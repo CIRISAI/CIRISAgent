@@ -706,7 +706,18 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     if not isinstance(data_tags, dict):
         data_tags = {}
 
-    return all(data_tags.get(k) == v for k, v in tags.items())
+    # Debug logging - remove after troubleshooting
+    import logging
+
+    logger = logging.getLogger(__name__)
+    result = all(data_tags.get(k) == v for k, v in tags.items())
+    if "thought_id" in tags and not result:
+        logger.warning(
+            f"[TAG FILTER] Mismatch: Expected {tags.get('thought_id')}, "
+            f"Got {data_tags.get('thought_id')} (metric={getattr(data, 'metric_name', 'unknown')})"
+        )
+
+    return result
 
 
 def filter_by_time_range(data: object, start_time: Optional[datetime], end_time: Optional[datetime]) -> bool:

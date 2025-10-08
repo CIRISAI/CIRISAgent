@@ -136,7 +136,12 @@ class ServiceInitializer:
         # Create default resource budget
         budget = ResourceBudget()  # Uses defaults from schema
 
-        credit_provider = None
+        # Credit provider: Always enabled for OAuth user credit gating
+        # - If CIRIS_BILLING_ENABLED=true: Use full billing backend (paid credits, purchases)
+        # - If CIRIS_BILLING_ENABLED=false: Use simple provider (1 free credit per OAuth user)
+        from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
+
+        credit_provider: CreditGateProtocol
         billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
         if billing_enabled:
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
@@ -151,6 +156,12 @@ class ServiceInitializer:
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
+            logger.info("Using CIRISBillingProvider for credit gating")
+        else:
+            from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+
+            credit_provider = SimpleCreditProvider()
+            logger.info("Using SimpleCreditProvider - 1 free credit per OAuth user")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,

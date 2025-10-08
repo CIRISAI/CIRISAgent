@@ -71,8 +71,8 @@ def _get_billing_client(request: Request) -> httpx.AsyncClient:
         import os
 
         billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
-        client = httpx.AsyncClient(base_url=billing_url, timeout=10.0)
-        request.app.state.billing_client = client
+        new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0)
+        request.app.state.billing_client = new_client
     client: httpx.AsyncClient = request.app.state.billing_client
     return client
 
@@ -110,54 +110,130 @@ async def get_credits(
     """
     Get user's credit balance and status.
 
-    This endpoint proxies to the billing backend. The frontend calls this
-    to display credit status and determine if purchase is needed.
+    Works with both:
+    - SimpleCreditProvider (1 free credit per OAuth user, no billing backend needed)
+    - CIRISBillingProvider (full billing backend with paid credits)
+
+    The frontend calls this to display credit status.
     """
-    billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth)
 
-    try:
-        # Check credit via billing backend
-        response = await billing_client.post(
-            "/v1/billing/credits/check",
-            json={
-                **user_identity,
-                "context": {
-                    "agent_id": request.app.state.runtime.agent_identity.agent_id
-                    if hasattr(request.app.state, "runtime")
-                    else "unknown",
-                    "source": "frontend_credit_display",
-                },
-            },
+    # Check if we have a resource monitor with credit provider
+    if not hasattr(request.app.state, "resource_monitor"):
+        raise HTTPException(status_code=503, detail="Resource monitor not available")
+
+    resource_monitor = request.app.state.resource_monitor
+
+    # Check if credit provider is configured
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        # No credit gating - unlimited use
+        return CreditStatusResponse(
+            has_credit=True,
+            credits_remaining=999,
+            free_uses_remaining=999,
+            total_uses=0,
+            plan_name="unlimited",
+            purchase_required=False,
+            purchase_options=None,
         )
-        response.raise_for_status()
-        credit_data = response.json()
 
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Billing API error: {e.response.status_code} - {e.response.text}")
-        raise HTTPException(status_code=503, detail="Billing service unavailable")
-    except httpx.RequestError as e:
-        logger.error(f"Billing API request error: {e}")
-        raise HTTPException(status_code=503, detail="Cannot reach billing service")
+    # Query credit provider via resource monitor
+    from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 
-    # Format response for frontend
-    purchase_options = None
-    if credit_data.get("purchase_required"):
-        purchase_options = {
-            "price_minor": credit_data.get("purchase_price_minor"),
-            "uses": credit_data.get("purchase_uses"),
-            "currency": "USD",
-        }
-
-    return CreditStatusResponse(
-        has_credit=credit_data["has_credit"],
-        credits_remaining=credit_data.get("credits_remaining", 0),
-        free_uses_remaining=credit_data.get("free_uses_remaining", 0),
-        total_uses=credit_data.get("total_uses", 0),
-        plan_name=credit_data.get("plan_name"),
-        purchase_required=credit_data.get("purchase_required", False),
-        purchase_options=purchase_options,
+    account = CreditAccount(
+        provider=user_identity["oauth_provider"],
+        account_id=user_identity["external_id"],
+        authority_id=user_identity.get("wa_id"),
+        tenant_id=user_identity.get("tenant_id"),
     )
+
+    context = CreditContext(
+        agent_id=request.app.state.runtime.agent_identity.agent_id
+        if hasattr(request.app.state, "runtime")
+        else "unknown",
+        channel_id="api:frontend",
+        request_id=None,
+        metadata={"source": "frontend_credit_display"},
+    )
+
+    try:
+        result = await resource_monitor.check_credit(account, context)
+    except Exception as e:
+        logger.error(f"Credit check error: {e}")
+        raise HTTPException(status_code=503, detail="Credit check failed")
+
+    # Determine if this is SimpleCreditProvider or CIRISBillingProvider
+    # SimpleCreditProvider: 1 free use, no purchases
+    # CIRISBillingProvider: Free uses + paid credits, purchases enabled
+    is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
+
+    if is_simple_provider:
+        # SimpleCreditProvider: 1 free credit per user
+        if result.has_credit:
+            # Still have free credit
+            return CreditStatusResponse(
+                has_credit=True,
+                credits_remaining=0,
+                free_uses_remaining=1,
+                total_uses=0,
+                plan_name="free",
+                purchase_required=False,
+                purchase_options=None,
+            )
+        else:
+            # Free credit exhausted, billing not enabled
+            return CreditStatusResponse(
+                has_credit=False,
+                credits_remaining=0,
+                free_uses_remaining=0,
+                total_uses=1,
+                plan_name="free",
+                purchase_required=False,  # Can't purchase when billing disabled
+                purchase_options={
+                    "price_minor": 0,
+                    "uses": 0,
+                    "currency": "USD",
+                    "message": "Contact administrator to enable billing",
+                },
+            )
+    else:
+        # CIRISBillingProvider: Return full billing data
+        # This requires actual API call to billing backend for full details
+        billing_client = _get_billing_client(request)
+
+        try:
+            response = await billing_client.post(
+                "/v1/billing/credits/check",
+                json={
+                    **user_identity,
+                    "context": context.model_dump(exclude_none=True),
+                },
+            )
+            response.raise_for_status()
+            credit_data = response.json()
+
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            logger.error(f"Billing API error: {e}")
+            raise HTTPException(status_code=503, detail="Billing service unavailable")
+
+        # Format response for frontend
+        purchase_options = None
+        if credit_data.get("purchase_required"):
+            purchase_options = {
+                "price_minor": credit_data.get("purchase_price_minor"),
+                "uses": credit_data.get("purchase_uses"),
+                "currency": "USD",
+            }
+
+        return CreditStatusResponse(
+            has_credit=credit_data["has_credit"],
+            credits_remaining=credit_data.get("credits_remaining", 0),
+            free_uses_remaining=credit_data.get("free_uses_remaining", 0),
+            total_uses=credit_data.get("total_uses", 0),
+            plan_name=credit_data.get("plan_name"),
+            purchase_required=credit_data.get("purchase_required", False),
+            purchase_options=purchase_options,
+        )
 
 
 @router.post("/purchase/initiate", response_model=PurchaseInitiateResponse)
@@ -169,9 +245,28 @@ async def initiate_purchase(
     """
     Initiate credit purchase (creates Stripe payment intent).
 
-    This endpoint proxies to the billing backend to create a payment intent.
-    The frontend receives the client_secret to complete payment with Stripe.js.
+    Only works when CIRIS_BILLING_ENABLED=true (CIRISBillingProvider).
+    Returns error when SimpleCreditProvider is active (billing disabled).
     """
+    # Check if billing is enabled (CIRISBillingProvider vs SimpleCreditProvider)
+    if not hasattr(request.app.state, "resource_monitor"):
+        raise HTTPException(status_code=503, detail="Resource monitor not available")
+
+    resource_monitor = request.app.state.resource_monitor
+
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        raise HTTPException(status_code=503, detail="Credit provider not configured")
+
+    is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
+
+    if is_simple_provider:
+        # Billing not enabled - can't purchase
+        raise HTTPException(
+            status_code=403,
+            detail="Billing not enabled. Contact administrator to enable paid credits.",
+        )
+
+    # Billing enabled - proceed with purchase
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth)
 
@@ -228,9 +323,27 @@ async def get_purchase_status(
     Check payment status (optional - for polling after payment).
 
     Frontend can poll this after initiating payment to confirm credits were added.
+    Only works when CIRIS_BILLING_ENABLED=true (CIRISBillingProvider).
     """
-    # For now, just check current credit balance
-    # In a full implementation, would verify the specific payment with Stripe
+    # Check if billing is enabled
+    if not hasattr(request.app.state, "resource_monitor"):
+        raise HTTPException(status_code=503, detail="Resource monitor not available")
+
+    resource_monitor = request.app.state.resource_monitor
+
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        raise HTTPException(status_code=503, detail="Credit provider not configured")
+
+    is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
+
+    if is_simple_provider:
+        # No purchases possible with SimpleCreditProvider
+        raise HTTPException(
+            status_code=404,
+            detail="Payment not found. Billing not enabled.",
+        )
+
+    # Billing enabled - check payment status
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth)
 

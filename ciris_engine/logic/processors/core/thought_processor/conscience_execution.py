@@ -73,8 +73,12 @@ class ConscienceExecutionPhase:
                 processing_context.is_conscience_retry = False
 
         # Exempt actions that shouldn't be overridden
+        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET (5 actions)
+        # Conscience exempt: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (5 actions)
         exempt_actions = {
+            HandlerActionType.RECALL.value,
             HandlerActionType.TASK_COMPLETE.value,
+            HandlerActionType.OBSERVE.value,
             HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }

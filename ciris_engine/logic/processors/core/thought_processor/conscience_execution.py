@@ -101,7 +101,15 @@ class ConscienceExecutionPhase:
                 ),
             )
 
-        context = {"thought": thought or thought_item, "dma_results": dma_results or {}}
+        # Create typed context for conscience checks
+        from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+
+        context = ConscienceCheckContext(
+            thought=thought or thought_item,
+            task=None,  # Will be populated by conscience checks if needed
+            round_number=None,
+            system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+        )
 
         final_action = action_result
         overridden = False

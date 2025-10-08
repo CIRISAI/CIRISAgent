@@ -4,10 +4,11 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.schemas.services.llm import LLMMessage
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -116,7 +117,7 @@ class LLMBus(BaseBus[LLMService]):
 
     async def call_llm_structured(
         self,
-        messages: List[Dict[str, Any]],
+        messages: Union[List[Dict[str, Any]], List["LLMMessage"]],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -135,13 +136,23 @@ class LLMBus(BaseBus[LLMService]):
         - Metrics collection
 
         Args:
-            messages: List of message dictionaries
+            messages: List of message dictionaries or LLMMessage objects
             response_model: Pydantic model for structured response
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             handler_name: Handler identifier for metrics
             domain: Optional domain for routing to specialized LLMs
         """
+        # Normalize messages to dicts if they are LLMMessage objects
+        from ciris_engine.schemas.services.llm import LLMMessage
+
+        normalized_messages: List[Dict[str, Any]] = []
+        for msg in messages:
+            if isinstance(msg, LLMMessage):
+                normalized_messages.append(msg.model_dump())
+            else:
+                normalized_messages.append(msg)
+
         start_time = self._time_service.timestamp()
 
         # Get all available LLM services, filtered by domain if specified
@@ -174,7 +185,7 @@ class LLMBus(BaseBus[LLMService]):
                 logger.debug(f"Calling LLM service {service_name} for {handler_name}")
 
                 result, usage = await selected_service.call_llm_structured(  # type: ignore[attr-defined]
-                    messages=messages,
+                    messages=normalized_messages,
                     response_model=response_model,
                     max_tokens=max_tokens,
                     temperature=temperature,

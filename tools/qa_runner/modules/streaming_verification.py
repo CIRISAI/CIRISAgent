@@ -503,6 +503,38 @@ class StreamingVerificationModule:
                                         events_with_audit_data += 1
                                         event_detail["has_audit_trail"] = True
 
+                                    # Resource usage fields - REQUIRED for resource tracking (all 8 must be present)
+                                    resource_fields = {
+                                        "tokens_total": int,
+                                        "tokens_input": int,
+                                        "tokens_output": int,
+                                        "cost_cents": (int, float),  # Can be float
+                                        "carbon_grams": (int, float),
+                                        "energy_mwh": (int, float),
+                                        "llm_calls": int,
+                                        "models_used": list,
+                                    }
+                                    for field, field_type in resource_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing resource field: {field}")
+                                            errors.append(f"🐛 RESOURCE: action_result missing resource field: {field}")
+                                        elif event.get(field) is None:
+                                            event_detail["issues"].append(f"Resource field is None: {field}")
+                                            errors.append(f"🐛 RESOURCE: action_result resource field is None: {field}")
+                                        elif isinstance(field_type, tuple):
+                                            # Multiple allowed types
+                                            if not isinstance(event[field], field_type):
+                                                event_detail["issues"].append(
+                                                    f"Resource field {field} has wrong type: {type(event[field]).__name__} "
+                                                    f"(expected one of {[t.__name__ for t in field_type]})"
+                                                )
+                                        else:
+                                            # Single type
+                                            if not isinstance(event[field], field_type):
+                                                event_detail["issues"].append(
+                                                    f"Resource field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                                )
+
                                 # Check for unexpected extra fields (exhaustive validation)
                                 expected_common_fields = {"event_type", "thought_id", "task_id", "timestamp"}
                                 event_type_specific_fields = {
@@ -540,6 +572,15 @@ class StreamingVerificationModule:
                                         "audit_sequence_number",
                                         "audit_entry_hash",
                                         "audit_signature",
+                                        # Resource usage fields (v1.3.1+)
+                                        "tokens_total",
+                                        "tokens_input",
+                                        "tokens_output",
+                                        "cost_cents",
+                                        "carbon_grams",
+                                        "energy_mwh",
+                                        "llm_calls",
+                                        "models_used",
                                     },
                                 }
 

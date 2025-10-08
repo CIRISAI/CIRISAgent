@@ -60,9 +60,7 @@ def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
     }
 
 
-async def _query_thought_resources(
-    telemetry_service: Any, thought_id: str, timestamp: datetime
-) -> Dict[str, Any]:
+async def _query_thought_resources(telemetry_service: Any, thought_id: str, timestamp: datetime) -> Dict[str, Any]:
     """Query telemetry service and aggregate resource usage for a thought.
 
     Args:
@@ -112,9 +110,7 @@ async def _query_thought_resources(
         carbon_data = await telemetry_service.query_metrics(
             metric_name="llm.carbon.grams", tags=tags, end_time=timestamp
         )
-        energy_data = await telemetry_service.query_metrics(
-            metric_name="llm.energy.mwh", tags=tags, end_time=timestamp
-        )
+        energy_data = await telemetry_service.query_metrics(metric_name="llm.energy.mwh", tags=tags, end_time=timestamp)
 
         # Aggregate metrics - sum all values
         tokens_total = sum(m.value for m in tokens_total_data)
@@ -211,9 +207,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                     telemetry_service = getattr(getattr(self, "sink", None), "telemetry", None)
                     if telemetry_service:
                         # Query resources and add to kwargs for _create_action_complete_data
-                        resource_data = await _query_thought_resources(
-                            telemetry_service, thought_id, end_timestamp
-                        )
+                        resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)
                         kwargs["_resource_usage"] = resource_data
                     else:
                         logger.warning(

@@ -118,6 +118,8 @@ class ResourceCost(BaseModel):
     )
     model_used: Optional[str] = Field(default=None, description="Model that incurred these costs")
 
+    model_config = ConfigDict(protected_namespaces=())
+
     def calculate_from_tokens(self, tokens: int, model: Optional[str] = None) -> None:
         """Calculate all costs from token count"""
         self.tokens_used = tokens

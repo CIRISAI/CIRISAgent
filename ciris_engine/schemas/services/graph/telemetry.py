@@ -106,6 +106,8 @@ class LLMUsageData(BaseModel):
     energy_kwh: Optional[float] = Field(None, description="Energy usage in kWh")
     model_used: Optional[str] = Field(None, description="Model name used")
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class TelemetryKwargs(BaseModel):
     """Structured kwargs for telemetry operations."""

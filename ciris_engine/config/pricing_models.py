@@ -58,6 +58,8 @@ class EnergyEstimates(BaseModel):
 
     model_patterns: Dict[str, Dict[str, float]] = Field(..., description="Energy consumption by model pattern")
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class CarbonIntensity(BaseModel):
     """Carbon intensity data by region."""

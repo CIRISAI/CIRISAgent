@@ -1432,21 +1432,34 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 handler_name="telemetry_service",
             )
 
+            logger.warning(f"[TELEMETRY QUERY] recall_timeseries returned {len(timeseries_data)} items for metric={metric_name}, tags={tags}")
+
             # Filter and convert to typed MetricRecord objects using helpers
             results: List[MetricRecord] = []
+            filtered_by_name = 0
+            filtered_by_tags = 0
+            filtered_by_time = 0
             for data in timeseries_data:
                 # Apply filters using helper functions
                 if not filter_by_metric_name(data, metric_name):
+                    filtered_by_name += 1
                     continue
                 if not filter_by_tags(data, tags):
+                    filtered_by_tags += 1
                     continue
                 if not filter_by_time_range(data, start_time, end_time):
+                    filtered_by_time += 1
                     continue
 
                 # Convert to MetricRecord using helper
                 record = convert_to_metric_record(data)
                 if record:
                     results.append(record)
+
+            logger.warning(
+                f"[TELEMETRY QUERY] Filtered: {filtered_by_name} by name, {filtered_by_tags} by tags, "
+                f"{filtered_by_time} by time. Results: {len(results)}"
+            )
 
             return results
 

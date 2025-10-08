@@ -18,6 +18,7 @@ from .routes import (
     agent,
     audit,
     auth,
+    billing,
     config,
     consent,
     dsar,
@@ -148,6 +149,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # Mount v1 API routes (all routes except emergency under /v1)
     v1_routers = [
         agent.router,  # Agent interaction
+        billing.router,  # Billing & credits (frontend proxy)
         memory.router,  # Memory operations
         system_extensions.router,  # Extended system operations (queue, services, processors) - MUST be before system.router
         system.router,  # System operations (includes health, time, resources, runtime)

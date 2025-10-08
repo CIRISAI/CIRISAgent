@@ -137,17 +137,16 @@ class ServiceInitializer:
         budget = ResourceBudget()  # Uses defaults from schema
 
         credit_provider = None
-        api_key = os.getenv("UNLIMIT_API_KEY")
-        if api_key:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import UnlimitCreditProvider
+        billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
+        if billing_enabled:
+            from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            base_url = os.getenv("UNLIMIT_API_BASE_URL", "https://api.unlimit.com")
-            timeout = float(os.getenv("UNLIMIT_API_TIMEOUT_SECONDS", "5.0"))
-            cache_ttl = int(os.getenv("UNLIMIT_CACHE_TTL_SECONDS", "15"))
-            fail_open = os.getenv("UNLIMIT_FAIL_OPEN", "false").lower() == "true"
-            credit_provider = UnlimitCreditProvider(
+            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+            timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+            cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+            fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+            credit_provider = CIRISBillingProvider(
                 base_url=base_url,
-                api_key=api_key,
                 timeout_seconds=timeout,
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,

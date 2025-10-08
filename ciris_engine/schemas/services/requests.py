@@ -107,6 +107,8 @@ class LLMResponse(ServiceResponse):
     model_used: str = Field(..., description="Model that was used")
     tokens_used: int = Field(..., description="Number of tokens used")
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 # Audit Service specific requests/responses
 

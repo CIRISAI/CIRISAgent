@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, 
 
 import instructor
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, InternalServerError, RateLimitError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
@@ -34,6 +34,8 @@ class OpenAIConfig(BaseModel):
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
     timeout_seconds: int = Field(default=30)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 logger = logging.getLogger(__name__)

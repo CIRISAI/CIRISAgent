@@ -30,6 +30,7 @@ def mock_time_service():
     """Mock time service"""
     service = Mock()
     service.now.return_value = datetime(2025, 10, 7, 12, 0, 0, tzinfo=timezone.utc)
+    service.now_iso.return_value = "2025-10-07T12:00:00+00:00"
     return service
 
 
@@ -136,12 +137,17 @@ def sample_thought():
     thought.thought_id = "thought_123"
     thought.source_task_id = "shutdown_test_123"
     thought.status = ThoughtStatus.PENDING
-    thought.final_action = None
+    thought.thought_type = "standard"  # Required for ProcessingQueueItem
+    thought.context = {}  # Required for ProcessingQueueItem
+    thought.ponder_notes = []  # Required for ProcessingQueueItem
     # Add content structure for ProcessingQueueItem.from_thought
+    # ThoughtContent requires 'text' field
     thought.content = {
-        "message": "Shutdown request",
+        "text": "Shutdown request",
         "context": {},
     }
+    # No final_action for PENDING thoughts - they haven't been processed yet
+    thought.final_action = None
     return thought
 
 
@@ -189,20 +195,16 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
-    @patch("ciris_engine.logic.persistence.models.tasks.get_config_service")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     async def test_create_shutdown_task_normal(
         self,
-        mock_get_config_service,
-        mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test creating a normal (non-emergency) shutdown task"""
-        # Setup config service
-        mock_config_service = Mock()
-        mock_config_service.get_config.return_value = {"system": {"agent_id": "test_agent"}}
-        mock_get_config_service.return_value = mock_config_service
+        # Mock add_task to return task_id
+        mock_add_task.return_value = "shutdown_test_123"
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test shutdown"
@@ -220,14 +222,17 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     async def test_create_shutdown_task_emergency_with_root_auth(
         self,
-        mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test creating emergency shutdown with ROOT authorization"""
+        # Mock add_task to return task_id
+        mock_add_task.return_value = "shutdown_emergency_123"
+
         # Setup
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
@@ -254,14 +259,17 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     async def test_create_shutdown_task_emergency_with_authority_auth(
         self,
-        mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test creating emergency shutdown with AUTHORITY authorization"""
+        # Mock add_task to return task_id
+        mock_add_task.return_value = "shutdown_emergency_authority_123"
+
         # Setup
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
@@ -332,14 +340,17 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     async def test_create_shutdown_task_with_channel_from_comm_bus(
         self,
-        mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test getting channel ID from communication bus when not on runtime"""
+        # Mock add_task to return task_id
+        mock_add_task.return_value = "shutdown_comm_bus_123"
+
         # Setup
         shutdown_processor.runtime.startup_channel_id = None
         shutdown_processor.runtime.get_primary_channel_id = None
@@ -424,10 +435,12 @@ class TestShutdownProcessing:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     async def test_process_activates_pending_task(
         self,
         mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
         sample_task,
@@ -436,6 +449,9 @@ class TestShutdownProcessing:
         # Setup
         sample_task.status = TaskStatus.PENDING
         shutdown_processor.shutdown_task = None
+
+        # Mock add_task for task creation
+        mock_add_task.return_value = "shutdown_test_123"
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -458,15 +474,20 @@ class TestShutdownProcessing:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     async def test_process_generates_seed_thought(
         self,
         mock_persistence,
+        mock_add_task,
         mock_get_shutdown_manager,
         shutdown_processor,
         sample_task,
     ):
         """Test that seed thought is generated for ACTIVE task with no thoughts"""
+        # Mock add_task for task creation
+        mock_add_task.return_value = "shutdown_test_123"
+
         # Setup
         sample_task.status = TaskStatus.ACTIVE
         shutdown_processor.shutdown_task = None
@@ -573,6 +594,7 @@ class TestThoughtProcessing:
 
         mock_action = Mock()
         mock_action.selected_action = HandlerActionType.SPEAK
+        mock_action.final_action = None  # Important: prevent Mock from auto-creating this attribute
         shutdown_processor.process_thought_item = AsyncMock(return_value=mock_action)
 
         # Execute

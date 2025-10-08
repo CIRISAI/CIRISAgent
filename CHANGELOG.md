@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - OpenAI client timeout was silently ignoring user settings (used `getattr()` instead of direct attribute access)
   - Telemetry aggregator couldn't disambiguate multiple instances of same provider class
   - Both issues fixed with tests to prevent regression
+- **🛡️ Conscience Exempt Actions**: Added RECALL and OBSERVE to exempt actions list
+  - **Before**: Only 3 actions exempt (TASK_COMPLETE, DEFER, REJECT)
+  - **After**: 5 actions exempt (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT)
+  - Conscience now runs for exactly 5 actions: SPEAK, TOOL, PONDER, MEMORIZE, FORGET
+  - Rationale: RECALL/OBSERVE are passive operations with no ethical implications
 
 ### Changed
 - **🧹 Dead Code Removal**: Removed 204 lines of deprecated code

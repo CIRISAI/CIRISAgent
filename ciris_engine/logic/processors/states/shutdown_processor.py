@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_REJECTION_REASON = "No reason provided"
+
 
 class ShutdownProcessor(BaseProcessor):
     """
@@ -134,6 +137,7 @@ class ShutdownProcessor(BaseProcessor):
                 # Already reported completion, just wait
                 logger.debug(f"Shutdown already complete, self.shutdown_complete = {self.shutdown_complete}")
                 import asyncio
+
                 await asyncio.sleep(1.0)
             return self.shutdown_result or ShutdownResult(
                 status="shutdown_complete", message="system shutdown", shutdown_ready=True, duration_seconds=0.0
@@ -295,9 +299,9 @@ class ShutdownProcessor(BaseProcessor):
     def _extract_rejection_reason(self, action: Any) -> str:
         """Extract rejection reason from action parameters."""
         if isinstance(action.action_params, dict):
-            reason = action.action_params.get("reason", "No reason provided")
-            return str(reason) if reason else "No reason provided"
-        return "No reason provided"
+            reason = action.action_params.get("reason", DEFAULT_REJECTION_REASON)
+            return str(reason) if reason else DEFAULT_REJECTION_REASON
+        return DEFAULT_REJECTION_REASON
 
     def _find_rejection_in_thoughts(self, thoughts: List[Any]) -> Optional[str]:
         """Search thoughts for a REJECT action and return the reason if found."""

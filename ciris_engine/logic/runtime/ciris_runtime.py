@@ -1206,9 +1206,9 @@ class CIRISRuntime:
         if not result:
             return "manual"
 
-        if result.get("action") == "shutdown_accepted" or result.get("status") == "completed":
+        if result.action == "shutdown_accepted" or result.status == "completed":
             return "accepted"
-        elif result.get("action") == "shutdown_rejected" or result.get("status") == "rejected":
+        elif result.action == "shutdown_rejected" or result.status == "rejected":
             return "rejected"
 
         return "manual"

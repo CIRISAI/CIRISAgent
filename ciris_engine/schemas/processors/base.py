@@ -43,9 +43,21 @@ class ProcessorMetrics(BaseModel):
 
 
 class ProcessorServices(BaseModel):
-    """Services available to processors."""
+    """Services available to processors.
 
+    This schema replaces Dict[str, Any] for service dependencies.
+    All services are optional as different processors need different services.
+    """
+
+    # Core services
+    time_service: Optional[object] = Field(None, description="Time service (TimeServiceProtocol)")
+    resource_monitor: Optional[object] = Field(None, description="Resource monitor service")
+
+    # Communication services
     discord_service: Optional[object] = Field(None, description="Discord service if available")
+    communication_bus: Optional[object] = Field(None, description="Communication bus for multi-adapter support")
+
+    # Storage services
     memory_service: Optional[object] = Field(None, description="Memory service")
     audit_service: Optional[object] = Field(None, description="Audit service")
     telemetry_service: Optional[object] = Field(None, description="Telemetry service")

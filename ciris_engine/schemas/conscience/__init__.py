@@ -1,5 +1,6 @@
 """conscience schemas v1."""
 
+from .context import ConscienceCheckContext
 from .core import (
     CoherenceCheckResult,
     ConscienceCheckResult,
@@ -12,6 +13,7 @@ from .core import (
 from .results import ConscienceResult
 
 __all__ = [
+    "ConscienceCheckContext",
     "ConscienceStatus",
     "EntropyCheckResult",
     "CoherenceCheckResult",

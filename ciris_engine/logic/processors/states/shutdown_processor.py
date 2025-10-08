@@ -7,7 +7,7 @@ a standard task that the agent processes through normal cognitive flow.
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -16,6 +16,7 @@ from ciris_engine.logic.processors.core.thought_processor import ThoughtProcesso
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
 from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -39,7 +40,7 @@ class ShutdownProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Any,  # Dict[str, Any]
+        services: ProcessorServices,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
         auth_service: Optional[Any] = None,
@@ -50,7 +51,7 @@ class ShutdownProcessor(BaseProcessor):
         self.auth_service = auth_service
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
-        self.shutdown_result: Optional[Dict[str, Any]] = None
+        self.shutdown_result: Optional[ShutdownResult] = None
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -75,28 +76,23 @@ class ShutdownProcessor(BaseProcessor):
         result = await self._process_shutdown(round_number)
         duration = (self.time_service.now() - start_time).total_seconds()
 
-        # Convert dict result to ShutdownResult
-        tasks_cleaned = result.get("tasks_cleaned", 0)
-        shutdown_ready = result.get("shutdown_ready", False) or result.get("status") == "completed"
-        errors = 1 if result.get("status") == "error" else 0
+        # Update duration if not already set
+        if result.duration_seconds == 0.0:
+            result.duration_seconds = duration
 
         logger.info(
-            f"ShutdownProcessor.process: status={result.get('status')}, shutdown_ready from dict={result.get('shutdown_ready')}, final shutdown_ready={shutdown_ready}"
-        )
-
-        shutdown_result = ShutdownResult(
-            tasks_cleaned=tasks_cleaned, shutdown_ready=shutdown_ready, errors=errors, duration_seconds=duration
+            f"ShutdownProcessor.process: status={result.status}, shutdown_ready={result.shutdown_ready}"
         )
 
         # Log the result we're returning
         logger.info(
-            f"ShutdownProcessor returning: shutdown_ready={shutdown_result.shutdown_ready}, full result={shutdown_result}"
+            f"ShutdownProcessor returning: shutdown_ready={result.shutdown_ready}, full result={result}"
         )
 
-        return shutdown_result
+        return result
 
-    async def _process_shutdown(self, round_number: int) -> Dict[str, Any]:
-        """Internal method that returns dict for backward compatibility."""
+    async def _process_shutdown(self, round_number: int) -> ShutdownResult:
+        """Internal shutdown processing with typed result."""
         logger.info(f"Shutdown processor: round {round_number}")
 
         try:
@@ -107,11 +103,21 @@ class ShutdownProcessor(BaseProcessor):
             # Check if task is complete
             if not self.shutdown_task:
                 logger.error("Shutdown task is None after creation")
-                return {"status": "error", "message": "Failed to create shutdown task"}
+                return ShutdownResult(
+                    status="error",
+                    message="Failed to create shutdown task",
+                    errors=1,
+                    duration_seconds=0.0
+                )
             current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
             if not current_task:
                 logger.error("Shutdown task disappeared!")
-                return {"status": "error", "message": "Shutdown task not found"}
+                return ShutdownResult(
+                    status="error",
+                    message="Shutdown task not found",
+                    errors=1,
+                    duration_seconds=0.0
+                )
 
             # If task is pending, activate it
             if current_task.status == TaskStatus.PENDING:
@@ -136,16 +142,22 @@ class ShutdownProcessor(BaseProcessor):
             # Check task completion status
             if not current_task:
                 logger.error("Current task is None after fetching")
-                return {"status": "error", "message": "Task not found"}
+                return ShutdownResult(
+                    status="error",
+                    message="Task not found",
+                    errors=1,
+                    duration_seconds=0.0
+                )
             if current_task.status == TaskStatus.COMPLETED:
                 if not self.shutdown_complete:
                     self.shutdown_complete = True
-                    self.shutdown_result = {
-                        "status": "completed",
-                        "action": "shutdown_accepted",
-                        "message": "Agent acknowledged shutdown",
-                        "shutdown_ready": True,  # Add this field that main processor checks
-                    }
+                    self.shutdown_result = ShutdownResult(
+                        status="completed",
+                        action="shutdown_accepted",
+                        message="Agent acknowledged shutdown",
+                        shutdown_ready=True,
+                        duration_seconds=0.0
+                    )
                     logger.info("✓ Shutdown task completed - agent accepted shutdown")
                     # Signal the runtime to proceed with shutdown
                     logger.info("Shutdown processor signaling completion to runtime")
@@ -155,7 +167,12 @@ class ShutdownProcessor(BaseProcessor):
                     import asyncio
 
                     await asyncio.sleep(1.0)
-                return self.shutdown_result or {"status": "shutdown_complete", "reason": "system shutdown"}
+                return self.shutdown_result or ShutdownResult(
+                    status="shutdown_complete",
+                    message="system shutdown",
+                    shutdown_ready=True,
+                    duration_seconds=0.0
+                )
             elif current_task.status == TaskStatus.FAILED:
                 # Task failed - could be REJECT or error
                 self.shutdown_complete = True
@@ -166,16 +183,22 @@ class ShutdownProcessor(BaseProcessor):
             thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
-            return {
-                "status": "in_progress",
-                "task_status": current_task.status.value,
-                "thoughts": thought_statuses,
-                "message": "Waiting for agent response",
-            }
+            return ShutdownResult(
+                status="in_progress",
+                task_status=current_task.status.value,
+                thoughts=thought_statuses,
+                message="Waiting for agent response",
+                duration_seconds=0.0
+            )
 
         except Exception as e:
             logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return ShutdownResult(
+                status="error",
+                message=str(e),
+                errors=1,
+                duration_seconds=0.0
+            )
 
     async def _create_shutdown_task(self) -> None:
         """Create the shutdown task."""
@@ -272,7 +295,7 @@ class ShutdownProcessor(BaseProcessor):
         await add_system_task(self.shutdown_task, auth_service=self.auth_service)
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 
-    def _check_failure_reason(self, task: Task) -> Dict[str, Any]:
+    def _check_failure_reason(self, task: Task) -> ShutdownResult:
         """Check why the task failed - could be REJECT or actual error."""
         # Look at the final thought to determine reason
         thoughts = persistence.get_thoughts_by_task_id(task.task_id)
@@ -289,15 +312,22 @@ class ShutdownProcessor(BaseProcessor):
                         )
                         logger.warning(f"Agent REJECTED shutdown: {reason}")
                         # Human override available via emergency shutdown API with Ed25519 signature
-                        return {
-                            "status": "rejected",
-                            "action": "shutdown_rejected",
-                            "reason": reason,
-                            "message": f"Agent rejected shutdown: {reason}",
-                        }
+                        return ShutdownResult(
+                            status="rejected",
+                            action="shutdown_rejected",
+                            reason=reason,
+                            message=f"Agent rejected shutdown: {reason}",
+                            duration_seconds=0.0
+                        )
 
         # Task failed for other reasons
-        return {"status": "error", "action": "shutdown_error", "message": "Shutdown task failed"}
+        return ShutdownResult(
+            status="error",
+            action="shutdown_error",
+            message="Shutdown task failed",
+            errors=1,
+            duration_seconds=0.0
+        )
 
     async def _process_shutdown_thoughts(self) -> None:
         """

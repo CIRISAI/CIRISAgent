@@ -6,12 +6,13 @@ overrides the action to DEFER, ensuring proper escalation to humans.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.conscience.interface import ConscienceInterface
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions import DeferParams
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
@@ -44,14 +45,14 @@ class ThoughtDepthGuardrail(ConscienceInterface):
     async def check(
         self,
         action: ActionSelectionDMAResult,
-        context: Dict[str, Any],
+        context: ConscienceCheckContext,
     ) -> ConscienceCheckResult:
         """Check if thought depth exceeds maximum allowed."""
         start_time = self._time_service.now()
         timestamp = self._time_service.now()
 
         # Get the thought from context
-        thought = context.get("thought")
+        thought = context.thought
         thought_id = thought.thought_id if thought and hasattr(thought, "thought_id") else "unknown"
         task_id = thought.source_task_id if thought and hasattr(thought, "source_task_id") else "unknown"
 

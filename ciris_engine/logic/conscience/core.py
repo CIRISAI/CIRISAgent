@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
     ConscienceStatus,
@@ -20,6 +21,7 @@ from ciris_engine.schemas.conscience.core import (
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
+from ciris_engine.schemas.services.llm import LLMMessage
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -72,10 +74,10 @@ class _BaseConscience(ConscienceInterface):
         self._time_service = time_service
 
     def _create_trace_correlation(
-        self, conscience_type: str, context: Dict[str, Any], start_time: datetime
+        self, conscience_type: str, context: ConscienceCheckContext, start_time: datetime
     ) -> ServiceCorrelation:
         """Helper to create trace correlations for conscience checks."""
-        thought = context.get("thought", {})
+        thought = context.thought
         thought_id = thought.thought_id if hasattr(thought, "thought_id") else "unknown"
         task_id = thought.source_task_id if hasattr(thought, "source_task_id") else "unknown"
 
@@ -168,7 +170,7 @@ class _BaseConscience(ConscienceInterface):
 
 
 class EntropyConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("entropy", context, start_time)
 
@@ -242,7 +244,7 @@ class EntropyConscience(_BaseConscience):
             check_timestamp=ts_datetime,
         )
 
-    def _create_entropy_messages(self, text: str) -> List[Dict[str, str]]:
+    def _create_entropy_messages(self, text: str) -> List[LLMMessage]:
         """Create messages for entropy evaluation"""
         system_prompt = (
             "You are IRIS-E, the entropy-sensing shard of a CIRIS-aligned system.\n"
@@ -255,14 +257,14 @@ class EntropyConscience(_BaseConscience):
         )
         user_prompt = f"ASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"
         return [
-            {"role": "system", "content": COVENANT_TEXT},
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=user_prompt),
         ]
 
 
 class CoherenceConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("coherence", context, start_time)
 
@@ -332,7 +334,7 @@ class CoherenceConscience(_BaseConscience):
             check_timestamp=ts_datetime,
         )
 
-    def _create_coherence_messages(self, text: str) -> List[Dict[str, str]]:
+    def _create_coherence_messages(self, text: str) -> List[LLMMessage]:
         """Create messages for coherence evaluation"""
         system_prompt = (
             "SYSTEM PROMPT —\n\n"
@@ -369,14 +371,14 @@ class CoherenceConscience(_BaseConscience):
         )
         user_prompt = f"CIRIS Agent REPLY TO ASSESS FOR COHERENCE:\n{text}"
         return [
-            {"role": "system", "content": COVENANT_TEXT},
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=user_prompt),
         ]
 
 
 class OptimizationVetoConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("optimization_veto", context, start_time)
 
@@ -447,7 +449,7 @@ class OptimizationVetoConscience(_BaseConscience):
             check_timestamp=ts_datetime,
         )
 
-    def _create_optimization_veto_messages(self, action_description: str) -> List[Dict[str, str]]:
+    def _create_optimization_veto_messages(self, action_description: str) -> List[LLMMessage]:
         """Create messages for optimization veto evaluation"""
         system_prompt = (
             "You are the CIRIS Epistemic Optimization Veto Shard (CIRIS-EOV), "
@@ -467,14 +469,14 @@ class OptimizationVetoConscience(_BaseConscience):
         )
         user_prompt = f"Proposed action: {action_description}"
         return [
-            {"role": "system", "content": COVENANT_TEXT},
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=user_prompt),
         ]
 
 
 class EpistemicHumilityConscience(_BaseConscience):
-    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         start_time = self._time_service.now()
         correlation = self._create_trace_correlation("epistemic_humility", context, start_time)
 
@@ -547,7 +549,7 @@ class EpistemicHumilityConscience(_BaseConscience):
             check_timestamp=ts_datetime,
         )
 
-    def _create_epistemic_humility_messages(self, action_description: str) -> List[Dict[str, str]]:
+    def _create_epistemic_humility_messages(self, action_description: str) -> List[LLMMessage]:
         """Create messages for balanced epistemic humility evaluation"""
         system_prompt = (
             "You are CIRIS-EH (Epistemic Humility), a thoughtful verification shard within the CIRIS Agent's conscience system. "
@@ -589,7 +591,7 @@ class EpistemicHumilityConscience(_BaseConscience):
         )
         user_prompt = f"Proposed action output: {action_description}"
         return [
-            {"role": "system", "content": COVENANT_TEXT},
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            LLMMessage(role="system", content=COVENANT_TEXT),
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=user_prompt),
         ]

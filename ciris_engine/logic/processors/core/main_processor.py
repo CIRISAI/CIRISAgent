@@ -131,11 +131,24 @@ class AgentProcessor:
         )
 
         # Shutdown processor for graceful shutdown negotiation
+        # Convert services dict to ProcessorServices for type safety
+        from ciris_engine.schemas.processors.base import ProcessorServices as ProcessorServicesSchema
+
+        processor_services = ProcessorServicesSchema(
+            time_service=services.get("time_service"),
+            resource_monitor=services.get("resource_monitor"),
+            discord_service=services.get("discord_service"),
+            communication_bus=services.get("communication_bus"),
+            memory_service=services.get("memory_service"),
+            audit_service=services.get("audit_service"),
+            telemetry_service=services.get("telemetry_service"),
+        )
+
         self.shutdown_processor = ShutdownProcessor(
             config_accessor=app_config,  # app_config is actually a ConfigAccessor
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
-            services=services,
+            services=processor_services,
             time_service=time_service,  # Use the injected time service directly
             runtime=runtime,
         )

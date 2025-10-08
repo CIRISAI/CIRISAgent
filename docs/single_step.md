@@ -29,9 +29,13 @@ The agent processes thoughts through these sequential stages, each with its own 
 **What happens**: Large Language Model determines what action to take based on DMA results and context, with full reasoning transparency.
 
 ### 4. CONSCIENCE_EXECUTION
-**Purpose**: Ethical safety validation  
-**Location**: After action is selected  
+**Purpose**: Ethical safety validation
+**Location**: After action is selected
 **What happens**: Multiple conscience functions evaluate the proposed action for safety, ethics, and appropriateness in parallel.
+
+**Action Coverage**:
+- **Evaluated (5)**: SPEAK, TOOL, PONDER, MEMORIZE, FORGET - all active actions requiring ethical validation
+- **Exempt (5)**: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT - passive or explicitly safe actions that bypass checks
 
 ### 3B. RECURSIVE_ASPDMA *(conditional - only if step 4 fails)*
 **Purpose**: Re-run action selection if conscience evaluation failed  

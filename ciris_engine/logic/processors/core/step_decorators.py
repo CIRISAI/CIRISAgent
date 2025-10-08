@@ -95,11 +95,14 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
     try:
         # Query all metric types with thought_id tag
         tags = {"thought_id": thought_id}
+        logger.warning(f"[RESOURCE QUERY] Querying resources for thought_id={thought_id}, end_time={timestamp}")
 
         # Query each metric type and aggregate
         tokens_total_data = await telemetry_service.query_metrics(
             metric_name="llm.tokens.total", tags=tags, end_time=timestamp
         )
+        logger.warning(f"[RESOURCE QUERY] Found {len(tokens_total_data)} llm.tokens.total metrics")
+
         tokens_input_data = await telemetry_service.query_metrics(
             metric_name="llm.tokens.input", tags=tags, end_time=timestamp
         )
@@ -124,9 +127,9 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         # Extract unique models from tags
         models_used = list({m.tags.get("model", "unknown") for m in tokens_total_data if hasattr(m, "tags")})
 
-        logger.debug(
-            f"Aggregated resources for thought {thought_id}: "
-            f"{int(tokens_total)} tokens, {llm_calls} calls, {cost_cents:.4f} cents"
+        logger.warning(
+            f"[RESOURCE QUERY] Aggregated resources for thought {thought_id}: "
+            f"{int(tokens_total)} tokens, {llm_calls} calls, {cost_cents:.4f} cents, models={models_used}"
         )
 
         return {

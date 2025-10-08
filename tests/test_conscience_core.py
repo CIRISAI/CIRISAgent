@@ -10,15 +10,16 @@ Tests all four conscience types:
 Target: 80%+ coverage (currently 20.5%)
 """
 
-import pytest
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import pytest
+
 from ciris_engine.logic.conscience.core import (
     CoherenceConscience,
-    ConscienceConfig,
     CoherenceResult,
+    ConscienceConfig,
     EntropyConscience,
     EntropyResult,
     EpistemicHumilityConscience,
@@ -26,16 +27,17 @@ from ciris_engine.logic.conscience.core import (
     _BaseConscience,
 )
 from ciris_engine.logic.registries.base import ServiceRegistry
+from ciris_engine.schemas.actions.parameters import SpeakParams
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
     ConscienceStatus,
     EpistemicHumilityResult,
     OptimizationVetoResult,
 )
-from ciris_engine.schemas.actions.parameters import SpeakParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
-
+from ciris_engine.schemas.services.llm import LLMMessage
 
 # ============================================================================
 # FIXTURES
@@ -104,11 +106,11 @@ def action_non_speak():
 
 @pytest.fixture
 def context_with_thought():
-    """Context dict with thought"""
+    """Context with thought using ConscienceCheckContext"""
     thought = Mock()
     thought.thought_id = "thought_123"
     thought.source_task_id = "task_456"
-    return {"thought": thought}
+    return ConscienceCheckContext(thought=thought)
 
 
 # ============================================================================
@@ -128,9 +130,7 @@ class TestBaseConscience:
                 time_service=None,
             )
 
-    def test_init_with_time_service_succeeds(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    def test_init_with_time_service_succeeds(self, mock_service_registry, conscience_config, mock_time_service):
         """Test successful initialization with time service"""
         conscience = _BaseConscience(
             service_registry=mock_service_registry,
@@ -141,9 +141,7 @@ class TestBaseConscience:
         assert conscience.config == conscience_config
 
     @pytest.mark.asyncio
-    async def test_get_sink_without_sink_raises(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    async def test_get_sink_without_sink_raises(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _get_sink() raises when sink is None"""
         conscience = _BaseConscience(
             service_registry=mock_service_registry,
@@ -398,9 +396,7 @@ class TestEntropyConscience:
         assert result.passed is True
         assert result.entropy_score == 0.1
 
-    def test_create_entropy_messages(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    def test_create_entropy_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_entropy_messages generates proper messages"""
         conscience = EntropyConscience(
             service_registry=mock_service_registry,
@@ -411,11 +407,12 @@ class TestEntropyConscience:
         messages = conscience._create_entropy_messages("Hello world")
 
         assert len(messages) == 3
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "system"
-        assert "IRIS-E" in messages[1]["content"]
-        assert messages[2]["role"] == "user"
-        assert "Hello world" in messages[2]["content"]
+        assert isinstance(messages[0], LLMMessage)
+        assert messages[0].role == "system"
+        assert messages[1].role == "system"
+        assert "IRIS-E" in messages[1].content
+        assert messages[2].role == "user"
+        assert "Hello world" in messages[2].content
 
 
 # ============================================================================
@@ -539,9 +536,7 @@ class TestCoherenceConscience:
         assert result.passed is True
         assert result.coherence_score == 0.9
 
-    def test_create_coherence_messages(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    def test_create_coherence_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_coherence_messages generates proper messages"""
         conscience = CoherenceConscience(
             service_registry=mock_service_registry,
@@ -552,11 +547,12 @@ class TestCoherenceConscience:
         messages = conscience._create_coherence_messages("Hello world")
 
         assert len(messages) == 3
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "system"
-        assert "IRIS-C" in messages[1]["content"]
-        assert messages[2]["role"] == "user"
-        assert "Hello world" in messages[2]["content"]
+        assert isinstance(messages[0], LLMMessage)
+        assert messages[0].role == "system"
+        assert messages[1].role == "system"
+        assert "IRIS-C" in messages[1].content
+        assert messages[2].role == "user"
+        assert "Hello world" in messages[2].content
 
 
 # ============================================================================
@@ -699,9 +695,7 @@ class TestOptimizationVetoConscience:
         assert result.passed is False
         assert result.optimization_veto_check.decision == "abort"
 
-    def test_create_optimization_veto_messages(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    def test_create_optimization_veto_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_optimization_veto_messages generates proper messages"""
         conscience = OptimizationVetoConscience(
             service_registry=mock_service_registry,
@@ -712,10 +706,11 @@ class TestOptimizationVetoConscience:
         messages = conscience._create_optimization_veto_messages("test action")
 
         assert len(messages) == 3
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "system"
-        assert "CIRIS-EOV" in messages[1]["content"]
-        assert messages[2]["role"] == "user"
+        assert isinstance(messages[0], LLMMessage)
+        assert messages[0].role == "system"
+        assert messages[1].role == "system"
+        assert "CIRIS-EOV" in messages[1].content
+        assert messages[2].role == "user"
 
 
 # ============================================================================
@@ -859,9 +854,7 @@ class TestEpistemicHumilityConscience:
         assert result.passed is False
         assert result.epistemic_humility_check.recommended_action == "abort"
 
-    def test_create_epistemic_humility_messages(
-        self, mock_service_registry, conscience_config, mock_time_service
-    ):
+    def test_create_epistemic_humility_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_epistemic_humility_messages generates proper messages"""
         conscience = EpistemicHumilityConscience(
             service_registry=mock_service_registry,
@@ -872,7 +865,8 @@ class TestEpistemicHumilityConscience:
         messages = conscience._create_epistemic_humility_messages("test action")
 
         assert len(messages) == 3
-        assert messages[0]["role"] == "system"
-        assert messages[1]["role"] == "system"
-        assert "CIRIS-EH" in messages[1]["content"]
-        assert messages[2]["role"] == "user"
+        assert isinstance(messages[0], LLMMessage)
+        assert messages[0].role == "system"
+        assert messages[1].role == "system"
+        assert "CIRIS-EH" in messages[1].content
+        assert messages[2].role == "user"

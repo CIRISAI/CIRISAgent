@@ -317,7 +317,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         try:
             llm_eval_data, _ = await self.call_llm_structured(
-                messages=messages, response_model=BaseDSDMA.LLMOutputForDSDMA, max_tokens=512, temperature=0.0
+                messages=messages,
+                response_model=BaseDSDMA.LLMOutputForDSDMA,
+                max_tokens=512,
+                temperature=0.0,
+                thought_id=thought_item.thought_id,
             )
 
             result = DSDMAResult(

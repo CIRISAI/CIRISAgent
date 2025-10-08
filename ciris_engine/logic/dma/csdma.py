@@ -171,7 +171,11 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         try:
             result_tuple = await self.call_llm_structured(
-                messages=messages, response_model=CSDMAResult, max_tokens=512, temperature=0.0
+                messages=messages,
+                response_model=CSDMAResult,
+                max_tokens=512,
+                temperature=0.0,
+                thought_id=thought_item.thought_id,
             )
             csdma_eval: CSDMAResult = result_tuple[0]
 

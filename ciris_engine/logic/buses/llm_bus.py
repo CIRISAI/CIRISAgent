@@ -123,6 +123,7 @@ class LLMBus(BaseBus[LLMService]):
         temperature: float = 0.0,
         handler_name: str = "default",
         domain: Optional[str] = None,  # NEW: Domain-aware routing
+        thought_id: Optional[str] = None,  # NEW: For resource tracking per thought
     ) -> Tuple[BaseModel, ResourceUsage]:
         """
         Generate structured output using LLM with optional domain routing.
@@ -197,7 +198,11 @@ class LLMBus(BaseBus[LLMService]):
 
                 # Record telemetry for resource usage
                 await self._record_resource_telemetry(
-                    service_name=service_name, handler_name=handler_name, usage=usage, latency_ms=latency_ms
+                    service_name=service_name,
+                    handler_name=handler_name,
+                    usage=usage,
+                    latency_ms=latency_ms,
+                    thought_id=thought_id,
                 )
 
                 logger.debug(f"LLM call successful via {service_name} " f"(latency: {latency_ms:.2f}ms)")
@@ -415,19 +420,34 @@ class LLMBus(BaseBus[LLMService]):
             self.circuit_breakers[service_name].record_failure()
 
     async def _record_resource_telemetry(
-        self, service_name: str, handler_name: str, usage: ResourceUsage, latency_ms: float
+        self,
+        service_name: str,
+        handler_name: str,
+        usage: ResourceUsage,
+        latency_ms: float,
+        thought_id: Optional[str] = None,
     ) -> None:
         """Record detailed telemetry for resource usage"""
         if not self.telemetry_service:
             return
 
         try:
+            # Build base tags
+            base_tags = {
+                "service": service_name,
+                "model": usage.model_used or "unknown",
+                "handler": handler_name,
+            }
+            # Add thought_id if provided for per-thought resource tracking
+            if thought_id:
+                base_tags["thought_id"] = thought_id
+
             # Record token usage
             await self.telemetry_service.record_metric(
                 metric_name="llm.tokens.total",
                 value=float(usage.tokens_used),
                 handler_name=handler_name,
-                tags={"service": service_name, "model": usage.model_used or "unknown", "handler": handler_name},
+                tags=base_tags,
             )
 
             # Record input/output tokens separately
@@ -436,7 +456,7 @@ class LLMBus(BaseBus[LLMService]):
                     metric_name="llm.tokens.input",
                     value=float(usage.tokens_input),
                     handler_name=handler_name,
-                    tags={"service": service_name, "model": usage.model_used or "unknown"},
+                    tags=base_tags,
                 )
 
             if usage.tokens_output > 0:
@@ -444,7 +464,7 @@ class LLMBus(BaseBus[LLMService]):
                     metric_name="llm.tokens.output",
                     value=float(usage.tokens_output),
                     handler_name=handler_name,
-                    tags={"service": service_name, "model": usage.model_used or "unknown"},
+                    tags=base_tags,
                 )
 
             # Record cost
@@ -453,7 +473,7 @@ class LLMBus(BaseBus[LLMService]):
                     metric_name="llm.cost.cents",
                     value=usage.cost_cents,
                     handler_name=handler_name,
-                    tags={"service": service_name, "model": usage.model_used or "unknown"},
+                    tags=base_tags,
                 )
 
             # Record environmental impact
@@ -462,7 +482,7 @@ class LLMBus(BaseBus[LLMService]):
                     metric_name="llm.environmental.carbon_grams",
                     value=usage.carbon_grams,
                     handler_name=handler_name,
-                    tags={"service": service_name, "model": usage.model_used or "unknown"},
+                    tags=base_tags,
                 )
 
             if usage.energy_kwh > 0:
@@ -470,7 +490,7 @@ class LLMBus(BaseBus[LLMService]):
                     metric_name="llm.environmental.energy_kwh",
                     value=usage.energy_kwh,
                     handler_name=handler_name,
-                    tags={"service": service_name, "model": usage.model_used or "unknown"},
+                    tags=base_tags,
                 )
 
             # Record latency
@@ -478,7 +498,7 @@ class LLMBus(BaseBus[LLMService]):
                 metric_name="llm.latency.ms",
                 value=latency_ms,
                 handler_name=handler_name,
-                tags={"service": service_name, "model": usage.model_used or "unknown"},
+                tags=base_tags,
             )
 
         except Exception as e:

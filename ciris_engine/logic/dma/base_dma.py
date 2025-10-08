@@ -108,9 +108,21 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         return service
 
     async def call_llm_structured(
-        self, messages: List[Dict[str, Any]], response_model: type, max_tokens: int = 1024, temperature: float = 0.0
+        self,
+        messages: List[Dict[str, Any]],
+        response_model: type,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        thought_id: Optional[str] = None,
     ) -> Tuple[Any, ...]:
         """Call LLM via sink for centralized failover, round-robin, and circuit breaker protection.
+
+        Args:
+            messages: List of message dictionaries
+            response_model: Pydantic model for response
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            thought_id: Optional thought_id for resource tracking
 
         Returns:
             Tuple[BaseModel, ResourceUsage]
@@ -134,6 +146,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             handler_name=self.__class__.__name__,
             max_tokens=max_tokens,
             temperature=temperature,
+            thought_id=thought_id,
         )
 
         # The sink returns Optional[tuple] which we need to ensure is a valid tuple

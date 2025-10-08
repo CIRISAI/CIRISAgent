@@ -201,7 +201,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         ]
 
         result_tuple = await self.call_llm_structured(
-            messages=messages, response_model=ActionSelectionDMAResult, max_tokens=1500, temperature=0.0
+            messages=messages,
+            response_model=ActionSelectionDMAResult,
+            max_tokens=1500,
+            temperature=0.0,
+            thought_id=input_data.original_thought.thought_id,
         )
 
         # Extract the result from the tuple and cast to the correct type

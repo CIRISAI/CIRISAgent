@@ -148,9 +148,9 @@ async def get_credits(
     )
 
     context = CreditContext(
-        agent_id=request.app.state.runtime.agent_identity.agent_id
-        if hasattr(request.app.state, "runtime")
-        else "unknown",
+        agent_id=(
+            request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+        ),
         channel_id="api:frontend",
         request_id=None,
         metadata={"source": "frontend_credit_display"},

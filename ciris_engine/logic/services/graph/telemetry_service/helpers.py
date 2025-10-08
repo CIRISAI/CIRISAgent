@@ -714,14 +714,15 @@ def filter_by_time_range(data: object, start_time: Optional[datetime], end_time:
     Check if timeseries data timestamp is within the specified range.
 
     Args:
-        data: Timeseries data point with timestamp attribute
+        data: Timeseries data point with timestamp/start_time attribute
         start_time: Optional start of time range
         end_time: Optional end of time range
 
     Returns:
         True if timestamp is within range (or no range specified)
     """
-    timestamp = getattr(data, "timestamp", None)
+    # Try timestamp first, fall back to start_time (used by TSDBGraphNode)
+    timestamp = getattr(data, "timestamp", None) or getattr(data, "start_time", None)
     if not timestamp:
         return False
 
@@ -746,7 +747,8 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
     """
     metric_name = getattr(data, "metric_name", None)
     value = getattr(data, "value", None)
-    timestamp = getattr(data, "timestamp", None)
+    # Try timestamp first, fall back to start_time (used by TSDBGraphNode)
+    timestamp = getattr(data, "timestamp", None) or getattr(data, "start_time", None)
 
     # Validate required fields
     if not (metric_name and value is not None and timestamp):

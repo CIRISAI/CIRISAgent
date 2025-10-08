@@ -71,7 +71,9 @@ class ShutdownResult(BaseModel):
     status: Optional[Literal["completed", "rejected", "error", "in_progress", "shutdown_complete"]] = Field(
         None, description="Detailed status of shutdown processing"
     )
-    action: Optional[str] = Field(None, description="Action taken: shutdown_accepted, shutdown_rejected, shutdown_error")
+    action: Optional[str] = Field(
+        None, description="Action taken: shutdown_accepted, shutdown_rejected, shutdown_error"
+    )
     message: str = Field("", description="Human-readable message about shutdown state")
     reason: Optional[str] = Field(None, description="Reason for rejection or error")
 

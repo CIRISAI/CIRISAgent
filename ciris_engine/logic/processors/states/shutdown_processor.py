@@ -80,14 +80,10 @@ class ShutdownProcessor(BaseProcessor):
         if result.duration_seconds == 0.0:
             result.duration_seconds = duration
 
-        logger.info(
-            f"ShutdownProcessor.process: status={result.status}, shutdown_ready={result.shutdown_ready}"
-        )
+        logger.info(f"ShutdownProcessor.process: status={result.status}, shutdown_ready={result.shutdown_ready}")
 
         # Log the result we're returning
-        logger.info(
-            f"ShutdownProcessor returning: shutdown_ready={result.shutdown_ready}, full result={result}"
-        )
+        logger.info(f"ShutdownProcessor returning: shutdown_ready={result.shutdown_ready}, full result={result}")
 
         return result
 
@@ -104,20 +100,12 @@ class ShutdownProcessor(BaseProcessor):
             if not self.shutdown_task:
                 logger.error("Shutdown task is None after creation")
                 return ShutdownResult(
-                    status="error",
-                    message="Failed to create shutdown task",
-                    errors=1,
-                    duration_seconds=0.0
+                    status="error", message="Failed to create shutdown task", errors=1, duration_seconds=0.0
                 )
             current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
             if not current_task:
                 logger.error("Shutdown task disappeared!")
-                return ShutdownResult(
-                    status="error",
-                    message="Shutdown task not found",
-                    errors=1,
-                    duration_seconds=0.0
-                )
+                return ShutdownResult(status="error", message="Shutdown task not found", errors=1, duration_seconds=0.0)
 
             # If task is pending, activate it
             if current_task.status == TaskStatus.PENDING:
@@ -142,12 +130,7 @@ class ShutdownProcessor(BaseProcessor):
             # Check task completion status
             if not current_task:
                 logger.error("Current task is None after fetching")
-                return ShutdownResult(
-                    status="error",
-                    message="Task not found",
-                    errors=1,
-                    duration_seconds=0.0
-                )
+                return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
             if current_task.status == TaskStatus.COMPLETED:
                 if not self.shutdown_complete:
                     self.shutdown_complete = True
@@ -156,7 +139,7 @@ class ShutdownProcessor(BaseProcessor):
                         action="shutdown_accepted",
                         message="Agent acknowledged shutdown",
                         shutdown_ready=True,
-                        duration_seconds=0.0
+                        duration_seconds=0.0,
                     )
                     logger.info("✓ Shutdown task completed - agent accepted shutdown")
                     # Signal the runtime to proceed with shutdown
@@ -168,10 +151,7 @@ class ShutdownProcessor(BaseProcessor):
 
                     await asyncio.sleep(1.0)
                 return self.shutdown_result or ShutdownResult(
-                    status="shutdown_complete",
-                    message="system shutdown",
-                    shutdown_ready=True,
-                    duration_seconds=0.0
+                    status="shutdown_complete", message="system shutdown", shutdown_ready=True, duration_seconds=0.0
                 )
             elif current_task.status == TaskStatus.FAILED:
                 # Task failed - could be REJECT or error
@@ -188,17 +168,12 @@ class ShutdownProcessor(BaseProcessor):
                 task_status=current_task.status.value,
                 thoughts=thought_statuses,
                 message="Waiting for agent response",
-                duration_seconds=0.0
+                duration_seconds=0.0,
             )
 
         except Exception as e:
             logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-            return ShutdownResult(
-                status="error",
-                message=str(e),
-                errors=1,
-                duration_seconds=0.0
-            )
+            return ShutdownResult(status="error", message=str(e), errors=1, duration_seconds=0.0)
 
     async def _create_shutdown_task(self) -> None:
         """Create the shutdown task."""
@@ -317,16 +292,12 @@ class ShutdownProcessor(BaseProcessor):
                             action="shutdown_rejected",
                             reason=reason,
                             message=f"Agent rejected shutdown: {reason}",
-                            duration_seconds=0.0
+                            duration_seconds=0.0,
                         )
 
         # Task failed for other reasons
         return ShutdownResult(
-            status="error",
-            action="shutdown_error",
-            message="Shutdown task failed",
-            errors=1,
-            duration_seconds=0.0
+            status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
         )
 
     async def _process_shutdown_thoughts(self) -> None:

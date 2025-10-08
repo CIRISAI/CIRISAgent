@@ -698,8 +698,14 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     if not tags:
         return True
 
-    # Check both 'tags' and 'labels' attributes (labels is used in database storage)
-    data_tags = getattr(data, "tags", None) or getattr(data, "labels", None) or {}
+    # Check both 'tags' and 'labels' attributes
+    # Note: 'tags' may be a list, 'labels' is the dict we want for key-value filtering
+    data_tags = getattr(data, "tags", None)
+    if not isinstance(data_tags, dict):
+        data_tags = getattr(data, "labels", None)
+    if not isinstance(data_tags, dict):
+        data_tags = {}
+
     return all(data_tags.get(k) == v for k, v in tags.items())
 
 
@@ -746,8 +752,13 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
     if not (metric_name and value is not None and timestamp):
         return None
 
-    # Check both 'tags' and 'labels' attributes (labels is used in database storage)
-    tags = getattr(data, "tags", None) or getattr(data, "labels", None) or {}
+    # Check both 'tags' and 'labels' attributes
+    # Note: 'tags' may be a list, 'labels' is the dict we want for metadata
+    tags = getattr(data, "tags", None)
+    if not isinstance(tags, dict):
+        tags = getattr(data, "labels", None)
+    if not isinstance(tags, dict):
+        tags = {}
 
     return MetricRecord(
         metric_name=metric_name,

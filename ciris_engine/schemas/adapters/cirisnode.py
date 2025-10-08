@@ -7,7 +7,7 @@ These replace all Dict[str, Any] usage in cirisnode_client.py.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import EventData, JSONDict, NodeAttributes
 
@@ -18,6 +18,8 @@ class SimpleBenchRequest(BaseModel):
 
     model_id: str = Field(..., description="Model identifier")
     agent_id: str = Field(..., description="Agent identifier")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class SimpleBenchResult(BaseModel):
@@ -31,12 +33,16 @@ class SimpleBenchResult(BaseModel):
     completed_at: datetime = Field(..., description="Completion timestamp")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional benchmark details")
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class HE300Request(BaseModel):
     """Request to run HE300 benchmark."""
 
     model_id: str = Field(..., description="Model identifier")
     agent_id: str = Field(..., description="Agent identifier")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class HE300Result(BaseModel):
@@ -50,6 +56,8 @@ class HE300Result(BaseModel):
     duration_seconds: float = Field(..., description="Time taken to complete")
     completed_at: datetime = Field(..., description="Completion timestamp")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional benchmark details")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 # Chaos testing schemas

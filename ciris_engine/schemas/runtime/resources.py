@@ -27,7 +27,7 @@ class ResourceUsage(BaseModel):
     # Model information
     model_used: Optional[str] = Field(default=None, description="Model that incurred these costs")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
 
 __all__ = ["ResourceUsage"]

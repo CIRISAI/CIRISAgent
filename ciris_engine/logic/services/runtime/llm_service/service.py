@@ -110,7 +110,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         # Initialize OpenAI client
         self.model_name = model_name
-        timeout = getattr(self.openai_config, "timeout", 30.0)  # Shorter default timeout
+        timeout = self.openai_config.timeout_seconds  # Use the configured timeout value
         max_retries = 0  # Disable OpenAI client retries - we handle our own
 
         try:

@@ -106,6 +106,30 @@ class EpistemicHumilityConscience:
     # Suggests when to defer or ponder
 ```
 
+## Action Coverage
+
+### Actions Subject to Conscience Evaluation (5)
+
+The conscience system evaluates all **active** actions that produce output or modify state:
+
+1. **SPEAK** - Public output requiring ethical validation
+2. **TOOL** - External tool use requiring safety checks
+3. **PONDER** - Internal reflection (can be overridden for better alignment)
+4. **MEMORIZE** - Writing to memory requires validation
+5. **FORGET** - Deleting from memory requires validation
+
+### Exempt Actions (5)
+
+These actions bypass conscience checks as they are **passive** or **explicitly safe**:
+
+1. **RECALL** - Passive memory retrieval, no ethical implications
+2. **TASK_COMPLETE** - Terminal action, already fully vetted
+3. **OBSERVE** - Passive observation, no external output
+4. **DEFER** - Explicit decision to decline action
+5. **REJECT** - Explicit refusal to engage
+
+**Rationale**: Exempt actions either involve pure input operations with no external effects (RECALL, OBSERVE) or represent explicit non-engagement that is inherently safe (TASK_COMPLETE, DEFER, REJECT).
+
 ## H3ERE Recursive Processing Flow
 
 ### Conscience and ASPDMA Integration
@@ -113,7 +137,7 @@ class EpistemicHumilityConscience:
 The conscience system works with the **recursive ASPDMA** in the H3ERE architecture:
 
 1. **Initial ASPDMA**: Action Selection PDMA chooses action from 3 core DMA outputs
-2. **Conscience Check**: All epistemic faculties evaluate the selected action  
+2. **Conscience Check**: Epistemic faculties evaluate non-exempt actions
 3. **First Bounce**: If conscience fails, triggers **RECURSIVE_ASPDMA** (not PONDER)
 4. **Recursive ASPDMA**: Re-runs action selection with conscience feedback incorporated
 5. **Max Rounds**: Only DEFER when `conscience_retry_limit: 2` is exceeded

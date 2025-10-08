@@ -215,6 +215,19 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
                                             )
+                                        # Validate telemetry_summary.circuit_breaker is not null
+                                        telemetry = snapshot.get("telemetry_summary")
+                                        if telemetry and isinstance(telemetry, dict):
+                                            if "circuit_breaker" not in telemetry:
+                                                issue_msg = (
+                                                    "system_snapshot.telemetry_summary missing 'circuit_breaker' field"
+                                                )
+                                                event_detail["issues"].append(issue_msg)
+                                                errors.append(f"🐛 MISSING FIELD: {issue_msg}")
+                                            elif telemetry.get("circuit_breaker") is None:
+                                                issue_msg = "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with state/failures/etc)"
+                                                event_detail["issues"].append(issue_msg)
+                                                errors.append(f"🐛 NULL FIELD: {issue_msg}")
                                         # Check service_health - should have entries for all services
                                         service_health = snapshot.get("service_health", {})
                                         if not service_health or not isinstance(service_health, dict):
@@ -261,7 +274,25 @@ class StreamingVerificationModule:
                                             if telemetry:
                                                 print(f"  Type: {type(telemetry).__name__}")
                                                 if isinstance(telemetry, dict):
+                                                    # Print circuit_breaker first (critical field)
+                                                    if "circuit_breaker" in telemetry:
+                                                        cb = telemetry["circuit_breaker"]
+                                                        print(f"\n  🔴 circuit_breaker:")
+                                                        if cb is None:
+                                                            print("     ❌ NULL (should be dict!)")
+                                                        elif isinstance(cb, dict):
+                                                            print(f"     Type: dict")
+                                                            for cb_key, cb_val in sorted(cb.items()):
+                                                                print(f"     - {cb_key}: {cb_val}")
+                                                        else:
+                                                            print(f"     ⚠️  Wrong type: {type(cb).__name__}")
+                                                    else:
+                                                        print(f"\n  🔴 circuit_breaker: ❌ MISSING")
+
+                                                    print(f"\n  Other fields:")
                                                     for key, value in sorted(telemetry.items()):
+                                                        if key == "circuit_breaker":
+                                                            continue  # Already printed above
                                                         # Truncate long values
                                                         val_str = str(value)
                                                         if len(val_str) > 60:

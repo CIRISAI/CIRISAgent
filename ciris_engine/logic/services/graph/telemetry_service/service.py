@@ -344,15 +344,22 @@ class TelemetryAggregator:
         Returns ServiceTelemetryData for the provider.
         """
         try:
-            # Get the provider instance from registry
-            providers = self.service_registry.get_services_by_type(service_type)
+            # Get the provider instance from registry using provider_info to match exact instance
+            provider_info = self.service_registry.get_provider_info()
             target_provider = None
 
-            for provider in providers:
-                # Extract class name from provider_name (remove instance ID)
-                provider_class_name = provider_name.split("_")[0] if "_" in provider_name else provider_name
-                if hasattr(provider, "__class__") and provider.__class__.__name__ == provider_class_name:
-                    target_provider = provider
+            # Find the exact provider by matching the full provider_name (which includes instance ID)
+            # This ensures we get the correct instance when multiple instances of the same class exist
+            for service_providers in provider_info.get("services", {}).get(service_type, []):
+                if service_providers.get("name") == provider_name:
+                    # Now get the actual provider instance from the services list
+                    providers = self.service_registry.get_services_by_type(service_type)
+                    for provider in providers:
+                        # Match by checking if the provider's id matches the one in provider_name
+                        provider_full_name = f"{provider.__class__.__name__}_{id(provider)}"
+                        if provider_full_name == provider_name:
+                            target_provider = provider
+                            break
                     break
 
             if not target_provider:
@@ -1975,6 +1982,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             calculate_average_latencies,
             calculate_error_rate,
             check_summary_cache,
+            collect_circuit_breaker_state,
             collect_metric_aggregates,
             get_average_thought_depth,
             get_queue_saturation,
@@ -2025,6 +2033,12 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         )
         service_latency_ms = calculate_average_latencies(aggregates.service_latency)
 
+        # Collect circuit breaker state from all buses
+        circuit_breaker_state = collect_circuit_breaker_state(getattr(self, "runtime", None))
+        # Always include circuit_breaker field (empty dict if no data, never None)
+        if not circuit_breaker_state:
+            circuit_breaker_state = {}
+
         # Build result
         summary = build_telemetry_summary(
             window_start_24h,
@@ -2035,6 +2049,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             avg_thought_depth,
             queue_saturation,
             service_latency_ms,
+            circuit_breaker=circuit_breaker_state,
         )
 
         # Cache and return

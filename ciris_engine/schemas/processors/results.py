@@ -5,7 +5,7 @@ These replace Dict[str, Any] returns from processors with type-safe schemas.
 Each state has its own result type with state-specific fields.
 """
 
-from typing import Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field
 
@@ -55,12 +55,33 @@ class DreamResult(BaseModel):
 
 
 class ShutdownResult(BaseModel):
-    """Result from SHUTDOWN state processing."""
+    """Result from SHUTDOWN state processing.
 
-    tasks_cleaned: int = Field(0)
-    shutdown_ready: bool = Field(False)
-    errors: int = Field(0)
-    duration_seconds: float = Field(...)
+    This schema replaces all Dict[str, Any] returns from shutdown_processor.py
+    with a fully-typed result structure.
+    """
+
+    # Core fields (used by process() method)
+    tasks_cleaned: int = Field(0, description="Number of tasks cleaned up")
+    shutdown_ready: bool = Field(False, description="Whether system is ready to shutdown")
+    errors: int = Field(0, description="Number of errors encountered")
+    duration_seconds: float = Field(..., description="Processing duration in seconds")
+
+    # Status fields (used by _process_shutdown() internal method)
+    status: Optional[Literal["completed", "rejected", "error", "in_progress", "shutdown_complete"]] = Field(
+        None, description="Detailed status of shutdown processing"
+    )
+    action: Optional[str] = Field(
+        None, description="Action taken: shutdown_accepted, shutdown_rejected, shutdown_error"
+    )
+    message: str = Field("", description="Human-readable message about shutdown state")
+    reason: Optional[str] = Field(None, description="Reason for rejection or error")
+
+    # Task tracking fields
+    task_status: Optional[str] = Field(None, description="Status of shutdown task (PENDING, ACTIVE, COMPLETED, FAILED)")
+    thoughts: Optional[List[Tuple[str, str]]] = Field(
+        None, description="List of (thought_id, status) tuples for debugging"
+    )
 
 
 # Discriminated union of all possible results

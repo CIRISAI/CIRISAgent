@@ -17,6 +17,7 @@ from ciris_engine.logic.conscience.updated_status_conscience import UpdatedStatu
 from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task, get_task_by_id, set_task_updated_info_flag
 from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
@@ -131,7 +132,7 @@ class TestUpdatedStatusConscience:
     @pytest.mark.asyncio
     async def test_passes_when_no_update_flag(self, conscience, speak_action, sample_thought, patch_db_path):
         """Test that check passes when no update flag is set."""
-        context = {"thought": sample_thought}
+        context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
 
         assert result.passed is True
@@ -148,7 +149,7 @@ class TestUpdatedStatusConscience:
             sample_task.task_id, "@newuser said: Actually, I changed my mind", mock_time_service, db_path=patch_db_path
         )
 
-        context = {"thought": sample_thought}
+        context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
 
         assert result.passed is False
@@ -166,7 +167,7 @@ class TestUpdatedStatusConscience:
         # Set the update flag
         set_task_updated_info_flag(sample_task.task_id, "New content", mock_time_service, db_path=patch_db_path)
 
-        context = {"thought": sample_thought}
+        context = ConscienceCheckContext(thought=sample_thought)
 
         # First check should detect and clear flag
         result = await conscience.check(speak_action, context)
@@ -191,7 +192,7 @@ class TestUpdatedStatusConscience:
         update_content = "@alice: I need help with something else"
         set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
 
-        context = {"thought": sample_thought}
+        context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
 
         assert result.passed is False
@@ -213,7 +214,7 @@ class TestUpdatedStatusConscience:
     @pytest.mark.asyncio
     async def test_passes_when_no_thought_in_context(self, conscience, speak_action):
         """Test that check passes when no thought in context."""
-        context = {}  # No thought
+        context = ConscienceCheckContext(thought=None)  # No thought
         result = await conscience.check(speak_action, context)
 
         assert result.passed is True
@@ -240,7 +241,7 @@ class TestUpdatedStatusConscience:
             ),
         )
 
-        context = {"thought": fake_thought}
+        context = ConscienceCheckContext(thought=fake_thought)
         result = await conscience.check(speak_action, context)
 
         assert result.passed is True
@@ -254,7 +255,7 @@ class TestUpdatedStatusConscience:
         update_content = "@alice (ID: 12345): Actually never mind"
         set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
 
-        context = {"thought": sample_thought}
+        context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
 
         # Verify the formatted update message (replacement_action is now top-level)

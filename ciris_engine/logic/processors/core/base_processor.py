@@ -4,7 +4,7 @@ Base processor abstract class defining the interface for all processor types.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import ValidationError
 
@@ -12,7 +12,7 @@ from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorMetrics
+from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorMetrics, ProcessorServices
 from ciris_engine.schemas.processors.results import ProcessingResult
 from ciris_engine.schemas.processors.states import AgentState
 
@@ -30,35 +30,46 @@ class BaseProcessor(ABC):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Dict[str, Any],
+        services: Union[Dict[str, Any], ProcessorServices],
     ) -> None:
-        """Initialize base processor with common dependencies."""
+        """Initialize base processor with common dependencies.
+
+        Args:
+            services: Can be Dict[str, Any] (legacy) or ProcessorServices (typed)
+        """
         self.config = config_accessor
         self.thought_processor = thought_processor
         self.action_dispatcher = action_dispatcher
-        self.services = services
-        if services and "discord_service" in services:
-            self.discord_service = services["discord_service"]
+
+        # Convert ProcessorServices to dict for backward compatibility
+        if isinstance(services, ProcessorServices):
+            services_dict = services.model_dump(exclude_none=True)
+        else:
+            services_dict = services
+
+        self.services = services_dict
+        if services_dict and "discord_service" in services_dict:
+            self.discord_service = services_dict["discord_service"]
 
         # Get TimeService from services
-        time_service = services.get("time_service")
+        time_service = services_dict.get("time_service")
         if not time_service:
             raise ValueError("time_service is required for processors")
         self.time_service: TimeServiceProtocol = time_service
 
         # Get ResourceMonitor from services - REQUIRED for system snapshots
-        self.resource_monitor = services.get("resource_monitor")
+        self.resource_monitor = services_dict.get("resource_monitor")
         if not self.resource_monitor:
             raise ValueError("resource_monitor is required for processors")
 
         # Extract other commonly used services
-        self.memory_service = services.get("memory_service")
-        self.graphql_provider = services.get("graphql_provider")
-        self.app_config = services.get("app_config")
-        self.runtime = services.get("runtime")
-        self.service_registry = services.get("service_registry")
-        self.secrets_service = services.get("secrets_service")
-        self.telemetry_service = services.get("telemetry_service")
+        self.memory_service = services_dict.get("memory_service")
+        self.graphql_provider = services_dict.get("graphql_provider")
+        self.app_config = services_dict.get("app_config")
+        self.runtime = services_dict.get("runtime")
+        self.service_registry = services_dict.get("service_registry")
+        self.secrets_service = services_dict.get("secrets_service")
+        self.telemetry_service = services_dict.get("telemetry_service")
 
         self.metrics = ProcessorMetrics()
 

@@ -47,6 +47,26 @@ CIRIS implements the **H3ERE (Hyper3 Ethical Recursive Engine)** architecture wi
 |---------|--------|---------|------------------|
 | **TaskCompleteHandler** | TASK_COMPLETE | Finalize tasks | Complete ethically-approved objectives |
 
+## Conscience Evaluation Coverage
+
+Before handlers execute, the **Conscience System** evaluates actions for ethical safety:
+
+**Actions Subject to Conscience (5)**:
+- **SPEAK** - External communication requires ethical validation
+- **TOOL** (ACT) - External actions require safety checks
+- **PONDER** - Internal reflection can be overridden for better alignment
+- **MEMORIZE** - Writing to memory requires validation
+- **FORGET** - Deleting from memory requires validation
+
+**Exempt Actions (5)**:
+- **RECALL** (REMEMBER) - Passive memory retrieval, no ethical implications
+- **TASK_COMPLETE** - Terminal action, already fully vetted
+- **OBSERVE** (LISTEN) - Passive observation, no external output
+- **DEFER** - Explicit decision to decline action
+- **REJECT** - Explicit refusal to engage
+
+Exempt actions bypass conscience checks as they are passive input operations or explicit non-engagement.
+
 ## Ethical Recursive Processing
 
 The H3ERE engine operates through ethical recursive loops:

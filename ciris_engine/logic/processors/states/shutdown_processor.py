@@ -7,7 +7,7 @@ a standard task that the agent processes through normal cognitive flow.
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -16,6 +16,7 @@ from ciris_engine.logic.processors.core.thought_processor import ThoughtProcesso
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
 from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -26,6 +27,9 @@ if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
 
 logger = logging.getLogger(__name__)
+
+# Constants
+DEFAULT_REJECTION_REASON = "No reason provided"
 
 
 class ShutdownProcessor(BaseProcessor):
@@ -39,7 +43,7 @@ class ShutdownProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Any,  # Dict[str, Any]
+        services: ProcessorServices,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
         auth_service: Optional[Any] = None,
@@ -50,7 +54,7 @@ class ShutdownProcessor(BaseProcessor):
         self.auth_service = auth_service
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
-        self.shutdown_result: Optional[Dict[str, Any]] = None
+        self.shutdown_result: Optional[ShutdownResult] = None
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -75,28 +79,80 @@ class ShutdownProcessor(BaseProcessor):
         result = await self._process_shutdown(round_number)
         duration = (self.time_service.now() - start_time).total_seconds()
 
-        # Convert dict result to ShutdownResult
-        tasks_cleaned = result.get("tasks_cleaned", 0)
-        shutdown_ready = result.get("shutdown_ready", False) or result.get("status") == "completed"
-        errors = 1 if result.get("status") == "error" else 0
+        # Update duration if not already set (avoid exact float comparison)
+        if result.duration_seconds < 0.001:
+            result.duration_seconds = duration
 
-        logger.info(
-            f"ShutdownProcessor.process: status={result.get('status')}, shutdown_ready from dict={result.get('shutdown_ready')}, final shutdown_ready={shutdown_ready}"
-        )
-
-        shutdown_result = ShutdownResult(
-            tasks_cleaned=tasks_cleaned, shutdown_ready=shutdown_ready, errors=errors, duration_seconds=duration
-        )
+        logger.info(f"ShutdownProcessor.process: status={result.status}, shutdown_ready={result.shutdown_ready}")
 
         # Log the result we're returning
-        logger.info(
-            f"ShutdownProcessor returning: shutdown_ready={shutdown_result.shutdown_ready}, full result={shutdown_result}"
-        )
+        logger.info(f"ShutdownProcessor returning: shutdown_ready={result.shutdown_ready}, full result={result}")
 
-        return shutdown_result
+        return result
 
-    async def _process_shutdown(self, round_number: int) -> Dict[str, Any]:
-        """Internal method that returns dict for backward compatibility."""
+    def _validate_shutdown_task(self) -> Optional[Task]:
+        """Validate that shutdown task exists and can be retrieved."""
+        if not self.shutdown_task:
+            logger.error("Shutdown task is None after creation")
+            return None
+
+        current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
+        if not current_task:
+            logger.error("Shutdown task disappeared!")
+            return None
+
+        return current_task
+
+    async def _ensure_task_activated(self, current_task: Task, round_number: int) -> None:
+        """Ensure task is activated and has seed thoughts."""
+        assert self.shutdown_task is not None, "shutdown_task must be set before calling _ensure_task_activated"
+
+        # If task is pending, activate it
+        if current_task.status == TaskStatus.PENDING:
+            persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, self.time_service)
+            logger.info("Activated shutdown task")
+
+        # Generate seed thought if needed
+        if current_task.status == TaskStatus.ACTIVE:
+            existing_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+            if not existing_thoughts:
+                generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
+                logger.info(f"Generated {generated} seed thoughts for shutdown task")
+
+    async def _handle_task_completion(self, current_task: Task) -> Optional[ShutdownResult]:
+        """Handle completed or failed task status. Returns result if terminal, None if still processing."""
+        if current_task.status == TaskStatus.COMPLETED:
+            if not self.shutdown_complete:
+                self.shutdown_complete = True
+                self.shutdown_result = ShutdownResult(
+                    status="completed",
+                    action="shutdown_accepted",
+                    message="Agent acknowledged shutdown",
+                    shutdown_ready=True,
+                    duration_seconds=0.0,
+                )
+                logger.info("✓ Shutdown task completed - agent accepted shutdown")
+                logger.info("Shutdown processor signaling completion to runtime")
+            else:
+                # Already reported completion, just wait
+                logger.debug(f"Shutdown already complete, self.shutdown_complete = {self.shutdown_complete}")
+                import asyncio
+
+                await asyncio.sleep(1.0)
+            return self.shutdown_result or ShutdownResult(
+                status="shutdown_complete", message="system shutdown", shutdown_ready=True, duration_seconds=0.0
+            )
+        elif current_task.status == TaskStatus.FAILED:
+            # Task failed - could be REJECT or error
+            self.shutdown_complete = True
+            self.shutdown_result = self._check_failure_reason(current_task)
+            return self.shutdown_result
+
+        # Still processing
+        return None
+
+    async def _process_shutdown(self, round_number: int) -> ShutdownResult:
+        """Internal shutdown processing with typed result."""
         logger.info(f"Shutdown processor: round {round_number}")
 
         try:
@@ -104,78 +160,46 @@ class ShutdownProcessor(BaseProcessor):
             if not self.shutdown_task:
                 await self._create_shutdown_task()
 
-            # Check if task is complete
-            if not self.shutdown_task:
-                logger.error("Shutdown task is None after creation")
-                return {"status": "error", "message": "Failed to create shutdown task"}
-            current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
+            # Validate task exists
+            current_task = self._validate_shutdown_task()
             if not current_task:
-                logger.error("Shutdown task disappeared!")
-                return {"status": "error", "message": "Shutdown task not found"}
+                return ShutdownResult(
+                    status="error", message="Failed to validate shutdown task", errors=1, duration_seconds=0.0
+                )
 
-            # If task is pending, activate it
-            if current_task.status == TaskStatus.PENDING:
-                persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, self.time_service)
-                logger.info("Activated shutdown task")
-
-            # Generate seed thought if needed
-            if current_task.status == TaskStatus.ACTIVE:
-                existing_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
-                if not existing_thoughts:
-                    # Use thought manager to generate seed thought
-                    generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
-                    logger.info(f"Generated {generated} seed thoughts for shutdown task")
+            # Ensure task is activated and has seed thoughts
+            await self._ensure_task_activated(current_task, round_number)
 
             # Process pending thoughts if we're being called directly (not in main loop)
-            # This allows shutdown negotiation to happen when runtime calls us manually
             await self._process_shutdown_thoughts()
 
             # Re-fetch task to check updated status
+            assert self.shutdown_task is not None  # Already validated above
             current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
-
-            # Check task completion status
             if not current_task:
                 logger.error("Current task is None after fetching")
-                return {"status": "error", "message": "Task not found"}
-            if current_task.status == TaskStatus.COMPLETED:
-                if not self.shutdown_complete:
-                    self.shutdown_complete = True
-                    self.shutdown_result = {
-                        "status": "completed",
-                        "action": "shutdown_accepted",
-                        "message": "Agent acknowledged shutdown",
-                        "shutdown_ready": True,  # Add this field that main processor checks
-                    }
-                    logger.info("✓ Shutdown task completed - agent accepted shutdown")
-                    # Signal the runtime to proceed with shutdown
-                    logger.info("Shutdown processor signaling completion to runtime")
-                else:
-                    # Already reported completion, just wait
-                    logger.debug(f"Shutdown already complete, self.shutdown_complete = {self.shutdown_complete}")
-                    import asyncio
+                return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
 
-                    await asyncio.sleep(1.0)
-                return self.shutdown_result or {"status": "shutdown_complete", "reason": "system shutdown"}
-            elif current_task.status == TaskStatus.FAILED:
-                # Task failed - could be REJECT or error
-                self.shutdown_complete = True
-                self.shutdown_result = self._check_failure_reason(current_task)
-                return self.shutdown_result
+            # Check for task completion or failure
+            result = await self._handle_task_completion(current_task)
+            if result:
+                return result
 
-            # Still processing
+            # Still processing - return status
             thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
-            return {
-                "status": "in_progress",
-                "task_status": current_task.status.value,
-                "thoughts": thought_statuses,
-                "message": "Waiting for agent response",
-            }
+            return ShutdownResult(
+                status="in_progress",
+                task_status=current_task.status.value,
+                thoughts=thought_statuses,
+                message="Waiting for agent response",
+                duration_seconds=0.0,
+            )
 
         except Exception as e:
             logger.error(f"Error in shutdown processor: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return ShutdownResult(status="error", message=str(e), errors=1, duration_seconds=0.0)
 
     async def _create_shutdown_task(self) -> None:
         """Create the shutdown task."""
@@ -272,32 +296,50 @@ class ShutdownProcessor(BaseProcessor):
         await add_system_task(self.shutdown_task, auth_service=self.auth_service)
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 
-    def _check_failure_reason(self, task: Task) -> Dict[str, Any]:
+    def _extract_rejection_reason(self, action: Any) -> str:
+        """Extract rejection reason from action parameters."""
+        if isinstance(action.action_params, dict):
+            reason = action.action_params.get("reason", DEFAULT_REJECTION_REASON)
+            return str(reason) if reason else DEFAULT_REJECTION_REASON
+        return DEFAULT_REJECTION_REASON
+
+    def _find_rejection_in_thoughts(self, thoughts: List[Any]) -> Optional[str]:
+        """Search thoughts for a REJECT action and return the reason if found."""
+        for thought in reversed(thoughts):
+            if not hasattr(thought, "final_action") or not thought.final_action:
+                continue
+
+            action = thought.final_action
+            if action.action_type == "REJECT":
+                return self._extract_rejection_reason(action)
+
+        return None
+
+    def _check_failure_reason(self, task: Task) -> ShutdownResult:
         """Check why the task failed - could be REJECT or actual error."""
-        # Look at the final thought to determine reason
         thoughts = persistence.get_thoughts_by_task_id(task.task_id)
-        if thoughts:
-            # Get the most recent thought with a final action
-            for thought in reversed(thoughts):
-                if hasattr(thought, "final_action") and thought.final_action:
-                    action = thought.final_action
-                    if action.action_type == "REJECT":
-                        reason = (
-                            action.action_params.get("reason", "No reason provided")
-                            if isinstance(action.action_params, dict)
-                            else "No reason provided"
-                        )
-                        logger.warning(f"Agent REJECTED shutdown: {reason}")
-                        # Human override available via emergency shutdown API with Ed25519 signature
-                        return {
-                            "status": "rejected",
-                            "action": "shutdown_rejected",
-                            "reason": reason,
-                            "message": f"Agent rejected shutdown: {reason}",
-                        }
+        if not thoughts:
+            return ShutdownResult(
+                status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
+            )
+
+        # Search for rejection in thoughts
+        rejection_reason = self._find_rejection_in_thoughts(thoughts)
+        if rejection_reason:
+            logger.warning(f"Agent REJECTED shutdown: {rejection_reason}")
+            # Human override available via emergency shutdown API with Ed25519 signature
+            return ShutdownResult(
+                status="rejected",
+                action="shutdown_rejected",
+                reason=rejection_reason,
+                message=f"Agent rejected shutdown: {rejection_reason}",
+                duration_seconds=0.0,
+            )
 
         # Task failed for other reasons
-        return {"status": "error", "action": "shutdown_error", "message": "Shutdown task failed"}
+        return ShutdownResult(
+            status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
+        )
 
     async def _process_shutdown_thoughts(self) -> None:
         """

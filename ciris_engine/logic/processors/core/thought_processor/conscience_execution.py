@@ -73,8 +73,12 @@ class ConscienceExecutionPhase:
                 processing_context.is_conscience_retry = False
 
         # Exempt actions that shouldn't be overridden
+        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET (5 actions)
+        # Conscience exempt: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (5 actions)
         exempt_actions = {
+            HandlerActionType.RECALL.value,
             HandlerActionType.TASK_COMPLETE.value,
+            HandlerActionType.OBSERVE.value,
             HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }
@@ -97,7 +101,15 @@ class ConscienceExecutionPhase:
                 ),
             )
 
-        context = {"thought": thought or thought_item, "dma_results": dma_results or {}}
+        # Create typed context for conscience checks
+        from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+
+        context = ConscienceCheckContext(
+            thought=thought or thought_item,
+            task=None,  # Will be populated by conscience checks if needed
+            round_number=None,
+            system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+        )
 
         final_action = action_result
         overridden = False

@@ -11,10 +11,11 @@ When detected, it forces a PONDER override to incorporate the new information.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ciris_engine.logic.conscience.interface import ConscienceInterface
 from ciris_engine.schemas.actions.parameters import PonderParams
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -40,12 +41,12 @@ class UpdatedStatusConscience(ConscienceInterface):
         """
         self._time_service = time_service
 
-    async def check(self, action: ActionSelectionDMAResult, context: Dict[str, Any]) -> ConscienceCheckResult:
+    async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         """Check if the task has new information available.
 
         Args:
             action: The selected action to check
-            context: Context containing the thought and task information
+            context: Typed context containing the thought and task information
 
         Returns:
             ConscienceCheckResult with FAILED status if update detected, PASSED otherwise
@@ -53,7 +54,7 @@ class UpdatedStatusConscience(ConscienceInterface):
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
 
         # Get the thought from context
-        thought = context.get("thought")
+        thought = context.thought
         if not thought:
             # No thought in context - pass
             return ConscienceCheckResult(

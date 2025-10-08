@@ -458,12 +458,12 @@ class TestDomainAwareLLMRouting:
 
     @pytest.mark.asyncio
     async def test_domain_filtering_with_unhealthy_services(self, llm_bus, service_registry):
-        """Test that unhealthy services are filtered out even if domain matches."""
+        """Test failover when primary service fails even if both have same domain."""
         medical_primary = MockLLMService(domain="medical", model="llama3-medical-70b")
         medical_backup = MockLLMService(domain="medical", model="biogpt")
 
-        # Make primary unhealthy
-        medical_primary.is_healthy_flag = False
+        # Make primary fail when called
+        medical_primary.call_llm_structured = AsyncMock(side_effect=Exception("Primary failed"))
 
         service_registry.register_service(
             service_type=ServiceType.LLM,
@@ -487,8 +487,8 @@ class TestDomainAwareLLMRouting:
             domain="medical",
         )
 
-        # Should use backup (primary is unhealthy)
-        assert medical_primary.call_count == 0
+        # Should try primary first (higher priority), fail, then use backup
+        assert medical_primary.call_llm_structured.call_count == 1
         assert medical_backup.call_count == 1
         assert usage.model_used == "biogpt"
 
@@ -766,16 +766,17 @@ class TestDomainRoutingEdgeCases:
             )
 
     @pytest.mark.asyncio
-    async def test_service_health_check_failure(self, llm_bus, service_registry):
-        """Test when service health check fails."""
+    async def test_service_failure_propagates(self, llm_bus, service_registry):
+        """Test when service call fails."""
         service = MockLLMService()
-        service.is_healthy_flag = False
+        # Make service fail when called
+        service.call_llm_structured = AsyncMock(side_effect=RuntimeError("Service failed"))
 
         service_registry.register_service(
             service_type=ServiceType.LLM, provider=service, priority=Priority.NORMAL, metadata={"domain": "general"}
         )
 
-        with pytest.raises(RuntimeError, match="No LLM services available"):
+        with pytest.raises(RuntimeError, match="All LLM services failed"):
             await llm_bus.call_llm_structured(
                 messages=[{"role": "user", "content": "test"}], response_model=MockResponseForDomainTesting
             )

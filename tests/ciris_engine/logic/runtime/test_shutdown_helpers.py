@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from ciris_engine.schemas.processors.results import ShutdownResult
+
 
 class TestShutdownHelpers:
     """Test shutdown continuity helper methods."""
@@ -16,10 +18,11 @@ class TestShutdownHelpers:
         runtime = Mock(spec=CIRISRuntime)
         runtime.agent_processor = Mock()
         runtime.agent_processor.shutdown_processor = Mock()
-        runtime.agent_processor.shutdown_processor.shutdown_result = {
-            "action": "shutdown_accepted",
-            "status": "completed",
-        }
+        runtime.agent_processor.shutdown_processor.shutdown_result = ShutdownResult(
+            action="shutdown_accepted",
+            status="completed",
+            duration_seconds=0.0,
+        )
 
         result = CIRISRuntime._determine_shutdown_consent_status(runtime)
         assert result == "accepted"
@@ -31,10 +34,11 @@ class TestShutdownHelpers:
         runtime = Mock(spec=CIRISRuntime)
         runtime.agent_processor = Mock()
         runtime.agent_processor.shutdown_processor = Mock()
-        runtime.agent_processor.shutdown_processor.shutdown_result = {
-            "action": "shutdown_rejected",
-            "status": "rejected",
-        }
+        runtime.agent_processor.shutdown_processor.shutdown_result = ShutdownResult(
+            action="shutdown_rejected",
+            status="rejected",
+            duration_seconds=0.0,
+        )
 
         result = CIRISRuntime._determine_shutdown_consent_status(runtime)
         assert result == "rejected"

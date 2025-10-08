@@ -20,7 +20,6 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 
-
 # ============================================================================
 # FIXTURES
 # ============================================================================
@@ -421,7 +420,7 @@ class TestShutdownProcessing:
         assert isinstance(result, ShutdownResult)
         assert result.shutdown_ready is False  # Rejected, not ready
         assert shutdown_processor.shutdown_complete is True
-        assert "rejected" in shutdown_processor.shutdown_result["status"]
+        assert shutdown_processor.shutdown_result.status == "rejected"
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
@@ -637,9 +636,10 @@ class TestFailureReason:
         result = shutdown_processor._check_failure_reason(sample_task)
 
         # Verify
-        assert result["status"] == "rejected"
-        assert result["action"] == "shutdown_rejected"
-        assert "not ready" in result["reason"]
+        assert isinstance(result, ShutdownResult)
+        assert result.status == "rejected"
+        assert result.action == "shutdown_rejected"
+        assert "not ready" in result.reason
 
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     def test_check_failure_reason_no_thoughts(
@@ -655,8 +655,9 @@ class TestFailureReason:
         result = shutdown_processor._check_failure_reason(sample_task)
 
         # Verify
-        assert result["status"] == "error"
-        assert result["action"] == "shutdown_error"
+        assert isinstance(result, ShutdownResult)
+        assert result.status == "error"
+        assert result.action == "shutdown_error"
 
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     def test_check_failure_reason_no_final_action(
@@ -674,7 +675,8 @@ class TestFailureReason:
         result = shutdown_processor._check_failure_reason(sample_task)
 
         # Verify
-        assert result["status"] == "error"
+        assert isinstance(result, ShutdownResult)
+        assert result.status == "error"
 
 
 # ============================================================================

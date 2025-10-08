@@ -689,7 +689,7 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     Check if timeseries data matches all required tags.
 
     Args:
-        data: Timeseries data point with tags attribute
+        data: Timeseries data point with tags or labels attribute
         tags: Optional dictionary of tags to match
 
     Returns:
@@ -698,7 +698,8 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     if not tags:
         return True
 
-    data_tags = getattr(data, "tags", None) or {}
+    # Check both 'tags' and 'labels' attributes (labels is used in database storage)
+    data_tags = getattr(data, "tags", None) or getattr(data, "labels", None) or {}
     return all(data_tags.get(k) == v for k, v in tags.items())
 
 
@@ -745,11 +746,14 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
     if not (metric_name and value is not None and timestamp):
         return None
 
+    # Check both 'tags' and 'labels' attributes (labels is used in database storage)
+    tags = getattr(data, "tags", None) or getattr(data, "labels", None) or {}
+
     return MetricRecord(
         metric_name=metric_name,
         value=value,
         timestamp=timestamp,
-        tags=getattr(data, "tags", None) or {},
+        tags=tags,
     )
 
 

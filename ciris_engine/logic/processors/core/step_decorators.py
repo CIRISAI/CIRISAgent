@@ -111,9 +111,11 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         )
         cost_data = await telemetry_service.query_metrics(metric_name="llm.cost.cents", tags=tags, end_time=timestamp)
         carbon_data = await telemetry_service.query_metrics(
-            metric_name="llm.carbon.grams", tags=tags, end_time=timestamp
+            metric_name="llm.environmental.carbon_grams", tags=tags, end_time=timestamp
         )
-        energy_data = await telemetry_service.query_metrics(metric_name="llm.energy.mwh", tags=tags, end_time=timestamp)
+        energy_data = await telemetry_service.query_metrics(
+            metric_name="llm.environmental.energy_kwh", tags=tags, end_time=timestamp
+        )
 
         # Aggregate metrics - sum all values
         tokens_total = sum(m.value for m in tokens_total_data)
@@ -121,7 +123,9 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         tokens_output = sum(m.value for m in tokens_output_data)
         cost_cents = sum(m.value for m in cost_data)
         carbon_grams = sum(m.value for m in carbon_data)
-        energy_mwh = sum(m.value for m in energy_data)
+        # Convert kWh to mWh (1 kWh = 1,000,000 mWh)
+        energy_kwh = sum(m.value for m in energy_data)
+        energy_mwh = energy_kwh * 1_000_000
         llm_calls = len(tokens_total_data)  # Each LLM call creates one tokens.total metric
 
         # Extract unique models from tags

@@ -611,7 +611,7 @@ async def _safe_get_health_status(service: Any) -> tuple[bool, bool]:
     return False, False  # No health method
 
 
-def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
+async def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
     """Safely get circuit breaker status from a service.
 
     Returns:
@@ -619,7 +619,7 @@ def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
     """
     try:
         if hasattr(service, "get_circuit_breaker_status"):
-            cb_status = service.get_circuit_breaker_status()
+            cb_status = await service.get_circuit_breaker_status()
             return True, str(cb_status) if cb_status else "UNKNOWN"
     except Exception as e:
         logger.warning(f"Failed to get circuit breaker status from service: {e}")
@@ -637,7 +637,7 @@ async def _process_single_service(
         service_health[service_name] = health_status
 
     # Get circuit breaker status - only include if service has circuit breaker methods
-    has_circuit_breaker, cb_status = _safe_get_circuit_breaker_status(service)
+    has_circuit_breaker, cb_status = await _safe_get_circuit_breaker_status(service)
     if has_circuit_breaker:
         circuit_breaker_status[service_name] = cb_status
 

@@ -203,8 +203,10 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
 
                 # For ACTION_COMPLETE, query and aggregate resource usage by thought_id
                 if step == StepPoint.ACTION_COMPLETE:
-                    # Get telemetry service from processor sink
-                    telemetry_service = getattr(getattr(self, "sink", None), "telemetry", None)
+                    # Get telemetry service from processor
+                    telemetry_service = getattr(self, "telemetry_service", None) or getattr(
+                        getattr(self, "sink", None), "telemetry", None
+                    )
                     if telemetry_service:
                         # Query resources and add to kwargs for _create_action_complete_data
                         resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)

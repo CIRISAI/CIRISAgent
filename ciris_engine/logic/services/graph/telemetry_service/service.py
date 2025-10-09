@@ -2005,12 +2005,13 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             circuit_breaker_state = {}
 
         # Check cache
-        cached = check_summary_cache(self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds)
+        cached: TelemetrySummary | None = check_summary_cache(
+            self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds
+        )
         if cached:
             logger.debug("Returning cached telemetry summary with fresh circuit breaker data")
             # Update cached summary with fresh circuit breaker state
-            if isinstance(cached, TelemetrySummary):
-                cached.circuit_breaker = circuit_breaker_state
+            cached.circuit_breaker = circuit_breaker_state
             return cached
 
         # Fail fast if memory bus not available

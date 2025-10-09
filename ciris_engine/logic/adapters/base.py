@@ -86,12 +86,12 @@ class Service(ABC):
                     await asyncio.sleep(final_delay)
 
                 # Handle both async and sync operations
+                # Note: Cannot avoid cast here - mypy can't infer T from operation signature
                 if asyncio.iscoroutinefunction(operation):
                     result = await operation(*args, **kwargs)
-                    return cast(T, result)
                 else:
                     result = operation(*args, **kwargs)
-                    return cast(T, result)
+                return cast(T, result)
 
             except non_retryable_exceptions as e:
                 logger.error(f"{self.service_name}: Non-retryable error, failing immediately: {e}")

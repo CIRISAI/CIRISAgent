@@ -21,7 +21,11 @@ def _convert_profiles_list_to_dict(profiles: List[Any]) -> dict[str, Any]:
     for profile in profiles:
         converted = _convert_user_profile_to_dict(profile)
         if isinstance(converted, dict):
-            user_id = converted.get("user_id", "unknown") if "user_id" in converted else getattr(profile, "user_id", "unknown")
+            user_id = (
+                converted.get("user_id", "unknown")
+                if "user_id" in converted
+                else getattr(profile, "user_id", "unknown")
+            )
             profiles_dict[user_id] = converted
     return profiles_dict
 

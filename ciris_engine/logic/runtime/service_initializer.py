@@ -168,8 +168,10 @@ class ServiceInitializer:
         else:
             from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
 
-            credit_provider = SimpleCreditProvider()
-            logger.info("Using SimpleCreditProvider - 1 free credit per OAuth user")
+            # Get free uses from environment (default: 0)
+            free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
+            credit_provider = SimpleCreditProvider(free_uses=free_uses)
+            logger.info(f"Using SimpleCreditProvider - {free_uses} free uses per OAuth user")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,

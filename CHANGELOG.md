@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CIRISBillingProvider with API key auth, oauth: prefix handling, idempotency
   - API endpoints: `/api/billing/credits`, `/api/billing/purchase/*`
   - User API key management: create/list/revoke with 30min-7day expiry
-  - SimpleCreditProvider: 1 free credit per OAuth user (no backend required)
+  - SimpleCreditProvider: Configurable free uses per OAuth user (default: 0, env: `CIRIS_SIMPLE_FREE_USES`)
 - **Resource Tracking**: Per-thought metrics in H3ERE events (tokens, cost, carbon, energy)
 - **API Documentation**: Complete specification in `docs/API_SPEC.md`
 - **Marketing Opt-in**: GDPR-compliant consent capture in OAuth flow

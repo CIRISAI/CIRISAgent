@@ -317,8 +317,8 @@ class TestInitiatePurchase:
         assert call_args[1]["json"]["customer_email"] == "user@example.com"
 
     @pytest.mark.asyncio
-    async def test_initiate_purchase_fallback_email(self, mock_auth_context, mock_purchase_request):
-        """Test purchase with fallback email when OAuth email not available."""
+    async def test_initiate_purchase_no_email(self, mock_auth_context, mock_purchase_request):
+        """Test purchase fails when OAuth email not available."""
         request = Mock()
         request.app.state = Mock()
 
@@ -336,33 +336,26 @@ class TestInitiatePurchase:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Mock billing client
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "payment_id": "pi_456",
-            "client_secret": "pi_456_secret",
-            "amount_minor": 500,
-            "currency": "USD",
-            "uses_purchased": 20,
-        }
-        billing_client.post = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Should fail with 400 before reaching billing client
+        with pytest.raises(HTTPException) as exc_info:
+            await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
-        # Mock Stripe publishable key
-        with patch("ciris_engine.logic.adapters.api.routes.billing._get_stripe_publishable_key", return_value="pk_test_456"):
-            response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
-
-        # Verify fallback email was used
-        call_args = billing_client.post.call_args
-        assert call_args[1]["json"]["customer_email"] == "user-123@ciris.ai"
+        assert exc_info.value.status_code == 400
+        assert "Email address required" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_api_error(self, mock_auth_context, mock_purchase_request):
         """Test purchase with billing API error."""
         request = Mock()
         request.app.state = Mock()
-        request.app.state.auth_service = None
+
+        # Mock auth service with OAuth user (has email)
+        auth_service = Mock()
+        oauth_user = Mock()
+        oauth_user.marketing_opt_in = False
+        oauth_user.oauth_email = "user@example.com"
+        auth_service.get_user = Mock(return_value=oauth_user)
+        request.app.state.auth_service = auth_service
 
         # Mock resource monitor
         resource_monitor = Mock()

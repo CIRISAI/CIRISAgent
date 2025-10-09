@@ -288,8 +288,13 @@ async def initiate_purchase(
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 
-    # Get user email (needed for Stripe) - extract from OAuth profile or fall back to user ID
-    customer_email = user_identity.get("email") or f"{auth.user_id}@ciris.ai"
+    # Get user email (needed for Stripe) - extract from OAuth profile
+    customer_email = user_identity.get("email")
+    if not customer_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email address required for purchase. Please authenticate with OAuth provider.",
+        )
 
     try:
         # Create payment intent via billing backend

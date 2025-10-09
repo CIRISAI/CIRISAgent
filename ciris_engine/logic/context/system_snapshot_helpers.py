@@ -929,9 +929,15 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
 
 def _extract_user_from_task_context(task: Optional[Task], user_ids: Set[str]) -> None:
     """Extract user ID from task context."""
-    if task and task.context and task.context.user_id:
-        user_ids.add(str(task.context.user_id))
-        logger.debug(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
+    if task and task.context:
+        logger.info(f"[USER EXTRACTION] Task context exists, user_id value: {repr(task.context.user_id)}")
+        if task.context.user_id:
+            user_ids.add(str(task.context.user_id))
+            logger.info(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
+        else:
+            logger.info(f"[USER EXTRACTION] Task context.user_id is None or empty")
+    else:
+        logger.info(f"[USER EXTRACTION] Task or task.context is None (task={task is not None})")
 
 
 def _extract_users_from_thought_content(thought: Any, user_ids: Set[str]) -> None:

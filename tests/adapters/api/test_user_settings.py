@@ -8,9 +8,9 @@ Tests cover:
 """
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-from unittest.mock import AsyncMock, Mock
 
 from ciris_engine.logic.adapters.api.routes.users import (
     UpdateUserSettingsRequest,
@@ -18,7 +18,7 @@ from ciris_engine.logic.adapters.api.routes.users import (
     get_my_settings,
     update_my_settings,
 )
-from ciris_engine.schemas.api.auth import AuthContext, UserRole, Permission
+from ciris_engine.schemas.api.auth import AuthContext, Permission, UserRole
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 

@@ -722,7 +722,8 @@ def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str
                     if isinstance(user_profiles, list):
                         # Filter list: only keep profiles where user_id is in allowed_user_ids
                         system_snapshot["user_profiles"] = [
-                            profile for profile in user_profiles
+                            profile
+                            for profile in user_profiles
                             if isinstance(profile, dict) and profile.get("user_id") in allowed_user_ids
                         ]
                     elif isinstance(user_profiles, dict):

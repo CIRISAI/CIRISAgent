@@ -131,16 +131,22 @@ class TestBuildSystemSnapshot:
         assert snapshot.current_thought_summary.thought_id == "thought_001"
         assert snapshot.current_thought_summary.status == "processing"
 
-        # Check channel extraction from task context
-        assert snapshot.channel_id == "test_channel_123"
+        # Check channel extraction - sample_task has channel_id="fallback_channel" which has priority
+        assert snapshot.channel_id == "fallback_channel"
 
     @pytest.mark.asyncio
     async def test_channel_id_extraction_priority(self, mock_resource_monitor, mock_time_service):
-        """Test channel_id extraction follows correct priority."""
-        # Create task without context first (context field is optional)
+        """Test channel_id extraction follows correct priority.
+
+        New priority order:
+        1. task.channel_id (direct field)
+        2. task.context.channel_id
+        3. task.context.system_snapshot.channel_id (legacy)
+        """
+        # Create task WITH channel_id - should have highest priority
         task = Task(
             task_id="task_002",
-            channel_id="task_channel",  # Lowest priority
+            channel_id="task_channel",  # HIGHEST priority
             description="Test",
             status=TaskStatus.PENDING,
             created_at=datetime.now(timezone.utc).isoformat(),
@@ -150,7 +156,7 @@ class TestBuildSystemSnapshot:
         # Add mock context as an attribute with system_snapshot having channel_id
         context = MagicMock()
         system_snapshot = MagicMock()
-        system_snapshot.channel_id = "snapshot_channel"  # This becomes the priority
+        system_snapshot.channel_id = "snapshot_channel"  # Lower priority
         # Ensure channel_context attribute doesn't exist to avoid validation issues
         system_snapshot.channel_context = None
         context.system_snapshot = system_snapshot
@@ -160,8 +166,8 @@ class TestBuildSystemSnapshot:
             task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
         )
 
-        # Should use system_snapshot.channel_id
-        assert snapshot.channel_id == "snapshot_channel"
+        # Should use task.channel_id (highest priority)
+        assert snapshot.channel_id == "task_channel"
 
     @pytest.mark.asyncio
     async def test_critical_resource_alerts(self, mock_resource_monitor, mock_time_service):
@@ -954,6 +960,9 @@ class TestChannelContextExtraction:
     async def test_channel_context_object_extraction(self, mock_resource_monitor, mock_time_service):
         """Test extracting channel_context object from system_snapshot."""
         mock_task = MagicMock()
+        # Set task.channel_id explicitly (it's a MagicMock attribute)
+        mock_task.channel_id = "context_channel_123"
+
         mock_context = MagicMock()
         mock_system_snapshot = MagicMock()
 
@@ -975,7 +984,7 @@ class TestChannelContextExtraction:
             task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
         )
 
-        # Should extract channel_id from channel_context object
+        # Should extract channel_id from task.channel_id
         assert snapshot.channel_id == "context_channel_123"
         assert snapshot.channel_context is not None
         assert snapshot.channel_context.channel_type == "discord"
@@ -1014,11 +1023,11 @@ class TestTypeEnforcement:
 
     @pytest.mark.asyncio
     async def test_channel_context_type_preservation(self, mock_resource_monitor, mock_time_service):
-        """Test that channel_id is properly extracted from task context."""
-        # Create task without context in constructor (to avoid validation error)
+        """Test that channel_id is properly extracted from task.channel_id (highest priority)."""
+        # Create task WITH channel_id (highest priority)
         task = Task(
             task_id="task_typed",
-            channel_id="fallback",
+            channel_id="fallback",  # This has priority
             description="Test",
             status=TaskStatus.ACTIVE,
             created_at=datetime.now(timezone.utc).isoformat(),
@@ -1028,7 +1037,7 @@ class TestTypeEnforcement:
         # Add mock context as an attribute after creation
         context = MagicMock()
         system_snapshot = MagicMock()
-        system_snapshot.channel_id = "typed_channel"
+        system_snapshot.channel_id = "typed_channel"  # Lower priority
         system_snapshot.channel_context = None  # Avoid MagicMock validation issues
         context.system_snapshot = system_snapshot
         task.context = context
@@ -1037,5 +1046,5 @@ class TestTypeEnforcement:
             task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
         )
 
-        # Channel ID should be extracted from context
-        assert snapshot.channel_id == "typed_channel"
+        # Channel ID should be extracted from task.channel_id (highest priority)
+        assert snapshot.channel_id == "fallback"

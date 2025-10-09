@@ -1599,12 +1599,8 @@ class TestObserverDataRedaction:
                         {"user_id": "user-123", "display_name": "Alice"},
                         {"user_id": "user-456", "display_name": "Bob"},
                     ],
-                    "recently_completed_tasks_summary": [
-                        {"task_id": "task-1", "description": "Task 1"}
-                    ],
-                    "top_pending_tasks_summary": [
-                        {"task_id": "task-2", "description": "Task 2"}
-                    ],
+                    "recently_completed_tasks_summary": [{"task_id": "task-1", "description": "Task 1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2", "description": "Task 2"}],
                 },
             }
         ]

@@ -285,12 +285,20 @@ class StreamingVerificationModule:
                                             issue_msg = "system_snapshot.user_profiles is empty list (should contain at least API user profile)"
                                             event_detail["issues"].append(issue_msg)
                                             errors.append(f"🐛 EMPTY LIST: {issue_msg}")
+                                            # Print the FULL event to debug why user_profiles is empty
+                                            print("\n" + "=" * 80)
+                                            print("🐛 DEBUG: FULL EVENT WITH EMPTY user_profiles")
+                                            print("=" * 80)
+                                            print(json.dumps(event, indent=2, default=str))
+                                            print("=" * 80 + "\n")
                                         else:
                                             # Validate user profile structure for each profile
                                             user_profiles = snapshot.get("user_profiles", [])
                                             for i, profile in enumerate(user_profiles):
                                                 if not isinstance(profile, dict):
-                                                    issue_msg = f"user_profiles[{i}] is not a dict: {type(profile).__name__}"
+                                                    issue_msg = (
+                                                        f"user_profiles[{i}] is not a dict: {type(profile).__name__}"
+                                                    )
                                                     event_detail["issues"].append(issue_msg)
                                                     errors.append(f"🐛 INVALID PROFILE: {issue_msg}")
                                                     continue
@@ -395,7 +403,9 @@ class StreamingVerificationModule:
                                             if user_profiles is None:
                                                 print("  ❌ NULL (should be list with at least API user!)")
                                             elif not isinstance(user_profiles, list):
-                                                print(f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)")
+                                                print(
+                                                    f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)"
+                                                )
                                             elif len(user_profiles) == 0:
                                                 print("  ❌ EMPTY (should contain at least API user profile)")
                                             else:
@@ -407,13 +417,21 @@ class StreamingVerificationModule:
                                                         # Show additional fields if present
                                                         extra_fields = []
                                                         if "user_preferred_name" in profile:
-                                                            extra_fields.append(f"preferred_name={profile['user_preferred_name']}")
+                                                            extra_fields.append(
+                                                                f"preferred_name={profile['user_preferred_name']}"
+                                                            )
                                                         if "location" in profile:
                                                             extra_fields.append(f"location={profile['location']}")
-                                                        extra_str = f" ({', '.join(extra_fields)})" if extra_fields else ""
-                                                        print(f"  {i}. user_id={user_id}, display_name={display_name}{extra_str}")
+                                                        extra_str = (
+                                                            f" ({', '.join(extra_fields)})" if extra_fields else ""
+                                                        )
+                                                        print(
+                                                            f"  {i}. user_id={user_id}, display_name={display_name}{extra_str}"
+                                                        )
                                                     else:
-                                                        print(f"  {i}. ⚠️ Invalid profile (not dict): {type(profile).__name__}")
+                                                        print(
+                                                            f"  {i}. ⚠️ Invalid profile (not dict): {type(profile).__name__}"
+                                                        )
 
                                             print("=" * 80 + "\n")
 

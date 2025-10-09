@@ -19,7 +19,6 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
 )
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
-
 # =============================================================================
 # ADMIN DETECTION TESTS
 # =============================================================================

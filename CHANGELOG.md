@@ -5,6 +5,38 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-10-08
+
+### Added
+- **📧 Marketing Opt-in Support**: OAuth flow now captures user consent for marketing communications
+  - Added `marketing_opt_in` field to `OAuthUser` and `User` dataclasses (defaults to `False`)
+  - OAuth callback endpoint accepts optional `marketing_opt_in` query parameter from frontend
+  - `create_oauth_user()` stores marketing preference on new users and updates it for returning users
+  - Billing API extracts `marketing_opt_in` from user records and includes in all billing service requests
+  - **Flow**: Frontend checkbox → OAuth callback → User record → Billing API → Billing service Account model
+  - Enables GDPR-compliant opt-in/opt-out tracking for marketing campaigns
+
+- **📊 Resource Usage Tracking in Action Events**: H3ERE reasoning events now include per-thought resource metrics
+  - Added 8 resource fields to `ActionResultEvent` schema:
+    - Token metrics: `tokens_total`, `tokens_input`, `tokens_output`
+    - Cost/environmental: `cost_cents`, `carbon_grams`, `energy_mwh`
+    - LLM usage: `llm_calls`, `models_used`
+  - Resources queried from telemetry by `thought_id` during `ACTION_COMPLETE` step
+  - Enables frontend to display real-time resource consumption per thought
+  - QA streaming tests validate resource fields are properly populated
+
+### Fixed
+- **🔍 Memory Service Label Deserialization**: Fixed `recall_timeseries()` not retrieving metric tags from database
+  - **Root Cause**: Function was checking `metric_tags` field, but database stores metadata in `labels` field
+  - **Solution**: Updated line 438 to check `labels` field first, then fall back to `metric_tags`
+  - **Impact**: Per-thought resource queries now work correctly; tags properly filter metrics by `thought_id`
+  - Removed invalid dynamic attribute assignments to `TimeSeriesDataPoint` (schema has `extra="forbid"`)
+
+### Testing
+- All QA streaming tests pass (100% success rate)
+- Resource fields properly populated with real data in action_result events
+- Per-thought resource tracking fully functional
+
 ## [1.3.0] - 2025-10-07
 
 ### Added

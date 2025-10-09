@@ -8,15 +8,16 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 
 ## Architecture & Design
 - [Architecture Overview](ARCHITECTURE.md) - System components and design (22 services)
-- [Architecture Pattern](ARCHITECTURE_PATTERN.md) - Intent-Driven Hybrid Architecture  
+- [Architecture Pattern](ARCHITECTURE_PATTERN.md) - Intent-Driven Hybrid Architecture
 - [Philosophy](../CLAUDE.md#core-philosophy-type-safety-first) - Core principles: No Untyped Dicts, No Bypass Patterns, No Exceptions
 
 ## Configuration & Operations
 - [Agent Configuration](AGENT_CONFIGURATION.md) - Creating and configuring agents
 - [Agent Creation Ceremony](AGENT_CREATION_CEREMONY.md) - Formal process for agent creation
 
-## Development  
-- [API Documentation](single_step_api_audit.md) - REST API specification and debugging
+## Development
+- [API Specification](API_SPEC.md) - Complete REST API reference (authentication, billing, endpoints)
+- [Single-Step Debugging](single_step.md) - H3ERE pipeline step-by-step debugging
 - [Memory System](IDENTITY_AS_GRAPH.md) - Memory management and cognitive recursion
 - [Thought Model](DMA_CREATION_GUIDE.md) - Deep reasoning system (DMAs, ASPDMA)
 - [Mock LLM](MOCK_LLM.md) - Development and testing with mock LLM providers

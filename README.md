@@ -65,7 +65,7 @@ python main.py --adapter api --port 8000
 **Quick Links:**
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get running in 5 minutes
 - **[Architecture Overview](docs/ARCHITECTURE.md)** - System design (22 services)
-- **[API Reference](docs/single_step_api_audit.md)** - REST API documentation
+- **[API Reference](docs/API_SPEC.md)** - REST API documentation
 - **[Developer Guide](docs/FOR_NERDS.md)** - Contributing and extending
 
 ## Contributing

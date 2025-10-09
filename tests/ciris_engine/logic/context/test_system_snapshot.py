@@ -341,9 +341,8 @@ async def test_build_system_snapshot_with_service_registry(mock_time_service):
 
     # Create mock service with health status
     healthy_service = Mock()
-    healthy_service.get_health_status = AsyncMock(
-        return_value=Mock(service_name="healthy_service", is_healthy=True, uptime_seconds=100.0)
-    )
+    healthy_service.is_healthy = AsyncMock(return_value=True)  # Batch context uses is_healthy()
+    healthy_service.get_circuit_breaker_status = Mock(return_value="CLOSED")  # SYNC not async
 
     # Mock get_circuit_breaker_states to return proper typed data
     service_registry.get_circuit_breaker_states = Mock(return_value={})

@@ -309,6 +309,23 @@ async def build_system_snapshot_with_batch(
     channel_id = None
     channel_context = None
 
+    # First, check for existing channel_context object in task.context.system_snapshot
+    if task and hasattr(task, "context") and task.context:
+        if (
+            hasattr(task.context, "system_snapshot")
+            and task.context.system_snapshot
+            and hasattr(task.context.system_snapshot, "channel_context")
+            and task.context.system_snapshot.channel_context
+        ):
+            from ciris_engine.schemas.runtime.system_context import ChannelContext
+
+            # Validate it's a ChannelContext object (fail fast on wrong type)
+            if isinstance(task.context.system_snapshot.channel_context, ChannelContext):
+                channel_context = task.context.system_snapshot.channel_context
+                logger.info(
+                    f"[UNIFIED BATCH] Extracted existing channel_context: {channel_context.channel_id} ({channel_context.channel_type})"
+                )
+
     # Extract channel_id - try multiple sources in priority order
     if task:
         # First try: task.channel_id (most common)

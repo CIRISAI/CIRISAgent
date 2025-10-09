@@ -83,7 +83,7 @@ async def build_system_snapshot(
     logger.debug("[LEGACY WRAPPER] build_system_snapshot called - redirecting to unified batch builder")
 
     # Redirect to unified batch builder (will create minimal batch context on-demand)
-    return await build_system_snapshot_with_batch(
+    snapshot = await build_system_snapshot_with_batch(
         task=task,
         thought=thought,
         batch_data=None,  # Will create minimal batch context on-demand
@@ -96,3 +96,21 @@ async def build_system_snapshot(
         telemetry_service=telemetry_service,
         runtime=runtime,
     )
+
+    # Log context building statistics (for test compatibility)
+    if snapshot.user_profiles:
+        user_profiles_json = json.dumps([p.model_dump() for p in snapshot.user_profiles], default=json_serial)
+        user_profiles_bytes = len(user_profiles_json.encode("utf-8"))
+        logger.info(
+            f"[CONTEXT BUILD] User Profiles queried: {len(snapshot.user_profiles)} profiles, {user_profiles_bytes} bytes added to context"
+        )
+
+    # Log final snapshot size
+    snapshot_json = snapshot.model_dump_json()
+    snapshot_bytes = len(snapshot_json.encode("utf-8"))
+    if snapshot.channel_context is None:
+        logger.warning(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes} bytes total (no channel context)")
+    else:
+        logger.info(f"[CONTEXT BUILD] System Snapshot built with {snapshot_bytes} bytes total")
+
+    return snapshot

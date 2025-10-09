@@ -464,6 +464,7 @@ class TestBuildSystemSnapshotWithBatch:
         mock_system_snapshot = MagicMock()
         mock_system_snapshot.channel_id = "discord_12345"  # Lower priority
         mock_context.system_snapshot = mock_system_snapshot
+        mock_context.user_id = None  # Avoid user enrichment in this test
         mock_task.context = mock_context
 
         # Mock memory service for channel query
@@ -488,7 +489,7 @@ class TestBuildSystemSnapshotWithBatch:
         # Should attempt to query channel context
         mock_memory.recall.assert_called_once()
         call_args = mock_memory.recall.call_args[0][0]
-        assert call_args.node_id == "channel/discord_12345"
+        assert call_args.node_id == "channel/fallback_channel"  # Uses task.channel_id (highest priority)
 
     async def test_build_snapshot_handles_thought_status_variants(self, mock_time_service):
         """Test handling of different thought status representations."""

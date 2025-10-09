@@ -433,12 +433,13 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                         if timestamp.tzinfo is None:
                             timestamp = timestamp.replace(tzinfo=timezone.utc)
 
-                    # Get tags
-                    metric_tags = attrs.get("metric_tags", {})
+                    # Get tags - check both 'labels' and 'metric_tags' for backward compatibility
+                    # Database stores in 'labels', but some older code may use 'metric_tags'
+                    metric_tags = attrs.get("labels", attrs.get("metric_tags", {}))
                     if not isinstance(metric_tags, dict):
                         metric_tags = {}
 
-                    # Create data point
+                    # Create data point - also store additional attributes for filtering
                     data_point = TimeSeriesDataPoint(
                         timestamp=timestamp,
                         metric_name=metric_name,
@@ -447,6 +448,12 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                         tags=metric_tags,
                         source=attrs.get("created_by", "memory_service"),
                     )
+
+                    # Add raw attributes for helper functions that may need them
+                    # This includes start_time, labels, etc.
+                    data_point.start_time = attrs.get("start_time")
+                    data_point.labels = metric_tags  # Alias for backward compatibility
+
                     data_points.append(data_point)
 
                 except Exception as e:

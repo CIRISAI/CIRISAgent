@@ -1225,7 +1225,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         """Set the runtime reference for accessing core services directly (internal method)."""
         logger.debug(f"[TELEMETRY] _set_runtime called, runtime={runtime is not None}")
         self._runtime = runtime
-        logger.debug(f"[TELEMETRY] Aggregator exists: {self._telemetry_aggregator is not None}, Registry exists: {self._service_registry is not None}")
+        logger.debug(
+            f"[TELEMETRY] Aggregator exists: {self._telemetry_aggregator is not None}, Registry exists: {self._service_registry is not None}"
+        )
         # Re-create aggregator if it exists to include runtime
         if self._telemetry_aggregator and self._service_registry:
             logger.debug("[TELEMETRY] Recreating aggregator with runtime")

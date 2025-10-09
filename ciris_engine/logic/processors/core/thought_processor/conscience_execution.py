@@ -237,7 +237,8 @@ class ConscienceExecutionPhase:
             reasoning_transparency=reasoning_transparency,
         )
 
-        result = ConscienceApplicationResult(
+        # Build final application result (explicitly typed for mypy)
+        application_result: ConscienceApplicationResult = ConscienceApplicationResult(
             original_action=action_result,
             final_action=final_action,
             overridden=overridden,
@@ -245,7 +246,7 @@ class ConscienceExecutionPhase:
             epistemic_data=epistemic_data,
         )
         if thought_depth_triggered is not None:
-            result.thought_depth_triggered = thought_depth_triggered
+            application_result.thought_depth_triggered = thought_depth_triggered
         if updated_status_detected is not None:
-            result.updated_status_detected = updated_status_detected
-        return result
+            application_result.updated_status_detected = updated_status_detected
+        return application_result

@@ -162,14 +162,14 @@ class RateLimitMiddleware:
             )
 
         # Process request
-        response = await call_next(request)
-        response = cast(Response, response)
+        processed_response = await call_next(request)
+        typed_response: Response = cast(Response, processed_response)
 
         # Add rate limit headers to response
         if client_id in self.limiter.buckets:
             tokens, _ = self.limiter.buckets[client_id]
-            response.headers["X-RateLimit-Limit"] = str(self.limiter.rate)
-            response.headers["X-RateLimit-Remaining"] = str(int(tokens))
-            response.headers["X-RateLimit-Window"] = "60"
+            typed_response.headers["X-RateLimit-Limit"] = str(self.limiter.rate)
+            typed_response.headers["X-RateLimit-Remaining"] = str(int(tokens))
+            typed_response.headers["X-RateLimit-Window"] = "60"
 
-        return response
+        return typed_response

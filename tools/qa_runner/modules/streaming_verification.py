@@ -311,7 +311,9 @@ class StreamingVerificationModule:
                                                             print("     ❌ NULL (should be dict!)")
                                                         elif isinstance(cb, dict):
                                                             if not cb:
-                                                                print("     ✓ Empty dict (no circuit breakers triggered)")
+                                                                print(
+                                                                    "     ✓ Empty dict (no circuit breakers triggered)"
+                                                                )
                                                             else:
                                                                 print(f"     ✓ Type: dict with {len(cb)} service(s)")
                                                                 for service_name, cb_state in sorted(cb.items()):
@@ -319,9 +321,13 @@ class StreamingVerificationModule:
                                                                         state = cb_state.get("state", "unknown")
                                                                         failures = cb_state.get("failure_count", 0)
                                                                         rate = cb_state.get("failure_rate", "0.00%")
-                                                                        print(f"     - {service_name}: state={state}, failures={failures}, rate={rate}")
+                                                                        print(
+                                                                            f"     - {service_name}: state={state}, failures={failures}, rate={rate}"
+                                                                        )
                                                                     else:
-                                                                        print(f"     - {service_name}: ⚠️ Invalid (not CircuitBreakerState dict)")
+                                                                        print(
+                                                                            f"     - {service_name}: ⚠️ Invalid (not CircuitBreakerState dict)"
+                                                                        )
                                                         else:
                                                             print(f"     ⚠️  Wrong type: {type(cb).__name__}")
                                                     else:

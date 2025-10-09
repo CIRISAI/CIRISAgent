@@ -5,7 +5,42 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - 2025-10-08
+## [1.3.1] - 2025-10-09
+
+### Fixed
+- **🔄 Circuit Breaker Recovery**: Fixed critical bug preventing circuit breaker recovery
+  - **Root Cause**: `record_failure()` was resetting `last_failure_time` even when circuit breaker was OPEN, preventing 60s recovery timer from elapsing
+  - **Solution**: Only update `failure_count` and `last_failure_time` when NOT OPEN, allowing recovery timer to work correctly
+  - **Impact**: Circuit breakers now properly transition to HALF_OPEN after 60 seconds, ending infinite retry loops (Echo-Nemesis fix)
+- **⏱️ LLM Timeout Configuration**: Reduced timeout from 30s to 5s to enable faster failover
+  - Configured in OpenAI SDK at provider level (service.py:36, service.py:78)
+  - Allows 25 seconds for failover before DMA timeout (30s)
+  - Circuit breaker timeout duration also reduced to 5.0s for consistency
+  - Recovery timeout standardized to 60.0s across all circuit breakers
+- **📝 Enhanced LLM Error Logging**: Added detailed context for debugging LLM failures
+  - Schema validation errors: Shows expected schema, validation details, first 500 chars
+  - Timeout errors: Reports timeout duration and context
+  - Service errors (503): Detailed provider and model information
+  - Rate limit errors (429): Enhanced diagnostic context
+  - Content filter blocks: Guardrail detection and reporting
+  - All errors include: model, provider, CB state, consecutive failures
+- **🧠 PDMA Ethical Prompt Fix**: Corrected prompt causing schema validation errors
+  - Fixed incorrect principle count (4 → 6 principles)
+  - Changed `alignment_check` from structured dict to single paragraph string
+  - Added warning about context red herrings and non sequiturs
+  - Eliminated schema validation failures that appeared as "provider issues"
+- **🔐 Audit Signature Persistence**: Fixed audit entries stored in graph without signatures
+  - **Root Cause**: Signatures generated AFTER storing node in graph, never updated
+  - **Solution**: Generate hash chain data FIRST, then create node with signature already set
+  - Fixed in `log_event()` and `log_action()` - reordered operations
+  - Updated `_store_entry_in_graph()` to accept and use hash_chain_data parameter
+  - All audit entries now have populated `signature` and `hash_chain` fields in graph_nodes
+- **🔒 OBSERVER Role Privacy**: Added task information redaction in SSE streaming
+  - OBSERVER users now have `recently_completed_tasks_summary` and `top_pending_tasks_summary` redacted from SNAPSHOT_AND_CONTEXT events
+  - Redaction applied after channel filtering but before streaming events
+  - Uses deep copy to avoid mutating original events
+  - ADMIN+ users bypass redaction (see all events unchanged)
+  - 7 comprehensive tests cover all edge cases
 
 ### Added
 - **Billing & API Keys**: Production billing system integration (billing.ciris.ai)
@@ -17,16 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API Documentation**: Complete specification in `docs/API_SPEC.md`
 - **Marketing Opt-in**: GDPR-compliant consent capture in OAuth flow
 
-### Fixed
-- **100% Mypy Clean**: Fixed all 8 type errors without type: ignore suppressions
-- **Circuit Breaker Telemetry**: Fixed empty dict in production (attribute typo, caching, imports)
-- **SonarCloud**: 6 quality issues resolved, coverage 56.4% → 80.2%
-- **Circuit Breaker Tests**: Fixed 11 async mock tests
-- **Memory Service**: `recall_timeseries()` now retrieves metric tags correctly
-- **Email Validation**: Purchases require OAuth email, no fallback
-
 ### Testing
-- 51 new tests: 30 billing/API keys, 15 circuit breaker, 6 telemetry (all passing)
+- 51 new tests: 30 billing/API keys, 15 circuit breaker, 6 telemetry
+- 14 audit service tests: All passing
+- 7 OBSERVER redaction tests: All passing
+- Comprehensive unit tests for circuit breaker recovery, LLM timeout, PDMA prompt
+- Mypy clean: 555 source files, 0 errors
 - SonarCloud quality gate: PASSING
 
 ## [1.3.0] - 2025-10-07

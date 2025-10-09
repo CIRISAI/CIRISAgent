@@ -311,7 +311,9 @@ async def test_resource_monitor_credit_check_and_cache(resource_budget, temp_db,
             )
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = CIRISBillingProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    provider = CIRISBillingProvider(
+        api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=60
+    )
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,
@@ -364,7 +366,9 @@ async def test_resource_monitor_credit_spend(resource_budget, temp_db, time_serv
             )
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = CIRISBillingProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    provider = CIRISBillingProvider(
+        api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=60
+    )
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,
@@ -400,7 +404,9 @@ async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_se
             return httpx.Response(200, json={"status": "ok"})  # Missing required fields
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = CIRISBillingProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=0)
+    provider = CIRISBillingProvider(
+        api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=0
+    )
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,

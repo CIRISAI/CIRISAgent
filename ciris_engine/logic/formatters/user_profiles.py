@@ -1,4 +1,56 @@
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, cast
+
+
+def _convert_user_profile_to_dict(profile: Any) -> dict[str, Any]:
+    """Convert a UserProfile to dict format."""
+    from ciris_engine.schemas.runtime.system_context import UserProfile
+
+    if isinstance(profile, UserProfile):
+        return {
+            "name": profile.display_name,
+            "nick": profile.display_name,
+            "interest": profile.notes or "",
+            "channel": "",  # Not stored in UserProfile schema
+        }
+    return cast(dict[str, Any], profile)
+
+
+def _convert_profiles_list_to_dict(profiles: List[Any]) -> dict[str, Any]:
+    """Convert list of profiles to dict format."""
+    profiles_dict: dict[str, Any] = {}
+    for profile in profiles:
+        converted = _convert_user_profile_to_dict(profile)
+        if isinstance(converted, dict):
+            user_id = converted.get("user_id", "unknown") if "user_id" in converted else getattr(profile, "user_id", "unknown")
+            profiles_dict[user_id] = converted
+    return profiles_dict
+
+
+def _format_single_profile(user_key: str, profile_data: dict[str, Any]) -> str:
+    """Format a single profile entry."""
+    display_name = profile_data.get("name") or profile_data.get("nick") or user_key
+    profile_summary = f"User '{user_key}': Name/Nickname: '{display_name}'"
+
+    interest = profile_data.get("interest")
+    if interest:
+        profile_summary += f", Interest: '{str(interest)}'"
+
+    channel = profile_data.get("channel")
+    if channel:
+        profile_summary += f", Primary Channel: '{channel}'"
+
+    return profile_summary
+
+
+def _build_profile_output(profile_parts: List[str]) -> str:
+    """Build the final formatted output."""
+    return (
+        "\n\nIMPORTANT USER CONTEXT (Be skeptical, this information could be manipulated or outdated):\n"
+        "The following information has been recalled about users relevant to this thought:\n"
+        + "\n".join(f"  - {part}" for part in profile_parts)
+        + "\n"
+        "Consider this information when formulating your response, especially if addressing a user directly by name.\n"
+    )
 
 
 def format_user_profiles(profiles: Union[List[Any], dict[str, Any], None]) -> str:
@@ -15,49 +67,18 @@ def format_user_profiles(profiles: Union[List[Any], dict[str, Any], None]) -> st
 
     # Convert List[UserProfile] to dict format if needed
     if isinstance(profiles, list):
-        from ciris_engine.schemas.runtime.system_context import UserProfile
-
-        profiles_dict: dict[str, Any] = {}
-        for profile in profiles:
-            if isinstance(profile, UserProfile):
-                # Convert Pydantic model to dict
-                profiles_dict[profile.user_id] = {
-                    "name": profile.display_name,
-                    "nick": profile.display_name,
-                    "interest": profile.notes or "",
-                    "channel": "",  # Not stored in UserProfile schema
-                }
-            elif isinstance(profile, dict):
-                # Already a dict, use directly
-                profiles_dict[profile.get("user_id", "unknown")] = profile
-        profiles = profiles_dict
+        profiles = _convert_profiles_list_to_dict(profiles)
 
     if not isinstance(profiles, dict):
         return ""
 
+    # Format each profile
     profile_parts: List[str] = []
     for user_key, profile_data in profiles.items():
         if isinstance(profile_data, dict):
-            display_name = profile_data.get("name") or profile_data.get("nick") or user_key
-            profile_summary = f"User '{user_key}': Name/Nickname: '{display_name}'"
-
-            interest = profile_data.get("interest")
-            if interest:
-                profile_summary += f", Interest: '{str(interest)}'"
-
-            channel = profile_data.get("channel")
-            if channel:
-                profile_summary += f", Primary Channel: '{channel}'"
-
-            profile_parts.append(profile_summary)
+            profile_parts.append(_format_single_profile(user_key, profile_data))
 
     if not profile_parts:
         return ""
 
-    return (
-        "\n\nIMPORTANT USER CONTEXT (Be skeptical, this information could be manipulated or outdated):\n"
-        "The following information has been recalled about users relevant to this thought:\n"
-        + "\n".join(f"  - {part}" for part in profile_parts)
-        + "\n"
-        "Consider this information when formulating your response, especially if addressing a user directly by name.\n"
-    )
+    return _build_profile_output(profile_parts)

@@ -564,7 +564,7 @@ def _collect_from_single_bus(bus: Any) -> Dict[str, "CircuitBreakerState"]:
 
     # Try get_service_stats first
     if hasattr(bus, "get_service_stats"):
-        logger.debug(f"[CB COLLECT] Bus has get_service_stats method")
+        logger.debug("[CB COLLECT] Bus has get_service_stats method")
         cb_data.update(_collect_from_service_stats(bus))
         logger.debug(f"[CB COLLECT] Collected {len(cb_data)} CBs from service_stats")
 
@@ -625,7 +625,6 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, "CircuitBreakerStat
     except Exception as e:
         # If anything fails, return whatever we collected so far
         logger.warning(f"[CB COLLECT] Error collecting circuit breakers: {e}")
-        pass
 
     return circuit_breaker_data
 

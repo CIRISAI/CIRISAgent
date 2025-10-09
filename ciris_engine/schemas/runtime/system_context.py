@@ -19,9 +19,6 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 from ciris_engine.schemas.types import JSONDict
 
-if TYPE_CHECKING:
-    pass
-
 
 class SystemSnapshot(BaseModel):
     """System state snapshot for processing context.

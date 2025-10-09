@@ -439,7 +439,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                     if not isinstance(metric_tags, dict):
                         metric_tags = {}
 
-                    # Create data point - also store additional attributes for filtering
+                    # Create data point
                     data_point = TimeSeriesDataPoint(
                         timestamp=timestamp,
                         metric_name=metric_name,
@@ -448,11 +448,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                         tags=metric_tags,
                         source=attrs.get("created_by", "memory_service"),
                     )
-
-                    # Add raw attributes for helper functions that may need them
-                    # This includes start_time, labels, etc.
-                    data_point.start_time = attrs.get("start_time")
-                    data_point.labels = metric_tags  # Alias for backward compatibility
 
                     data_points.append(data_point)
 

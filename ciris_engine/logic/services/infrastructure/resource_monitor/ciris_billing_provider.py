@@ -26,12 +26,14 @@ class CIRISBillingProvider(CreditGateProtocol):
     def __init__(
         self,
         *,
+        api_key: str,
         base_url: str = "https://billing.ciris.ai",
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._cache_ttl = max(cache_ttl_seconds, 0)
@@ -46,7 +48,10 @@ class CIRISBillingProvider(CreditGateProtocol):
         async with self._client_lock:
             if self._client is not None:
                 return
-            headers = {"User-Agent": "CIRIS-Agent-CreditGate/1.0"}
+            headers = {
+                "User-Agent": "CIRIS-Agent-CreditGate/1.0",
+                "X-API-Key": self._api_key,
+            }
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout_seconds,
@@ -189,18 +194,29 @@ class CIRISBillingProvider(CreditGateProtocol):
         account: CreditAccount,
         context: CreditContext | None,
     ) -> dict[str, object]:
+        # Add oauth: prefix if not already present
+        provider = account.provider if account.provider.startswith("oauth:") else f"oauth:{account.provider}"
+
         payload: dict[str, object] = {
-            "oauth_provider": account.provider,
+            "oauth_provider": provider,
             "external_id": account.account_id,
+            "amount_minor": 1,  # Default check amount
         }
         if account.authority_id:
             payload["wa_id"] = account.authority_id
         if account.tenant_id:
             payload["tenant_id"] = account.tenant_id
         if context:
-            context_data = context.model_dump(exclude_unset=True, exclude_none=True)
-            if context_data:
-                payload["context"] = context_data
+            # Only include serializable context fields
+            context_dict = {}
+            if context.agent_id:
+                context_dict["agent_id"] = context.agent_id
+            if context.channel_id:
+                context_dict["channel_id"] = context.channel_id
+            if context.request_id:
+                context_dict["request_id"] = context.request_id
+            if context_dict:
+                payload["context"] = context_dict
         return payload
 
     @staticmethod
@@ -209,11 +225,25 @@ class CIRISBillingProvider(CreditGateProtocol):
         request: CreditSpendRequest,
         context: CreditContext | None,
     ) -> dict[str, object]:
+        # Add oauth: prefix if not already present
+        provider = account.provider if account.provider.startswith("oauth:") else f"oauth:{account.provider}"
+
+        # Generate idempotency key from request metadata or create one
+        idempotency_key = request.metadata.get("idempotency_key") if request.metadata else None
+        if not idempotency_key:
+            # Create idempotency key from account + timestamp + amount
+            import hashlib
+            import time
+
+            key_data = f"{account.provider}:{account.account_id}:{int(time.time())}:{request.amount_minor}"
+            idempotency_key = f"charge_{hashlib.sha256(key_data.encode()).hexdigest()[:16]}"
+
         payload: dict[str, object] = {
-            "oauth_provider": account.provider,
+            "oauth_provider": provider,
             "external_id": account.account_id,
             "amount_minor": request.amount_minor,
             "currency": request.currency,
+            "idempotency_key": idempotency_key,
         }
         if account.authority_id:
             payload["wa_id"] = account.authority_id
@@ -222,11 +252,10 @@ class CIRISBillingProvider(CreditGateProtocol):
         if request.description:
             payload["description"] = request.description
         if request.metadata:
-            payload["metadata"] = request.metadata
-        if context:
-            context_data = context.model_dump(exclude_unset=True, exclude_none=True)
-            if context_data:
-                payload["context"] = context_data
+            # Remove idempotency_key from metadata since it's in the top level
+            metadata = {k: v for k, v in request.metadata.items() if k != "idempotency_key"}
+            if metadata:
+                payload["metadata"] = metadata
         return payload
 
     @staticmethod

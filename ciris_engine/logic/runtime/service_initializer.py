@@ -146,17 +146,25 @@ class ServiceInitializer:
         if billing_enabled:
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
+            # Get API key from environment (required for CIRISBillingProvider)
+            api_key = os.getenv("CIRIS_BILLING_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true"
+                )
+
             base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
             timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
             credit_provider = CIRISBillingProvider(
+                api_key=api_key,
                 base_url=base_url,
                 timeout_seconds=timeout,
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
-            logger.info("Using CIRISBillingProvider for credit gating")
+            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", base_url)
         else:
             from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
 

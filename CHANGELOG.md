@@ -8,82 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.1] - 2025-10-08
 
 ### Added
-- **💳 Billing & Credits System**: Complete billing integration for usage-based pricing
-  - `GET /api/billing/credits` - Check credit balance and status
-  - `POST /api/billing/purchase/initiate` - Create Stripe payment intent
-  - `GET /api/billing/purchase/status/{payment_id}` - Check payment status
-  - **SimpleCreditProvider**: 1 free credit per OAuth user (no billing backend needed)
-  - **CIRISBillingProvider**: Full billing backend with paid credits and Stripe integration
-  - Email extraction from OAuth profile (Google/Discord) required for purchases
-  - User identity includes `marketing_opt_in` preference from OAuth flow
-  - 15 comprehensive tests covering all billing scenarios
-
-- **🔑 API Key Management**: OAuth users can create and manage their own API keys
-  - `POST /v1/auth/api-keys` - Create keys with 30min-7day expiry
-  - `GET /v1/auth/api-keys` - List user's API keys
-  - `DELETE /v1/auth/api-keys/{key_id}` - Revoke keys
-  - Keys inherit user's role (OBSERVER/ADMIN) automatically
-  - 15 comprehensive tests covering lifecycle and security
-
-- **📚 API Documentation**: Complete API specification in `docs/API_SPEC.md`
-  - Full endpoint documentation for auth, billing, and API key management
-  - Request/response schemas with examples
-  - Error handling and status codes
-  - OAuth flow and authentication guide
-
-- **📊 Resource Usage Tracking**: H3ERE reasoning events now include per-thought metrics
-  - 8 resource fields in `ActionResultEvent`: tokens, cost, carbon, energy, LLM calls
-  - Resources queried from telemetry by `thought_id` during `ACTION_COMPLETE`
-  - Enables real-time resource consumption display per thought
-
-- **📧 Marketing Opt-in**: OAuth flow captures GDPR-compliant marketing consent
-  - `marketing_opt_in` field in OAuth user records (defaults to `False`)
-  - OAuth callback accepts optional `marketing_opt_in` query parameter
-  - Propagated to billing service for campaign tracking
+- **Billing & API Keys**: Production billing system integration (billing.ciris.ai)
+  - CIRISBillingProvider with API key auth, oauth: prefix handling, idempotency
+  - API endpoints: `/api/billing/credits`, `/api/billing/purchase/*`
+  - User API key management: create/list/revoke with 30min-7day expiry
+  - SimpleCreditProvider: 1 free credit per OAuth user (no backend required)
+- **Resource Tracking**: Per-thought metrics in H3ERE events (tokens, cost, carbon, energy)
+- **API Documentation**: Complete specification in `docs/API_SPEC.md`
+- **Marketing Opt-in**: GDPR-compliant consent capture in OAuth flow
 
 ### Fixed
-- **🔧 SonarCloud Quality Issues**: Resolved 6 code quality violations
-  - Extracted 3 error message constants to eliminate duplicate strings
-  - Reduced cognitive complexity in `step_decorators.py` from 16→15 (extracted helper function)
-  - Implemented 3 TODOs in billing.py:
-    - Email extraction from OAuth profile via `auth_service.get_user().oauth_email`
-    - Payment status querying from billing backend `/v1/billing/purchases/{payment_id}/status`
-    - Credits tracking from payment records with proper error handling
-  - **Coverage**: 56.4% → 80.2% (exceeds 80% target)
-
-- **🔍 Memory Service**: Fixed `recall_timeseries()` not retrieving metric tags
-  - Database stores metadata in `labels` field, not `metric_tags`
-  - Updated to check `labels` first, then fall back to `metric_tags`
-  - Per-thought resource queries now work correctly
-
-- **🧪 Circuit Breaker Tests**: Fixed 11 failing async mock tests
-  - Changed `Mock`/`MagicMock` to `AsyncMock` for async methods
-  - Added proper `@pytest.mark.asyncio` and `await` statements
-  - All system snapshot and service health tests passing
-
-- **✉️ Email Validation**: Purchases now require valid OAuth email
-  - Removed fallback to `{user_id}@ciris.ai` placeholder
-  - Raises `HTTPException(400)` if OAuth email not available
-  - Ensures valid email for Stripe payment processing
-
-- **🔴 Circuit Breaker Telemetry Collection**: Fixed empty circuit_breaker dict in production
-  - **Root Cause**: Three bugs prevented circuit breakers from appearing in telemetry
-    1. Typo: `getattr(self, "runtime", None)` → `self._runtime` in service.py:2042
-    2. Caching: Circuit breaker data cached for 60s, causing stale empty results
-    3. Forward reference: `TYPE_CHECKING` import prevented runtime validation
-  - **Solution**:
-    - Fixed attribute reference to use correct `self._runtime`
-    - Circuit breakers now collected fresh on every telemetry request (bypasses cache)
-    - Moved `CircuitBreakerState` import from `TYPE_CHECKING` to direct import
-  - **Result**: Circuit breakers now properly visible in SSE events and telemetry endpoints
-  - Shows service health: `MockLLMService: state=closed, failures=0, rate=0.00%`
-  - Changed debug logging to `logger.debug()` to avoid log spam
+- **100% Mypy Clean**: Fixed all 8 type errors without type: ignore suppressions
+- **Circuit Breaker Telemetry**: Fixed empty dict in production (attribute typo, caching, imports)
+- **SonarCloud**: 6 quality issues resolved, coverage 56.4% → 80.2%
+- **Circuit Breaker Tests**: Fixed 11 async mock tests
+- **Memory Service**: `recall_timeseries()` now retrieves metric tags correctly
+- **Email Validation**: Purchases require OAuth email, no fallback
 
 ### Testing
-- 30 new tests: 15 billing + 15 API key management (100% pass rate)
-- 6 new circuit breaker collection tests (100% pass rate)
-- SonarCloud quality gate: PASSING (80.2% coverage)
-- All QA streaming tests pass with resource tracking validation
+- 51 new tests: 30 billing/API keys, 15 circuit breaker, 6 telemetry (all passing)
+- SonarCloud quality gate: PASSING
 
 ## [1.3.0] - 2025-10-07
 

@@ -265,7 +265,7 @@ class TestBuildSystemSnapshot:
                 for service in services:
                     # Use ServiceProtocol is_healthy method
                     service.is_healthy = AsyncMock(return_value=True)
-                    service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
+                    service.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
         snapshot = await build_system_snapshot(
             task=None,
@@ -866,7 +866,7 @@ class TestServiceHealthCollection:
         # Create mock global service with ServiceProtocol is_healthy method
         mock_global_service = MagicMock()
         mock_global_service.is_healthy = AsyncMock(return_value=True)
-        mock_global_service.get_circuit_breaker_status = MagicMock(return_value="CLOSED")
+        mock_global_service.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
         mock_registry.get_provider_info.return_value = {
             "handlers": {},

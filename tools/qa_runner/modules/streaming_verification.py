@@ -215,7 +215,7 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
                                             )
-                                        # Validate telemetry_summary.circuit_breaker is not null
+                                        # Validate telemetry_summary.circuit_breaker is not null and has proper structure
                                         telemetry = snapshot.get("telemetry_summary")
                                         if telemetry and isinstance(telemetry, dict):
                                             if "circuit_breaker" not in telemetry:
@@ -225,9 +225,38 @@ class StreamingVerificationModule:
                                                 event_detail["issues"].append(issue_msg)
                                                 errors.append(f"🐛 MISSING FIELD: {issue_msg}")
                                             elif telemetry.get("circuit_breaker") is None:
-                                                issue_msg = "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with state/failures/etc)"
+                                                issue_msg = "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with CircuitBreakerState entries)"
                                                 event_detail["issues"].append(issue_msg)
                                                 errors.append(f"🐛 NULL FIELD: {issue_msg}")
+                                            else:
+                                                # Validate CircuitBreakerState schema for each entry
+                                                cb_dict = telemetry.get("circuit_breaker")
+                                                if isinstance(cb_dict, dict):
+                                                    required_cb_fields = {
+                                                        "state": str,
+                                                        "failure_count": int,
+                                                        "success_count": int,
+                                                        "total_requests": int,
+                                                        "failed_requests": int,
+                                                        "consecutive_failures": int,
+                                                        "failure_rate": str,
+                                                    }
+                                                    for service_name, cb_state in cb_dict.items():
+                                                        if not isinstance(cb_state, dict):
+                                                            issue_msg = f"circuit_breaker[{service_name}] is not a dict (should be CircuitBreakerState)"
+                                                            event_detail["issues"].append(issue_msg)
+                                                            errors.append(f"🐛 INVALID CB STATE: {issue_msg}")
+                                                            continue
+
+                                                        for field, field_type in required_cb_fields.items():
+                                                            if field not in cb_state:
+                                                                issue_msg = f"circuit_breaker[{service_name}] missing field '{field}'"
+                                                                event_detail["issues"].append(issue_msg)
+                                                                errors.append(f"🐛 CB MISSING FIELD: {issue_msg}")
+                                                            elif not isinstance(cb_state[field], field_type):
+                                                                issue_msg = f"circuit_breaker[{service_name}].{field} has wrong type: {type(cb_state[field]).__name__} (expected {field_type.__name__})"
+                                                                event_detail["issues"].append(issue_msg)
+                                                                errors.append(f"🐛 CB WRONG TYPE: {issue_msg}")
                                         # Check service_health - should have entries for all services
                                         service_health = snapshot.get("service_health", {})
                                         if not service_health or not isinstance(service_health, dict):
@@ -274,16 +303,25 @@ class StreamingVerificationModule:
                                             if telemetry:
                                                 print(f"  Type: {type(telemetry).__name__}")
                                                 if isinstance(telemetry, dict):
-                                                    # Print circuit_breaker first (critical field)
+                                                    # Print circuit_breaker first (critical field) with CircuitBreakerState validation
                                                     if "circuit_breaker" in telemetry:
                                                         cb = telemetry["circuit_breaker"]
-                                                        print(f"\n  🔴 circuit_breaker:")
+                                                        print(f"\n  🔴 circuit_breaker (CircuitBreakerState schema):")
                                                         if cb is None:
                                                             print("     ❌ NULL (should be dict!)")
                                                         elif isinstance(cb, dict):
-                                                            print(f"     Type: dict")
-                                                            for cb_key, cb_val in sorted(cb.items()):
-                                                                print(f"     - {cb_key}: {cb_val}")
+                                                            if not cb:
+                                                                print("     ✓ Empty dict (no circuit breakers triggered)")
+                                                            else:
+                                                                print(f"     ✓ Type: dict with {len(cb)} service(s)")
+                                                                for service_name, cb_state in sorted(cb.items()):
+                                                                    if isinstance(cb_state, dict):
+                                                                        state = cb_state.get("state", "unknown")
+                                                                        failures = cb_state.get("failure_count", 0)
+                                                                        rate = cb_state.get("failure_rate", "0.00%")
+                                                                        print(f"     - {service_name}: state={state}, failures={failures}, rate={rate}")
+                                                                    else:
+                                                                        print(f"     - {service_name}: ⚠️ Invalid (not CircuitBreakerState dict)")
                                                         else:
                                                             print(f"     ⚠️  Wrong type: {type(cb).__name__}")
                                                     else:

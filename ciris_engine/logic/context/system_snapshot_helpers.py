@@ -1031,6 +1031,74 @@ def _create_user_memory_query(user_id: str) -> MemoryQuery:
     )
 
 
+def _determine_if_admin_user(user_id: str) -> bool:
+    """Determine if a user_id represents an admin or system user."""
+    # Check for admin patterns
+    user_id_lower = user_id.lower()
+    return user_id_lower.startswith("wa-") or user_id_lower == "admin" or user_id_lower.startswith("admin_")
+
+
+async def _create_default_user_node(
+    user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
+) -> Optional[GraphNode]:
+    """Create a new user node with appropriate defaults.
+
+    Creates minimal user profile for new users:
+    - Admin/WA users: minimal profile with system defaults
+    - Regular users: basic profile ready for user settings
+    """
+    try:
+        # Determine user type
+        is_admin = _determine_if_admin_user(user_id)
+
+        # Create timestamp for first_seen
+        current_time = datetime.now(timezone.utc)
+
+        # Build base attributes - Dict[str, Any] for flexible attribute types
+        base_attributes: Dict[str, Any] = {
+            "user_id": user_id,
+            "display_name": "Admin" if is_admin else f"User_{user_id}",
+            "first_seen": current_time.isoformat(),
+            "created_by": "UserEnrichment",
+        }
+
+        # Add channel if provided
+        if channel_id:
+            base_attributes["channels"] = [channel_id]
+
+        # Add role-specific defaults
+        if is_admin:
+            # Admin users get minimal profile
+            base_attributes["trust_level"] = 1.0
+            base_attributes["is_wa"] = user_id.lower().startswith("wa-")
+        else:
+            # Regular users get basic profile
+            base_attributes["trust_level"] = 0.5
+            base_attributes["communication_style"] = "formal"
+            base_attributes["preferred_language"] = "en"
+            base_attributes["timezone"] = "UTC"
+
+        # Create GraphNode
+        new_node = GraphNode(
+            id=f"user/{user_id}",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes=base_attributes,
+        )
+
+        # Save to memory graph
+        logger.info(
+            f"[USER EXTRACTION] Creating new user node for {user_id} (admin={is_admin}) with attributes: {list(base_attributes.keys())}"
+        )
+        await memory_service.memorize(new_node)
+
+        return new_node
+
+    except Exception as e:
+        logger.error(f"Failed to create default user node for {user_id}: {e}")
+        return None
+
+
 async def _process_user_node_for_profile(
     user_node: Any, user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
 ) -> UserProfile:
@@ -1067,7 +1135,11 @@ async def _process_user_node_for_profile(
 async def _enrich_single_user_profile(
     user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
 ) -> Optional[UserProfile]:
-    """Enrich a single user profile from memory graph."""
+    """Enrich a single user profile from memory graph.
+
+    If no user node exists, creates one automatically with appropriate defaults.
+    This ensures user_profiles is never empty in system snapshots.
+    """
     try:
         # Query user node with ALL attributes
         user_query = _create_user_memory_query(user_id)
@@ -1080,6 +1152,13 @@ async def _enrich_single_user_profile(
         if user_results:
             user_node = user_results[0]
             return await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+
+        # No user node exists - create one automatically
+        logger.info(f"[USER EXTRACTION] No node found for user/{user_id}, creating new user node with defaults")
+        new_user_node = await _create_default_user_node(user_id, memory_service, channel_id)
+
+        if new_user_node:
+            return await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
 
     except Exception as e:
         logger.warning(f"Failed to enrich user {user_id}: {e}")

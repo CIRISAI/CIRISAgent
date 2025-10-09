@@ -268,6 +268,50 @@ class StreamingVerificationModule:
                                                 f"system_snapshot.service_health only has {len(service_health)} services (expected 20+)"
                                             )
 
+                                        # Check user_profiles - should ALWAYS exist (at minimum, API user for wakeup tasks)
+                                        if "user_profiles" not in snapshot:
+                                            issue_msg = "system_snapshot.user_profiles is MISSING (should always be present, at minimum for API user)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 MISSING FIELD: {issue_msg}")
+                                        elif snapshot.get("user_profiles") is None:
+                                            issue_msg = "system_snapshot.user_profiles is None (should be list, at minimum with API user)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 NULL FIELD: {issue_msg}")
+                                        elif not isinstance(snapshot.get("user_profiles"), list):
+                                            issue_msg = f"system_snapshot.user_profiles has wrong type: {type(snapshot.get('user_profiles')).__name__} (expected list)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 WRONG TYPE: {issue_msg}")
+                                        elif len(snapshot.get("user_profiles", [])) == 0:
+                                            issue_msg = "system_snapshot.user_profiles is empty list (should contain at least API user profile)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 EMPTY LIST: {issue_msg}")
+                                        else:
+                                            # Validate user profile structure for each profile
+                                            user_profiles = snapshot.get("user_profiles", [])
+                                            for i, profile in enumerate(user_profiles):
+                                                if not isinstance(profile, dict):
+                                                    issue_msg = f"user_profiles[{i}] is not a dict: {type(profile).__name__}"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 INVALID PROFILE: {issue_msg}")
+                                                    continue
+                                                # Check for required user_id field
+                                                if "user_id" not in profile:
+                                                    issue_msg = f"user_profiles[{i}] missing required 'user_id' field"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 PROFILE MISSING user_id: {issue_msg}")
+                                                elif not isinstance(profile["user_id"], str) or not profile["user_id"]:
+                                                    issue_msg = f"user_profiles[{i}].user_id is invalid: {profile.get('user_id')}"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 INVALID user_id: {issue_msg}")
+                                                # Check for display_name field (should exist)
+                                                if "display_name" not in profile:
+                                                    issue_msg = f"user_profiles[{i}] missing 'display_name' field"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    # This is a warning, not a critical error
+                                                elif not isinstance(profile["display_name"], str):
+                                                    issue_msg = f"user_profiles[{i}].display_name has wrong type: {type(profile['display_name']).__name__}"
+                                                    event_detail["issues"].append(issue_msg)
+
                                         # Print first occurrence of critical fields for validation
                                         if not first_snapshot_printed:
                                             first_snapshot_printed = True
@@ -344,6 +388,32 @@ class StreamingVerificationModule:
                                                         print(f"  - {key}: {val_str}")
                                             else:
                                                 print("  (None)")
+
+                                            # Print user_profiles
+                                            user_profiles = snapshot.get("user_profiles")
+                                            print(f"\n👥 user_profiles:")
+                                            if user_profiles is None:
+                                                print("  ❌ NULL (should be list with at least API user!)")
+                                            elif not isinstance(user_profiles, list):
+                                                print(f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)")
+                                            elif len(user_profiles) == 0:
+                                                print("  ❌ EMPTY (should contain at least API user profile)")
+                                            else:
+                                                print(f"  ✓ Type: list with {len(user_profiles)} profile(s)")
+                                                for i, profile in enumerate(user_profiles, 1):
+                                                    if isinstance(profile, dict):
+                                                        user_id = profile.get("user_id", "MISSING")
+                                                        display_name = profile.get("display_name", "MISSING")
+                                                        # Show additional fields if present
+                                                        extra_fields = []
+                                                        if "user_preferred_name" in profile:
+                                                            extra_fields.append(f"preferred_name={profile['user_preferred_name']}")
+                                                        if "location" in profile:
+                                                            extra_fields.append(f"location={profile['location']}")
+                                                        extra_str = f" ({', '.join(extra_fields)})" if extra_fields else ""
+                                                        print(f"  {i}. user_id={user_id}, display_name={display_name}{extra_str}")
+                                                    else:
+                                                        print(f"  {i}. ⚠️ Invalid profile (not dict): {type(profile).__name__}")
 
                                             print("=" * 80 + "\n")
 

@@ -25,12 +25,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables frontend to display real-time resource consumption per thought
   - QA streaming tests validate resource fields are properly populated
 
+- **🔑 API Key Management for OAuth Users**: Users can create and manage their own API keys
+  - `POST /v1/auth/api-keys` - Create new API keys with configurable expiry (30 minutes to 7 days)
+  - `GET /v1/auth/api-keys` - List all API keys for authenticated user
+  - `DELETE /v1/auth/api-keys/{key_id}` - Revoke specific API key
+  - Updated `APIKeyCreateRequest` schema:
+    - Changed from `expires_in_days` to `expires_in_minutes` for finer control
+    - Validation: minimum 30 minutes, maximum 10080 minutes (7 days)
+    - Removed `role` field (automatically uses authenticated user's role)
+  - Keys are tied to creating user and can only be deleted by that user
+  - API key value shown only once during creation
+  - Enables OAuth users to create automation keys for API access
+
 ### Fixed
 - **🔍 Memory Service Label Deserialization**: Fixed `recall_timeseries()` not retrieving metric tags from database
   - **Root Cause**: Function was checking `metric_tags` field, but database stores metadata in `labels` field
   - **Solution**: Updated line 438 to check `labels` field first, then fall back to `metric_tags`
   - **Impact**: Per-thought resource queries now work correctly; tags properly filter metrics by `thought_id`
   - Removed invalid dynamic attribute assignments to `TimeSeriesDataPoint` (schema has `extra="forbid"`)
+
+- **🧪 Circuit Breaker Test Mocks**: Fixed 11 failing tests for circuit breaker status collection
+  - Changed `Mock`/`MagicMock` to `AsyncMock` for `get_circuit_breaker_status()` calls
+  - Added `@pytest.mark.asyncio` and `await` to async function calls in tests
+  - Tests now properly mock async circuit breaker status methods
+  - All system snapshot and service health tests passing
 
 ### Testing
 - All QA streaming tests pass (100% success rate)

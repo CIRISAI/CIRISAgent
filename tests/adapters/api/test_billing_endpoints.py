@@ -303,7 +303,9 @@ class TestInitiatePurchase:
         request.app.state.billing_client = billing_client
 
         # Mock Stripe publishable key
-        with patch("ciris_engine.logic.adapters.api.routes.billing._get_stripe_publishable_key", return_value="pk_test_123"):
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.billing._get_stripe_publishable_key", return_value="pk_test_123"
+        ):
             response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
         assert response.payment_id == "pi_123"
@@ -457,7 +459,9 @@ class TestGetPurchaseStatus:
         billing_client = AsyncMock()
         mock_response = Mock()
         mock_response.status_code = 404
-        billing_client.get = AsyncMock(side_effect=httpx.HTTPStatusError("Not found", request=Mock(), response=mock_response))
+        billing_client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError("Not found", request=Mock(), response=mock_response)
+        )
         request.app.state.billing_client = billing_client
 
         response = await get_purchase_status("pi_nonexistent", request, mock_auth_context)
@@ -483,7 +487,9 @@ class TestGetPurchaseStatus:
         billing_client = AsyncMock()
         mock_response = Mock()
         mock_response.status_code = 500
-        billing_client.get = AsyncMock(side_effect=httpx.HTTPStatusError("Server error", request=Mock(), response=mock_response))
+        billing_client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError("Server error", request=Mock(), response=mock_response)
+        )
         request.app.state.billing_client = billing_client
 
         with pytest.raises(HTTPException) as exc_info:

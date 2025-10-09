@@ -73,3 +73,4 @@ ciris_audit_report.json
 # NPM files in main directory (should be in CIRISGUI)
 package-lock.json
 package.json
+dict_any_audit_results.json

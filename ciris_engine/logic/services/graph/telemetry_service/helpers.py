@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from ciris_engine.logic.buses.memory_bus import MemoryBus
     from ciris_engine.logic.buses.runtime_control_bus import RuntimeControlBus
     from ciris_engine.logic.services.graph.telemetry_service.service import GraphTelemetryService
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 
 # Metric types to query - moved from inline definition
 METRIC_TYPES = [
@@ -442,50 +443,63 @@ def store_summary_cache(
 # ============================================================================
 
 
-def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> "CircuitBreakerState":
     """Extract circuit breaker data from service stats dict.
 
     Args:
         stats: Service stats dict containing circuit_breaker_state
 
     Returns:
-        Dict with circuit breaker state and metrics
+        CircuitBreakerState with state and metrics
     """
-    return {
-        "state": stats.get("circuit_breaker_state", "unknown"),
-        "total_requests": stats.get("total_requests", 0),
-        "failed_requests": stats.get("failed_requests", 0),
-        "failure_rate": stats.get("failure_rate", "0.00%"),
-        "consecutive_failures": stats.get("consecutive_failures", 0),
-    }
+    # Import at runtime to avoid circular dependency
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    return CircuitBreakerState(
+        state=stats.get("circuit_breaker_state", "unknown"),
+        total_requests=stats.get("total_requests", 0),
+        failed_requests=stats.get("failed_requests", 0),
+        failure_rate=stats.get("failure_rate", "0.00%"),
+        consecutive_failures=stats.get("consecutive_failures", 0),
+        failure_count=stats.get("consecutive_failures", 0),
+        success_count=0,
+    )
 
 
-def _extract_direct_cb_data(cb: Any) -> Dict[str, Any]:
+def _extract_direct_cb_data(cb: Any) -> "CircuitBreakerState":
     """Extract circuit breaker data from CircuitBreaker object.
 
     Args:
         cb: CircuitBreaker instance
 
     Returns:
-        Dict with circuit breaker state and counts
+        CircuitBreakerState with state and counts
     """
-    return {
-        "state": str(cb.state) if hasattr(cb, "state") else "unknown",
-        "failure_count": cb.failure_count if hasattr(cb, "failure_count") else 0,
-        "success_count": cb.success_count if hasattr(cb, "success_count") else 0,
-    }
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    return CircuitBreakerState(
+        state=str(cb.state) if hasattr(cb, "state") else "unknown",
+        failure_count=cb.failure_count if hasattr(cb, "failure_count") else 0,
+        success_count=cb.success_count if hasattr(cb, "success_count") else 0,
+        total_requests=0,
+        failed_requests=0,
+        consecutive_failures=cb.failure_count if hasattr(cb, "failure_count") else 0,
+        failure_rate="0.00%",
+    )
 
 
-def _collect_from_service_stats(bus: Any) -> Dict[str, Any]:
+def _collect_from_service_stats(bus: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from bus.get_service_stats().
 
     Args:
         bus: Bus instance with get_service_stats method
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     try:
         service_stats = bus.get_service_stats()
@@ -503,7 +517,9 @@ def _collect_from_service_stats(bus: Any) -> Dict[str, Any]:
     return cb_data
 
 
-def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -> Dict[str, Any]:
+def _collect_from_direct_cb_attribute(
+    bus: Any, existing_data: Dict[str, "CircuitBreakerState"]
+) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from bus.circuit_breakers attribute.
 
     Args:
@@ -511,9 +527,11 @@ def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -
         existing_data: Already collected CB data (don't override these)
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     try:
         circuit_breakers = bus.circuit_breakers
@@ -531,16 +549,18 @@ def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -
     return cb_data
 
 
-def _collect_from_single_bus(bus: Any) -> Dict[str, Any]:
+def _collect_from_single_bus(bus: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from a single bus.
 
     Args:
         bus: Bus instance to collect from
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     # Try get_service_stats first
     if hasattr(bus, "get_service_stats"):
@@ -553,7 +573,7 @@ def _collect_from_single_bus(bus: Any) -> Dict[str, Any]:
     return cb_data
 
 
-def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
+def collect_circuit_breaker_state(runtime: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker state from all buses.
 
     Walks through all buses (LLM, Memory, Communication, Tool, Wise, RuntimeControl)
@@ -563,9 +583,11 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
         runtime: Runtime instance with bus_manager attribute
 
     Returns:
-        Dict mapping service names to their circuit breaker info (state, failures, etc)
+        Dict mapping service names to their circuit breaker state
     """
-    circuit_breaker_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    circuit_breaker_data: Dict[str, CircuitBreakerState] = {}
 
     if not runtime:
         return circuit_breaker_data
@@ -599,7 +621,7 @@ def build_telemetry_summary(
     avg_thought_depth: float,
     queue_saturation: float,
     service_latency_ms: Dict[str, float],
-    circuit_breaker: Optional[Dict[str, Any]] = None,
+    circuit_breaker: Optional[Dict[str, "CircuitBreakerState"]] = None,
 ) -> TelemetrySummary:
     """Build TelemetrySummary from collected data.
 

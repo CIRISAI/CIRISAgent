@@ -5,7 +5,7 @@ Provides type-safe contexts for system state and runtime operations.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -15,6 +15,9 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.types import JSONDict
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 
 
 class SystemSnapshot(BaseModel):
@@ -334,8 +337,8 @@ class TelemetrySummary(BaseModel):
     queue_saturation: float = Field(0.0, description="Queue saturation 0-1")
 
     # Circuit breaker state
-    circuit_breaker: Optional[Dict[str, Any]] = Field(
-        None, description="Circuit breaker state across all services (service_name -> {state, failures, etc})"
+    circuit_breaker: Optional[Dict[str, "CircuitBreakerState"]] = Field(
+        None, description="Circuit breaker state across all services (service_name -> CircuitBreakerState)"
     )
 
     @field_serializer("window_start", "window_end")

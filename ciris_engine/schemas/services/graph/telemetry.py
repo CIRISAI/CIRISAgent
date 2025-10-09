@@ -161,6 +161,20 @@ class MetricRecord(BaseModel):
         return v
 
 
+class CircuitBreakerState(BaseModel):
+    """Circuit breaker state for a single service."""
+
+    state: str = Field(..., description="Circuit breaker state (open/closed/half_open/unknown)")
+    failure_count: int = Field(0, description="Consecutive failures")
+    success_count: int = Field(0, description="Consecutive successes")
+    total_requests: int = Field(0, description="Total requests")
+    failed_requests: int = Field(0, description="Failed requests")
+    consecutive_failures: int = Field(0, description="Consecutive failures")
+    failure_rate: str = Field("0.00%", description="Failure rate percentage")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class MetricAggregates(BaseModel):
     """Aggregated metrics across time windows.
 
@@ -232,4 +246,5 @@ __all__ = [
     "AggregatedTelemetryResponse",
     "MetricRecord",
     "MetricAggregates",
+    "CircuitBreakerState",
 ]

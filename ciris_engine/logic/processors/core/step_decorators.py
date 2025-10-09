@@ -159,6 +159,29 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         }
 
 
+async def _maybe_add_resource_usage(
+    step: StepPoint, processor: Any, thought_id: str, end_timestamp: Any, kwargs: Dict[str, Any]
+) -> None:
+    """Helper to add resource usage for ACTION_COMPLETE steps - reduces cognitive complexity."""
+    if step != StepPoint.ACTION_COMPLETE:
+        return
+
+    # Get telemetry service from processor
+    telemetry_service = getattr(processor, "telemetry_service", None) or getattr(
+        getattr(processor, "sink", None), "telemetry", None
+    )
+
+    if telemetry_service:
+        # Query resources and add to kwargs for _create_action_complete_data
+        resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)
+        kwargs["_resource_usage"] = resource_data
+    else:
+        logger.warning(
+            f"No telemetry service available for thought {thought_id} - "
+            f"resource usage will not be recorded in action_complete event"
+        )
+
+
 def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
@@ -206,20 +229,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                 )
 
                 # For ACTION_COMPLETE, query and aggregate resource usage by thought_id
-                if step == StepPoint.ACTION_COMPLETE:
-                    # Get telemetry service from processor
-                    telemetry_service = getattr(self, "telemetry_service", None) or getattr(
-                        getattr(self, "sink", None), "telemetry", None
-                    )
-                    if telemetry_service:
-                        # Query resources and add to kwargs for _create_action_complete_data
-                        resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)
-                        kwargs["_resource_usage"] = resource_data
-                    else:
-                        logger.warning(
-                            f"No telemetry service available for thought {thought_id} - "
-                            f"resource usage will not be recorded in action_complete event"
-                        )
+                await _maybe_add_resource_usage(step, self, thought_id, end_timestamp, kwargs)
 
                 # Add step-specific data and create typed step data
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)

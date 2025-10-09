@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 
+# Error message constants (avoid duplication)
+ERROR_RESOURCE_MONITOR_UNAVAILABLE = "Resource monitor not available"
+ERROR_CREDIT_PROVIDER_NOT_CONFIGURED = "Credit provider not configured"
+ERROR_BILLING_SERVICE_UNAVAILABLE = "Billing service unavailable"
+
+
 # Request/Response schemas
 
 
@@ -88,14 +94,18 @@ def _get_stripe_publishable_key() -> str:
 
 
 def _extract_user_identity(auth: AuthContext, request: Request) -> Dict[str, Any]:
-    """Extract user identity from auth context including marketing opt-in preference."""
-    # Extract marketing_opt_in from user record if available
+    """Extract user identity from auth context including marketing opt-in preference and email."""
+    # Extract marketing_opt_in and email from user record if available
     marketing_opt_in = False
-    if hasattr(request.app.state, "auth_service"):
+    user_email = None
+
+    if hasattr(request.app.state, "auth_service") and request.app.state.auth_service is not None:
         auth_service = request.app.state.auth_service
         user = auth_service.get_user(auth.user_id)
         if user:
             marketing_opt_in = user.marketing_opt_in
+            # Try to get email from OAuth user data
+            user_email = user.oauth_email
 
     return {
         "oauth_provider": "api:internal",  # Or extract from auth context
@@ -103,6 +113,7 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> Dict[str, Any
         "wa_id": auth.user_id,
         "tenant_id": None,
         "marketing_opt_in": marketing_opt_in,
+        "email": user_email,
     }
 
 
@@ -127,7 +138,7 @@ async def get_credits(
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
-        raise HTTPException(status_code=503, detail="Resource monitor not available")
+        raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
 
     resource_monitor = request.app.state.resource_monitor
 
@@ -221,7 +232,7 @@ async def get_credits(
 
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             logger.error(f"Billing API error: {e}")
-            raise HTTPException(status_code=503, detail="Billing service unavailable")
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
         # Format response for frontend
         purchase_options = None
@@ -257,12 +268,12 @@ async def initiate_purchase(
     """
     # Check if billing is enabled (CIRISBillingProvider vs SimpleCreditProvider)
     if not hasattr(request.app.state, "resource_monitor"):
-        raise HTTPException(status_code=503, detail="Resource monitor not available")
+        raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
 
     resource_monitor = request.app.state.resource_monitor
 
     if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
-        raise HTTPException(status_code=503, detail="Credit provider not configured")
+        raise HTTPException(status_code=503, detail=ERROR_CREDIT_PROVIDER_NOT_CONFIGURED)
 
     is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
 
@@ -277,9 +288,8 @@ async def initiate_purchase(
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 
-    # Get user email (needed for Stripe)
-    # TODO: Extract from auth context or user profile
-    customer_email = f"{auth.user_id}@ciris.ai"  # Placeholder
+    # Get user email (needed for Stripe) - extract from OAuth profile or fall back to user ID
+    customer_email = user_identity.get("email") or f"{auth.user_id}@ciris.ai"
 
     try:
         # Create payment intent via billing backend
@@ -334,12 +344,12 @@ async def get_purchase_status(
     """
     # Check if billing is enabled
     if not hasattr(request.app.state, "resource_monitor"):
-        raise HTTPException(status_code=503, detail="Resource monitor not available")
+        raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
 
     resource_monitor = request.app.state.resource_monitor
 
     if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
-        raise HTTPException(status_code=503, detail="Credit provider not configured")
+        raise HTTPException(status_code=503, detail=ERROR_CREDIT_PROVIDER_NOT_CONFIGURED)
 
     is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
 
@@ -354,28 +364,49 @@ async def get_purchase_status(
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 
+    payment_data = None
+    credit_data = None
+
     try:
+        # Query billing backend for specific payment status
+        payment_response = await billing_client.get(
+            f"/v1/billing/purchases/{payment_id}/status",
+            params=user_identity,
+        )
+        payment_response.raise_for_status()
+        payment_data = payment_response.json()
+
         # Get updated credit balance
-        response = await billing_client.post(
+        credits_response = await billing_client.post(
             "/v1/billing/credits/check",
             json={
                 **user_identity,
                 "context": {"source": "purchase_status_check"},
             },
         )
-        response.raise_for_status()
-        credit_data = response.json()
+        credits_response.raise_for_status()
+        credit_data = credits_response.json()
 
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+    except httpx.HTTPStatusError as e:
+        # If payment not found, return pending status
+        if e.response.status_code == 404:
+            return PurchaseStatusResponse(
+                status="pending",
+                credits_added=0,
+                balance_after=None,
+            )
         logger.error(f"Billing API error: {e}")
-        raise HTTPException(status_code=503, detail="Billing service unavailable")
+        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+    except httpx.RequestError as e:
+        logger.error(f"Billing API request error: {e}")
+        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
-    # TODO: Query Stripe or billing backend for specific payment status
-    # For now, return generic success if credits exist
-    has_credits = credit_data.get("credits_remaining", 0) > 0
+    # Extract payment status and amount from billing backend response
+    payment_status = payment_data.get("status", "unknown")
+    credits_added = payment_data.get("credits_added", 0)
 
     return PurchaseStatusResponse(
-        status="succeeded" if has_credits else "pending",
-        credits_added=20 if has_credits else 0,  # TODO: Get actual amount from payment record
+        status=payment_status,
+        credits_added=credits_added,
         balance_after=credit_data.get("credits_remaining"),
     )

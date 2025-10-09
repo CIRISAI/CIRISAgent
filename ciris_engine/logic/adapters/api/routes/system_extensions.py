@@ -4,6 +4,7 @@ System management endpoint extensions for CIRIS API v1.
 Adds runtime queue, service management, and processor state endpoints.
 """
 
+import copy
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -680,6 +681,37 @@ def _filter_events_by_channel_access(
     return filtered_events
 
 
+def _redact_observer_sensitive_data(events: List[Any]) -> List[Any]:
+    """Redact sensitive task information from events for OBSERVER users.
+
+    Removes:
+    - recently_completed_tasks_summary
+    - top_pending_tasks_summary
+
+    from system_snapshot in SNAPSHOT_AND_CONTEXT events.
+    """
+    redacted_events = []
+    for event in events:
+        # Only redact SNAPSHOT_AND_CONTEXT events
+        if event.get("event_type") == "snapshot_and_context":
+            # Make a deep copy to avoid mutating the original event
+            event = copy.deepcopy(event)
+
+            # Redact task lists from system_snapshot
+            if "system_snapshot" in event and event["system_snapshot"]:
+                system_snapshot = event["system_snapshot"]
+
+                # Remove sensitive task information for OBSERVER users
+                if "recently_completed_tasks_summary" in system_snapshot:
+                    system_snapshot["recently_completed_tasks_summary"] = []
+                if "top_pending_tasks_summary" in system_snapshot:
+                    system_snapshot["top_pending_tasks_summary"] = []
+
+        redacted_events.append(event)
+
+    return redacted_events
+
+
 @router.get("/runtime/reasoning-stream")
 async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)) -> Any:
     """
@@ -766,6 +798,11 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                             filtered_events = _filter_events_by_channel_access(
                                 events, allowed_channel_ids, task_channel_cache
                             )
+
+                            # SECURITY: Redact sensitive task information for OBSERVER users
+                            # This removes recently_completed_tasks and pending_tasks from snapshots
+                            if filtered_events and user_role == UserRole.OBSERVER:
+                                filtered_events = _redact_observer_sensitive_data(filtered_events)
 
                             # Replace events with filtered list
                             if filtered_events:

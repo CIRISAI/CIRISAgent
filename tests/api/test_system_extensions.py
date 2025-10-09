@@ -14,6 +14,7 @@ from ciris_engine.logic.adapters.api.routes.system_extensions import (
     SingleStepResponse,
     _extract_cognitive_state,
     _get_queue_depth,
+    _redact_observer_sensitive_data,
     get_processing_queue_status,
     get_processor_states,
     get_service_health_details,
@@ -1235,3 +1236,182 @@ class TestReasoningStreamEndpoint:
                 # Verify subscribe was called
                 mock_stream.subscribe.assert_called_once()
                 # Note: unsubscribe happens in finally block, may not be called yet in this test structure
+
+
+class TestObserverDataRedaction:
+    """Test OBSERVER role data redaction functionality."""
+
+    def test_redact_snapshot_and_context_event(self):
+        """Test redaction of task information from SNAPSHOT_AND_CONTEXT events."""
+        # Create a mock SNAPSHOT_AND_CONTEXT event with task data
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "system_snapshot": {
+                    "channel_id": "user-789",
+                    "current_time_utc": "2025-10-09T12:00:00Z",
+                    "recently_completed_tasks_summary": [
+                        {"task_id": "task-1", "description": "Task 1"},
+                        {"task_id": "task-2", "description": "Task 2"},
+                    ],
+                    "top_pending_tasks_summary": [
+                        {"task_id": "task-3", "description": "Task 3"},
+                        {"task_id": "task-4", "description": "Task 4"},
+                    ],
+                    "system_counts": {
+                        "total_tasks": 10,
+                        "pending_tasks": 5,
+                    },
+                },
+            }
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify task lists are redacted
+        assert len(redacted_events) == 1
+        event = redacted_events[0]
+        assert event["event_type"] == "snapshot_and_context"
+        assert event["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert event["system_snapshot"]["top_pending_tasks_summary"] == []
+
+        # Verify other fields are preserved
+        assert event["thought_id"] == "thought-123"
+        assert event["task_id"] == "task-456"
+        assert event["system_snapshot"]["channel_id"] == "user-789"
+        assert event["system_snapshot"]["system_counts"]["total_tasks"] == 10
+
+    def test_redact_preserves_other_events(self):
+        """Test that non-SNAPSHOT_AND_CONTEXT events are preserved unchanged."""
+        events = [
+            {
+                "event_type": "dma_results",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "dma_data": {"csdma": "test"},
+            },
+            {
+                "event_type": "aspdma_result",
+                "thought_id": "thought-124",
+                "task_id": "task-457",
+                "selected_action": "speak",
+            },
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify events are unchanged
+        assert len(redacted_events) == 2
+        assert redacted_events[0] == events[0]
+        assert redacted_events[1] == events[1]
+
+    def test_redact_handles_missing_system_snapshot(self):
+        """Test redaction handles events with missing system_snapshot gracefully."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                # No system_snapshot field
+            }
+        ]
+
+        # Execute redaction (should not crash)
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify event is preserved
+        assert len(redacted_events) == 1
+        assert redacted_events[0]["event_type"] == "snapshot_and_context"
+
+    def test_redact_handles_null_system_snapshot(self):
+        """Test redaction handles events with null system_snapshot."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "system_snapshot": None,
+            }
+        ]
+
+        # Execute redaction (should not crash)
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify event is preserved
+        assert len(redacted_events) == 1
+        assert redacted_events[0]["system_snapshot"] is None
+
+    def test_redact_handles_empty_events_list(self):
+        """Test redaction handles empty events list."""
+        events = []
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify empty list returned
+        assert redacted_events == []
+
+    def test_redact_mixed_events(self):
+        """Test redaction with mix of SNAPSHOT_AND_CONTEXT and other events."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2"}],
+                },
+            },
+            {
+                "event_type": "dma_results",
+                "dma_data": "test",
+            },
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-3"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-4"}],
+                },
+            },
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify only SNAPSHOT_AND_CONTEXT events are redacted
+        assert len(redacted_events) == 3
+        assert redacted_events[0]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[0]["system_snapshot"]["top_pending_tasks_summary"] == []
+        assert redacted_events[1]["event_type"] == "dma_results"  # Unchanged
+        assert redacted_events[2]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[2]["system_snapshot"]["top_pending_tasks_summary"] == []
+
+    def test_redact_does_not_mutate_original(self):
+        """Test that redaction creates a deep copy and doesn't mutate original events."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2"}],
+                },
+            }
+        ]
+
+        # Store original values
+        original_recent_tasks = events[0]["system_snapshot"]["recently_completed_tasks_summary"]
+        original_pending_tasks = events[0]["system_snapshot"]["top_pending_tasks_summary"]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events)
+
+        # Verify original events are unchanged
+        assert events[0]["system_snapshot"]["recently_completed_tasks_summary"] == original_recent_tasks
+        assert events[0]["system_snapshot"]["top_pending_tasks_summary"] == original_pending_tasks
+
+        # Verify redacted events have empty lists
+        assert redacted_events[0]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[0]["system_snapshot"]["top_pending_tasks_summary"] == []

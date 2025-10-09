@@ -564,11 +564,18 @@ def _collect_from_single_bus(bus: Any) -> Dict[str, "CircuitBreakerState"]:
 
     # Try get_service_stats first
     if hasattr(bus, "get_service_stats"):
+        logger.debug(f"[CB COLLECT] Bus has get_service_stats method")
         cb_data.update(_collect_from_service_stats(bus))
+        logger.debug(f"[CB COLLECT] Collected {len(cb_data)} CBs from service_stats")
 
     # Also check direct circuit_breakers attribute
     if hasattr(bus, "circuit_breakers"):
+        cb_attr = getattr(bus, "circuit_breakers", {})
+        logger.debug(
+            f"[CB COLLECT] Bus has circuit_breakers attribute with {len(cb_attr) if isinstance(cb_attr, dict) else 0} entries"
+        )
         cb_data.update(_collect_from_direct_cb_attribute(bus, cb_data))
+        logger.debug(f"[CB COLLECT] Total {len(cb_data)} CBs after checking circuit_breakers attribute")
 
     return cb_data
 
@@ -590,11 +597,13 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, "CircuitBreakerStat
     circuit_breaker_data: Dict[str, CircuitBreakerState] = {}
 
     if not runtime:
+        logger.debug("[CB COLLECT] No runtime provided")
         return circuit_breaker_data
 
     try:
         bus_manager = getattr(runtime, "bus_manager", None)
         if not bus_manager:
+            logger.debug(f"[CB COLLECT] Runtime has no bus_manager (type: {type(runtime).__name__})")
             return circuit_breaker_data
 
         # List of bus attributes to check
@@ -603,10 +612,19 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, "CircuitBreakerStat
         for bus_name in bus_names:
             bus = getattr(bus_manager, bus_name, None)
             if bus:
-                circuit_breaker_data.update(_collect_from_single_bus(bus))
+                logger.debug(f"[CB COLLECT] Collecting from {bus_name} bus ({type(bus).__name__})")
+                bus_data = _collect_from_single_bus(bus)
+                if bus_data:
+                    logger.debug(f"[CB COLLECT] Found {len(bus_data)} circuit breakers in {bus_name} bus")
+                circuit_breaker_data.update(bus_data)
+            else:
+                logger.debug(f"[CB COLLECT] No {bus_name} bus in bus_manager")
 
-    except Exception:
+        logger.debug(f"[CB COLLECT] Total circuit breakers collected: {len(circuit_breaker_data)}")
+
+    except Exception as e:
         # If anything fails, return whatever we collected so far
+        logger.warning(f"[CB COLLECT] Error collecting circuit breakers: {e}")
         pass
 
     return circuit_breaker_data

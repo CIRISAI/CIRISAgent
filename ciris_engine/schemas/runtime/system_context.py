@@ -14,10 +14,13 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 # Import ShutdownContext directly to avoid forward reference issues
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
+
+# Import CircuitBreakerState directly for runtime validation
+from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
-    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+    pass
 
 
 class SystemSnapshot(BaseModel):
@@ -337,7 +340,7 @@ class TelemetrySummary(BaseModel):
     queue_saturation: float = Field(0.0, description="Queue saturation 0-1")
 
     # Circuit breaker state
-    circuit_breaker: Optional[Dict[str, "CircuitBreakerState"]] = Field(
+    circuit_breaker: Optional[Dict[str, CircuitBreakerState]] = Field(
         None, description="Circuit breaker state across all services (service_name -> CircuitBreakerState)"
     )
 

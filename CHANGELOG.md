@@ -66,8 +66,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Raises `HTTPException(400)` if OAuth email not available
   - Ensures valid email for Stripe payment processing
 
+- **🔴 Circuit Breaker Telemetry Collection**: Fixed empty circuit_breaker dict in production
+  - **Root Cause**: Three bugs prevented circuit breakers from appearing in telemetry
+    1. Typo: `getattr(self, "runtime", None)` → `self._runtime` in service.py:2042
+    2. Caching: Circuit breaker data cached for 60s, causing stale empty results
+    3. Forward reference: `TYPE_CHECKING` import prevented runtime validation
+  - **Solution**:
+    - Fixed attribute reference to use correct `self._runtime`
+    - Circuit breakers now collected fresh on every telemetry request (bypasses cache)
+    - Moved `CircuitBreakerState` import from `TYPE_CHECKING` to direct import
+  - **Result**: Circuit breakers now properly visible in SSE events and telemetry endpoints
+  - Shows service health: `MockLLMService: state=closed, failures=0, rate=0.00%`
+  - Changed debug logging to `logger.debug()` to avoid log spam
+
 ### Testing
 - 30 new tests: 15 billing + 15 API key management (100% pass rate)
+- 6 new circuit breaker collection tests (100% pass rate)
 - SonarCloud quality gate: PASSING (80.2% coverage)
 - All QA streaming tests pass with resource tracking validation
 

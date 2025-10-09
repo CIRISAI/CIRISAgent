@@ -1223,12 +1223,17 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
     def _set_runtime(self, runtime: object) -> None:
         """Set the runtime reference for accessing core services directly (internal method)."""
+        logger.debug(f"[TELEMETRY] _set_runtime called, runtime={runtime is not None}")
         self._runtime = runtime
+        logger.debug(f"[TELEMETRY] Aggregator exists: {self._telemetry_aggregator is not None}, Registry exists: {self._service_registry is not None}")
         # Re-create aggregator if it exists to include runtime
         if self._telemetry_aggregator and self._service_registry:
+            logger.debug("[TELEMETRY] Recreating aggregator with runtime")
             self._telemetry_aggregator = TelemetryAggregator(
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )
+        else:
+            logger.debug("[TELEMETRY] Aggregator will be created later with runtime when first needed")
 
     def _set_service_registry(self, registry: object) -> None:
         """Set the service registry for accessing memory bus and time service (internal method)."""
@@ -1992,11 +1997,19 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
 
         now = self._now()
 
+        # Always collect fresh circuit breaker state (not cacheable, changes rapidly)
+        circuit_breaker_state = collect_circuit_breaker_state(self._runtime)
+        if not circuit_breaker_state:
+            circuit_breaker_state = {}
+
         # Check cache
         cached = check_summary_cache(self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds)
         if cached:
-            logger.debug("Returning cached telemetry summary")
-            return cached  # type: ignore[no-any-return]
+            logger.debug("Returning cached telemetry summary with fresh circuit breaker data")
+            # Update cached summary with fresh circuit breaker state
+            if isinstance(cached, TelemetrySummary):
+                cached.circuit_breaker = circuit_breaker_state
+            return cached
 
         # Fail fast if memory bus not available
         if not self._memory_bus:
@@ -2033,11 +2046,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         )
         service_latency_ms = calculate_average_latencies(aggregates.service_latency)
 
-        # Collect circuit breaker state from all buses
-        circuit_breaker_state = collect_circuit_breaker_state(getattr(self, "runtime", None))
-        # Always include circuit_breaker field (empty dict if no data, never None)
-        if not circuit_breaker_state:
-            circuit_breaker_state = {}
+        # circuit_breaker_state already collected above (before cache check)
 
         # Build result
         summary = build_telemetry_summary(
@@ -2113,10 +2122,13 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             if self._runtime:
                 logger.debug(f"[TELEMETRY] Runtime has bus_manager: {hasattr(self._runtime, 'bus_manager')}")
                 logger.debug(f"[TELEMETRY] Runtime has memory_service: {hasattr(self._runtime, 'memory_service')}")
+            else:
+                logger.debug("[TELEMETRY] ⚠️  Runtime is None when creating aggregator!")
 
             self._telemetry_aggregator = TelemetryAggregator(
                 service_registry=self._service_registry, time_service=self._time_service, runtime=self._runtime
             )
+            logger.debug(f"[TELEMETRY] TelemetryAggregator created with runtime={self._runtime is not None}")
 
     def _check_cache(self, cache_key: str, now: datetime) -> Optional[Dict[str, Any]]:
         """Check cache for valid telemetry data."""

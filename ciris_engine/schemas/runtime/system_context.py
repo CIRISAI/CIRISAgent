@@ -206,6 +206,14 @@ class UserProfile(BaseModel):
     timezone: str = Field("UTC", description="User timezone")
     communication_style: str = Field("formal", description="Preferred communication style")
 
+    # User-configurable preferences (protected from agent, modifiable via API only)
+    user_preferred_name: Optional[str] = Field(None, description="User's preferred display name (overrides oauth_name)")
+    location: Optional[str] = Field(None, description="User's location preference")
+    interaction_preferences: Optional[str] = Field(
+        None, description="User's custom interaction preferences/prompt (free-form text)"
+    )
+    oauth_name: Optional[str] = Field(None, description="Full name from OAuth provider")
+
     # Interaction history
     total_interactions: int = Field(0, description="Total interactions")
     last_interaction: Optional[datetime] = Field(None, description="Last interaction time")

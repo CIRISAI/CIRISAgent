@@ -99,7 +99,9 @@ class SonarClient:
 
         return stats
 
-    def get_quality_gate_status(self, branch: Optional[str] = None, pull_request: Optional[str] = None) -> Dict[str, Any]:
+    def get_quality_gate_status(
+        self, branch: Optional[str] = None, pull_request: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Get quality gate status for the project, branch, or PR.
 
         Args:
@@ -119,7 +121,9 @@ class SonarClient:
         response.raise_for_status()
         return response.json()["projectStatus"]
 
-    def get_project_analyses(self, branch: Optional[str] = None, pull_request: Optional[str] = None, limit: int = 1) -> Dict[str, Any]:
+    def get_project_analyses(
+        self, branch: Optional[str] = None, pull_request: Optional[str] = None, limit: int = 1
+    ) -> Dict[str, Any]:
         """Get recent analyses for project, branch, or PR.
 
         Args:

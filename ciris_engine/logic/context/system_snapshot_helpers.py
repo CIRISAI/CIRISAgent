@@ -1172,6 +1172,12 @@ def get_known_user_fields() -> Set[str]:
         "language",  # Alternative for preferred_language
         "timezone",
         "communication_style",
+        # User-configurable preferences (protected from agent, visible in snapshot)
+        "user_preferred_name",
+        "location",
+        "interaction_preferences",
+        "oauth_name",
+        # User interaction tracking
         "total_interactions",
         "last_interaction",
         "last_seen",  # Alternative for last_interaction
@@ -1220,6 +1226,11 @@ def build_user_profile_from_node(
         preferred_language=attrs.get("language", attrs.get("preferred_language", "en")),
         timezone=attrs.get("timezone", "UTC"),
         communication_style=attrs.get("communication_style", "formal"),
+        # User-configurable preferences (protected from agent modification in MANAGED_USER_ATTRIBUTES)
+        user_preferred_name=attrs.get("user_preferred_name"),
+        location=attrs.get("location"),
+        interaction_preferences=attrs.get("interaction_preferences"),
+        oauth_name=attrs.get("oauth_name"),
         total_interactions=attrs.get("total_interactions", 0),
         last_interaction=last_interaction,
         trust_level=attrs.get("trust_level", 0.5),

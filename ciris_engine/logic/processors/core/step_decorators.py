@@ -1367,7 +1367,7 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
 
 
 def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create ACTION_RESULT reasoning event with audit trail and follow-up data."""
+    """Create ACTION_RESULT reasoning event with audit trail, resource usage, and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
@@ -1387,6 +1387,15 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
         audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
         audit_signature=getattr(step_data, "audit_signature", None),
+        # Resource usage fields (queried from telemetry by thought_id)
+        tokens_total=getattr(step_data, "tokens_total", 0),
+        tokens_input=getattr(step_data, "tokens_input", 0),
+        tokens_output=getattr(step_data, "tokens_output", 0),
+        cost_cents=getattr(step_data, "cost_cents", 0.0),
+        carbon_grams=getattr(step_data, "carbon_grams", 0.0),
+        energy_mwh=getattr(step_data, "energy_mwh", 0.0),
+        llm_calls=getattr(step_data, "llm_calls", 0),
+        models_used=getattr(step_data, "models_used", []),
     )
 
 

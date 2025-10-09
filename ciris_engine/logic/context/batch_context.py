@@ -101,13 +101,13 @@ async def prefetch_batch_context(
 
             if identity_result and identity_result.attributes:
                 attrs = identity_result.attributes
+                # Convert Pydantic model to dict if needed
+                if hasattr(attrs, "model_dump"):
+                    attrs = attrs.model_dump()
                 if isinstance(attrs, dict):
-                    batch_data.agent_identity = {
-                        "agent_id": attrs.get("agent_id", ""),
-                        "description": attrs.get("description", ""),
-                        "role": attrs.get("role_description", ""),
-                        "trust_level": attrs.get("trust_level", 0.5),
-                    }
+                    # Copy ALL attributes to preserve stewardship and other fields
+                    batch_data.agent_identity = dict(attrs)  # Full copy of all identity attributes
+                    # Extract specific fields for structured access
                     batch_data.identity_purpose = attrs.get("role_description", "")
                     batch_data.identity_capabilities = attrs.get("permitted_actions", [])
                     batch_data.identity_restrictions = attrs.get("restricted_capabilities", [])
@@ -332,6 +332,16 @@ async def build_system_snapshot_with_batch(
             and task.context.system_snapshot.channel_id
         ):
             channel_id = str(task.context.system_snapshot.channel_id)
+
+    # If no channel_id from task, try thought.context.channel_id
+    if not channel_id and thought:
+        if (
+            hasattr(thought, "context")
+            and thought.context
+            and hasattr(thought.context, "channel_id")
+            and thought.context.channel_id
+        ):
+            channel_id = str(thought.context.channel_id)
 
     # Only query channel context if we have a channel_id
     if channel_id and memory_service:

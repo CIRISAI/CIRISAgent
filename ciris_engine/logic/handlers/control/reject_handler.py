@@ -40,12 +40,12 @@ class RejectHandler(BaseActionHandler):
             return None
 
         follow_up_content_key_info = f"Rejected thought {thought_id}. Reason: {params.reason}"
-        # NOTE: Rejection notifications to users have been removed by design.
-        # If rejection logging or user notifications are needed in the future,
-        # they can be added/controlled here based on configuration or context.
-        # Example:
-        # if config.notify_on_rejection and original_event_channel_id and params.reason:
-        #     await self.bus_manager.communication.send_message(...)
+
+        # Send rejection notification to API channels
+        if original_event_channel_id and self._is_api_channel(original_event_channel_id):
+            self.logger.info(f"Sending rejection notification to API channel {original_event_channel_id}")
+            await self._send_notification(original_event_channel_id, "Agent rejected the message")
+
         persistence.update_thought_status(
             thought_id=thought_id,
             status=final_thought_status,
@@ -66,6 +66,12 @@ class RejectHandler(BaseActionHandler):
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return None
+
+    def _is_api_channel(self, channel_id: Optional[str]) -> bool:
+        """Check if channel is an API channel (not Discord)."""
+        if not channel_id:
+            return False
+        return channel_id.startswith("api_") or channel_id.startswith("ws:")
 
     async def _create_adaptive_filter(
         self, params: RejectParams, thought: Thought, dispatch_context: DispatchContext

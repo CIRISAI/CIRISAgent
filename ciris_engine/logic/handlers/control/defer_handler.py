@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class DeferHandler(BaseActionHandler):
+    def _is_api_channel(self, channel_id: Optional[str]) -> bool:
+        """Check if channel is an API channel (not Discord)."""
+        if not channel_id:
+            return False
+        return channel_id.startswith("api_") or channel_id.startswith("ws:")
+
     async def _get_task_scheduler_service(self) -> Optional[Any]:
         """Get task scheduler service from registry."""
         try:
@@ -177,5 +183,13 @@ class DeferHandler(BaseActionHandler):
         # Update task status to deferred - "no kings" principle
         persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, self.time_service)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
+
+        # Send deferral notification to API channels
+        task = persistence.get_task_by_id(parent_task_id)
+        if task and task.channel_id and self._is_api_channel(task.channel_id):
+            self.logger.info(f"Sending deferral notification to API channel {task.channel_id}")
+            await self._send_notification(
+                task.channel_id, "The agent has contacted a human authority for help with responding to your message"
+            )
 
         return None

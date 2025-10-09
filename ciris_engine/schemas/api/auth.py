@@ -267,9 +267,13 @@ class OAuth2CallbackResponse(BaseModel):
 class APIKeyCreateRequest(BaseModel):
     """Request to create a new API key."""
 
-    role: UserRole = Field(..., description="Role for the API key")
     description: Optional[str] = Field(None, description="Description of the key's purpose")
-    expires_in_days: Optional[int] = Field(None, description="Number of days until key expires (None = no expiration)")
+    expires_in_minutes: int = Field(
+        ...,
+        ge=30,
+        le=10080,
+        description="Expiry time in minutes (30 minutes to 7 days). 30min=30, 1day=1440, 7days=10080",
+    )
 
 
 class APIKeyResponse(BaseModel):

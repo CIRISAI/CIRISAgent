@@ -24,6 +24,10 @@ from pydantic import BaseModel, Field
 from ciris_engine.logic.adapters.api.services.auth_service import OAuthUser
 from ciris_engine.logic.adapters.api.services.oauth_security import validate_oauth_picture_url
 from ciris_engine.schemas.api.auth import (
+    APIKeyCreateRequest,
+    APIKeyInfo,
+    APIKeyListResponse,
+    APIKeyResponse,
     AuthContext,
     LoginRequest,
     LoginResponse,
@@ -754,3 +758,102 @@ async def oauth_callback(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OAuth callback failed: {str(e)}"
         )
+
+
+# ========== API Key Management Endpoints ==========
+
+
+@router.post("/auth/api-keys", response_model=APIKeyResponse)
+async def create_api_key(
+    request: APIKeyCreateRequest,
+    auth: AuthContext = Depends(get_auth_context),
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> APIKeyResponse:
+    """
+    Create a new API key for the authenticated user.
+
+    Users can create API keys for their OAuth identity with configurable expiry (30min - 7 days).
+    The key is only shown once and cannot be retrieved later.
+    """
+    # Calculate expiration based on minutes
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=request.expires_in_minutes)
+
+    # Generate API key with user's current role
+    api_key = f"ciris_{auth.role.value.lower()}_{secrets.token_urlsafe(32)}"
+
+    # Store API key
+    auth_service.store_api_key(
+        key=api_key,
+        user_id=auth.user_id,
+        role=auth.role,
+        expires_at=expires_at,
+        description=request.description,
+        created_by=auth.user_id,
+    )
+
+    logger.info(f"User {auth.user_id} created API key with {request.expires_in_minutes}min expiry")
+
+    return APIKeyResponse(
+        api_key=api_key,
+        role=auth.role,
+        expires_at=expires_at,
+        description=request.description,
+        created_at=datetime.now(timezone.utc),
+        created_by=auth.user_id,
+    )
+
+
+@router.get("/auth/api-keys", response_model=APIKeyListResponse)
+async def list_api_keys(
+    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
+) -> APIKeyListResponse:
+    """
+    List all API keys for the authenticated user.
+
+    Returns information about all API keys created by the user (excluding the actual key values).
+    """
+    # Get all keys for this user
+    stored_keys = auth_service.list_user_api_keys(auth.user_id)
+
+    # Convert to response format
+    api_keys = [
+        APIKeyInfo(
+            key_id=key.key_id,
+            role=key.role,
+            expires_at=key.expires_at,
+            description=key.description,
+            created_at=key.created_at,
+            created_by=key.created_by,
+            last_used=key.last_used,
+            is_active=key.is_active,
+        )
+        for key in stored_keys
+    ]
+
+    return APIKeyListResponse(api_keys=api_keys, total=len(api_keys))
+
+
+@router.delete("/auth/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_api_key(
+    key_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> None:
+    """
+    Delete an API key.
+
+    Users can only delete their own API keys.
+    """
+    # Get the key to verify ownership
+    all_keys = auth_service.list_user_api_keys(auth.user_id)
+    key_to_delete = next((k for k in all_keys if k.key_id == key_id), None)
+
+    if not key_to_delete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+
+    # Revoke the key
+    auth_service.revoke_api_key(key_id)
+
+    logger.info(f"User {auth.user_id} deleted API key {key_id}")
+
+    return None

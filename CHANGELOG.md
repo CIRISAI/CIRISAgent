@@ -8,52 +8,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.1] - 2025-10-08
 
 ### Added
-- **📧 Marketing Opt-in Support**: OAuth flow now captures user consent for marketing communications
-  - Added `marketing_opt_in` field to `OAuthUser` and `User` dataclasses (defaults to `False`)
-  - OAuth callback endpoint accepts optional `marketing_opt_in` query parameter from frontend
-  - `create_oauth_user()` stores marketing preference on new users and updates it for returning users
-  - Billing API extracts `marketing_opt_in` from user records and includes in all billing service requests
-  - **Flow**: Frontend checkbox → OAuth callback → User record → Billing API → Billing service Account model
-  - Enables GDPR-compliant opt-in/opt-out tracking for marketing campaigns
+- **💳 Billing & Credits System**: Complete billing integration for usage-based pricing
+  - `GET /api/billing/credits` - Check credit balance and status
+  - `POST /api/billing/purchase/initiate` - Create Stripe payment intent
+  - `GET /api/billing/purchase/status/{payment_id}` - Check payment status
+  - **SimpleCreditProvider**: 1 free credit per OAuth user (no billing backend needed)
+  - **CIRISBillingProvider**: Full billing backend with paid credits and Stripe integration
+  - Email extraction from OAuth profile (Google/Discord) required for purchases
+  - User identity includes `marketing_opt_in` preference from OAuth flow
+  - 15 comprehensive tests covering all billing scenarios
 
-- **📊 Resource Usage Tracking in Action Events**: H3ERE reasoning events now include per-thought resource metrics
-  - Added 8 resource fields to `ActionResultEvent` schema:
-    - Token metrics: `tokens_total`, `tokens_input`, `tokens_output`
-    - Cost/environmental: `cost_cents`, `carbon_grams`, `energy_mwh`
-    - LLM usage: `llm_calls`, `models_used`
-  - Resources queried from telemetry by `thought_id` during `ACTION_COMPLETE` step
-  - Enables frontend to display real-time resource consumption per thought
-  - QA streaming tests validate resource fields are properly populated
+- **🔑 API Key Management**: OAuth users can create and manage their own API keys
+  - `POST /v1/auth/api-keys` - Create keys with 30min-7day expiry
+  - `GET /v1/auth/api-keys` - List user's API keys
+  - `DELETE /v1/auth/api-keys/{key_id}` - Revoke keys
+  - Keys inherit user's role (OBSERVER/ADMIN) automatically
+  - 15 comprehensive tests covering lifecycle and security
 
-- **🔑 API Key Management for OAuth Users**: Users can create and manage their own API keys
-  - `POST /v1/auth/api-keys` - Create new API keys with configurable expiry (30 minutes to 7 days)
-  - `GET /v1/auth/api-keys` - List all API keys for authenticated user
-  - `DELETE /v1/auth/api-keys/{key_id}` - Revoke specific API key
-  - Updated `APIKeyCreateRequest` schema:
-    - Changed from `expires_in_days` to `expires_in_minutes` for finer control
-    - Validation: minimum 30 minutes, maximum 10080 minutes (7 days)
-    - Removed `role` field (automatically uses authenticated user's role)
-  - Keys are tied to creating user and can only be deleted by that user
-  - API key value shown only once during creation
-  - Enables OAuth users to create automation keys for API access
+- **📚 API Documentation**: Complete API specification in `docs/API_SPEC.md`
+  - Full endpoint documentation for auth, billing, and API key management
+  - Request/response schemas with examples
+  - Error handling and status codes
+  - OAuth flow and authentication guide
+
+- **📊 Resource Usage Tracking**: H3ERE reasoning events now include per-thought metrics
+  - 8 resource fields in `ActionResultEvent`: tokens, cost, carbon, energy, LLM calls
+  - Resources queried from telemetry by `thought_id` during `ACTION_COMPLETE`
+  - Enables real-time resource consumption display per thought
+
+- **📧 Marketing Opt-in**: OAuth flow captures GDPR-compliant marketing consent
+  - `marketing_opt_in` field in OAuth user records (defaults to `False`)
+  - OAuth callback accepts optional `marketing_opt_in` query parameter
+  - Propagated to billing service for campaign tracking
 
 ### Fixed
-- **🔍 Memory Service Label Deserialization**: Fixed `recall_timeseries()` not retrieving metric tags from database
-  - **Root Cause**: Function was checking `metric_tags` field, but database stores metadata in `labels` field
-  - **Solution**: Updated line 438 to check `labels` field first, then fall back to `metric_tags`
-  - **Impact**: Per-thought resource queries now work correctly; tags properly filter metrics by `thought_id`
-  - Removed invalid dynamic attribute assignments to `TimeSeriesDataPoint` (schema has `extra="forbid"`)
+- **🔧 SonarCloud Quality Issues**: Resolved 6 code quality violations
+  - Extracted 3 error message constants to eliminate duplicate strings
+  - Reduced cognitive complexity in `step_decorators.py` from 16→15 (extracted helper function)
+  - Implemented 3 TODOs in billing.py:
+    - Email extraction from OAuth profile via `auth_service.get_user().oauth_email`
+    - Payment status querying from billing backend `/v1/billing/purchases/{payment_id}/status`
+    - Credits tracking from payment records with proper error handling
+  - **Coverage**: 56.4% → 80.2% (exceeds 80% target)
 
-- **🧪 Circuit Breaker Test Mocks**: Fixed 11 failing tests for circuit breaker status collection
-  - Changed `Mock`/`MagicMock` to `AsyncMock` for `get_circuit_breaker_status()` calls
-  - Added `@pytest.mark.asyncio` and `await` to async function calls in tests
-  - Tests now properly mock async circuit breaker status methods
+- **🔍 Memory Service**: Fixed `recall_timeseries()` not retrieving metric tags
+  - Database stores metadata in `labels` field, not `metric_tags`
+  - Updated to check `labels` first, then fall back to `metric_tags`
+  - Per-thought resource queries now work correctly
+
+- **🧪 Circuit Breaker Tests**: Fixed 11 failing async mock tests
+  - Changed `Mock`/`MagicMock` to `AsyncMock` for async methods
+  - Added proper `@pytest.mark.asyncio` and `await` statements
   - All system snapshot and service health tests passing
 
+- **✉️ Email Validation**: Purchases now require valid OAuth email
+  - Removed fallback to `{user_id}@ciris.ai` placeholder
+  - Raises `HTTPException(400)` if OAuth email not available
+  - Ensures valid email for Stripe payment processing
+
 ### Testing
-- All QA streaming tests pass (100% success rate)
-- Resource fields properly populated with real data in action_result events
-- Per-thought resource tracking fully functional
+- 30 new tests: 15 billing + 15 API key management (100% pass rate)
+- SonarCloud quality gate: PASSING (80.2% coverage)
+- All QA streaming tests pass with resource tracking validation
 
 ## [1.3.0] - 2025-10-07
 

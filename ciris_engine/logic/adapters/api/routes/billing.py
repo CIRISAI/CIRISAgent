@@ -87,15 +87,22 @@ def _get_stripe_publishable_key() -> str:
     return key
 
 
-def _extract_user_identity(auth: AuthContext) -> Dict[str, Any]:
-    """Extract user identity from auth context."""
-    # TODO: Map auth context to OAuth provider/external_id
-    # For now, use user_id as external_id
+def _extract_user_identity(auth: AuthContext, request: Request) -> Dict[str, Any]:
+    """Extract user identity from auth context including marketing opt-in preference."""
+    # Extract marketing_opt_in from user record if available
+    marketing_opt_in = False
+    if hasattr(request.app.state, "auth_service"):
+        auth_service = request.app.state.auth_service
+        user = auth_service.get_user(auth.user_id)
+        if user:
+            marketing_opt_in = user.marketing_opt_in
+
     return {
         "oauth_provider": "api:internal",  # Or extract from auth context
         "external_id": auth.user_id,
         "wa_id": auth.user_id,
         "tenant_id": None,
+        "marketing_opt_in": marketing_opt_in,
     }
 
 
@@ -116,7 +123,7 @@ async def get_credits(
 
     The frontend calls this to display credit status.
     """
-    user_identity = _extract_user_identity(auth)
+    user_identity = _extract_user_identity(auth, request)
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
@@ -268,7 +275,7 @@ async def initiate_purchase(
 
     # Billing enabled - proceed with purchase
     billing_client = _get_billing_client(request)
-    user_identity = _extract_user_identity(auth)
+    user_identity = _extract_user_identity(auth, request)
 
     # Get user email (needed for Stripe)
     # TODO: Extract from auth context or user profile
@@ -345,7 +352,7 @@ async def get_purchase_status(
 
     # Billing enabled - check payment status
     billing_client = _get_billing_client(request)
-    user_identity = _extract_user_identity(auth)
+    user_identity = _extract_user_identity(auth, request)
 
     try:
         # Get updated credit balance

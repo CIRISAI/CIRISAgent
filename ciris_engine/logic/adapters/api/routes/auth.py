@@ -688,12 +688,17 @@ def _build_redirect_response(api_key: str, oauth_user: OAuthUser, provider: str)
 
 @router.get("/auth/oauth/{provider}/callback")
 async def oauth_callback(
-    provider: str, code: str, state: str, auth_service: APIAuthService = Depends(get_auth_service)
+    provider: str,
+    code: str,
+    state: str,
+    auth_service: APIAuthService = Depends(get_auth_service),
+    marketing_opt_in: bool = False,
 ) -> RedirectResponse:
     """
     Handle OAuth callback.
 
     Exchanges authorization code for tokens and creates/updates user.
+    Accepts optional marketing_opt_in parameter from frontend.
     """
     try:
         # Load OAuth configuration
@@ -727,6 +732,7 @@ async def oauth_callback(
             email=user_data["email"],
             name=user_data["name"],
             role=user_role,
+            marketing_opt_in=marketing_opt_in,
         )
 
         # Store OAuth profile data

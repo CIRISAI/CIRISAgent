@@ -68,6 +68,7 @@ class OAuthUser:
     role: UserRole
     created_at: datetime
     last_login: datetime
+    marketing_opt_in: bool = False  # User consent for marketing communications
 
 
 @dataclass
@@ -94,6 +95,7 @@ class User:
     oauth_picture: Optional[str] = None  # Profile picture URL from OAuth provider
     permission_requested_at: Optional[datetime] = None  # Timestamp when user requested permissions
     oauth_links: List[OAuthIdentityLink] = field(default_factory=list)
+    marketing_opt_in: bool = False  # User consent for marketing communications
 
 
 class APIAuthService:
@@ -342,7 +344,13 @@ class APIAuthService:
             stored_key.is_active = False
 
     def create_oauth_user(
-        self, provider: str, external_id: str, email: Optional[str], name: Optional[str], role: UserRole
+        self,
+        provider: str,
+        external_id: str,
+        email: Optional[str],
+        name: Optional[str],
+        role: UserRole,
+        marketing_opt_in: bool = False,
     ) -> OAuthUser:
         """Create or update an OAuth user."""
         user_id = f"{provider}:{external_id}"
@@ -356,6 +364,8 @@ class APIAuthService:
                 user.email = email
             if name:
                 user.name = name
+            # Update marketing opt-in (user can change their preference)
+            user.marketing_opt_in = marketing_opt_in
         else:
             # Create new user
             user = OAuthUser(
@@ -367,6 +377,7 @@ class APIAuthService:
                 role=role,
                 created_at=now,
                 last_login=now,
+                marketing_opt_in=marketing_opt_in,
             )
             self._oauth_users[user_id] = user
 

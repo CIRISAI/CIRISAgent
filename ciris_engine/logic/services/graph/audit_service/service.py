@@ -255,10 +255,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             outcome=outcome,
         )
 
-        # Store in graph
-        await self._store_entry_in_graph(entry, action_type)
-
-        # Add to hash chain (REQUIRED in production)
+        # Add to hash chain FIRST (REQUIRED in production)
         hash_chain_data = await self._add_to_hash_chain(entry)
 
         if not hash_chain_data:
@@ -267,6 +264,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 f"enable_hash_chain={self.enable_hash_chain}. "
                 f"This is a critical audit trail failure."
             )
+
+        # Store in graph WITH hash chain data (signature + entry_hash)
+        await self._store_entry_in_graph(entry, action_type, hash_chain_data)
 
         # Cache for quick access
         self._cache_entry(entry)
@@ -324,7 +324,16 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 outcome=audit_data.outcome,
             )
 
-            # Create graph node
+            # Add to hash chain FIRST to get signature before storing in graph
+            logger.debug(f"enable_hash_chain={self.enable_hash_chain}")
+            hash_chain_data = None
+            if self.enable_hash_chain:
+                logger.debug("Adding entry to hash chain")
+                hash_chain_data = await self._add_to_hash_chain(entry)
+            else:
+                logger.debug("Hash chain disabled, not writing to audit_log table")
+
+            # Create graph node WITH signature from hash chain
             node = AuditEntryNode(
                 id=f"audit_{entry.entry_id}",
                 action=event_type,
@@ -339,28 +348,19 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                         "outcome": entry.outcome or "logged",
                     },
                 ),
-                signature=None,  # Will be set by hash chain if enabled
-                hash_chain=None,  # Will be set by hash chain if enabled
+                signature=hash_chain_data.get("signature") if hash_chain_data else None,
+                hash_chain=hash_chain_data.get("entry_hash") if hash_chain_data else None,
                 scope=GraphScope.LOCAL,
                 attributes={},
             )
 
-            # Store in graph
+            # Store in graph with signature already set
             if self._memory_bus:
                 await self._memory_bus.memorize(
                     node=node.to_graph_node(),
                     handler_name="audit_service",
                     metadata={"audit_entry": entry.model_dump(), "event": True, "immutable": True},
                 )
-
-            # Add to hash chain if enabled
-            logger.debug(f"enable_hash_chain={self.enable_hash_chain}")
-            hash_chain_data = None
-            if self.enable_hash_chain:
-                logger.debug("Adding entry to hash chain")
-                hash_chain_data = await self._add_to_hash_chain(entry)
-            else:
-                logger.debug("Hash chain disabled, not writing to audit_log table")
 
             # Cache and export
             self._cache_entry(entry)
@@ -808,13 +808,21 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     # ========== Private Helper Methods ==========
 
-    async def _store_entry_in_graph(self, entry: AuditRequest, action_type: HandlerActionType) -> None:
-        """Store an audit entry in the graph and create a trace correlation."""
+    async def _store_entry_in_graph(
+        self, entry: AuditRequest, action_type: HandlerActionType, hash_chain_data: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Store an audit entry in the graph and create a trace correlation.
+
+        Args:
+            entry: The audit request to store
+            action_type: The handler action type
+            hash_chain_data: Optional hash chain data with signature/entry_hash to include in node
+        """
         if not self._memory_bus:
             logger.error("Memory bus not available for audit storage")
             return
 
-        # Create specialized audit node
+        # Create specialized audit node WITH signature from hash chain
         node = AuditEntryNode(
             id=f"audit_{action_type.value}_{entry.entry_id}",
             action=action_type.value,
@@ -830,11 +838,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                     "severity": self._get_severity(action_type),
                 },
             ),
+            signature=hash_chain_data.get("signature") if hash_chain_data else None,
+            hash_chain=hash_chain_data.get("entry_hash") if hash_chain_data else None,
             scope=GraphScope.LOCAL,
             attributes={"action_type": action_type.value, "event_id": entry.entry_id},
         )
 
-        # Store via memory bus
+        # Store via memory bus with signature already set
         result = await self._memory_bus.memorize(
             node=node.to_graph_node(),
             handler_name="audit_service",

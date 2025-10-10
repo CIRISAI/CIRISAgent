@@ -5,7 +5,7 @@ Provides type-safe contexts for system state and runtime operations.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
@@ -14,6 +14,9 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 # Import ShutdownContext directly to avoid forward reference issues
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
+
+# Import CircuitBreakerState directly for runtime validation
+from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 from ciris_engine.schemas.types import JSONDict
 
 
@@ -203,6 +206,14 @@ class UserProfile(BaseModel):
     timezone: str = Field("UTC", description="User timezone")
     communication_style: str = Field("formal", description="Preferred communication style")
 
+    # User-configurable preferences (protected from agent, modifiable via API only)
+    user_preferred_name: Optional[str] = Field(None, description="User's preferred display name (overrides oauth_name)")
+    location: Optional[str] = Field(None, description="User's location preference")
+    interaction_preferences: Optional[str] = Field(
+        None, description="User's custom interaction preferences/prompt (free-form text)"
+    )
+    oauth_name: Optional[str] = Field(None, description="Full name from OAuth provider")
+
     # Interaction history
     total_interactions: int = Field(0, description="Total interactions")
     last_interaction: Optional[datetime] = Field(None, description="Last interaction time")
@@ -334,8 +345,8 @@ class TelemetrySummary(BaseModel):
     queue_saturation: float = Field(0.0, description="Queue saturation 0-1")
 
     # Circuit breaker state
-    circuit_breaker: Optional[Dict[str, Any]] = Field(
-        None, description="Circuit breaker state across all services (service_name -> {state, failures, etc})"
+    circuit_breaker: Optional[Dict[str, CircuitBreakerState]] = Field(
+        None, description="Circuit breaker state across all services (service_name -> CircuitBreakerState)"
     )
 
     @field_serializer("window_start", "window_end")

@@ -118,8 +118,9 @@ class QueryManager:
             logger.error(f"Failed to query nodes for period: {e}")
 
         # Convert to TSDBNodeQueryResult for each node type
-        result = {}
+        result: Dict[str, TSDBNodeQueryResult] = {}
         for node_type, nodes in nodes_by_type.items():
+            # Use string key for type safety
             result[node_type] = TSDBNodeQueryResult(nodes=nodes, period_start=period_start, period_end=period_end)
 
         return result

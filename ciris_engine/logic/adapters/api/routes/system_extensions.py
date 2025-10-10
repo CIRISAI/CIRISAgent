@@ -4,6 +4,7 @@ System management endpoint extensions for CIRIS API v1.
 Adds runtime queue, service management, and processor state endpoints.
 """
 
+import copy
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -680,6 +681,66 @@ def _filter_events_by_channel_access(
     return filtered_events
 
 
+def _is_snapshot_event(event: Any) -> bool:
+    """Check if event is a snapshot_and_context event that needs redaction."""
+    return bool(event.get("event_type") == "snapshot_and_context")
+
+
+def _remove_task_summaries(system_snapshot: Dict[str, Any]) -> None:
+    """Remove sensitive task summaries from system snapshot."""
+    system_snapshot["recently_completed_tasks_summary"] = []
+    system_snapshot["top_pending_tasks_summary"] = []
+
+
+def _filter_user_profiles(user_profiles: Any, allowed_user_ids: set[str]) -> Any:
+    """Filter user profiles to only allowed user IDs."""
+    if isinstance(user_profiles, list):
+        return [
+            profile
+            for profile in user_profiles
+            if isinstance(profile, dict) and profile.get("user_id") in allowed_user_ids
+        ]
+    elif isinstance(user_profiles, dict):
+        return {user_id: profile for user_id, profile in user_profiles.items() if user_id in allowed_user_ids}
+    return user_profiles
+
+
+def _redact_system_snapshot(system_snapshot: Dict[str, Any], allowed_user_ids: set[str]) -> None:
+    """Redact sensitive data from system snapshot in-place."""
+    _remove_task_summaries(system_snapshot)
+
+    if "user_profiles" in system_snapshot and system_snapshot["user_profiles"]:
+        system_snapshot["user_profiles"] = _filter_user_profiles(system_snapshot["user_profiles"], allowed_user_ids)
+
+
+def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str]) -> List[Any]:
+    """Redact sensitive task and user information from events for OBSERVER users.
+
+    Removes:
+    - recently_completed_tasks_summary
+    - top_pending_tasks_summary
+
+    Filters:
+    - user_profiles (only shows user's OWN profile based on allowed_user_ids)
+
+    from system_snapshot in SNAPSHOT_AND_CONTEXT events.
+
+    Args:
+        events: List of events to redact
+        allowed_user_ids: Set of user IDs the user is allowed to see (self + OAuth links)
+    """
+    redacted_events = []
+    for event in events:
+        if _is_snapshot_event(event):
+            event = copy.deepcopy(event)
+            if "system_snapshot" in event and event["system_snapshot"]:
+                _redact_system_snapshot(event["system_snapshot"], allowed_user_ids)
+
+        redacted_events.append(event)
+
+    return redacted_events
+
+
 @router.get("/runtime/reasoning-stream")
 async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)) -> Any:
     """
@@ -714,6 +775,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
     # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
     allowed_channel_ids: set[str] = set()
+    allowed_user_ids: set[str] = set()  # User IDs for profile filtering
     task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
 
     if not can_see_all:
@@ -722,6 +784,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
             raise HTTPException(status_code=401, detail="User ID not found in token")
 
         allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
+        allowed_user_ids = {user_id}  # User can only see their own profile
 
     async def stream_reasoning_steps() -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
@@ -766,6 +829,12 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                             filtered_events = _filter_events_by_channel_access(
                                 events, allowed_channel_ids, task_channel_cache
                             )
+
+                            # SECURITY: Redact sensitive task information for OBSERVER users
+                            # This removes recently_completed_tasks and pending_tasks from snapshots
+                            # and filters user_profiles to only show user's OWN profile
+                            if filtered_events and user_role == UserRole.OBSERVER:
+                                filtered_events = _redact_observer_sensitive_data(filtered_events, allowed_user_ids)
 
                             # Replace events with filtered list
                             if filtered_events:

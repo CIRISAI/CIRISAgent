@@ -7,7 +7,7 @@ Provides typed schemas for telemetry service operations.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -106,6 +106,8 @@ class LLMUsageData(BaseModel):
     energy_kwh: Optional[float] = Field(None, description="Energy usage in kWh")
     model_used: Optional[str] = Field(None, description="Model name used")
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class TelemetryKwargs(BaseModel):
     """Structured kwargs for telemetry operations."""
@@ -157,6 +159,20 @@ class MetricRecord(BaseModel):
         if v.tzinfo is None:
             return v.replace(tzinfo=timezone.utc)
         return v
+
+
+class CircuitBreakerState(BaseModel):
+    """Circuit breaker state for a single service."""
+
+    state: str = Field(..., description="Circuit breaker state (open/closed/half_open/unknown)")
+    failure_count: int = Field(0, description="Consecutive failures")
+    success_count: int = Field(0, description="Consecutive successes")
+    total_requests: int = Field(0, description="Total requests")
+    failed_requests: int = Field(0, description="Failed requests")
+    consecutive_failures: int = Field(0, description="Consecutive failures")
+    failure_rate: str = Field("0.00%", description="Failure rate percentage")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class MetricAggregates(BaseModel):
@@ -230,4 +246,5 @@ __all__ = [
     "AggregatedTelemetryResponse",
     "MetricRecord",
     "MetricAggregates",
+    "CircuitBreakerState",
 ]

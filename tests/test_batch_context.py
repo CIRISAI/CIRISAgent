@@ -440,13 +440,19 @@ class TestBuildSystemSnapshotWithBatch:
         assert snapshot.secrets_filter_version == 1
 
     async def test_build_snapshot_extracts_channel_context(self, mock_time_service):
-        """Test channel context extraction from nested task context."""
+        """Test channel context extraction priority.
+
+        New priority order:
+        1. task.channel_id (direct field) - HIGHEST
+        2. task.context.channel_id
+        3. task.context.system_snapshot.channel_id (legacy) - LOWEST
+        """
         batch_data = BatchContextData()
 
-        # Create a mock task with nested context
+        # Create a mock task WITH channel_id (highest priority)
         mock_task = MagicMock()
         mock_task.task_id = "task_999"
-        mock_task.channel_id = "fallback_channel"
+        mock_task.channel_id = "fallback_channel"  # This has priority
         mock_task.created_at = datetime.now(timezone.utc)
         mock_task.status = TaskStatus.ACTIVE
         mock_task.priority = 5
@@ -456,8 +462,9 @@ class TestBuildSystemSnapshotWithBatch:
         # Mock the context attribute
         mock_context = MagicMock()
         mock_system_snapshot = MagicMock()
-        mock_system_snapshot.channel_id = "discord_12345"
+        mock_system_snapshot.channel_id = "discord_12345"  # Lower priority
         mock_context.system_snapshot = mock_system_snapshot
+        mock_context.user_id = None  # Avoid user enrichment in this test
         mock_task.context = mock_context
 
         # Mock memory service for channel query
@@ -472,8 +479,8 @@ class TestBuildSystemSnapshotWithBatch:
             time_service=mock_time_service,
         )
 
-        # Should extract channel_id from nested context
-        assert snapshot.channel_id == "discord_12345"
+        # Should extract channel_id from task.channel_id (highest priority)
+        assert snapshot.channel_id == "fallback_channel"
 
         # Current task details will be None as our mock task is not a BaseModel
         # The function only creates TaskSummary for BaseModel instances
@@ -482,7 +489,7 @@ class TestBuildSystemSnapshotWithBatch:
         # Should attempt to query channel context
         mock_memory.recall.assert_called_once()
         call_args = mock_memory.recall.call_args[0][0]
-        assert call_args.node_id == "channel/discord_12345"
+        assert call_args.node_id == "channel/fallback_channel"  # Uses task.channel_id (highest priority)
 
     async def test_build_snapshot_handles_thought_status_variants(self, mock_time_service):
         """Test handling of different thought status representations."""

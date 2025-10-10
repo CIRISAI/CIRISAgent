@@ -81,6 +81,8 @@ class ToolBus(BaseBus[ToolService]):
         supporting_services = []
         for service in all_tool_services:
             try:
+                # Service is guaranteed to exist in the list
+                assert service is not None, "Service in list should not be None"
                 available_tools = await service.get_available_tools()
                 logger.debug(f"Service {type(service).__name__} supports tools: {available_tools}")
                 if tool_name in available_tools:
@@ -128,6 +130,8 @@ class ToolBus(BaseBus[ToolService]):
 
         # Step 5: Execute the tool
         try:
+            # Logic guarantees selected_service is not None at this point
+            assert selected_service is not None, "Selected service must not be None"
             logger.debug(f"Executing tool '{tool_name}' with {type(selected_service).__name__}")
             result: ToolExecutionResult = await selected_service.execute_tool(tool_name, parameters)
 

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from ciris_engine.logic.buses.memory_bus import MemoryBus
     from ciris_engine.logic.buses.runtime_control_bus import RuntimeControlBus
     from ciris_engine.logic.services.graph.telemetry_service.service import GraphTelemetryService
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 
 # Metric types to query - moved from inline definition
 METRIC_TYPES = [
@@ -442,50 +443,63 @@ def store_summary_cache(
 # ============================================================================
 
 
-def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> "CircuitBreakerState":
     """Extract circuit breaker data from service stats dict.
 
     Args:
         stats: Service stats dict containing circuit_breaker_state
 
     Returns:
-        Dict with circuit breaker state and metrics
+        CircuitBreakerState with state and metrics
     """
-    return {
-        "state": stats.get("circuit_breaker_state", "unknown"),
-        "total_requests": stats.get("total_requests", 0),
-        "failed_requests": stats.get("failed_requests", 0),
-        "failure_rate": stats.get("failure_rate", "0.00%"),
-        "consecutive_failures": stats.get("consecutive_failures", 0),
-    }
+    # Import at runtime to avoid circular dependency
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    return CircuitBreakerState(
+        state=stats.get("circuit_breaker_state", "unknown"),
+        total_requests=stats.get("total_requests", 0),
+        failed_requests=stats.get("failed_requests", 0),
+        failure_rate=stats.get("failure_rate", "0.00%"),
+        consecutive_failures=stats.get("consecutive_failures", 0),
+        failure_count=stats.get("consecutive_failures", 0),
+        success_count=0,
+    )
 
 
-def _extract_direct_cb_data(cb: Any) -> Dict[str, Any]:
+def _extract_direct_cb_data(cb: Any) -> "CircuitBreakerState":
     """Extract circuit breaker data from CircuitBreaker object.
 
     Args:
         cb: CircuitBreaker instance
 
     Returns:
-        Dict with circuit breaker state and counts
+        CircuitBreakerState with state and counts
     """
-    return {
-        "state": str(cb.state) if hasattr(cb, "state") else "unknown",
-        "failure_count": cb.failure_count if hasattr(cb, "failure_count") else 0,
-        "success_count": cb.success_count if hasattr(cb, "success_count") else 0,
-    }
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    return CircuitBreakerState(
+        state=str(cb.state) if hasattr(cb, "state") else "unknown",
+        failure_count=cb.failure_count if hasattr(cb, "failure_count") else 0,
+        success_count=cb.success_count if hasattr(cb, "success_count") else 0,
+        total_requests=0,
+        failed_requests=0,
+        consecutive_failures=cb.failure_count if hasattr(cb, "failure_count") else 0,
+        failure_rate="0.00%",
+    )
 
 
-def _collect_from_service_stats(bus: Any) -> Dict[str, Any]:
+def _collect_from_service_stats(bus: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from bus.get_service_stats().
 
     Args:
         bus: Bus instance with get_service_stats method
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     try:
         service_stats = bus.get_service_stats()
@@ -503,7 +517,9 @@ def _collect_from_service_stats(bus: Any) -> Dict[str, Any]:
     return cb_data
 
 
-def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -> Dict[str, Any]:
+def _collect_from_direct_cb_attribute(
+    bus: Any, existing_data: Dict[str, "CircuitBreakerState"]
+) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from bus.circuit_breakers attribute.
 
     Args:
@@ -511,9 +527,11 @@ def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -
         existing_data: Already collected CB data (don't override these)
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     try:
         circuit_breakers = bus.circuit_breakers
@@ -531,29 +549,38 @@ def _collect_from_direct_cb_attribute(bus: Any, existing_data: Dict[str, Any]) -
     return cb_data
 
 
-def _collect_from_single_bus(bus: Any) -> Dict[str, Any]:
+def _collect_from_single_bus(bus: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker data from a single bus.
 
     Args:
         bus: Bus instance to collect from
 
     Returns:
-        Dict mapping service names to their circuit breaker data
+        Dict mapping service names to their circuit breaker state
     """
-    cb_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    cb_data: Dict[str, CircuitBreakerState] = {}
 
     # Try get_service_stats first
     if hasattr(bus, "get_service_stats"):
+        logger.debug("[CB COLLECT] Bus has get_service_stats method")
         cb_data.update(_collect_from_service_stats(bus))
+        logger.debug(f"[CB COLLECT] Collected {len(cb_data)} CBs from service_stats")
 
     # Also check direct circuit_breakers attribute
     if hasattr(bus, "circuit_breakers"):
+        cb_attr = getattr(bus, "circuit_breakers", {})
+        logger.debug(
+            f"[CB COLLECT] Bus has circuit_breakers attribute with {len(cb_attr) if isinstance(cb_attr, dict) else 0} entries"
+        )
         cb_data.update(_collect_from_direct_cb_attribute(bus, cb_data))
+        logger.debug(f"[CB COLLECT] Total {len(cb_data)} CBs after checking circuit_breakers attribute")
 
     return cb_data
 
 
-def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
+def collect_circuit_breaker_state(runtime: Any) -> Dict[str, "CircuitBreakerState"]:
     """Collect circuit breaker state from all buses.
 
     Walks through all buses (LLM, Memory, Communication, Tool, Wise, RuntimeControl)
@@ -563,16 +590,20 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
         runtime: Runtime instance with bus_manager attribute
 
     Returns:
-        Dict mapping service names to their circuit breaker info (state, failures, etc)
+        Dict mapping service names to their circuit breaker state
     """
-    circuit_breaker_data: Dict[str, Any] = {}
+    from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+    circuit_breaker_data: Dict[str, CircuitBreakerState] = {}
 
     if not runtime:
+        logger.debug("[CB COLLECT] No runtime provided")
         return circuit_breaker_data
 
     try:
         bus_manager = getattr(runtime, "bus_manager", None)
         if not bus_manager:
+            logger.debug(f"[CB COLLECT] Runtime has no bus_manager (type: {type(runtime).__name__})")
             return circuit_breaker_data
 
         # List of bus attributes to check
@@ -581,11 +612,19 @@ def collect_circuit_breaker_state(runtime: Any) -> Dict[str, Any]:
         for bus_name in bus_names:
             bus = getattr(bus_manager, bus_name, None)
             if bus:
-                circuit_breaker_data.update(_collect_from_single_bus(bus))
+                logger.debug(f"[CB COLLECT] Collecting from {bus_name} bus ({type(bus).__name__})")
+                bus_data = _collect_from_single_bus(bus)
+                if bus_data:
+                    logger.debug(f"[CB COLLECT] Found {len(bus_data)} circuit breakers in {bus_name} bus")
+                circuit_breaker_data.update(bus_data)
+            else:
+                logger.debug(f"[CB COLLECT] No {bus_name} bus in bus_manager")
 
-    except Exception:
+        logger.debug(f"[CB COLLECT] Total circuit breakers collected: {len(circuit_breaker_data)}")
+
+    except Exception as e:
         # If anything fails, return whatever we collected so far
-        pass
+        logger.warning(f"[CB COLLECT] Error collecting circuit breakers: {e}")
 
     return circuit_breaker_data
 
@@ -599,7 +638,7 @@ def build_telemetry_summary(
     avg_thought_depth: float,
     queue_saturation: float,
     service_latency_ms: Dict[str, float],
-    circuit_breaker: Optional[Dict[str, Any]] = None,
+    circuit_breaker: Optional[Dict[str, "CircuitBreakerState"]] = None,
 ) -> TelemetrySummary:
     """Build TelemetrySummary from collected data.
 
@@ -689,7 +728,7 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     Check if timeseries data matches all required tags.
 
     Args:
-        data: Timeseries data point with tags attribute
+        data: Timeseries data point with tags or labels attribute
         tags: Optional dictionary of tags to match
 
     Returns:
@@ -698,7 +737,14 @@ def filter_by_tags(data: object, tags: Optional[Dict[str, str]]) -> bool:
     if not tags:
         return True
 
-    data_tags = getattr(data, "tags", None) or {}
+    # Check both 'tags' and 'labels' attributes
+    # Note: 'tags' may be a list, 'labels' is the dict we want for key-value filtering
+    data_tags = getattr(data, "tags", None)
+    if not isinstance(data_tags, dict):
+        data_tags = getattr(data, "labels", None)
+    if not isinstance(data_tags, dict):
+        data_tags = {}
+
     return all(data_tags.get(k) == v for k, v in tags.items())
 
 
@@ -707,14 +753,15 @@ def filter_by_time_range(data: object, start_time: Optional[datetime], end_time:
     Check if timeseries data timestamp is within the specified range.
 
     Args:
-        data: Timeseries data point with timestamp attribute
+        data: Timeseries data point with timestamp/start_time attribute
         start_time: Optional start of time range
         end_time: Optional end of time range
 
     Returns:
         True if timestamp is within range (or no range specified)
     """
-    timestamp = getattr(data, "timestamp", None)
+    # Try timestamp first, fall back to start_time (used by TSDBGraphNode)
+    timestamp = getattr(data, "timestamp", None) or getattr(data, "start_time", None)
     if not timestamp:
         return False
 
@@ -739,17 +786,26 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
     """
     metric_name = getattr(data, "metric_name", None)
     value = getattr(data, "value", None)
-    timestamp = getattr(data, "timestamp", None)
+    # Try timestamp first, fall back to start_time (used by TSDBGraphNode)
+    timestamp = getattr(data, "timestamp", None) or getattr(data, "start_time", None)
 
     # Validate required fields
     if not (metric_name and value is not None and timestamp):
         return None
 
+    # Check both 'tags' and 'labels' attributes
+    # Note: 'tags' may be a list, 'labels' is the dict we want for metadata
+    tags = getattr(data, "tags", None)
+    if not isinstance(tags, dict):
+        tags = getattr(data, "labels", None)
+    if not isinstance(tags, dict):
+        tags = {}
+
     return MetricRecord(
         metric_name=metric_name,
         value=value,
         timestamp=timestamp,
-        tags=getattr(data, "tags", None) or {},
+        tags=tags,
     )
 
 

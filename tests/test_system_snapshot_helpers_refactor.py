@@ -409,38 +409,42 @@ class TestServiceHealthHelperFunctions:
         assert has_method is True
         assert is_healthy is True
 
-    def test_safe_get_circuit_breaker_status_success(self):
+    @pytest.mark.asyncio
+    async def test_safe_get_circuit_breaker_status_success(self):
         """Test getting circuit breaker status successfully."""
         mock_service = Mock()
-        mock_service.get_circuit_breaker_status = Mock(return_value="CLOSED")
+        mock_service.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
-        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        has_method, status = await _safe_get_circuit_breaker_status(mock_service)
         assert has_method is True
         assert status == "CLOSED"
 
-    def test_safe_get_circuit_breaker_status_no_method(self):
+    @pytest.mark.asyncio
+    async def test_safe_get_circuit_breaker_status_no_method(self):
         """Test getting circuit breaker status when method doesn't exist."""
         mock_service = Mock(spec=[])  # No methods
 
-        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        has_method, status = await _safe_get_circuit_breaker_status(mock_service)
         assert has_method is False
         assert status == "UNKNOWN"
 
-    def test_safe_get_circuit_breaker_status_none_result(self):
+    @pytest.mark.asyncio
+    async def test_safe_get_circuit_breaker_status_none_result(self):
         """Test getting circuit breaker status when method returns None."""
         mock_service = Mock()
-        mock_service.get_circuit_breaker_status = Mock(return_value=None)
+        mock_service.get_circuit_breaker_status = AsyncMock(return_value=None)
 
-        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        has_method, status = await _safe_get_circuit_breaker_status(mock_service)
         assert has_method is True
         assert status == "UNKNOWN"
 
-    def test_safe_get_circuit_breaker_status_exception(self):
+    @pytest.mark.asyncio
+    async def test_safe_get_circuit_breaker_status_exception(self):
         """Test getting circuit breaker status when method raises exception."""
         mock_service = Mock()
-        mock_service.get_circuit_breaker_status = Mock(side_effect=Exception("CB check failed"))
+        mock_service.get_circuit_breaker_status = AsyncMock(side_effect=Exception("CB check failed"))
 
-        has_method, status = _safe_get_circuit_breaker_status(mock_service)
+        has_method, status = await _safe_get_circuit_breaker_status(mock_service)
         assert has_method is True  # Has method but failed
         assert status == "UNKNOWN"
 
@@ -450,7 +454,7 @@ class TestServiceHealthHelperFunctions:
         mock_service = Mock()
         # Use ServiceProtocol is_healthy method
         mock_service.is_healthy = AsyncMock(return_value=True)
-        mock_service.get_circuit_breaker_status = Mock(return_value="OPEN")
+        mock_service.get_circuit_breaker_status = AsyncMock(return_value="OPEN")
 
         service_health = {}
         circuit_breaker_status = {}
@@ -466,11 +470,11 @@ class TestServiceHealthHelperFunctions:
         # Create mock services with ServiceProtocol is_healthy methods
         mock_service1 = Mock()
         mock_service1.is_healthy = AsyncMock(return_value=True)
-        mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
+        mock_service1.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
         mock_service2 = Mock()
         mock_service2.is_healthy = AsyncMock(return_value=False)
-        mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
+        mock_service2.get_circuit_breaker_status = AsyncMock(return_value="OPEN")
 
         services_group = {"llm": [mock_service1], "memory": [mock_service2]}
 
@@ -493,11 +497,11 @@ class TestServiceHealthHelperFunctions:
         # Create mock services with ServiceProtocol is_healthy methods
         mock_service1 = Mock()
         mock_service1.is_healthy = AsyncMock(return_value=True)
-        mock_service1.get_circuit_breaker_status = Mock(return_value="CLOSED")
+        mock_service1.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
         mock_service2 = Mock()
         mock_service2.is_healthy = AsyncMock(return_value=False)
-        mock_service2.get_circuit_breaker_status = Mock(return_value="OPEN")
+        mock_service2.get_circuit_breaker_status = AsyncMock(return_value="OPEN")
 
         # Mock registry info
         registry_info = {

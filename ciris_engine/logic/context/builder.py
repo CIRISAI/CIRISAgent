@@ -9,9 +9,9 @@ from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 
+from .batch_context import build_system_snapshot_with_batch as _build_snapshot_unified
 from .channel_resolution import resolve_channel_id_and_context
 from .secrets_snapshot import build_secrets_snapshot as _secrets_snapshot
-from .system_snapshot import build_system_snapshot as _build_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -111,18 +111,27 @@ class ContextBuilder:
     async def build_system_snapshot(
         self, task: Optional[Task], thought: Any  # Accept Thought or ProcessingQueueItem
     ) -> SystemSnapshot:
-        """Build system snapshot for the thought."""
-        return await _build_snapshot(
-            task,
-            thought,
-            self.resource_monitor,  # REQUIRED parameter must be positional
+        """
+        Build system snapshot for the thought using unified batch approach.
+
+        This method now uses the unified batch snapshot builder which:
+        - Creates minimal batch context on-demand for single thoughts
+        - Uses pre-fetched batch context when available (batch processing)
+        - Ensures consistent snapshot building across all code paths
+        """
+        return await _build_snapshot_unified(
+            task=task,
+            thought=thought,
+            batch_data=None,  # Will create minimal batch context on-demand
             memory_service=self.memory_service,
             graphql_provider=self.graphql_provider,
-            telemetry_service=self.telemetry_service,
-            secrets_service=self.secrets_service,
-            runtime=self.runtime,
-            service_registry=self.service_registry,
             time_service=self.time_service,
+            # Services for on-demand batch context creation
+            secrets_service=self.secrets_service,
+            service_registry=self.service_registry,
+            resource_monitor=self.resource_monitor,
+            telemetry_service=self.telemetry_service,
+            runtime=self.runtime,
         )
 
     async def _build_secrets_snapshot(self) -> Dict[str, Any]:

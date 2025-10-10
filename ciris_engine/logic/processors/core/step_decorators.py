@@ -60,6 +60,128 @@ def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
     }
 
 
+async def _query_thought_resources(telemetry_service: Any, thought_id: str, timestamp: datetime) -> Dict[str, Any]:
+    """Query telemetry service and aggregate resource usage for a thought.
+
+    Args:
+        telemetry_service: Telemetry service instance
+        thought_id: ID of the thought to query resources for
+        timestamp: End timestamp for the query window
+
+    Returns:
+        Dict with aggregated resource data:
+        - tokens_total: Total tokens used
+        - tokens_input: Input tokens used
+        - tokens_output: Output tokens used
+        - cost_cents: Total cost in USD cents
+        - carbon_grams: Total CO2 emissions in grams
+        - energy_mwh: Total energy in milliwatt-hours
+        - llm_calls: Number of LLM calls
+        - models_used: List of unique models used
+    """
+    if not telemetry_service:
+        logger.debug(f"No telemetry service available to query resources for thought {thought_id}")
+        return {
+            "tokens_total": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "cost_cents": 0.0,
+            "carbon_grams": 0.0,
+            "energy_mwh": 0.0,
+            "llm_calls": 0,
+            "models_used": [],
+        }
+
+    try:
+        # Query all metric types with thought_id tag
+        tags = {"thought_id": thought_id}
+
+        # Query each metric type and aggregate
+        tokens_total_data = await telemetry_service.query_metrics(
+            metric_name="llm.tokens.total", tags=tags, end_time=timestamp
+        )
+        tokens_input_data = await telemetry_service.query_metrics(
+            metric_name="llm.tokens.input", tags=tags, end_time=timestamp
+        )
+        tokens_output_data = await telemetry_service.query_metrics(
+            metric_name="llm.tokens.output", tags=tags, end_time=timestamp
+        )
+        cost_data = await telemetry_service.query_metrics(metric_name="llm.cost.cents", tags=tags, end_time=timestamp)
+        carbon_data = await telemetry_service.query_metrics(
+            metric_name="llm.environmental.carbon_grams", tags=tags, end_time=timestamp
+        )
+        energy_data = await telemetry_service.query_metrics(
+            metric_name="llm.environmental.energy_kwh", tags=tags, end_time=timestamp
+        )
+
+        # Aggregate metrics - sum all values
+        tokens_total = sum(m.value for m in tokens_total_data)
+        tokens_input = sum(m.value for m in tokens_input_data)
+        tokens_output = sum(m.value for m in tokens_output_data)
+        cost_cents = sum(m.value for m in cost_data)
+        carbon_grams = sum(m.value for m in carbon_data)
+        # Convert kWh to mWh (1 kWh = 1,000,000 mWh)
+        energy_kwh = sum(m.value for m in energy_data)
+        energy_mwh = energy_kwh * 1_000_000
+        llm_calls = len(tokens_total_data)  # Each LLM call creates one tokens.total metric
+
+        # Extract unique models from tags
+        models_used = list({m.tags.get("model", "unknown") for m in tokens_total_data if hasattr(m, "tags")})
+
+        logger.debug(
+            f"Aggregated resources for thought {thought_id}: "
+            f"{int(tokens_total)} tokens, {llm_calls} calls, {cost_cents:.4f} cents"
+        )
+
+        return {
+            "tokens_total": int(tokens_total),
+            "tokens_input": int(tokens_input),
+            "tokens_output": int(tokens_output),
+            "cost_cents": float(cost_cents),
+            "carbon_grams": float(carbon_grams),
+            "energy_mwh": float(energy_mwh),
+            "llm_calls": llm_calls,
+            "models_used": models_used,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to query resources for thought {thought_id}: {e}", exc_info=True)
+        # Return zeros on error - don't fail the entire action complete step
+        return {
+            "tokens_total": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "cost_cents": 0.0,
+            "carbon_grams": 0.0,
+            "energy_mwh": 0.0,
+            "llm_calls": 0,
+            "models_used": [],
+        }
+
+
+async def _maybe_add_resource_usage(
+    step: StepPoint, processor: Any, thought_id: str, end_timestamp: Any, kwargs: Dict[str, Any]
+) -> None:
+    """Helper to add resource usage for ACTION_COMPLETE steps - reduces cognitive complexity."""
+    if step != StepPoint.ACTION_COMPLETE:
+        return
+
+    # Get telemetry service from processor
+    telemetry_service = getattr(processor, "telemetry_service", None) or getattr(
+        getattr(processor, "sink", None), "telemetry", None
+    )
+
+    if telemetry_service:
+        # Query resources and add to kwargs for _create_action_complete_data
+        resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)
+        kwargs["_resource_usage"] = resource_data
+    else:
+        logger.warning(
+            f"No telemetry service available for thought {thought_id} - "
+            f"resource usage will not be recorded in action_complete event"
+        )
+
+
 def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
@@ -105,6 +227,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                     processing_time_ms=processing_time_ms,
                     success=True,
                 )
+
+                # For ACTION_COMPLETE, query and aggregate resource usage by thought_id
+                await _maybe_add_resource_usage(step, self, thought_id, end_timestamp, kwargs)
 
                 # Add step-specific data and create typed step data
                 step_data = _create_typed_step_data(step, base_step_data, thought_item, result, args, kwargs)
@@ -227,7 +352,7 @@ def _get_step_data_creators() -> Dict[StepPoint, Callable[..., Any]]:
             base_data, result, args, kwargs
         ),
         StepPoint.ACTION_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_action_complete_data(
-            base_data, result
+            base_data, result, kwargs
         ),
         StepPoint.ROUND_COMPLETE: lambda base_data, result, args, kwargs, thought_item: _create_round_complete_data(
             base_data, args
@@ -706,8 +831,10 @@ def _create_perform_action_data(
     )
 
 
-def _create_action_complete_data(base_data: BaseStepData, result: Any) -> ActionCompleteStepData:
-    """Add ACTION_COMPLETE specific data."""
+def _create_action_complete_data(
+    base_data: BaseStepData, result: Any, kwargs: Optional[Dict[str, Any]] = None
+) -> ActionCompleteStepData:
+    """Add ACTION_COMPLETE specific data with resource usage."""
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
 
@@ -719,6 +846,9 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
             f"ACTION_COMPLETE expects ActionResponse, got {type(result)}. "
             f"Handlers must return ActionResponse with audit_data."
         )
+
+    # Extract resource usage data if available (passed via kwargs from decorator)
+    resource_data = (kwargs or {}).get("_resource_usage", {})
 
     return ActionCompleteStepData(
         **_base_data_dict(base_data),
@@ -733,6 +863,15 @@ def _create_action_complete_data(base_data: BaseStepData, result: Any) -> Action
         audit_sequence_number=result.audit_data.sequence_number,
         audit_entry_hash=result.audit_data.entry_hash,
         audit_signature=result.audit_data.signature,
+        # Resource usage (queried from telemetry by thought_id)
+        tokens_total=resource_data.get("tokens_total", 0),
+        tokens_input=resource_data.get("tokens_input", 0),
+        tokens_output=resource_data.get("tokens_output", 0),
+        cost_cents=resource_data.get("cost_cents", 0.0),
+        carbon_grams=resource_data.get("carbon_grams", 0.0),
+        energy_mwh=resource_data.get("energy_mwh", 0.0),
+        llm_calls=resource_data.get("llm_calls", 0),
+        models_used=resource_data.get("models_used", []),
     )
 
 
@@ -1238,7 +1377,7 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
 
 
 def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create ACTION_RESULT reasoning event with audit trail and follow-up data."""
+    """Create ACTION_RESULT reasoning event with audit trail, resource usage, and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
@@ -1258,6 +1397,15 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
         audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
         audit_signature=getattr(step_data, "audit_signature", None),
+        # Resource usage fields (queried from telemetry by thought_id)
+        tokens_total=getattr(step_data, "tokens_total", 0),
+        tokens_input=getattr(step_data, "tokens_input", 0),
+        tokens_output=getattr(step_data, "tokens_output", 0),
+        cost_cents=getattr(step_data, "cost_cents", 0.0),
+        carbon_grams=getattr(step_data, "carbon_grams", 0.0),
+        energy_mwh=getattr(step_data, "energy_mwh", 0.0),
+        llm_calls=getattr(step_data, "llm_calls", 0),
+        models_used=getattr(step_data, "models_used", []),
     )
 
 

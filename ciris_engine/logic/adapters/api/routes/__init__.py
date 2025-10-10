@@ -5,12 +5,13 @@ Export all route modules for easy import.
 """
 
 # Import all route modules
-from . import agent, audit, auth, config, emergency, memory, system, system_extensions, telemetry, users, wa
+from . import agent, audit, auth, billing, config, emergency, memory, system, system_extensions, telemetry, users, wa
 
 __all__ = [
     "agent",
     "audit",
     "auth",
+    "billing",
     "config",
     "emergency",
     "memory",

@@ -44,6 +44,8 @@ class LLMHealthResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if unhealthy")
     last_check: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    model_config = ConfigDict(protected_namespaces=())
+
 
 class LLMResponse(BaseModel):
     """Standard LLM response structure."""
@@ -52,6 +54,8 @@ class LLMResponse(BaseModel):
     model: str = Field(..., description="Model that generated response")
     usage: TokenUsageStats = Field(default_factory=TokenUsageStats, description="Token usage stats")
     finish_reason: Optional[str] = Field(None, description="Why generation stopped")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class ExtractedJSONData(BaseModel):

@@ -260,3 +260,167 @@ class TestTelemetryHelperMethods:
         )
 
         assert result == {}
+
+
+class TestCircuitBreakerCollection:
+    """Test circuit breaker state collection from buses."""
+
+    def test_collect_circuit_breaker_state_no_runtime(self):
+        """Test collect_circuit_breaker_state with no runtime."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+
+        result = collect_circuit_breaker_state(None)
+        assert result == {}
+
+    def test_collect_circuit_breaker_state_no_bus_manager(self):
+        """Test collect_circuit_breaker_state with runtime but no bus_manager."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+
+        runtime = Mock()
+        # runtime has no bus_manager attribute
+        result = collect_circuit_breaker_state(runtime)
+        assert result == {}
+
+    def test_collect_circuit_breaker_state_with_circuit_breakers(self):
+        """Test collect_circuit_breaker_state with actual circuit breakers."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+        from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+        # Create mock runtime with bus_manager
+        runtime = Mock()
+        bus_manager = Mock()
+        runtime.bus_manager = bus_manager
+
+        # Create mock LLM bus with circuit breakers
+        mock_llm_bus = Mock()
+        mock_cb = Mock()
+        mock_cb.state = "closed"
+        mock_cb.failure_count = 5
+        mock_cb.success_count = 95
+        mock_llm_bus.circuit_breakers = {"MockLLMService": mock_cb}
+        mock_llm_bus.get_service_stats.return_value = {}
+
+        # Set up bus_manager attributes
+        bus_manager.llm = mock_llm_bus
+        bus_manager.memory = None
+        bus_manager.communication = None
+        bus_manager.wise = None
+        bus_manager.tool = None
+        bus_manager.runtime_control = None
+
+        result = collect_circuit_breaker_state(runtime)
+
+        # Should have collected one circuit breaker
+        assert len(result) == 1
+        assert "MockLLMService" in result
+        assert isinstance(result["MockLLMService"], CircuitBreakerState)
+        assert result["MockLLMService"].state == "closed"
+        assert result["MockLLMService"].failure_count == 5
+        assert result["MockLLMService"].success_count == 95
+
+    def test_collect_circuit_breaker_state_multiple_buses(self):
+        """Test collect_circuit_breaker_state with multiple buses having circuit breakers."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+        from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
+
+        # Create mock runtime
+        runtime = Mock()
+        bus_manager = Mock()
+        runtime.bus_manager = bus_manager
+
+        # LLM bus with circuit breaker
+        mock_llm_bus = Mock()
+        mock_llm_cb = Mock()
+        mock_llm_cb.state = "closed"
+        mock_llm_cb.failure_count = 0
+        mock_llm_cb.success_count = 100
+        mock_llm_bus.circuit_breakers = {"LLMService": mock_llm_cb}
+        mock_llm_bus.get_service_stats.return_value = {}
+
+        # Memory bus with circuit breaker
+        mock_memory_bus = Mock()
+        mock_memory_cb = Mock()
+        mock_memory_cb.state = "half_open"
+        mock_memory_cb.failure_count = 3
+        mock_memory_cb.success_count = 1
+        mock_memory_bus.circuit_breakers = {"MemoryService": mock_memory_cb}
+        mock_memory_bus.get_service_stats.return_value = {}
+
+        # Set up bus_manager
+        bus_manager.llm = mock_llm_bus
+        bus_manager.memory = mock_memory_bus
+        bus_manager.communication = None
+        bus_manager.wise = None
+        bus_manager.tool = None
+        bus_manager.runtime_control = None
+
+        result = collect_circuit_breaker_state(runtime)
+
+        # Should have collected two circuit breakers
+        assert len(result) == 2
+        assert "LLMService" in result
+        assert "MemoryService" in result
+        assert isinstance(result["LLMService"], CircuitBreakerState)
+        assert isinstance(result["MemoryService"], CircuitBreakerState)
+        assert result["LLMService"].state == "closed"
+        assert result["MemoryService"].state == "half_open"
+
+    def test_collect_circuit_breaker_state_empty_buses(self):
+        """Test collect_circuit_breaker_state with buses but no circuit breakers."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+
+        # Create mock runtime
+        runtime = Mock()
+        bus_manager = Mock()
+        runtime.bus_manager = bus_manager
+
+        # Create buses with empty circuit_breakers
+        mock_llm_bus = Mock()
+        mock_llm_bus.circuit_breakers = {}
+        mock_llm_bus.get_service_stats.return_value = {}
+
+        bus_manager.llm = mock_llm_bus
+        bus_manager.memory = None
+        bus_manager.communication = None
+        bus_manager.wise = None
+        bus_manager.tool = None
+        bus_manager.runtime_control = None
+
+        result = collect_circuit_breaker_state(runtime)
+
+        # Should return empty dict
+        assert result == {}
+
+    def test_telemetry_summary_includes_fresh_circuit_breakers(self):
+        """Test that get_telemetry_summary includes fresh circuit breaker data even when cached."""
+        from ciris_engine.logic.services.graph.telemetry_service.helpers import collect_circuit_breaker_state
+
+        # Create service with runtime
+        service_registry = Mock()
+        time_service = Mock()
+        time_service.now.return_value = datetime.now(timezone.utc)
+
+        # Create runtime with bus_manager and circuit breakers
+        runtime = Mock()
+        bus_manager = Mock()
+        runtime.bus_manager = bus_manager
+
+        mock_llm_bus = Mock()
+        mock_cb = Mock()
+        mock_cb.state = "closed"
+        mock_cb.failure_count = 0
+        mock_cb.success_count = 50
+        mock_llm_bus.circuit_breakers = {"TestService": mock_cb}
+        mock_llm_bus.get_service_stats.return_value = {}
+
+        bus_manager.llm = mock_llm_bus
+        bus_manager.memory = None
+        bus_manager.communication = None
+        bus_manager.wise = None
+        bus_manager.tool = None
+        bus_manager.runtime_control = None
+
+        # Test collection works
+        result = collect_circuit_breaker_state(runtime)
+        assert len(result) == 1
+        assert "TestService" in result

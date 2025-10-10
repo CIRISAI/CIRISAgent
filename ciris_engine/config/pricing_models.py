@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelConfig(BaseModel):
@@ -57,6 +57,8 @@ class EnergyEstimates(BaseModel):
     """Energy consumption estimates for models."""
 
     model_patterns: Dict[str, Dict[str, float]] = Field(..., description="Energy consumption by model pattern")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class CarbonIntensity(BaseModel):

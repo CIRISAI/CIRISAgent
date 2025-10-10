@@ -1,4 +1,4 @@
-"""Unlimit-backed credit gate provider for the resource monitor."""
+"""CIRIS Billing-backed credit gate provider for the resource monitor."""
 
 from __future__ import annotations
 
@@ -20,21 +20,21 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
-class UnlimitCreditProvider(CreditGateProtocol):
-    """Async credit provider that gates interactions via Unlimit."""
+class CIRISBillingProvider(CreditGateProtocol):
+    """Async credit provider that gates interactions via self-hosted CIRIS Billing API."""
 
     def __init__(
         self,
         *,
-        base_url: str = "https://api.unlimit.com",
-        api_key: str | None = None,
+        api_key: str,
+        base_url: str = "https://billing.ciris.ai",
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._cache_ttl = max(cache_ttl_seconds, 0)
         self._fail_open = fail_open
@@ -48,16 +48,17 @@ class UnlimitCreditProvider(CreditGateProtocol):
         async with self._client_lock:
             if self._client is not None:
                 return
-            headers = {"User-Agent": "CIRIS-Unlimit-CreditGate/0.1"}
-            if self._api_key:
-                headers["Authorization"] = f"Bearer {self._api_key}"
+            headers = {
+                "User-Agent": "CIRIS-Agent-CreditGate/1.0",
+                "X-API-Key": self._api_key,
+            }
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout_seconds,
                 headers=headers,
                 transport=self._transport,
             )
-            logger.info("UnlimitCreditProvider started with base_url=%s", self._base_url)
+            logger.info("CIRISBillingProvider started with base_url=%s", self._base_url)
 
     async def stop(self) -> None:
         async with self._client_lock:
@@ -65,7 +66,7 @@ class UnlimitCreditProvider(CreditGateProtocol):
         if client:
             await client.aclose()
         self._cache.clear()
-        logger.info("UnlimitCreditProvider stopped")
+        logger.info("CIRISBillingProvider stopped")
 
     async def check_credit(
         self,
@@ -83,7 +84,7 @@ class UnlimitCreditProvider(CreditGateProtocol):
             logger.debug("Credit cache hit for %s", cache_key)
             return cached[0].model_copy()
 
-        payload = self._build_payload(account, context)
+        payload = self._build_check_payload(account, context)
         logger.debug("Credit check payload for %s: %s", cache_key, payload)
 
         try:
@@ -142,6 +143,17 @@ class UnlimitCreditProvider(CreditGateProtocol):
             self._invalidate_cache(cache_key)
             return result
 
+        if response.status_code == httpx.codes.CONFLICT:
+            # Idempotency conflict - charge already exists
+            logger.info("Idempotency conflict for %s - charge already recorded", cache_key)
+            # Extract existing charge info from response if available
+            existing_charge_id = response.headers.get("X-Existing-Charge-ID")
+            return CreditSpendResult(
+                succeeded=True,
+                transaction_id=existing_charge_id,
+                reason="charge_already_exists:idempotency",
+            )
+
         if response.status_code in {httpx.codes.PAYMENT_REQUIRED, httpx.codes.FORBIDDEN}:
             reason = self._extract_reason(response)
             self._invalidate_cache(cache_key)
@@ -178,22 +190,33 @@ class UnlimitCreditProvider(CreditGateProtocol):
         return datetime.now(timezone.utc) >= expiry
 
     @staticmethod
-    def _build_payload(
+    def _build_check_payload(
         account: CreditAccount,
         context: CreditContext | None,
     ) -> dict[str, object]:
+        # Add oauth: prefix if not already present
+        provider = account.provider if account.provider.startswith("oauth:") else f"oauth:{account.provider}"
+
         payload: dict[str, object] = {
-            "oauth_provider": account.provider,
+            "oauth_provider": provider,
             "external_id": account.account_id,
+            "amount_minor": 1,  # Default check amount
         }
         if account.authority_id:
             payload["wa_id"] = account.authority_id
         if account.tenant_id:
             payload["tenant_id"] = account.tenant_id
         if context:
-            context_data = context.model_dump(exclude_unset=True, exclude_none=True)
-            if context_data:
-                payload["context"] = context_data
+            # Only include serializable context fields
+            context_dict = {}
+            if context.agent_id:
+                context_dict["agent_id"] = context.agent_id
+            if context.channel_id:
+                context_dict["channel_id"] = context.channel_id
+            if context.request_id:
+                context_dict["request_id"] = context.request_id
+            if context_dict:
+                payload["context"] = context_dict
         return payload
 
     @staticmethod
@@ -202,11 +225,25 @@ class UnlimitCreditProvider(CreditGateProtocol):
         request: CreditSpendRequest,
         context: CreditContext | None,
     ) -> dict[str, object]:
+        # Add oauth: prefix if not already present
+        provider = account.provider if account.provider.startswith("oauth:") else f"oauth:{account.provider}"
+
+        # Generate idempotency key from request metadata or create one
+        idempotency_key = request.metadata.get("idempotency_key") if request.metadata else None
+        if not idempotency_key:
+            # Create idempotency key from account + timestamp + amount
+            import hashlib
+            import time
+
+            key_data = f"{account.provider}:{account.account_id}:{int(time.time())}:{request.amount_minor}"
+            idempotency_key = f"charge_{hashlib.sha256(key_data.encode()).hexdigest()[:16]}"
+
         payload: dict[str, object] = {
-            "oauth_provider": account.provider,
+            "oauth_provider": provider,
             "external_id": account.account_id,
             "amount_minor": request.amount_minor,
             "currency": request.currency,
+            "idempotency_key": idempotency_key,
         }
         if account.authority_id:
             payload["wa_id"] = account.authority_id
@@ -215,19 +252,21 @@ class UnlimitCreditProvider(CreditGateProtocol):
         if request.description:
             payload["description"] = request.description
         if request.metadata:
-            payload["metadata"] = request.metadata
-        if context:
-            context_data = context.model_dump(exclude_unset=True, exclude_none=True)
-            if context_data:
-                payload["context"] = context_data
+            # Remove idempotency_key from metadata since it's in the top level
+            metadata = {k: v for k, v in request.metadata.items() if k != "idempotency_key"}
+            if metadata:
+                payload["metadata"] = metadata
         return payload
 
     @staticmethod
     def _parse_check_success(data: dict[str, object]) -> CreditCheckResult:
         try:
-            # Accept legacy providers that return `has_balance`
-            if "has_balance" in data and "has_credit" not in data:
-                data = {**data, "has_credit": data.get("has_balance")}
+            # CIRIS Billing returns additional fields:
+            # - free_uses_remaining
+            # - total_uses
+            # - purchase_required
+            # - purchase_price_minor
+            # - purchase_uses
             return CreditCheckResult(**data)
         except Exception as exc:
             raise ValueError(f"Invalid credit payload: {data}") from exc
@@ -235,7 +274,19 @@ class UnlimitCreditProvider(CreditGateProtocol):
     @staticmethod
     def _parse_spend_success(data: dict[str, object]) -> CreditSpendResult:
         try:
-            return CreditSpendResult(**data)
+            # Map CIRIS Billing response to CreditSpendResult
+            # charge_id → transaction_id
+            # balance_after → balance_remaining
+            result_data = {
+                "succeeded": True,
+                "transaction_id": data.get("charge_id"),
+                "balance_remaining": data.get("balance_after"),
+                "reason": None,
+                "provider_metadata": {
+                    k: str(v) for k, v in data.items() if k not in {"succeeded", "transaction_id", "balance_remaining"}
+                },
+            }
+            return CreditSpendResult(**result_data)
         except Exception as exc:
             raise ValueError(f"Invalid credit spend payload: {data}") from exc
 
@@ -244,7 +295,7 @@ class UnlimitCreditProvider(CreditGateProtocol):
         try:
             body = response.json()
             if isinstance(body, dict):
-                value = body.get("reason") or body.get("detail") or body.get("message") or body.get("error")
+                value = body.get("detail") or body.get("reason") or body.get("message") or body.get("error")
                 if isinstance(value, str) and value:
                     return value
             return response.text
@@ -259,4 +310,4 @@ class UnlimitCreditProvider(CreditGateProtocol):
         return CreditCheckResult(has_credit=False, reason=reason)
 
 
-__all__ = ["UnlimitCreditProvider"]
+__all__ = ["CIRISBillingProvider"]

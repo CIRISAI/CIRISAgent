@@ -618,7 +618,7 @@ class TestServiceHealth:
         # Mock service with ServiceProtocol is_healthy method
         service = Mock()
         service.is_healthy = AsyncMock(return_value=True)
-        service.get_circuit_breaker_status = Mock(return_value="CLOSED")
+        service.get_circuit_breaker_status = AsyncMock(return_value="CLOSED")
 
         registry_info = {"handlers": {"discord": {"communication": [service]}}, "global_services": {}}
         service_registry.get_provider_info.return_value = registry_info
@@ -636,7 +636,7 @@ class TestServiceHealth:
         # Mock global service with ServiceProtocol is_healthy method
         global_service = Mock()
         global_service.is_healthy = AsyncMock(return_value=False)
-        global_service.get_circuit_breaker_status = Mock(return_value="OPEN")
+        global_service.get_circuit_breaker_status = AsyncMock(return_value="OPEN")
 
         registry_info = {"handlers": {}, "global_services": {"memory": [global_service]}}
         service_registry.get_provider_info.return_value = registry_info
@@ -671,7 +671,7 @@ class TestServiceHealth:
         service = Mock()
         # Service with ServiceProtocol is_healthy method
         service.is_healthy = AsyncMock(return_value=True)
-        service.get_circuit_breaker_status = Mock(return_value=None)
+        service.get_circuit_breaker_status = AsyncMock(return_value=None)
 
         registry_info = {"handlers": {"cli": {"runtime_control": [service]}}, "global_services": {}}
         service_registry.get_provider_info.return_value = registry_info

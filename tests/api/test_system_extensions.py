@@ -14,6 +14,7 @@ from ciris_engine.logic.adapters.api.routes.system_extensions import (
     SingleStepResponse,
     _extract_cognitive_state,
     _get_queue_depth,
+    _redact_observer_sensitive_data,
     get_processing_queue_status,
     get_processor_states,
     get_service_health_details,
@@ -1235,3 +1236,381 @@ class TestReasoningStreamEndpoint:
                 # Verify subscribe was called
                 mock_stream.subscribe.assert_called_once()
                 # Note: unsubscribe happens in finally block, may not be called yet in this test structure
+
+
+class TestObserverDataRedaction:
+    """Test OBSERVER role data redaction functionality."""
+
+    def test_redact_snapshot_and_context_event(self):
+        """Test redaction of task information from SNAPSHOT_AND_CONTEXT events."""
+        # Create a mock SNAPSHOT_AND_CONTEXT event with task data
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "system_snapshot": {
+                    "channel_id": "user-789",
+                    "current_time_utc": "2025-10-09T12:00:00Z",
+                    "recently_completed_tasks_summary": [
+                        {"task_id": "task-1", "description": "Task 1"},
+                        {"task_id": "task-2", "description": "Task 2"},
+                    ],
+                    "top_pending_tasks_summary": [
+                        {"task_id": "task-3", "description": "Task 3"},
+                        {"task_id": "task-4", "description": "Task 4"},
+                    ],
+                    "system_counts": {
+                        "total_tasks": 10,
+                        "pending_tasks": 5,
+                    },
+                },
+            }
+        ]
+
+        # Execute redaction with allowed_user_ids
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-789"})
+
+        # Verify task lists are redacted
+        assert len(redacted_events) == 1
+        event = redacted_events[0]
+        assert event["event_type"] == "snapshot_and_context"
+        assert event["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert event["system_snapshot"]["top_pending_tasks_summary"] == []
+
+        # Verify other fields are preserved
+        assert event["thought_id"] == "thought-123"
+        assert event["task_id"] == "task-456"
+        assert event["system_snapshot"]["channel_id"] == "user-789"
+        assert event["system_snapshot"]["system_counts"]["total_tasks"] == 10
+
+    def test_redact_preserves_other_events(self):
+        """Test that non-SNAPSHOT_AND_CONTEXT events are preserved unchanged."""
+        events = [
+            {
+                "event_type": "dma_results",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "dma_data": {"csdma": "test"},
+            },
+            {
+                "event_type": "aspdma_result",
+                "thought_id": "thought-124",
+                "task_id": "task-457",
+                "selected_action": "speak",
+            },
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify events are unchanged
+        assert len(redacted_events) == 2
+        assert redacted_events[0] == events[0]
+        assert redacted_events[1] == events[1]
+
+    def test_redact_handles_missing_system_snapshot(self):
+        """Test redaction handles events with missing system_snapshot gracefully."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                # No system_snapshot field
+            }
+        ]
+
+        # Execute redaction (should not crash)
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify event is preserved
+        assert len(redacted_events) == 1
+        assert redacted_events[0]["event_type"] == "snapshot_and_context"
+
+    def test_redact_handles_null_system_snapshot(self):
+        """Test redaction handles events with null system_snapshot."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "thought_id": "thought-123",
+                "task_id": "task-456",
+                "system_snapshot": None,
+            }
+        ]
+
+        # Execute redaction (should not crash)
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify event is preserved
+        assert len(redacted_events) == 1
+        assert redacted_events[0]["system_snapshot"] is None
+
+    def test_redact_handles_empty_events_list(self):
+        """Test redaction handles empty events list."""
+        events = []
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify empty list returned
+        assert redacted_events == []
+
+    def test_redact_mixed_events(self):
+        """Test redaction with mix of SNAPSHOT_AND_CONTEXT and other events."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2"}],
+                },
+            },
+            {
+                "event_type": "dma_results",
+                "dma_data": "test",
+            },
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-3"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-4"}],
+                },
+            },
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify only SNAPSHOT_AND_CONTEXT events are redacted
+        assert len(redacted_events) == 3
+        assert redacted_events[0]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[0]["system_snapshot"]["top_pending_tasks_summary"] == []
+        assert redacted_events[1]["event_type"] == "dma_results"  # Unchanged
+        assert redacted_events[2]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[2]["system_snapshot"]["top_pending_tasks_summary"] == []
+
+    def test_redact_does_not_mutate_original(self):
+        """Test that redaction creates a deep copy and doesn't mutate original events."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [{"task_id": "task-1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2"}],
+                },
+            }
+        ]
+
+        # Store original values
+        original_recent_tasks = events[0]["system_snapshot"]["recently_completed_tasks_summary"]
+        original_pending_tasks = events[0]["system_snapshot"]["top_pending_tasks_summary"]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify original events are unchanged
+        assert events[0]["system_snapshot"]["recently_completed_tasks_summary"] == original_recent_tasks
+        assert events[0]["system_snapshot"]["top_pending_tasks_summary"] == original_pending_tasks
+
+        # Verify redacted events have empty lists
+        assert redacted_events[0]["system_snapshot"]["recently_completed_tasks_summary"] == []
+        assert redacted_events[0]["system_snapshot"]["top_pending_tasks_summary"] == []
+
+    def test_redact_user_profiles_list_format_single_user(self):
+        """Test redaction of user_profiles list - OBSERVER sees only their own profile."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [
+                        {"user_id": "user-123", "display_name": "Alice", "location": "SF"},
+                        {"user_id": "user-456", "display_name": "Bob", "location": "NYC"},
+                        {"user_id": "user-789", "display_name": "Carol", "location": "LA"},
+                    ],
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction for user-123
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify only user-123's profile is visible
+        assert len(redacted_events) == 1
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert len(user_profiles) == 1
+        assert user_profiles[0]["user_id"] == "user-123"
+        assert user_profiles[0]["display_name"] == "Alice"
+
+    def test_redact_user_profiles_list_format_multiple_allowed(self):
+        """Test redaction with multiple allowed user IDs (e.g., OAuth linked accounts)."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [
+                        {"user_id": "user-123", "display_name": "Alice"},
+                        {"user_id": "user-456", "display_name": "Bob"},
+                        {"user_id": "google:abc123", "display_name": "Alice (Google)"},
+                        {"user_id": "github:xyz789", "display_name": "Alice (GitHub)"},
+                    ],
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction with multiple allowed IDs (primary + OAuth links)
+        allowed_ids = {"user-123", "google:abc123", "github:xyz789"}
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids=allowed_ids)
+
+        # Verify all allowed profiles are visible
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert len(user_profiles) == 3
+        profile_ids = {p["user_id"] for p in user_profiles}
+        assert profile_ids == allowed_ids
+
+    def test_redact_user_profiles_dict_format(self):
+        """Test redaction of user_profiles in dict format."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": {
+                        "user-123": {"display_name": "Alice", "location": "SF"},
+                        "user-456": {"display_name": "Bob", "location": "NYC"},
+                        "user-789": {"display_name": "Carol", "location": "LA"},
+                    },
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction for user-456
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-456"})
+
+        # Verify only user-456's profile is visible
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert len(user_profiles) == 1
+        assert "user-456" in user_profiles
+        assert user_profiles["user-456"]["display_name"] == "Bob"
+        assert "user-123" not in user_profiles
+        assert "user-789" not in user_profiles
+
+    def test_redact_user_profiles_no_matching_profiles(self):
+        """Test redaction when user has no matching profile in the list."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [
+                        {"user_id": "user-456", "display_name": "Bob"},
+                        {"user_id": "user-789", "display_name": "Carol"},
+                    ],
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction for user who's not in the list
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-999"})
+
+        # Verify user_profiles is empty
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert len(user_profiles) == 0
+
+    def test_redact_user_profiles_empty_list(self):
+        """Test redaction handles empty user_profiles list."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [],
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify empty list is preserved
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert user_profiles == []
+
+    def test_redact_user_profiles_missing_field(self):
+        """Test redaction when user_profiles field is missing from snapshot."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                    # No user_profiles field
+                },
+            }
+        ]
+
+        # Execute redaction (should not crash)
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify event is preserved without error
+        assert len(redacted_events) == 1
+        assert "user_profiles" not in redacted_events[0]["system_snapshot"]
+
+    def test_redact_user_profiles_invalid_format(self):
+        """Test redaction handles invalid profile entries gracefully."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [
+                        {"user_id": "user-123", "display_name": "Alice"},
+                        "invalid_string_entry",  # Invalid entry
+                        {"user_id": "user-456", "display_name": "Bob"},
+                        None,  # Invalid entry
+                        {"display_name": "No user_id"},  # Missing user_id
+                    ],
+                    "recently_completed_tasks_summary": [],
+                    "top_pending_tasks_summary": [],
+                },
+            }
+        ]
+
+        # Execute redaction for user-123
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify only valid matching profile is included
+        user_profiles = redacted_events[0]["system_snapshot"]["user_profiles"]
+        assert len(user_profiles) == 1
+        assert user_profiles[0]["user_id"] == "user-123"
+
+    def test_redact_combined_tasks_and_profiles(self):
+        """Test that both tasks and user_profiles are redacted together."""
+        events = [
+            {
+                "event_type": "snapshot_and_context",
+                "system_snapshot": {
+                    "user_profiles": [
+                        {"user_id": "user-123", "display_name": "Alice"},
+                        {"user_id": "user-456", "display_name": "Bob"},
+                    ],
+                    "recently_completed_tasks_summary": [{"task_id": "task-1", "description": "Task 1"}],
+                    "top_pending_tasks_summary": [{"task_id": "task-2", "description": "Task 2"}],
+                },
+            }
+        ]
+
+        # Execute redaction for user-123
+        redacted_events = _redact_observer_sensitive_data(events, allowed_user_ids={"user-123"})
+
+        # Verify both tasks are redacted AND user_profiles are filtered
+        snapshot = redacted_events[0]["system_snapshot"]
+        assert snapshot["recently_completed_tasks_summary"] == []
+        assert snapshot["top_pending_tasks_summary"] == []
+        assert len(snapshot["user_profiles"]) == 1
+        assert snapshot["user_profiles"][0]["user_id"] == "user-123"

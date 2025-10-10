@@ -112,9 +112,13 @@ class CircuitBreaker:
         """Record a failed operation"""
         self.total_calls += 1
         self.total_failures += 1
-        self.failure_count += 1
         self.consecutive_failures += 1
-        self.last_failure_time = time.time()
+
+        # Only update failure_count and last_failure_time when NOT already OPEN
+        # This prevents resetting the recovery timer while the circuit breaker is open
+        if self.state != CircuitState.OPEN:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
 
         if self.state == CircuitState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:

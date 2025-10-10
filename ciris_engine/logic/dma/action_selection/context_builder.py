@@ -366,7 +366,7 @@ Adhere strictly to the schema for your JSON output.
                 self._instruction_generator = ActionInstructionGenerator(self.service_registry, self.bus_manager)
 
             # Generate dynamic instructions
-            dynamic_schemas = self._instruction_generator.generate_action_instructions(permitted_actions)
+            dynamic_schemas: str = self._instruction_generator.generate_action_instructions(permitted_actions)
 
             if dynamic_schemas:
                 logger.debug("Using dynamically generated action schemas")

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
@@ -250,6 +250,25 @@ class APIKeyInfo(BaseModel):
     name: Optional[str] = Field(None, description="Optional name for the key")
 
 
+class UserSettingsResponse(BaseModel):
+    """User's personal settings (user-modifiable preferences)."""
+
+    user_preferred_name: Optional[str] = Field(None, description="User's preferred display name")
+    location: Optional[str] = Field(None, description="User's location preference")
+    interaction_preferences: Optional[str] = Field(None, description="User's custom interaction preferences")
+    marketing_opt_in: bool = Field(False, description="User consent for marketing communications")
+    marketing_opt_in_source: Optional[str] = Field(None, description="Source of marketing consent (read-only)")
+
+
+class UpdateUserSettingsRequest(BaseModel):
+    """Request to update user's personal settings."""
+
+    user_preferred_name: Optional[str] = Field(None, description="User's preferred display name")
+    location: Optional[str] = Field(None, description="User's location preference")
+    interaction_preferences: Optional[str] = Field(None, description="User's custom interaction preferences")
+    marketing_opt_in: Optional[bool] = Field(None, description="User consent for marketing communications")
+
+
 @router.get("", response_model=PaginatedResponse[UserSummary])
 async def list_users(
     page: int = Query(1, ge=1),
@@ -434,6 +453,153 @@ async def get_permission_requests(
     permission_requests.sort(key=lambda x: x.permission_requested_at, reverse=True)
 
     return permission_requests
+
+
+@router.get("/me/settings", response_model=UserSettingsResponse)
+async def get_my_settings(
+    request: Request,
+    auth: AuthContext = Depends(get_auth_context),
+) -> UserSettingsResponse:
+    """
+    Get the current user's personal settings.
+
+    Requires: Must be authenticated (any role)
+    """
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+    from ciris_engine.schemas.services.operations import MemoryQuery
+
+    # Get the memory service from app state
+    memory_service = getattr(request.app.state, "memory_service", None)
+    if not memory_service:
+        raise HTTPException(status_code=503, detail="Memory service not available")
+
+    try:
+        # Query the user node from the graph
+        user_query = MemoryQuery(
+            node_id=f"user/{auth.user_id}",
+            scope=GraphScope.LOCAL,
+            type=NodeType.USER,
+            include_edges=False,
+            depth=1,
+        )
+        user_results = await memory_service.recall(user_query)
+
+        if not user_results:
+            # User node doesn't exist yet - return defaults
+            return UserSettingsResponse()
+
+        user_node = user_results[0]
+        attrs = user_node.attributes if isinstance(user_node.attributes, dict) else {}
+
+        # Extract user settings from node attributes
+        return UserSettingsResponse(
+            user_preferred_name=attrs.get("user_preferred_name"),
+            location=attrs.get("location"),
+            interaction_preferences=attrs.get("interaction_preferences"),
+            marketing_opt_in=attrs.get("marketing_opt_in", False),
+            marketing_opt_in_source=attrs.get("marketing_opt_in_source"),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve user settings for {auth.user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve user settings")
+
+
+@router.put("/me/settings", response_model=UserSettingsResponse)
+async def update_my_settings(
+    http_request: Request,
+    request: UpdateUserSettingsRequest,
+    auth: AuthContext = Depends(get_auth_context),
+) -> UserSettingsResponse:
+    """
+    Update the current user's personal settings.
+
+    Requires: Must be authenticated (any role)
+
+    Note: This endpoint bypasses the MANAGED_USER_ATTRIBUTES protection
+    because users are allowed to modify their own settings.
+    """
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+    from ciris_engine.schemas.services.operations import MemoryQuery
+
+    # Get the memory service from app state
+    memory_service = getattr(http_request.app.state, "memory_service", None)
+    if not memory_service:
+        raise HTTPException(status_code=503, detail="Memory service not available")
+
+    try:
+        # Query the user node from the graph
+        user_query = MemoryQuery(
+            node_id=f"user/{auth.user_id}",
+            scope=GraphScope.LOCAL,
+            type=NodeType.USER,
+            include_edges=False,
+            depth=1,
+        )
+        user_results = await memory_service.recall(user_query)
+
+        # Prepare attributes to update (only include fields that were provided)
+        attrs_to_update: Dict[str, Any] = {}
+        if request.user_preferred_name is not None:
+            attrs_to_update["user_preferred_name"] = request.user_preferred_name
+        if request.location is not None:
+            attrs_to_update["location"] = request.location
+        if request.interaction_preferences is not None:
+            attrs_to_update["interaction_preferences"] = request.interaction_preferences
+        if request.marketing_opt_in is not None:
+            attrs_to_update["marketing_opt_in"] = request.marketing_opt_in
+            # Update marketing_opt_in_source when user changes their preference
+            attrs_to_update["marketing_opt_in_source"] = "settings_api"
+
+        if user_results:
+            # User node exists - update it
+            user_node = user_results[0]
+            existing_attrs = user_node.attributes if isinstance(user_node.attributes, dict) else {}
+
+            # Merge existing attributes with updates
+            updated_attrs = {**existing_attrs, **attrs_to_update}
+
+            # Create updated node
+            updated_node = GraphNode(
+                id=f"user/{auth.user_id}",
+                type=NodeType.USER,
+                scope=GraphScope.LOCAL,
+                attributes=updated_attrs,
+            )
+
+            # Save the updated node directly (bypassing MANAGED_USER_ATTRIBUTES check)
+            await memory_service.memorize(updated_node, handler_name="UserSettingsAPI")
+
+        else:
+            # User node doesn't exist - create it with the settings
+            new_node = GraphNode(
+                id=f"user/{auth.user_id}",
+                type=NodeType.USER,
+                scope=GraphScope.LOCAL,
+                attributes=attrs_to_update,
+            )
+
+            # Save the new node
+            await memory_service.memorize(new_node, handler_name="UserSettingsAPI")
+
+        # Return the updated settings
+        final_attrs = {**attrs_to_update}
+        if user_results:
+            user_node = user_results[0]
+            existing_attrs = user_node.attributes if isinstance(user_node.attributes, dict) else {}
+            final_attrs = {**existing_attrs, **attrs_to_update}
+
+        return UserSettingsResponse(
+            user_preferred_name=final_attrs.get("user_preferred_name"),
+            location=final_attrs.get("location"),
+            interaction_preferences=final_attrs.get("interaction_preferences"),
+            marketing_opt_in=final_attrs.get("marketing_opt_in", False),
+            marketing_opt_in_source=final_attrs.get("marketing_opt_in_source"),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to update user settings for {auth.user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update user settings")
 
 
 @router.get("/{user_id}", response_model=UserDetail)

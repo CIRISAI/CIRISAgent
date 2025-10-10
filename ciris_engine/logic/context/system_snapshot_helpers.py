@@ -116,10 +116,10 @@ def collect_memorized_attributes(
             if value is None:
                 memorized_attributes[key] = ""
             elif isinstance(value, (dict, list)):
-                # Use JSON serialization for complex objects so they can be parsed later
-                memorized_attributes[key] = json.dumps(value)
+                # Use JSON serialization with datetime handler for complex objects
+                memorized_attributes[key] = json.dumps(value, default=_json_serial_for_users)
             else:
-                # Use string conversion for simple types
+                # Use string conversion for simple types (handles datetime via str())
                 memorized_attributes[key] = str(value)
     return memorized_attributes
 
@@ -611,7 +611,7 @@ async def _safe_get_health_status(service: Any) -> tuple[bool, bool]:
     return False, False  # No health method
 
 
-def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
+async def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
     """Safely get circuit breaker status from a service.
 
     Returns:
@@ -619,7 +619,7 @@ def _safe_get_circuit_breaker_status(service: Any) -> tuple[bool, str]:
     """
     try:
         if hasattr(service, "get_circuit_breaker_status"):
-            cb_status = service.get_circuit_breaker_status()
+            cb_status = await service.get_circuit_breaker_status()
             return True, str(cb_status) if cb_status else "UNKNOWN"
     except Exception as e:
         logger.warning(f"Failed to get circuit breaker status from service: {e}")
@@ -637,7 +637,7 @@ async def _process_single_service(
         service_health[service_name] = health_status
 
     # Get circuit breaker status - only include if service has circuit breaker methods
-    has_circuit_breaker, cb_status = _safe_get_circuit_breaker_status(service)
+    has_circuit_breaker, cb_status = await _safe_get_circuit_breaker_status(service)
     if has_circuit_breaker:
         circuit_breaker_status[service_name] = cb_status
 
@@ -929,9 +929,15 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
 
 def _extract_user_from_task_context(task: Optional[Task], user_ids: Set[str]) -> None:
     """Extract user ID from task context."""
-    if task and task.context and task.context.user_id:
-        user_ids.add(str(task.context.user_id))
-        logger.debug(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
+    if task and task.context:
+        logger.debug(f"[USER EXTRACTION] Task context exists, user_id value: {repr(task.context.user_id)}")
+        if task.context.user_id:
+            user_ids.add(str(task.context.user_id))
+            logger.debug(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
+        else:
+            logger.debug("[USER EXTRACTION] Task context.user_id is None or empty")
+    else:
+        logger.debug(f"[USER EXTRACTION] Task or task.context is None (task={task is not None})")
 
 
 def _extract_users_from_thought_content(thought: Any, user_ids: Set[str]) -> None:
@@ -1031,6 +1037,74 @@ def _create_user_memory_query(user_id: str) -> MemoryQuery:
     )
 
 
+def _determine_if_admin_user(user_id: str) -> bool:
+    """Determine if a user_id represents an admin or system user."""
+    # Check for admin patterns
+    user_id_lower = user_id.lower()
+    return user_id_lower.startswith("wa-") or user_id_lower == "admin" or user_id_lower.startswith("admin_")
+
+
+async def _create_default_user_node(
+    user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
+) -> Optional[GraphNode]:
+    """Create a new user node with appropriate defaults.
+
+    Creates minimal user profile for new users:
+    - Admin/WA users: minimal profile with system defaults
+    - Regular users: basic profile ready for user settings
+    """
+    try:
+        # Determine user type
+        is_admin = _determine_if_admin_user(user_id)
+
+        # Create timestamp for first_seen
+        current_time = datetime.now(timezone.utc)
+
+        # Build base attributes - Dict[str, Any] for flexible attribute types
+        base_attributes: Dict[str, Any] = {
+            "user_id": user_id,
+            "display_name": "Admin" if is_admin else f"User_{user_id}",
+            "first_seen": current_time.isoformat(),
+            "created_by": "UserEnrichment",
+        }
+
+        # Add channel if provided
+        if channel_id:
+            base_attributes["channels"] = [channel_id]
+
+        # Add role-specific defaults
+        if is_admin:
+            # Admin users get minimal profile
+            base_attributes["trust_level"] = 1.0
+            base_attributes["is_wa"] = user_id.lower().startswith("wa-")
+        else:
+            # Regular users get basic profile
+            base_attributes["trust_level"] = 0.5
+            base_attributes["communication_style"] = "formal"
+            base_attributes["preferred_language"] = "en"
+            base_attributes["timezone"] = "UTC"
+
+        # Create GraphNode
+        new_node = GraphNode(
+            id=f"user/{user_id}",
+            type=NodeType.USER,
+            scope=GraphScope.LOCAL,
+            attributes=base_attributes,
+        )
+
+        # Save to memory graph
+        logger.info(
+            f"[USER EXTRACTION] Creating new user node for {user_id} (admin={is_admin}) with attributes: {list(base_attributes.keys())}"
+        )
+        await memory_service.memorize(new_node)
+
+        return new_node
+
+    except Exception as e:
+        logger.error(f"Failed to create default user node for {user_id}: {e}")
+        return None
+
+
 async def _process_user_node_for_profile(
     user_node: Any, user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
 ) -> UserProfile:
@@ -1067,7 +1141,11 @@ async def _process_user_node_for_profile(
 async def _enrich_single_user_profile(
     user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
 ) -> Optional[UserProfile]:
-    """Enrich a single user profile from memory graph."""
+    """Enrich a single user profile from memory graph.
+
+    If no user node exists, creates one automatically with appropriate defaults.
+    This ensures user_profiles is never empty in system snapshots.
+    """
     try:
         # Query user node with ALL attributes
         user_query = _create_user_memory_query(user_id)
@@ -1080,6 +1158,13 @@ async def _enrich_single_user_profile(
         if user_results:
             user_node = user_results[0]
             return await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+
+        # No user node exists - create one automatically
+        logger.info(f"[USER EXTRACTION] No node found for user/{user_id}, creating new user node with defaults")
+        new_user_node = await _create_default_user_node(user_id, memory_service, channel_id)
+
+        if new_user_node:
+            return await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
 
     except Exception as e:
         logger.warning(f"Failed to enrich user {user_id}: {e}")
@@ -1172,6 +1257,12 @@ def get_known_user_fields() -> Set[str]:
         "language",  # Alternative for preferred_language
         "timezone",
         "communication_style",
+        # User-configurable preferences (protected from agent, visible in snapshot)
+        "user_preferred_name",
+        "location",
+        "interaction_preferences",
+        "oauth_name",
+        # User interaction tracking
         "total_interactions",
         "last_interaction",
         "last_seen",  # Alternative for last_interaction
@@ -1220,6 +1311,11 @@ def build_user_profile_from_node(
         preferred_language=attrs.get("language", attrs.get("preferred_language", "en")),
         timezone=attrs.get("timezone", "UTC"),
         communication_style=attrs.get("communication_style", "formal"),
+        # User-configurable preferences (protected from agent modification in MANAGED_USER_ATTRIBUTES)
+        user_preferred_name=attrs.get("user_preferred_name"),
+        location=attrs.get("location"),
+        interaction_preferences=attrs.get("interaction_preferences"),
+        oauth_name=attrs.get("oauth_name"),
         total_interactions=attrs.get("total_interactions", 0),
         last_interaction=last_interaction,
         trust_level=attrs.get("trust_level", 0.5),

@@ -16,6 +16,36 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 logger = logging.getLogger(__name__)
 
 
+async def create_minimal_batch_context(
+    memory_service: Optional[Any] = None,
+    secrets_service: Optional[Any] = None,
+    service_registry: Optional[Any] = None,
+    resource_monitor: Optional[Any] = None,
+    telemetry_service: Optional[Any] = None,
+    runtime: Optional[Any] = None,
+) -> "BatchContextData":
+    """
+    Create minimal batch context for single-thought processing.
+
+    This is a lightweight version of prefetch_batch_context() that creates
+    batch data on-demand for individual thoughts when batch processing is
+    not being used (e.g., API interactions, single thoughts).
+
+    Uses the same data fetching logic as prefetch_batch_context() but is
+    called inline for single thoughts instead of being pre-fetched.
+    """
+    logger.debug("[MINIMAL BATCH] Creating minimal batch context for single thought")
+    # Reuse the full prefetch logic - it's already optimized
+    return await prefetch_batch_context(
+        memory_service=memory_service,
+        secrets_service=secrets_service,
+        service_registry=service_registry,
+        resource_monitor=resource_monitor,
+        telemetry_service=telemetry_service,
+        runtime=runtime,
+    )
+
+
 class BatchContextData:
     """Pre-fetched data that's the same for all thoughts in a batch."""
 
@@ -71,13 +101,16 @@ async def prefetch_batch_context(
 
             if identity_result and identity_result.attributes:
                 attrs = identity_result.attributes
+                # Convert Pydantic model to dict if needed
+                if hasattr(attrs, "model_dump"):
+                    attrs = attrs.model_dump()
                 if isinstance(attrs, dict):
-                    batch_data.agent_identity = {
-                        "agent_id": attrs.get("agent_id", ""),
-                        "description": attrs.get("description", ""),
-                        "role": attrs.get("role_description", ""),
-                        "trust_level": attrs.get("trust_level", 0.5),
-                    }
+                    # Copy ALL attributes to preserve stewardship and other fields
+                    batch_data.agent_identity = dict(attrs)  # Full copy of all identity attributes
+                    # CRITICAL: Map role_description → role for DSDMA compatibility
+                    if "role_description" in batch_data.agent_identity and "role" not in batch_data.agent_identity:
+                        batch_data.agent_identity["role"] = batch_data.agent_identity["role_description"]
+                    # Extract specific fields for structured access
                     batch_data.identity_purpose = attrs.get("role_description", "")
                     batch_data.identity_capabilities = attrs.get("permitted_actions", [])
                     batch_data.identity_restrictions = attrs.get("restricted_capabilities", [])
@@ -206,20 +239,51 @@ async def prefetch_batch_context(
 async def build_system_snapshot_with_batch(
     task: Optional[Task],
     thought: Any,
-    batch_data: BatchContextData,
+    batch_data: Optional[BatchContextData] = None,
     memory_service: Optional[Any] = None,
     graphql_provider: Optional[Any] = None,
     time_service: Any = None,  # REQUIRED - will fail fast and loud if None
+    resource_monitor: Any = None,  # REQUIRED - mission critical system
+    # Additional services for creating batch context on-demand
+    secrets_service: Optional[Any] = None,
+    service_registry: Optional[Any] = None,
+    telemetry_service: Optional[Any] = None,
+    runtime: Optional[Any] = None,
 ) -> SystemSnapshot:
-    """Build system snapshot using pre-fetched batch data."""
+    """
+    Build system snapshot using batch data (pre-fetched or created on-demand).
+
+    If batch_data is provided, uses the pre-fetched data (batch processing).
+    If batch_data is None, creates minimal batch context on-demand (single thought).
+
+    This unified approach ensures consistent snapshot building regardless of
+    whether processing a batch of thoughts or a single thought.
+    """
 
     from ciris_engine.schemas.runtime.system_context import ThoughtSummary
 
     from .system_snapshot_helpers import _get_localized_times
 
-    logger.info(
-        f"[DEBUG DB TIMING] Building snapshot for thought {getattr(thought, 'thought_id', 'unknown')} with batch data"
-    )
+    # Create batch context on-demand if not provided
+    if batch_data is None:
+        logger.info(
+            f"[UNIFIED BATCH] No batch context provided for thought {getattr(thought, 'thought_id', 'unknown')}, creating on-demand"
+        )
+        batch_data = await create_minimal_batch_context(
+            memory_service=memory_service,
+            secrets_service=secrets_service,
+            service_registry=service_registry,
+            resource_monitor=resource_monitor,
+            telemetry_service=telemetry_service,
+            runtime=runtime,
+        )
+        logger.info(
+            f"[UNIFIED BATCH] Created minimal batch context for thought {getattr(thought, 'thought_id', 'unknown')}"
+        )
+    else:
+        logger.info(
+            f"[UNIFIED BATCH] Using pre-fetched batch data for thought {getattr(thought, 'thought_id', 'unknown')}"
+        )
 
     # Per-thought data
     thought_summary = None
@@ -230,8 +294,13 @@ async def build_system_snapshot_with_batch(
         elif status_val is not None:
             status_val = str(status_val)
 
+        # ThoughtSummary requires thought_id to be a string (not None)
+        thought_id = getattr(thought, "thought_id", None)
+        if thought_id is None:
+            thought_id = "unknown"
+
         thought_summary = ThoughtSummary(
-            thought_id=getattr(thought, "thought_id", "unknown"),
+            thought_id=thought_id,
             content=getattr(thought, "content", None),
             status=status_val,
             source_task_id=getattr(thought, "source_task_id", None),
@@ -243,14 +312,57 @@ async def build_system_snapshot_with_batch(
     channel_id = None
     channel_context = None
 
-    # Extract channel_id logic (simplified)
+    # First, check for existing channel_context object in task.context.system_snapshot
     if task and hasattr(task, "context") and task.context:
         if (
             hasattr(task.context, "system_snapshot")
             and task.context.system_snapshot
+            and hasattr(task.context.system_snapshot, "channel_context")
+            and task.context.system_snapshot.channel_context
+        ):
+            from ciris_engine.schemas.runtime.system_context import ChannelContext
+
+            # Validate it's a ChannelContext object (fail fast on wrong type)
+            if isinstance(task.context.system_snapshot.channel_context, ChannelContext):
+                channel_context = task.context.system_snapshot.channel_context
+                logger.info(
+                    f"[UNIFIED BATCH] Extracted existing channel_context: {channel_context.channel_id} ({channel_context.channel_type})"
+                )
+
+    # Extract channel_id - try multiple sources in priority order
+    if task:
+        # First try: task.channel_id (most common)
+        if hasattr(task, "channel_id") and task.channel_id:
+            channel_id = str(task.channel_id)
+        # Second try: task.context.channel_id
+        elif (
+            hasattr(task, "context")
+            and task.context
+            and hasattr(task.context, "channel_id")
+            and task.context.channel_id
+        ):
+            channel_id = str(task.context.channel_id)
+        # Third try: task.context.system_snapshot.channel_id (legacy)
+        elif (
+            hasattr(task, "context")
+            and task.context
+            and hasattr(task.context, "system_snapshot")
+            and task.context.system_snapshot
             and hasattr(task.context.system_snapshot, "channel_id")
+            and task.context.system_snapshot.channel_id
         ):
             channel_id = str(task.context.system_snapshot.channel_id)
+
+    # If no channel_id from task, try thought.context.channel_id
+    if (
+        not channel_id
+        and thought
+        and hasattr(thought, "context")
+        and thought.context
+        and hasattr(thought.context, "channel_id")
+        and thought.context.channel_id
+    ):
+        channel_id = str(thought.context.channel_id)
 
     # Only query channel context if we have a channel_id
     if channel_id and memory_service:
@@ -283,6 +395,88 @@ async def build_system_snapshot_with_batch(
                 parent_task_id=getattr(task, "parent_task_id", None),
             )
 
+    # GraphQL user enrichment (if available)
+    user_profiles = []
+    if graphql_provider:
+        from ciris_engine.schemas.runtime.system_context import UserProfile
+
+        enriched_context = await graphql_provider.enrich_context(task, thought)
+        if enriched_context and enriched_context.user_profiles:
+            # Convert GraphQLUserProfile to UserProfile
+            for name, graphql_profile in enriched_context.user_profiles:
+                # Extract consent attributes from GraphQL profile
+                consent_attrs = {attr.key: attr.value for attr in graphql_profile.attributes}
+                consent_stream = consent_attrs.get("consent_stream", "TEMPORARY")
+                consent_expires_at = None
+                if "consent_expires_at" in consent_attrs:
+                    try:
+                        consent_expires_at = datetime.fromisoformat(consent_attrs["consent_expires_at"])
+                    except (ValueError, TypeError):
+                        pass
+                partnership_requested_at = None
+                if "partnership_requested_at" in consent_attrs:
+                    try:
+                        partnership_requested_at = datetime.fromisoformat(consent_attrs["partnership_requested_at"])
+                    except (ValueError, TypeError):
+                        pass
+
+                user_profiles.append(
+                    UserProfile(
+                        user_id=name,
+                        display_name=graphql_profile.nick or name,
+                        created_at=datetime.now(timezone.utc),
+                        preferred_language="en",
+                        timezone="UTC",
+                        communication_style="formal",
+                        trust_level=graphql_profile.trust_score or 0.5,
+                        last_interaction=(
+                            datetime.fromisoformat(graphql_profile.last_seen) if graphql_profile.last_seen else None
+                        ),
+                        is_wa=any(attr.key == "is_wa" and attr.value == "true" for attr in graphql_profile.attributes),
+                        permissions=[attr.value for attr in graphql_profile.attributes if attr.key == "permission"],
+                        restrictions=[attr.value for attr in graphql_profile.attributes if attr.key == "restriction"],
+                        consent_stream=consent_stream,
+                        consent_expires_at=consent_expires_at,
+                        partnership_requested_at=partnership_requested_at,
+                        partnership_approved=consent_attrs.get("partnership_approved", "false").lower() == "true",
+                    )
+                )
+
+    # Memory graph user enrichment (if available)
+    if memory_service:
+        from .system_snapshot_helpers import _enrich_user_profiles, _extract_user_ids_from_context
+
+        user_ids_to_enrich = _extract_user_ids_from_context(task, thought)
+        if user_ids_to_enrich:
+            logger.info(f"[DEBUG BATCH] Enriching {len(user_ids_to_enrich)} user profiles: {user_ids_to_enrich}")
+            user_profiles = await _enrich_user_profiles(memory_service, user_ids_to_enrich, channel_id, user_profiles)
+
+    # Collect adapter channels and tools (if runtime available)
+    adapter_channels = {}
+    available_tools = {}
+    if runtime:
+        from .system_snapshot_helpers import _collect_adapter_channels, _collect_available_tools
+
+        adapter_channels = await _collect_adapter_channels(runtime)
+        available_tools = await _collect_available_tools(runtime)
+
+    # Get queue status for system_counts
+    queue_status = persistence.get_queue_status()
+    system_counts = {
+        "total_tasks": queue_status.total_tasks,
+        "total_thoughts": queue_status.total_thoughts,
+        "pending_tasks": queue_status.pending_tasks,
+        "pending_thoughts": queue_status.pending_thoughts + queue_status.processing_thoughts,
+    }
+
+    # Get version information
+    from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
+
+    try:
+        from version import __version__ as code_hash
+    except ImportError:
+        code_hash = ""
+
     # Build snapshot with batch data
     return SystemSnapshot(
         # Channel context fields
@@ -292,7 +486,7 @@ async def build_system_snapshot_with_batch(
         current_task_details=current_task_summary,
         current_thought_summary=thought_summary,
         # System overview
-        system_counts={},  # Could be populated from batch data if needed
+        system_counts=system_counts,
         top_pending_tasks_summary=batch_data.top_tasks,
         recently_completed_tasks_summary=batch_data.recent_tasks,
         # Agent identity fields
@@ -300,6 +494,10 @@ async def build_system_snapshot_with_batch(
         identity_purpose=batch_data.identity_purpose or "",
         identity_capabilities=batch_data.identity_capabilities,
         identity_restrictions=batch_data.identity_restrictions,
+        # Version information
+        agent_version=CIRIS_VERSION,
+        agent_codename=CIRIS_CODENAME,
+        agent_code_hash=code_hash,
         # Security fields
         detected_secrets=batch_data.secrets_snapshot.get("detected_secrets", []) if batch_data.secrets_snapshot else [],
         secrets_filter_version=(
@@ -316,7 +514,9 @@ async def build_system_snapshot_with_batch(
         shutdown_context=batch_data.shutdown_context,
         telemetry_summary=batch_data.telemetry_summary,
         continuity_summary=batch_data.continuity_summary,
-        user_profiles=[],  # Not using dict, it expects a list
+        user_profiles=user_profiles,  # Enriched user profiles from GraphQL and memory graph
+        adapter_channels=adapter_channels,  # Available channels by adapter
+        available_tools=available_tools,  # Available tools by adapter
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

@@ -8,9 +8,7 @@ import httpx
 import pytest
 
 from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService, ResourceSignalBus
-from ciris_engine.logic.services.infrastructure.resource_monitor.unlimit_credit_provider import (
-    UnlimitCreditProvider,
-)
+from ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider import CIRISBillingProvider
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
@@ -311,7 +309,7 @@ async def test_resource_monitor_credit_check_and_cache(resource_budget, temp_db,
             )
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,
@@ -355,14 +353,16 @@ async def test_resource_monitor_credit_spend(resource_budget, temp_db, time_serv
             return httpx.Response(
                 201,
                 json={
-                    "succeeded": True,
-                    "transaction_id": "txn-42",
-                    "balance_remaining": 3,
+                    "charge_id": "txn-42",
+                    "balance_after": 3,
+                    "account_id": "acc-123",
+                    "amount_minor": 100,
+                    "currency": "USD",
                 },
             )
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=60)
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,
@@ -398,7 +398,7 @@ async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_se
             return httpx.Response(200, json={"status": "ok"})  # Missing required fields
         raise AssertionError(f"Unexpected path {request.url.path}")
 
-    provider = UnlimitCreditProvider(transport=httpx.MockTransport(handler), cache_ttl_seconds=0)
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler), cache_ttl_seconds=0)
     monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,

@@ -55,14 +55,29 @@ class MemorizeHandler(BaseActionHandler):
 
         # Define managed user attributes that should not be modified by memorize operations
         MANAGED_USER_ATTRIBUTES = {
+            # System-managed timestamps
             "last_seen": "System-managed timestamp updated automatically when user activity is detected. Use OBSERVE action instead.",
             "last_interaction": "System-managed timestamp updated automatically when user interacts. Use OBSERVE action instead.",
             "created_at": "System-managed timestamp set once when user is first encountered. Cannot be modified.",
             "first_seen": "System-managed timestamp set once when user is first encountered. Cannot be modified.",
+            # System-managed access control
             "trust_level": "Managed by the Adaptive Filter service based on user behavior patterns. Cannot be directly modified.",
             "is_wa": "Managed by the Authentication service. Wise Authority status requires proper authorization flow.",
             "permissions": "Managed by the Authorization service. Permission changes require administrative access.",
             "restrictions": "Managed by the Authorization service. Restriction changes require administrative access.",
+            # User privacy & preference settings (user-only modification via API)
+            "marketing_opt_in": "User consent for marketing communications. Only modifiable by user via settings API. Use DEFER to request user permission changes.",
+            "marketing_opt_in_source": "Source of marketing consent (e.g., 'oauth_login', 'settings_page'). System-managed tracking field. Cannot be modified directly.",
+            "location": "User's location preference. Only modifiable by user via settings API. Use OBSERVE to see current value.",
+            "interaction_preferences": "User's custom interaction preferences and prompt. Only modifiable by user via settings API. Use OBSERVE to see current value.",
+            "user_preferred_name": "User's preferred display name. Only modifiable by user via settings API. Use OBSERVE to see current value.",
+            # OAuth identity fields (authentication system managed)
+            "oauth_provider": "OAuth provider identity (e.g., 'google', 'github'). Managed by authentication system during OAuth flow. Use OBSERVE to see details.",
+            "oauth_email": "Email address from OAuth provider. Managed by authentication system. Use OBSERVE to see email.",
+            "oauth_external_id": "External user ID from OAuth provider. Managed by authentication system during OAuth flow. Cannot be modified.",
+            "oauth_name": "Full name from OAuth provider. Managed by authentication system during OAuth flow. Use OBSERVE to see name.",
+            "oauth_picture": "Profile picture URL from OAuth provider. Managed by authentication system during OAuth flow. Use OBSERVE to see picture URL.",
+            "oauth_links": "Linked OAuth identities for this user. Managed by authentication system. Use OBSERVE to see linked accounts.",
         }
 
         # Check if this is a user node and validate attributes

@@ -136,22 +136,42 @@ class ServiceInitializer:
         # Create default resource budget
         budget = ResourceBudget()  # Uses defaults from schema
 
-        credit_provider = None
-        api_key = os.getenv("UNLIMIT_API_KEY")
-        if api_key:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import UnlimitCreditProvider
+        # Credit provider: Always enabled for OAuth user credit gating
+        # - If CIRIS_BILLING_ENABLED=true: Use full billing backend (paid credits, purchases)
+        # - If CIRIS_BILLING_ENABLED=false: Use simple provider (1 free credit per OAuth user)
+        from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 
-            base_url = os.getenv("UNLIMIT_API_BASE_URL", "https://api.unlimit.com")
-            timeout = float(os.getenv("UNLIMIT_API_TIMEOUT_SECONDS", "5.0"))
-            cache_ttl = int(os.getenv("UNLIMIT_CACHE_TTL_SECONDS", "15"))
-            fail_open = os.getenv("UNLIMIT_FAIL_OPEN", "false").lower() == "true"
-            credit_provider = UnlimitCreditProvider(
-                base_url=base_url,
+        credit_provider: CreditGateProtocol
+        billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
+        if billing_enabled:
+            from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+
+            # Get API key from environment (required for CIRISBillingProvider)
+            api_key = os.getenv("CIRIS_BILLING_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true"
+                )
+
+            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+            timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+            cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+            fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+            credit_provider = CIRISBillingProvider(
                 api_key=api_key,
+                base_url=base_url,
                 timeout_seconds=timeout,
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
+            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", base_url)
+        else:
+            from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+
+            # Get free uses from environment (default: 0)
+            free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
+            credit_provider = SimpleCreditProvider(free_uses=free_uses)
+            logger.info(f"Using SimpleCreditProvider - {free_uses} free uses per OAuth user")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,

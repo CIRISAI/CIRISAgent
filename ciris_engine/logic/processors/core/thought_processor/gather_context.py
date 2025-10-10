@@ -48,30 +48,63 @@ class ContextGatheringPhase:
     async def _gather_context_step(
         self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
     ) -> ProcessingThoughtContext:
-        """Step 1: Build context for DMA processing."""
+        """
+        Step 1: Build context for DMA processing.
+
+        UNIFIED BATCH APPROACH:
+        - Always fetches the task from thought.source_task_id for user context
+        - Always uses build_system_snapshot_with_batch (creates minimal batch if needed)
+        - Ensures consistent snapshot building for both batch and single thoughts
+        """
+        from ciris_engine.logic import persistence
+        from ciris_engine.logic.context.batch_context import build_system_snapshot_with_batch
+
         thought = await self._fetch_thought(thought_item.thought_id)
 
         # Validate thought was successfully fetched
         if thought is None:
             raise ValueError(f"Failed to fetch thought {thought_item.thought_id}")
 
-        batch_context_data = context.get("batch_context") if context else None
-        if batch_context_data:
-            logger.debug(f"Using batch context for thought {thought_item.thought_id}")
-            from ciris_engine.logic.context.batch_context import build_system_snapshot_with_batch
+        # ALWAYS fetch task for user context extraction
+        task = None
+        source_task_id = getattr(thought, "source_task_id", None)
+        logger.info(f"[UNIFIED CONTEXT] Thought {thought_item.thought_id} source_task_id: {source_task_id}")
 
-            system_snapshot = await build_system_snapshot_with_batch(
-                task=None,
-                thought=thought,
-                batch_data=batch_context_data,
-                memory_service=self.context_builder.memory_service if self.context_builder else None,
-                graphql_provider=None,
-                time_service=self.context_builder.time_service if self.context_builder else None,
+        if source_task_id:
+            logger.info(f"[UNIFIED CONTEXT] Fetching task {source_task_id} for user context")
+            task = persistence.get_task_by_id(source_task_id)
+            task_user_id = getattr(task.context, "user_id", None) if task and task.context else None
+            log_msg = (
+                f"Fetched task {task.task_id} with context user_id={task_user_id}"
+                if task
+                else f"Could not fetch task {source_task_id} for thought {thought_item.thought_id}"
             )
-            thought_context = await self.context_builder.build_thought_context(thought, system_snapshot=system_snapshot)
-        else:
-            logger.debug(f"Building full context for thought {thought_item.thought_id} (no batch context)")
-            thought_context = await self.context_builder.build_thought_context(thought)
+            log_fn = logger.info if task else logger.warning
+            log_fn(f"[UNIFIED CONTEXT] {log_msg}")
+
+        # Get pre-fetched batch context if available, otherwise will create on-demand
+        batch_context_data = context.get("batch_context") if context else None
+
+        # ALWAYS use unified batch approach
+        system_snapshot = await build_system_snapshot_with_batch(
+            task=task,  # Always pass task for user enrichment
+            thought=thought,
+            batch_data=batch_context_data,  # Pre-fetched or None (will create minimal)
+            memory_service=self.context_builder.memory_service if self.context_builder else None,
+            graphql_provider=None,
+            time_service=self.context_builder.time_service if self.context_builder else None,
+            # Additional services for on-demand batch creation
+            secrets_service=self.context_builder.secrets_service if self.context_builder else None,
+            service_registry=self.context_builder.service_registry if self.context_builder else None,
+            resource_monitor=self.context_builder.resource_monitor if self.context_builder else None,
+            telemetry_service=self.context_builder.telemetry_service if self.context_builder else None,
+            runtime=self.context_builder.runtime if self.context_builder else None,
+        )
+
+        # Build thought context with the unified snapshot
+        thought_context = await self.context_builder.build_thought_context(
+            thought, task=task, system_snapshot=system_snapshot
+        )
 
         # Store context on queue item
         if hasattr(thought_context, "model_dump"):

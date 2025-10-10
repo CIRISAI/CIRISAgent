@@ -159,8 +159,31 @@ class TestThoughtProcessor:
         )
         mock_dma_orchestrator.run_action_selection = AsyncMock(return_value=mock_action_result)
 
+        # Mock context builder with proper runtime and service mocks for batch context
         mock_context_builder = Mock()
         mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
+
+        # Mock runtime with proper adapter manager structure
+        mock_runtime = Mock()
+        mock_adapter_manager = Mock()
+        mock_adapter_manager._adapters = {}  # Empty dict for iteration
+        mock_runtime.adapter_manager = mock_adapter_manager
+        mock_runtime.bus_manager = Mock()
+        mock_runtime.service_registry = Mock()
+        mock_runtime.current_shutdown_context = None  # None, not Mock, for Pydantic validation
+        mock_context_builder.runtime = mock_runtime
+
+        # Mock other services needed by batch context
+        mock_context_builder.memory_service = AsyncMock()
+        mock_context_builder.memory_service.recall = AsyncMock(return_value=[])
+        mock_context_builder.secrets_service = None
+        mock_context_builder.service_registry = Mock()
+        mock_context_builder.service_registry.get_provider_info = Mock(
+            return_value={"handlers": {}, "global_services": {}}
+        )
+        mock_context_builder.resource_monitor = None
+        mock_context_builder.telemetry_service = None
+        mock_context_builder.time_service = mock_time_service
 
         # Mock conscience application - should return ConscienceApplicationResult
         from ciris_engine.schemas.conscience.core import EpistemicData

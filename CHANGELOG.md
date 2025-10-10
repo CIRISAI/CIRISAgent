@@ -5,6 +5,81 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-10-09
+
+### Fixed
+- **🔄 Circuit Breaker Recovery**: Fixed critical bug preventing circuit breaker recovery
+  - **Root Cause**: `record_failure()` was resetting `last_failure_time` even when circuit breaker was OPEN, preventing 60s recovery timer from elapsing
+  - **Solution**: Only update `failure_count` and `last_failure_time` when NOT OPEN, allowing recovery timer to work correctly
+  - **Impact**: Circuit breakers now properly transition to HALF_OPEN after 60 seconds, ending infinite retry loops (Echo-Nemesis fix)
+- **⏱️ LLM Timeout Configuration**: Reduced timeout from 30s to 5s to enable faster failover
+  - Configured in OpenAI SDK at provider level (service.py:36, service.py:78)
+  - Allows 25 seconds for failover before DMA timeout (30s)
+  - Circuit breaker timeout duration also reduced to 5.0s for consistency
+  - Recovery timeout standardized to 60.0s across all circuit breakers
+- **📝 Enhanced LLM Error Logging**: Added detailed context for debugging LLM failures
+  - Schema validation errors: Shows expected schema, validation details, first 500 chars
+  - Timeout errors: Reports timeout duration and context
+  - Service errors (503): Detailed provider and model information
+  - Rate limit errors (429): Enhanced diagnostic context
+  - Content filter blocks: Guardrail detection and reporting
+  - All errors include: model, provider, CB state, consecutive failures
+- **🧠 PDMA Ethical Prompt Fix**: Corrected prompt causing schema validation errors
+  - Fixed incorrect principle count (4 → 6 principles)
+  - Changed `alignment_check` from structured dict to single paragraph string
+  - Added warning about context red herrings and non sequiturs
+  - Eliminated schema validation failures that appeared as "provider issues"
+- **🔐 Audit Signature Persistence**: Fixed audit entries stored in graph without signatures
+  - **Root Cause**: Signatures generated AFTER storing node in graph, never updated
+  - **Solution**: Generate hash chain data FIRST, then create node with signature already set
+  - Fixed in `log_event()` and `log_action()` - reordered operations
+  - Updated `_store_entry_in_graph()` to accept and use hash_chain_data parameter
+  - All audit entries now have populated `signature` and `hash_chain` fields in graph_nodes
+- **🔒 OBSERVER Role Privacy**: Added task information redaction in SSE streaming
+  - OBSERVER users now have `recently_completed_tasks_summary` and `top_pending_tasks_summary` redacted from SNAPSHOT_AND_CONTEXT events
+  - Redaction applied after channel filtering but before streaming events
+  - Uses deep copy to avoid mutating original events
+  - ADMIN+ users bypass redaction (see all events unchanged)
+  - 7 comprehensive tests cover all edge cases
+- **📊 Unified Batch Context Consolidation**: Complete refactoring of system snapshot building (27d5fa28)
+  - Consolidated 6 separate code paths into single `BatchContextData` architecture
+  - Eliminated redundant database queries and memory service calls
+  - Fixed 17 test failures through unified context building
+  - All components now use `build_batch_context()` for consistent snapshot data
+- **🎯 Code Quality (SonarCloud)**: Resolved 4 critical code quality issues (21fbf325)
+  - Removed unnecessary f-string in system_snapshot_helpers.py:938
+  - Merged nested if statement in batch_context.py:355
+  - Reduced cognitive complexity in gather_context.py (16→15)
+  - Reduced cognitive complexity in system_extensions.py (27→4 via 4 helper functions)
+- **🔑 DSDMA Identity Mapping**: Fixed agent stuck in WAKEUP state (210507b8)
+  - **Root Cause**: Batch context preserved all identity attributes with `dict(attrs)` but lost critical `role_description` → `role` mapping
+  - **Solution**: Added explicit field mapping after attribute copy to ensure DSDMA gets required `role` field
+  - Fixed: "CRITICAL: role is missing from identity in DSDMA domain 'Datum'!"
+- **👥 User Profile Enrichment**: Fixed empty user_profiles in SSE streaming events (12dc43b3)
+  - **Root Cause**: JSON serialization failed on datetime objects in connected node attributes during user enrichment
+  - **Solution**: Added `_json_serial_for_users` handler to `collect_memorized_attributes()` for datetime serialization
+  - Fixed: "Object of type datetime is not JSON serializable" error
+  - User profiles now populate correctly in all system snapshots and SSE events
+
+### Added
+- **Billing & API Keys**: Production billing system integration (billing.ciris.ai)
+  - CIRISBillingProvider with API key auth, oauth: prefix handling, idempotency
+  - API endpoints: `/api/billing/credits`, `/api/billing/purchase/*`
+  - User API key management: create/list/revoke with 30min-7day expiry
+  - SimpleCreditProvider: Configurable free uses per OAuth user (default: 0, env: `CIRIS_SIMPLE_FREE_USES`)
+- **Resource Tracking**: Per-thought metrics in H3ERE events (tokens, cost, carbon, energy)
+- **API Documentation**: Complete specification in `docs/API_SPEC.md`
+- **Marketing Opt-in**: GDPR-compliant consent capture in OAuth flow
+
+### Testing
+- **✅ QA Test Suite**: 128/128 tests passing (100% success rate)
+  - Streaming: 2/2 (100%) - User profiles now populate correctly in SSE events
+  - Guidance, Handlers, Filters: 43/43 (100%)
+  - All other modules: 83/83 (100%)
+- **✅ Unit Tests**: 5,100+ tests passing with zero failures
+- **✅ Mypy**: 555 source files, 0 errors (100% type safety)
+- **⏳ SonarCloud**: CI in progress (4 issues resolved, awaiting new analysis)
+
 ## [1.3.0] - 2025-10-07
 
 ### Added

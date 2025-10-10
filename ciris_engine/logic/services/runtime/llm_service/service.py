@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, 
 
 import instructor
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI, InternalServerError, RateLimitError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
@@ -33,7 +33,9 @@ class OpenAIConfig(BaseModel):
     base_url: Optional[str] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
-    timeout_seconds: int = Field(default=30)
+    timeout_seconds: int = Field(default=5)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 logger = logging.getLogger(__name__)
@@ -71,9 +73,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Initialize circuit breaker BEFORE calling super().__init__
         circuit_config = CircuitBreakerConfig(
             failure_threshold=5,  # Open after 5 consecutive failures
-            recovery_timeout=10.0,  # Wait 10 seconds before testing recovery
+            recovery_timeout=60.0,  # Wait 60 seconds before testing recovery
             success_threshold=2,  # Close after 2 successful calls
-            timeout_duration=30.0,  # 30 second API timeout
+            timeout_duration=5.0,  # 5 second API timeout
         )
         self.circuit_breaker = CircuitBreaker("llm_service", circuit_config)
 
@@ -372,7 +374,40 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self._track_error(e)
                 # Track LLM-specific error
                 self._total_errors += 1
-                logger.warning(f"LLM structured API error recorded by circuit breaker: {e}")
+
+                # Enhanced error logging for provider errors
+                error_type = type(e).__name__
+                error_details = {
+                    "error_type": error_type,
+                    "model": self.model_name,
+                    "base_url": self.openai_config.base_url or "default",
+                    "circuit_breaker_state": self.circuit_breaker.state.value,
+                }
+
+                if isinstance(e, RateLimitError):
+                    logger.error(
+                        f"LLM RATE LIMIT ERROR - Provider: {error_details['base_url']}, "
+                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                        f"Error: {e}"
+                    )
+                elif isinstance(e, InternalServerError):
+                    logger.error(
+                        f"LLM PROVIDER ERROR (500) - Provider: {error_details['base_url']}, "
+                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                        f"Provider returned internal server error: {e}"
+                    )
+                elif isinstance(e, APIConnectionError):
+                    logger.error(
+                        f"LLM CONNECTION ERROR - Provider: {error_details['base_url']}, "
+                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                        f"Failed to connect to provider: {e}"
+                    )
+                else:
+                    logger.error(
+                        f"LLM API ERROR ({error_type}) - Provider: {error_details['base_url']}, "
+                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                        f"Error: {e}"
+                    )
                 raise
             except Exception as e:
                 # Check if this is an instructor retry exception (includes timeouts, 503 errors, rate limits, etc.)
@@ -384,18 +419,105 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         # Track LLM-specific error
                         self._total_errors += 1
 
+                        # Build error context for better debugging
+                        error_context = {
+                            "model": self.model_name,
+                            "provider": self.openai_config.base_url or "default",
+                            "response_model": resp_model.__name__,
+                            "circuit_breaker_state": self.circuit_breaker.state.value,
+                            "consecutive_failures": self.circuit_breaker.consecutive_failures,
+                        }
+
                         # Provide specific error messages for different failure types
                         error_str = str(e).lower()
-                        if "timed out" in error_str:
-                            logger.error(f"LLM structured timeout detected, circuit breaker recorded failure: {e}")
-                            raise TimeoutError("LLM API timeout in structured call - circuit breaker activated") from e
-                        elif "service unavailable" in error_str or "503" in error_str:
-                            logger.error(f"LLM service unavailable (503), circuit breaker recorded failure: {e}")
+                        full_error = str(e)
+
+                        # Check for schema validation errors
+                        if "validation" in error_str or "validationerror" in error_str:
+                            # Extract validation details
+                            logger.error(
+                                f"LLM SCHEMA VALIDATION ERROR - Response did not match expected schema.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  Expected Schema: {error_context['response_model']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Validation Details: {full_error[:500]}"
+                            )
                             raise RuntimeError(
-                                "LLM service unavailable - circuit breaker activated for failover"
+                                f"LLM response validation failed for {resp_model.__name__} - "
+                                "circuit breaker activated for failover"
                             ) from e
+
+                        # Check for timeout errors
+                        elif "timed out" in error_str or "timeout" in error_str:
+                            logger.error(
+                                f"LLM TIMEOUT ERROR - Request exceeded {self.openai_config.timeout_seconds}s timeout.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error: {full_error[:300]}"
+                            )
+                            raise TimeoutError(
+                                f"LLM API timeout ({self.openai_config.timeout_seconds}s) "
+                                "- circuit breaker activated"
+                            ) from e
+
+                        # Check for service unavailable / 503 errors
+                        elif "service unavailable" in error_str or "503" in error_str:
+                            logger.error(
+                                f"LLM SERVICE UNAVAILABLE (503) - Provider temporarily down.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error: {full_error[:300]}"
+                            )
+                            raise RuntimeError(
+                                "LLM service unavailable (503) - circuit breaker activated for failover"
+                            ) from e
+
+                        # Check for rate limit / 429 errors
+                        elif "rate limit" in error_str or "429" in error_str:
+                            logger.error(
+                                f"LLM RATE LIMIT (429) - Provider quota exceeded.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error: {full_error[:300]}"
+                            )
+                            raise RuntimeError(
+                                "LLM rate limit exceeded (429) - circuit breaker activated for failover"
+                            ) from e
+
+                        # Check for content filtering / guardrail errors
+                        elif "content_filter" in error_str or "content policy" in error_str or "safety" in error_str:
+                            logger.error(
+                                f"LLM CONTENT FILTER / GUARDRAIL - Request blocked by provider safety systems.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error: {full_error[:300]}"
+                            )
+                            raise RuntimeError(
+                                "LLM content filter triggered - circuit breaker activated for failover"
+                            ) from e
+
+                        # Generic instructor error with enhanced logging
                         else:
-                            logger.error(f"LLM structured call failed, circuit breaker recorded failure: {e}")
+                            logger.error(
+                                f"LLM INSTRUCTOR ERROR - Unspecified failure.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  Expected Schema: {error_context['response_model']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error Type: {type(e).__name__}\n"
+                                f"  Error: {full_error[:500]}"
+                            )
                             raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e
                 # Re-raise other exceptions
                 raise

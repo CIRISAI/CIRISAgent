@@ -782,7 +782,7 @@ class PerformActionStepData(BaseStepData):
 
 
 class ActionCompleteStepData(BaseStepData):
-    """Step data for ACTION_COMPLETE step with audit trail information."""
+    """Step data for ACTION_COMPLETE step with audit trail and resource usage information."""
 
     action_executed: str = Field(..., description="Action that was executed")
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
@@ -794,6 +794,16 @@ class ActionCompleteStepData(BaseStepData):
     audit_sequence_number: int = Field(..., description="Sequence number in audit hash chain (REQUIRED)")
     audit_entry_hash: str = Field(..., description="Hash of audit entry - tamper-evident (REQUIRED)")
     audit_signature: str = Field(..., description="Cryptographic signature of audit entry (REQUIRED)")
+
+    # Resource usage (queried from telemetry by thought_id)
+    tokens_total: int = Field(0, description="Total tokens used (query telemetry by thought_id)")
+    tokens_input: int = Field(0, description="Input tokens (query telemetry by thought_id)")
+    tokens_output: int = Field(0, description="Output tokens (query telemetry by thought_id)")
+    cost_cents: float = Field(0.0, description="Cost in USD cents (query telemetry by thought_id)")
+    carbon_grams: float = Field(0.0, description="CO2 emissions in grams (query telemetry by thought_id)")
+    energy_mwh: float = Field(0.0, description="Energy in milliwatt-hours (query telemetry by thought_id)")
+    llm_calls: int = Field(0, description="Number of LLM calls (query telemetry by thought_id)")
+    models_used: List[str] = Field(default_factory=list, description="Models used (query telemetry by thought_id)")
 
 
 class ActionResponse(BaseModel):
@@ -961,7 +971,7 @@ class ConscienceResultEvent(BaseModel):
 
 
 class ActionResultEvent(BaseModel):
-    """Event 5: Action execution outcome with audit trail (ACTION_COMPLETE step)."""
+    """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ACTION_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -980,3 +990,13 @@ class ActionResultEvent(BaseModel):
     audit_sequence_number: Optional[int] = Field(None, description=DESC_AUDIT_SEQUENCE)
     audit_entry_hash: Optional[str] = Field(None, description=DESC_AUDIT_HASH)
     audit_signature: Optional[str] = Field(None, description=DESC_AUDIT_SIGNATURE)
+
+    # Resource usage (queried from telemetry by thought_id)
+    tokens_total: int = Field(0, description="Total tokens used for this thought")
+    tokens_input: int = Field(0, description="Input tokens used for this thought")
+    tokens_output: int = Field(0, description="Output tokens used for this thought")
+    cost_cents: float = Field(0.0, description="Total cost in USD cents for this thought")
+    carbon_grams: float = Field(0.0, description="CO2 emissions in grams for this thought")
+    energy_mwh: float = Field(0.0, description="Energy used in milliwatt-hours for this thought")
+    llm_calls: int = Field(0, description="Number of LLM calls for this thought")
+    models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")

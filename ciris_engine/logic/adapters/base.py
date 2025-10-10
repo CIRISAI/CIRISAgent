@@ -2,7 +2,7 @@ import asyncio
 import logging
 import secrets
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +86,12 @@ class Service(ABC):
                     await asyncio.sleep(final_delay)
 
                 # Handle both async and sync operations
+                # Note: Cannot avoid cast here - mypy can't infer T from operation signature
                 if asyncio.iscoroutinefunction(operation):
                     result = await operation(*args, **kwargs)
-                    return result  # type: ignore[no-any-return]
                 else:
                     result = operation(*args, **kwargs)
-                    return result
+                return cast(T, result)
 
             except non_retryable_exceptions as e:
                 logger.error(f"{self.service_name}: Non-retryable error, failing immediately: {e}")

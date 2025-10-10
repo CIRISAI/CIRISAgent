@@ -215,7 +215,7 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 "system_snapshot.telemetry_summary is None (should be TelemetrySummary dict)"
                                             )
-                                        # Validate telemetry_summary.circuit_breaker is not null
+                                        # Validate telemetry_summary.circuit_breaker is not null and has proper structure
                                         telemetry = snapshot.get("telemetry_summary")
                                         if telemetry and isinstance(telemetry, dict):
                                             if "circuit_breaker" not in telemetry:
@@ -225,9 +225,38 @@ class StreamingVerificationModule:
                                                 event_detail["issues"].append(issue_msg)
                                                 errors.append(f"🐛 MISSING FIELD: {issue_msg}")
                                             elif telemetry.get("circuit_breaker") is None:
-                                                issue_msg = "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with state/failures/etc)"
+                                                issue_msg = "system_snapshot.telemetry_summary.circuit_breaker is None (should be dict with CircuitBreakerState entries)"
                                                 event_detail["issues"].append(issue_msg)
                                                 errors.append(f"🐛 NULL FIELD: {issue_msg}")
+                                            else:
+                                                # Validate CircuitBreakerState schema for each entry
+                                                cb_dict = telemetry.get("circuit_breaker")
+                                                if isinstance(cb_dict, dict):
+                                                    required_cb_fields = {
+                                                        "state": str,
+                                                        "failure_count": int,
+                                                        "success_count": int,
+                                                        "total_requests": int,
+                                                        "failed_requests": int,
+                                                        "consecutive_failures": int,
+                                                        "failure_rate": str,
+                                                    }
+                                                    for service_name, cb_state in cb_dict.items():
+                                                        if not isinstance(cb_state, dict):
+                                                            issue_msg = f"circuit_breaker[{service_name}] is not a dict (should be CircuitBreakerState)"
+                                                            event_detail["issues"].append(issue_msg)
+                                                            errors.append(f"🐛 INVALID CB STATE: {issue_msg}")
+                                                            continue
+
+                                                        for field, field_type in required_cb_fields.items():
+                                                            if field not in cb_state:
+                                                                issue_msg = f"circuit_breaker[{service_name}] missing field '{field}'"
+                                                                event_detail["issues"].append(issue_msg)
+                                                                errors.append(f"🐛 CB MISSING FIELD: {issue_msg}")
+                                                            elif not isinstance(cb_state[field], field_type):
+                                                                issue_msg = f"circuit_breaker[{service_name}].{field} has wrong type: {type(cb_state[field]).__name__} (expected {field_type.__name__})"
+                                                                event_detail["issues"].append(issue_msg)
+                                                                errors.append(f"🐛 CB WRONG TYPE: {issue_msg}")
                                         # Check service_health - should have entries for all services
                                         service_health = snapshot.get("service_health", {})
                                         if not service_health or not isinstance(service_health, dict):
@@ -238,6 +267,58 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(
                                                 f"system_snapshot.service_health only has {len(service_health)} services (expected 20+)"
                                             )
+
+                                        # Check user_profiles - should ALWAYS exist (at minimum, API user for wakeup tasks)
+                                        if "user_profiles" not in snapshot:
+                                            issue_msg = "system_snapshot.user_profiles is MISSING (should always be present, at minimum for API user)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 MISSING FIELD: {issue_msg}")
+                                        elif snapshot.get("user_profiles") is None:
+                                            issue_msg = "system_snapshot.user_profiles is None (should be list, at minimum with API user)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 NULL FIELD: {issue_msg}")
+                                        elif not isinstance(snapshot.get("user_profiles"), list):
+                                            issue_msg = f"system_snapshot.user_profiles has wrong type: {type(snapshot.get('user_profiles')).__name__} (expected list)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 WRONG TYPE: {issue_msg}")
+                                        elif len(snapshot.get("user_profiles", [])) == 0:
+                                            issue_msg = "system_snapshot.user_profiles is empty list (should contain at least API user profile)"
+                                            event_detail["issues"].append(issue_msg)
+                                            errors.append(f"🐛 EMPTY LIST: {issue_msg}")
+                                            # Print the FULL event to debug why user_profiles is empty
+                                            print("\n" + "=" * 80)
+                                            print("🐛 DEBUG: FULL EVENT WITH EMPTY user_profiles")
+                                            print("=" * 80)
+                                            print(json.dumps(event, indent=2, default=str))
+                                            print("=" * 80 + "\n")
+                                        else:
+                                            # Validate user profile structure for each profile
+                                            user_profiles = snapshot.get("user_profiles", [])
+                                            for i, profile in enumerate(user_profiles):
+                                                if not isinstance(profile, dict):
+                                                    issue_msg = (
+                                                        f"user_profiles[{i}] is not a dict: {type(profile).__name__}"
+                                                    )
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 INVALID PROFILE: {issue_msg}")
+                                                    continue
+                                                # Check for required user_id field
+                                                if "user_id" not in profile:
+                                                    issue_msg = f"user_profiles[{i}] missing required 'user_id' field"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 PROFILE MISSING user_id: {issue_msg}")
+                                                elif not isinstance(profile["user_id"], str) or not profile["user_id"]:
+                                                    issue_msg = f"user_profiles[{i}].user_id is invalid: {profile.get('user_id')}"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    errors.append(f"🐛 INVALID user_id: {issue_msg}")
+                                                # Check for display_name field (should exist)
+                                                if "display_name" not in profile:
+                                                    issue_msg = f"user_profiles[{i}] missing 'display_name' field"
+                                                    event_detail["issues"].append(issue_msg)
+                                                    # This is a warning, not a critical error
+                                                elif not isinstance(profile["display_name"], str):
+                                                    issue_msg = f"user_profiles[{i}].display_name has wrong type: {type(profile['display_name']).__name__}"
+                                                    event_detail["issues"].append(issue_msg)
 
                                         # Print first occurrence of critical fields for validation
                                         if not first_snapshot_printed:
@@ -274,16 +355,31 @@ class StreamingVerificationModule:
                                             if telemetry:
                                                 print(f"  Type: {type(telemetry).__name__}")
                                                 if isinstance(telemetry, dict):
-                                                    # Print circuit_breaker first (critical field)
+                                                    # Print circuit_breaker first (critical field) with CircuitBreakerState validation
                                                     if "circuit_breaker" in telemetry:
                                                         cb = telemetry["circuit_breaker"]
-                                                        print(f"\n  🔴 circuit_breaker:")
+                                                        print(f"\n  🔴 circuit_breaker (CircuitBreakerState schema):")
                                                         if cb is None:
                                                             print("     ❌ NULL (should be dict!)")
                                                         elif isinstance(cb, dict):
-                                                            print(f"     Type: dict")
-                                                            for cb_key, cb_val in sorted(cb.items()):
-                                                                print(f"     - {cb_key}: {cb_val}")
+                                                            if not cb:
+                                                                print(
+                                                                    "     ✓ Empty dict (no circuit breakers triggered)"
+                                                                )
+                                                            else:
+                                                                print(f"     ✓ Type: dict with {len(cb)} service(s)")
+                                                                for service_name, cb_state in sorted(cb.items()):
+                                                                    if isinstance(cb_state, dict):
+                                                                        state = cb_state.get("state", "unknown")
+                                                                        failures = cb_state.get("failure_count", 0)
+                                                                        rate = cb_state.get("failure_rate", "0.00%")
+                                                                        print(
+                                                                            f"     - {service_name}: state={state}, failures={failures}, rate={rate}"
+                                                                        )
+                                                                    else:
+                                                                        print(
+                                                                            f"     - {service_name}: ⚠️ Invalid (not CircuitBreakerState dict)"
+                                                                        )
                                                         else:
                                                             print(f"     ⚠️  Wrong type: {type(cb).__name__}")
                                                     else:
@@ -300,6 +396,42 @@ class StreamingVerificationModule:
                                                         print(f"  - {key}: {val_str}")
                                             else:
                                                 print("  (None)")
+
+                                            # Print user_profiles
+                                            user_profiles = snapshot.get("user_profiles")
+                                            print(f"\n👥 user_profiles:")
+                                            if user_profiles is None:
+                                                print("  ❌ NULL (should be list with at least API user!)")
+                                            elif not isinstance(user_profiles, list):
+                                                print(
+                                                    f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)"
+                                                )
+                                            elif len(user_profiles) == 0:
+                                                print("  ❌ EMPTY (should contain at least API user profile)")
+                                            else:
+                                                print(f"  ✓ Type: list with {len(user_profiles)} profile(s)")
+                                                for i, profile in enumerate(user_profiles, 1):
+                                                    if isinstance(profile, dict):
+                                                        user_id = profile.get("user_id", "MISSING")
+                                                        display_name = profile.get("display_name", "MISSING")
+                                                        # Show additional fields if present
+                                                        extra_fields = []
+                                                        if "user_preferred_name" in profile:
+                                                            extra_fields.append(
+                                                                f"preferred_name={profile['user_preferred_name']}"
+                                                            )
+                                                        if "location" in profile:
+                                                            extra_fields.append(f"location={profile['location']}")
+                                                        extra_str = (
+                                                            f" ({', '.join(extra_fields)})" if extra_fields else ""
+                                                        )
+                                                        print(
+                                                            f"  {i}. user_id={user_id}, display_name={display_name}{extra_str}"
+                                                        )
+                                                    else:
+                                                        print(
+                                                            f"  {i}. ⚠️ Invalid profile (not dict): {type(profile).__name__}"
+                                                        )
 
                                             print("=" * 80 + "\n")
 
@@ -503,6 +635,38 @@ class StreamingVerificationModule:
                                         events_with_audit_data += 1
                                         event_detail["has_audit_trail"] = True
 
+                                    # Resource usage fields - REQUIRED for resource tracking (all 8 must be present)
+                                    resource_fields = {
+                                        "tokens_total": int,
+                                        "tokens_input": int,
+                                        "tokens_output": int,
+                                        "cost_cents": (int, float),  # Can be float
+                                        "carbon_grams": (int, float),
+                                        "energy_mwh": (int, float),
+                                        "llm_calls": int,
+                                        "models_used": list,
+                                    }
+                                    for field, field_type in resource_fields.items():
+                                        if field not in event:
+                                            event_detail["issues"].append(f"Missing resource field: {field}")
+                                            errors.append(f"🐛 RESOURCE: action_result missing resource field: {field}")
+                                        elif event.get(field) is None:
+                                            event_detail["issues"].append(f"Resource field is None: {field}")
+                                            errors.append(f"🐛 RESOURCE: action_result resource field is None: {field}")
+                                        elif isinstance(field_type, tuple):
+                                            # Multiple allowed types
+                                            if not isinstance(event[field], field_type):
+                                                event_detail["issues"].append(
+                                                    f"Resource field {field} has wrong type: {type(event[field]).__name__} "
+                                                    f"(expected one of {[t.__name__ for t in field_type]})"
+                                                )
+                                        else:
+                                            # Single type
+                                            if not isinstance(event[field], field_type):
+                                                event_detail["issues"].append(
+                                                    f"Resource field {field} has wrong type: {type(event[field]).__name__} (expected {field_type.__name__})"
+                                                )
+
                                 # Check for unexpected extra fields (exhaustive validation)
                                 expected_common_fields = {"event_type", "thought_id", "task_id", "timestamp"}
                                 event_type_specific_fields = {
@@ -540,6 +704,15 @@ class StreamingVerificationModule:
                                         "audit_sequence_number",
                                         "audit_entry_hash",
                                         "audit_signature",
+                                        # Resource usage fields (v1.3.1+)
+                                        "tokens_total",
+                                        "tokens_input",
+                                        "tokens_output",
+                                        "cost_cents",
+                                        "carbon_grams",
+                                        "energy_mwh",
+                                        "llm_calls",
+                                        "models_used",
                                     },
                                 }
 

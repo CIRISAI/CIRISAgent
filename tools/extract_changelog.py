@@ -53,10 +53,11 @@ def format_for_deployment(version_section: str, version: str) -> str:
             item = line[2:].strip()
             # Remove markdown bold formatting for cleaner deployment message
             item = re.sub(r"\*\*(.*?)\*\*", r"\1", item)
-            # Remove backticks to prevent bash command substitution
-            item = item.replace("`", "'")
-            # Remove other potentially problematic shell characters
-            item = item.replace('"', "'")
+            # Remove all quote characters to prevent shell injection
+            # GitHub Actions wraps output in single quotes, so we remove all quotes entirely
+            item = item.replace("`", "")
+            item = item.replace("'", "")
+            item = item.replace('"', "")
             item = item.replace("$", "")
             # Take first sentence for brevity
             item = item.split(" - ")[0] if " - " in item else item.split(".")[0]

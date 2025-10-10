@@ -116,10 +116,10 @@ def collect_memorized_attributes(
             if value is None:
                 memorized_attributes[key] = ""
             elif isinstance(value, (dict, list)):
-                # Use JSON serialization for complex objects so they can be parsed later
-                memorized_attributes[key] = json.dumps(value)
+                # Use JSON serialization with datetime handler for complex objects
+                memorized_attributes[key] = json.dumps(value, default=_json_serial_for_users)
             else:
-                # Use string conversion for simple types
+                # Use string conversion for simple types (handles datetime via str())
                 memorized_attributes[key] = str(value)
     return memorized_attributes
 

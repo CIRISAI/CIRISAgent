@@ -41,6 +41,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses deep copy to avoid mutating original events
   - ADMIN+ users bypass redaction (see all events unchanged)
   - 7 comprehensive tests cover all edge cases
+- **📊 Unified Batch Context Consolidation**: Complete refactoring of system snapshot building (27d5fa28)
+  - Consolidated 6 separate code paths into single `BatchContextData` architecture
+  - Eliminated redundant database queries and memory service calls
+  - Fixed 17 test failures through unified context building
+  - All components now use `build_batch_context()` for consistent snapshot data
+- **🎯 Code Quality (SonarCloud)**: Resolved 4 critical code quality issues (21fbf325)
+  - Removed unnecessary f-string in system_snapshot_helpers.py:938
+  - Merged nested if statement in batch_context.py:355
+  - Reduced cognitive complexity in gather_context.py (16→15)
+  - Reduced cognitive complexity in system_extensions.py (27→4 via 4 helper functions)
+- **🔑 DSDMA Identity Mapping**: Fixed agent stuck in WAKEUP state (210507b8)
+  - **Root Cause**: Batch context preserved all identity attributes with `dict(attrs)` but lost critical `role_description` → `role` mapping
+  - **Solution**: Added explicit field mapping after attribute copy to ensure DSDMA gets required `role` field
+  - Fixed: "CRITICAL: role is missing from identity in DSDMA domain 'Datum'!"
+- **👥 User Profile Enrichment**: Fixed empty user_profiles in SSE streaming events (12dc43b3)
+  - **Root Cause**: JSON serialization failed on datetime objects in connected node attributes during user enrichment
+  - **Solution**: Added `_json_serial_for_users` handler to `collect_memorized_attributes()` for datetime serialization
+  - Fixed: "Object of type datetime is not JSON serializable" error
+  - User profiles now populate correctly in all system snapshots and SSE events
 
 ### Added
 - **Billing & API Keys**: Production billing system integration (billing.ciris.ai)
@@ -53,12 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Marketing Opt-in**: GDPR-compliant consent capture in OAuth flow
 
 ### Testing
-- 51 new tests: 30 billing/API keys, 15 circuit breaker, 6 telemetry
-- 14 audit service tests: All passing
-- 7 OBSERVER redaction tests: All passing
-- Comprehensive unit tests for circuit breaker recovery, LLM timeout, PDMA prompt
-- Mypy clean: 555 source files, 0 errors
-- SonarCloud quality gate: PASSING
+- **✅ QA Test Suite**: 128/128 tests passing (100% success rate)
+  - Streaming: 2/2 (100%) - User profiles now populate correctly in SSE events
+  - Guidance, Handlers, Filters: 43/43 (100%)
+  - All other modules: 83/83 (100%)
+- **✅ Unit Tests**: 5,100+ tests passing with zero failures
+- **✅ Mypy**: 555 source files, 0 errors (100% type safety)
+- **⏳ SonarCloud**: CI in progress (4 issues resolved, awaiting new analysis)
 
 ## [1.3.0] - 2025-10-07
 

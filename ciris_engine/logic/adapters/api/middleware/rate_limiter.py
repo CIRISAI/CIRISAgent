@@ -5,11 +5,15 @@ Implements a basic in-memory rate limiter using token bucket algorithm.
 """
 
 import asyncio
+import logging
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, Tuple, cast
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 
+import jwt
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -137,6 +141,28 @@ class RateLimitMiddleware:
             "/v1/system/health",  # Health checks should not be rate limited
         }
 
+    def _extract_user_id_from_jwt(self, token: str) -> Optional[str]:
+        """
+        Extract user ID from JWT token without verification.
+
+        This is used for rate limiting purposes only. We decode the JWT
+        to extract the 'sub' (subject) field which contains the user/WA ID.
+
+        Args:
+            token: JWT token string
+
+        Returns:
+            User ID (wa_id) from the token's 'sub' claim, or None if extraction fails
+        """
+        try:
+            # Decode without verification (we're only extracting user_id for rate limiting)
+            # The token will be properly verified by the authentication middleware
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            return decoded.get("sub")
+        except Exception as e:
+            logger.debug(f"Failed to extract user_id from JWT: {type(e).__name__}: {e}")
+            return None
+
     async def __call__(self, request: Request, call_next: Callable[..., Any]) -> Response:
         """Process request through rate limiter."""
         # Check if path is exempt
@@ -158,10 +184,14 @@ class RateLimitMiddleware:
                 # Service tokens use IP-based rate limiting
                 client_id = f"service_{client_host}"
             else:
-                # JWT tokens: use auth prefix with IP
-                # TODO: Decode JWT to extract user_id for per-user rate limiting
-                # For now, authenticated users share limit per IP
-                client_id = f"auth_{client_host}"
+                # JWT tokens: decode to extract user_id for per-user rate limiting
+                user_id = self._extract_user_id_from_jwt(token)
+                if user_id:
+                    # Use user ID from JWT for per-user rate limiting
+                    client_id = f"user_{user_id}"
+                else:
+                    # Failed to decode JWT, fall back to IP-based
+                    client_id = f"auth_{client_host}"
         else:
             # No authentication - use IP-based rate limiting
             client_id = f"ip_{client_host}"

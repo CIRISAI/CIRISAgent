@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2025-10-10
+
+### Fixed
+- **🔒 CRITICAL SECURITY: JWT Rate Limiter Signature Verification**: Fixed JWT tokens being accepted without signature verification in rate limiter
+  - **Vulnerability**: Rate limiter was decoding JWT tokens without verifying signatures, allowing attackers to forge tokens with arbitrary user IDs to bypass rate limiting
+  - **Root Cause**: `_extract_user_id_from_jwt()` used `jwt.decode(token, options={"verify_signature": False})` at line 160 of rate_limiter.py
+  - **Solution**: Implemented proper JWT signature verification with gateway_secret before trusting token contents
+  - **Implementation**: Lazy-load gateway_secret from authentication service via request.app.state, fallback to IP-based rate limiting if verification fails
+  - **Impact**: All JWT tokens must now have valid signatures before being used for per-user rate limiting, preventing rate limit bypass attacks
+  - **Security Level**: HIGH - CWE privacy vulnerability - JWT signature verification is mandatory for security
+- **📊 LLM Call Tracking for Conscience Checks**: Fixed conscience LLM calls not being tracked in telemetry metrics
+  - **Root Cause**: All 4 conscience LLM calls (entropy, coherence, optimization_veto, epistemic_humility) were not passing `thought_id` parameter to `call_llm_structured()`
+  - **Solution**: Updated all 4 conscience checks in `core.py` to pass `thought_id=context.thought.thought_id` parameter
+  - **Impact**: SPEAK thoughts now correctly show 8 LLM calls (4 DMA + 4 conscience) in ACTION_RESULT events, TASK_COMPLETE thoughts correctly show 4 calls (4 DMA, conscience exempt)
+  - **Verification**: Telemetry metrics now properly track all LLM calls by `thought_id` tag for accurate resource accounting
+- **🔌 Together AI Provider Compatibility**: Fixed API errors with Together AI rejecting null values in messages
+  - **Root Cause**: Together AI and some other providers reject messages containing null/None values for optional fields (e.g., `name: None`)
+  - **Solution**: Added `exclude_none=True` to `model_dump()` for LLMMessage objects and strip None values from dict messages in `llm_bus.py:153-159`
+  - **Impact**: LLM calls now work correctly with Together AI provider without 400 errors
+  - **Scope**: Applied to both LLMMessage objects and dict messages for consistency across all providers
+
 ## [1.3.1] - 2025-10-09
 
 ### Fixed

@@ -155,8 +155,13 @@ class LLMBus(BaseBus[LLMService]):
                 msg_dict = msg.model_dump(exclude_none=True)
                 normalized_messages.append(msg_dict)
             else:
-                # Also strip None values from dict messages for consistency
-                normalized_messages.append({k: v for k, v in msg.items() if v is not None})
+                # Only strip the optional "name" field if it's None
+                # IMPORTANT: Don't strip required fields like "content" even if None
+                # (tool-call assistant messages require "content": None to be present)
+                msg_copy = dict(msg)
+                if "name" in msg_copy and msg_copy["name"] is None:
+                    del msg_copy["name"]
+                normalized_messages.append(msg_copy)
 
         start_time = self._time_service.timestamp()
 

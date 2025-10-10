@@ -124,14 +124,16 @@ class RateLimiter:
 class RateLimitMiddleware:
     """FastAPI middleware for rate limiting."""
 
-    def __init__(self, requests_per_minute: int = 60):
+    def __init__(self, requests_per_minute: int = 60, gateway_secret: Optional[bytes] = None):
         """
         Initialize middleware.
 
         Args:
             requests_per_minute: Rate limit per minute
+            gateway_secret: Secret for verifying JWT tokens (required for user-based rate limiting)
         """
         self.limiter = RateLimiter(requests_per_minute)
+        self.gateway_secret = gateway_secret
         # Exempt paths that should not be rate limited
         self.exempt_paths = {
             "/openapi.json",
@@ -141,30 +143,67 @@ class RateLimitMiddleware:
             "/v1/system/health",  # Health checks should not be rate limited
         }
 
-    def _extract_user_id_from_jwt(self, token: str) -> Optional[str]:
+    def _get_gateway_secret(self, request: Request) -> Optional[bytes]:
         """
-        Extract user ID from JWT token without verification.
+        Get gateway secret from the authentication service.
 
-        This is used for rate limiting purposes only. We decode the JWT
-        to extract the 'sub' (subject) field which contains the user/WA ID.
+        Args:
+            request: FastAPI request object with app state
+
+        Returns:
+            Gateway secret bytes, or None if not available
+        """
+        # Try to get from explicitly set gateway_secret first
+        if self.gateway_secret:
+            return self.gateway_secret
+
+        # Lazy-load from authentication service if available
+        if hasattr(request.app.state, "authentication_service"):
+            auth_service = request.app.state.authentication_service
+            if auth_service and hasattr(auth_service, "gateway_secret"):
+                secret = auth_service.gateway_secret
+                # Type guard: ensure it's bytes
+                if isinstance(secret, bytes):
+                    return secret
+
+        return None
+
+    def _extract_user_id_from_jwt(self, token: str, request: Request) -> Optional[str]:
+        """
+        Extract user ID from JWT token WITH proper signature verification.
+
+        SECURITY: This method verifies the JWT signature before trusting the contents.
+        Prevents attackers from forging tokens with arbitrary user IDs to bypass rate limiting.
 
         Args:
             token: JWT token string
+            request: FastAPI request object (for accessing authentication service)
 
         Returns:
-            User ID (wa_id) from the token's 'sub' claim, or None if extraction fails
+            User ID (wa_id) from verified token's 'sub' claim, or None if verification fails
         """
+        gateway_secret = self._get_gateway_secret(request)
+        if not gateway_secret:
+            # No gateway secret available - cannot verify tokens, fallback to IP-based rate limiting
+            logger.debug("No gateway_secret available - cannot verify JWT tokens")
+            return None
+
         try:
-            # Decode without verification (we're only extracting user_id for rate limiting)
-            # The token will be properly verified by the authentication middleware
-            decoded = jwt.decode(token, options={"verify_signature": False})
+            # SECURITY FIX: Verify signature with gateway secret before trusting token contents
+            decoded = jwt.decode(token, gateway_secret, algorithms=["HS256"])
+
+            # Extract and validate the 'sub' field
             sub = decoded.get("sub")
-            # Type guard: ensure sub is a string or None
             if isinstance(sub, str):
                 return sub
             return None
+        except jwt.InvalidTokenError as e:
+            # Token verification failed - fallback to IP-based rate limiting
+            logger.debug(f"JWT verification failed in rate limiter: {type(e).__name__}: {e}")
+            return None
         except Exception as e:
-            logger.debug(f"Failed to extract user_id from JWT: {type(e).__name__}: {e}")
+            # Unexpected error during verification
+            logger.debug(f"Failed to verify JWT in rate limiter: {type(e).__name__}: {e}")
             return None
 
     async def __call__(self, request: Request, call_next: Callable[..., Any]) -> Response:
@@ -188,13 +227,13 @@ class RateLimitMiddleware:
                 # Service tokens use IP-based rate limiting
                 client_id = f"service_{client_host}"
             else:
-                # JWT tokens: decode to extract user_id for per-user rate limiting
-                user_id = self._extract_user_id_from_jwt(token)
+                # JWT tokens: verify and extract user_id for per-user rate limiting
+                user_id = self._extract_user_id_from_jwt(token, request)
                 if user_id:
-                    # Use user ID from JWT for per-user rate limiting
+                    # Use user ID from verified JWT for per-user rate limiting
                     client_id = f"user_{user_id}"
                 else:
-                    # Failed to decode JWT, fall back to IP-based
+                    # Failed to verify JWT, fall back to IP-based
                     client_id = f"auth_{client_host}"
         else:
             # No authentication - use IP-based rate limiting

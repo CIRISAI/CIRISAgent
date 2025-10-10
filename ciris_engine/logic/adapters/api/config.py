@@ -30,7 +30,7 @@ class APIAdapterConfig(BaseModel):
     enable_swagger: bool = Field(default=True, description="Enable Swagger/OpenAPI documentation")
     enable_redoc: bool = Field(default=True, description="Enable ReDoc documentation")
 
-    rate_limit_enabled: bool = Field(default=False, description="Enable rate limiting")
+    rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
     rate_limit_per_minute: int = Field(default=60, description="Requests per minute limit")
 
     auth_enabled: bool = Field(default=True, description="Enable authentication")

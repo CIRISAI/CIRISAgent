@@ -935,7 +935,7 @@ def _extract_user_from_task_context(task: Optional[Task], user_ids: Set[str]) ->
             user_ids.add(str(task.context.user_id))
             logger.debug(f"[USER EXTRACTION] Found user {task.context.user_id} from task context")
         else:
-            logger.debug(f"[USER EXTRACTION] Task context.user_id is None or empty")
+            logger.debug("[USER EXTRACTION] Task context.user_id is None or empty")
     else:
         logger.debug(f"[USER EXTRACTION] Task or task.context is None (task={task is not None})")
 

@@ -681,6 +681,38 @@ def _filter_events_by_channel_access(
     return filtered_events
 
 
+def _is_snapshot_event(event: Any) -> bool:
+    """Check if event is a snapshot_and_context event that needs redaction."""
+    return bool(event.get("event_type") == "snapshot_and_context")
+
+
+def _remove_task_summaries(system_snapshot: Dict[str, Any]) -> None:
+    """Remove sensitive task summaries from system snapshot."""
+    system_snapshot["recently_completed_tasks_summary"] = []
+    system_snapshot["top_pending_tasks_summary"] = []
+
+
+def _filter_user_profiles(user_profiles: Any, allowed_user_ids: set[str]) -> Any:
+    """Filter user profiles to only allowed user IDs."""
+    if isinstance(user_profiles, list):
+        return [
+            profile
+            for profile in user_profiles
+            if isinstance(profile, dict) and profile.get("user_id") in allowed_user_ids
+        ]
+    elif isinstance(user_profiles, dict):
+        return {user_id: profile for user_id, profile in user_profiles.items() if user_id in allowed_user_ids}
+    return user_profiles
+
+
+def _redact_system_snapshot(system_snapshot: Dict[str, Any], allowed_user_ids: set[str]) -> None:
+    """Redact sensitive data from system snapshot in-place."""
+    _remove_task_summaries(system_snapshot)
+
+    if "user_profiles" in system_snapshot and system_snapshot["user_profiles"]:
+        system_snapshot["user_profiles"] = _filter_user_profiles(system_snapshot["user_profiles"], allowed_user_ids)
+
+
 def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str]) -> List[Any]:
     """Redact sensitive task and user information from events for OBSERVER users.
 
@@ -699,40 +731,10 @@ def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str
     """
     redacted_events = []
     for event in events:
-        # Only redact SNAPSHOT_AND_CONTEXT events
-        if event.get("event_type") == "snapshot_and_context":
-            # Make a deep copy to avoid mutating the original event
+        if _is_snapshot_event(event):
             event = copy.deepcopy(event)
-
-            # Redact task lists and filter user profiles from system_snapshot
             if "system_snapshot" in event and event["system_snapshot"]:
-                system_snapshot = event["system_snapshot"]
-
-                # Remove sensitive task information for OBSERVER users
-                if "recently_completed_tasks_summary" in system_snapshot:
-                    system_snapshot["recently_completed_tasks_summary"] = []
-                if "top_pending_tasks_summary" in system_snapshot:
-                    system_snapshot["top_pending_tasks_summary"] = []
-
-                # Filter user_profiles to only show user's OWN profile
-                if "user_profiles" in system_snapshot and system_snapshot["user_profiles"]:
-                    user_profiles = system_snapshot["user_profiles"]
-
-                    # Handle both list and dict formats
-                    if isinstance(user_profiles, list):
-                        # Filter list: only keep profiles where user_id is in allowed_user_ids
-                        system_snapshot["user_profiles"] = [
-                            profile
-                            for profile in user_profiles
-                            if isinstance(profile, dict) and profile.get("user_id") in allowed_user_ids
-                        ]
-                    elif isinstance(user_profiles, dict):
-                        # Filter dict: only keep entries where key is in allowed_user_ids
-                        system_snapshot["user_profiles"] = {
-                            user_id: profile
-                            for user_id, profile in user_profiles.items()
-                            if user_id in allowed_user_ids
-                        }
+                _redact_system_snapshot(event["system_snapshot"], allowed_user_ids)
 
         redacted_events.append(event)
 

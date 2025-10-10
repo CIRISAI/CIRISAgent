@@ -67,22 +67,20 @@ class ContextGatheringPhase:
 
         # ALWAYS fetch task for user context extraction
         task = None
-        logger.info(
-            f"[UNIFIED CONTEXT] Thought {thought_item.thought_id} source_task_id: {getattr(thought, 'source_task_id', None)}"
-        )
-        if thought.source_task_id:
-            logger.info(f"[UNIFIED CONTEXT] Fetching task {thought.source_task_id} for user context")
-            task = persistence.get_task_by_id(thought.source_task_id)
-            if task:
-                logger.info(
-                    f"[UNIFIED CONTEXT] Fetched task {task.task_id} with context user_id={getattr(task.context, 'user_id', None)}"
-                )
-            else:
-                logger.warning(
-                    f"[UNIFIED CONTEXT] Could not fetch task {thought.source_task_id} for thought {thought_item.thought_id}"
-                )
-        else:
-            logger.info(f"[UNIFIED CONTEXT] Thought {thought_item.thought_id} has NO source_task_id")
+        source_task_id = getattr(thought, "source_task_id", None)
+        logger.info(f"[UNIFIED CONTEXT] Thought {thought_item.thought_id} source_task_id: {source_task_id}")
+
+        if source_task_id:
+            logger.info(f"[UNIFIED CONTEXT] Fetching task {source_task_id} for user context")
+            task = persistence.get_task_by_id(source_task_id)
+            task_user_id = getattr(task.context, "user_id", None) if task and task.context else None
+            log_msg = (
+                f"Fetched task {task.task_id} with context user_id={task_user_id}"
+                if task
+                else f"Could not fetch task {source_task_id} for thought {thought_item.thought_id}"
+            )
+            log_fn = logger.info if task else logger.warning
+            log_fn(f"[UNIFIED CONTEXT] {log_msg}")
 
         # Get pre-fetched batch context if available, otherwise will create on-demand
         batch_context_data = context.get("batch_context") if context else None

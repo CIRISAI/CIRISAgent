@@ -351,14 +351,15 @@ async def build_system_snapshot_with_batch(
             channel_id = str(task.context.system_snapshot.channel_id)
 
     # If no channel_id from task, try thought.context.channel_id
-    if not channel_id and thought:
-        if (
-            hasattr(thought, "context")
-            and thought.context
-            and hasattr(thought.context, "channel_id")
-            and thought.context.channel_id
-        ):
-            channel_id = str(thought.context.channel_id)
+    if (
+        not channel_id
+        and thought
+        and hasattr(thought, "context")
+        and thought.context
+        and hasattr(thought.context, "channel_id")
+        and thought.context.channel_id
+    ):
+        channel_id = str(thought.context.channel_id)
 
     # Only query channel context if we have a channel_id
     if channel_id and memory_service:

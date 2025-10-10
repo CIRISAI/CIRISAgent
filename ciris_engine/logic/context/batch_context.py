@@ -107,6 +107,9 @@ async def prefetch_batch_context(
                 if isinstance(attrs, dict):
                     # Copy ALL attributes to preserve stewardship and other fields
                     batch_data.agent_identity = dict(attrs)  # Full copy of all identity attributes
+                    # CRITICAL: Map role_description → role for DSDMA compatibility
+                    if "role_description" in batch_data.agent_identity and "role" not in batch_data.agent_identity:
+                        batch_data.agent_identity["role"] = batch_data.agent_identity["role_description"]
                     # Extract specific fields for structured access
                     batch_data.identity_purpose = attrs.get("role_description", "")
                     batch_data.identity_capabilities = attrs.get("permitted_actions", [])

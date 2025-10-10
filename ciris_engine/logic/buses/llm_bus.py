@@ -150,9 +150,13 @@ class LLMBus(BaseBus[LLMService]):
         normalized_messages: List[Dict[str, Any]] = []
         for msg in messages:
             if isinstance(msg, LLMMessage):
-                normalized_messages.append(msg.model_dump())
+                # Use exclude_none=True to avoid sending name: None to providers
+                # Some providers (e.g., Together AI) reject null values for optional fields
+                msg_dict = msg.model_dump(exclude_none=True)
+                normalized_messages.append(msg_dict)
             else:
-                normalized_messages.append(msg)
+                # Also strip None values from dict messages for consistency
+                normalized_messages.append({k: v for k, v in msg.items() if v is not None})
 
         start_time = self._time_service.timestamp()
 

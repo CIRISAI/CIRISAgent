@@ -57,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed: "CRITICAL: role is missing from identity in DSDMA domain 'Datum'!"
 - **👥 User Profile Enrichment**: Fixed empty user_profiles in SSE streaming events (12dc43b3)
   - **Root Cause**: JSON serialization failed on datetime objects in connected node attributes during user enrichment
-  - **Solution**: Added `_json_serial_for_users` handler to `collect_memorized_attributes()` for datetime serialization
+  - **Solution**: Added datetime handler to collect_memorized_attributes for proper serialization
   - Fixed: "Object of type datetime is not JSON serializable" error
   - User profiles now populate correctly in all system snapshots and SSE events
 

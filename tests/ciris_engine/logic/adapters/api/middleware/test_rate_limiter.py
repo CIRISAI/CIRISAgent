@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 
 from ciris_engine.logic.adapters.api.middleware.rate_limiter import RateLimiter, RateLimitMiddleware
 
-
 # =============================================================================
 # RateLimiter Tests (Token Bucket Algorithm)
 # =============================================================================
@@ -416,6 +415,140 @@ class TestRateLimitMiddlewareClientIdentification:
         assert "ip_unknown" in middleware.limiter.buckets
 
 
+class TestRateLimitMiddlewareJWTExtraction:
+    """Test JWT user ID extraction for per-user rate limiting."""
+
+    def test_extract_user_id_from_valid_jwt(self):
+        """Test extracting user ID from valid JWT."""
+        import jwt
+
+        middleware = RateLimitMiddleware()
+
+        # Create a valid JWT with sub claim
+        payload = {"sub": "wa-2025-01-01-ABC123", "name": "Test User", "exp": 9999999999}
+        token = jwt.encode(payload, "secret", algorithm="HS256")
+
+        # Extract user ID
+        user_id = middleware._extract_user_id_from_jwt(token)
+        assert user_id == "wa-2025-01-01-ABC123"
+
+    def test_extract_user_id_from_jwt_without_sub(self):
+        """Test extracting user ID from JWT without sub claim."""
+        import jwt
+
+        middleware = RateLimitMiddleware()
+
+        # Create JWT without sub claim
+        payload = {"name": "Test User", "exp": 9999999999}
+        token = jwt.encode(payload, "secret", algorithm="HS256")
+
+        # Extract should return None
+        user_id = middleware._extract_user_id_from_jwt(token)
+        assert user_id is None
+
+    def test_extract_user_id_from_invalid_jwt(self):
+        """Test extracting user ID from malformed JWT."""
+        middleware = RateLimitMiddleware()
+
+        # Invalid JWT
+        user_id = middleware._extract_user_id_from_jwt("not-a-valid-jwt")
+        assert user_id is None
+
+    def test_extract_user_id_from_empty_token(self):
+        """Test extracting user ID from empty token."""
+        middleware = RateLimitMiddleware()
+
+        user_id = middleware._extract_user_id_from_jwt("")
+        assert user_id is None
+
+    @pytest.mark.asyncio
+    async def test_jwt_user_rate_limiting(self):
+        """Test JWT tokens get per-user rate limiting."""
+        import jwt
+
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+
+        # Create JWT for user1
+        payload1 = {"sub": "wa-2025-01-01-USER01", "exp": 9999999999}
+        token1 = jwt.encode(payload1, "secret", algorithm="HS256")
+
+        # Create request with JWT
+        request = Mock(spec=Request)
+        request.url.path = "/v1/test"
+        request.client.host = "192.168.1.100"
+        request.headers.get = Mock(return_value=f"Bearer {token1}")
+
+        call_next = AsyncMock(return_value=Response(content="OK"))
+
+        # Make 2 requests - should succeed
+        response1 = await middleware(request, call_next)
+        response2 = await middleware(request, call_next)
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+        # Third request should be rate limited
+        response3 = await middleware(request, call_next)
+        assert response3.status_code == 429
+
+        # Check bucket was created with user_ prefix
+        assert "user_wa-2025-01-01-USER01" in middleware.limiter.buckets
+
+    @pytest.mark.asyncio
+    async def test_different_users_independent_limits(self):
+        """Test different JWT users have independent rate limits."""
+        import jwt
+
+        middleware = RateLimitMiddleware(requests_per_minute=1)
+
+        # Create JWTs for two different users
+        payload1 = {"sub": "wa-user1", "exp": 9999999999}
+        payload2 = {"sub": "wa-user2", "exp": 9999999999}
+        token1 = jwt.encode(payload1, "secret", algorithm="HS256")
+        token2 = jwt.encode(payload2, "secret", algorithm="HS256")
+
+        # Create requests for each user
+        request1 = Mock(spec=Request)
+        request1.url.path = "/v1/test"
+        request1.client.host = "192.168.1.100"
+        request1.headers.get = Mock(return_value=f"Bearer {token1}")
+
+        request2 = Mock(spec=Request)
+        request2.url.path = "/v1/test"
+        request2.client.host = "192.168.1.100"  # Same IP
+        request2.headers.get = Mock(return_value=f"Bearer {token2}")
+
+        call_next = AsyncMock(return_value=Response(content="OK"))
+
+        # Both users make 1 request - should succeed
+        response1 = await middleware(request1, call_next)
+        response2 = await middleware(request2, call_next)
+
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+        # Both have independent limits
+        assert "user_wa-user1" in middleware.limiter.buckets
+        assert "user_wa-user2" in middleware.limiter.buckets
+
+    @pytest.mark.asyncio
+    async def test_jwt_extraction_failure_fallback(self):
+        """Test malformed JWT falls back to IP-based rate limiting."""
+        middleware = RateLimitMiddleware()
+
+        # Request with malformed JWT
+        request = Mock(spec=Request)
+        request.url.path = "/v1/test"
+        request.client.host = "192.168.1.100"
+        request.headers.get = Mock(return_value="Bearer invalid-jwt-token")
+
+        call_next = AsyncMock(return_value=Response(content="OK"))
+
+        await middleware(request, call_next)
+
+        # Should fall back to auth_IP format
+        assert "auth_192.168.1.100" in middleware.limiter.buckets
+
+
 class TestRateLimitMiddlewareEnforcement:
     """Test rate limit enforcement and responses."""
 
@@ -482,6 +615,7 @@ class TestRateLimitMiddlewareEnforcement:
 
         # Parse JSON content
         import json
+
         content = json.loads(response.body.decode())
         assert content["detail"] == "Rate limit exceeded"
         assert "retry_after" in content

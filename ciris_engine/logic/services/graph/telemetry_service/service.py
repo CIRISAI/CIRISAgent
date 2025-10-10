@@ -153,9 +153,7 @@ class TelemetryAggregator:
             task.cancel()
 
         # Organize results by category
-        telemetry: Dict[str, Dict[str, ServiceTelemetryData]] = {
-            cat: {} for cat in self.CATEGORIES.keys()
-        }
+        telemetry: Dict[str, Dict[str, ServiceTelemetryData]] = {cat: {} for cat in self.CATEGORIES.keys()}
         # Add registry category for dynamic services
         telemetry["registry"] = {}
 
@@ -1052,9 +1050,7 @@ class TelemetryAggregator:
         else:
             return {"status": str(status)}
 
-    def _process_service_metrics(
-        self, service_data: ServiceTelemetryData
-    ) -> Tuple[bool, int, int, float, float]:
+    def _process_service_metrics(self, service_data: ServiceTelemetryData) -> Tuple[bool, int, int, float, float]:
         """Process metrics for a single service."""
         is_healthy = service_data.healthy
         errors = service_data.error_count or 0
@@ -2151,7 +2147,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 return cached_data
         return None
 
-    def _convert_telemetry_to_services(self, telemetry: Dict[str, Dict[str, ServiceTelemetryData]]) -> Dict[str, ServiceTelemetryData]:
+    def _convert_telemetry_to_services(
+        self, telemetry: Dict[str, Dict[str, ServiceTelemetryData]]
+    ) -> Dict[str, ServiceTelemetryData]:
         """Convert nested telemetry dict to flat service dict."""
         services_data = {}
         for category, services in telemetry.items():

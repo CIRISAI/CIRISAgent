@@ -22,6 +22,7 @@ class QAModule(Enum):
     TASKS = "tasks"
     GUIDANCE = "guidance"
     CONSENT = "consent"
+    BILLING = "billing"
 
     # Handler modules
     HANDLERS = "handlers"
@@ -129,6 +130,9 @@ class QAConfig:
             return APITestModule.get_guidance_tests()
         elif module == QAModule.CONSENT:
             # Consent tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.BILLING:
+            # Billing tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

@@ -158,7 +158,11 @@ class RateLimitMiddleware:
             # Decode without verification (we're only extracting user_id for rate limiting)
             # The token will be properly verified by the authentication middleware
             decoded = jwt.decode(token, options={"verify_signature": False})
-            return decoded.get("sub")
+            sub = decoded.get("sub")
+            # Type guard: ensure sub is a string or None
+            if isinstance(sub, str):
+                return sub
+            return None
         except Exception as e:
             logger.debug(f"Failed to extract user_id from JWT: {type(e).__name__}: {e}")
             return None

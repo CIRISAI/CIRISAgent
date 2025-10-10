@@ -13,16 +13,23 @@ from fastapi.responses import JSONResponse
 
 
 class RateLimiter:
-    """Simple in-memory rate limiter using token bucket algorithm."""
+    """Simple in-memory rate limiter using token bucket algorithm.
 
-    def __init__(self, requests_per_minute: int = 60):
+    IMPORTANT: This implementation is in-memory only and not suitable for
+    multi-instance deployments. For production with multiple API pods,
+    consider using Redis or another distributed backend.
+    """
+
+    def __init__(self, requests_per_minute: int = 60, max_clients: int = 10000):
         """
         Initialize rate limiter.
 
         Args:
             requests_per_minute: Number of requests allowed per minute
+            max_clients: Maximum number of client buckets to track (prevents memory exhaustion)
         """
         self.rate = requests_per_minute
+        self.max_clients = max_clients
         self.buckets: Dict[str, Tuple[float, datetime]] = {}
         self._lock = asyncio.Lock()
         self._cleanup_interval = 300  # Cleanup old entries every 5 minutes
@@ -42,13 +49,20 @@ class RateLimiter:
             now = datetime.now()
 
             # Cleanup old entries periodically
-            if (now - self._last_cleanup).seconds > self._cleanup_interval:
+            if (now - self._last_cleanup).total_seconds() > self._cleanup_interval:
                 self._cleanup_old_entries()
                 self._last_cleanup = now
 
             # Get or create bucket
             if client_id not in self.buckets:
-                self.buckets[client_id] = (float(self.rate), now)
+                # Enforce max bucket count to prevent memory exhaustion
+                if len(self.buckets) >= self.max_clients:
+                    # Remove oldest bucket to make room (LRU-like behavior)
+                    oldest_client = min(self.buckets.items(), key=lambda x: x[1][1])[0]
+                    del self.buckets[oldest_client]
+
+                # New client starts with full tokens minus the one consumed by this request
+                self.buckets[client_id] = (float(self.rate - 1), now)
                 return True
 
             tokens, last_update = self.buckets[client_id]
@@ -63,7 +77,7 @@ class RateLimiter:
                 self.buckets[client_id] = (tokens, now)
                 return True
 
-            # No tokens available
+            # No tokens available - update timestamp but don't consume
             self.buckets[client_id] = (tokens, now)
             return False
 
@@ -131,18 +145,25 @@ class RateLimitMiddleware:
             return cast(Response, response)
 
         # Extract client identifier (prefer authenticated user, fallback to IP)
+        client_host = request.client.host if request.client else "unknown"
         client_id = None
 
-        # Try to get user from JWT token if available
+        # Try to extract user ID from authentication
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer ") and ":" not in auth_header:
-            # This might be a JWT token, but we'll just use a generic "auth" prefix
-            # The actual user extraction would require JWT decoding
-            client_host = request.client.host if request.client else "unknown"
-            client_id = f"auth_{client_host}"
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
+
+            # Check for service token format: "service:TOKEN"
+            if token.startswith("service:"):
+                # Service tokens use IP-based rate limiting
+                client_id = f"service_{client_host}"
+            else:
+                # JWT tokens: use auth prefix with IP
+                # TODO: Decode JWT to extract user_id for per-user rate limiting
+                # For now, authenticated users share limit per IP
+                client_id = f"auth_{client_host}"
         else:
-            # Use IP address
-            client_host = request.client.host if request.client else "unknown"
+            # No authentication - use IP-based rate limiting
             client_id = f"ip_{client_host}"
 
         # Check rate limit

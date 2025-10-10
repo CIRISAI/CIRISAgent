@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 
 from ciris_engine.logic.adapters.api.middleware.rate_limiter import RateLimiter, RateLimitMiddleware
 
-
 # =============================================================================
 # RateLimiter Tests (Token Bucket Algorithm)
 # =============================================================================
@@ -482,6 +481,7 @@ class TestRateLimitMiddlewareEnforcement:
 
         # Parse JSON content
         import json
+
         content = json.loads(response.body.decode())
         assert content["detail"] == "Rate limit exceeded"
         assert "retry_after" in content

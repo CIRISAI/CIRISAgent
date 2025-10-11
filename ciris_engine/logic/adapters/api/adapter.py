@@ -339,7 +339,12 @@ class ApiPlatform(Service):
 
         # Configure uvicorn
         config = uvicorn.Config(
-            self.app, host=self.config.host, port=self.config.port, log_level="info", access_log=True
+            self.app,
+            host=self.config.host,
+            port=self.config.port,
+            log_level="info",
+            access_log=True,
+            timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
         )
 
         # Create and start server

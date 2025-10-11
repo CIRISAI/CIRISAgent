@@ -124,11 +124,11 @@ class TelemetryAggregator:
         self.cache: Dict[str, Tuple[datetime, AggregatedTelemetryResponse]] = {}
         self.cache_ttl = timedelta(seconds=30)
 
-    async def collect_all_parallel(self) -> Dict[str, Dict[str, ServiceTelemetryData]]:
-        """
-        Collect telemetry from all services in parallel.
+    def _create_collection_tasks(self) -> tuple[list[Any], list[tuple[str, str]]]:
+        """Create collection tasks for all services.
 
-        Returns hierarchical telemetry organized by category.
+        Returns:
+            Tuple of (tasks, service_info)
         """
         tasks = []
         service_info = []
@@ -145,6 +145,78 @@ class TelemetryAggregator:
         tasks.extend(registry_tasks["tasks"])
         service_info.extend(registry_tasks["info"])
 
+        return tasks, service_info
+
+    def _process_task_result(
+        self, result: Any, service_name: str, category: str, telemetry: Dict[str, Dict[str, ServiceTelemetryData]]
+    ) -> None:
+        """Process a single task result and add to telemetry dict.
+
+        Args:
+            result: Task result from collect_service
+            service_name: Name of the service
+            category: Category of the service
+            telemetry: Telemetry dict to update
+        """
+        # Handle adapter results that return dict of instances
+        if isinstance(result, dict) and service_name in ["api", "discord", "cli"]:
+            # Adapter returned dict of instances - add each with adapter_id
+            for adapter_id, adapter_data in result.items():
+                telemetry[category][adapter_id] = adapter_data
+        elif isinstance(result, ServiceTelemetryData):
+            # Normal service result
+            telemetry[category][service_name] = result
+        else:
+            # Unexpected type - convert to ServiceTelemetryData
+            logger.warning(f"Unexpected result type for {service_name}: {type(result)}")
+            telemetry[category][service_name] = ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )
+
+    def _process_completed_tasks(
+        self,
+        tasks: list[Any],
+        service_info: list[tuple[str, str]],
+        done: set[Any],
+        telemetry: Dict[str, Dict[str, ServiceTelemetryData]],
+    ) -> None:
+        """Process completed tasks and populate telemetry dict.
+
+        Args:
+            tasks: List of all tasks
+            service_info: List of (category, service_name) tuples
+            done: Set of completed tasks
+            telemetry: Telemetry dict to update
+        """
+        for idx, task in enumerate(tasks):
+            if idx >= len(service_info):
+                continue
+
+            category, service_name = service_info[idx]
+
+            if task in done:
+                try:
+                    result = task.result()
+                    self._process_task_result(result, service_name, category, telemetry)
+                except Exception as e:
+                    logger.warning(f"Failed to collect from {service_name}: {e}")
+                    # Return empty telemetry data instead of empty dict
+                    telemetry[category][service_name] = ServiceTelemetryData(
+                        healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+                    )  # NO FALLBACKS
+            else:
+                # Task timed out
+                telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+
+    async def collect_all_parallel(self) -> Dict[str, Dict[str, ServiceTelemetryData]]:
+        """
+        Collect telemetry from all services in parallel.
+
+        Returns hierarchical telemetry organized by category.
+        """
+        # Create collection tasks
+        tasks, service_info = self._create_collection_tasks()
+
         # Execute all collections in parallel with timeout
         done, pending = await asyncio.wait(tasks, timeout=5.0, return_when=asyncio.ALL_COMPLETED)
 
@@ -157,36 +229,8 @@ class TelemetryAggregator:
         # Add registry category for dynamic services
         telemetry["registry"] = {}
 
-        for idx, task in enumerate(tasks):
-            if idx < len(service_info):
-                category, service_name = service_info[idx]
-
-                if task in done:
-                    try:
-                        result = task.result()
-                        # Handle adapter results that return dict of instances
-                        if isinstance(result, dict) and service_name in ["api", "discord", "cli"]:
-                            # Adapter returned dict of instances - add each with adapter_id
-                            for adapter_id, adapter_data in result.items():
-                                telemetry[category][adapter_id] = adapter_data
-                        elif isinstance(result, ServiceTelemetryData):
-                            # Normal service result
-                            telemetry[category][service_name] = result
-                        else:
-                            # Unexpected type - convert to ServiceTelemetryData
-                            logger.warning(f"Unexpected result type for {service_name}: {type(result)}")
-                            telemetry[category][service_name] = ServiceTelemetryData(
-                                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to collect from {service_name}: {e}")
-                        # Return empty telemetry data instead of empty dict
-                        telemetry[category][service_name] = ServiceTelemetryData(
-                            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-                        )  # NO FALLBACKS
-                else:
-                    # Task timed out
-                    telemetry[category][service_name] = self.get_fallback_metrics(service_name)
+        # Process completed tasks
+        self._process_completed_tasks(tasks, service_info, done, telemetry)
 
         # Compute covenant metrics from governance services
         covenant_metrics_data = self.compute_covenant_metrics(telemetry)

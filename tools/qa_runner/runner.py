@@ -80,19 +80,30 @@ class QARunner:
                 self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
                 self._filter_helper = None
 
-        # Collect all test cases
+        # Separate SDK-based modules from HTTP test modules
+        sdk_modules = [QAModule.CONSENT, QAModule.BILLING]
+        http_modules = [m for m in modules if m not in sdk_modules]
+        sdk_test_modules = [m for m in modules if m in sdk_modules]
+
+        # Collect HTTP test cases
         all_tests = []
-        for module in modules:
+        for module in http_modules:
             tests = self.config.get_module_tests(module)
             all_tests.extend(tests)
 
-        self.console.print(f"\n📋 Running {len(all_tests)} test cases...")
+        # Run HTTP tests
+        success = True
+        if all_tests:
+            self.console.print(f"\n📋 Running {len(all_tests)} HTTP test cases...")
+            if self.config.parallel_tests:
+                success = self._run_parallel(all_tests)
+            else:
+                success = self._run_sequential(all_tests)
 
-        # Run tests
-        if self.config.parallel_tests:
-            success = self._run_parallel(all_tests)
-        else:
-            success = self._run_sequential(all_tests)
+        # Run SDK-based tests
+        if sdk_test_modules:
+            sdk_success = self._run_sdk_modules(sdk_test_modules)
+            success = success and sdk_success
 
         # MANDATORY: Always show incidents log status after tests
         self._show_incidents_status("POST-TEST")
@@ -346,6 +357,68 @@ class QARunner:
         except Exception as e:
             self.console.print(f"[red]Authentication error: {e}[/red]")
             return False
+
+    def _run_sdk_modules(self, modules: List[QAModule]) -> bool:
+        """Run SDK-based test modules (consent, billing, etc.)."""
+        from ciris_sdk.client import CIRISClient
+
+        from .modules import BillingTests, ConsentTests
+
+        all_passed = True
+
+        # Map modules to test classes
+        module_map = {
+            QAModule.CONSENT: ConsentTests,
+            QAModule.BILLING: BillingTests,
+        }
+
+        async def run_module(module: QAModule):
+            """Run a single SDK module."""
+            test_class = module_map.get(module)
+            if not test_class:
+                self.console.print(f"[red]❌ Unknown SDK module: {module.value}[/red]")
+                return False
+
+            # Create SDK client with authentication
+            async with CIRISClient(base_url=self.config.base_url) as client:
+                # Manually set the token (skip login since we already have it)
+                client._transport.set_api_key(self.token, persist=False)
+
+                # Instantiate and run test module
+                test_instance = test_class(client, self.console)
+                results = await test_instance.run()
+
+                # Store results in runner's results dict
+                for result in results:
+                    test_name = result["test"]
+                    passed = "PASS" in result["status"]
+
+                    self.results[f"{module.value}::{test_name}"] = {
+                        "success": passed,
+                        "status": result["status"],
+                        "error": result.get("error"),
+                        "duration": 0.0,  # SDK tests don't track individual durations
+                    }
+
+                # Check if all tests passed
+                return all(r["status"] == "✅ PASS" for r in results)
+
+        # Run all SDK modules sequentially (they use async internally)
+        for module in modules:
+            self.console.print(f"\n📋 Running {module.value} SDK tests...")
+            try:
+                module_passed = asyncio.run(run_module(module))
+                if not module_passed:
+                    all_passed = False
+            except Exception as e:
+                self.console.print(f"[red]❌ Error running {module.value}: {e}[/red]")
+                import traceback
+
+                if self.config.verbose:
+                    self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+                all_passed = False
+
+        return all_passed
 
     def _run_sequential(self, tests: List[QATestCase]) -> bool:
         """Run tests sequentially."""

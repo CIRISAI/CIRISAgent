@@ -637,6 +637,97 @@ class TestTelemetry:
             assert "circuit_breaker_state" in service_stats
 
 
+class TestMessageNormalization:
+    """Test message normalization and None value filtering"""
+
+    @pytest.mark.asyncio
+    async def test_none_values_stripped_from_llm_messages(self, llm_bus, service_registry):
+        """Test that None values are stripped from LLMMessage objects during normalization"""
+        from ciris_engine.schemas.services.llm import LLMMessage
+
+        # Register a mock service that can inspect the messages it receives
+        received_messages = []
+
+        class InspectingLLMService(MockLLMService):
+            async def call_llm_structured(
+                self,
+                messages: List[dict],
+                response_model: Type[BaseModel],
+                max_tokens: int = 1024,
+                temperature: float = 0.0,
+            ) -> Tuple[BaseModel, ResourceUsage]:
+                # Capture the messages for inspection
+                received_messages.extend(messages)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+
+        service = InspectingLLMService("Inspector")
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service,
+            priority=Priority.NORMAL,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "mock"},
+        )
+
+        # Create LLMMessage with name=None (default)
+        messages = [
+            LLMMessage(role="system", content="You are a helpful assistant"),  # name will be None by default
+            LLMMessage(role="user", content="Hello"),
+        ]
+
+        # Make the call
+        await llm_bus.call_llm_structured(messages=messages, response_model=MockResponseModel)
+
+        # Verify messages were normalized and None values were stripped
+        assert len(received_messages) == 2
+        for msg in received_messages:
+            assert "role" in msg
+            assert "content" in msg
+            # name field should NOT be present if it was None
+            assert "name" not in msg or msg["name"] is not None
+
+    @pytest.mark.asyncio
+    async def test_none_values_stripped_from_dict_messages(self, llm_bus, service_registry):
+        """Test that None values are stripped from dict messages during normalization"""
+        received_messages = []
+
+        class InspectingLLMService(MockLLMService):
+            async def call_llm_structured(
+                self,
+                messages: List[dict],
+                response_model: Type[BaseModel],
+                max_tokens: int = 1024,
+                temperature: float = 0.0,
+            ) -> Tuple[BaseModel, ResourceUsage]:
+                received_messages.extend(messages)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+
+        service = InspectingLLMService("Inspector")
+        service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service,
+            priority=Priority.NORMAL,
+            capabilities=["call_llm_structured"],
+            metadata={"provider": "mock"},
+        )
+
+        # Create dict messages with None values
+        messages = [
+            {"role": "system", "content": "You are helpful", "name": None},  # name is explicitly None
+            {"role": "user", "content": "Test", "name": None},
+        ]
+
+        # Make the call
+        await llm_bus.call_llm_structured(messages=messages, response_model=MockResponseModel)
+
+        # Verify None values were stripped
+        assert len(received_messages) == 2
+        for msg in received_messages:
+            assert "role" in msg
+            assert "content" in msg
+            assert "name" not in msg  # None values should be stripped
+
+
 class TestEdgeCases:
     """Test edge cases and error conditions"""
 

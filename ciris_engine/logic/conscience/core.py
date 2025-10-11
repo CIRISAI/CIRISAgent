@@ -217,6 +217,7 @@ class EntropyConscience(_BaseConscience):
                     handler_name="entropy_conscience",
                     max_tokens=64,
                     temperature=0.0,
+                    thought_id=context.thought.thought_id,
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -307,6 +308,7 @@ class CoherenceConscience(_BaseConscience):
                     handler_name="coherence_conscience",
                     max_tokens=64,
                     temperature=0.0,
+                    thought_id=context.thought.thought_id,
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -406,6 +408,7 @@ class OptimizationVetoConscience(_BaseConscience):
                     handler_name="optimization_veto_conscience",
                     max_tokens=500,
                     temperature=0.0,
+                    thought_id=context.thought.thought_id,
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -504,6 +507,7 @@ class EpistemicHumilityConscience(_BaseConscience):
                     handler_name="epistemic_humility_conscience",
                     max_tokens=384,
                     temperature=0.0,
+                    thought_id=context.thought.thought_id,
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")

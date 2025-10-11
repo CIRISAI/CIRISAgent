@@ -422,43 +422,63 @@ class TestRateLimitMiddlewareJWTExtraction:
         """Test extracting user ID from valid JWT."""
         import jwt
 
-        middleware = RateLimitMiddleware()
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(gateway_secret=secret)
 
         # Create a valid JWT with sub claim
         payload = {"sub": "wa-2025-01-01-ABC123", "name": "Test User", "exp": 9999999999}
-        token = jwt.encode(payload, "secret", algorithm="HS256")
+        token = jwt.encode(payload, secret, algorithm="HS256")
+
+        # Create mock request
+        request = Mock(spec=Request)
+        request.app.state = Mock()
 
         # Extract user ID
-        user_id = middleware._extract_user_id_from_jwt(token)
+        user_id = middleware._extract_user_id_from_jwt(token, request)
         assert user_id == "wa-2025-01-01-ABC123"
 
     def test_extract_user_id_from_jwt_without_sub(self):
         """Test extracting user ID from JWT without sub claim."""
         import jwt
 
-        middleware = RateLimitMiddleware()
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(gateway_secret=secret)
 
         # Create JWT without sub claim
         payload = {"name": "Test User", "exp": 9999999999}
-        token = jwt.encode(payload, "secret", algorithm="HS256")
+        token = jwt.encode(payload, secret, algorithm="HS256")
+
+        # Create mock request
+        request = Mock(spec=Request)
+        request.app.state = Mock()
 
         # Extract should return None
-        user_id = middleware._extract_user_id_from_jwt(token)
+        user_id = middleware._extract_user_id_from_jwt(token, request)
         assert user_id is None
 
     def test_extract_user_id_from_invalid_jwt(self):
         """Test extracting user ID from malformed JWT."""
-        middleware = RateLimitMiddleware()
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(gateway_secret=secret)
+
+        # Create mock request
+        request = Mock(spec=Request)
+        request.app.state = Mock()
 
         # Invalid JWT
-        user_id = middleware._extract_user_id_from_jwt("not-a-valid-jwt")
+        user_id = middleware._extract_user_id_from_jwt("not-a-valid-jwt", request)
         assert user_id is None
 
     def test_extract_user_id_from_empty_token(self):
         """Test extracting user ID from empty token."""
-        middleware = RateLimitMiddleware()
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(gateway_secret=secret)
 
-        user_id = middleware._extract_user_id_from_jwt("")
+        # Create mock request
+        request = Mock(spec=Request)
+        request.app.state = Mock()
+
+        user_id = middleware._extract_user_id_from_jwt("", request)
         assert user_id is None
 
     @pytest.mark.asyncio
@@ -466,17 +486,19 @@ class TestRateLimitMiddlewareJWTExtraction:
         """Test JWT tokens get per-user rate limiting."""
         import jwt
 
-        middleware = RateLimitMiddleware(requests_per_minute=2)
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(requests_per_minute=2, gateway_secret=secret)
 
         # Create JWT for user1
         payload1 = {"sub": "wa-2025-01-01-USER01", "exp": 9999999999}
-        token1 = jwt.encode(payload1, "secret", algorithm="HS256")
+        token1 = jwt.encode(payload1, secret, algorithm="HS256")
 
         # Create request with JWT
         request = Mock(spec=Request)
         request.url.path = "/v1/test"
         request.client.host = "192.168.1.100"
         request.headers.get = Mock(return_value=f"Bearer {token1}")
+        request.app.state = Mock()
 
         call_next = AsyncMock(return_value=Response(content="OK"))
 
@@ -498,24 +520,27 @@ class TestRateLimitMiddlewareJWTExtraction:
         """Test different JWT users have independent rate limits."""
         import jwt
 
-        middleware = RateLimitMiddleware(requests_per_minute=1)
+        secret = b"test_secret"
+        middleware = RateLimitMiddleware(requests_per_minute=1, gateway_secret=secret)
 
         # Create JWTs for two different users
         payload1 = {"sub": "wa-user1", "exp": 9999999999}
         payload2 = {"sub": "wa-user2", "exp": 9999999999}
-        token1 = jwt.encode(payload1, "secret", algorithm="HS256")
-        token2 = jwt.encode(payload2, "secret", algorithm="HS256")
+        token1 = jwt.encode(payload1, secret, algorithm="HS256")
+        token2 = jwt.encode(payload2, secret, algorithm="HS256")
 
         # Create requests for each user
         request1 = Mock(spec=Request)
         request1.url.path = "/v1/test"
         request1.client.host = "192.168.1.100"
         request1.headers.get = Mock(return_value=f"Bearer {token1}")
+        request1.app.state = Mock()
 
         request2 = Mock(spec=Request)
         request2.url.path = "/v1/test"
         request2.client.host = "192.168.1.100"  # Same IP
         request2.headers.get = Mock(return_value=f"Bearer {token2}")
+        request2.app.state = Mock()
 
         call_next = AsyncMock(return_value=Response(content="OK"))
 

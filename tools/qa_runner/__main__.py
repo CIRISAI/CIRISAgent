@@ -46,6 +46,8 @@ Available modules:
   tools           - Tool management
   tasks           - Task management
   guidance        - Guidance system
+  consent         - Consent management
+  billing         - Billing and credit system
   handlers        - Message handlers
   simple_handlers - Simple handler tests
   streaming       - H3ERE pipeline streaming verification

@@ -115,6 +115,34 @@ class LLMBus(BaseBus[LLMService]):
 
         logger.info(f"LLMBus initialized with {distribution_strategy} distribution strategy")
 
+    def _normalize_messages(self, messages: Union[List[Dict[str, Any]], List["LLMMessage"]]) -> List[Dict[str, Any]]:
+        """Normalize messages to dict format for LLM providers.
+
+        Args:
+            messages: List of message dictionaries or LLMMessage objects
+
+        Returns:
+            List of normalized message dictionaries
+        """
+        from ciris_engine.schemas.services.llm import LLMMessage
+
+        normalized_messages: List[Dict[str, Any]] = []
+        for msg in messages:
+            if isinstance(msg, LLMMessage):
+                # Use exclude_none=True to avoid sending name: None to providers
+                # Some providers (e.g., Together AI) reject null values for optional fields
+                msg_dict = msg.model_dump(exclude_none=True)
+                normalized_messages.append(msg_dict)
+            else:
+                # Only strip the optional "name" field if it's None
+                # IMPORTANT: Don't strip required fields like "content" even if None
+                # (tool-call assistant messages require "content": None to be present)
+                msg_copy = dict(msg)
+                if "name" in msg_copy and msg_copy["name"] is None:
+                    del msg_copy["name"]
+                normalized_messages.append(msg_copy)
+        return normalized_messages
+
     async def call_llm_structured(
         self,
         messages: Union[List[Dict[str, Any]], List["LLMMessage"]],
@@ -144,16 +172,8 @@ class LLMBus(BaseBus[LLMService]):
             handler_name: Handler identifier for metrics
             domain: Optional domain for routing to specialized LLMs
         """
-        # Normalize messages to dicts if they are LLMMessage objects
-        from ciris_engine.schemas.services.llm import LLMMessage
-
-        normalized_messages: List[Dict[str, Any]] = []
-        for msg in messages:
-            if isinstance(msg, LLMMessage):
-                normalized_messages.append(msg.model_dump())
-            else:
-                normalized_messages.append(msg)
-
+        # Normalize messages to dicts
+        normalized_messages = self._normalize_messages(messages)
         start_time = self._time_service.timestamp()
 
         # Get all available LLM services, filtered by domain if specified

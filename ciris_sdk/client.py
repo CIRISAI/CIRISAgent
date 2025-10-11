@@ -7,6 +7,7 @@ from .exceptions import CIRISConnectionError
 from .resources.agent import AgentIdentity, AgentResource, AgentStatus, ConversationHistory, InteractResponse
 from .resources.audit import AuditResource
 from .resources.auth import AuthResource
+from .resources.billing import BillingResource
 from .resources.config import ConfigResource
 from .resources.consent import ConsentResource
 from .resources.emergency import EmergencyResource
@@ -74,6 +75,7 @@ class CIRISClient:
         # Note: Many endpoints have been consolidated in the v1 API
         self.agent = AgentResource(self._transport)
         self.audit = AuditResource(self._transport)
+        self.billing = BillingResource(self._transport)  # NEW: Credit and billing management
         self.memory = MemoryResource(self._transport)
         self.system = SystemResource(self._transport)  # NEW: Consolidated system ops
         self.telemetry = TelemetryResource(self._transport)

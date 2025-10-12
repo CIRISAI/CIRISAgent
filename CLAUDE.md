@@ -398,9 +398,9 @@ curl -X POST http://localhost:8000/v1/agent/interact \
 
 ```bash
 # ALWAYS bump version after significant changes
-python tools/bump_version.py patch     # Bug fixes
-python tools/bump_version.py minor     # New features
-python tools/bump_version.py major     # Breaking changes
+python tools/dev/bump_version.py patch     # Bug fixes
+python tools/dev/bump_version.py minor     # New features
+python tools/dev/bump_version.py major     # Breaking changes
 ```
 
 ## Critical URLs & Paths

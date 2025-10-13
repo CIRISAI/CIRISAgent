@@ -324,7 +324,7 @@ pytest -n 16 tests/ --timeout=300
 
 # Coverage analysis
 python -m tools.quality_analyzer       # Find gaps
-python -m tools.sonar_tool analyze     # SonarCloud metrics
+python -m tools.analysis.sonar quality-gate  # SonarCloud quality gate status
 ```
 
 ### QA Runner - API Test Suite

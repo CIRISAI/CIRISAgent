@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import MemorySearchResult, TimeSeriesDataPoint
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
@@ -501,43 +502,45 @@ class MemoryBus(BaseBus[MemoryService]):
             "memory_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> Dict[str, float]:
+    def get_metrics(self) -> BusMetrics:
         """
-        Get all memory bus metrics including base, custom, and v1.4.3 specific.
+        Get all memory bus metrics as typed BusMetrics schema.
 
-        Returns exactly these metrics from the 362 v1.4.3 set:
-        - memory_bus_operations: Total memory operations
-        - memory_bus_broadcasts: Broadcast messages sent
-        - memory_bus_errors: Bus errors encountered
-        - memory_bus_subscribers: Active subscriber count
+        Returns BusMetrics with:
+        - messages_sent: Total memory operations performed
+        - messages_received: Same as sent (synchronous operations)
+        - messages_dropped: Currently 0 (no drop tracking yet)
+        - average_latency_ms: Currently 0.0 (no latency tracking yet)
+        - active_subscriptions: Number of registered memory services
+        - queue_depth: Current message queue size
+        - errors_last_hour: Error count (no time-window yet, total errors)
+        - additional_metrics: Bus-specific metrics including uptime
 
         Uses real values from bus state, not zeros.
         """
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
         # Get subscriber count (registered memory services)
         memory_services = self.service_registry.get_services_by_type(ServiceType.MEMORY)
         subscriber_count = len(memory_services) if memory_services else 0
 
-        # Total operations = our specific operation counter (all successful memory operations)
-        operations_count = self._operation_count
+        # Calculate uptime for additional_metrics
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        # Broadcast count - memory bus is mostly synchronous, so this tracks message queue usage
-        # Use our broadcast counter (currently tracking queue size for broadcast-like behavior)
-        broadcast_count = self._broadcast_count + self.get_queue_size()
-
-        # Error count from our specific error counter (memory operation failures)
-        error_count = self._error_count
-
-        # Add v1.4.3 specific metrics
-        metrics.update(
-            {
-                "memory_bus_operations": float(operations_count),
-                "memory_bus_broadcasts": float(broadcast_count),
-                "memory_bus_errors": float(error_count),
-                "memory_bus_subscribers": float(subscriber_count),
-            }
+        # Map to BusMetrics schema
+        return BusMetrics(
+            messages_sent=self._operation_count,  # All successful memory operations
+            messages_received=self._operation_count,  # Synchronous, same as sent
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=0.0,  # Not tracked yet
+            active_subscriptions=subscriber_count,
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=self._error_count,  # Total errors (not windowed yet)
+            busiest_service=None,  # Could track which service gets most calls
+            additional_metrics={
+                "memory_operations_total": self._operation_count,
+                "memory_broadcasts": self._broadcast_count,
+                "memory_uptime_seconds": uptime_seconds,
+            },
         )
-
-        return metrics

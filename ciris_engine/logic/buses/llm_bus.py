@@ -22,6 +22,7 @@ from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.llm import MessageDict
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
@@ -627,41 +628,57 @@ class LLMBus(BaseBus[LLMService]):
             "llm_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
-        # Add v1.4.3 specific metrics
-        # Calculate messages routed from all service metrics
-        total_messages_routed = sum(metrics_obj.total_requests for metrics_obj in self.service_metrics.values())
-
-        # Provider selections = total requests across all services
-        # (each request requires a provider selection)
-        provider_selections = total_messages_routed
-
-        # Calculate routing errors from all service metrics
-        routing_errors = sum(metrics_obj.failed_requests for metrics_obj in self.service_metrics.values())
+    def get_metrics(self) -> BusMetrics:
+        """Get all LLM bus metrics as typed BusMetrics schema."""
+        # Calculate aggregate metrics from service metrics
+        total_requests = sum(m.total_requests for m in self.service_metrics.values())
+        failed_requests = sum(m.failed_requests for m in self.service_metrics.values())
+        total_latency = sum(m.total_latency_ms for m in self.service_metrics.values())
+        avg_latency = total_latency / total_requests if total_requests > 0 else 0.0
 
         # Count active providers (services that are available and healthy)
-        active_providers = len(
-            [
-                service
-                for service in self.service_registry.get_services_by_type(ServiceType.LLM)
-                if self._is_service_available_sync(service)
-            ]
-        )
+        active_providers_list = [
+            service
+            for service in self.service_registry.get_services_by_type(ServiceType.LLM)
+            if self._is_service_available_sync(service)
+        ]
+        active_providers = len(active_providers_list)
 
-        metrics.update(
-            {
-                "llm_bus_messages_routed": float(total_messages_routed),
-                "llm_bus_provider_selections": float(provider_selections),
-                "llm_bus_routing_errors": float(routing_errors),
-                "llm_bus_active_providers": float(active_providers),
-            }
-        )
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        return metrics
+        # Count circuit breakers open
+        circuit_breakers_open = sum(1 for cb in self.circuit_breakers.values() if cb.state == CircuitState.OPEN)
+
+        # Find busiest service (service with most requests)
+        busiest_service = None
+        max_requests = 0
+        for service_name, metrics in self.service_metrics.items():
+            if metrics.total_requests > max_requests:
+                max_requests = metrics.total_requests
+                busiest_service = service_name
+
+        # Map to BusMetrics schema
+        return BusMetrics(
+            messages_sent=total_requests,  # Total LLM requests sent
+            messages_received=total_requests,  # Same as sent (synchronous)
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=avg_latency,
+            active_subscriptions=len(self.service_metrics),  # Number of LLM services with metrics
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=failed_requests,  # Total failed requests (not windowed yet)
+            busiest_service=busiest_service,
+            additional_metrics={
+                "llm_requests_total": total_requests,
+                "llm_failed_requests": failed_requests,
+                "llm_circuit_breakers_open": circuit_breakers_open,
+                "llm_providers_available": len(self.service_metrics),
+                "llm_uptime_seconds": uptime_seconds,
+            },
+        )
 
     def _is_service_available_sync(self, service: object) -> bool:
         """Synchronous check if a service is available (for metrics collection)."""

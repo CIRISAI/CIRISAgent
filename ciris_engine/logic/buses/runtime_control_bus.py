@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.protocols.services import RuntimeControlService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core.runtime import (
     AdapterInfo,
@@ -497,21 +498,36 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             "runtime_control_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> Dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
+    def get_metrics(self) -> BusMetrics:
+        """Get all runtime control bus metrics as typed BusMetrics schema."""
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        # Add v1.4.3 specific metrics
-        metrics.update(
-            {
-                "runtime_bus_commands": float(self._commands_sent),
-                "runtime_bus_state_broadcasts": float(self._state_broadcasts),
-                "runtime_bus_emergency_stops": float(self._emergency_stops),
-            }
+        # Count active operations
+        active_operations_count = len(self._active_operations)
+
+        # Map to BusMetrics schema
+        return BusMetrics(
+            messages_sent=self._commands_sent,  # Control commands sent
+            messages_received=self._commands_sent,  # Synchronous
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=0.0,  # Not tracked yet
+            active_subscriptions=1,  # Single runtime control service
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=0,  # Not tracked yet
+            busiest_service=None,  # Single service
+            additional_metrics={
+                "runtime_control_commands": self._commands_sent,
+                "runtime_control_state_queries": self._state_broadcasts,
+                "runtime_control_emergency_stops": self._emergency_stops,
+                "runtime_control_uptime_seconds": uptime_seconds,
+                "runtime_control_active_operations": active_operations_count,
+                "runtime_control_shutting_down": 1 if self._shutting_down else 0,
+            },
         )
-
-        return metrics
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process runtime control messages - most should be synchronous"""

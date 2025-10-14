@@ -76,70 +76,103 @@ class DiscordPlatform(Service):
 
     def _initialize_config(self, runtime: Any, kwargs: DiscordPlatformKwargs) -> None:
         """Initialize adapter configuration from kwargs, template, or environment."""
+        # Load config from the highest priority source available
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
-            # Ensure adapter_config is a DiscordAdapterConfig instance
-            adapter_config = kwargs["adapter_config"]
-            if isinstance(adapter_config, DiscordAdapterConfig):
-                self.config = adapter_config
-            elif isinstance(adapter_config, dict):
-                self.config = DiscordAdapterConfig(**adapter_config)
-            else:
-                logger.warning(f"Invalid adapter_config type: {type(adapter_config)}. Creating default config.")
-                self.config = DiscordAdapterConfig()
+            self._load_config_from_adapter_config(kwargs["adapter_config"])
+        else:
+            self._load_config_from_kwargs_or_default(kwargs)
+            self._load_config_from_template(runtime)
 
-            # ALWAYS load environment variables to fill in any missing values
+        # Finalize configuration with validation
+        self._finalize_config()
+
+    def _load_config_from_adapter_config(self, adapter_config: Union[DiscordAdapterConfig, dict[str, Any], Any]) -> None:
+        """Load configuration from adapter_config parameter."""
+        if isinstance(adapter_config, DiscordAdapterConfig):
+            self.config = adapter_config
+        elif isinstance(adapter_config, dict):
+            self.config = DiscordAdapterConfig(**adapter_config)
+        else:
+            logger.warning(f"Invalid adapter_config type: {type(adapter_config)}. Creating default config.")
+            self.config = DiscordAdapterConfig()
+
+        # ALWAYS load environment variables to fill in any missing values
+        logger.info(
+            f"DEBUG: Before load_env_vars in adapter_config branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
+        )
+        self.config.load_env_vars()
+        logger.info(
+            f"Discord adapter using provided config with env vars loaded: channels={self.config.monitored_channel_ids}"
+        )
+
+    def _load_config_from_kwargs_or_default(self, kwargs: DiscordPlatformKwargs) -> None:
+        """Load configuration from direct kwargs or create default."""
+        # Check if config values are passed directly as kwargs (from API load_adapter)
+        if self._has_direct_config_kwargs(kwargs):
+            self.config = self._build_config_from_direct_kwargs(kwargs)
             logger.info(
-                f"DEBUG: Before load_env_vars in adapter_config branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
-            )
-            self.config.load_env_vars()
-            logger.info(
-                f"Discord adapter using provided config with env vars loaded: channels={self.config.monitored_channel_ids}"
+                f"Discord adapter created config from direct kwargs: bot_token={'***' if self.config.bot_token else 'None'}, channels={self.config.monitored_channel_ids}"
             )
         else:
-            # Check if config values are passed directly as kwargs (from API load_adapter)
-            if "bot_token" in kwargs or "channel_id" in kwargs or "server_id" in kwargs:
-                # Create config from direct kwargs
-                config_dict: dict[str, Any] = {}
-                if "bot_token" in kwargs:
-                    config_dict["bot_token"] = kwargs["bot_token"]
-                if "channel_id" in kwargs:
-                    config_dict["monitored_channel_ids"] = [kwargs["channel_id"]]
-                    config_dict["home_channel_id"] = kwargs["channel_id"]
-                if "server_id" in kwargs:
-                    config_dict["server_id"] = kwargs["server_id"]
-                # Add other config fields if present (cast to dict for dynamic access)
-                kwargs_dict = cast(dict[str, Any], kwargs)
-                for key in ["deferral_channel_id", "admin_user_ids"]:
-                    if key in kwargs_dict:
-                        config_dict[key] = kwargs_dict[key]
+            # Create default config with fallback bot token
+            self.config = DiscordAdapterConfig()
+            if "discord_bot_token" in kwargs:
+                self.config.bot_token = kwargs["discord_bot_token"]
 
-                self.config = DiscordAdapterConfig(**config_dict)
-                logger.info(
-                    f"Discord adapter created config from direct kwargs: bot_token={'***' if self.config.bot_token else 'None'}, channels={self.config.monitored_channel_ids}"
-                )
-            else:
-                self.config = DiscordAdapterConfig()
-                if "discord_bot_token" in kwargs:
-                    self.config.bot_token = kwargs["discord_bot_token"]
+    def _has_direct_config_kwargs(self, kwargs: DiscordPlatformKwargs) -> bool:
+        """Check if kwargs contains direct configuration parameters."""
+        return "bot_token" in kwargs or "channel_id" in kwargs or "server_id" in kwargs
 
-            template = getattr(runtime, "template", None)
-            if template and hasattr(template, "discord_config") and template.discord_config:
-                try:
-                    config_dict = (
-                        template.discord_config.model_dump() if hasattr(template.discord_config, "model_dump") else {}
-                    )
-                    for key, value in config_dict.items():
-                        if hasattr(self.config, key):
-                            setattr(self.config, key, value)
-                            logger.debug(f"DiscordPlatform: Set config {key} = {value} from template")
-                except Exception as e:
-                    logger.debug(f"DiscordPlatform: Could not load config from template: {e}")
+    def _build_config_from_direct_kwargs(self, kwargs: DiscordPlatformKwargs) -> DiscordAdapterConfig:
+        """Build configuration from direct kwargs parameters."""
+        config_dict: dict[str, Any] = {}
 
+        if "bot_token" in kwargs:
+            config_dict["bot_token"] = kwargs["bot_token"]
+
+        if "channel_id" in kwargs:
+            config_dict["monitored_channel_ids"] = [kwargs["channel_id"]]
+            config_dict["home_channel_id"] = kwargs["channel_id"]
+
+        if "server_id" in kwargs:
+            config_dict["server_id"] = kwargs["server_id"]
+
+        # Add other config fields if present
+        kwargs_dict = cast(dict[str, Any], kwargs)
+        for key in ["deferral_channel_id", "admin_user_ids"]:
+            if key in kwargs_dict:
+                config_dict[key] = kwargs_dict[key]
+
+        return DiscordAdapterConfig(**config_dict)
+
+    def _load_config_from_template(self, runtime: Any) -> None:
+        """Load configuration from runtime template if available."""
+        template = getattr(runtime, "template", None)
+        if not template or not hasattr(template, "discord_config") or not template.discord_config:
             self.config.load_env_vars()
             logger.info(
                 f"DEBUG: After load_env_vars in else branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
             )
+            return
 
+        try:
+            config_dict = (
+                template.discord_config.model_dump() if hasattr(template.discord_config, "model_dump") else {}
+            )
+            for key, value in config_dict.items():
+                if hasattr(self.config, key):
+                    setattr(self.config, key, value)
+                    logger.debug(f"DiscordPlatform: Set config {key} = {value} from template")
+        except Exception as e:
+            logger.debug(f"DiscordPlatform: Could not load config from template: {e}")
+
+        self.config.load_env_vars()
+        logger.info(
+            f"DEBUG: After load_env_vars in else branch, monitored_channel_ids = {self.config.monitored_channel_ids}"
+        )
+
+    def _finalize_config(self) -> None:
+        """Validate and finalize configuration."""
         if not self.config.bot_token:
             logger.error("DiscordPlatform: 'bot_token' not found in config. This is required.")
             raise ValueError("DiscordPlatform requires 'bot_token' in configuration.")

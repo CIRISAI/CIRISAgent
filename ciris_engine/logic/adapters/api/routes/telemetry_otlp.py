@@ -12,6 +12,7 @@ import hashlib
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import CIRIS_VERSION
 
@@ -20,14 +21,14 @@ SERVICE_NAMESPACE_KEY = "service.namespace"
 DEPLOYMENT_ENVIRONMENT_KEY = "deployment.environment"
 
 
-def safe_telemetry_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
+def safe_telemetry_get(data: JSONDict, key: str, default: Any = None) -> Any:
     """Safely extract value from telemetry data with type checking."""
     return data.get(key, default) if isinstance(data, dict) else default
 
 
 def create_resource_attributes(
-    service_name: str, service_version: str, telemetry_data: Dict[str, Any]
-) -> List[Dict[str, Any]]:
+    service_name: str, service_version: str, telemetry_data: JSONDict
+) -> List[JSONDict]:
     """Create standard resource attributes for OTLP format."""
     attributes = [
         {"key": "service.name", "value": {"stringValue": service_name}},
@@ -46,7 +47,7 @@ def create_resource_attributes(
     return attributes
 
 
-def add_system_metrics(telemetry_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+def add_system_metrics(telemetry_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
     """Extract and create system-level metrics from telemetry data."""
     metrics = []
 
@@ -147,14 +148,14 @@ def add_system_metrics(telemetry_data: Dict[str, Any], current_time_ns: int) -> 
 
 
 def _add_service_gauge_metric(
-    metrics: List[Dict[str, Any]],
+    metrics: List[JSONDict],
     service_data: Any,
     field_name: str,
     metric_name: str,
     description: str,
     unit: str,
     current_time_ns: int,
-    service_attrs: List[Dict[str, Any]],
+    service_attrs: List[JSONDict],
     transform_value: Any = None,
 ) -> None:
     """Helper to add a gauge metric for a service field."""
@@ -169,14 +170,14 @@ def _add_service_gauge_metric(
 
 
 def _add_service_counter_metric(
-    metrics: List[Dict[str, Any]],
+    metrics: List[JSONDict],
     service_data: Any,
     field_name: str,
     metric_name: str,
     description: str,
     unit: str,
     current_time_ns: int,
-    service_attrs: List[Dict[str, Any]],
+    service_attrs: List[JSONDict],
     safe_convert: bool = False,
 ) -> None:
     """Helper to add a counter metric for a service field."""
@@ -201,9 +202,9 @@ def _add_service_counter_metric(
                 )
 
 
-def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+def add_service_metrics(services_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
     """Extract and create service-level metrics from services data."""
-    metrics: List[Dict[str, Any]] = []
+    metrics: List[JSONDict] = []
 
     if not isinstance(services_data, dict):
         return metrics
@@ -289,7 +290,7 @@ def add_service_metrics(services_data: Dict[str, Any], current_time_ns: int) -> 
     return metrics
 
 
-def add_covenant_metrics(covenant_data: Dict[str, Any], current_time_ns: int) -> List[Dict[str, Any]]:
+def add_covenant_metrics(covenant_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
     """Extract and create covenant-related metrics from covenant data."""
     metrics = []
 
@@ -352,12 +353,12 @@ def add_covenant_metrics(covenant_data: Dict[str, Any], current_time_ns: int) ->
 
 
 def convert_to_otlp_json(
-    telemetry_data: Dict[str, Any],
+    telemetry_data: JSONDict,
     service_name: str = "ciris",
     service_version: str = CIRIS_VERSION,
     scope_name: str = "ciris.telemetry",
     scope_version: str = "1.0.0",
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Convert CIRIS telemetry data to OTLP JSON format.
 
@@ -419,8 +420,8 @@ def _create_gauge_metric(
     unit: str,
     value: float,
     time_ns: int,
-    attributes: Optional[List[Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+    attributes: Optional[List[JSONDict]] = None,
+) -> JSONDict:
     """Create a gauge metric in OTLP format."""
     data_point = {"asDouble": value, "timeUnixNano": str(time_ns)}
 
@@ -436,9 +437,9 @@ def _create_counter_metric(
     unit: str,
     value: float,
     time_ns: int,
-    attributes: Optional[List[Dict[str, Any]]] = None,
+    attributes: Optional[List[JSONDict]] = None,
     start_time_ns: Optional[int] = None,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Create a counter/sum metric in OTLP format."""
     # Use provided start time or assume counter started 1 hour ago
     if start_time_ns is None:
@@ -466,9 +467,9 @@ def _create_histogram_metric(
     bucket_counts: List[int],
     explicit_bounds: List[float],
     time_ns: int,
-    attributes: Optional[List[Dict[str, Any]]] = None,
+    attributes: Optional[List[JSONDict]] = None,
     start_time_ns: Optional[int] = None,
-) -> Dict[str, Any]:
+) -> JSONDict:
     """Create a histogram metric in OTLP format."""
     if start_time_ns is None:
         start_time_ns = int(time_ns - (3600 * 1e9))  # 1 hour ago, converted to int
@@ -494,12 +495,12 @@ def _create_histogram_metric(
 
 
 def convert_traces_to_otlp_json(
-    traces_data: List[Dict[str, Any]],
+    traces_data: List[JSONDict],
     service_name: str = "ciris",
     service_version: str = CIRIS_VERSION,
     scope_name: str = "ciris.traces",
     scope_version: str = "1.0.0",
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Convert CIRIS traces to OTLP JSON format.
 
@@ -680,12 +681,12 @@ def convert_traces_to_otlp_json(
 
 
 def convert_logs_to_otlp_json(
-    logs_data: List[Dict[str, Any]],
+    logs_data: List[JSONDict],
     service_name: str = "ciris",
     service_version: str = CIRIS_VERSION,
     scope_name: str = "ciris.logs",
     scope_version: str = "1.0.0",
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Convert CIRIS logs to OTLP JSON format.
 
@@ -793,7 +794,7 @@ def convert_logs_to_otlp_json(
     }
 
 
-def validate_otlp_json(otlp_data: Dict[str, Any]) -> bool:
+def validate_otlp_json(otlp_data: JSONDict) -> bool:
     """
     Validate that the OTLP JSON structure is correct.
 

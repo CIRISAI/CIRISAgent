@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.runtime_control import (
@@ -48,7 +49,7 @@ _paused_thoughts: Dict[str, asyncio.Event] = {}
 _single_step_mode = False
 
 
-def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
+def _base_data_dict(base_data: BaseStepData) -> JSONDict:
     """Convert BaseStepData to dict for **unpacking into step data constructors."""
     return {
         "timestamp": base_data.timestamp,
@@ -60,7 +61,7 @@ def _base_data_dict(base_data: BaseStepData) -> Dict[str, Any]:
     }
 
 
-async def _query_thought_resources(telemetry_service: Any, thought_id: str, timestamp: datetime) -> Dict[str, Any]:
+async def _query_thought_resources(telemetry_service: Any, thought_id: str, timestamp: datetime) -> JSONDict:
     """Query telemetry service and aggregate resource usage for a thought.
 
     Args:
@@ -160,7 +161,7 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
 
 
 async def _maybe_add_resource_usage(
-    step: StepPoint, processor: Any, thought_id: str, end_timestamp: Any, kwargs: Dict[str, Any]
+    step: StepPoint, processor: Any, thought_id: str, end_timestamp: Any, kwargs: JSONDict
 ) -> None:
     """Helper to add resource usage for ACTION_COMPLETE steps - reduces cognitive complexity."""
     if step != StepPoint.ACTION_COMPLETE:
@@ -383,7 +384,7 @@ def _create_typed_step_data(
     thought_item: Any,
     result: Any,
     args: Tuple[Any, ...],
-    kwargs: Dict[str, Any],
+    kwargs: JSONDict,
 ) -> StepDataUnion:
     """Create typed step data based on step type using dispatch pattern."""
     # Prepare base data with task_id
@@ -798,7 +799,7 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
 
 
 def _create_perform_action_data(
-    base_data: BaseStepData, result: Any, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    base_data: BaseStepData, result: Any, args: Tuple[Any, ...], kwargs: JSONDict
 ) -> PerformActionStepData:
     """Create PERFORM_ACTION specific typed data."""
     # Extract selected_action - first try result, then args
@@ -832,7 +833,7 @@ def _create_perform_action_data(
 
 
 def _create_action_complete_data(
-    base_data: BaseStepData, result: Any, kwargs: Optional[Dict[str, Any]] = None
+    base_data: BaseStepData, result: Any, kwargs: Optional[JSONDict] = None
 ) -> ActionCompleteStepData:
     """Add ACTION_COMPLETE specific data with resource usage."""
     if not result:
@@ -1454,7 +1455,7 @@ def _build_span_attributes_dict(step: StepPoint, step_result: Any, step_data: St
     return attributes
 
 
-def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to GATHER_CONTEXT step."""
     if "context" in result_data and result_data["context"]:
         context_size = len(str(result_data["context"]))
@@ -1466,7 +1467,7 @@ def _add_gather_context_attributes(attributes: List[SpanAttribute], result_data:
         )
 
 
-def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to PERFORM_DMAS step."""
     if "dma_results" in result_data and result_data["dma_results"]:
         attributes.extend(
@@ -1479,7 +1480,7 @@ def _add_perform_dmas_attributes(attributes: List[SpanAttribute], result_data: D
         attributes.append(SpanAttribute(key="dma.context_provided", value={"boolValue": bool(result_data["context"])}))
 
 
-def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to PERFORM_ASPDMA step."""
     if "selected_action" in result_data:
         attributes.append(
@@ -1491,7 +1492,7 @@ def _add_perform_aspdma_attributes(attributes: List[SpanAttribute], result_data:
         )
 
 
-def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to CONSCIENCE_EXECUTION step."""
     if "conscience_passed" in result_data:
         attributes.append(SpanAttribute(key="conscience.passed", value={"boolValue": result_data["conscience_passed"]}))
@@ -1501,7 +1502,7 @@ def _add_conscience_execution_attributes(attributes: List[SpanAttribute], result
         )
 
 
-def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to FINALIZE_ACTION step."""
     if "selected_action" in result_data:
         attributes.append(
@@ -1513,7 +1514,7 @@ def _add_finalize_action_attributes(attributes: List[SpanAttribute], result_data
         )
 
 
-def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to PERFORM_ACTION step."""
     if "action_executed" in result_data:
         attributes.append(
@@ -1525,7 +1526,7 @@ def _add_perform_action_attributes(attributes: List[SpanAttribute], result_data:
         )
 
 
-def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: Dict[str, Any]) -> None:  # NOQA
+def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data: JSONDict) -> None:  # NOQA
     """Add attributes specific to ACTION_COMPLETE step."""
     if "handler_completed" in result_data:
         attributes.append(
@@ -1538,7 +1539,7 @@ def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data
 
 
 def _add_typed_step_attributes(
-    attributes: List[SpanAttribute], step: StepPoint, result_data: Dict[str, Any]
+    attributes: List[SpanAttribute], step: StepPoint, result_data: JSONDict
 ) -> None:  # NOQA
     """Add step-specific attributes based on typed step result data."""
 

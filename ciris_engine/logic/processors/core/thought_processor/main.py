@@ -5,6 +5,7 @@ Main coordinator that executes the 7 phases of ethical reasoning.
 
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -91,7 +92,7 @@ class ThoughtProcessor(
         self._pipeline_controller = None  # Will be deprecated
 
     async def process_thought(
-        self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
+        self, thought_item: ProcessingQueueItem, context: Optional[JSONDict] = None
     ) -> Optional[ActionSelectionDMAResult]:
         """
         Main H3ERE pipeline orchestration.
@@ -154,7 +155,7 @@ class ThoughtProcessor(
         self,
         thought_item: ProcessingQueueItem,
         thought: Thought,
-        context: Optional[Dict[str, Any]],
+        context: Optional[JSONDict],
         correlation: ServiceCorrelation,
         start_time: Any,
     ) -> ConscienceApplicationResult:
@@ -217,7 +218,7 @@ class ThoughtProcessor(
 
     async def _perform_action_selection_phase(
         self, thought_item: ProcessingQueueItem, thought: Thought, thought_context: Any, dma_results: Any
-    ) -> Dict[str, Any]:
+    ) -> JSONDict:
         """Execute action selection and conscience validation phases."""
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
@@ -561,7 +562,7 @@ class ThoughtProcessor(
         self,
         action_result: ActionSelectionDMAResult,
         thought: Thought,
-        dma_results_dict: Dict[str, Any],
+        dma_results_dict: JSONDict,
         processing_context: Optional[Any] = None,
     ) -> ConscienceApplicationResult:
         """Simple conscience application without orchestrator."""
@@ -576,7 +577,7 @@ class ThoughtProcessor(
                 epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
             )
 
-        context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
+        context: JSONDict = {"thought": thought, "dma_results": dma_results_dict}
         conscience_result = await self._run_conscience_checks(action_result, context)
 
         if is_conscience_retry and not conscience_result["overridden"]:
@@ -607,13 +608,13 @@ class ThoughtProcessor(
         return action_result.selected_action in exempt_actions
 
     async def _run_conscience_checks(
-        self, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action_result: ActionSelectionDMAResult, context: JSONDict
+    ) -> JSONDict:
         """Run all conscience checks and return the results."""
         final_action = action_result
         overridden = False
         override_reason = None
-        epistemic_data: Dict[str, str] = {}
+        epistemic_data: JSONDict = {}
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
@@ -648,8 +649,8 @@ class ThoughtProcessor(
         }
 
     async def _check_single_conscience(
-        self, entry: Any, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, entry: Any, action_result: ActionSelectionDMAResult, context: JSONDict
+    ) -> JSONDict:
         """Check a single conscience and handle errors."""
         conscience = entry.conscience
         cb = entry.circuit_breaker
@@ -717,7 +718,7 @@ class ThoughtProcessor(
             resource_usage=None,
         )
 
-    def _handle_conscience_retry_without_override(self, conscience_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_conscience_retry_without_override(self, conscience_result: JSONDict) -> JSONDict:
         """Handle conscience retry when no override occurred."""
         has_depth_guardrail = any(
             "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__
@@ -746,7 +747,7 @@ class ThoughtProcessor(
         return conscience_result
 
     def _create_conscience_application_result(
-        self, action_result: ActionSelectionDMAResult, conscience_result: Dict[str, Any]
+        self, action_result: ActionSelectionDMAResult, conscience_result: JSONDict
     ) -> ConscienceApplicationResult:
         """Create the final ConscienceApplicationResult."""
         # epistemic_data is REQUIRED - use EMPTY marker if not provided

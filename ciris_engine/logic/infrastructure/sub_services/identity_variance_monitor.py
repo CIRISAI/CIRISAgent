@@ -8,12 +8,13 @@ This implements the patent's requirement for bounded identity evolution.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 from ciris_engine.schemas.infrastructure.behavioral_patterns import BehavioralPattern
 from ciris_engine.schemas.infrastructure.identity_variance import (
     CurrentIdentityData,
@@ -782,7 +783,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
     def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> JSONDict:
         """Extract current trust parameters from config nodes."""
-        trust_params = {}
+        trust_params: JSONDict = {}
 
         for node in config_nodes:
             node_attrs = (
@@ -790,8 +791,10 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 if isinstance(node.attributes, dict)
                 else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
             )
-            if node_attrs.get("config_type") == ConfigNodeType.TRUST_PARAMETERS.value:
-                trust_params.update(node_attrs.get("values", {}))
+            config_type = get_str(node_attrs, "config_type", "")
+            if config_type == ConfigNodeType.TRUST_PARAMETERS.value:
+                values = get_dict(node_attrs, "values", {})
+                trust_params.update(values)
 
         return trust_params
 
@@ -805,25 +808,34 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 if isinstance(node.attributes, dict)
                 else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
             )
-            if node_attrs.get("node_type") == "capability_change":
-                capabilities.append(node_attrs.get("capability", "unknown"))
+            node_type = get_str(node_attrs, "node_type", "")
+            if node_type == "capability_change":
+                capability = get_str(node_attrs, "capability", "unknown")
+                capabilities.append(capability)
 
         return capabilities
 
-    def _compare_patterns(
-        self, baseline_patterns: JSONDict, current_patterns: JSONDict
-    ) -> List[IdentityDiff]:
+    def _compare_patterns(self, baseline_patterns: JSONDict, current_patterns: JSONDict) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []
 
         # Compare action distributions
-        baseline_actions = baseline_patterns.get("action_distribution", {})
-        current_actions = current_patterns.get("action_distribution", {})
+        baseline_actions = get_dict(baseline_patterns, "action_distribution", {})
+        current_actions = get_dict(current_patterns, "action_distribution", {})
 
-        # Check for significant shifts
-        for action in set(baseline_actions.keys()) | set(current_actions.keys()):
-            baseline_pct = baseline_actions.get(action, 0) / max(1, baseline_patterns.get("total_actions", 1))
-            current_pct = current_actions.get(action, 0) / max(1, current_patterns.get("total_actions", 1))
+        # Check for significant shifts - convert to sets
+        baseline_keys = set(baseline_actions.keys())
+        current_keys = set(current_actions.keys())
+        all_actions = baseline_keys | current_keys
+
+        for action in all_actions:
+            baseline_count = get_int(baseline_actions, action, 0)
+            current_count = get_int(current_actions, action, 0)
+            total_baseline = get_int(baseline_patterns, "total_actions", 1)
+            total_current = get_int(current_patterns, "total_actions", 1)
+
+            baseline_pct = baseline_count / max(1, total_baseline)
+            current_pct = current_count / max(1, total_current)
 
             if abs(current_pct - baseline_pct) > 0.2:  # 20% shift in behavior
                 differences.append(
@@ -857,7 +869,8 @@ class IdentityVarianceMonitor(BaseScheduledService):
                     if isinstance(nodes[0].attributes, dict)
                     else nodes[0].attributes.model_dump() if hasattr(nodes[0].attributes, "model_dump") else {}
                 )
-                self._baseline_snapshot_id = node_attrs.get("baseline_id")
+                baseline_id = get_str(node_attrs, "baseline_id", "")
+                self._baseline_snapshot_id = baseline_id if baseline_id else None
                 logger.info(f"Loaded baseline ID: {self._baseline_snapshot_id}")
 
         except Exception as e:

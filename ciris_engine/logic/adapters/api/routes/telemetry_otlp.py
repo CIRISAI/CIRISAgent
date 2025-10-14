@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union, cast
 
 from ciris_engine.constants import CIRIS_VERSION
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str, get_str_optional
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str_optional, get_float, get_int, get_dict, get_str
 
 # OTLP attribute key constants
 SERVICE_NAMESPACE_KEY = "service.namespace"

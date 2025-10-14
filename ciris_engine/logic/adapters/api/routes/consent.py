@@ -6,7 +6,6 @@ Implements Consensual Evolution Protocol v0.2.
 
 import logging
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -22,6 +21,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStatus,
     ConsentStream,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import AuthContext, get_auth_context, require_observer
 
@@ -112,9 +112,7 @@ def get_consent_manager(request: Request) -> ConsentService:
     return manager
 
 
-def _build_consent_dict(
-    consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
-) -> JSONDict:
+def _build_consent_dict(consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None) -> JSONDict:
     """
     Build consent dictionary - eliminates duplication.
 

@@ -4,10 +4,11 @@ import base64
 import logging
 import os
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
 import discord
+
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

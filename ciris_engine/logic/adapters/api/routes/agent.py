@@ -10,7 +10,6 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -21,6 +20,7 @@ from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permiss
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
+from ciris_engine.schemas.types import JSONDict
 
 from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import require_observer

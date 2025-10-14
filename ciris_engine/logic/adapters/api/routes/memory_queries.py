@@ -8,10 +8,10 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 from .memory_query_helpers import DatabaseExecutor, DateTimeParser, GraphNodeBuilder, QueryBuilder, TimeRangeCalculator
 

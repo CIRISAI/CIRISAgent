@@ -10,8 +10,8 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Dict, List, Tuple
 
-from ciris_engine.schemas.types import JSONDict
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

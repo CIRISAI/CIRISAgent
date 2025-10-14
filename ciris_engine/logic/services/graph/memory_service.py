@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence import get_db_connection, initialize_database
 from ciris_engine.logic.secrets.service import SecretsService
@@ -248,7 +249,9 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Add secret references to node metadata if any were found
         if secret_refs:
             if isinstance(processed_attributes, dict):
-                processed_attributes.setdefault("secret_refs", []).extend([ref.uuid for ref in secret_refs])
+                refs_list = get_list(processed_attributes, "secret_refs", [])
+                refs_list.extend([ref.uuid for ref in secret_refs])
+                processed_attributes["secret_refs"] = refs_list
             logger.info(f"Stored {len(secret_refs)} secret references in memory node {node.id}")
 
         return GraphNode(
@@ -304,9 +307,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return attributes_dict
 
-    def _process_secrets_for_forget(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict]
-    ) -> None:
+    def _process_secrets_for_forget(self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict]) -> None:
         """Clean up secrets when forgetting a node."""
         if not attributes:
             return
@@ -965,21 +966,29 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         filtered = nodes
 
-        if "since" in filters:
-            since = filters["since"]
-            if isinstance(since, str):
-                from datetime import datetime
+        since_val = filters.get("since")
+        if since_val:
+            since_dt: datetime
+            if isinstance(since_val, str):
+                since_dt = datetime.fromisoformat(since_val)
+            elif isinstance(since_val, datetime):
+                since_dt = since_val
+            else:
+                # Skip invalid type
+                return filtered
+            filtered = [n for n in filtered if n.updated_at and n.updated_at >= since_dt]
 
-                since = datetime.fromisoformat(since)
-            filtered = [n for n in filtered if n.updated_at and n.updated_at >= since]
-
-        if "until" in filters:
-            until = filters["until"]
-            if isinstance(until, str):
-                from datetime import datetime
-
-                until = datetime.fromisoformat(until)
-            filtered = [n for n in filtered if n.updated_at and n.updated_at <= until]
+        until_val = filters.get("until")
+        if until_val:
+            until_dt: datetime
+            if isinstance(until_val, str):
+                until_dt = datetime.fromisoformat(until_val)
+            elif isinstance(until_val, datetime):
+                until_dt = until_val
+            else:
+                # Skip invalid type
+                return filtered
+            filtered = [n for n in filtered if n.updated_at and n.updated_at <= until_dt]
 
         return filtered
 
@@ -988,8 +997,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         if not filters or "tags" not in filters:
             return nodes
 
-        tags = filters["tags"]
-        if not isinstance(tags, list):
+        tags_val = filters.get("tags", [])
+        if not isinstance(tags_val, list):
             return nodes
 
         filtered = []
@@ -1000,11 +1009,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # Handle both dict and object attributes
             node_tags = None
             if isinstance(n.attributes, dict):
-                node_tags = n.attributes.get("tags", [])
+                node_tags = get_list(n.attributes, "tags", [])
             elif hasattr(n.attributes, "tags"):
                 node_tags = n.attributes.tags
 
-            if node_tags and any(tag in node_tags for tag in tags):
+            if node_tags and any(tag in node_tags for tag in tags_val):
                 filtered.append(n)
 
         return filtered

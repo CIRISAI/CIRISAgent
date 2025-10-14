@@ -6,11 +6,11 @@ Handles task activation, prioritization, and lifecycle management using v1 schem
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol

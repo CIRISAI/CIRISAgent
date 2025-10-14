@@ -192,9 +192,7 @@ class WACLIOAuthService:
             logger.error(f"OAuth exchange error: {e}")
             raise
 
-    async def _exchange_code_for_token(
-        self, provider: str, code: str, provider_config: JSONDict
-    ) -> OAuthTokenResponse:
+    async def _exchange_code_for_token(self, provider: str, code: str, provider_config: JSONDict) -> OAuthTokenResponse:
         """Exchange authorization code for access token."""
         import aiohttp
 

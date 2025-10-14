@@ -280,9 +280,7 @@ def _get_known_channel_fields() -> Set[str]:
     }
 
 
-def _build_required_channel_fields(
-    attrs: JSONDict, node: Any
-) -> JSONDict:
+def _build_required_channel_fields(attrs: JSONDict, node: Any) -> JSONDict:
     """Build required ChannelContext fields with defaults."""
     return {
         "channel_id": get_channel_id_from_node(node, attrs),
@@ -308,9 +306,7 @@ def _build_optional_channel_fields(
 
 
 # Legacy function - now uses standardized collect_memorized_attributes
-def _collect_memorized_attributes(
-    attrs: JSONDict, known_fields: Set[str]
-) -> Dict[str, str]:
+def _collect_memorized_attributes(attrs: JSONDict, known_fields: Set[str]) -> Dict[str, str]:
     """Collect arbitrary attributes the agent memorized about this channel."""
     return collect_memorized_attributes(attrs, known_fields)
 
@@ -521,9 +517,7 @@ async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Secret
     """Get secrets snapshot data."""
     if secrets_service:
         # Get the raw snapshot data
-        snapshot_data = await build_secrets_snapshot(
-            secrets_service
-        )
+        snapshot_data = await build_secrets_snapshot(secrets_service)
 
         # Check if there was an error
         error_message = snapshot_data.get(ERROR_KEY)
@@ -1425,9 +1419,7 @@ def _create_user_profile_from_node(
     return build_user_profile_from_node(user_id, attrs, connected_nodes_info, last_interaction, created_at)
 
 
-async def _collect_cross_channel_messages(
-    user_id: str, channel_id: str
-) -> List[JSONDict]:
+async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[JSONDict]:
     """Collect recent messages from this user in other channels."""
     recent_messages = []
     try:

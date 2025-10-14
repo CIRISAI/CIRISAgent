@@ -1540,9 +1540,7 @@ def _add_action_complete_attributes(attributes: List[SpanAttribute], result_data
         )
 
 
-def _add_typed_step_attributes(
-    attributes: List[SpanAttribute], step: StepPoint, result_data: JSONDict
-) -> None:  # NOQA
+def _add_typed_step_attributes(attributes: List[SpanAttribute], step: StepPoint, result_data: JSONDict) -> None:  # NOQA
     """Add step-specific attributes based on typed step result data."""
 
     # Map step types to their handler functions

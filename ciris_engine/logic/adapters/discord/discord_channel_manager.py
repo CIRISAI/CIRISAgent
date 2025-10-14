@@ -2,13 +2,13 @@
 
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import discord
 from discord.errors import Forbidden, NotFound
 
 from ciris_engine.logic.utils.privacy import sanitize_correlation_parameters
 from ciris_engine.schemas.runtime.messages import DiscordMessage
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

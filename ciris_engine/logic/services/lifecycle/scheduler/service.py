@@ -12,7 +12,6 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.persistence import add_thought, get_db_connection
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
@@ -22,6 +21,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType, ThoughtStatus, Thoug
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo, ShutdownContext
 from ciris_engine.schemas.runtime.models import FinalAction, Thought
 from ciris_engine.schemas.services.core import ServiceCapabilities
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

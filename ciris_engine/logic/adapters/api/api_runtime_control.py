@@ -5,12 +5,12 @@ Runtime control service for API adapter.
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 from .constants import ERROR_ADAPTER_MANAGER_NOT_AVAILABLE, ERROR_TIME_SERVICE_NOT_AVAILABLE
 

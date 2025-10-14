@@ -9,11 +9,11 @@ import logging
 import re
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.secrets.core import ConfigExport, DetectedSecret, PatternStats
 from ciris_engine.schemas.secrets.core import SecretPattern as ConfigSecretPattern
 from ciris_engine.schemas.secrets.core import SecretsDetectionConfig, SecretsFilterResult
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

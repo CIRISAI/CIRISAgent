@@ -937,7 +937,11 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
                             confidence=get_float(node.attributes, "confidence", 0.0),
                             occurrences=get_int(node.attributes, "occurrences", 1),
                             last_seen=last_seen_dt,
-                            metadata=node.attributes.get("metadata", {}) if isinstance(node.attributes.get("metadata"), dict) else {},
+                            metadata=(
+                                node.attributes.get("metadata", {})
+                                if isinstance(node.attributes.get("metadata"), dict)
+                                else {}
+                            ),
                         )
                     )
 

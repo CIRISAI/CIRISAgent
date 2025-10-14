@@ -7,7 +7,6 @@ and integration with the agent's action pipeline.
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -23,6 +22,7 @@ from ciris_engine.schemas.secrets.service import (
 )
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.core.secrets import SecretsServiceStats
+from ciris_engine.schemas.types import JSONDict
 
 from .filter import SecretsFilter
 from .store import SecretsStore

@@ -1,8 +1,6 @@
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional, Union
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -19,6 +17,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelationStatus,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .action_selection_pdma import ActionSelectionPDMAEvaluator
 from .csdma import CSDMAEvaluator

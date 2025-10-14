@@ -4,11 +4,11 @@ Telemetry data models - extracted from telemetry.py to reduce file size.
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.telemetry import MetricTags
+from ciris_engine.schemas.types import JSONDict
 
 # Field description constants
 DESC_SERVICE_NAME = "Service name"

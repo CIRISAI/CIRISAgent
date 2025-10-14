@@ -5,7 +5,6 @@ import logging
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any, Deque, Dict, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.models.correlations import add_correlation
@@ -19,6 +18,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelation,
     ServiceCorrelationStatus,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .security import SecurityFilter
 
@@ -98,9 +98,7 @@ class BasicTelemetryCollector(BaseService):
 
         # Store enhanced metrics in separate history for TSDB capabilities
         if not hasattr(self, "_enhanced_history"):
-            self._enhanced_history: Dict[str, Deque[JSONDict]] = defaultdict(
-                lambda: deque(maxlen=self.buffer_size)
-            )
+            self._enhanced_history: Dict[str, Deque[JSONDict]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
 
         self._enhanced_history[name].append(metric_entry)
 

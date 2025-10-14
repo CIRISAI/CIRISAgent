@@ -10,9 +10,9 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Union, cast
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 

@@ -5,6 +5,7 @@ import logging
 import time
 from collections import defaultdict
 from typing import Any, Dict
+
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)

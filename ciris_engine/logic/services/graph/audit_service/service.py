@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int
 from uuid import uuid4
 
 # Optional import for psutil
@@ -1067,7 +1068,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             hash_chain_data: Optional[JSONDict] = None
 
             def _write_to_chain() -> JSONDict:
-                entry_dict = {
+                entry_dict: JSONDict = {
                     "event_id": entry.entry_id,
                     "event_timestamp": entry.timestamp.isoformat(),
                     "event_type": entry.event_type,
@@ -1079,7 +1080,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                     raise RuntimeError("Hash chain not available")
 
                 prepared = self.hash_chain.prepare_entry(entry_dict)
-                signature = self.signature_manager.sign_entry(prepared["entry_hash"])
+                entry_hash_val = get_str(prepared, "entry_hash", "")
+                signature = self.signature_manager.sign_entry(entry_hash_val)
 
                 if not self._db_connection:
                     raise RuntimeError("Database connection not available")
@@ -1111,13 +1113,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 self._db_connection.commit()
 
                 # Return hash chain data
-                return {
-                    "sequence_number": prepared["sequence_number"],
-                    "entry_hash": prepared["entry_hash"],
-                    "previous_hash": prepared["previous_hash"],
+                result_dict: JSONDict = {
+                    "sequence_number": get_int(prepared, "sequence_number", 0),
+                    "entry_hash": entry_hash_val,
+                    "previous_hash": get_str(prepared, "previous_hash", ""),
                     "signature": signature,
                     "signing_key_id": self.signature_manager.key_id or "unknown",
                 }
+                return result_dict
 
             try:
                 logger.debug(f"About to write to hash chain for entry {entry.entry_id}")
@@ -1354,14 +1357,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
     def _extract_action_type_from_attrs(self, attrs: JSONDict) -> Optional[str]:
         """Extract action_type from attributes with fallback."""
-        action_type = attrs.get("action_type")
-        if not action_type and "action_type" in attrs:
-            action_type = attrs["action_type"]
-        return action_type
+        action_type_val = get_str(attrs, "action_type", "")
+        if action_type_val:
+            return action_type_val
+        return None
 
-    def _create_audit_request_from_attrs(
-        self, attrs: JSONDict, timestamp: datetime, action_type: str
-    ) -> AuditRequest:
+    def _create_audit_request_from_attrs(self, attrs: JSONDict, timestamp: datetime, action_type: str) -> AuditRequest:
         """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),

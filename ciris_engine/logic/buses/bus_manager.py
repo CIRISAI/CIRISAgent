@@ -4,10 +4,10 @@ BusManager - Orchestrates all message buses
 
 import logging
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus
 from .communication_bus import CommunicationBus

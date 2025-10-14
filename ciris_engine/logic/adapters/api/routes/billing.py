@@ -7,13 +7,13 @@ Frontend should NEVER call the billing backend directly.
 
 import logging
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.auth import AuthContext
+from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import require_observer
 

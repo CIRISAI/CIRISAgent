@@ -8,9 +8,10 @@ extending the existing processor control capabilities with adapter lifecycle man
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
+
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime

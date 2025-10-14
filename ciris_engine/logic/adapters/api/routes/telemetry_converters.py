@@ -4,6 +4,7 @@ Telemetry format converters - extracted from telemetry.py to reduce file size.
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
+
 from ciris_engine.schemas.types import JSONDict
 
 

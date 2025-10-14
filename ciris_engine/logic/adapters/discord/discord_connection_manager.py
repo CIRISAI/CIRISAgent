@@ -5,9 +5,10 @@ import logging
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import discord
+
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol

@@ -8,7 +8,6 @@ then migrates to graph-based configuration for runtime management.
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 import yaml

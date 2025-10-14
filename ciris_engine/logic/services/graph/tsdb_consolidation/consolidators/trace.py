@@ -9,8 +9,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict, Union
 
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_list, get_str
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_list, get_str
 from ciris_engine.schemas.services.graph.consolidation import TraceSpanData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus

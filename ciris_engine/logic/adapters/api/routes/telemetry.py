@@ -10,7 +10,6 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
@@ -25,6 +24,7 @@ from ciris_engine.schemas.api.telemetry import (
     ServiceMetricValue,
     TelemetryQueryFilters,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,

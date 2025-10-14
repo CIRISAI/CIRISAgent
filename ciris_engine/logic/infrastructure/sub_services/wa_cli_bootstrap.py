@@ -5,7 +5,6 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from rich.console import Console
 from rich.prompt import Prompt
@@ -13,6 +12,7 @@ from rich.prompt import Prompt
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.services.authority_core import WACertificate, WARole
+from ciris_engine.schemas.types import JSONDict
 
 
 class WACLIBootstrapService:

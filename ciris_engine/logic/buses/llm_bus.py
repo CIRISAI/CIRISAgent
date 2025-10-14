@@ -5,6 +5,7 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
+
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -293,9 +294,7 @@ class LLMBus(BaseBus[LLMService]):
 
         return 0, {}  # Default to highest priority, empty metadata
 
-    def _should_include_service_for_domain(
-        self, service_metadata: JSONDict, domain: Optional[str]
-    ) -> Tuple[bool, int]:
+    def _should_include_service_for_domain(self, service_metadata: JSONDict, domain: Optional[str]) -> Tuple[bool, int]:
         """Check if service should be included based on domain and get priority adjustment.
 
         Returns:

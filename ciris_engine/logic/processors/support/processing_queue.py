@@ -2,8 +2,6 @@ import collections
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from ciris_engine.schemas.types import JSONDict
-
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.runtime.enums import ThoughtType
@@ -11,6 +9,7 @@ from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 
 # Import both types of ThoughtContext
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

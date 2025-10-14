@@ -6,7 +6,6 @@ import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
@@ -18,6 +17,7 @@ from ciris_engine.schemas.processors.results import WakeupResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

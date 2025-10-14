@@ -9,10 +9,10 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict
-from ciris_engine.schemas.types import JSONDict
 from weakref import WeakSet
 
 from ciris_engine.schemas.streaming.reasoning_stream import ReasoningEventUnion, ReasoningStreamUpdate
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

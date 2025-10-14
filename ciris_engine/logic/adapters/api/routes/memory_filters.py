@@ -11,10 +11,10 @@ This ensures OBSERVER users only see memories they created or participated in.
 import json
 import logging
 from typing import Any, Dict, List, Optional, Set
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

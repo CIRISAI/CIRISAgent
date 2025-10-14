@@ -4,9 +4,9 @@ Telemetry helper functions - extracted from telemetry.py to reduce file size.
 
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.graph.telemetry_service import TelemetryAggregator
+from ciris_engine.schemas.types import JSONDict
 
 
 async def get_telemetry_from_service(

@@ -10,9 +10,10 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, HTTPException, Request
+
+from ciris_engine.schemas.types import JSONDict
 
 try:
     # Try to import Ed25519 verification

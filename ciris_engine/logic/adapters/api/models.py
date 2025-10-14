@@ -4,9 +4,10 @@ Shared models for API responses.
 
 from datetime import datetime
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class StandardResponse(BaseModel):

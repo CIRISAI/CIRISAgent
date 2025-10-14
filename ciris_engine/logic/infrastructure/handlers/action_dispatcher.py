@@ -36,9 +36,7 @@ class ActionDispatcher:
             audit_service: Optional audit service for centralized action auditing.
         """
         self.handlers: Dict[HandlerActionType, BaseActionHandler] = handlers
-        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, JSONDict], Awaitable[bool] | bool]] = (
-            None
-        )
+        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, JSONDict], Awaitable[bool] | bool]] = None
         self.telemetry_service = telemetry_service
         self._time_service = time_service
         self.audit_service = audit_service
@@ -64,9 +62,7 @@ class ActionDispatcher:
 
     @streaming_step(StepPoint.PERFORM_ACTION)
     @step_point(StepPoint.PERFORM_ACTION)
-    async def _perform_action_step(
-        self, thought_item: ProcessingQueueItem, result: Any, context: JSONDict
-    ) -> Any:
+    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result: Any, context: JSONDict) -> Any:
         """Step 9: Dispatch action to handler - streaming decorator for visibility."""
         # This is a pass-through that just enables streaming
         # The actual dispatch happens in the dispatch method

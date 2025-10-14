@@ -13,6 +13,7 @@ from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -741,9 +742,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             tools=tools,
         )
 
-    async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[Dict[str, Any]]:
+    async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[ToolInfo]:
         """Extract tools from adapter tool service."""
-        tools: List[Dict[str, Any]] = []
+        tools: List[ToolInfo] = []
 
         if not (hasattr(adapter, "tool_service") and adapter.tool_service):
             return tools
@@ -753,23 +754,51 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 tool_names = await adapter.tool_service.list_tools()
                 for tool_name in tool_names:
                     tool_info = await self._create_tool_info(adapter.tool_service, tool_name)
-                    tools.append(tool_info)
+                    if tool_info:
+                        tools.append(tool_info)
         except Exception as e:
             logger.debug(f"Could not get tools from {adapter_type}: {e}")
 
         return tools
 
-    async def _create_tool_info(self, tool_service: Any, tool_name: str) -> Dict[str, Any]:
-        """Create tool info dictionary."""
-        tool_info: Dict[str, Any] = {"name": tool_name, "description": f"{tool_name} tool"}
+    async def _create_tool_info(self, tool_service: Any, tool_name: str) -> Optional[ToolInfo]:
+        """Create ToolInfo object from tool service."""
+        try:
+            # Default parameters schema
+            default_parameters = ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[],
+            )
 
-        if hasattr(tool_service, "get_tool_schema"):
-            schema = await tool_service.get_tool_schema(tool_name)
-            if schema:
-                # ToolInfo expects 'parameters', not 'schema'
-                tool_info["parameters"] = schema.model_dump() if hasattr(schema, "model_dump") else schema
+            # Try to get schema from tool service
+            parameters = default_parameters
+            if hasattr(tool_service, "get_tool_schema"):
+                schema = await tool_service.get_tool_schema(tool_name)
+                if schema:
+                    # Convert schema to ToolParameterSchema
+                    if isinstance(schema, dict):
+                        parameters = ToolParameterSchema(
+                            type=schema.get("type", "object"),
+                            properties=schema.get("properties", {}),
+                            required=schema.get("required", []),
+                        )
+                    elif hasattr(schema, "model_dump"):
+                        schema_dict = schema.model_dump()
+                        parameters = ToolParameterSchema(
+                            type=schema_dict.get("type", "object"),
+                            properties=schema_dict.get("properties", {}),
+                            required=schema_dict.get("required", []),
+                        )
 
-        return tool_info
+            return ToolInfo(
+                name=tool_name,
+                description=f"{tool_name} tool",
+                parameters=parameters,
+            )
+        except Exception as e:
+            logger.debug(f"Could not create ToolInfo for {tool_name}: {e}")
+            return None
 
     async def _get_managed_adapters(self) -> List[AdapterInfo]:
         """Get adapters from adapter manager."""

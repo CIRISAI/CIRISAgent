@@ -47,11 +47,13 @@ class ShutdownProcessor(BaseProcessor):
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
         auth_service: Optional[Any] = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         super().__init__(config_accessor, thought_processor, action_dispatcher, services)
         self.runtime = runtime
         self._time_service = time_service
         self.auth_service = auth_service
+        self.agent_occurrence_id = agent_occurrence_id
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
         self.shutdown_result: Optional[ShutdownResult] = None
@@ -59,7 +61,11 @@ class ShutdownProcessor(BaseProcessor):
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
         max_active_thoughts = 50  # Default, could get from config_accessor if needed
-        self.thought_manager = ThoughtManager(time_service=self._time_service, max_active_thoughts=max_active_thoughts)
+        self.thought_manager = ThoughtManager(
+            time_service=self._time_service,
+            max_active_thoughts=max_active_thoughts,
+            agent_occurrence_id=self.agent_occurrence_id,
+        )
 
     def get_supported_states(self) -> List[AgentState]:
         """We only handle SHUTDOWN state."""
@@ -96,7 +102,7 @@ class ShutdownProcessor(BaseProcessor):
             logger.error("Shutdown task is None after creation")
             return None
 
-        current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
+        current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
         if not current_task:
             logger.error("Shutdown task disappeared!")
             return None
@@ -109,7 +115,7 @@ class ShutdownProcessor(BaseProcessor):
 
         # If task is pending, activate it
         if current_task.status == TaskStatus.PENDING:
-            persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, self.time_service)
+            persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
             logger.info("Activated shutdown task")
 
         # Generate seed thought if needed
@@ -175,7 +181,7 @@ class ShutdownProcessor(BaseProcessor):
 
             # Re-fetch task to check updated status
             assert self.shutdown_task is not None  # Already validated above
-            current_task = persistence.get_task_by_id(self.shutdown_task.task_id)
+            current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
             if not current_task:
                 logger.error("Current task is None after fetching")
                 return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
@@ -373,7 +379,7 @@ class ShutdownProcessor(BaseProcessor):
 
                 if result:
                     # Dispatch the action
-                    task = persistence.get_task_by_id(thought.source_task_id)
+                    task = persistence.get_task_by_id(thought.source_task_id, self.agent_occurrence_id)
                     from ciris_engine.logic.utils.context_utils import build_dispatch_context
 
                     # Get action from final_action (result is ConscienceApplicationResult)

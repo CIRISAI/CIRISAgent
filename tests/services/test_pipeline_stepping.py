@@ -137,29 +137,34 @@ class TestAgentProcessorPause:
         await agent_processor.pause_processing()
 
         # Now single-step should work (though no thoughts to process)
-        with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get:
-            mock_get.return_value = []
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
 
-            # Mock the pipeline controller to return empty pipeline response
-            if hasattr(agent_processor, "_pipeline_controller") and agent_processor._pipeline_controller:
-                # Mock execute_single_step_point to return pipeline_empty response
-                with patch.object(
-                    agent_processor._pipeline_controller,
-                    "execute_single_step_point",
-                    return_value={
-                        "step_point": "pipeline_empty",
-                        "step_results": [],
-                        "pipeline_state": {},
-                        "current_round": 0,
-                        "pipeline_empty": True,
-                    },
-                ):
-                    result = await agent_processor.single_step()
-            else:
+        # Mock the pipeline controller to return SingleStepResult Pydantic model
+        mock_step_result = SingleStepResult(
+            success=True,
+            step_point="pipeline_empty",
+            message="No pending thoughts to process",
+            thoughts_advanced=0,
+            processing_time_ms=0.0,
+            pipeline_state={},
+            step_results=[],
+        )
+
+        if hasattr(agent_processor, "_pipeline_controller") and agent_processor._pipeline_controller:
+            # Mock execute_single_step_point to return SingleStepResult
+            with patch.object(
+                agent_processor._pipeline_controller,
+                "execute_single_step_point",
+                return_value=mock_step_result,
+            ):
                 result = await agent_processor.single_step()
+        else:
+            # Should not reach here - pipeline controller is always initialized
+            result = await agent_processor.single_step()
 
-            assert result["success"]
-            assert result.get("pipeline_empty")
+        assert result.success
+        # pipeline_empty is not a field in SingleStepResult - check thoughts_advanced instead
+        assert result.thoughts_advanced == 0  # No thoughts advanced means pipeline was empty
 
 
 class TestPipelineController:

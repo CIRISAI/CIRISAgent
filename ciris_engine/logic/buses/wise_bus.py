@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
@@ -533,25 +534,34 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "wise_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> Dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
-        # Add v1.4.3 specific metrics
+    def get_metrics(self) -> BusMetrics:
+        """Get all wise bus metrics as typed BusMetrics schema."""
         # Count active authorities (WiseAuthority services)
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
 
-        metrics.update(
-            {
-                "wise_bus_requests": float(self._requests_count),
-                "wise_bus_deferrals": float(self._deferrals_count),
-                "wise_bus_guidance": float(self._guidance_count),
-                "wise_bus_authorities": float(len(all_wa_services)),
-            }
-        )
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        return metrics
+        # Map to BusMetrics schema
+        return BusMetrics(
+            messages_sent=self._requests_count,  # Guidance requests sent
+            messages_received=self._guidance_count,  # Guidance responses received
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=0.0,  # Not tracked yet
+            active_subscriptions=len(all_wa_services),
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=self._requests_count - self._guidance_count,  # Failed requests
+            busiest_service=None,  # Could track which authority gets most requests
+            additional_metrics={
+                "wise_guidance_requests": self._requests_count,
+                "wise_guidance_deferrals": self._deferrals_count,
+                "wise_guidance_responses": self._guidance_count,
+                "wise_uptime_seconds": uptime_seconds,
+            },
+        )
 
     async def _process_message(self, message: BusMessage) -> None:
         """Process a wise authority message - currently all WA operations are synchronous"""

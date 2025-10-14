@@ -6,7 +6,7 @@ Uses v1 schemas and integrates state management.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -18,12 +18,22 @@ from ciris_engine.logic.utils.shutdown_manager import (
     is_global_shutdown_requested,
     request_global_shutdown,
 )
+from ciris_engine.protocols.pipeline_control import SingleStepResult
+from ciris_engine.schemas.processors.base import ProcessorMetrics, ProcessorServices
 from ciris_engine.schemas.processors.context import ProcessorContext
+from ciris_engine.schemas.processors.main import (
+    GlobalProcessingMetrics,
+    MainProcessorMetrics,
+    ProcessingRoundResult,
+    ProcessingStatus,
+)
 from ciris_engine.schemas.processors.state import StateTransitionRecord
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.services.runtime_control import PipelineState
+from ciris_engine.schemas.services.runtime_control import ProcessingQueueItem as QueueItem
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -59,10 +69,11 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Dict[str, Any],
+        services: Union[Dict[str, Any], ProcessorServices],
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         """Initialize the agent processor with v1 configuration."""
         # Allow empty string for startup_channel_id - will be resolved dynamically
@@ -72,15 +83,22 @@ class AgentProcessor:
         self.agent_identity = agent_identity
         self.thought_processor = thought_processor
         self._action_dispatcher = action_dispatcher  # Store internally
-        self.services = services
+
+        # Store services - keep as-is for now to avoid breaking existing code
+        self.services: Union[Dict[str, Any], ProcessorServices] = services
         self.startup_channel_id = startup_channel_id
         self.runtime = runtime  # Store runtime reference for preload tasks
         self._time_service = time_service  # Store injected time service
+        self.agent_occurrence_id = agent_occurrence_id  # Store occurrence ID for multi-instance support
+
+        # Helper to safely get from services regardless of type
+        def get_service(key: str) -> Any:
+            if isinstance(services, dict):
+                return services.get(key)
+            return getattr(services, key, None)
 
         # Initialize state manager - agent always starts in SHUTDOWN state
-        time_service_from_services = (
-            services.get("time_service") if isinstance(services, dict) else getattr(services, "time_service", None)
-        )
+        time_service_from_services = get_service("time_service")
         if not time_service_from_services:
             # Use the injected time service if not in services dict
             time_service_from_services = time_service
@@ -102,6 +120,7 @@ class AgentProcessor:
             action_dispatcher=self._action_dispatcher,  # Use internal dispatcher
             services=services,
             startup_channel_id=startup_channel_id,
+            agent_occurrence_id=agent_occurrence_id,
         )
 
         self.play_processor = PlayProcessor(
@@ -119,15 +138,30 @@ class AgentProcessor:
         )
 
         # Enhanced dream processor with self-configuration and memory consolidation
+        # Dream processor needs dict, so convert if needed
+        services_dict = (
+            services
+            if isinstance(services, dict)
+            else {
+                "service_registry": getattr(services, "service_registry", None),
+                "identity_manager": getattr(services, "identity_manager", None),
+                "memory_service": getattr(services, "memory_service", None),
+                "audit_service": getattr(services, "audit_service", None),
+                "telemetry_service": getattr(services, "telemetry_service", None),
+                "time_service": getattr(services, "time_service", None),
+                "resource_monitor": getattr(services, "resource_monitor", None),
+            }
+        )
         self.dream_processor = DreamProcessor(
             config_accessor=app_config,  # app_config is actually a ConfigAccessor
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
-            services=services,
-            service_registry=services.get("service_registry"),
-            identity_manager=services.get("identity_manager"),
+            services=services_dict,
+            service_registry=get_service("service_registry"),
+            identity_manager=get_service("identity_manager"),
             startup_channel_id=startup_channel_id,
             cirisnode_url="https://localhost:8001",  # Default since cirisnode config not in essential
+            agent_occurrence_id=agent_occurrence_id,
         )
 
         # Shutdown processor for graceful shutdown negotiation
@@ -135,13 +169,13 @@ class AgentProcessor:
         from ciris_engine.schemas.processors.base import ProcessorServices as ProcessorServicesSchema
 
         processor_services = ProcessorServicesSchema(
-            time_service=services.get("time_service"),
-            resource_monitor=services.get("resource_monitor"),
-            discord_service=services.get("discord_service"),
-            communication_bus=services.get("communication_bus"),
-            memory_service=services.get("memory_service"),
-            audit_service=services.get("audit_service"),
-            telemetry_service=services.get("telemetry_service"),
+            time_service=get_service("time_service"),
+            resource_monitor=get_service("resource_monitor"),
+            discord_service=get_service("discord_service"),
+            communication_bus=get_service("communication_bus"),
+            memory_service=get_service("memory_service"),
+            audit_service=get_service("audit_service"),
+            telemetry_service=get_service("telemetry_service"),
         )
 
         self.shutdown_processor = ShutdownProcessor(
@@ -151,6 +185,7 @@ class AgentProcessor:
             services=processor_services,
             time_service=time_service,  # Use the injected time service directly
             runtime=runtime,
+            agent_occurrence_id=agent_occurrence_id,
         )
 
         # Map states to processors
@@ -183,6 +218,12 @@ class AgentProcessor:
 
         logger.info("AgentProcessor initialized with v1 schemas and modular processors")
 
+    def _get_service(self, key: str) -> Any:
+        """Safely get a service from the services dict or ProcessorServices object."""
+        if isinstance(self.services, dict):
+            return self.services.get(key)
+        return getattr(self.services, key, None)
+
     def _load_preload_tasks(self) -> None:
         """Load preload tasks after successful WORK state transition."""
         try:
@@ -192,12 +233,8 @@ class AgentProcessor:
                     logger.info(f"Loading {len(preload_tasks)} preload tasks after WORK state transition")
                     from ciris_engine.logic.processors.support.task_manager import TaskManager
 
-                    time_service = (
-                        self.services.get("time_service")
-                        if isinstance(self.services, dict)
-                        else getattr(self.services, "time_service", None)
-                    )
-                    tm = TaskManager(time_service=time_service)
+                    time_service = self._get_service("time_service")
+                    tm = TaskManager(time_service=time_service, agent_occurrence_id=self.agent_occurrence_id)
                     for desc in preload_tasks:
                         try:
                             tm.create_task(
@@ -303,7 +340,7 @@ class AgentProcessor:
                 logger.info(f"Wakeup round {wakeup_round}: {wakeup_result.thoughts_processed} thoughts processed")
 
                 # Use shorter delay for mock LLM
-                llm_service = self.services.get("llm_service")
+                llm_service = self._get_service("llm_service")
                 is_mock_llm = llm_service and type(llm_service).__name__ == "MockLLMService"
                 round_delay = 0.1 if is_mock_llm else 5.0
                 await asyncio.sleep(round_delay)
@@ -375,7 +412,7 @@ class AgentProcessor:
             # Get current state to filter thoughts appropriately
             current_state = self.state_manager.get_state()
 
-            pending_thoughts = persistence.get_pending_thoughts_for_active_tasks()
+            pending_thoughts = persistence.get_pending_thoughts_for_active_tasks(self.agent_occurrence_id)
 
             # If in SHUTDOWN state, only process thoughts for shutdown tasks
             if current_state == AgentState.SHUTDOWN:
@@ -410,7 +447,9 @@ class AgentProcessor:
                     # Pre-fetch all thoughts in the batch to avoid serialization
                     thought_ids = [t.thought_id for t in batch]
                     logger.info(f"[DEBUG TIMING] Pre-fetching {len(thought_ids)} thoughts in batch")
-                    prefetched_thoughts = await persistence.async_get_thoughts_by_ids(thought_ids)
+                    prefetched_thoughts = await persistence.async_get_thoughts_by_ids(
+                        thought_ids, self.agent_occurrence_id
+                    )
                     logger.info(f"[DEBUG TIMING] Pre-fetched {len(prefetched_thoughts)} thoughts")
 
                     # Pre-fetch batch context data (same for all thoughts)
@@ -418,31 +457,11 @@ class AgentProcessor:
                     from ciris_engine.logic.context.batch_context import prefetch_batch_context
 
                     batch_context_data = await prefetch_batch_context(
-                        memory_service=(
-                            self.services.get("memory_service")
-                            if isinstance(self.services, dict)
-                            else getattr(self.services, "memory_service", None)
-                        ),
-                        secrets_service=(
-                            self.services.get("secrets_service")
-                            if isinstance(self.services, dict)
-                            else getattr(self.services, "secrets_service", None)
-                        ),
-                        service_registry=(
-                            self.services.get("service_registry")
-                            if isinstance(self.services, dict)
-                            else getattr(self.services, "service_registry", None)
-                        ),
-                        resource_monitor=(
-                            self.services.get("resource_monitor")
-                            if isinstance(self.services, dict)
-                            else getattr(self.services, "resource_monitor", None)
-                        ),
-                        telemetry_service=(
-                            self.services.get("telemetry_service")
-                            if isinstance(self.services, dict)
-                            else getattr(self.services, "telemetry_service", None)
-                        ),
+                        memory_service=self._get_service("memory_service"),
+                        secrets_service=self._get_service("secrets_service"),
+                        service_registry=self._get_service("service_registry"),
+                        resource_monitor=self._get_service("resource_monitor"),
+                        telemetry_service=self._get_service("telemetry_service"),
                         runtime=self.runtime,
                     )
                     logger.info("[DEBUG TIMING] Pre-fetched batch context data")
@@ -634,7 +653,7 @@ class AgentProcessor:
             if result:
                 try:
                     # Get the task for context
-                    task = persistence.get_task_by_id(thought.source_task_id)
+                    task = persistence.get_task_by_id(thought.source_task_id, self.agent_occurrence_id)
 
                     # Extract conscience result if available
                     conscience_result = getattr(result, "_conscience_result", None)
@@ -686,7 +705,9 @@ class AgentProcessor:
             else:
                 try:
                     # Check if the thought was already handled (e.g., TASK_COMPLETE)
-                    updated_thought = await persistence.async_get_thought_by_id(thought.thought_id)
+                    updated_thought = await persistence.async_get_thought_by_id(
+                        thought.thought_id, self.agent_occurrence_id
+                    )
                     if updated_thought and updated_thought.status in [ThoughtStatus.COMPLETED, ThoughtStatus.FAILED]:
                         logger.debug(
                             f"Thought {thought.thought_id} was already handled with status {updated_thought.status.value}"
@@ -835,7 +856,7 @@ class AgentProcessor:
         """Set callback for thought processing time tracking."""
         self._thought_processing_callback = callback
 
-    async def single_step(self) -> Dict[str, Any]:
+    async def single_step(self) -> "SingleStepResult":
         """
         Execute one step point in the PDMA pipeline when paused.
 
@@ -843,13 +864,7 @@ class AgentProcessor:
         has execute_single_step_point or we fail loudly.
 
         Returns:
-            Dict containing:
-            - success: bool
-            - step_point: str (the step point executed)
-            - step_results: List[TypedStepResult] (results for all thoughts processed)
-            - thoughts_processed: int
-            - processing_time_ms: float
-            - pipeline_state: dict
+            SingleStepResult with step execution details
         """
         logger.info(f"single_step() called, paused: {self._is_paused}")
 
@@ -865,8 +880,6 @@ class AgentProcessor:
                 "Single-step functionality requires a proper pipeline controller implementation."
             )
 
-        start_time = self._time_service.now()
-
         # Enable single-step mode
         self._single_step_mode = True
         self._pipeline_controller._single_step_mode = True
@@ -878,29 +891,11 @@ class AgentProcessor:
             if not step_result:
                 raise ValueError("Pipeline controller returned None")
 
-            # Support both dict and Pydantic SingleStepResult models
-            from ciris_engine.protocols.pipeline_control import SingleStepResult
-
+            # Return the typed result directly
             if isinstance(step_result, SingleStepResult):
-                # Convert Pydantic model to dict for uniform access
-                step_result_dict = step_result.model_dump()
-            elif isinstance(step_result, dict):
-                step_result_dict = step_result
+                return step_result
             else:
                 raise ValueError(f"Invalid step result type from pipeline controller: {type(step_result)}")
-
-            processing_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000
-
-            return {
-                "success": True,
-                "step_point": step_result_dict["step_point"],  # Fail if missing
-                "step_results": step_result_dict["step_results"],  # Fail if missing
-                "thoughts_processed": len(step_result_dict["step_results"]),
-                "processing_time_ms": processing_time_ms,
-                "pipeline_state": step_result_dict["pipeline_state"],  # Fail if missing
-                "current_round": step_result_dict.get("current_round"),
-                "pipeline_empty": step_result_dict.get("pipeline_empty", False),
-            }
 
         finally:
             # Always disable single-step mode
@@ -1350,25 +1345,74 @@ class AgentProcessor:
             processor = self.state_processors[target_state]
             processor.initialize()
 
-    async def process(self, round_number: int) -> Dict[str, Any]:
+    async def process(self, round_number: int) -> ProcessingRoundResult:
         """Execute one round of processing based on current state."""
         current_state = self.state_manager.get_state()
         processor = self.state_processors.get(current_state)
 
         if processor:
-            # Process and convert typed result to dict for backward compatibility
+            # Return typed result directly from processor
             typed_result = await processor.process(round_number)
-            # Convert typed result to dict
-            return (
-                typed_result.model_dump()
-                if hasattr(typed_result, "model_dump")
-                else {"state": current_state.value, "round_number": round_number}
-            )
+
+            # Convert to ProcessingRoundResult if needed
+            if isinstance(typed_result, ProcessingRoundResult):
+                return typed_result
+            elif hasattr(typed_result, "model_dump"):
+                # Convert other result types to ProcessingRoundResult
+                result_dict = typed_result.model_dump()
+                return ProcessingRoundResult(
+                    round_number=round_number,
+                    state=current_state,
+                    processor_name=processor.__class__.__name__,
+                    success=result_dict.get("success", True),
+                    items_processed=result_dict.get("items_processed", 0),
+                    errors=result_dict.get("errors", 0),
+                    state_changed=False,
+                    new_state=None,
+                    processing_time_ms=result_dict.get("duration_seconds", 0) * 1000,
+                    details=result_dict,
+                )
+            else:
+                # Fallback for untyped results
+                return ProcessingRoundResult(
+                    round_number=round_number,
+                    state=current_state,
+                    processor_name=processor.__class__.__name__,
+                    success=True,
+                    items_processed=0,
+                    errors=0,
+                    state_changed=False,
+                    new_state=None,
+                    processing_time_ms=0.0,
+                    details={},
+                )
         elif current_state == AgentState.DREAM:
             # Dream state handled separately
-            return {"state": "dream", "round_number": round_number}
+            return ProcessingRoundResult(
+                round_number=round_number,
+                state=current_state,
+                processor_name="DreamProcessor",
+                success=True,
+                items_processed=0,
+                errors=0,
+                state_changed=False,
+                new_state=None,
+                processing_time_ms=0.0,
+                details={"state": "dream"},
+            )
         else:
-            return {"state": current_state.value, "round_number": round_number, "error": "No processor available"}
+            return ProcessingRoundResult(
+                round_number=round_number,
+                state=current_state,
+                processor_name="Unknown",
+                success=False,
+                items_processed=0,
+                errors=1,
+                state_changed=False,
+                new_state=None,
+                processing_time_ms=0.0,
+                details={"error": "No processor available"},
+            )
 
     def get_current_state(self) -> str:
         """Get current processing state.
@@ -1420,7 +1464,7 @@ class AgentProcessor:
         try:
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
-            memory_service = self.services.get("memory_service")
+            memory_service = self._get_service("memory_service")
             if not memory_service:
                 logger.warning("Cannot schedule initial dream - no memory service")
                 return
@@ -1461,7 +1505,7 @@ class AgentProcessor:
             from ciris_engine.schemas.services.graph_core import GraphScope
             from ciris_engine.schemas.services.operations import MemoryQuery
 
-            memory_service = self.services.get("memory_service")
+            memory_service = self._get_service("memory_service")
             if not memory_service:
                 return False
 
@@ -1530,10 +1574,10 @@ class AgentProcessor:
             from ciris_engine.logic import persistence
             from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
-            pending_count = persistence.count_thoughts_by_status(ThoughtStatus.PENDING)
-            processing_count = persistence.count_thoughts_by_status(ThoughtStatus.PROCESSING)
-            completed_count = persistence.count_thoughts_by_status(ThoughtStatus.COMPLETED)
-            failed_count = persistence.count_thoughts_by_status(ThoughtStatus.FAILED)
+            pending_count = persistence.count_thoughts_by_status(ThoughtStatus.PENDING, self.agent_occurrence_id)
+            processing_count = persistence.count_thoughts_by_status(ThoughtStatus.PROCESSING, self.agent_occurrence_id)
+            completed_count = persistence.count_thoughts_by_status(ThoughtStatus.COMPLETED, self.agent_occurrence_id)
+            failed_count = persistence.count_thoughts_by_status(ThoughtStatus.FAILED, self.agent_occurrence_id)
 
             # Get recent thought activity
             recent_thoughts = []
@@ -1541,7 +1585,7 @@ class AgentProcessor:
                 # Get last 5 thoughts for activity overview
                 from ciris_engine.logic.persistence.models.thoughts import get_recent_thoughts
 
-                recent_data = get_recent_thoughts(limit=5)
+                recent_data = get_recent_thoughts(limit=5, occurrence_id=self.agent_occurrence_id)
                 for thought_data in recent_data:
                     content_str = str(thought_data.content or "")
                     recent_thoughts.append(

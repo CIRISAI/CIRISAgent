@@ -23,6 +23,7 @@ class QAModule(Enum):
     GUIDANCE = "guidance"
     CONSENT = "consent"
     BILLING = "billing"
+    MULTI_OCCURRENCE = "multi_occurrence"
 
     # Handler modules
     HANDLERS = "handlers"
@@ -107,6 +108,7 @@ class QAConfig:
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
         from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
         from .modules.filter_tests import FilterTestModule
+        from .modules.multi_occurrence_tests import MultiOccurrenceTestModule
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
         # API test modules
@@ -134,6 +136,8 @@ class QAConfig:
         elif module == QAModule.BILLING:
             # Billing tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.MULTI_OCCURRENCE:
+            return MultiOccurrenceTestModule.get_all_multi_occurrence_tests()
 
         # Handler test modules
         elif module == QAModule.HANDLERS:
@@ -196,7 +200,34 @@ class QAConfig:
 
         elif module == QAModule.ALL:
             tests = []
-            for m in [QAModule.API_FULL, QAModule.HANDLERS_FULL, QAModule.FILTERS, QAModule.SDK, QAModule.STREAMING]:
+            # Run all modules in sequence - comprehensive test suite
+            for m in [
+                # Core API modules
+                QAModule.AUTH,
+                QAModule.TELEMETRY,
+                QAModule.AGENT,
+                QAModule.SYSTEM,
+                QAModule.MEMORY,
+                QAModule.AUDIT,
+                QAModule.TOOLS,
+                QAModule.TASKS,
+                QAModule.GUIDANCE,
+                QAModule.CONSENT,
+                QAModule.BILLING,
+                QAModule.MULTI_OCCURRENCE,
+                # Handler modules
+                QAModule.HANDLERS,
+                QAModule.SIMPLE_HANDLERS,
+                # Filter modules
+                QAModule.FILTERS,
+                # SDK modules
+                QAModule.SDK,
+                # Extended modules
+                QAModule.EXTENDED_API,
+                QAModule.SINGLE_STEP_SIMPLE,
+                QAModule.SINGLE_STEP_COMPREHENSIVE,
+                QAModule.STREAMING,
+            ]:
                 tests.extend(self.get_module_tests(m))
             return tests
 

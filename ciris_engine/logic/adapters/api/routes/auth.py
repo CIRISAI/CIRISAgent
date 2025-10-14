@@ -356,12 +356,14 @@ class OAuthLoginResponse(BaseModel):
 
 
 @router.get("/auth/oauth/{provider}/login")
-async def oauth_login(provider: str, request: Request) -> RedirectResponse:
+async def oauth_login(provider: str, request: Request, redirect_uri: Optional[str] = None) -> RedirectResponse:
     """
     Initiate OAuth login flow.
 
     Redirects to the OAuth provider's authorization URL.
+    Accepts optional redirect_uri to specify where to send tokens after OAuth.
     """
+    import base64
     import json
     import urllib.parse
     from pathlib import Path
@@ -387,11 +389,17 @@ async def oauth_login(provider: str, request: Request) -> RedirectResponse:
         provider_config = config[provider]
         client_id = provider_config["client_id"]
 
-        # Generate state for CSRF protection
-        state = secrets.token_urlsafe(32)
+        # Generate CSRF token
+        csrf_token = secrets.token_urlsafe(32)
 
-        # Store state in a temporary location (in production, use Redis or similar)
-        # For now, we'll include it in the redirect_uri
+        # Encode state with CSRF token and optional redirect_uri
+        state_data = {"csrf": csrf_token}
+        if redirect_uri:
+            state_data["redirect_uri"] = redirect_uri
+            logger.info(f"OAuth login initiated with redirect_uri: {redirect_uri}")
+
+        # Base64 encode the state JSON
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
         # Use OAUTH_CALLBACK_BASE_URL environment variable, or construct from request
         base_url = os.getenv("OAUTH_CALLBACK_BASE_URL")
@@ -667,13 +675,16 @@ def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthU
     return api_key
 
 
-def _build_redirect_response(api_key: str, oauth_user: OAuthUser, provider: str) -> RedirectResponse:
+def _build_redirect_response(
+    api_key: str, oauth_user: OAuthUser, provider: str, redirect_uri: Optional[str] = None
+) -> RedirectResponse:
     """Build the redirect response for OAuth callback."""
     VALID_PROVIDERS = {"google", "github", "discord"}
     if provider not in VALID_PROVIDERS:
         # Redirect to a safe default if provider is invalid
         return RedirectResponse(url="/", status_code=302)
-    gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
+
+    # Build redirect parameters
     redirect_params = {
         "access_token": api_key,
         "token_type": "Bearer",
@@ -685,7 +696,18 @@ def _build_redirect_response(api_key: str, oauth_user: OAuthUser, provider: str)
     import urllib.parse
 
     query_string = urllib.parse.urlencode(redirect_params)
-    redirect_url = f"{gui_callback_url}?{query_string}"
+
+    # If redirect_uri was provided, use it (frontend domain)
+    # Otherwise, use relative path (backward compatibility)
+    if redirect_uri:
+        redirect_url = f"{redirect_uri}?{query_string}"
+        logger.info(f"Redirecting OAuth user to frontend: {redirect_uri}")
+    else:
+        gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
+        redirect_url = f"{gui_callback_url}?{query_string}"
+        logger.warning(
+            f"No redirect_uri in state, using relative path (may fail for separate frontend): {redirect_url}"
+        )
 
     return RedirectResponse(url=redirect_url, status_code=302)
 
@@ -705,6 +727,20 @@ async def oauth_callback(
     Accepts optional marketing_opt_in parameter from frontend.
     """
     try:
+        # Decode state parameter to extract redirect_uri
+        import base64
+        import json
+
+        redirect_uri = None
+        try:
+            state_json = base64.urlsafe_b64decode(state.encode()).decode()
+            state_data = json.loads(state_json)
+            redirect_uri = state_data.get("redirect_uri")
+            logger.debug(f"Decoded state: redirect_uri={redirect_uri}")
+        except Exception as e:
+            # If state decode fails, log but continue (backward compatibility)
+            logger.warning(f"Failed to decode state parameter: {e}. Using default redirect.")
+
         # Load OAuth configuration
         provider_config = _load_oauth_config(provider)
         client_id = provider_config["client_id"]
@@ -749,7 +785,7 @@ async def oauth_callback(
         logger.info(f"OAuth user {oauth_user.user_id} logged in successfully via {provider}")
 
         # Build and return redirect response
-        return _build_redirect_response(api_key, oauth_user, provider)
+        return _build_redirect_response(api_key, oauth_user, provider, redirect_uri)
 
     except HTTPException:
         raise

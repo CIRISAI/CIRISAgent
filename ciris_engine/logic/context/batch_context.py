@@ -119,10 +119,10 @@ async def prefetch_batch_context(
 
     # 2. Recent and Top Tasks (single query each)
     logger.info("[DEBUG DB TIMING] Batch: fetching recent completed tasks")
-    db_recent_tasks = persistence.get_recent_completed_tasks(10)
+    db_recent_tasks = persistence.get_recent_completed_tasks("default", 10)
 
     logger.info("[DEBUG DB TIMING] Batch: fetching top tasks")
-    db_top_tasks = persistence.get_top_tasks(10)
+    db_top_tasks = persistence.get_top_tasks("default", 10)
 
     # Convert to TaskSummary
     from pydantic import BaseModel

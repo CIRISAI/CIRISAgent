@@ -122,7 +122,9 @@ class TaskCompleteHandler(BaseActionHandler):
                     raise RuntimeError(error_msg)
 
                 # Only mark task complete if no pending thoughts
-                task_updated = persistence.update_task_status(parent_task_id, TaskStatus.COMPLETED, self.time_service)
+                task_updated = persistence.update_task_status(
+                    parent_task_id, TaskStatus.COMPLETED, "default", self.time_service
+                )
                 if task_updated:
                     self.logger.info(
                         f"Marked parent task {parent_task_id} as COMPLETED due to TASK_COMPLETE action on thought {thought_id}."

@@ -68,8 +68,8 @@ class TestUpdatedStatusConscience:
         original_get_task = tasks_module.get_task_by_id
         original_get_db_connection = db_module.get_db_connection
 
-        def patched_get_task(task_id, db_path=None):
-            return original_get_task(task_id, db_path=temp_db)
+        def patched_get_task(task_id, occurrence_id="default", db_path=None):
+            return original_get_task(task_id, occurrence_id, db_path=temp_db)
 
         def patched_get_db_connection(db_path=None):
             return original_get_db_connection(db_path=temp_db)
@@ -146,7 +146,11 @@ class TestUpdatedStatusConscience:
         """Test that check fails when update flag is set."""
         # Set the update flag
         set_task_updated_info_flag(
-            sample_task.task_id, "@newuser said: Actually, I changed my mind", mock_time_service, db_path=patch_db_path
+            sample_task.task_id,
+            "@newuser said: Actually, I changed my mind",
+            "default",
+            mock_time_service,
+            db_path=patch_db_path,
         )
 
         context = ConscienceCheckContext(thought=sample_thought)
@@ -165,7 +169,9 @@ class TestUpdatedStatusConscience:
     ):
         """Test that update flag is cleared after detection."""
         # Set the update flag
-        set_task_updated_info_flag(sample_task.task_id, "New content", mock_time_service, db_path=patch_db_path)
+        set_task_updated_info_flag(
+            sample_task.task_id, "New content", "default", mock_time_service, db_path=patch_db_path
+        )
 
         context = ConscienceCheckContext(thought=sample_thought)
 
@@ -190,7 +196,9 @@ class TestUpdatedStatusConscience:
         """Test that replacement action is PONDER with update content."""
         # Set the update flag with specific content
         update_content = "@alice: I need help with something else"
-        set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
+        set_task_updated_info_flag(
+            sample_task.task_id, update_content, "default", mock_time_service, db_path=patch_db_path
+        )
 
         context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)
@@ -253,7 +261,9 @@ class TestUpdatedStatusConscience:
     ):
         """Test that update message is properly formatted."""
         update_content = "@alice (ID: 12345): Actually never mind"
-        set_task_updated_info_flag(sample_task.task_id, update_content, mock_time_service, db_path=patch_db_path)
+        set_task_updated_info_flag(
+            sample_task.task_id, update_content, "default", mock_time_service, db_path=patch_db_path
+        )
 
         context = ConscienceCheckContext(thought=sample_thought)
         result = await conscience.check(speak_action, context)

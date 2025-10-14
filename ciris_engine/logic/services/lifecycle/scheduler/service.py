@@ -203,7 +203,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 from ciris_engine.schemas.runtime.enums import TaskStatus
 
                 if self._time_service:
-                    update_task_status(deferred_task_id, TaskStatus.PENDING, self._time_service)
+                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default", self._time_service)
                 else:
                     # If no time service available, skip updating the task
                     logger.warning(f"Cannot update task {deferred_task_id} status: no time service available")

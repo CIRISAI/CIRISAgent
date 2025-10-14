@@ -793,8 +793,19 @@ class TelemetryAggregator:
                 # Try get_metrics first (all buses have this)
                 if hasattr(bus, "get_metrics"):
                     try:
-                        metrics = bus.get_metrics()
-                        # Convert dict to ServiceTelemetryData
+                        metrics_result = bus.get_metrics()
+                        # Convert BusMetrics (Pydantic model) to dict
+                        # Buses now return typed BusMetrics instead of Dict[str, float]
+                        if hasattr(metrics_result, "model_dump"):
+                            metrics = metrics_result.model_dump()
+                            # Merge additional_metrics into top-level for backward compatibility
+                            if "additional_metrics" in metrics:
+                                additional = metrics.pop("additional_metrics")
+                                metrics.update(additional)
+                        else:
+                            # Fallback for any remaining dict returns
+                            metrics = metrics_result
+
                         # Buses with providers should report healthy
                         is_healthy = True
                         if hasattr(bus, "get_providers"):
@@ -814,14 +825,21 @@ class TelemetryAggregator:
                         }
                         uptime_metric = uptime_metric_map.get(bus_name, "uptime_seconds")
 
+                        # Filter custom_metrics to only include valid types (int, float, str) and exclude None
+                        filtered_metrics = {
+                            k: v for k, v in metrics.items() if v is not None and isinstance(v, (int, float, str))
+                        }
+
                         return ServiceTelemetryData(
                             healthy=is_healthy,
                             uptime_seconds=metrics.get(uptime_metric, metrics.get("uptime_seconds", 0.0)),
-                            error_count=metrics.get("error_count", 0),
-                            requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
+                            error_count=metrics.get("error_count", 0) or metrics.get("errors_last_hour", 0),
+                            requests_handled=metrics.get("request_count")
+                            or metrics.get("requests_handled", 0)
+                            or metrics.get("messages_sent", 0),
                             error_rate=metrics.get("error_rate", 0.0),
                             memory_mb=metrics.get("memory_mb"),
-                            custom_metrics=metrics,
+                            custom_metrics=filtered_metrics,
                         )
                     except Exception as e:
                         logger.error(f"Error getting metrics from {bus_name}: {e}")
@@ -940,11 +958,21 @@ class TelemetryAggregator:
         custom_metrics: Dict[str, Any] = {"adapter_id": adapter_id} if adapter_id else {}
         if adapter_info:
             adapter_type_value: Any = adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
-            custom_metrics["adapter_type"] = adapter_type_value
+            if adapter_type_value is not None:  # Only add if not None
+                custom_metrics["adapter_type"] = adapter_type_value
             if hasattr(adapter_info, "started_at") and adapter_info.started_at:
                 custom_metrics["start_time"] = adapter_info.started_at.isoformat()
 
-        custom_metrics.update(metrics.get("custom_metrics", {}))
+        # Update with custom_metrics from metrics, filtering out None values
+        raw_custom_metrics = metrics.get("custom_metrics", {})
+        custom_metrics.update(
+            {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
+        )
+
+        # Final filter to ensure all values are valid types (int, float, str) and not None
+        filtered_custom_metrics = {
+            k: v for k, v in custom_metrics.items() if v is not None and isinstance(v, (int, float, str))
+        }
 
         return ServiceTelemetryData(
             healthy=healthy,
@@ -953,7 +981,7 @@ class TelemetryAggregator:
             requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0),
             error_rate=metrics.get("error_rate", 0.0),
             memory_mb=metrics.get("memory_mb"),
-            custom_metrics=custom_metrics,
+            custom_metrics=filtered_custom_metrics,
         )
 
     def _create_empty_telemetry(self, adapter_id: str, error_msg: Optional[str] = None) -> ServiceTelemetryData:

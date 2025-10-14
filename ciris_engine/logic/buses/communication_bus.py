@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.protocols.services import CommunicationService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 
@@ -321,22 +322,32 @@ class CommunicationBus(BaseBus[CommunicationService]):
             "communication_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> Dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
-        # Add v1.4.3 specific metrics
+    def get_metrics(self) -> BusMetrics:
+        """Get all communication bus metrics as typed BusMetrics schema."""
         # Get active connections count from service registry
         active_connections = len(self.service_registry.get_services_by_type(ServiceType.COMMUNICATION))
 
-        metrics.update(
-            {
-                "communication_bus_messages_sent": float(self._messages_sent),
-                "communication_bus_messages_received": float(self._messages_received),
-                "communication_bus_broadcasts": float(self._broadcasts),
-                "communication_bus_connections": float(active_connections),
-            }
-        )
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        return metrics
+        # Map to BusMetrics schema - put communication-specific metrics in additional_metrics
+        return BusMetrics(
+            messages_sent=self._messages_sent,
+            messages_received=self._messages_received,
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=0.0,  # Not tracked yet
+            active_subscriptions=active_connections,
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=self._errors,  # Total errors (not windowed yet)
+            busiest_service=None,  # Could track which adapter gets most traffic
+            additional_metrics={
+                "communication_messages_sent": self._messages_sent,
+                "communication_messages_received": self._messages_received,
+                "communication_broadcasts": self._broadcasts,
+                "communication_errors": self._errors,
+                "communication_uptime_seconds": uptime_seconds,
+            },
+        )

@@ -58,10 +58,8 @@ def clean_db(test_db):
         conn.execute("DELETE FROM tasks")
         conn.execute("DELETE FROM graph_edges")
         conn.execute("DELETE FROM graph_nodes")
-        conn.execute("DELETE FROM metrics")
-        conn.execute("DELETE FROM audit_logs")
-        conn.execute("DELETE FROM trace_summaries")
         conn.execute("DELETE FROM feedback_mappings")
+        conn.execute("DELETE FROM audit_log")
         conn.commit()
 
     return test_db

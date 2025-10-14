@@ -95,8 +95,8 @@ class DreamProcessor(BaseProcessor):
         pulse_interval: float = 300.0,  # 5 minutes between major activities
         min_dream_duration: int = 30,  # Minimum 30 minutes
         max_dream_duration: int = 120,  # Maximum 2 hours
-        max_active_tasks: int = 50,  # More tasks during dream
-        max_active_thoughts: int = 100,  # More thoughts during dream
+        capacity_limits: Optional[Dict[str, int]] = None,  # max_active_tasks and max_active_thoughts
+        agent_occurrence_id: str = "default",
     ) -> None:
         # Initialize base processor
         super().__init__(config_accessor, thought_processor, action_dispatcher, services)
@@ -116,8 +116,11 @@ class DreamProcessor(BaseProcessor):
         self.pulse_interval = pulse_interval
         self.min_dream_duration = min_dream_duration
         self.max_dream_duration = max_dream_duration
-        self.max_active_tasks = max_active_tasks
-        self.max_active_thoughts = max_active_thoughts
+        # Extract capacity limits from dict or use defaults
+        capacity_limits = capacity_limits or {}
+        self.max_active_tasks = capacity_limits.get("max_active_tasks", 50)
+        self.max_active_thoughts = capacity_limits.get("max_active_thoughts", 100)
+        self.agent_occurrence_id = agent_occurrence_id
 
         # Check if CIRISNode is configured
         self.cirisnode_enabled = self._check_cirisnode_enabled()
@@ -193,7 +196,11 @@ class DreamProcessor(BaseProcessor):
         if not self.task_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for TaskManager")
-            self.task_manager = TaskManager(max_active_tasks=self.max_active_tasks, time_service=self._time_service)
+            self.task_manager = TaskManager(
+                max_active_tasks=self.max_active_tasks,
+                time_service=self._time_service,
+                agent_occurrence_id=self.agent_occurrence_id,
+            )
         if not self.thought_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for ThoughtManager")
@@ -201,6 +208,7 @@ class DreamProcessor(BaseProcessor):
                 time_service=self._time_service,
                 max_active_thoughts=self.max_active_thoughts,
                 default_channel_id=self.startup_channel_id,
+                agent_occurrence_id=self.agent_occurrence_id,
             )
 
         # Clear any previous tasks
@@ -307,7 +315,7 @@ class DreamProcessor(BaseProcessor):
 
         if self._time_service:
             for task in self._dream_tasks:
-                persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self._time_service)
+                persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, "default", self._time_service)
 
         logger.info(f"Created and activated {len(self._dream_tasks)} dream tasks")
 

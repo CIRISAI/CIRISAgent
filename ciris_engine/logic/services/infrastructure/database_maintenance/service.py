@@ -354,7 +354,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Mark old tasks as completed
             if old_task_ids:
                 for task_id in old_task_ids:
-                    update_task_status(task_id, TaskStatus.COMPLETED, self.time_service)
+                    update_task_status(task_id, TaskStatus.COMPLETED, "default", self.time_service)
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
             else:
                 logger.info("No old active tasks found")

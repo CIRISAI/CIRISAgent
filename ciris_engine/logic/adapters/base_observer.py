@@ -121,6 +121,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         time_service: Optional[TimeServiceProtocol] = None,
         auth_service: Optional[Any] = None,
         observer_wa_id: Optional[str] = None,
+        agent_occurrence_id: str = "default",
         *,
         origin_service: str = "unknown",
         resource_monitor: Optional[ResourceMonitorServiceProtocol] = None,
@@ -134,6 +135,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self.time_service = time_service
         self.auth_service = auth_service
         self.observer_wa_id = observer_wa_id
+        self.agent_occurrence_id = agent_occurrence_id
         self.origin_service = origin_service
         self.resource_monitor = resource_monitor
         self._credit_log_cache: Dict[str, float] = {}
@@ -522,11 +524,13 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 set_task_updated_info_flag,
             )
 
-            existing_task = get_active_task_for_channel(channel_id)
+            existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
-                success = set_task_updated_info_flag(existing_task.task_id, update_content, self.time_service)
+                success = set_task_updated_info_flag(
+                    existing_task.task_id, update_content, self.agent_occurrence_id, self.time_service
+                )
                 if success:
                     logger.info(
                         f"[OBSERVER] TASK UPDATE: Flagged existing task {existing_task.task_id} "
@@ -554,6 +558,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=getattr(msg, "channel_id", "system"),
+                agent_occurrence_id=self.agent_occurrence_id,
                 description=description,
                 status=TaskStatus.ACTIVE,
                 priority=priority,
@@ -564,6 +569,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
                     user_id=msg.author_id,  # type: ignore[attr-defined]
                     correlation_id=msg.message_id,  # type: ignore[attr-defined]
                     parent_task_id=None,
+                    agent_occurrence_id=self.agent_occurrence_id,
                 ),
             )
 
@@ -624,6 +630,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             thought = Thought(
                 thought_id=generate_thought_id(thought_type=ThoughtType.STANDARD, task_id=task.task_id),
                 source_task_id=task.task_id,
+                agent_occurrence_id=self.agent_occurrence_id,
                 channel_id=getattr(msg, "channel_id", None),
                 thought_type=ThoughtType.STANDARD,
                 status=ThoughtStatus.PENDING,
@@ -642,6 +649,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
                     depth=0,
                     parent_thought_id=None,
                     correlation_id=msg.message_id,  # type: ignore[attr-defined]
+                    agent_occurrence_id=self.agent_occurrence_id,
                 ),
             )
 

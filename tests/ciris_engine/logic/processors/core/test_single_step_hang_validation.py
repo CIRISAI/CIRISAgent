@@ -147,19 +147,29 @@ class TestSingleStepHangValidation:
     async def test_single_step_works_with_always_present_pipeline_controller(self, agent_processor):
         """Test that single_step works now that pipeline controller is always present."""
         # ARRANGE: Pause processor (pipeline controller is always initialized now)
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         agent_processor._is_paused = True
         # Pipeline controller is always present, no need to check for None
         assert agent_processor._pipeline_controller is not None
 
-        # Mock the thought processing to avoid full execution
-        with patch.object(agent_processor, "_process_single_thought") as mock_process:
-            mock_process.return_value = {"success": True, "thought_id": "test_thought"}
+        # Mock pipeline controller to return proper Pydantic model
+        mock_step_result = SingleStepResult(
+            success=True,
+            step_point="GATHER_CONTEXT",
+            message="Processed 1 thought at GATHER_CONTEXT",
+            thoughts_advanced=1,
+            processing_time_ms=10.0,
+            pipeline_state={},
+            step_results=[],
+        )
+        agent_processor._pipeline_controller.execute_single_step_point = AsyncMock(return_value=mock_step_result)
 
-            # ACT: Call single_step
-            result = await agent_processor.single_step()
+        # ACT: Call single_step
+        result = await agent_processor.single_step()
 
-            # ASSERT: Works correctly with initialized pipeline controller
-            assert result["success"] is True
+        # ASSERT: Works correctly with initialized pipeline controller
+        assert result.success is True
 
     @pytest.mark.asyncio
     async def test_single_step_deadlock_with_paused_processor(self, agent_processor, sample_thought):
@@ -175,27 +185,32 @@ class TestSingleStepHangValidation:
         6. State processor tries to run full pipeline while paused -> DEADLOCK
         """
         # ARRANGE: Set up the deadlock scenario
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         await agent_processor.pause_processing()
         assert agent_processor.is_paused()
         assert agent_processor._pipeline_controller is not None
 
-        # Mock persistence to return pending thought
-        with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get_thoughts:
-            mock_get_thoughts.return_value = [sample_thought]
+        # Mock pipeline controller to return proper result
+        mock_step_result = SingleStepResult(
+            success=True,
+            step_point="GATHER_CONTEXT",
+            message="Processed 1 thought at GATHER_CONTEXT",
+            thoughts_advanced=1,
+            processing_time_ms=10.0,
+            pipeline_state={},
+            step_results=[],
+        )
+        agent_processor._pipeline_controller.execute_single_step_point = AsyncMock(return_value=mock_step_result)
 
-            # Mock pipeline controller methods
-            agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
-            agent_processor._pipeline_controller.get_pipeline_state = Mock(
-                return_value=Mock(thoughts_by_step={}, model_dump=Mock(return_value={}))
-            )
+        # ACT: Call single_step - this should NOT hang now that the bug is fixed
+        result = await asyncio.wait_for(agent_processor.single_step(), timeout=2.0)
 
-            # ACT: Call single_step - this should NOT hang now that the bug is fixed
-            result = await asyncio.wait_for(agent_processor.single_step(), timeout=2.0)
-
-            # ASSERT: The deadlock is FIXED - single step now completes successfully
-            assert result is not None, "Result should not be None"
-            assert "success" in result, "Result should contain success field"
-            # The bug is fixed - single step now works properly even with paused processor
+        # ASSERT: The deadlock is FIXED - single step now completes successfully
+        assert result is not None, "Result should not be None"
+        assert hasattr(result, "success"), "Result should have success attribute"
+        assert result.success is True
+        # The bug is fixed - single step now works properly even with paused processor
 
     @pytest.mark.asyncio
     async def test_pause_processing_works_correctly(self, agent_processor):
@@ -230,29 +245,32 @@ class TestSingleStepHangValidation:
     async def test_single_step_with_empty_pipeline(self, agent_processor):
         """Test single_step behavior with empty pipeline and no pending thoughts."""
         # ARRANGE: Paused processor with empty pipeline
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         await agent_processor.pause_processing()
 
-        # Mock empty pipeline and no pending thoughts - this should trigger fallback
-        agent_processor._pipeline_controller.drain_pipeline_step = Mock(return_value=None)
-        agent_processor._pipeline_controller.get_pipeline_state = Mock(
-            return_value=Mock(thoughts_by_step={}, model_dump=Mock(return_value={}))
+        # Mock pipeline controller to return empty result
+        mock_step_result = SingleStepResult(
+            success=True,
+            step_point="no_work",
+            message="No pending thoughts to process",
+            thoughts_advanced=0,
+            processing_time_ms=0.0,
+            pipeline_state={},
+            step_results=[],
         )
+        agent_processor._pipeline_controller.execute_single_step_point = AsyncMock(return_value=mock_step_result)
 
-        with patch("ciris_engine.logic.persistence.get_thoughts_by_status") as mock_get_thoughts:
-            mock_get_thoughts.return_value = []  # No pending thoughts
+        # ACT: Call single_step
+        result = await agent_processor.single_step()
 
-            # ACT: Call single_step
-            result = await agent_processor.single_step()
-
-            # ASSERT: COVENANT compliance - PDMA must step through transparently even with no thoughts
-            assert result["success"] is True
-            # SUT currently returns hardcoded "no_work" string (not in StepPoint enum)
-            # This is what the current implementation actually does
-            assert result["step_point"] == "no_work"
-            assert result["thoughts_processed"] == 0  # No thoughts processed
-            assert len(result.get("step_results", [])) == 0  # No step results
-            assert "processing_time_ms" in result
-            assert "pipeline_state" in result
-
-            # The SUT returns the expected fields for no_work case
-            # (no message field in actual implementation)
+        # ASSERT: COVENANT compliance - PDMA must step through transparently even with no thoughts
+        assert result.success is True
+        # SUT currently returns hardcoded "no_work" string (not in StepPoint enum)
+        # This is what the current implementation actually does
+        assert result.step_point == "no_work"
+        assert result.thoughts_advanced == 0  # No thoughts advanced
+        assert result.message is not None  # Message field is required
+        assert len(result.step_results) == 0  # No step results
+        assert result.processing_time_ms >= 0
+        assert result.pipeline_state is not None

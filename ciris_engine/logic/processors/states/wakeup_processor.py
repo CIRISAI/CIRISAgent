@@ -372,7 +372,7 @@ class WakeupProcessor(BaseProcessor):
         if not persistence.task_exists(root_task.task_id):
             await add_system_task(root_task, auth_service=self.auth_service)
         else:
-            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
         self.wakeup_tasks = [root_task]
         wakeup_sequence = self._get_wakeup_sequence()
         for step_type, content in wakeup_sequence:
@@ -556,16 +556,16 @@ class WakeupProcessor(BaseProcessor):
 
     def _mark_task_failed(self, task_id: str, reason: str) -> None:
         """Mark a task as failed."""
-        persistence.update_task_status(task_id, TaskStatus.FAILED, self.time_service)
+        persistence.update_task_status(task_id, TaskStatus.FAILED, "default", self.time_service)
         logger.error(f"Task {task_id} marked as FAILED: {reason}")
 
     def _mark_root_task_complete(self) -> None:
         """Mark the root wakeup task as complete."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.COMPLETED, self.time_service)
+        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.COMPLETED, "default", self.time_service)
 
     def _mark_root_task_failed(self) -> None:
         """Mark the root wakeup task as failed."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.FAILED, self.time_service)
+        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.FAILED, "default", self.time_service)
 
     def is_wakeup_complete(self) -> bool:
         """Check if wakeup sequence is complete."""

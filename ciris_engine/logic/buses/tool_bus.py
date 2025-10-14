@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .base_bus import BaseBus, BusMessage
@@ -337,31 +338,38 @@ class ToolBus(BaseBus[ToolService]):
             "tool_uptime_seconds": uptime_seconds,
         }
 
-    def get_metrics(self) -> Dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific."""
-        # Get all base + custom metrics
-        metrics = self._collect_metrics()
-
-        # Add v1.4.3 specific metrics
-        # Use cached tools count if available (updated by collect_telemetry)
-        # Otherwise fallback to service count estimation
+    def get_metrics(self) -> BusMetrics:
+        """Get all tool bus metrics as typed BusMetrics schema."""
+        # Get registered tools count
         if self._cached_tools_count > 0:
             registered_tools_count = self._cached_tools_count
         else:
-            # Fallback: estimate based on number of tool services
             tool_services = self._get_all_tool_services()
-            # Each service typically provides 3-10 tools
             registered_tools_count = len(tool_services) * 5  # Conservative estimate
 
-        metrics.update(
-            {
-                "tool_bus_executions": float(self._executions_count),
-                "tool_bus_errors": float(self._errors_count),
-                "tool_bus_registered_tools": float(registered_tools_count),
-            }
-        )
+        # Calculate uptime
+        uptime_seconds = 0.0
+        if hasattr(self, "_time_service") and self._time_service:
+            if hasattr(self, "_start_time") and self._start_time:
+                uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        return metrics
+        # Map to BusMetrics schema
+        return BusMetrics(
+            messages_sent=self._executions_count,  # Total tool executions
+            messages_received=self._executions_count,  # Synchronous
+            messages_dropped=0,  # Not tracked yet
+            average_latency_ms=0.0,  # Not tracked yet
+            active_subscriptions=len(self._get_all_tool_services()),
+            queue_depth=self.get_queue_size(),
+            errors_last_hour=self._errors_count,  # Total errors (not windowed yet)
+            busiest_service=None,  # Could track which tool gets used most
+            additional_metrics={
+                "tool_executions_total": self._executions_count,
+                "tool_execution_errors": self._errors_count,
+                "tools_available": registered_tools_count,
+                "tool_uptime_seconds": uptime_seconds,
+            },
+        )
 
     async def collect_telemetry(self) -> Dict[str, Any]:
         """

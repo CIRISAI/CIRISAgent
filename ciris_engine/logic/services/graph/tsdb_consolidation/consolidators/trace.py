@@ -30,13 +30,13 @@ class TaskSummaryData(TypedDict, total=False):
     """Summary data for a task (using total=False for optional fields).
 
     Note: This TypedDict is used for documentation purposes.
-    Actual runtime uses Dict[str, Any] to allow datetime/Set objects
+    Actual runtime uses JSONDict to allow datetime/Set objects
     that are later serialized to JSON-compatible types.
     """
 
     task_id: str
     status: str
-    thoughts: List[Dict[str, Any]]  # List of thought info dicts
+    thoughts: List[JSONDict]  # List of thought info dicts
     start_time: datetime
     end_time: datetime
     handlers_selected: List[str]
@@ -77,9 +77,9 @@ class TraceConsolidator:
         logger.info(f"Consolidating {len(trace_spans)} trace spans")
 
         # Initialize tracking structures
-        # Note: Using Dict[str, Any] because task_summaries contains datetime and Set objects
+        # Note: Using JSONDict because task_summaries contains datetime and Set objects
         # that are later serialized to JSON-compatible types before storage
-        task_summaries: Dict[str, Any] = {}  # task_id -> summary data
+        task_summaries: JSONDict = {}  # task_id -> summary data
         unique_tasks: Set[str] = set()
         unique_thoughts: Set[str] = set()
         tasks_by_status: Dict[str, int] = defaultdict(int)
@@ -300,7 +300,7 @@ class TraceConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, trace_spans: List[TraceSpanData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for trace summary.
 

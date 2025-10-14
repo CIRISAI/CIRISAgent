@@ -15,6 +15,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -227,7 +228,7 @@ class AuditConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, audit_nodes: List[GraphNode]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for audit summary.
 

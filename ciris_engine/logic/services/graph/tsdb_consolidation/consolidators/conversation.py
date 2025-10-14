@@ -8,6 +8,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
@@ -167,7 +168,7 @@ class ConversationConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, service_interactions: List[ServiceInteractionData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for conversation summary.
 

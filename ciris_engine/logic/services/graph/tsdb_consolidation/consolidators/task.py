@@ -8,6 +8,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph.consolidation import TaskCorrelationData
@@ -188,7 +189,7 @@ class TaskConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, tasks: List[TaskCorrelationData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for task summary.
 

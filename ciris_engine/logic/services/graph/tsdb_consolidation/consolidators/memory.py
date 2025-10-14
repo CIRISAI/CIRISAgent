@@ -9,6 +9,7 @@ It does NOT create a summary node.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
@@ -40,7 +41,7 @@ class MemoryConsolidator:
         period_label: str,
         nodes_by_type: Dict[str, List[GraphNode]],
         summary_nodes: List[GraphNode],
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Create edges from summary nodes to important memory nodes in the period.
 
@@ -58,7 +59,7 @@ class MemoryConsolidator:
         Returns:
             List of (source_node, target_node, edge_type, attributes) tuples
         """
-        edges: List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]] = []
+        edges: List[Tuple[GraphNode, GraphNode, str, JSONDict]] = []
 
         # Filter for memory node types
         memory_nodes = {}

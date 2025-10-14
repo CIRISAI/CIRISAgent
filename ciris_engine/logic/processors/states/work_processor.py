@@ -6,7 +6,7 @@ Enhanced with proper context building and service passing.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_int
 
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
@@ -137,7 +137,8 @@ class WorkProcessor(BaseProcessor):
 
         except Exception as e:
             logger.error(f"Error in work round {round_number}: {e}", exc_info=True)
-            round_metrics["errors"] += 1
+            errors = get_int(round_metrics, "errors", 0)
+            round_metrics["errors"] = errors + 1
             self.metrics.errors += 1
 
         # Calculate round duration
@@ -146,7 +147,9 @@ class WorkProcessor(BaseProcessor):
         round_metrics["duration_seconds"] = duration
 
         # Only log at INFO level if work was actually done
-        if round_metrics["thoughts_processed"] > 0 or round_metrics["tasks_activated"] > 0:
+        thoughts_processed = get_int(round_metrics, "thoughts_processed", 0)
+        tasks_activated = get_int(round_metrics, "tasks_activated", 0)
+        if thoughts_processed > 0 or tasks_activated > 0:
             logger.info(
                 f"Work round {round_number}: completed "
                 f"({round_metrics['thoughts_processed']} thoughts, {duration:.2f}s)"

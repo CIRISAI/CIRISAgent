@@ -86,7 +86,9 @@ class DiscordPlatform(Service):
         # Finalize configuration with validation
         self._finalize_config()
 
-    def _load_config_from_adapter_config(self, adapter_config: Union[DiscordAdapterConfig, dict[str, Any], Any]) -> None:
+    def _load_config_from_adapter_config(
+        self, adapter_config: Union[DiscordAdapterConfig, dict[str, Any], Any]
+    ) -> None:
         """Load configuration from adapter_config parameter."""
         if isinstance(adapter_config, DiscordAdapterConfig):
             self.config = adapter_config
@@ -156,9 +158,7 @@ class DiscordPlatform(Service):
             return
 
         try:
-            config_dict = (
-                template.discord_config.model_dump() if hasattr(template.discord_config, "model_dump") else {}
-            )
+            config_dict = template.discord_config.model_dump() if hasattr(template.discord_config, "model_dump") else {}
             for key, value in config_dict.items():
                 if hasattr(self.config, key):
                     setattr(self.config, key, value)

@@ -9,6 +9,7 @@ from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.messages import IncomingMessage
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class CLIObserver(BaseObserver[IncomingMessage]):
 
     def __init__(
         self,
-        on_observe: Callable[[Dict[str, Any]], Awaitable[None]],
+        on_observe: Callable[[JSONDict], Awaitable[None]],
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         bus_manager: Optional[BusManager] = None,

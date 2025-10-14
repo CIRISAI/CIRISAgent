@@ -6,12 +6,12 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -89,7 +89,12 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             logger.warning(f"WebSocket client not found: {client_id}")
             return False
 
-        ws = self._websocket_clients[client_id]
+        ws = self._websocket_clients.get(client_id)
+        # Type guard: ensure ws has send_json method
+        if ws is None or not hasattr(ws, "send_json"):
+            logger.warning(f"Invalid WebSocket client: {client_id}")
+            return False
+
         await ws.send_json(
             {
                 "type": "message",

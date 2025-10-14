@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2025-10-14
+
+### Fixed
+- **🧪 Test Failures**: Fixed 7 test failures from type-safety improvements
+  - Updated `ProcessingRoundResult` and `SingleStepResult` import paths
+  - Fixed field name from `thoughts_processed` to `thoughts_advanced`
+  - Added required `message` field to `SingleStepResult` instantiations
+
+### Added
+- **🔐 OAuth Cross-Domain Support**: Enhanced OAuth flow for separate frontend/API domains
+  - Added `redirect_uri` parameter support in oauth_login endpoint
+  - State parameter now encodes redirect_uri for proper cross-domain redirects
+  - Maintains backward compatibility with relative path redirects
+  - 8 comprehensive tests for OAuth redirect_uri functionality
+- **📊 Multi-Occurrence Architecture**: Infrastructure for multiple API instances
+  - Added `occurrence_id` database migration (004_add_occurrence_id.sql)
+  - Created telemetry architecture documentation
+  - Added multi-occurrence isolation tests
+
+### Changed
+- **🎯 Type Safety**: Strongly typed telemetry for services
+  - Replaced untyped dicts with concrete Pydantic schemas
+  - Enhanced service telemetry data structures with proper typing
+
+### Testing
+- **✅ QA Test Suite**: Complete test coverage across 20 modules
+  - Updated ALL module to run comprehensive test suite (128 tests)
+  - Added multi-occurrence tests and documentation
+  - 100% compatibility with new type-safe schemas
+
 ## [1.3.2] - 2025-10-10
 
 ### Fixed

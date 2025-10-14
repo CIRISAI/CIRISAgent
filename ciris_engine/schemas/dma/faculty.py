@@ -173,7 +173,7 @@ class EnhancedDMAInputs(BaseModel):
     processing_context: Any = Field(..., description="Processing context")
 
     # Action selection fields
-    agent_identity: Optional[Dict[str, Any]] = Field(None, description="Agent identity information")
+    agent_identity: Optional[IdentityData] = Field(None, description="Agent identity information")
     permitted_actions: Optional[List[HandlerActionType]] = Field(None, description="List of permitted actions")
     conscience_feedback: Optional[Any] = Field(None, description="Conscience evaluation feedback")
 

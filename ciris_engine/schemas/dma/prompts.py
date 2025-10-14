@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class PromptTemplate(BaseModel):
     """A single prompt template with metadata."""
@@ -99,9 +101,13 @@ class PromptCollection(BaseModel):
 
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for backward compatibility."""
-        result = {}
+    def to_dict(self) -> JSONDict:
+        """Convert to JSON-serializable dictionary for backward compatibility.
+
+        Returns a flattened dictionary containing all prompt strings,
+        agent variations, and custom prompts.
+        """
+        result: Dict[str, Any] = {}
 
         # Add all non-None string fields
         for field_name in self.model_fields:

@@ -7,6 +7,7 @@ including shutdown/continuity history.
 
 from typing import Any, Dict, Optional
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_dict, get_list
 
 
 def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
@@ -46,10 +47,10 @@ def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
 
     lines = []
 
-    # Core identity information
-    agent_id = agent_identity.get("agent_id", "Unknown")
-    description = agent_identity.get("description", "")
-    role = agent_identity.get("role_description", "")
+    # Core identity information - use type-safe accessors
+    agent_id = get_str(agent_identity, "agent_id", "Unknown")
+    description = get_str(agent_identity, "description", "")
+    role = get_str(agent_identity, "role_description", "")
 
     lines.append(f"Agent ID: {agent_id}")
 

@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Tuple
 
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
 
 logger = logging.getLogger(__name__)
 
@@ -83,16 +84,16 @@ def aggregate_metric_stats(summaries: List[JSONDict]) -> Dict[str, Dict[str, flo
     metrics: Dict[str, MetricStats] = defaultdict(MetricStats)
 
     for summary in summaries:
-        for metric_name, stats in summary.get("metrics", {}).items():
+        for metric_name, stats in get_dict(summary, "metrics", {}).items():
             metric_obj = metrics[metric_name]
 
             # Handle both old format (single value) and new format (stats dict)
             if isinstance(stats, dict):
-                metric_obj.count += stats.get("count", 1)
-                metric_obj.sum += stats.get("sum", 0)
-                metric_obj.min = min(metric_obj.min, stats.get("min", float("inf")))
-                metric_obj.max = max(metric_obj.max, stats.get("max", float("-inf")))
-            else:
+                metric_obj.count += get_int(stats, "count", 1)
+                metric_obj.sum += get_float(stats, "sum", 0.0)
+                metric_obj.min = min(metric_obj.min, get_float(stats, "min", float("inf")))
+                metric_obj.max = max(metric_obj.max, get_float(stats, "max", float("-inf")))
+            elif isinstance(stats, (int, float)):
                 # Old format - single numeric value
                 metric_obj.count += 1
                 metric_obj.sum += float(stats)
@@ -135,11 +136,11 @@ def aggregate_resource_usage(summaries: List[JSONDict]) -> Dict[str, float]:
     totals = ResourceTotals()
 
     for summary in summaries:
-        totals.total_tokens += summary.get("total_tokens", 0)
-        totals.total_cost_cents += summary.get("total_cost_cents", 0.0)
-        totals.total_carbon_grams += summary.get("total_carbon_grams", 0.0)
-        totals.total_energy_kwh += summary.get("total_energy_kwh", 0.0)
-        totals.error_count += summary.get("error_count", 0)
+        totals.total_tokens += get_int(summary, "total_tokens", 0)
+        totals.total_cost_cents += get_float(summary, "total_cost_cents", 0.0)
+        totals.total_carbon_grams += get_float(summary, "total_carbon_grams", 0.0)
+        totals.total_energy_kwh += get_float(summary, "total_energy_kwh", 0.0)
+        totals.error_count += get_int(summary, "error_count", 0)
 
     return totals.to_dict()
 
@@ -170,8 +171,9 @@ def aggregate_action_counts(summaries: List[JSONDict]) -> Dict[str, int]:
     action_totals: Dict[str, int] = defaultdict(int)
 
     for summary in summaries:
-        for action_name, count in summary.get("action_counts", {}).items():
-            action_totals[action_name] += count
+        for action_name, count in get_dict(summary, "action_counts", {}).items():
+            if isinstance(count, int):
+                action_totals[action_name] += count
 
     return dict(action_totals)
 

@@ -6,28 +6,25 @@ can safely operate against the same SQLite database without interfering
 with each other's work.
 """
 
-import pytest
 from datetime import datetime, timezone
 from typing import List
 
+import pytest
+
 from ciris_engine.logic import persistence
+from ciris_engine.logic.persistence.analytics import get_pending_thoughts_for_active_tasks
 from ciris_engine.logic.persistence.models.tasks import (
     add_task,
-    get_task_by_id,
-    get_all_tasks,
     get_active_task_for_channel,
+    get_all_tasks,
     get_pending_tasks_for_activation,
+    get_task_by_id,
 )
-from ciris_engine.logic.persistence.models.thoughts import (
-    add_thought,
-    get_thought_by_id,
-    get_thoughts_by_task_id,
-)
-from ciris_engine.logic.persistence.analytics import get_pending_thoughts_for_active_tasks
+from ciris_engine.logic.persistence.models.thoughts import add_thought, get_thought_by_id, get_thoughts_by_task_id
 from ciris_engine.logic.processors.support.task_manager import TaskManager
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import Task, Thought, TaskContext, ThoughtContext
+from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought, ThoughtContext
 
 
 class MockTimeService:

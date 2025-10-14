@@ -18,21 +18,22 @@ from ciris_engine.logic.utils.shutdown_manager import (
     is_global_shutdown_requested,
     request_global_shutdown,
 )
-from ciris_engine.schemas.processors.context import ProcessorContext
-from ciris_engine.schemas.processors.state import StateTransitionRecord
 from ciris_engine.protocols.pipeline_control import SingleStepResult
 from ciris_engine.schemas.processors.base import ProcessorMetrics, ProcessorServices
+from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.main import (
     GlobalProcessingMetrics,
     MainProcessorMetrics,
     ProcessingRoundResult,
     ProcessingStatus,
 )
+from ciris_engine.schemas.processors.state import StateTransitionRecord
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
-from ciris_engine.schemas.services.runtime_control import PipelineState, ProcessingQueueItem as QueueItem
+from ciris_engine.schemas.services.runtime_control import PipelineState
+from ciris_engine.schemas.services.runtime_control import ProcessingQueueItem as QueueItem
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -138,15 +139,19 @@ class AgentProcessor:
 
         # Enhanced dream processor with self-configuration and memory consolidation
         # Dream processor needs dict, so convert if needed
-        services_dict = services if isinstance(services, dict) else {
-            "service_registry": getattr(services, "service_registry", None),
-            "identity_manager": getattr(services, "identity_manager", None),
-            "memory_service": getattr(services, "memory_service", None),
-            "audit_service": getattr(services, "audit_service", None),
-            "telemetry_service": getattr(services, "telemetry_service", None),
-            "time_service": getattr(services, "time_service", None),
-            "resource_monitor": getattr(services, "resource_monitor", None),
-        }
+        services_dict = (
+            services
+            if isinstance(services, dict)
+            else {
+                "service_registry": getattr(services, "service_registry", None),
+                "identity_manager": getattr(services, "identity_manager", None),
+                "memory_service": getattr(services, "memory_service", None),
+                "audit_service": getattr(services, "audit_service", None),
+                "telemetry_service": getattr(services, "telemetry_service", None),
+                "time_service": getattr(services, "time_service", None),
+                "resource_monitor": getattr(services, "resource_monitor", None),
+            }
+        )
         self.dream_processor = DreamProcessor(
             config_accessor=app_config,  # app_config is actually a ConfigAccessor
             thought_processor=thought_processor,
@@ -442,7 +447,9 @@ class AgentProcessor:
                     # Pre-fetch all thoughts in the batch to avoid serialization
                     thought_ids = [t.thought_id for t in batch]
                     logger.info(f"[DEBUG TIMING] Pre-fetching {len(thought_ids)} thoughts in batch")
-                    prefetched_thoughts = await persistence.async_get_thoughts_by_ids(thought_ids, self.agent_occurrence_id)
+                    prefetched_thoughts = await persistence.async_get_thoughts_by_ids(
+                        thought_ids, self.agent_occurrence_id
+                    )
                     logger.info(f"[DEBUG TIMING] Pre-fetched {len(prefetched_thoughts)} thoughts")
 
                     # Pre-fetch batch context data (same for all thoughts)
@@ -698,7 +705,9 @@ class AgentProcessor:
             else:
                 try:
                     # Check if the thought was already handled (e.g., TASK_COMPLETE)
-                    updated_thought = await persistence.async_get_thought_by_id(thought.thought_id, self.agent_occurrence_id)
+                    updated_thought = await persistence.async_get_thought_by_id(
+                        thought.thought_id, self.agent_occurrence_id
+                    )
                     if updated_thought and updated_thought.status in [ThoughtStatus.COMPLETED, ThoughtStatus.FAILED]:
                         logger.debug(
                             f"Thought {thought.thought_id} was already handled with status {updated_thought.status.value}"

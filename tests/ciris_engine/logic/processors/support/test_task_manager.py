@@ -248,7 +248,9 @@ class TestTaskManager:
 
         assert result is True
         mock_get_task.assert_called_once_with("test-task-123", "default")
-        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.COMPLETED, "default", task_manager.time_service)
+        mock_update_status.assert_called_once_with(
+            "test-task-123", TaskStatus.COMPLETED, "default", task_manager.time_service
+        )
 
     @patch("ciris_engine.logic.persistence.get_task_by_id")
     def test_complete_task_not_found(self, mock_get_task, task_manager):
@@ -269,7 +271,9 @@ class TestTaskManager:
         result = task_manager.fail_task("test-task-123", "Task failed due to error")
 
         assert result is True
-        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.FAILED, "default", task_manager.time_service)
+        mock_update_status.assert_called_once_with(
+            "test-task-123", TaskStatus.FAILED, "default", task_manager.time_service
+        )
 
     @patch("ciris_engine.logic.persistence.get_task_by_id")
     def test_fail_task_not_found(self, mock_get_task, task_manager):
@@ -347,7 +351,9 @@ class TestTaskManager:
         tasks = task_manager.create_wakeup_sequence_tasks()
 
         # Should update existing root status instead of adding
-        mock_update_status.assert_called_once_with("WAKEUP_ROOT", TaskStatus.ACTIVE, "default", task_manager.time_service)
+        mock_update_status.assert_called_once_with(
+            "WAKEUP_ROOT", TaskStatus.ACTIVE, "default", task_manager.time_service
+        )
         # Should add 5 step tasks but not the root
         assert mock_add_task.call_count == 5
 

@@ -61,7 +61,11 @@ class ShutdownProcessor(BaseProcessor):
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
         max_active_thoughts = 50  # Default, could get from config_accessor if needed
-        self.thought_manager = ThoughtManager(time_service=self._time_service, max_active_thoughts=max_active_thoughts, agent_occurrence_id=self.agent_occurrence_id)
+        self.thought_manager = ThoughtManager(
+            time_service=self._time_service,
+            max_active_thoughts=max_active_thoughts,
+            agent_occurrence_id=self.agent_occurrence_id,
+        )
 
     def get_supported_states(self) -> List[AgentState]:
         """We only handle SHUTDOWN state."""

@@ -13,6 +13,7 @@ from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
+from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -46,7 +47,6 @@ from ciris_engine.schemas.services.runtime_control import (
     ServiceRegistryInfoResponse,
     WAPublicKeyMap,
 )
-from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
 from ciris_engine.schemas.types import ConfigDict, ConfigValue
 

@@ -195,7 +195,11 @@ class DreamProcessor(BaseProcessor):
         if not self.task_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for TaskManager")
-            self.task_manager = TaskManager(max_active_tasks=self.max_active_tasks, time_service=self._time_service, agent_occurrence_id=self.agent_occurrence_id)
+            self.task_manager = TaskManager(
+                max_active_tasks=self.max_active_tasks,
+                time_service=self._time_service,
+                agent_occurrence_id=self.agent_occurrence_id,
+            )
         if not self.thought_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for ThoughtManager")

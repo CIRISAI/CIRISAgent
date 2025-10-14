@@ -827,9 +827,7 @@ class TelemetryAggregator:
 
                         # Filter custom_metrics to only include valid types (int, float, str) and exclude None
                         filtered_metrics = {
-                            k: v
-                            for k, v in metrics.items()
-                            if v is not None and isinstance(v, (int, float, str))
+                            k: v for k, v in metrics.items() if v is not None and isinstance(v, (int, float, str))
                         }
 
                         return ServiceTelemetryData(
@@ -967,7 +965,9 @@ class TelemetryAggregator:
 
         # Update with custom_metrics from metrics, filtering out None values
         raw_custom_metrics = metrics.get("custom_metrics", {})
-        custom_metrics.update({k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))})
+        custom_metrics.update(
+            {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
+        )
 
         # Final filter to ensure all values are valid types (int, float, str) and not None
         filtered_custom_metrics = {

@@ -705,7 +705,9 @@ def _build_redirect_response(
     else:
         gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
         redirect_url = f"{gui_callback_url}?{query_string}"
-        logger.warning(f"No redirect_uri in state, using relative path (may fail for separate frontend): {redirect_url}")
+        logger.warning(
+            f"No redirect_uri in state, using relative path (may fail for separate frontend): {redirect_url}"
+        )
 
     return RedirectResponse(url=redirect_url, status_code=302)
 

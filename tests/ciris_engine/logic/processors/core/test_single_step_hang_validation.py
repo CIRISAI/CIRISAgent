@@ -148,6 +148,7 @@ class TestSingleStepHangValidation:
         """Test that single_step works now that pipeline controller is always present."""
         # ARRANGE: Pause processor (pipeline controller is always initialized now)
         from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         agent_processor._is_paused = True
         # Pipeline controller is always present, no need to check for None
         assert agent_processor._pipeline_controller is not None
@@ -185,6 +186,7 @@ class TestSingleStepHangValidation:
         """
         # ARRANGE: Set up the deadlock scenario
         from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         await agent_processor.pause_processing()
         assert agent_processor.is_paused()
         assert agent_processor._pipeline_controller is not None
@@ -244,6 +246,7 @@ class TestSingleStepHangValidation:
         """Test single_step behavior with empty pipeline and no pending thoughts."""
         # ARRANGE: Paused processor with empty pipeline
         from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         await agent_processor.pause_processing()
 
         # Mock pipeline controller to return empty result

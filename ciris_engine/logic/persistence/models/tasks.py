@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_tasks_by_status(status: TaskStatus, occurrence_id: str = "default", db_path: Optional[str] = None) -> List[Task]:
+def get_tasks_by_status(
+    status: TaskStatus, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> List[Task]:
     """Returns all tasks with the given status and occurrence from the tasks table as Task objects."""
     if not isinstance(status, TaskStatus):
         raise TypeError(f"Expected TaskStatus enum, got {type(status)}: {status}")
@@ -159,7 +161,9 @@ async def add_system_task(
     return add_task(task, db_path=db_path)
 
 
-def get_recent_completed_tasks(occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None) -> List[Task]:
+def get_recent_completed_tasks(
+    occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None
+) -> List[Task]:
     tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
     completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
     completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
@@ -333,8 +337,7 @@ def set_task_updated_info_flag(
     task = get_task_by_id(task_id, occurrence_id, db_path)
     if not task or task.agent_occurrence_id != occurrence_id:
         logger.warning(
-            f"Task {task_id} does not belong to occurrence {occurrence_id}, "
-            f"cannot set updated_info_available flag"
+            f"Task {task_id} does not belong to occurrence {occurrence_id}, " f"cannot set updated_info_available flag"
         )
         return False
 

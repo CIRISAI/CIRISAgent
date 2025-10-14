@@ -122,7 +122,7 @@ class EssentialConfig(BaseModel):
     default_template: str = Field("default", description="Default template name for agent identity creation")
     agent_occurrence_id: str = Field(
         "default",
-        description="Unique ID for this runtime occurrence (enables multiple instances against same database)"
+        description="Unique ID for this runtime occurrence (enables multiple instances against same database)",
     )
 
     model_config = ConfigDict(extra="forbid")  # No ambiguity allowed in mission-critical config

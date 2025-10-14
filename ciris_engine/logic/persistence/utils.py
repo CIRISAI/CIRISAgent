@@ -30,19 +30,28 @@ def map_row_to_task(row: Any) -> Task:
             else:
                 # Provide required fields for TaskContext
                 row_dict["context"] = TaskContext(
-                    channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
-                    agent_occurrence_id=agent_occurrence_id
+                    channel_id=None,
+                    user_id=None,
+                    correlation_id=str(uuid.uuid4()),
+                    parent_task_id=None,
+                    agent_occurrence_id=agent_occurrence_id,
                 )
         except Exception as e:
             logger.warning(f"Failed to decode context_json for task {row_dict.get('task_id')}: {e}")
             row_dict["context"] = TaskContext(
-                channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
-                agent_occurrence_id=agent_occurrence_id
+                channel_id=None,
+                user_id=None,
+                correlation_id=str(uuid.uuid4()),
+                parent_task_id=None,
+                agent_occurrence_id=agent_occurrence_id,
             )
     else:
         row_dict["context"] = TaskContext(
-            channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
-            agent_occurrence_id=agent_occurrence_id
+            channel_id=None,
+            user_id=None,
+            correlation_id=str(uuid.uuid4()),
+            parent_task_id=None,
+            agent_occurrence_id=agent_occurrence_id,
         )
     if row_dict.get("outcome_json"):
         try:

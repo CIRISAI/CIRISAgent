@@ -21,7 +21,10 @@ class TaskManager:
     """Manages task lifecycle operations."""
 
     def __init__(
-        self, max_active_tasks: int = 10, time_service: Optional["TimeServiceProtocol"] = None, agent_occurrence_id: str = "default"
+        self,
+        max_active_tasks: int = 10,
+        time_service: Optional["TimeServiceProtocol"] = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         self.max_active_tasks = max_active_tasks
         self._time_service = time_service
@@ -99,7 +102,9 @@ class TaskManager:
         activated_count = 0
 
         for task in pending_tasks:
-            if persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service):
+            if persistence.update_task_status(
+                task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service
+            ):
                 logger.info(f"Activated task {task.task_id} (Priority: {task.priority})")
                 activated_count += 1
             else:
@@ -136,7 +141,9 @@ class TaskManager:
         if outcome:
             logger.info(f"Task {task_id} completed with outcome: {outcome}")
 
-        return persistence.update_task_status(task_id, TaskStatus.COMPLETED, self.agent_occurrence_id, self.time_service)
+        return persistence.update_task_status(
+            task_id, TaskStatus.COMPLETED, self.agent_occurrence_id, self.time_service
+        )
 
     def fail_task(self, task_id: str, reason: str) -> bool:
         """Mark a task as failed with a reason."""
@@ -192,7 +199,9 @@ class TaskManager:
         if not persistence.task_exists(root_task.task_id, self.agent_occurrence_id):
             persistence.add_task(root_task)
         else:
-            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service)
+            persistence.update_task_status(
+                root_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service
+            )
 
         wakeup_steps = [
             (

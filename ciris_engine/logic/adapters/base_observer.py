@@ -528,7 +528,9 @@ class BaseObserver[MessageT: BaseModel](ABC):
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
-                success = set_task_updated_info_flag(existing_task.task_id, update_content, self.agent_occurrence_id, self.time_service)
+                success = set_task_updated_info_flag(
+                    existing_task.task_id, update_content, self.agent_occurrence_id, self.time_service
+                )
                 if success:
                     logger.info(
                         f"[OBSERVER] TASK UPDATE: Flagged existing task {existing_task.task_id} "

@@ -87,7 +87,9 @@ class ThoughtManager:
             logger.critical(f"SEED_THOUGHT: Task {task.task_id} has NO context - POTENTIAL SECURITY BREACH")
             # Delete the malicious task immediately
             try:
-                persistence.update_task_status(task.task_id, TaskStatus.FAILED, task.agent_occurrence_id, self.time_service)
+                persistence.update_task_status(
+                    task.task_id, TaskStatus.FAILED, task.agent_occurrence_id, self.time_service
+                )
                 logger.critical(f"SEED_THOUGHT: Marked malicious task {task.task_id} as FAILED")
             except Exception as e:
                 logger.critical(f"SEED_THOUGHT: Failed to mark malicious task {task.task_id} as FAILED: {e}")
@@ -110,7 +112,9 @@ class ThoughtManager:
 
         try:
             persistence.add_thought(thought)
-            logger.debug(f"Generated seed thought {thought.thought_id} for task {task.task_id} (occurrence: {task.agent_occurrence_id})")
+            logger.debug(
+                f"Generated seed thought {thought.thought_id} for task {task.task_id} (occurrence: {task.agent_occurrence_id})"
+            )
             return thought
         except Exception as e:
             logger.error(f"Failed to add seed thought for task {task.task_id}: {e}")
@@ -142,7 +146,9 @@ class ThoughtManager:
             logger.warning("max_active_thoughts is zero or negative")
             return 0
 
-        pending_thoughts = persistence.get_pending_thoughts_for_active_tasks(self.agent_occurrence_id, limit=self.max_active_thoughts)
+        pending_thoughts = persistence.get_pending_thoughts_for_active_tasks(
+            self.agent_occurrence_id, limit=self.max_active_thoughts
+        )
 
         memory_meta = [t for t in pending_thoughts if t.thought_type == ThoughtType.MEMORY]
         if memory_meta:
@@ -163,7 +169,9 @@ class ThoughtManager:
                 break
 
         if added_count > 0:
-            logger.debug(f"Round {round_number}: Populated queue with {added_count} thoughts for occurrence {self.agent_occurrence_id}")
+            logger.debug(
+                f"Round {round_number}: Populated queue with {added_count} thoughts for occurrence {self.agent_occurrence_id}"
+            )
         else:
             logger.debug(f"Round {round_number}: No thoughts to queue for occurrence {self.agent_occurrence_id}")
         return added_count
@@ -191,7 +199,9 @@ class ThoughtManager:
                 if success:
                     updated_items.append(item)
                 else:
-                    logger.warning(f"Failed to mark thought {item.thought_id} as PROCESSING in occurrence {self.agent_occurrence_id}")
+                    logger.warning(
+                        f"Failed to mark thought {item.thought_id} as PROCESSING in occurrence {self.agent_occurrence_id}"
+                    )
             except Exception as e:
                 logger.error(f"Error marking thought {item.thought_id} as PROCESSING: {e}")
 
@@ -237,7 +247,9 @@ class ThoughtManager:
         )
         try:
             persistence.add_thought(thought)
-            logger.debug(f"Created follow-up thought {thought.thought_id} (occurrence: {parent_thought.agent_occurrence_id})")
+            logger.debug(
+                f"Created follow-up thought {thought.thought_id} (occurrence: {parent_thought.agent_occurrence_id})"
+            )
             return thought
         except Exception as e:
             logger.error(f"Failed to create follow-up thought: {e}")

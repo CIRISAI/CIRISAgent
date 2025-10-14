@@ -54,7 +54,11 @@ class WorkProcessor(BaseProcessor):
         if not time_service:
             raise ValueError("time_service is required in services")
         self.time_service = time_service
-        self.task_manager = TaskManager(max_active_tasks=max_active_tasks, time_service=self.time_service, agent_occurrence_id=self.agent_occurrence_id)
+        self.task_manager = TaskManager(
+            max_active_tasks=max_active_tasks,
+            time_service=self.time_service,
+            agent_occurrence_id=self.agent_occurrence_id,
+        )
         self.thought_manager = ThoughtManager(
             time_service=self.time_service,
             max_active_thoughts=max_active_thoughts,

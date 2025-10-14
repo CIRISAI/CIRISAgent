@@ -181,6 +181,7 @@ class TestAgentProcessor:
         assert result is not None
         # Result is a ProcessingRoundResult Pydantic model
         from ciris_engine.schemas.processors.main import ProcessingRoundResult
+
         assert isinstance(result, ProcessingRoundResult)
         assert result.errors >= 0
         assert result.processing_time_ms >= 0
@@ -358,6 +359,7 @@ class TestAgentProcessor:
         result = await main_processor.process(1)
         # Result is a ProcessingRoundResult with error info
         from ciris_engine.schemas.processors.main import ProcessingRoundResult
+
         assert isinstance(result, ProcessingRoundResult)
         assert result.success is False
         assert result.errors > 0
@@ -542,6 +544,7 @@ class TestAgentProcessor:
         # Mock pipeline controller with execute_single_step_point method
         # Must return SingleStepResult Pydantic model, not dict
         from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         mock_controller = AsyncMock()
         mock_step_result = SingleStepResult(
             success=True,

@@ -74,7 +74,9 @@ def add_thought(thought: Thought, db_path: Optional[str] = None) -> str:
         raise
 
 
-def get_thought_by_id(thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> Optional[Thought]:
+def get_thought_by_id(
+    thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> Optional[Thought]:
     sql = "SELECT * FROM thoughts WHERE thought_id = ? AND agent_occurrence_id = ?"
     try:
         with get_db_connection(db_path=db_path) as conn:
@@ -89,12 +91,16 @@ def get_thought_by_id(thought_id: str, occurrence_id: str = "default", db_path: 
         return None
 
 
-async def async_get_thought_by_id(thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> Optional[Thought]:
+async def async_get_thought_by_id(
+    thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> Optional[Thought]:
     """Asynchronous wrapper for get_thought_by_id using asyncio.to_thread."""
     return await asyncio.to_thread(get_thought_by_id, thought_id, occurrence_id, db_path)
 
 
-def get_thoughts_by_ids(thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None) -> dict[str, Thought]:
+def get_thoughts_by_ids(
+    thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None
+) -> dict[str, Thought]:
     """Fetch multiple thoughts by their IDs in a single query.
 
     Returns a dict mapping thought_id to Thought object.
@@ -121,12 +127,16 @@ def get_thoughts_by_ids(thought_ids: List[str], occurrence_id: str = "default", 
     return result
 
 
-async def async_get_thoughts_by_ids(thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None) -> dict[str, Thought]:
+async def async_get_thoughts_by_ids(
+    thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None
+) -> dict[str, Thought]:
     """Asynchronous wrapper for get_thoughts_by_ids."""
     return await asyncio.to_thread(get_thoughts_by_ids, thought_ids, occurrence_id, db_path)
 
 
-async def async_get_thought_status(thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> Optional[ThoughtStatus]:
+async def async_get_thought_status(
+    thought_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> Optional[ThoughtStatus]:
     """Retrieve just the status of a thought asynchronously."""
 
     def _query() -> Optional[ThoughtStatus]:
@@ -145,7 +155,9 @@ async def async_get_thought_status(thought_id: str, occurrence_id: str = "defaul
     return await asyncio.to_thread(_query)
 
 
-def get_thoughts_by_task_id(task_id: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> List[Thought]:
+def get_thoughts_by_task_id(
+    task_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> List[Thought]:
     """Return all thoughts for a given source_task_id as Thought objects."""
     sql = "SELECT * FROM thoughts WHERE source_task_id = ? AND agent_occurrence_id = ? ORDER BY created_at ASC"
     thoughts: List[Any] = []
@@ -161,24 +173,30 @@ def get_thoughts_by_task_id(task_id: str, occurrence_id: str = "default", db_pat
     return thoughts
 
 
-def delete_thoughts_by_ids(thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None) -> int:
+def delete_thoughts_by_ids(
+    thought_ids: List[str], occurrence_id: str = "default", db_path: Optional[str] = None
+) -> int:
     """Delete thoughts by a list of IDs. Returns the number deleted."""
     if not thought_ids:
         return 0
 
-    logger.warning(f"DELETE_OPERATION: delete_thoughts_by_ids called with {len(thought_ids)} thoughts for occurrence {occurrence_id}: {thought_ids}")
+    logger.warning(
+        f"DELETE_OPERATION: delete_thoughts_by_ids called with {len(thought_ids)} thoughts for occurrence {occurrence_id}: {thought_ids}"
+    )
     import traceback
 
     logger.warning(f"DELETE_OPERATION: Called from: {''.join(traceback.format_stack()[-3:-1])}")
 
-    placeholders = ','.join(['?'] * len(thought_ids))
+    placeholders = ",".join(["?"] * len(thought_ids))
     sql = f"DELETE FROM thoughts WHERE thought_id IN ({placeholders}) AND agent_occurrence_id = ?"  # nosec B608 - placeholders are '?' strings, not user input
     try:
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.execute(sql, thought_ids + [occurrence_id])
             conn.commit()
             deleted_count = cursor.rowcount
-            logger.warning(f"DELETE_OPERATION: Successfully deleted {deleted_count} thoughts for occurrence {occurrence_id}")
+            logger.warning(
+                f"DELETE_OPERATION: Successfully deleted {deleted_count} thoughts for occurrence {occurrence_id}"
+            )
             return deleted_count
     except Exception as e:
         logger.exception(f"Failed to delete thoughts by ids for occurrence {occurrence_id}: {e}")
@@ -202,7 +220,11 @@ def count_thoughts(occurrence_id: str = "default", db_path: Optional[str] = None
 
 
 def update_thought_status(
-    thought_id: str, status: ThoughtStatus, occurrence_id: str = "default", db_path: Optional[str] = None, final_action: Optional[Any] = None
+    thought_id: str,
+    status: ThoughtStatus,
+    occurrence_id: str = "default",
+    db_path: Optional[str] = None,
+    final_action: Optional[Any] = None,
 ) -> bool:
     """Update the status of a thought by ID and optionally final_action.
 
@@ -252,7 +274,9 @@ def update_thought_status(
 # DELETED: Legacy pydantic_to_dict function. Use protocol-driven schemas directly.
 
 
-def get_thoughts_older_than(older_than_timestamp: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> List[Thought]:
+def get_thoughts_older_than(
+    older_than_timestamp: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> List[Thought]:
     """Returns all thoughts with created_at older than the given ISO timestamp as Thought objects."""
     sql = "SELECT * FROM thoughts WHERE created_at < ? AND agent_occurrence_id = ? ORDER BY created_at ASC"
     thoughts: List[Any] = []
@@ -264,11 +288,15 @@ def get_thoughts_older_than(older_than_timestamp: str, occurrence_id: str = "def
             for row in rows:
                 thoughts.append(map_row_to_thought(row))
     except Exception as e:
-        logger.exception(f"Failed to get thoughts older than {older_than_timestamp} for occurrence {occurrence_id}: {e}")
+        logger.exception(
+            f"Failed to get thoughts older than {older_than_timestamp} for occurrence {occurrence_id}: {e}"
+        )
     return thoughts
 
 
-def get_recent_thoughts(occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None) -> List[ThoughtSummary]:
+def get_recent_thoughts(
+    occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None
+) -> List[ThoughtSummary]:
     """Get recent thoughts as typed summaries for status reporting."""
     sql = "SELECT * FROM thoughts WHERE agent_occurrence_id = ? ORDER BY created_at DESC LIMIT ?"
     thoughts = []

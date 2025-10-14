@@ -223,7 +223,7 @@ Foundation services that enable the system:
 **Access**: Direct injection
 **Why**: Central security boundary. All secrets encrypted with AES-256-GCM.
 
-#### 17. Consent Service  
+#### 17. Consent Service
 **Purpose**: User consent management and privacy compliance
 **Protocol**: `ConsentServiceProtocol`
 **Access**: Direct injection

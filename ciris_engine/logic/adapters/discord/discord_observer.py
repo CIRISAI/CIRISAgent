@@ -509,8 +509,10 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 else:
                     # Reactivate the original task
                     original_task = persistence.get_task_by_id(original_thought.source_task_id)
-                    if original_task and self.time_service:
-                        persistence.update_task_status(original_task.task_id, TaskStatus.ACTIVE, self.time_service)
+                    if original_task and self.time_service and self.agent_id:
+                        persistence.update_task_status(
+                            original_task.task_id, TaskStatus.ACTIVE, self.agent_id, self.time_service
+                        )
                         logger.info(f"Reactivated task {original_task.task_id} due to guidance")
 
                         # Extract deferral reason from the original thought's final_action

@@ -441,7 +441,8 @@ class TestOAuthRedirectURI:
         mock_config = {"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}
 
         with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}'
+            "pathlib.Path.read_text",
+            return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
         ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "scout-test"}):
             # Create mock request with redirect_uri parameter
             mock_request = Mock()
@@ -480,7 +481,8 @@ class TestOAuthRedirectURI:
         from ciris_engine.logic.adapters.api.routes.auth import oauth_login
 
         with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}'
+            "pathlib.Path.read_text",
+            return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
         ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
             mock_request = Mock()
             mock_request.headers = {"x-forwarded-proto": "https", "host": "agents.ciris.ai"}
@@ -511,11 +513,11 @@ class TestOAuthRedirectURI:
     @pytest.mark.asyncio
     async def test_oauth_callback_with_redirect_uri_in_state(self):
         """Test oauth_callback decodes redirect_uri from state and redirects to frontend."""
-        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
-
         # Create state with redirect_uri
         import base64
         import json
+
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
 
         redirect_uri = "https://scout.ciris.ai/oauth/scout-test/google/callback"
         state_data = {"csrf": "test-csrf-token", "redirect_uri": redirect_uri}
@@ -557,11 +559,11 @@ class TestOAuthRedirectURI:
     @pytest.mark.asyncio
     async def test_oauth_callback_without_redirect_uri_in_state(self):
         """Test oauth_callback without redirect_uri uses relative path (backward compatibility)."""
-        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
-
         # Create state without redirect_uri
         import base64
         import json
+
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
 
         state_data = {"csrf": "test-csrf-token"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()

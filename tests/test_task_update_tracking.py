@@ -268,7 +268,9 @@ class TestTaskUpdateTracking:
 
     def test_set_task_updated_info_flag_nonexistent_task(self, temp_db, mock_time_service):
         """Test setting flag on nonexistent task."""
-        success = set_task_updated_info_flag("nonexistent-task-id", "New message", "default", mock_time_service, db_path=temp_db)
+        success = set_task_updated_info_flag(
+            "nonexistent-task-id", "New message", "default", mock_time_service, db_path=temp_db
+        )
 
         assert success is False
 

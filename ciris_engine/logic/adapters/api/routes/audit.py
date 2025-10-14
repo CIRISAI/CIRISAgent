@@ -11,8 +11,9 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional, get_dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as FastAPIPath
@@ -180,7 +181,7 @@ def _parse_jsonl_entry_timestamp(
     entry: JSONDict,
 ) -> Optional[datetime]:  # NOQA - JSONL entries are JSONDict by design
     """Parse timestamp from JSONL entry."""
-    entry_time_str = entry.get("timestamp") or entry.get("event_timestamp")
+    entry_time_str = get_str_optional(entry, "timestamp") or get_str_optional(entry, "event_timestamp")
     if entry_time_str:
         try:
             return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX))
@@ -252,82 +253,92 @@ async def _query_jsonl_audit(
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
-def _process_graph_entries(merged: Dict[str, JSONDict], graph_entries: List[AuditEntry]) -> None:
+def _process_graph_entries(merged: Dict[str, Any], graph_entries: List[AuditEntry]) -> None:
     """Process graph entries and add them to merged results."""
     for entry in graph_entries:
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
         if entry_id not in merged:
             merged[entry_id] = {"entry": _convert_audit_entry(entry), "sources": ["graph"]}
         else:
-            merged[entry_id]["sources"].append("graph")
+            sources = merged[entry_id].get("sources")
+            if isinstance(sources, list):
+                sources.append("graph")
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, JSONDict], sqlite_entries: List[JSONDict]
+    merged: Dict[str, Any], sqlite_entries: List[JSONDict]
 ) -> None:  # NOQA - SQLite query results are JSONDict by design
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
-        entry_id = (
-            sqlite_entry.get("event_id") or f"audit_{sqlite_entry['event_timestamp']}_{sqlite_entry['originator_id']}"
-        )
+        event_timestamp = get_str(sqlite_entry, "event_timestamp", "")
+        originator_id = get_str(sqlite_entry, "originator_id", "unknown")
+        entry_id = get_str_optional(sqlite_entry, "event_id") or f"audit_{event_timestamp}_{originator_id}"
 
         if entry_id not in merged:
             # Convert SQLite entry to AuditEntryResponse format
-            timestamp = datetime.fromisoformat(sqlite_entry["event_timestamp"].replace("Z", UTC_TIMEZONE_SUFFIX))
+            timestamp = datetime.fromisoformat(event_timestamp.replace("Z", UTC_TIMEZONE_SUFFIX))
             context = AuditContext(
-                description=sqlite_entry.get("event_payload"), entity_id=sqlite_entry.get("originator_id")
+                description=get_str_optional(sqlite_entry, "event_payload"),
+                entity_id=get_str_optional(sqlite_entry, "originator_id")
             )
 
             merged[entry_id] = {
                 "entry": AuditEntryResponse(
                     id=entry_id,
-                    action=sqlite_entry["event_type"],
-                    actor=sqlite_entry["originator_id"],
+                    action=get_str(sqlite_entry, "event_type", "unknown"),
+                    actor=originator_id,
                     timestamp=timestamp,
                     context=context,
-                    signature=sqlite_entry.get("signature"),
-                    hash_chain=sqlite_entry.get("previous_hash"),
+                    signature=get_str_optional(sqlite_entry, "signature"),
+                    hash_chain=get_str_optional(sqlite_entry, "previous_hash"),
                     storage_sources=["sqlite"],
                 ),
                 "sources": ["sqlite"],
             }
         else:
-            merged[entry_id]["sources"].append("sqlite")
+            sources = merged[entry_id].get("sources")
+            if isinstance(sources, list):
+                sources.append("sqlite")
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, JSONDict], jsonl_entries: List[JSONDict]
+    merged: Dict[str, Any], jsonl_entries: List[JSONDict]
 ) -> None:  # NOQA - JSONL entries are JSONDict by design
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
-        entry_id = jsonl_entry.get("id") or f"audit_{jsonl_entry.get('timestamp', '')}_{jsonl_entry.get('actor', '')}"
+        timestamp_str = get_str(jsonl_entry, "timestamp", "")
+        actor_str = get_str(jsonl_entry, "actor", "")
+        entry_id = get_str_optional(jsonl_entry, "id") or f"audit_{timestamp_str}_{actor_str}"
 
         if entry_id not in merged:
             # Convert JSONL entry to AuditEntryResponse format
-            timestamp_str = jsonl_entry.get("timestamp") or jsonl_entry.get("event_timestamp")
+            ts_str = get_str_optional(jsonl_entry, "timestamp") or get_str_optional(jsonl_entry, "event_timestamp")
             timestamp = (
-                datetime.fromisoformat(timestamp_str.replace("Z", UTC_TIMEZONE_SUFFIX))
-                if timestamp_str
+                datetime.fromisoformat(ts_str.replace("Z", UTC_TIMEZONE_SUFFIX))
+                if ts_str
                 else datetime.now(timezone.utc)
             )
 
-            context = AuditContext(description=jsonl_entry.get("description") or jsonl_entry.get("event_payload"))
+            description = get_str_optional(jsonl_entry, "description") or get_str_optional(jsonl_entry, "event_payload")
+            context = AuditContext(description=description)
 
             merged[entry_id] = {
                 "entry": AuditEntryResponse(
                     id=entry_id,
-                    action=jsonl_entry.get("action") or jsonl_entry.get("event_type", "unknown"),
-                    actor=jsonl_entry.get("actor") or jsonl_entry.get("originator_id", "unknown"),
+                    action=get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "unknown"),
+                    actor=get_str_optional(jsonl_entry, "actor") or get_str(jsonl_entry, "originator_id", "unknown"),
                     timestamp=timestamp,
                     context=context,
-                    signature=jsonl_entry.get("signature"),
-                    hash_chain=jsonl_entry.get("hash_chain") or jsonl_entry.get("previous_hash"),
+                    signature=get_str_optional(jsonl_entry, "signature"),
+                    hash_chain=get_str_optional(jsonl_entry, "hash_chain") or get_str_optional(jsonl_entry, "previous_hash"),
                     storage_sources=["jsonl"],
                 ),
                 "sources": ["jsonl"],
             }
         else:
-            merged[entry_id]["sources"].append("jsonl")
+            sources = merged[entry_id].get("sources")
+            if isinstance(sources, list):
+                sources.append("jsonl")
 
 
 async def _merge_audit_sources(
@@ -336,7 +347,7 @@ async def _merge_audit_sources(
     jsonl_entries: List[JSONDict],  # NOQA - Raw database results are JSONDict by design
 ) -> List[AuditEntryResponse]:
     """Merge audit entries from all sources and track storage locations."""
-    merged: Dict[str, JSONDict] = {}  # Track entries by ID with their sources
+    merged: Dict[str, Any] = {}  # Track entries by ID with their sources
 
     # Process entries from all sources
     _process_graph_entries(merged, graph_entries)
@@ -346,8 +357,12 @@ async def _merge_audit_sources(
     # Update storage_sources for all merged entries and build result
     result = []
     for entry_data in merged.values():
-        entry_data["entry"].storage_sources = sorted(entry_data["sources"])
-        result.append(entry_data["entry"])
+        if isinstance(entry_data, dict):
+            entry = entry_data.get("entry")
+            sources = entry_data.get("sources")
+            if isinstance(entry, AuditEntryResponse) and isinstance(sources, list):
+                entry.storage_sources = sorted(sources)
+                result.append(entry)
 
     # Sort by timestamp (newest first)
     result.sort(key=lambda x: x.timestamp, reverse=True)

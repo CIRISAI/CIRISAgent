@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
@@ -50,8 +51,8 @@ class BatchContextData:
     """Pre-fetched data that's the same for all thoughts in a batch."""
 
     def __init__(self) -> None:
-        # Agent identity - using typed values per SystemSnapshot definition
-        self.agent_identity: Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]] = {}
+        # Agent identity - using IdentityData model per SystemSnapshot definition
+        self.agent_identity: Optional[IdentityData] = None
         self.identity_purpose: Optional[str] = None
         self.identity_capabilities: List[str] = []
         self.identity_restrictions: List[str] = []
@@ -105,11 +106,21 @@ async def prefetch_batch_context(
                 if hasattr(attrs, "model_dump"):
                     attrs = attrs.model_dump()
                 if isinstance(attrs, dict):
-                    # Copy ALL attributes to preserve stewardship and other fields
-                    batch_data.agent_identity = dict(attrs)  # Full copy of all identity attributes
-                    # CRITICAL: Map role_description → role for DSDMA compatibility
-                    if "role_description" in batch_data.agent_identity and "role" not in batch_data.agent_identity:
-                        batch_data.agent_identity["role"] = batch_data.agent_identity["role_description"]
+                    # Create IdentityData instance from attributes
+                    try:
+                        # Map role_description → role for IdentityData model
+                        identity_dict = {
+                            "agent_id": attrs.get("agent_id", "unknown"),
+                            "description": attrs.get("description", ""),
+                            "role": attrs.get("role") or attrs.get("role_description", ""),
+                            "trust_level": attrs.get("trust_level", 0.5),
+                            "stewardship": attrs.get("stewardship"),
+                        }
+                        batch_data.agent_identity = IdentityData(**identity_dict)
+                    except Exception as e:
+                        logger.warning(f"Failed to create IdentityData from attributes: {e}")
+                        batch_data.agent_identity = None
+
                     # Extract specific fields for structured access
                     batch_data.identity_purpose = attrs.get("role_description", "")
                     batch_data.identity_capabilities = attrs.get("permitted_actions", [])
@@ -490,7 +501,7 @@ async def build_system_snapshot_with_batch(
         top_pending_tasks_summary=batch_data.top_tasks,
         recently_completed_tasks_summary=batch_data.recent_tasks,
         # Agent identity fields
-        agent_identity=batch_data.agent_identity or {},
+        agent_identity=batch_data.agent_identity,
         identity_purpose=batch_data.identity_purpose or "",
         identity_capabilities=batch_data.identity_capabilities,
         identity_restrictions=batch_data.identity_restrictions,

@@ -36,33 +36,41 @@ class ConfigBootstrap:
     @staticmethod
     def _apply_env_overrides(config_data: ConfigDict) -> ConfigDict:
         """Apply environment variable overrides to config data."""
+        from typing import cast
+
         # Database paths
         db_path = get_env_var("CIRIS_DB_PATH")
         if db_path:
-            config_data.setdefault("database", {})["main_db"] = db_path
+            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section["main_db"] = db_path
 
         secrets_db = get_env_var("CIRIS_SECRETS_DB_PATH")
         if secrets_db:
-            config_data.setdefault("database", {})["secrets_db"] = secrets_db
+            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section["secrets_db"] = secrets_db
 
         audit_db = get_env_var("CIRIS_AUDIT_DB_PATH")
         if audit_db:
-            config_data.setdefault("database", {})["audit_db"] = audit_db
+            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section["audit_db"] = audit_db
 
         # Service endpoints
         llm_endpoint = get_env_var("OPENAI_API_BASE") or get_env_var("LLM_ENDPOINT")
         if llm_endpoint:
-            config_data.setdefault("services", {})["llm_endpoint"] = llm_endpoint
+            services_section = cast(Dict[str, Any], config_data.setdefault("services", {}))
+            services_section["llm_endpoint"] = llm_endpoint
 
         llm_model = get_env_var("OPENAI_MODEL_NAME") or get_env_var("OPENAI_MODEL") or get_env_var("LLM_MODEL")
         if llm_model:
-            config_data.setdefault("services", {})["llm_model"] = llm_model
+            services_section = cast(Dict[str, Any], config_data.setdefault("services", {}))
+            services_section["llm_model"] = llm_model
 
         # Security settings
         retention_days = get_env_var("AUDIT_RETENTION_DAYS")
         if retention_days:
             try:
-                config_data.setdefault("security", {})["audit_retention_days"] = int(retention_days)
+                security_section = cast(Dict[str, Any], config_data.setdefault("security", {}))
+                security_section["audit_retention_days"] = int(retention_days)
             except ValueError:
                 logger.warning(f"Invalid AUDIT_RETENTION_DAYS value: {retention_days}")
 
@@ -70,14 +78,16 @@ class ConfigBootstrap:
         max_tasks = get_env_var("MAX_ACTIVE_TASKS")
         if max_tasks:
             try:
-                config_data.setdefault("limits", {})["max_active_tasks"] = int(max_tasks)
+                limits_section = cast(Dict[str, Any], config_data.setdefault("limits", {}))
+                limits_section["max_active_tasks"] = int(max_tasks)
             except ValueError:
                 logger.warning(f"Invalid MAX_ACTIVE_TASKS value: {max_tasks}")
 
         max_depth = get_env_var("MAX_THOUGHT_DEPTH")
         if max_depth:
             try:
-                config_data.setdefault("security", {})["max_thought_depth"] = int(max_depth)
+                security_section = cast(Dict[str, Any], config_data.setdefault("security", {}))
+                security_section["max_thought_depth"] = int(max_depth)
             except ValueError:
                 logger.warning(f"Invalid MAX_THOUGHT_DEPTH value: {max_depth}")
 

@@ -36,6 +36,12 @@ ConfigDict = Dict[str, ConfigValue]
 # Prefer: Use the actual Pydantic model type instead of dict
 SerializedModel = Dict[str, Any]
 
+# BACKWARDS COMPATIBILITY - Wave 0 migration temporary aliases
+# TODO: Remove these in Wave 1 after updating all imports
+NodeAttributes = JSONDict  # Use concrete NodeAttributes models instead
+EventData = JSONDict  # Use AuditEventData instead
+OAuthData = JSONDict  # Use OAuthTokenResponse or related models instead
+
 # Export only the core type aliases still in use
 __all__ = [
     "ConfigValue",
@@ -44,4 +50,8 @@ __all__ = [
     "JSONDict",
     "JSONList",
     "SerializedModel",  # Deprecated, for backwards compat only
+    # Wave 0 backwards compat - remove after Wave 1
+    "NodeAttributes",
+    "EventData",
+    "OAuthData",
 ]

@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field
 
@@ -110,7 +111,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             if "dma_input_data" in current_context:
                 dma_input_data = current_context["dma_input_data"]
             else:
-                logger.debug("No DMAInputData in context, using legacy Dict[str, Any]")
+                logger.debug("No DMAInputData in context, using legacy JSONDict")
 
         return await self.evaluate_thought(input_data, dma_input_data)
 

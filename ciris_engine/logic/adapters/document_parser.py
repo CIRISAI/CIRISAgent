@@ -14,6 +14,7 @@ import logging
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
 
@@ -305,7 +306,7 @@ class DocumentParser:
             logger.exception(f"DOCX extraction error: {e}")
             return f"DOCX error: {str(e)}"
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get parser status for debugging."""
         return {
             "available": self.is_available(),

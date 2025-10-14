@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional, Union
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -361,7 +362,7 @@ async def run_dsdma(
         persistence.add_correlation(correlation, time_service)
 
     try:
-        # Use evaluate method which handles Dict[str, Any] to DMAInputData conversion
+        # Use evaluate method which handles JSONDict to DMAInputData conversion
         result = await dsdma.evaluate(thought, current_context=context)
 
         # Update correlation with success

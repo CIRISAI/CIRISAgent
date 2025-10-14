@@ -6,6 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.schemas.types import JSONDict
 
 from pydantic import ValidationError
 
@@ -36,7 +37,7 @@ class BaseProcessor(ABC):
         """Initialize base processor with common dependencies.
 
         Args:
-            services: Can be Dict[str, Any] (legacy) or ProcessorServices (typed)
+            services: Can be JSONDict (legacy) or ProcessorServices (typed)
         """
         self.config = config_accessor
         self.thought_processor = thought_processor

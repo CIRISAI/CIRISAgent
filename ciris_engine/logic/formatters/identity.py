@@ -6,9 +6,10 @@ including shutdown/continuity history.
 """
 
 from typing import Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 
-def format_agent_identity(agent_identity: Optional[Dict[str, Any]]) -> str:
+def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
     """
     Format agent identity information into readable text.
 

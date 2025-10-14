@@ -8,6 +8,7 @@ This implements the patent's requirement for bounded identity evolution.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.wise_bus import WiseBus
@@ -779,7 +780,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return trust_params
 
-    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> Dict[str, Any]:
+    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> JSONDict:
         """Extract current trust parameters from config nodes."""
         trust_params = {}
 
@@ -810,7 +811,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
         return capabilities
 
     def _compare_patterns(
-        self, baseline_patterns: Dict[str, Any], current_patterns: Dict[str, Any]
+        self, baseline_patterns: JSONDict, current_patterns: JSONDict
     ) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []

@@ -9,6 +9,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -547,7 +548,7 @@ class PatternAnalysisLoop(BaseScheduledService):
 
     async def _get_action_frequency(self) -> Dict[str, ActionFrequency]:
         """Get frequency of different actions."""
-        action_data_raw: Dict[str, Dict[str, Any]] = defaultdict(
+        action_data_raw: Dict[str, JSONDict] = defaultdict(
             lambda: {"count": 0, "evidence": [], "last_seen": None}
         )
 

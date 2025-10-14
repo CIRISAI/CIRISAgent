@@ -4,6 +4,7 @@ Base adapter class with common correlation and message handling functionality.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -29,7 +30,7 @@ class BaseAdapter(Service):
         self,
         adapter_type: str,
         runtime: Any,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[JSONDict] = None,
         context: Optional["AdapterStartupContext"] = None,
     ) -> None:
         """

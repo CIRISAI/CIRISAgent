@@ -1,6 +1,7 @@
 import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -35,7 +36,7 @@ class ActionDispatcher:
             audit_service: Optional audit service for centralized action auditing.
         """
         self.handlers: Dict[HandlerActionType, BaseActionHandler] = handlers
-        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, Dict[str, Any]], Awaitable[bool] | bool]] = (
+        self.action_filter: Optional[Callable[[ActionSelectionDMAResult, JSONDict], Awaitable[bool] | bool]] = (
             None
         )
         self.telemetry_service = telemetry_service
@@ -64,7 +65,7 @@ class ActionDispatcher:
     @streaming_step(StepPoint.PERFORM_ACTION)
     @step_point(StepPoint.PERFORM_ACTION)
     async def _perform_action_step(
-        self, thought_item: ProcessingQueueItem, result: Any, context: Dict[str, Any]
+        self, thought_item: ProcessingQueueItem, result: Any, context: JSONDict
     ) -> Any:
         """Step 9: Dispatch action to handler - streaming decorator for visibility."""
         # This is a pass-through that just enables streaming

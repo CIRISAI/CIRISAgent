@@ -9,6 +9,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
@@ -1213,7 +1214,7 @@ class CIRISRuntime:
 
         return "manual"
 
-    def _build_shutdown_node_attributes(self, reason: str, consent_status: str) -> Dict[str, Any]:
+    def _build_shutdown_node_attributes(self, reason: str, consent_status: str) -> JSONDict:
         """Build attributes dict for shutdown memory node.
 
         Args:
@@ -1298,7 +1299,7 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[Dict[str, AdapterConfig]],
-        kwargs: Dict[str, Any],
+        kwargs: JSONDict,
     ) -> None:
         """Parse bootstrap configuration or create from legacy parameters."""
         if bootstrap is not None:
@@ -1321,7 +1322,7 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[Dict[str, AdapterConfig]],
-        kwargs: Dict[str, Any],
+        kwargs: JSONDict,
     ) -> None:
         """Create bootstrap config from legacy parameters."""
         self.essential_config = essential_config or EssentialConfig()

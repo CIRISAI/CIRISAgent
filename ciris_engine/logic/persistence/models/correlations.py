@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.persistence.db import get_db_connection
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_response_data(
-    response_data_json: Optional[Dict[str, Any]], timestamp: Optional[datetime] = None
-) -> Optional[Dict[str, Any]]:
+    response_data_json: Optional[JSONDict], timestamp: Optional[datetime] = None
+) -> Optional[JSONDict]:
     """Parse response data JSON with backward compatibility for missing fields."""
     if not response_data_json:
         return None

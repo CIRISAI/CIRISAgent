@@ -6,6 +6,7 @@ Enhanced with proper context building and service passing.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
@@ -33,7 +34,7 @@ class WorkProcessor(BaseProcessor):
         config_accessor: Any,  # ConfigAccessor
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: Any,  # Dict[str, Any] - using Any to avoid circular import issues
+        services: Any,  # JSONDict - using Any to avoid circular import issues
         startup_channel_id: Optional[str] = None,
         agent_occurrence_id: str = "default",
         **kwargs: Any,

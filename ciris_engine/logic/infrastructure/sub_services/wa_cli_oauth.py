@@ -11,6 +11,7 @@ import webbrowser
 from pathlib import Path
 from threading import Thread
 from typing import TYPE_CHECKING, Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from rich.console import Console
 
@@ -50,7 +51,7 @@ class WACLIOAuthService:
         self._oauth_server_running = False
 
     async def oauth_setup(
-        self, provider: str, client_id: str, client_secret: str, custom_metadata: Optional[Dict[str, Any]] = None
+        self, provider: str, client_id: str, client_secret: str, custom_metadata: Optional[JSONDict] = None
     ) -> OAuthOperationResult:
         """Configure OAuth provider."""
         try:
@@ -151,7 +152,7 @@ class WACLIOAuthService:
             return OAuthLoginResult(status="error", provider=provider, error=str(e))
 
     async def _exchange_oauth_code(
-        self, provider: str, callback_data: OAuthCallbackData, provider_config: Dict[str, Any]
+        self, provider: str, callback_data: OAuthCallbackData, provider_config: JSONDict
     ) -> OAuthLoginResult:
         """Exchange OAuth code for token and create WA."""
 
@@ -192,7 +193,7 @@ class WACLIOAuthService:
             raise
 
     async def _exchange_code_for_token(
-        self, provider: str, code: str, provider_config: Dict[str, Any]
+        self, provider: str, code: str, provider_config: JSONDict
     ) -> OAuthTokenResponse:
         """Exchange authorization code for access token."""
         import aiohttp

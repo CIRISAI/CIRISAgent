@@ -8,6 +8,7 @@ then migrates to graph-based configuration for runtime management.
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 import yaml
@@ -41,35 +42,35 @@ class ConfigBootstrap:
         # Database paths
         db_path = get_env_var("CIRIS_DB_PATH")
         if db_path:
-            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section = cast(JSONDict, config_data.setdefault("database", {}))
             db_section["main_db"] = db_path
 
         secrets_db = get_env_var("CIRIS_SECRETS_DB_PATH")
         if secrets_db:
-            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section = cast(JSONDict, config_data.setdefault("database", {}))
             db_section["secrets_db"] = secrets_db
 
         audit_db = get_env_var("CIRIS_AUDIT_DB_PATH")
         if audit_db:
-            db_section = cast(Dict[str, Any], config_data.setdefault("database", {}))
+            db_section = cast(JSONDict, config_data.setdefault("database", {}))
             db_section["audit_db"] = audit_db
 
         # Service endpoints
         llm_endpoint = get_env_var("OPENAI_API_BASE") or get_env_var("LLM_ENDPOINT")
         if llm_endpoint:
-            services_section = cast(Dict[str, Any], config_data.setdefault("services", {}))
+            services_section = cast(JSONDict, config_data.setdefault("services", {}))
             services_section["llm_endpoint"] = llm_endpoint
 
         llm_model = get_env_var("OPENAI_MODEL_NAME") or get_env_var("OPENAI_MODEL") or get_env_var("LLM_MODEL")
         if llm_model:
-            services_section = cast(Dict[str, Any], config_data.setdefault("services", {}))
+            services_section = cast(JSONDict, config_data.setdefault("services", {}))
             services_section["llm_model"] = llm_model
 
         # Security settings
         retention_days = get_env_var("AUDIT_RETENTION_DAYS")
         if retention_days:
             try:
-                security_section = cast(Dict[str, Any], config_data.setdefault("security", {}))
+                security_section = cast(JSONDict, config_data.setdefault("security", {}))
                 security_section["audit_retention_days"] = int(retention_days)
             except ValueError:
                 logger.warning(f"Invalid AUDIT_RETENTION_DAYS value: {retention_days}")
@@ -78,7 +79,7 @@ class ConfigBootstrap:
         max_tasks = get_env_var("MAX_ACTIVE_TASKS")
         if max_tasks:
             try:
-                limits_section = cast(Dict[str, Any], config_data.setdefault("limits", {}))
+                limits_section = cast(JSONDict, config_data.setdefault("limits", {}))
                 limits_section["max_active_tasks"] = int(max_tasks)
             except ValueError:
                 logger.warning(f"Invalid MAX_ACTIVE_TASKS value: {max_tasks}")
@@ -86,7 +87,7 @@ class ConfigBootstrap:
         max_depth = get_env_var("MAX_THOUGHT_DEPTH")
         if max_depth:
             try:
-                security_section = cast(Dict[str, Any], config_data.setdefault("security", {}))
+                security_section = cast(JSONDict, config_data.setdefault("security", {}))
                 security_section["max_thought_depth"] = int(max_depth)
             except ValueError:
                 logger.warning(f"Invalid MAX_THOUGHT_DEPTH value: {max_depth}")
@@ -161,7 +162,7 @@ class ConfigBootstrap:
         Returns dict mapping config keys to their source information
         (source, env_var/file, bootstrap_phase flag).
         """
-        metadata: Dict[str, Any] = {}
+        metadata: JSONDict = {}
 
         # Check which values came from environment
         env_sources = {

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_dict
 
 from .memory_query_helpers import DatabaseExecutor, DateTimeParser, GraphNodeBuilder, QueryBuilder, TimeRangeCalculator
 
@@ -114,24 +115,27 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
             stats["total_edges"] = cursor.fetchone()[0]
 
             # Nodes by type
+            nodes_by_type = get_dict(stats, "nodes_by_type", {})
             cursor.execute("SELECT node_type, COUNT(*) FROM graph_nodes GROUP BY node_type")
             for row in cursor.fetchall():
-                stats["nodes_by_type"][row[0]] = row[1]
+                nodes_by_type[row[0]] = row[1]
 
             # Nodes by scope
+            nodes_by_scope = get_dict(stats, "nodes_by_scope", {})
             cursor.execute("SELECT scope, COUNT(*) FROM graph_nodes GROUP BY scope")
             for row in cursor.fetchall():
-                stats["nodes_by_scope"][row[0]] = row[1]
+                nodes_by_scope[row[0]] = row[1]
 
             # Recent activity (last 24 hours)
+            recent_activity = get_dict(stats, "recent_activity", {})
             now = datetime.now()
             yesterday = now - timedelta(days=1)
 
             cursor.execute("SELECT COUNT(*) FROM graph_nodes WHERE updated_at >= ?", (yesterday.isoformat(),))
-            stats["recent_activity"]["nodes_24h"] = cursor.fetchone()[0]
+            recent_activity["nodes_24h"] = cursor.fetchone()[0]
 
             cursor.execute("SELECT COUNT(*) FROM graph_edges WHERE created_at >= ?", (yesterday.isoformat(),))
-            stats["recent_activity"]["edges_24h"] = cursor.fetchone()[0]
+            recent_activity["edges_24h"] = cursor.fetchone()[0]
 
             # Storage size
             import os

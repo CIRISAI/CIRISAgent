@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import aiofiles
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -62,7 +63,7 @@ class CLIToolService(BaseService, ToolService):
         self._track_request()
         self._tool_executions += 1
 
-        correlation_id = parameters.get("correlation_id", str(uuid.uuid4()))
+        correlation_id = get_str(parameters, "correlation_id", str(uuid.uuid4()))
         now = datetime.now(timezone.utc)
         corr = ServiceCorrelation(
             correlation_id=correlation_id,
@@ -102,7 +103,8 @@ class CLIToolService(BaseService, ToolService):
                         "Tools MUST return typed dict results!"
                     )
                 success = result.get("error") is None
-                error_msg = result.get("error")
+                error_value = result.get("error")
+                error_msg = str(error_value) if error_value is not None else None
             except Exception as e:
                 # Track error for telemetry
                 self._track_error(e)

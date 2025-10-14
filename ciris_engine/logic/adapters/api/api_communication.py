@@ -89,7 +89,12 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             logger.warning(f"WebSocket client not found: {client_id}")
             return False
 
-        ws = self._websocket_clients[client_id]
+        ws = self._websocket_clients.get(client_id)
+        # Type guard: ensure ws has send_json method
+        if ws is None or not hasattr(ws, "send_json"):
+            logger.warning(f"Invalid WebSocket client: {client_id}")
+            return False
+
         await ws.send_json(
             {
                 "type": "message",

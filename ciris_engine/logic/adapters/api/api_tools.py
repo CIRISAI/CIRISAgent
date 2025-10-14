@@ -7,6 +7,8 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float, get_dict
 
 import aiohttp
 
@@ -16,7 +18,6 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
-from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,8 @@ class APIToolService(BaseService, ToolService):
                 correlation_id=correlation_id,
             )
 
-            if correlation_id:
+            # Type narrow correlation_id to str for dict indexing
+            if correlation_id and isinstance(correlation_id, str):
                 self._results[correlation_id] = tool_result
 
             return tool_result
@@ -115,11 +117,11 @@ class APIToolService(BaseService, ToolService):
     async def _curl(self, params: JSONDict) -> JSONDict:
         """Execute a curl-like HTTP request."""
         logger.info(f"[API_TOOLS] _curl called with params: {params}")
-        url = params.get("url")
-        method = params.get("method", "GET").upper()
-        headers = params.get("headers", {})
+        url = get_str(params, "url", "")
+        method = get_str(params, "method", "GET").upper()
+        headers = get_dict(params, "headers", {})
         data = params.get("data")
-        timeout = params.get("timeout", 30)
+        timeout = get_float(params, "timeout", 30.0)
 
         if not url:
             logger.error(f"[API_TOOLS] URL parameter missing. Params keys: {list(params.keys())}")
@@ -127,7 +129,9 @@ class APIToolService(BaseService, ToolService):
 
         try:
             async with aiohttp.ClientSession() as session:
-                kwargs = {"headers": headers, "timeout": aiohttp.ClientTimeout(total=timeout)}
+                # Build kwargs with proper types
+                timeout_obj = aiohttp.ClientTimeout(total=timeout)
+                kwargs: Dict[str, Any] = {"headers": headers, "timeout": timeout_obj}
 
                 if data:
                     if isinstance(data, dict):

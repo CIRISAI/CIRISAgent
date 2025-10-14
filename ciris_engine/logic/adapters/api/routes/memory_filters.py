@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Set
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_list
 
 logger = logging.getLogger(__name__)
 
@@ -109,8 +110,8 @@ def _check_created_by(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
 
 def _check_user_list(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
     """Check if any user in user_list is allowed."""
-    user_list = attrs_dict.get("user_list", [])
-    return any(uid in allowed_user_ids for uid in user_list)
+    user_list = get_list(attrs_dict, "user_list", [])
+    return any(uid in allowed_user_ids for uid in user_list if isinstance(uid, str))
 
 
 def _check_task_summaries(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:

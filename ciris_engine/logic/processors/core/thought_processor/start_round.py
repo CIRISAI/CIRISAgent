@@ -7,6 +7,7 @@ from PENDING to PROCESSING status and preparing them for the H3ERE pipeline.
 
 import logging
 from typing import Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -30,8 +31,8 @@ class RoundInitializationPhase:
     @streaming_step(StepPoint.START_ROUND)
     @step_point(StepPoint.START_ROUND)
     async def _start_round_step(
-        self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, thought_item: ProcessingQueueItem, context: Optional[JSONDict] = None
+    ) -> JSONDict:
         """Step 0: Initialize processing round and prepare thoughts for H3ERE pipeline."""
 
         # Get the thought ID from the queue item

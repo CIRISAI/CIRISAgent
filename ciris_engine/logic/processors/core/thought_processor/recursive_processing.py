@@ -8,6 +8,7 @@ Handles retry logic when conscience validation fails, including:
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -143,7 +144,7 @@ class RecursiveProcessingPhase:
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         last_error = None
-        retry_history: List[Dict[str, Any]] = []
+        retry_history: List[JSONDict] = []
 
         for attempt in range(max_retries):
             try:

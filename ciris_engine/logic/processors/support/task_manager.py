@@ -6,6 +6,7 @@ Handles task activation, prioritization, and lifecycle management using v1 schem
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.enums import TaskStatus
@@ -42,7 +43,7 @@ class TaskManager:
         description: str,
         channel_id: str,
         priority: int = 0,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[JSONDict] = None,
         parent_task_id: Optional[str] = None,
     ) -> Task:
         """Create a new task with v1 schema."""
@@ -128,7 +129,7 @@ class TaskManager:
         logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
         return filtered
 
-    def complete_task(self, task_id: str, outcome: Optional[Dict[str, Any]] = None) -> bool:
+    def complete_task(self, task_id: str, outcome: Optional[JSONDict] = None) -> bool:
         """Mark a task as completed with optional outcome."""
         task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
         if not task:

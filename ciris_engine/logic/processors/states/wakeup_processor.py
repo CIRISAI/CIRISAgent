@@ -6,6 +6,7 @@ import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
@@ -128,7 +129,7 @@ class WakeupProcessor(BaseProcessor):
             duration_seconds=duration,
         )
 
-    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> Dict[str, Any]:
+    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> JSONDict:
         """
         Execute wakeup processing for one round.
         In non-blocking mode, creates thoughts for incomplete steps and returns immediately.
@@ -586,7 +587,7 @@ class WakeupProcessor(BaseProcessor):
         self.wakeup_complete = True
         logger.info("Wakeup processor stopped")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current wakeup processor status and metrics."""
         wakeup_sequence = self._get_wakeup_sequence()
         total_steps = len(wakeup_sequence)

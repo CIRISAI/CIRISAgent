@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.adapters import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus
@@ -87,7 +88,7 @@ class DreamProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: Dict[str, Any],
+        services: JSONDict,
         service_registry: Optional["ServiceRegistry"] = None,
         identity_manager: Optional["IdentityManager"] = None,
         startup_channel_id: Optional[str] = None,
@@ -143,7 +144,7 @@ class DreamProcessor(BaseProcessor):
         self._dream_tasks: List[Any] = []  # Track our created tasks
 
         # Metrics from original processor
-        self.dream_metrics: Dict[str, Any] = {
+        self.dream_metrics: JSONDict = {
             "total_dreams": 0,
             "total_introspections": 0,
             "total_consolidations": 0,

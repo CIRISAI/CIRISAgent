@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
+from ciris_engine.schemas.types import JSONDict
 
 import yaml
 from pydantic import BaseModel
@@ -109,7 +110,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
     async def call_llm_structured(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[JSONDict],
         response_model: type,
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -159,7 +160,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return result
 
-    async def apply_faculties(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, BaseModel]:
+    async def apply_faculties(self, content: str, context: Optional[JSONDict] = None) -> Dict[str, BaseModel]:
         """Apply available epistemic faculties to content.
 
         Args:
@@ -171,7 +172,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         """
         from ciris_engine.schemas.dma.faculty import FacultyContext
 
-        results: Dict[str, Any] = {}
+        results: JSONDict = {}
 
         if not self.faculties:
             return results

@@ -8,6 +8,7 @@ registered action handlers and their parameter schemas.
 import json
 import logging
 from typing import Any, Dict, List, Optional, Type
+from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel
 
@@ -199,7 +200,7 @@ class ActionInstructionGenerator:
                 loop = asyncio.get_event_loop()
 
                 # Create a coroutine to get all tools
-                async def get_all_tools() -> Dict[str, Any]:
+                async def get_all_tools() -> JSONDict:
                     if not self.service_registry:
                         return {}
 
@@ -335,7 +336,7 @@ Available tools (check with tool service for current list):
   - discord_ban_user: Ban a user from the server
     parameters: {"guild_id": integer, "user_id": integer, "reason"?: string, "delete_message_days"?: integer}"""
 
-    def _simplify_schema(self, schema: Dict[str, Any]) -> str:
+    def _simplify_schema(self, schema: JSONDict) -> str:
         """Simplify a JSON schema to a readable format."""
         properties = schema.get("properties", {})
         required = schema.get("required", [])
@@ -359,7 +360,7 @@ Available tools (check with tool service for current list):
 
         return "{" + ", ".join(params) + "}"
 
-    def _extract_type(self, prop_schema: Dict[str, Any]) -> str:
+    def _extract_type(self, prop_schema: JSONDict) -> str:
         """Extract type information from a property schema, handling complex types."""
         # Direct type
         if "type" in prop_schema:

@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field
 
@@ -44,7 +45,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         domain_name: str,
         service_registry: ServiceRegistry,
         model_name: Optional[str] = None,
-        domain_specific_knowledge: Optional[Dict[str, Any]] = None,
+        domain_specific_knowledge: Optional[JSONDict] = None,
         prompt_template: Optional[str] = None,
         **kwargs: Any,
     ) -> None:

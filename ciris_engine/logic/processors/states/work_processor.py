@@ -5,6 +5,7 @@ Enhanced with proper context building and service passing.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
@@ -81,7 +82,7 @@ class WorkProcessor(BaseProcessor):
         logger.debug(f"WorkProcessor.process called for round {round_number}")
         start_time = self.time_service.now()
 
-        round_metrics: Dict[str, Any] = {
+        round_metrics: JSONDict = {
             "round_number": round_number,
             "tasks_activated": 0,
             "thoughts_generated": 0,
@@ -282,7 +283,7 @@ class WorkProcessor(BaseProcessor):
         self._running = False
         logger.info("Work processor stopped")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current work processor status and metrics."""
         work_stats = {
             "last_activity": self.last_activity_time.isoformat(),

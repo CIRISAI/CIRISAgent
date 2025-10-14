@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, cast
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
@@ -108,8 +109,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
     async def recursive_evaluate_with_faculties(
         self,
-        input_data: Union[Dict[str, Any], EnhancedDMAInputs],
-        conscience_failure_context: Union[Dict[str, Any], ConscienceFailureContext],
+        input_data: Union[JSONDict, EnhancedDMAInputs],
+        conscience_failure_context: Union[JSONDict, ConscienceFailureContext],
     ) -> ActionSelectionDMAResult:
         """Perform recursive evaluation using epistemic faculties."""
 

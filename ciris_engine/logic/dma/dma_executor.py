@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -306,7 +307,7 @@ async def run_csdma(
 async def run_dsdma(
     dsdma: BaseDSDMA,
     thought: ProcessingQueueItem,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[JSONDict] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> DSDMAResult:
     """Run the domain-specific DMA using profile-driven configuration."""
@@ -404,7 +405,7 @@ async def run_dsdma(
 
 async def run_action_selection_pdma(
     evaluator: ActionSelectionPDMAEvaluator,
-    triaged_inputs: Union[Dict[str, Any], EnhancedDMAInputs],
+    triaged_inputs: Union[JSONDict, EnhancedDMAInputs],
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> ActionSelectionDMAResult:
     """Select the next handler action using the triaged DMA results."""

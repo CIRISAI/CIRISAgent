@@ -9,10 +9,11 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int, get_list, get_str
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -548,9 +549,10 @@ class PatternAnalysisLoop(BaseScheduledService):
 
     async def _get_action_frequency(self) -> Dict[str, ActionFrequency]:
         """Get frequency of different actions."""
-        action_data_raw: Dict[str, JSONDict] = defaultdict(
-            lambda: {"count": 0, "evidence": [], "last_seen": None}
-        )
+        # Use a dict with explicit types for tracking
+        action_counts: Dict[str, int] = defaultdict(int)
+        action_evidence: Dict[str, List[str]] = defaultdict(list)
+        action_last_seen: Dict[str, Optional[datetime]] = defaultdict(lambda: None)
 
         # Query recent actions
         if not self._memory_bus:
@@ -565,38 +567,38 @@ class PatternAnalysisLoop(BaseScheduledService):
 
         for action in action_data:
             # Extract action type from tags
-            action_type = action.tags.get("action", "unknown") if action.tags else "unknown"
-            action_data_raw[action_type]["count"] += 1
+            if action.tags:
+                tags_as_jsondict: JSONDict = {k: v for k, v in action.tags.items()}
+                action_type = get_str(tags_as_jsondict, "action", "unknown")
+            else:
+                action_type = "unknown"
+
+            action_counts[action_type] += 1
 
             # Track last seen
             action_time = action.timestamp
-            if (
-                action_data_raw[action_type]["last_seen"] is None
-                or action_time > action_data_raw[action_type]["last_seen"]
-            ):
-                action_data_raw[action_type]["last_seen"] = action_time
+            last_seen = action_last_seen[action_type]
+            if last_seen is None or action_time > last_seen:
+                action_last_seen[action_type] = action_time
 
             # Use correlation_id as evidence (limit to 10)
-            if (
-                hasattr(action, "correlation_id")
-                and action.correlation_id
-                and len(action_data_raw[action_type]["evidence"]) < 10
-            ):
-                action_data_raw[action_type]["evidence"].append(f"Action {action.correlation_id} at {action.timestamp}")
+            if hasattr(action, "correlation_id") and action.correlation_id and len(action_evidence[action_type]) < 10:
+                action_evidence[action_type].append(f"Action {action.correlation_id} at {action.timestamp}")
 
         # Convert to ActionFrequency objects
         action_frequency: Dict[str, ActionFrequency] = {}
         total_days = 7  # We queried last 7 days
 
-        for action_type, data in action_data_raw.items():
-            if data["count"] > 0:
+        for action_type in action_counts.keys():
+            count = action_counts[action_type]
+            if count > 0:
                 action_frequency[action_type] = ActionFrequency(
                     action=action_type,
-                    count=data["count"],
-                    evidence=data["evidence"],
-                    last_seen=data["last_seen"]
+                    count=count,
+                    evidence=action_evidence[action_type],
+                    last_seen=action_last_seen[action_type]
                     or (self._time_service.now() if self._time_service else datetime.now(timezone.utc)),
-                    daily_average=data["count"] / total_days,
+                    daily_average=count / total_days,
                 )
 
         return action_frequency

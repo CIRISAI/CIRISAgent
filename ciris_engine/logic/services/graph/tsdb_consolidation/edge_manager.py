@@ -15,6 +15,7 @@ from ciris_engine.schemas.services.graph.consolidation import ParticipantData
 from ciris_engine.schemas.services.graph.edge_types import EdgeSpecification
 from ciris_engine.schemas.services.graph.edges import UserParticipationAttributes
 from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -647,7 +648,7 @@ class EdgeManager:
 
     def _normalize_edge_specifications(
         self, edges: List[EdgeSpecification]
-    ) -> Tuple[List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], set[str]]:
+    ) -> Tuple[List[Tuple[str, str, str, JSONDict, Optional[str]]], set[str]]:
         """Convert EdgeSpecification objects to normalized format.
 
         Returns:
@@ -674,8 +675,8 @@ class EdgeManager:
         return normalized_edges, node_ids_to_check
 
     def _normalize_edge_tuples(
-        self, edges: List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]
-    ) -> Tuple[List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], set[str]]:
+        self, edges: List[Tuple[GraphNode, GraphNode, str, JSONDict]]
+    ) -> Tuple[List[Tuple[str, str, str, JSONDict, Optional[str]]], set[str]]:
         """Convert edge tuples to normalized format.
 
         Returns:
@@ -745,7 +746,7 @@ class EdgeManager:
                 logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
 
     def _build_edge_record(
-        self, source_id: str, target_id: str, relationship: str, attrs: Dict[str, Any], scope: str
+        self, source_id: str, target_id: str, relationship: str, attrs: JSONDict, scope: str
     ) -> Tuple[str, str, str, str, str, float, str, str]:
         """Build a single edge record for database insertion.
 
@@ -774,7 +775,7 @@ class EdgeManager:
         )
 
     def _build_edge_data(
-        self, normalized_edges: List[Tuple[str, str, str, Dict[str, Any], Optional[str]]], existing_nodes: set[str]
+        self, normalized_edges: List[Tuple[str, str, str, JSONDict, Optional[str]]], existing_nodes: set[str]
     ) -> List[Tuple[str, str, str, str, str, float, str, str]]:
         """Build edge data for batch insertion."""
         edge_data = []
@@ -792,7 +793,7 @@ class EdgeManager:
         return edge_data
 
     def create_edges(
-        self, edges: Union[List[EdgeSpecification], List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]]
+        self, edges: Union[List[EdgeSpecification], List[Tuple[GraphNode, GraphNode, str, JSONDict]]]
     ) -> int:
         """
         Create multiple edges from a list of edge specifications.
@@ -819,7 +820,7 @@ class EdgeManager:
                     )
                 else:
                     normalized_edges, node_ids_to_check = self._normalize_edge_tuples(
-                        cast(List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]], edges)
+                        cast(List[Tuple[GraphNode, GraphNode, str, JSONDict]], edges)
                     )
 
                 # Check which nodes already exist

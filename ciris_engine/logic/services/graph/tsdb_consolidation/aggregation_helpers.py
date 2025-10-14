@@ -10,6 +10,8 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Dict, List, Tuple
 
+from ciris_engine.schemas.types import JSONDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,7 @@ class ResourceTotals:
         }
 
 
-def aggregate_metric_stats(summaries: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+def aggregate_metric_stats(summaries: List[JSONDict]) -> Dict[str, Dict[str, float]]:
     """
     Aggregate metric statistics from multiple summaries.
 
@@ -109,7 +111,7 @@ def aggregate_metric_stats(summaries: List[Dict[str, Any]]) -> Dict[str, Dict[st
     return result
 
 
-def aggregate_resource_usage(summaries: List[Dict[str, Any]]) -> Dict[str, float]:
+def aggregate_resource_usage(summaries: List[JSONDict]) -> Dict[str, float]:
     """
     Aggregate resource usage (tokens, cost, carbon, energy) from summaries.
 
@@ -142,7 +144,7 @@ def aggregate_resource_usage(summaries: List[Dict[str, Any]]) -> Dict[str, float
     return totals.to_dict()
 
 
-def aggregate_action_counts(summaries: List[Dict[str, Any]]) -> Dict[str, int]:
+def aggregate_action_counts(summaries: List[JSONDict]) -> Dict[str, int]:
     """
     Aggregate action counts from summaries.
 
@@ -258,7 +260,7 @@ def create_aggregated_summary_attributes(
     resources: Dict[str, float],
     action_counts: Dict[str, int],
     source_summary_ids: List[str],
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Create attributes dictionary for an aggregated summary node.
 
@@ -318,7 +320,7 @@ def create_aggregated_summary_attributes(
     return attributes
 
 
-def parse_summary_attributes(summaries: List[Tuple[str, str]]) -> List[Dict[str, Any]]:
+def parse_summary_attributes(summaries: List[Tuple[str, str]]) -> List[JSONDict]:
     """
     Parse JSON attributes from summary tuples.
 

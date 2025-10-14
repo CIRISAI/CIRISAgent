@@ -25,6 +25,7 @@ from ciris_engine.schemas.services.graph.consolidation import (
     ThoughtSummary,
     TraceSpanData,
 )
+from ciris_engine.schemas.types import JSONDict, JSONValue
 
 logger = logging.getLogger(__name__)
 
@@ -92,12 +93,8 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(
-        default_factory=dict
-    )
-    response_data: Optional[Dict[str, str | int | float | bool | List[Any] | Dict[str, Any] | None]] = Field(
-        default_factory=dict
-    )
+    request_data: Optional[JSONDict] = Field(default_factory=dict)
+    response_data: Optional[JSONDict] = Field(default_factory=dict)
     tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
     context: Optional[Dict[str, str | int | float | bool | List[Any]]] = Field(default=None)
 
@@ -140,19 +137,19 @@ class RawThoughtData(BaseModel):
 
 
 # Helper functions for safe data extraction and type conversion
-def safe_dict_get(data: Dict[str, Any] | str | int | float | List[Any] | None, key: str, default: Any = None) -> Any:
+def safe_dict_get(data: JSONDict | str | int | float | List[Any] | None, key: str, default: Any = None) -> Any:
     """Safely extract value from data that might not be a dict."""
     if isinstance(data, dict):
         return data.get(key, default)
     return default
 
 
-def ensure_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -> Dict[str, Any]:
+def ensure_dict(data: JSONDict | str | int | float | List[Any] | None) -> JSONDict:
     """Ensure data is a dict, return empty dict if not."""
     return data if isinstance(data, dict) else {}
 
 
-def safe_str_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -> Dict[str, str]:
+def safe_str_dict(data: JSONDict | str | int | float | List[Any] | None) -> Dict[str, str]:
     """Convert data to string dictionary safely."""
     if isinstance(data, dict):
         return {k: str(v) for k, v in data.items()}
@@ -160,7 +157,7 @@ def safe_str_dict(data: Dict[str, Any] | str | int | float | List[Any] | None) -
 
 
 def build_request_data_from_raw(
-    raw_request: Dict[str, Any] | str | int | float | List[Any] | None,
+    raw_request: JSONDict | str | int | float | List[Any] | None,
 ) -> Optional[RequestData]:
     """Extract and build RequestData from raw request data with type safety."""
     if raw_request is None or not isinstance(raw_request, dict):
@@ -180,7 +177,7 @@ def build_request_data_from_raw(
 
 
 def build_response_data_from_raw(
-    raw_response: Dict[str, Any] | str | int | float | List[Any] | None,
+    raw_response: JSONDict | str | int | float | List[Any] | None,
 ) -> Optional[ResponseData]:
     """Extract and build ResponseData from raw response data with type safety."""
     if raw_response is None or not isinstance(raw_response, dict):
@@ -198,7 +195,7 @@ def build_response_data_from_raw(
 
 
 def build_interaction_context_from_raw(
-    context_data: Dict[str, Any] | str | int | float | List[Any] | None,
+    context_data: JSONDict | str | int | float | List[Any] | None,
 ) -> Optional[InteractionContext]:
     """Extract and build InteractionContext from raw context data with type safety."""
     if context_data is None or not isinstance(context_data, dict):
@@ -219,7 +216,7 @@ class TSDBDataConverter:
     """Converts raw dictionary data to typed schemas."""
 
     @staticmethod
-    def convert_service_interaction(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[ServiceInteractionData]:
+    def convert_service_interaction(raw_data: JSONDict | RawCorrelationData) -> Optional[ServiceInteractionData]:
         """Convert raw correlation data to ServiceInteractionData."""
         try:
             # Convert dict to typed model if needed
@@ -264,7 +261,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_metric_correlation(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[MetricCorrelationData]:
+    def convert_metric_correlation(raw_data: JSONDict | RawCorrelationData) -> Optional[MetricCorrelationData]:
         """Convert raw correlation data to MetricCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -322,7 +319,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_trace_span(raw_data: Dict[str, Any] | RawCorrelationData) -> Optional[TraceSpanData]:
+    def convert_trace_span(raw_data: JSONDict | RawCorrelationData) -> Optional[TraceSpanData]:
         """Convert raw correlation data to TraceSpanData."""
         try:
             # Convert dict to typed model if needed
@@ -407,7 +404,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def convert_task(raw_task: Dict[str, Any] | RawTaskData) -> Optional[TaskCorrelationData]:
+    def convert_task(raw_task: JSONDict | RawTaskData) -> Optional[TaskCorrelationData]:
         """Convert raw task data to TaskCorrelationData."""
         try:
             # Convert dict to typed model if needed
@@ -484,7 +481,7 @@ class TSDBDataConverter:
             return None
 
     @staticmethod
-    def _convert_thought(raw_thought: Dict[str, Any] | RawThoughtData) -> Optional[ThoughtSummary]:
+    def _convert_thought(raw_thought: JSONDict | RawThoughtData) -> Optional[ThoughtSummary]:
         """Convert raw thought data to ThoughtSummary."""
         try:
             # Convert dict to typed model if needed

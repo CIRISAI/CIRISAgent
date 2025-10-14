@@ -11,11 +11,12 @@ from sqlite3 import Connection, Cursor
 from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
 
-def parse_summary_attributes_with_fallback(attrs_dict: Dict[str, Any]) -> SummaryAttributes:
+def parse_summary_attributes_with_fallback(attrs_dict: JSONDict) -> SummaryAttributes:
     """
     Parse summary attributes dict into SummaryAttributes model with fallback.
 

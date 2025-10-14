@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def create_daily_summary_attributes(
     metrics: Dict[str, Dict[str, float]],
     resources: Dict[str, float],
     action_counts: Dict[str, int],
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Create attributes dictionary for a daily summary node.
 
@@ -151,7 +152,7 @@ def create_daily_summary_attributes(
 def create_daily_summary_node(
     summary_type: str,
     day: datetime,
-    attributes: Dict[str, Any],
+    attributes: JSONDict,
     now: datetime,
 ) -> GraphNode:
     """

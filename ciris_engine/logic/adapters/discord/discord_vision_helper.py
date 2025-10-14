@@ -4,6 +4,7 @@ import base64
 import logging
 import os
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
 import discord
@@ -235,7 +236,7 @@ class DiscordVisionHelper:
         """
         return bool(self.api_key)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current status of vision helper.
 
         Returns:

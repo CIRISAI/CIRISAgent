@@ -5,6 +5,7 @@ import logging
 import time
 from collections import defaultdict
 from typing import Any, Dict
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,7 @@ class DiscordRateLimiter:
         self._stats["total_wait_time"] += wait_time
         self._stats["max_wait_time"] = max(self._stats["max_wait_time"], wait_time)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get rate limiter statistics.
 
         Returns:

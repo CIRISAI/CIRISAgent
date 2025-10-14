@@ -13,7 +13,6 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
-from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 import jwt
@@ -39,6 +38,7 @@ from ciris_engine.schemas.services.authority_core import (
     WARole,
 )
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task

@@ -7,7 +7,6 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
 
@@ -17,6 +16,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,6 @@ Main coordinator that executes the 7 phases of ethical reasoning.
 
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -29,6 +28,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelationStatus,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .action_execution import ActionExecutionPhase
 from .conscience_execution import ConscienceExecutionPhase
@@ -607,9 +607,7 @@ class ThoughtProcessor(
         }
         return action_result.selected_action in exempt_actions
 
-    async def _run_conscience_checks(
-        self, action_result: ActionSelectionDMAResult, context: JSONDict
-    ) -> JSONDict:
+    async def _run_conscience_checks(self, action_result: ActionSelectionDMAResult, context: JSONDict) -> JSONDict:
         """Run all conscience checks and return the results."""
         final_action = action_result
         overridden = False

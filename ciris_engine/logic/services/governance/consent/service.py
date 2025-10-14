@@ -14,6 +14,7 @@ from uuid import uuid4
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.persistence import add_graph_node, get_graph_node
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_list, get_str, get_str_optional
 from ciris_engine.protocols.consent import ConsentManagerProtocol
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -32,7 +33,6 @@ from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional, get_list, get_float, get_dict
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +147,14 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 stream=ConsentStream(get_str(attrs, "stream", "temporary")),
                 categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
                 granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
-                expires_at=(datetime.fromisoformat(expires_str) if (expires_str := get_str_optional(attrs, "expires_at")) else None),
-                last_modified=datetime.fromisoformat(get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())),
+                expires_at=(
+                    datetime.fromisoformat(expires_str)
+                    if (expires_str := get_str_optional(attrs, "expires_at"))
+                    else None
+                ),
+                last_modified=datetime.fromisoformat(
+                    get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())
+                ),
                 impact_score=get_float(attrs, "impact_score", 0.0),
                 attribution_count=int(get_float(attrs, "attribution_count", 0)),
             )
@@ -673,7 +679,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                             timestamp=node.updated_at,
                             previous_stream=ConsentStream(get_str(attrs, "previous_stream", "temporary")),
                             new_stream=ConsentStream(get_str(attrs, "new_stream", "temporary")),
-                            previous_categories=[ConsentCategory(c) for c in get_list(attrs, "previous_categories", [])],
+                            previous_categories=[
+                                ConsentCategory(c) for c in get_list(attrs, "previous_categories", [])
+                            ],
                             new_categories=[ConsentCategory(c) for c in get_list(attrs, "new_categories", [])],
                             initiated_by=get_str(attrs, "initiated_by", "unknown"),
                             reason=get_str_optional(attrs, "reason"),
@@ -718,7 +726,10 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             # Reconstruct categories from dict
             categories_data = get_list(request_dict, "categories", [])
-            categories = [ConsentCategory(c) if isinstance(c, str) else ConsentCategory(c.get("value", "interaction")) for c in categories_data]
+            categories = [
+                ConsentCategory(c) if isinstance(c, str) else ConsentCategory(c.get("value", "interaction"))
+                for c in categories_data
+            ]
 
             # Create PARTNERED status
             partnered_status = ConsentStatus(

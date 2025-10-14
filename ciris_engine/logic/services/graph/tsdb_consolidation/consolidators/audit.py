@@ -15,8 +15,9 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
+
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -288,9 +289,7 @@ class AuditConsolidator:
                 severity_str = get_str(attrs, "severity", "").lower()
 
                 # Check if security-related
-                is_security = any(
-                    keyword in event_type_str for keyword in ["auth", "access", "permission", "security"]
-                )
+                is_security = any(keyword in event_type_str for keyword in ["auth", "access", "permission", "security"])
                 is_high_severity = severity_str in ["high", "critical", "error"]
 
                 if (is_security or is_high_severity) and security_count < 10:

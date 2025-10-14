@@ -7,7 +7,6 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -42,6 +41,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceResponseData,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher

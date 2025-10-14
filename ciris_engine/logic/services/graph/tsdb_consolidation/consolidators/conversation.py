@@ -8,7 +8,6 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
@@ -16,6 +15,7 @@ from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.services.graph.consolidation import ConversationEntry, ParticipantData, ServiceInteractionData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol

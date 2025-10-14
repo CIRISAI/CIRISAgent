@@ -14,9 +14,10 @@ import logging
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
-from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
+
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

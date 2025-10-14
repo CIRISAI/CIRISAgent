@@ -7,13 +7,13 @@ with existing CIRIS services following all architectural patterns.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, cast
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
 
 from ciris_engine.logic.services.graph.base import BaseGraphService
 from ciris_engine.logic.services.mixins import RequestMetricsMixin
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.buses import MemoryBus

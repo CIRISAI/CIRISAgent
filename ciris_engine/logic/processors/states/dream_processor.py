@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.adapters import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus

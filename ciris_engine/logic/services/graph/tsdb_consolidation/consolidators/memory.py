@@ -9,11 +9,11 @@ It does NOT create a summary node.
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

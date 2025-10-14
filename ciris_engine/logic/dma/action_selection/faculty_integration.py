@@ -2,7 +2,6 @@
 
 import logging
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.dma.faculty import (
@@ -14,6 +13,7 @@ from ciris_engine.schemas.dma.faculty import (
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

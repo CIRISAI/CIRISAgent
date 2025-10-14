@@ -6,8 +6,9 @@ including shutdown/continuity history.
 """
 
 from typing import Any, Dict, Optional
+
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_dict, get_list
 
 
 def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:

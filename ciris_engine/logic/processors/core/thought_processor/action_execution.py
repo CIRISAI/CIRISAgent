@@ -7,11 +7,11 @@ and completion tracking.
 
 import logging
 from typing import Any, Dict
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,7 @@ class ActionExecutionPhase:
 
     @streaming_step(StepPoint.PERFORM_ACTION)
     @step_point(StepPoint.PERFORM_ACTION)
-    async def _perform_action_step(
-        self, thought_item: ProcessingQueueItem, result: Any, context: JSONDict
-    ) -> Any:
+    async def _perform_action_step(self, thought_item: ProcessingQueueItem, result: Any, context: JSONDict) -> Any:
         """Step 6: Dispatch action to handler."""
         # This step is handled by base_processor dispatch_action method
         # Just pass through the result - actual dispatch happens after this

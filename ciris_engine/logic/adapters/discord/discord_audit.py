@@ -3,9 +3,9 @@
 import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.audit.core import EventPayload
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol

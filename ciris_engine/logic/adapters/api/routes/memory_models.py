@@ -6,11 +6,11 @@ Extracted from memory.py to improve modularity and testability.
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 
 class StoreRequest(BaseModel):

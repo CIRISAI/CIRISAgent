@@ -1,6 +1,5 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
-from ciris_engine.schemas.types import JSONDict
 
 import httpx
 

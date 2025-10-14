@@ -9,6 +9,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:

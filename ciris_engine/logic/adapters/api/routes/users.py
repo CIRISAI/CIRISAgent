@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
-from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
+from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import check_permissions, get_auth_context, get_auth_service
 from ..services.auth_service import (

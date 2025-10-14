@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.types import JSONDict
 
 
 @runtime_checkable

@@ -810,9 +810,7 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return capabilities
 
-    def _compare_patterns(
-        self, baseline_patterns: JSONDict, current_patterns: JSONDict
-    ) -> List[IdentityDiff]:
+    def _compare_patterns(self, baseline_patterns: JSONDict, current_patterns: JSONDict) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []
 

@@ -6,7 +6,6 @@ import logging
 import uuid
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 import discord
 

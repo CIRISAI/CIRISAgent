@@ -1359,9 +1359,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             action_type = attrs["action_type"]
         return action_type
 
-    def _create_audit_request_from_attrs(
-        self, attrs: JSONDict, timestamp: datetime, action_type: str
-    ) -> AuditRequest:
+    def _create_audit_request_from_attrs(self, attrs: JSONDict, timestamp: datetime, action_type: str) -> AuditRequest:
         """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),

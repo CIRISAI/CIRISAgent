@@ -8,12 +8,12 @@ Handles retry logic when conscience validation fails, including:
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

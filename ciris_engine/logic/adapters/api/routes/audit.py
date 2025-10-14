@@ -12,8 +12,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional, get_dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as FastAPIPath
@@ -21,11 +19,13 @@ from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph.audit import AuditQuery, VerificationReport
 from ciris_engine.schemas.services.nodes import AuditEntry
+from ciris_engine.schemas.types import JSONDict
 
 from ..constants import DESC_END_TIME, DESC_RESULTS_OFFSET, DESC_START_TIME, ERROR_AUDIT_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import AuthContext, require_admin, require_observer
@@ -279,7 +279,7 @@ def _process_sqlite_entries(
             timestamp = datetime.fromisoformat(event_timestamp.replace("Z", UTC_TIMEZONE_SUFFIX))
             context = AuditContext(
                 description=get_str_optional(sqlite_entry, "event_payload"),
-                entity_id=get_str_optional(sqlite_entry, "originator_id")
+                entity_id=get_str_optional(sqlite_entry, "originator_id"),
             )
 
             merged[entry_id] = {
@@ -330,7 +330,8 @@ def _process_jsonl_entries(
                     timestamp=timestamp,
                     context=context,
                     signature=get_str_optional(jsonl_entry, "signature"),
-                    hash_chain=get_str_optional(jsonl_entry, "hash_chain") or get_str_optional(jsonl_entry, "previous_hash"),
+                    hash_chain=get_str_optional(jsonl_entry, "hash_chain")
+                    or get_str_optional(jsonl_entry, "previous_hash"),
                     storage_sources=["jsonl"],
                 ),
                 "sources": ["jsonl"],

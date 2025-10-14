@@ -6,10 +6,11 @@ Provides anonymized statistics about system operations without auth.
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
+
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

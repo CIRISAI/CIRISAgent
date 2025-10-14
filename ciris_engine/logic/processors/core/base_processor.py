@@ -5,8 +5,6 @@ Base processor abstract class defining the interface for all processor types.
 import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import ValidationError
 
@@ -17,6 +15,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorMetrics, ProcessorServices
 from ciris_engine.schemas.processors.results import ProcessingResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher

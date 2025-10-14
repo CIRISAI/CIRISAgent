@@ -8,7 +8,6 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -16,6 +15,7 @@ from ciris_engine.schemas.config.agent import AgentTemplate
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot, CoreProfile, IdentityMetadata
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

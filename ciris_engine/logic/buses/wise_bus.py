@@ -5,15 +5,15 @@ Wise Authority message bus - handles all WA service operations
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
-from ciris_engine.schemas.types import JSONDict
 
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
+from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
 from .prohibitions import (

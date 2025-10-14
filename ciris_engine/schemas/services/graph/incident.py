@@ -200,8 +200,12 @@ class ProblemNode(TypedGraphNode):
         attrs.pop("node_class", None)
 
         # Handle datetime deserialization - extract and convert, don't modify attrs
-        first_occurrence = cls._deserialize_datetime(attrs.get("first_occurrence")) if "first_occurrence" in attrs else None
-        last_occurrence = cls._deserialize_datetime(attrs.get("last_occurrence")) if "last_occurrence" in attrs else None
+        first_occurrence = (
+            cls._deserialize_datetime(attrs.get("first_occurrence")) if "first_occurrence" in attrs else None
+        )
+        last_occurrence = (
+            cls._deserialize_datetime(attrs.get("last_occurrence")) if "last_occurrence" in attrs else None
+        )
         resolved_at = cls._deserialize_datetime(attrs.get("resolved_at")) if "resolved_at" in attrs else None
 
         # Remove these from attrs so they don't conflict with kwargs
@@ -281,7 +285,9 @@ class IncidentInsightNode(TypedGraphNode):
         attrs.pop("node_class", None)
 
         # Handle datetime deserialization - extract and convert, don't modify attrs
-        analysis_timestamp = cls._deserialize_datetime(attrs.get("analysis_timestamp")) if "analysis_timestamp" in attrs else None
+        analysis_timestamp = (
+            cls._deserialize_datetime(attrs.get("analysis_timestamp")) if "analysis_timestamp" in attrs else None
+        )
 
         # Remove from attrs so it doesn't conflict with kwargs
         attrs.pop("analysis_timestamp", None)

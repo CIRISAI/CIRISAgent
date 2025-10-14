@@ -9,9 +9,9 @@ import logging
 import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 from .memory_visualization_helpers import TimelineLayoutCalculator
 

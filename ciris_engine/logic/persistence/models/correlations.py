@@ -2,7 +2,6 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.persistence.db import get_db_connection
@@ -10,6 +9,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
 from ciris_engine.schemas.persistence.correlations import ChannelInfo
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService

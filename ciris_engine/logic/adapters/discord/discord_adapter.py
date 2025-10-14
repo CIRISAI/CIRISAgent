@@ -3,7 +3,6 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
 
 import discord
 from discord.errors import ConnectionClosed, HTTPException
@@ -36,6 +35,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceRequestData,
     ServiceResponseData,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .config import DiscordAdapterConfig
 from .constants import ACTION_OBSERVE

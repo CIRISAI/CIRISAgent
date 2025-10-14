@@ -8,7 +8,6 @@ registered action handlers and their parameter schemas.
 import json
 import logging
 from typing import Any, Dict, List, Optional, Type
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel
 
@@ -25,6 +24,7 @@ from ciris_engine.schemas.actions.parameters import (
     ToolParams,
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

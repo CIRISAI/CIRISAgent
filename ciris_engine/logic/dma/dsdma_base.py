@@ -1,7 +1,5 @@
 import logging
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.schemas.types import JSONDict
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +15,7 @@ from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.results import DSDMAResult
+from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import get_prompt_loader

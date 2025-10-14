@@ -8,11 +8,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import Service
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

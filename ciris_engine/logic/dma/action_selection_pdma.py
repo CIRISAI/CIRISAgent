@@ -3,7 +3,6 @@
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, cast
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
@@ -17,6 +16,7 @@ from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
 from .action_selection.faculty_integration import FacultyIntegration

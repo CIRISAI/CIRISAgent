@@ -6,12 +6,12 @@ Provides WA-authorized emergency control endpoints including kill switch.
 
 import logging
 from typing import Any, Dict
-from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, WASignedCommand
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

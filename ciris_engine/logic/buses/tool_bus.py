@@ -5,14 +5,14 @@ Tool message bus - handles all tool service operations
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
-from ciris_engine.schemas.types import JSONDict
 
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_list
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_list, get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
 
@@ -196,9 +196,7 @@ class ToolBus(BaseBus[ToolService]):
             logger.error(f"Error getting tool result: {e}", exc_info=True)
             return None
 
-    async def validate_parameters(
-        self, tool_name: str, parameters: JSONDict, handler_name: str = "default"
-    ) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict, handler_name: str = "default") -> bool:
         """Validate parameters for a tool"""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["validate_parameters"])
 

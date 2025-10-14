@@ -5,6 +5,7 @@ Memory message bus - handles all memory service operations
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass
 
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
@@ -425,9 +426,7 @@ class MemoryBus(BaseBus[MemoryService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_telemetry_result(
-        self, telemetry: JSONDict, aggregated: JSONDict, cache_rates: List[float]
-    ) -> None:
+    def _aggregate_telemetry_result(self, telemetry: JSONDict, aggregated: JSONDict, cache_rates: List[float]) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             service_name = get_str(telemetry, "service_name", "unknown")

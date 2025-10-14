@@ -4,10 +4,10 @@ Play processor for creative and experimental processing.
 
 import logging
 from typing import Any, Dict, List
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.processors.results import PlayResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.types import JSONDict
 
 from .work_processor import WorkProcessor
 

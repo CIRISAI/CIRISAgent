@@ -4,16 +4,25 @@ import asyncio
 import logging
 import signal
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.types import ConfigDict
 
 from ..config.bootstrap import ConfigBootstrap
 from ..runtime.ciris_runtime import CIRISRuntime
 
 
-async def load_config(config_path: Optional[str], cli_overrides: Optional[Dict[str, Any]] = None) -> EssentialConfig:
-    """Load essential configuration using the new bootstrap system."""
+async def load_config(config_path: Optional[str], cli_overrides: Optional[ConfigDict] = None) -> EssentialConfig:
+    """Load essential configuration using the new bootstrap system.
+
+    Args:
+        config_path: Optional path to configuration file
+        cli_overrides: Optional configuration overrides from command line
+
+    Returns:
+        Loaded and validated essential configuration
+    """
     return await ConfigBootstrap.load_essential_config(
         config_path=Path(config_path) if config_path else None, cli_overrides=cli_overrides
     )

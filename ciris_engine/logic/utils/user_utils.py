@@ -1,16 +1,27 @@
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.schemas.types import JSONDict
 
 
 async def extract_user_nick(
     *,
     message: Optional[object] = None,
     params: Optional[object] = None,
-    dispatch_context: Optional[Dict[str, Any]] = None,
+    dispatch_context: Optional[JSONDict] = None,
     thought_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Attempt to determine a user nickname from various sources."""
+    """Attempt to determine a user nickname from various sources.
+
+    Args:
+        message: Optional Discord message object with author information
+        params: Optional params object with user data
+        dispatch_context: Optional dispatch context with author/user information
+        thought_id: Optional thought ID to lookup parent task context
+
+    Returns:
+        User nickname if found, None otherwise
+    """
     # 1. Directly from a Discord message object
     if message is not None:
         author = getattr(message, "author", None)

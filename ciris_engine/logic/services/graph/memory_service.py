@@ -157,7 +157,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
         # Process attributes - convert to proper schema
-        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]] = {}
+        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict] = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -262,14 +262,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         )
 
     async def _process_secrets_for_recall(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]], action_type: str
-    ) -> Dict[str, Any]:
+        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict], action_type: str
+    ) -> JSONDict:
         """Process secrets in recalled attributes for potential decryption."""
         if not attributes:
             return {}
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: Dict[str, Any]
+        attributes_dict: JSONDict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -305,14 +305,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         return attributes_dict
 
     def _process_secrets_for_forget(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]]
+        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict]
     ) -> None:
         """Clean up secrets when forgetting a node."""
         if not attributes:
             return
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: Dict[str, Any]
+        attributes_dict: JSONDict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -958,7 +958,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return connected_node, True
 
-    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
+    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[JSONDict]) -> List[GraphNode]:
         """Apply time-based filters to a list of nodes."""
         if not filters:
             return nodes
@@ -983,7 +983,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return filtered
 
-    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
+    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[JSONDict]) -> List[GraphNode]:
         """Apply tag-based filters to a list of nodes."""
         if not filters or "tags" not in filters:
             return nodes
@@ -1049,7 +1049,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return filtered
 
-    def _get_attributes_dict(self, attributes: Any) -> Dict[str, Any]:
+    def _get_attributes_dict(self, attributes: Any) -> JSONDict:
         """Extract attributes as dictionary from various formats."""
         if hasattr(attributes, "model_dump"):
             return attributes.model_dump()  # type: ignore[no-any-return]

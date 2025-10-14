@@ -21,6 +21,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 from uuid import uuid4
 
 # Optional import for psutil
@@ -809,7 +810,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
     # ========== Private Helper Methods ==========
 
     async def _store_entry_in_graph(
-        self, entry: AuditRequest, action_type: HandlerActionType, hash_chain_data: Optional[Dict[str, Any]] = None
+        self, entry: AuditRequest, action_type: HandlerActionType, hash_chain_data: Optional[JSONDict] = None
     ) -> None:
         """Store an audit entry in the graph and create a trace correlation.
 
@@ -1052,7 +1053,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         await asyncio.to_thread(_create_tables)
         self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
 
-    async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[Dict[str, Any]]:
+    async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain.
 
         Returns:
@@ -1063,9 +1064,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             return None
 
         async with self._hash_chain_lock:
-            hash_chain_data: Optional[Dict[str, Any]] = None
+            hash_chain_data: Optional[JSONDict] = None
 
-            def _write_to_chain() -> Dict[str, Any]:
+            def _write_to_chain() -> JSONDict:
                 entry_dict = {
                     "event_id": entry.entry_id,
                     "event_timestamp": entry.timestamp.isoformat(),
@@ -1351,7 +1352,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             timestamp = self._time_service.now() if self._time_service else datetime.now()
         return timestamp
 
-    def _extract_action_type_from_attrs(self, attrs: Dict[str, Any]) -> Optional[str]:
+    def _extract_action_type_from_attrs(self, attrs: JSONDict) -> Optional[str]:
         """Extract action_type from attributes with fallback."""
         action_type = attrs.get("action_type")
         if not action_type and "action_type" in attrs:
@@ -1359,7 +1360,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         return action_type
 
     def _create_audit_request_from_attrs(
-        self, attrs: Dict[str, Any], timestamp: datetime, action_type: str
+        self, attrs: JSONDict, timestamp: datetime, action_type: str
     ) -> AuditRequest:
         """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
@@ -1464,7 +1465,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             result.append(log_entry)
         return result
 
-    def _convert_entry_to_audit_log_dict(self, entry: AuditRequest) -> Dict[str, Any]:
+    def _convert_entry_to_audit_log_dict(self, entry: AuditRequest) -> JSONDict:
         """Convert audit entry to audit log dictionary format."""
         return {
             "event_id": entry.entry_id,
@@ -1475,7 +1476,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             "metadata": {"outcome": entry.outcome} if entry.outcome else {},
         }
 
-    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[Dict[str, Any]]:
+    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[JSONDict]:
         """Search for event in memory bus."""
         if not self._memory_bus:
             return None
@@ -1494,7 +1495,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return self._convert_entry_to_audit_log_dict(entry)
 
-    def _search_event_in_recent_cache(self, event_id: str) -> Optional[Dict[str, Any]]:
+    def _search_event_in_recent_cache(self, event_id: str) -> Optional[JSONDict]:
         """Search for event in recent entries cache."""
         for entry in self._recent_entries:
             if entry.entry_id == event_id:

@@ -9,6 +9,7 @@ from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +318,7 @@ Adhere strictly to the schema for your JSON output.
         return ""
 
     def _build_conscience_guidance(
-        self, conscience_feedback: Optional[Union[Dict[str, Any], ConscienceFailureContext]]
+        self, conscience_feedback: Optional[Union[JSONDict, ConscienceFailureContext]]
     ) -> str:
         """Build conscience guidance from feedback if available."""
         if not conscience_feedback:

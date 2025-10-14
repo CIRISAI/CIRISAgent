@@ -6,6 +6,7 @@ Provides anonymized statistics about system operations without auth.
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -263,7 +264,7 @@ async def get_transparency_policy() -> TransparencyPolicy:
 
 
 @router.get("/status")
-async def get_system_status() -> Dict[str, Any]:
+async def get_system_status() -> JSONDict:
     """
     Get current system status.
 

@@ -7,6 +7,7 @@ Frontend should NEVER call the billing backend directly.
 
 import logging
 from typing import Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -39,7 +40,7 @@ class CreditStatusResponse(BaseModel):
     total_uses: int = Field(..., description="Total uses so far")
     plan_name: Optional[str] = Field(None, description="Current plan name")
     purchase_required: bool = Field(..., description="Whether purchase is required to continue")
-    purchase_options: Optional[Dict[str, Any]] = Field(None, description="Purchase options if required")
+    purchase_options: Optional[JSONDict] = Field(None, description="Purchase options if required")
 
 
 class PurchaseInitiateRequest(BaseModel):
@@ -93,7 +94,7 @@ def _get_stripe_publishable_key() -> str:
     return key
 
 
-def _extract_user_identity(auth: AuthContext, request: Request) -> Dict[str, Any]:
+def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
     """Extract user identity from auth context including marketing opt-in preference and email."""
     # Extract marketing_opt_in and email from user record if available
     marketing_opt_in = False

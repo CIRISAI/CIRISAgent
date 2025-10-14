@@ -5,6 +5,7 @@ Runtime control service for API adapter.
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
@@ -95,7 +96,7 @@ class APIRuntimeControlService(Service):
             logger.error(f"State transition failed: {e}")
             return False
 
-    def get_runtime_status(self) -> Dict[str, Any]:
+    def get_runtime_status(self) -> JSONDict:
         """Get current runtime status."""
         status = {
             "paused": self._paused,

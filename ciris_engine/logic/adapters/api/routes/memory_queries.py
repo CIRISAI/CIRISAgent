@@ -8,6 +8,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -77,7 +78,7 @@ async def query_timeline_nodes(
     return GraphNodeBuilder.build_from_rows(rows)
 
 
-async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
+async def get_memory_stats(memory_service: Any) -> JSONDict:
     """
     Get statistics about memory storage.
 
@@ -87,7 +88,7 @@ async def get_memory_stats(memory_service: Any) -> Dict[str, Any]:
     Returns:
         Dictionary with memory statistics
     """
-    stats: Dict[str, Any] = {
+    stats: JSONDict = {
         "total_nodes": 0,
         "total_edges": 0,
         "nodes_by_type": {},

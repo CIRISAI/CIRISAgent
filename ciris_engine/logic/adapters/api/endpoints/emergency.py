@@ -6,6 +6,7 @@ Provides WA-authorized emergency control endpoints including kill switch.
 
 import logging
 from typing import Any, Dict
+from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -64,7 +65,7 @@ async def emergency_shutdown(
 @router.get("/kill-switch/status")
 async def get_kill_switch_status(
     runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Get current kill switch configuration status.
 

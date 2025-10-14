@@ -7,6 +7,7 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import aiohttp
 
@@ -51,7 +52,7 @@ class APIToolService(BaseService, ToolService):
         await BaseService.stop(self)
         logger.info("API tool service stopped")
 
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         # Track request for telemetry
         self._track_request()
@@ -111,7 +112,7 @@ class APIToolService(BaseService, ToolService):
                 correlation_id=correlation_id,
             )
 
-    async def _curl(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _curl(self, params: JSONDict) -> JSONDict:
         """Execute a curl-like HTTP request."""
         logger.info(f"[API_TOOLS] _curl called with params: {params}")
         url = params.get("url")
@@ -155,12 +156,12 @@ class APIToolService(BaseService, ToolService):
         except Exception as e:
             return {"error": str(e)}
 
-    async def _http_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _http_get(self, params: JSONDict) -> JSONDict:
         """Perform an HTTP GET request."""
         params["method"] = "GET"
         return await self._curl(params)
 
-    async def _http_post(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _http_post(self, params: JSONDict) -> JSONDict:
         """Perform an HTTP POST request."""
         params["method"] = "POST"
         return await self._curl(params)
@@ -174,7 +175,7 @@ class APIToolService(BaseService, ToolService):
         # All our tools are synchronous, so results should be available immediately
         return self._results.get(correlation_id)
 
-    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """Validate parameters for a tool."""
         if tool_name in ["curl", "http_get", "http_post"]:
             return "url" in parameters

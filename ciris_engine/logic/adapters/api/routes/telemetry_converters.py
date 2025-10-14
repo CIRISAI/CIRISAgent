@@ -4,9 +4,10 @@ Telemetry format converters - extracted from telemetry.py to reduce file size.
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
+from ciris_engine.schemas.types import JSONDict
 
 
-def convert_to_prometheus(data: Dict[str, Any]) -> str:
+def convert_to_prometheus(data: JSONDict) -> str:
     """
     Convert telemetry data to Prometheus format.
 
@@ -16,7 +17,7 @@ def convert_to_prometheus(data: Dict[str, Any]) -> str:
     return converter.convert(data)
 
 
-def convert_to_graphite(data: Dict[str, Any]) -> str:
+def convert_to_graphite(data: JSONDict) -> str:
     """
     Convert telemetry data to Graphite format.
 
@@ -33,12 +34,12 @@ class PrometheusConverter:
         self.lines: List[str] = []
         self.metrics_seen: set[str] = set()
 
-    def convert(self, data: Dict[str, Any]) -> str:
+    def convert(self, data: JSONDict) -> str:
         """Convert data to Prometheus format."""
         self._process_dict(data, "")
         return "\n".join(self.lines)
 
-    def _process_dict(self, data: Dict[str, Any], prefix: str) -> None:
+    def _process_dict(self, data: JSONDict, prefix: str) -> None:
         """Process a dictionary recursively."""
         for key, value in data.items():
             if self._should_skip_key(key):
@@ -107,12 +108,12 @@ class GraphiteConverter:
         self.lines: List[str] = []
         self.timestamp = int(datetime.now(timezone.utc).timestamp())
 
-    def convert(self, data: Dict[str, Any]) -> str:
+    def convert(self, data: JSONDict) -> str:
         """Convert data to Graphite format."""
         self._process_dict(data, "ciris")
         return "\n".join(self.lines)
 
-    def _process_dict(self, data: Dict[str, Any], prefix: str) -> None:
+    def _process_dict(self, data: JSONDict, prefix: str) -> None:
         """Process a dictionary recursively."""
         for key, value in data.items():
             if self._should_skip_key(key):

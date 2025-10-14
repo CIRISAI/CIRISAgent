@@ -7,7 +7,7 @@ hash chains, digital signatures, and root anchoring.
 
 import logging
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ciris_engine.protocols.services.lifecycle import TimeServiceProtocol
 from ciris_engine.schemas.audit.verification import (
@@ -20,6 +20,7 @@ from ciris_engine.schemas.audit.verification import (
     SigningKeyInfo,
     VerificationReport,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .hash_chain import AuditHashChain
 from .signature_manager import AuditSignatureManager
@@ -185,8 +186,15 @@ class AuditVerifier:
         logger.info("Performing fast tampering detection")
         return self.hash_chain.find_tampering()
 
-    def _verify_single_entry(self, entry: Dict[str, Any]) -> EntryVerificationResult:
-        """Verify a single entry's hash and signature"""
+    def _verify_single_entry(self, entry: JSONDict) -> EntryVerificationResult:
+        """Verify a single entry's hash and signature
+
+        Args:
+            entry: Audit entry as JSON-compatible dict
+
+        Returns:
+            Verification result with hash and signature validation status
+        """
         errors: List[str] = []
 
         # Verify entry hash

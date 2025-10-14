@@ -13,6 +13,7 @@ import aiofiles
 import yaml
 
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.types import ConfigDict, JSONDict
 
 from .env_utils import get_env_var
 
@@ -23,17 +24,17 @@ class ConfigBootstrap:
     """Load essential config from multiple sources in priority order."""
 
     @staticmethod
-    def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively merge two dictionaries."""
+    def _deep_merge(base: ConfigDict, update: ConfigDict) -> ConfigDict:
+        """Recursively merge two configuration dictionaries."""
         for key, value in update.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                base[key] = ConfigBootstrap._deep_merge(base[key], value)
+                base[key] = ConfigBootstrap._deep_merge(base[key], value)  # type: ignore[arg-type]
             else:
                 base[key] = value
         return base
 
     @staticmethod
-    def _apply_env_overrides(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_env_overrides(config_data: ConfigDict) -> ConfigDict:
         """Apply environment variable overrides to config data."""
         # Database paths
         db_path = get_env_var("CIRIS_DB_PATH")
@@ -93,7 +94,7 @@ class ConfigBootstrap:
 
     @staticmethod
     async def load_essential_config(
-        config_path: Optional[Path] = None, cli_overrides: Optional[Dict[str, Any]] = None
+        config_path: Optional[Path] = None, cli_overrides: Optional[ConfigDict] = None
     ) -> EssentialConfig:
         """
         Load essential configuration from multiple sources.
@@ -112,7 +113,7 @@ class ConfigBootstrap:
             Validated EssentialConfig instance
         """
         # Start with empty config data
-        config_data: Dict[str, Any] = {}
+        config_data: ConfigDict = {}
 
         # Load from YAML file if exists
         yaml_path = config_path or Path("config/essential.yaml")
@@ -143,13 +144,14 @@ class ConfigBootstrap:
             raise ValueError(f"Invalid configuration: {e}") from e
 
     @staticmethod
-    def get_config_metadata(config: EssentialConfig, yaml_path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+    def get_config_metadata(config: EssentialConfig, yaml_path: Optional[Path] = None) -> JSONDict:
         """
         Generate metadata about config sources for migration to graph.
 
-        Returns dict mapping config keys to their source information.
+        Returns dict mapping config keys to their source information
+        (source, env_var/file, bootstrap_phase flag).
         """
-        metadata = {}
+        metadata: Dict[str, Any] = {}
 
         # Check which values came from environment
         env_sources = {

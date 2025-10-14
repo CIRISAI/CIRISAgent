@@ -636,14 +636,6 @@ class LLMBus(BaseBus[LLMService]):
         total_latency = sum(m.total_latency_ms for m in self.service_metrics.values())
         avg_latency = total_latency / total_requests if total_requests > 0 else 0.0
 
-        # Count active providers (services that are available and healthy)
-        active_providers_list = [
-            service
-            for service in self.service_registry.get_services_by_type(ServiceType.LLM)
-            if self._is_service_available_sync(service)
-        ]
-        active_providers = len(active_providers_list)
-
         # Calculate uptime
         uptime_seconds = 0.0
         if hasattr(self, "_time_service") and self._time_service:

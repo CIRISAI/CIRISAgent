@@ -337,7 +337,7 @@ def set_task_updated_info_flag(
     task = get_task_by_id(task_id, occurrence_id, db_path)
     if not task or task.agent_occurrence_id != occurrence_id:
         logger.warning(
-            f"Task {task_id} does not belong to occurrence {occurrence_id}, " f"cannot set updated_info_available flag"
+            f"Task {task_id} does not belong to occurrence {occurrence_id}, cannot set updated_info_available flag"
         )
         return False
 

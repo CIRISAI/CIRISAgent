@@ -18,6 +18,7 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float, get_bool, get_dict, get_list
 
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.runtime_control import (
@@ -849,7 +850,8 @@ def _create_action_complete_data(
         )
 
     # Extract resource usage data if available (passed via kwargs from decorator)
-    resource_data = (kwargs or {}).get("_resource_usage", {})
+    kwargs_dict = kwargs or {}
+    resource_data = get_dict(kwargs_dict, "_resource_usage", {})
 
     return ActionCompleteStepData(
         **_base_data_dict(base_data),
@@ -865,14 +867,14 @@ def _create_action_complete_data(
         audit_entry_hash=result.audit_data.entry_hash,
         audit_signature=result.audit_data.signature,
         # Resource usage (queried from telemetry by thought_id)
-        tokens_total=resource_data.get("tokens_total", 0),
-        tokens_input=resource_data.get("tokens_input", 0),
-        tokens_output=resource_data.get("tokens_output", 0),
-        cost_cents=resource_data.get("cost_cents", 0.0),
-        carbon_grams=resource_data.get("carbon_grams", 0.0),
-        energy_mwh=resource_data.get("energy_mwh", 0.0),
-        llm_calls=resource_data.get("llm_calls", 0),
-        models_used=resource_data.get("models_used", []),
+        tokens_total=get_int(resource_data, "tokens_total", 0),
+        tokens_input=get_int(resource_data, "tokens_input", 0),
+        tokens_output=get_int(resource_data, "tokens_output", 0),
+        cost_cents=get_float(resource_data, "cost_cents", 0.0),
+        carbon_grams=get_float(resource_data, "carbon_grams", 0.0),
+        energy_mwh=get_float(resource_data, "energy_mwh", 0.0),
+        llm_calls=get_int(resource_data, "llm_calls", 0),
+        models_used=get_list(resource_data, "models_used", []),
     )
 
 

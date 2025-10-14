@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+from ciris_engine.logic.utils.jsondict_helpers import get_list
 from ciris_engine.schemas.services.graph.consolidation import (
     InteractionContext,
     MetricCorrelationData,
@@ -96,7 +97,7 @@ class RawCorrelationData(BaseModel):
     request_data: Optional[JSONDict] = Field(default_factory=dict)
     response_data: Optional[JSONDict] = Field(default_factory=dict)
     tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
-    context: Optional[Dict[str, str | int | float | bool | List[Any]]] = Field(default=None)
+    context: Optional[JSONDict] = Field(default=None)
 
     @field_validator("request_data", "response_data", "tags", mode="before")
     @classmethod
@@ -119,7 +120,7 @@ class RawTaskData(BaseModel):
     description: Optional[str] = None
     retry_count: int = 0
     error_message: Optional[str] = None
-    thoughts: List[Dict[str, str | int | float | bool]] = Field(default_factory=list)
+    thoughts: List[JSONDict] = Field(default_factory=list)
     metadata: Optional[Dict[str, str | int | float | bool]] = None
 
 
@@ -410,12 +411,14 @@ class TSDBDataConverter:
             # Convert dict to typed model if needed
             if isinstance(raw_task, dict):
                 # Clean thoughts list before creating RawTaskData
-                if "thoughts" in raw_task and raw_task["thoughts"]:
+                thoughts_list = get_list(raw_task, "thoughts", [])
+                if thoughts_list:
                     cleaned_thoughts = []
-                    for thought in raw_task["thoughts"]:
-                        # Remove None values from thought dicts
-                        cleaned_thought = {k: v for k, v in thought.items() if v is not None}
-                        cleaned_thoughts.append(cleaned_thought)
+                    for thought in thoughts_list:
+                        if isinstance(thought, dict):
+                            # Remove None values from thought dicts
+                            cleaned_thought = {k: v for k, v in thought.items() if v is not None}
+                            cleaned_thoughts.append(cleaned_thought)
                     raw_task["thoughts"] = cleaned_thoughts
                 raw_task = RawTaskData(**raw_task)
             # Extract handlers from thoughts

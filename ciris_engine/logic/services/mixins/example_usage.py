@@ -7,6 +7,7 @@ with existing CIRIS services following all architectural patterns.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.services.graph.base import BaseGraphService
 from ciris_engine.logic.services.mixins import RequestMetricsMixin
@@ -80,7 +81,7 @@ class MetricsEnabledGraphService(RequestMetricsMixin, BaseGraphService):
             logger.error(f"Failed to query graph: {e}")
             raise
 
-    def get_extended_status(self) -> Dict[str, Any]:
+    def get_extended_status(self) -> JSONDict:
         """Get service status including request metrics.
 
         Extends the base status with request metrics information.
@@ -136,7 +137,7 @@ class MetricsEnabledAdapter:
         # Implementation would go here
         pass
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> JSONDict:
         """Get adapter metrics."""
         metrics = self._metrics.get_request_metrics()
         return {
@@ -148,7 +149,7 @@ class MetricsEnabledAdapter:
 
 
 # Example 3: Using metrics in an API endpoint
-async def api_endpoint_with_metrics(service: MetricsEnabledGraphService) -> Dict[str, Any]:
+async def api_endpoint_with_metrics(service: MetricsEnabledGraphService) -> JSONDict:
     """Example API endpoint that exposes service metrics."""
 
     # Get extended status including metrics

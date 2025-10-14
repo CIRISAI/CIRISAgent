@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
+from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 import jwt
@@ -301,7 +302,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             conn.commit()
 
-    def _row_to_wa(self, row_dict: Dict[str, Any]) -> WACertificate:
+    def _row_to_wa(self, row_dict: JSONDict) -> WACertificate:
         """Convert a SQLite row dictionary to a WACertificate instance."""
 
         oauth_links_json = row_dict.get("oauth_links_json")
@@ -473,7 +474,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             link for link in existing.oauth_links if not (link.provider == provider and link.external_id == external_id)
         ]
 
-        payload: Dict[str, Any] = {
+        payload: JSONDict = {
             "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
         }
 
@@ -1463,7 +1464,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             else:
                 logger.warning("No root WA certificate found - cannot create system WA")
 
-    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: Dict[str, Any]) -> str:
+    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: JSONDict) -> str:
         """Create a channel token for an adapter."""
         # Ensure adapter_info has proper structure
         if not adapter_info:
@@ -1494,7 +1495,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return token
 
-    def verify_token_sync(self, token: str) -> Optional[Dict[str, Any]]:
+    def verify_token_sync(self, token: str) -> Optional[JSONDict]:
         """Synchronously verify a token (for non-async contexts)."""
         try:
             # For sync verification, we can only verify gateway-signed tokens

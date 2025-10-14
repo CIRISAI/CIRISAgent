@@ -31,6 +31,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._average_consent_age_hours = 0.0
 
         # Pending partnership requests
-        self._pending_partnerships: Dict[str, Dict[str, Any]] = {}
+        self._pending_partnerships: Dict[str, JSONDict] = {}
 
     def _now(self) -> datetime:
         """Get current time from time service."""
@@ -1029,7 +1030,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     # ToolService Protocol Implementation
 
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         self._track_request()  # Track the tool execution
         self._tool_executions += 1
@@ -1164,7 +1165,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # ConsentService tools are synchronous, so results are immediate
         return None
 
-    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """Validate parameters for a tool."""
         if tool_name == "upgrade_relationship":
             return "user_id" in parameters
@@ -1172,7 +1173,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return "user_id" in parameters
         return False
 
-    async def _upgrade_relationship_tool(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def _upgrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
         """Tool implementation for upgrading relationship to PARTNERED."""
         try:
             user_id = parameters.get("user_id")
@@ -1228,7 +1229,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             logger.error(f"Failed to upgrade relationship: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _degrade_relationship_tool(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def _degrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
         """Tool implementation for downgrading relationship."""
         try:
             user_id = parameters.get("user_id")

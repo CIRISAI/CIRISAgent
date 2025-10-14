@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.config_service import GraphConfigService
@@ -1050,7 +1051,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         else:
             raise ValueError("Backup data is not in expected format")
 
-    def _parse_structured_backup(self, backup_value: Dict[str, Any]) -> ConfigDict:
+    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigDict:
         """Parse structured backup data with metadata."""
         timestamp_str = backup_value.get("backup_timestamp")
         if not isinstance(timestamp_str, str):
@@ -1373,7 +1374,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             timestamp=self._now(),
         )
 
-    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[Dict[str, Any]]:
+    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[JSONDict]:
         """Find a provider in the service registry."""
         for service_type, providers in registry._services.items():
             for provider in providers:
@@ -1383,11 +1384,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _apply_priority_updates(
         self,
-        provider_info: Dict[str, Any],
+        provider_info: JSONDict,
         new_priority_enum: Any,
         new_priority_group: Optional[int],
         new_strategy_enum: Optional[Any],
-    ) -> Dict[str, Any]:
+    ) -> JSONDict:
         """Apply priority and strategy updates to provider."""
         provider = provider_info["provider"]
         providers_list = provider_info["providers_list"]

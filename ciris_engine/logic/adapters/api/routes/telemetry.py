@@ -10,6 +10,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_serializer
@@ -457,7 +458,7 @@ async def _get_system_overview(request: Request) -> SystemOverview:
 # Endpoints
 
 
-async def _export_otlp_metrics(telemetry_service: Any) -> Dict[str, Any]:
+async def _export_otlp_metrics(telemetry_service: Any) -> JSONDict:
     """Export metrics in OTLP format."""
     if not telemetry_service:
         raise HTTPException(status_code=503, detail=ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE)
@@ -484,7 +485,7 @@ async def _export_otlp_metrics(telemetry_service: Any) -> Dict[str, Any]:
     return convert_to_otlp_json(telemetry_dict)
 
 
-def _extract_basic_trace_fields(correlation: Any) -> Dict[str, Any]:
+def _extract_basic_trace_fields(correlation: Any) -> JSONDict:
     """Extract basic trace fields from correlation object."""
     return {
         "trace_id": (correlation.trace_context.trace_id if correlation.trace_context else correlation.correlation_id),
@@ -500,7 +501,7 @@ def _extract_basic_trace_fields(correlation: Any) -> Dict[str, Any]:
     }
 
 
-def _extract_request_data_fields(correlation: Any, trace_data: Dict[str, Any]) -> None:
+def _extract_request_data_fields(correlation: Any, trace_data: JSONDict) -> None:
     """Extract task/thought linkage from request data."""
     if not correlation.request_data:
         return
@@ -511,7 +512,7 @@ def _extract_request_data_fields(correlation: Any, trace_data: Dict[str, Any]) -
         trace_data["thought_id"] = correlation.request_data.thought_id
 
 
-def _extract_response_data_fields(correlation: Any, trace_data: Dict[str, Any]) -> None:
+def _extract_response_data_fields(correlation: Any, trace_data: JSONDict) -> None:
     """Extract performance data from response data."""
     if not correlation.response_data:
         return
@@ -524,7 +525,7 @@ def _extract_response_data_fields(correlation: Any, trace_data: Dict[str, Any]) 
         trace_data["error"] = correlation.response_data.error_message
 
 
-def _extract_span_attributes(correlation: Any, trace_data: Dict[str, Any]) -> None:
+def _extract_span_attributes(correlation: Any, trace_data: JSONDict) -> None:
     """Extract span attributes from trace context."""
     if not correlation.trace_context:
         return
@@ -539,7 +540,7 @@ def _extract_span_attributes(correlation: Any, trace_data: Dict[str, Any]) -> No
     )
 
 
-def _build_trace_data_from_correlation(correlation: Any) -> Dict[str, Any]:
+def _build_trace_data_from_correlation(correlation: Any) -> JSONDict:
     """Build trace data dictionary from correlation object."""
     trace_data = _extract_basic_trace_fields(correlation)
     _extract_request_data_fields(correlation, trace_data)
@@ -548,7 +549,7 @@ def _build_trace_data_from_correlation(correlation: Any) -> Dict[str, Any]:
     return trace_data
 
 
-async def _export_otlp_traces(visibility_service: Any, limit: int) -> Dict[str, Any]:
+async def _export_otlp_traces(visibility_service: Any, limit: int) -> JSONDict:
     """Export traces in OTLP format."""
     if not visibility_service:
         raise HTTPException(status_code=503, detail="Visibility service not available")
@@ -571,7 +572,7 @@ async def _export_otlp_traces(visibility_service: Any, limit: int) -> Dict[str, 
     return convert_traces_to_otlp_json(traces)
 
 
-def _build_log_data_from_entry(log_entry: Any) -> Dict[str, Any]:
+def _build_log_data_from_entry(log_entry: Any) -> JSONDict:
     """Build log data dictionary from log entry."""
     log_data = {
         "timestamp": log_entry.timestamp.isoformat(),
@@ -605,7 +606,7 @@ def _build_log_data_from_entry(log_entry: Any) -> Dict[str, Any]:
     return log_data
 
 
-async def _export_otlp_logs(limit: int, start_time: Optional[datetime], end_time: Optional[datetime]) -> Dict[str, Any]:
+async def _export_otlp_logs(limit: int, start_time: Optional[datetime], end_time: Optional[datetime]) -> JSONDict:
     """Export logs in OTLP format."""
     logs = []
     try:
@@ -643,7 +644,7 @@ async def get_otlp_telemetry(
     limit: int = Query(100, ge=1, le=1000, description="Maximum items to return"),
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     OpenTelemetry Protocol (OTLP) JSON export.
 
@@ -1870,7 +1871,7 @@ async def get_unified_telemetry(
     ),
     format: str = Query("json", description="Output format: json|prometheus|graphite"),
     live: bool = Query(False, description="Force live collection (bypass cache)"),
-) -> Dict[str, Any] | Response:
+) -> JSONDict | Response:
     """
     Unified enterprise telemetry endpoint.
 

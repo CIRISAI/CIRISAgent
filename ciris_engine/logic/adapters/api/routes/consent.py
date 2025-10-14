@@ -6,6 +6,7 @@ Implements Consensual Evolution Protocol v0.2.
 
 import logging
 from typing import Any, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -113,7 +114,7 @@ def get_consent_manager(request: Request) -> ConsentService:
 
 def _build_consent_dict(
     consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Build consent dictionary - eliminates duplication.
 
@@ -150,7 +151,7 @@ def _build_consent_dict(
 async def get_consent_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Get current consent status for authenticated user.
 
@@ -183,7 +184,7 @@ async def query_consents(
     user_id: Optional[str] = None,
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Query consent records with optional filters.
 
@@ -330,8 +331,8 @@ async def get_audit_trail(
     return await manager.get_audit_trail(user_id, limit)
 
 
-@router.get("/streams", response_model=Dict[str, Any])
-async def get_consent_streams() -> Dict[str, Any]:
+@router.get("/streams", response_model=JSONDict)
+async def get_consent_streams() -> JSONDict:
     """
     Get available consent streams and their descriptions.
     """
@@ -341,8 +342,8 @@ async def get_consent_streams() -> Dict[str, Any]:
     }
 
 
-@router.get("/categories", response_model=Dict[str, Any])
-async def get_consent_categories() -> Dict[str, Any]:
+@router.get("/categories", response_model=JSONDict)
+async def get_consent_categories() -> JSONDict:
     """
     Get available consent categories for PARTNERED stream.
     """
@@ -351,11 +352,11 @@ async def get_consent_categories() -> Dict[str, Any]:
     }
 
 
-@router.get("/partnership/status", response_model=Dict[str, Any])
+@router.get("/partnership/status", response_model=JSONDict)
 async def check_partnership_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Check status of pending partnership request.
 
@@ -385,11 +386,11 @@ async def check_partnership_status(
     return response
 
 
-@router.post("/cleanup", response_model=Dict[str, Any])
+@router.post("/cleanup", response_model=JSONDict)
 async def cleanup_expired(
     _auth: AuthContext = Depends(require_observer),
     manager: ConsentService = Depends(get_consent_manager),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Clean up expired TEMPORARY consents (admin only).
 

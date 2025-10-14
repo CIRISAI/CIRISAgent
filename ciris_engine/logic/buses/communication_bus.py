@@ -333,7 +333,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
             if hasattr(self, "_start_time") and self._start_time:
                 uptime_seconds = (self._time_service.now() - self._start_time).total_seconds()
 
-        # Map to BusMetrics schema
+        # Map to BusMetrics schema - put communication-specific metrics in additional_metrics
         return BusMetrics(
             messages_sent=self._messages_sent,
             messages_received=self._messages_received,
@@ -344,6 +344,8 @@ class CommunicationBus(BaseBus[CommunicationService]):
             errors_last_hour=self._errors,  # Total errors (not windowed yet)
             busiest_service=None,  # Could track which adapter gets most traffic
             additional_metrics={
+                "communication_messages_sent": self._messages_sent,
+                "communication_messages_received": self._messages_received,
                 "communication_broadcasts": self._broadcasts,
                 "communication_errors": self._errors,
                 "communication_uptime_seconds": uptime_seconds,

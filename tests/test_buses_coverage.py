@@ -209,10 +209,10 @@ class TestCommunicationBus:
     def test_get_metrics(self, communication_bus):
         """Test getting bus metrics."""
         metrics = communication_bus.get_metrics()
-        assert "communication_messages_sent" in metrics
-        assert "communication_messages_received" in metrics
-        assert "communication_errors" in metrics
-        assert "communication_uptime_seconds" in metrics
+        assert "communication_messages_sent" in metrics.additional_metrics
+        assert "communication_messages_received" in metrics.additional_metrics
+        assert "communication_errors" in metrics.additional_metrics
+        assert "communication_uptime_seconds" in metrics.additional_metrics
 
 
 # =============================================================================
@@ -377,10 +377,11 @@ class TestLLMBusComprehensive:
 
         metrics = llm_bus.get_metrics()
 
-        assert "llm_requests_total" in metrics
-        assert "llm_failed_requests" in metrics
-        assert "llm_average_latency_ms" in metrics  # Fixed metric name
-        assert "llm_providers_available" in metrics  # This is the actual metric name
+        assert "llm_requests_total" in metrics.additional_metrics
+        assert "llm_failed_requests" in metrics.additional_metrics
+        # llm_average_latency_ms is in average_latency_ms, not additional_metrics
+        assert metrics.average_latency_ms == 50.0  # 5000ms / 100 requests
+        assert "llm_providers_available" in metrics.additional_metrics  # This is the actual metric name
 
 
 # =============================================================================
@@ -591,10 +592,11 @@ class TestMemoryBus:
 
         metrics = memory_bus.get_metrics()
 
-        assert "memory_operations_total" in metrics
-        assert "memory_errors_total" in metrics
-        assert "memory_broadcasts" in metrics
-        assert "memory_uptime_seconds" in metrics
+        assert "memory_operations_total" in metrics.additional_metrics
+        # memory_errors_total is in errors_last_hour, not additional_metrics
+        assert metrics.errors_last_hour == 5
+        assert "memory_broadcasts" in metrics.additional_metrics
+        assert "memory_uptime_seconds" in metrics.additional_metrics
         # CIRIS doesn't have cache metrics
 
 
@@ -705,9 +707,9 @@ class TestToolBus:
 
         metrics = tool_bus.get_metrics()
 
-        assert metrics["tool_executions_total"] == 100
-        assert metrics["tool_execution_errors"] == 10
-        assert metrics["tools_available"] == 5
+        assert metrics.additional_metrics["tool_executions_total"] == 100
+        assert metrics.additional_metrics["tool_execution_errors"] == 10
+        assert metrics.additional_metrics["tools_available"] == 5
 
 
 # =============================================================================
@@ -809,9 +811,9 @@ class TestWiseBusAdditional:
 
         metrics = wise_bus.get_metrics()
 
-        assert metrics["wise_guidance_requests"] == 50
-        assert metrics["wise_guidance_deferrals"] == 10
-        assert metrics["wise_guidance_responses"] == 40
+        assert metrics.additional_metrics["wise_guidance_requests"] == 50
+        assert metrics.additional_metrics["wise_guidance_deferrals"] == 10
+        assert metrics.additional_metrics["wise_guidance_responses"] == 40
 
 
 # =============================================================================
@@ -889,9 +891,9 @@ class TestRuntimeControlBusAdditional:
 
         metrics = runtime_bus.get_metrics()
 
-        assert "runtime_control_commands" in metrics
-        assert "runtime_control_state_queries" in metrics
-        assert "runtime_control_emergency_stops" in metrics
+        assert "runtime_control_commands" in metrics.additional_metrics
+        assert "runtime_control_state_queries" in metrics.additional_metrics
+        assert "runtime_control_emergency_stops" in metrics.additional_metrics
 
 
 if __name__ == "__main__":

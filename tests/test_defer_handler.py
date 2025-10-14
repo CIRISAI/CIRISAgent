@@ -240,7 +240,7 @@ class TestDeferHandler:
 
         # Verify task status updated
         mock_persistence.update_task_status.assert_called_once_with(
-            thought.source_task_id, TaskStatus.DEFERRED, defer_handler.time_service
+            thought.source_task_id, TaskStatus.DEFERRED, "default", defer_handler.time_service
         )
 
     @pytest.mark.asyncio
@@ -438,7 +438,7 @@ class TestDeferHandler:
 
         # Task status SHOULD be updated for system tasks too (no kings principle)
         mock_persistence.update_task_status.assert_called_once_with(
-            "SYSTEM_TASK", TaskStatus.DEFERRED, defer_handler.time_service
+            "SYSTEM_TASK", TaskStatus.DEFERRED, "default", defer_handler.time_service
         )
 
     @pytest.mark.asyncio

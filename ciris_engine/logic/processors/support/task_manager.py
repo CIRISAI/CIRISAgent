@@ -20,9 +20,12 @@ logger = logging.getLogger(__name__)
 class TaskManager:
     """Manages task lifecycle operations."""
 
-    def __init__(self, max_active_tasks: int = 10, time_service: Optional["TimeServiceProtocol"] = None) -> None:
+    def __init__(
+        self, max_active_tasks: int = 10, time_service: Optional["TimeServiceProtocol"] = None, agent_occurrence_id: str = "default"
+    ) -> None:
         self.max_active_tasks = max_active_tasks
         self._time_service = time_service
+        self.agent_occurrence_id = agent_occurrence_id
 
     @property
     def time_service(self) -> "TimeServiceProtocol":
@@ -51,11 +54,13 @@ class TaskManager:
             user_id=context_dict.get("user_id"),
             correlation_id=context_dict.get("correlation_id", str(uuid.uuid4())),
             parent_task_id=parent_task_id,
+            agent_occurrence_id=self.agent_occurrence_id,
         )
 
         task = Task(
             task_id=str(uuid.uuid4()),
             channel_id=channel_id,
+            agent_occurrence_id=self.agent_occurrence_id,
             description=description,
             status=TaskStatus.PENDING,
             priority=priority,
@@ -71,7 +76,7 @@ class TaskManager:
         )
 
         persistence.add_task(task)
-        logger.info(f"Created task {task.task_id}: {description}")
+        logger.info(f"Created task {task.task_id} (occurrence: {self.agent_occurrence_id}): {description}")
         return task
 
     def activate_pending_tasks(self) -> int:
@@ -79,8 +84,8 @@ class TaskManager:
         Activate pending tasks up to the configured limit.
         Returns the number of tasks activated.
         """
-        logger.debug("[TASK DEBUG] activate_pending_tasks called")
-        num_active = persistence.count_active_tasks()
+        logger.debug(f"[TASK DEBUG] activate_pending_tasks called for occurrence {self.agent_occurrence_id}")
+        num_active = persistence.count_active_tasks(self.agent_occurrence_id)
         logger.debug(f"[TASK DEBUG] Current active tasks: {num_active}, max allowed: {self.max_active_tasks}")
         can_activate = max(0, self.max_active_tasks - num_active)
 
@@ -89,30 +94,30 @@ class TaskManager:
             return 0
 
         logger.debug(f"[TASK DEBUG] Can activate up to {can_activate} tasks")
-        pending_tasks = persistence.get_pending_tasks_for_activation(limit=can_activate)
+        pending_tasks = persistence.get_pending_tasks_for_activation(self.agent_occurrence_id, limit=can_activate)
         logger.debug(f"[TASK DEBUG] Found {len(pending_tasks)} pending tasks")
         activated_count = 0
 
         for task in pending_tasks:
-            if persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self.time_service):
+            if persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service):
                 logger.info(f"Activated task {task.task_id} (Priority: {task.priority})")
                 activated_count += 1
             else:
                 logger.warning(f"Failed to activate task {task.task_id}")
 
         if activated_count > 0:
-            logger.info(f"Activated {activated_count} tasks")
+            logger.info(f"Activated {activated_count} tasks for occurrence {self.agent_occurrence_id}")
         else:
             logger.debug("No tasks to activate")
         return activated_count
 
     def get_tasks_needing_seed(self, limit: int = 50) -> List[Task]:
         """Get active tasks that need seed thoughts."""
-        logger.debug("[TASK DEBUG] get_tasks_needing_seed called")
+        logger.debug(f"[TASK DEBUG] get_tasks_needing_seed called for occurrence {self.agent_occurrence_id}")
         # Exclude special tasks that are handled separately
         excluded_tasks = {"WAKEUP_ROOT", "SYSTEM_TASK"}
 
-        tasks = persistence.get_tasks_needing_seed_thought(limit)
+        tasks = persistence.get_tasks_needing_seed_thought(self.agent_occurrence_id, limit)
         logger.debug(f"[TASK DEBUG] Found {len(tasks)} tasks from persistence")
         filtered = [t for t in tasks if t.task_id not in excluded_tasks and t.parent_task_id != "WAKEUP_ROOT"]
         logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
@@ -120,9 +125,9 @@ class TaskManager:
 
     def complete_task(self, task_id: str, outcome: Optional[Dict[str, Any]] = None) -> bool:
         """Mark a task as completed with optional outcome."""
-        task = persistence.get_task_by_id(task_id)
+        task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
         if not task:
-            logger.error(f"Task {task_id} not found")
+            logger.error(f"Task {task_id} not found in occurrence {self.agent_occurrence_id}")
             return False
 
         # NOTE: Currently we don't have a way to update task outcome in persistence
@@ -131,13 +136,13 @@ class TaskManager:
         if outcome:
             logger.info(f"Task {task_id} completed with outcome: {outcome}")
 
-        return persistence.update_task_status(task_id, TaskStatus.COMPLETED, self.time_service)
+        return persistence.update_task_status(task_id, TaskStatus.COMPLETED, self.agent_occurrence_id, self.time_service)
 
     def fail_task(self, task_id: str, reason: str) -> bool:
         """Mark a task as failed with a reason."""
-        task = persistence.get_task_by_id(task_id)
+        task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
         if not task:
-            logger.error(f"Task {task_id} not found")
+            logger.error(f"Task {task_id} not found in occurrence {self.agent_occurrence_id}")
             return False
 
         # NOTE: Currently we don't have a way to update task outcome in persistence
@@ -145,7 +150,7 @@ class TaskManager:
         # For now, we just log the failure reason and update the status
         logger.info(f"Task {task_id} failed: {reason}")
 
-        return persistence.update_task_status(task_id, TaskStatus.FAILED, self.time_service)
+        return persistence.update_task_status(task_id, TaskStatus.FAILED, self.agent_occurrence_id, self.time_service)
 
     def create_wakeup_sequence_tasks(self, channel_id: Optional[str] = None) -> List[Task]:
         """Create the WAKEUP sequence tasks using v1 schema."""
@@ -159,12 +164,17 @@ class TaskManager:
 
         # Create TaskContext for root task
         root_context = TaskContext(
-            channel_id=channel_id, user_id="system", correlation_id=str(uuid.uuid4()), parent_task_id=None
+            channel_id=channel_id,
+            user_id="system",
+            correlation_id=str(uuid.uuid4()),
+            parent_task_id=None,
+            agent_occurrence_id=self.agent_occurrence_id,
         )
 
         root_task = Task(
             task_id="WAKEUP_ROOT",
             channel_id=channel_id,
+            agent_occurrence_id=self.agent_occurrence_id,
             description="Wakeup ritual",
             status=TaskStatus.ACTIVE,
             priority=1,
@@ -179,10 +189,10 @@ class TaskManager:
             signed_at=None,
         )
 
-        if not persistence.task_exists(root_task.task_id):
+        if not persistence.task_exists(root_task.task_id, self.agent_occurrence_id):
             persistence.add_task(root_task)
         else:
-            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service)
 
         wakeup_steps = [
             (
@@ -216,11 +226,13 @@ class TaskManager:
                 user_id="system",
                 correlation_id=str(uuid.uuid4()),
                 parent_task_id=root_task.task_id,
+                agent_occurrence_id=self.agent_occurrence_id,
             )
 
             step_task = Task(
                 task_id=str(uuid.uuid4()),
                 channel_id=channel_id,
+                agent_occurrence_id=self.agent_occurrence_id,
                 description=content,
                 status=TaskStatus.ACTIVE,
                 priority=0,
@@ -241,11 +253,11 @@ class TaskManager:
 
     def get_active_task_count(self) -> int:
         """Get count of active tasks."""
-        return persistence.count_active_tasks()
+        return persistence.count_active_tasks(self.agent_occurrence_id)
 
     def get_pending_task_count(self) -> int:
         """Get count of pending tasks."""
-        return persistence.count_tasks(TaskStatus.PENDING)
+        return persistence.count_tasks(TaskStatus.PENDING, self.agent_occurrence_id)
 
     def cleanup_old_completed_tasks(self, days_old: int = 7) -> int:
         """Clean up completed tasks older than specified days."""
@@ -253,13 +265,13 @@ class TaskManager:
 
         cutoff_date = self.time_service.now() - timedelta(days=days_old)
 
-        old_tasks = persistence.get_tasks_older_than(cutoff_date.isoformat())
+        old_tasks = persistence.get_tasks_older_than(cutoff_date.isoformat(), self.agent_occurrence_id)
         completed_old = [t for t in old_tasks if t.status == TaskStatus.COMPLETED]
 
         if completed_old:
             task_ids = [t.task_id for t in completed_old]
-            deleted = persistence.delete_tasks_by_ids(task_ids)
-            logger.info(f"Cleaned up {deleted} old completed tasks")
+            deleted = persistence.delete_tasks_by_ids(task_ids, self.agent_occurrence_id)
+            logger.info(f"Cleaned up {deleted} old completed tasks for occurrence {self.agent_occurrence_id}")
             return deleted
 
         return 0

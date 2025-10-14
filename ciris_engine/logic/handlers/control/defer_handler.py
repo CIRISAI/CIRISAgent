@@ -181,7 +181,7 @@ class DeferHandler(BaseActionHandler):
 
         parent_task_id = thought.source_task_id
         # Update task status to deferred - "no kings" principle
-        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, self.time_service)
+        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default", self.time_service)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
         # Send deferral notification to API channels

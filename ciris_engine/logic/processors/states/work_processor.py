@@ -34,10 +34,12 @@ class WorkProcessor(BaseProcessor):
         action_dispatcher: "ActionDispatcher",
         services: Any,  # Dict[str, Any] - using Any to avoid circular import issues
         startup_channel_id: Optional[str] = None,
+        agent_occurrence_id: str = "default",
         **kwargs: Any,
     ) -> None:
         """Initialize work processor."""
         self.startup_channel_id = startup_channel_id
+        self.agent_occurrence_id = agent_occurrence_id
         super().__init__(config_accessor, thought_processor, action_dispatcher, services, **kwargs)
 
         workflow_config = getattr(self.config, "workflow", None)
@@ -52,11 +54,12 @@ class WorkProcessor(BaseProcessor):
         if not time_service:
             raise ValueError("time_service is required in services")
         self.time_service = time_service
-        self.task_manager = TaskManager(max_active_tasks=max_active_tasks, time_service=self.time_service)
+        self.task_manager = TaskManager(max_active_tasks=max_active_tasks, time_service=self.time_service, agent_occurrence_id=self.agent_occurrence_id)
         self.thought_manager = ThoughtManager(
             time_service=self.time_service,
             max_active_thoughts=max_active_thoughts,
             default_channel_id=self.startup_channel_id,
+            agent_occurrence_id=self.agent_occurrence_id,
         )
         self.last_activity_time = self.time_service.now()
         self.idle_rounds = 0
@@ -196,12 +199,12 @@ class WorkProcessor(BaseProcessor):
 
         logger.debug(f"Dispatching action {selected_action} for thought {thought_id}")
 
-        thought_obj = await persistence.async_get_thought_by_id(thought_id)
+        thought_obj = await persistence.async_get_thought_by_id(thought_id, self.agent_occurrence_id)
         if not thought_obj:
             logger.error(f"Could not retrieve thought {thought_id} for dispatch")
             return
 
-        task = persistence.get_task_by_id(item.source_task_id)
+        task = persistence.get_task_by_id(item.source_task_id, self.agent_occurrence_id)
         dispatch_context = build_dispatch_context(
             thought=thought_obj,
             time_service=self.time_service,

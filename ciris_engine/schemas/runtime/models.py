@@ -21,6 +21,9 @@ class TaskContext(BaseModel):
     user_id: Optional[str] = Field(None, description="User who created task")
     correlation_id: str = Field(..., description="Correlation ID for tracing")
     parent_task_id: Optional[str] = Field(None, description="Parent task if nested")
+    agent_occurrence_id: str = Field(
+        default="default", description="Runtime occurrence ID that owns this task"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -46,6 +49,9 @@ class ThoughtContext(BaseModel):
     depth: int = Field(0, description="Ponder depth (max 7)")
     parent_thought_id: Optional[str] = Field(None, description="Parent thought if pondering")
     correlation_id: str = Field(..., description="Correlation ID")
+    agent_occurrence_id: str = Field(
+        default="default", description="Runtime occurrence ID (inherited from task)"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -65,6 +71,9 @@ class Task(BaseModel):
 
     task_id: str = Field(..., description="Unique task identifier")
     channel_id: str = Field(..., description="Channel where task originated/reports to")
+    agent_occurrence_id: str = Field(
+        default="default", description="Runtime occurrence ID that owns this task"
+    )
     description: str = Field(..., description="What needs to be done")
     status: TaskStatus = Field(default=TaskStatus.PENDING)
     priority: int = Field(default=0, ge=0, le=10, description="Priority 0-10")
@@ -93,6 +102,9 @@ class Thought(BaseModel):
 
     thought_id: str = Field(..., description="Unique thought identifier")
     source_task_id: str = Field(..., description="Task that generated this thought")
+    agent_occurrence_id: str = Field(
+        default="default", description="Runtime occurrence ID (inherited from task)"
+    )
     channel_id: Optional[str] = Field(None, description="Channel where thought operates")
     thought_type: ThoughtType = Field(default=ThoughtType.STANDARD)
     status: ThoughtStatus = Field(default=ThoughtStatus.PENDING)

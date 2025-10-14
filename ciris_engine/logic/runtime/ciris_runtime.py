@@ -1304,6 +1304,7 @@ class CIRISRuntime:
         if bootstrap is not None:
             self.bootstrap = bootstrap
             self.essential_config = essential_config or EssentialConfig()
+            self.essential_config.load_env_vars()  # Load environment variables
             self.startup_channel_id = bootstrap.startup_channel_id or ""
             self.adapter_configs = bootstrap.adapter_overrides
             self.modules_to_load = bootstrap.modules
@@ -1324,6 +1325,7 @@ class CIRISRuntime:
     ) -> None:
         """Create bootstrap config from legacy parameters."""
         self.essential_config = essential_config or EssentialConfig()
+        self.essential_config.load_env_vars()  # Load environment variables
         self.startup_channel_id = startup_channel_id or ""
         self.adapter_configs = adapter_configs or {}
         self.modules_to_load = kwargs.get("modules", [])

@@ -21,6 +21,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.routes.auth import (
+    _build_redirect_response,
     _determine_user_role,
     _generate_api_key_and_store,
     _handle_discord_oauth,
@@ -426,3 +427,262 @@ class TestOAuthErrorPaths:
         # The function returns 404 for unsupported providers due to config loading
         assert exc_info.value.status_code == 404
         assert "OAuth provider 'invalid' not configured" in exc_info.value.detail
+
+
+class TestOAuthRedirectURI:
+    """Test OAuth redirect_uri parameter functionality for separate frontend/API domains."""
+
+    @pytest.mark.asyncio
+    async def test_oauth_login_with_redirect_uri(self):
+        """Test oauth_login encodes redirect_uri in state parameter."""
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_login
+
+        # Mock OAuth config
+        mock_config = {"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}
+
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.read_text", return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}'
+        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "scout-test"}):
+            # Create mock request with redirect_uri parameter
+            mock_request = Mock()
+            mock_request.headers = {"x-forwarded-proto": "https", "host": "scoutapi.ciris.ai"}
+            mock_request.url = Mock(scheme="https")
+
+            # Call oauth_login with redirect_uri
+            redirect_uri = "https://scout.ciris.ai/oauth/scout-test/google/callback"
+            response = await oauth_login("google", mock_request, redirect_uri=redirect_uri)
+
+            # Verify it's a redirect response
+            assert response.status_code == 302
+            assert "accounts.google.com" in response.headers["location"]
+
+            # Decode the state parameter from the redirect URL
+            import base64
+            import json
+            import urllib.parse
+
+            parsed_url = urllib.parse.urlparse(response.headers["location"])
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            state_param = query_params["state"][0]
+
+            # Decode state
+            state_json = base64.urlsafe_b64decode(state_param.encode()).decode()
+            state_data = json.loads(state_json)
+
+            # Verify redirect_uri is encoded in state
+            assert "redirect_uri" in state_data
+            assert state_data["redirect_uri"] == redirect_uri
+            assert "csrf" in state_data  # CSRF token should also be present
+
+    @pytest.mark.asyncio
+    async def test_oauth_login_without_redirect_uri(self):
+        """Test oauth_login without redirect_uri (backward compatibility)."""
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_login
+
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.read_text", return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}'
+        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+            mock_request = Mock()
+            mock_request.headers = {"x-forwarded-proto": "https", "host": "agents.ciris.ai"}
+            mock_request.url = Mock(scheme="https")
+
+            # Call without redirect_uri
+            response = await oauth_login("google", mock_request)
+
+            # Verify it's a redirect response
+            assert response.status_code == 302
+
+            # Decode state - should not have redirect_uri
+            import base64
+            import json
+            import urllib.parse
+
+            parsed_url = urllib.parse.urlparse(response.headers["location"])
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            state_param = query_params["state"][0]
+
+            state_json = base64.urlsafe_b64decode(state_param.encode()).decode()
+            state_data = json.loads(state_json)
+
+            # Should have CSRF but not redirect_uri
+            assert "csrf" in state_data
+            assert "redirect_uri" not in state_data
+
+    @pytest.mark.asyncio
+    async def test_oauth_callback_with_redirect_uri_in_state(self):
+        """Test oauth_callback decodes redirect_uri from state and redirects to frontend."""
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
+
+        # Create state with redirect_uri
+        import base64
+        import json
+
+        redirect_uri = "https://scout.ciris.ai/oauth/scout-test/google/callback"
+        state_data = {"csrf": "test-csrf-token", "redirect_uri": redirect_uri}
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
+        # Mock OAuth config and handlers
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
+        ) as mock_oauth_handler:
+            mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
+
+            # Mock OAuth user data
+            mock_oauth_handler.return_value = {
+                "external_id": "12345",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://example.com/pic.jpg",
+            }
+
+            # Mock auth service
+            mock_auth_service = Mock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "oauth-user-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+
+            # Call callback
+            response = await oauth_callback("google", "test-code", state, mock_auth_service, marketing_opt_in=False)
+
+            # Verify redirect to frontend domain (not relative path)
+            assert response.status_code == 302
+            redirect_location = response.headers["location"]
+            assert redirect_location.startswith(redirect_uri)
+            assert "access_token=" in redirect_location
+            assert "https://scout.ciris.ai" in redirect_location  # Full URL, not relative
+
+    @pytest.mark.asyncio
+    async def test_oauth_callback_without_redirect_uri_in_state(self):
+        """Test oauth_callback without redirect_uri uses relative path (backward compatibility)."""
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
+
+        # Create state without redirect_uri
+        import base64
+        import json
+
+        state_data = {"csrf": "test-csrf-token"}
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
+        ) as mock_oauth_handler, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+            mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
+
+            mock_oauth_handler.return_value = {
+                "external_id": "12345",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://example.com/pic.jpg",
+            }
+
+            mock_auth_service = Mock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "oauth-user-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+
+            response = await oauth_callback("google", "test-code", state, mock_auth_service)
+
+            # Verify redirect to relative path (backward compatibility)
+            assert response.status_code == 302
+            redirect_location = response.headers["location"]
+            assert redirect_location.startswith("/oauth/")  # Relative path
+            assert "access_token=" in redirect_location
+
+    @pytest.mark.asyncio
+    async def test_oauth_callback_malformed_state(self):
+        """Test oauth_callback handles malformed state gracefully."""
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
+
+        # Malformed state (not valid base64 JSON)
+        malformed_state = "not-valid-base64-json"
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
+        ) as mock_oauth_handler, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+            mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
+
+            mock_oauth_handler.return_value = {
+                "external_id": "12345",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://example.com/pic.jpg",
+            }
+
+            mock_auth_service = Mock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "oauth-user-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+
+            # Should not raise, should fall back to relative path
+            response = await oauth_callback("google", "test-code", malformed_state, mock_auth_service)
+
+            # Should still work, using default redirect
+            assert response.status_code == 302
+            assert "access_token=" in response.headers["location"]
+
+    def test_build_redirect_response_with_redirect_uri(self):
+        """Test _build_redirect_response uses full URL when redirect_uri provided."""
+        from ciris_engine.logic.adapters.api.routes.auth import _build_redirect_response
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "user-123"
+        mock_oauth_user.role = UserRole.OBSERVER
+
+        redirect_uri = "https://scout.ciris.ai/oauth/scout-test/google/callback"
+        response = _build_redirect_response(
+            api_key="test-api-key", oauth_user=mock_oauth_user, provider="google", redirect_uri=redirect_uri
+        )
+
+        # Should redirect to full URL
+        assert response.status_code == 302
+        redirect_location = response.headers["location"]
+        assert redirect_location.startswith("https://scout.ciris.ai/oauth/scout-test/google/callback?")
+        assert "access_token=test-api-key" in redirect_location
+        assert "role=OBSERVER" in redirect_location  # Role enum value is uppercase
+        assert "user_id=user-123" in redirect_location
+
+    def test_build_redirect_response_without_redirect_uri(self):
+        """Test _build_redirect_response uses relative path without redirect_uri (backward compatibility)."""
+        from ciris_engine.logic.adapters.api.routes.auth import _build_redirect_response
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "user-123"
+        mock_oauth_user.role = UserRole.ADMIN
+
+        with patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+            response = _build_redirect_response(
+                api_key="test-api-key", oauth_user=mock_oauth_user, provider="google", redirect_uri=None
+            )
+
+            # Should redirect to relative path
+            assert response.status_code == 302
+            redirect_location = response.headers["location"]
+            assert redirect_location.startswith("/oauth/datum/google/callback?")
+            assert "access_token=test-api-key" in redirect_location
+            assert "role=ADMIN" in redirect_location  # Role enum value is uppercase
+
+    def test_build_redirect_response_invalid_provider(self):
+        """Test _build_redirect_response handles invalid provider safely."""
+        from ciris_engine.logic.adapters.api.routes.auth import _build_redirect_response
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "user-123"
+        mock_oauth_user.role = UserRole.OBSERVER
+
+        # Invalid provider should redirect to safe default
+        response = _build_redirect_response(
+            api_key="test-api-key", oauth_user=mock_oauth_user, provider="invalid_provider", redirect_uri=None
+        )
+
+        # Should redirect to safe default (/)
+        assert response.status_code == 302
+        assert response.headers["location"] == "/"

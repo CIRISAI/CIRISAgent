@@ -436,7 +436,7 @@ def _get_recent_tasks(limit: int = 10) -> List[TaskSummary]:
     """Get recent completed tasks as TaskSummary objects."""
     recent_tasks_list: List[TaskSummary] = []
     logger.info("[DEBUG DB TIMING] About to get recent completed tasks")
-    db_recent_tasks = persistence.get_recent_completed_tasks(limit)
+    db_recent_tasks = persistence.get_recent_completed_tasks("default", limit)
     logger.info(f"[DEBUG DB TIMING] Completed get recent completed tasks: {len(db_recent_tasks)} tasks")
 
     for t_obj in db_recent_tasks:
@@ -460,7 +460,7 @@ def _get_top_tasks(limit: int = 10) -> List[TaskSummary]:
     """Get top pending tasks as TaskSummary objects."""
     top_tasks_list: List[TaskSummary] = []
     logger.info("[DEBUG DB TIMING] About to get top tasks")
-    db_top_tasks = persistence.get_top_tasks(limit)
+    db_top_tasks = persistence.get_top_tasks("default", limit)
     logger.info(f"[DEBUG DB TIMING] Completed get top tasks: {len(db_top_tasks)} tasks")
 
     for t_obj in db_top_tasks:

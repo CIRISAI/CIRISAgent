@@ -144,7 +144,7 @@ class TestTaskManager:
 
         assert activated == 2
         mock_count_active.assert_called_once()
-        mock_get_pending.assert_called_once_with(limit=5)  # max 10 - 5 active = 5
+        mock_get_pending.assert_called_once_with("default", limit=5)  # max 10 - 5 active = 5
         assert mock_update_status.call_count == 2
 
     @patch("ciris_engine.logic.persistence.count_active_tasks")
@@ -235,7 +235,7 @@ class TestTaskManager:
 
         assert len(tasks) == 1
         assert tasks[0] == sample_task
-        mock_get_tasks.assert_called_once_with(10)
+        mock_get_tasks.assert_called_once_with("default", 10)
 
     @patch("ciris_engine.logic.persistence.update_task_status")
     @patch("ciris_engine.logic.persistence.get_task_by_id")
@@ -247,8 +247,8 @@ class TestTaskManager:
         result = task_manager.complete_task("test-task-123", {"result": "success"})
 
         assert result is True
-        mock_get_task.assert_called_once_with("test-task-123")
-        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.COMPLETED, task_manager.time_service)
+        mock_get_task.assert_called_once_with("test-task-123", "default")
+        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.COMPLETED, "default", task_manager.time_service)
 
     @patch("ciris_engine.logic.persistence.get_task_by_id")
     def test_complete_task_not_found(self, mock_get_task, task_manager):
@@ -269,7 +269,7 @@ class TestTaskManager:
         result = task_manager.fail_task("test-task-123", "Task failed due to error")
 
         assert result is True
-        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.FAILED, task_manager.time_service)
+        mock_update_status.assert_called_once_with("test-task-123", TaskStatus.FAILED, "default", task_manager.time_service)
 
     @patch("ciris_engine.logic.persistence.get_task_by_id")
     def test_fail_task_not_found(self, mock_get_task, task_manager):
@@ -347,7 +347,7 @@ class TestTaskManager:
         tasks = task_manager.create_wakeup_sequence_tasks()
 
         # Should update existing root status instead of adding
-        mock_update_status.assert_called_once_with("WAKEUP_ROOT", TaskStatus.ACTIVE, task_manager.time_service)
+        mock_update_status.assert_called_once_with("WAKEUP_ROOT", TaskStatus.ACTIVE, "default", task_manager.time_service)
         # Should add 5 step tasks but not the root
         assert mock_add_task.call_count == 5
 
@@ -369,7 +369,7 @@ class TestTaskManager:
         count = task_manager.get_pending_task_count()
 
         assert count == 15
-        mock_count.assert_called_once_with(TaskStatus.PENDING)
+        mock_count.assert_called_once_with(TaskStatus.PENDING, "default")
 
     @patch("ciris_engine.logic.persistence.delete_tasks_by_ids")
     @patch("ciris_engine.logic.persistence.get_tasks_older_than")
@@ -436,7 +436,7 @@ class TestTaskManager:
         assert cutoff_call.startswith("2024-12-25")
 
         # Verify only completed tasks were deleted
-        mock_delete.assert_called_once_with(["old-complete-1", "old-complete-2"])
+        mock_delete.assert_called_once_with(["old-complete-1", "old-complete-2"], "default")
 
     @patch("ciris_engine.logic.persistence.get_tasks_older_than")
     def test_cleanup_old_completed_tasks_none_found(self, mock_get_old, task_manager):

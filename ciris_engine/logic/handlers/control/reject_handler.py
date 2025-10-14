@@ -52,7 +52,7 @@ class RejectHandler(BaseActionHandler):
             final_action=result,
         )
         if parent_task_id:
-            persistence.update_task_status(parent_task_id, TaskStatus.REJECTED, self.time_service)
+            persistence.update_task_status(parent_task_id, TaskStatus.REJECTED, "default", self.time_service)
         self.logger.info(
             f"Updated original thought {thought_id} to status {final_thought_status.value} for REJECT action. Info: {follow_up_content_key_info}"
         )

@@ -290,6 +290,7 @@ class ComponentBuilder:
             startup_channel_id=self.runtime.startup_channel_id,
             time_service=self.runtime.time_service,  # Add missing parameter
             runtime=self.runtime,  # Pass runtime reference for preload tasks
+            agent_occurrence_id=self.runtime.essential_config.agent_occurrence_id,  # Pass occurrence_id from config
         )
 
         return self.agent_processor

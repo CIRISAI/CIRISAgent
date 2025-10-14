@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
 import discord  # Ensure discord.py is available
+from pydantic import BaseModel, Field
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.adapters.discord.ciris_discord_client import CIRISDiscordClient
@@ -22,6 +23,34 @@ from .config import DiscordAdapterConfig
 logger = logging.getLogger(__name__)
 
 
+class DiscordPlatformKwargs(TypedDict, total=False):
+    """Type-safe kwargs for DiscordPlatform initialization."""
+
+    adapter_config: Union[DiscordAdapterConfig, dict[str, Any]]
+    bot_token: Optional[str]
+    channel_id: Optional[str]
+    server_id: Optional[str]
+    deferral_channel_id: Optional[str]
+    admin_user_ids: Optional[List[str]]
+    discord_bot_token: Optional[str]
+    discord_monitored_channel_ids: Optional[List[str]]
+    discord_monitored_channel_id: Optional[str]
+
+
+class DiscordTaskErrorContext(BaseModel):
+    """Error context for Discord task lifecycle failures."""
+
+    task_exists: bool = Field(..., description="Whether Discord task exists")
+    task_done: Optional[bool] = Field(None, description="Whether Discord task is done")
+    task_cancelled: Optional[bool] = Field(None, description="Whether Discord task was cancelled")
+    task_exception: Optional[str] = Field(None, description="Exception from Discord task if available")
+    client_closed: Optional[bool] = Field(None, description="Whether Discord client is closed")
+    client_user: Optional[str] = Field(None, description="Discord client user if available")
+    reconnect_attempts: int = Field(..., description="Number of reconnection attempts")
+    agent_task_name: str = Field(..., description="Name of the agent task")
+    agent_task_done: bool = Field(..., description="Whether agent task is done")
+
+
 class DiscordPlatform(Service):
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize Discord platform adapter."""
@@ -29,12 +58,15 @@ class DiscordPlatform(Service):
         self.context = context
         self.config: DiscordAdapterConfig  # type: ignore[assignment]
 
+        # Cast kwargs to typed dict for type safety
+        typed_kwargs = cast(DiscordPlatformKwargs, kwargs)
+
         # Initialize configuration from various sources
-        self._initialize_config(runtime, kwargs)
+        self._initialize_config(runtime, typed_kwargs)
 
         # Create Discord client and adapter
         self._initialize_discord_client()
-        self._initialize_discord_adapter(kwargs)
+        self._initialize_discord_adapter(typed_kwargs)
 
         # Initialize state
         self.discord_observer: Optional[DiscordObserver] = None
@@ -42,7 +74,7 @@ class DiscordPlatform(Service):
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
 
-    def _initialize_config(self, runtime: Any, kwargs: Dict[str, Any]) -> None:
+    def _initialize_config(self, runtime: Any, kwargs: DiscordPlatformKwargs) -> None:
         """Initialize adapter configuration from kwargs, template, or environment."""
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             # Ensure adapter_config is a DiscordAdapterConfig instance
@@ -67,7 +99,7 @@ class DiscordPlatform(Service):
             # Check if config values are passed directly as kwargs (from API load_adapter)
             if "bot_token" in kwargs or "channel_id" in kwargs or "server_id" in kwargs:
                 # Create config from direct kwargs
-                config_dict = {}
+                config_dict: dict[str, Any] = {}
                 if "bot_token" in kwargs:
                     config_dict["bot_token"] = kwargs["bot_token"]
                 if "channel_id" in kwargs:
@@ -75,10 +107,11 @@ class DiscordPlatform(Service):
                     config_dict["home_channel_id"] = kwargs["channel_id"]
                 if "server_id" in kwargs:
                     config_dict["server_id"] = kwargs["server_id"]
-                # Add other config fields if present
+                # Add other config fields if present (cast to dict for dynamic access)
+                kwargs_dict = cast(dict[str, Any], kwargs)
                 for key in ["deferral_channel_id", "admin_user_ids"]:
-                    if key in kwargs:
-                        config_dict[key] = kwargs[key]
+                    if key in kwargs_dict:
+                        config_dict[key] = kwargs_dict[key]
 
                 self.config = DiscordAdapterConfig(**config_dict)
                 logger.info(
@@ -123,7 +156,7 @@ class DiscordPlatform(Service):
         # The adapter_id is used by AuthenticationService for observer persistence
         self.adapter_id = "discord_pending"
 
-    def _initialize_discord_adapter(self, kwargs: Dict[str, Any]) -> None:
+    def _initialize_discord_adapter(self, kwargs: DiscordPlatformKwargs) -> None:
         """Create and configure the Discord adapter and tool service."""
         # Get runtime services
         time_service = getattr(self.runtime, "time_service", None)
@@ -151,7 +184,7 @@ class DiscordPlatform(Service):
         # Configure monitored channels from kwargs
         self._configure_monitored_channels(kwargs)
 
-    def _configure_monitored_channels(self, kwargs: Dict[str, Any]) -> None:
+    def _configure_monitored_channels(self, kwargs: DiscordPlatformKwargs) -> None:
         """Configure monitored channels from kwargs and validate configuration."""
         kwargs_channel_ids = kwargs.get("discord_monitored_channel_ids", [])
         kwargs_channel_id = kwargs.get("discord_monitored_channel_id")
@@ -293,25 +326,25 @@ class DiscordPlatform(Service):
 
         raise TimeoutError("Discord client failed to reconnect within timeout")
 
-    def _build_error_context(self, current_agent_task: asyncio.Task[Any]) -> Dict[str, Any]:
+    def _build_error_context(self, current_agent_task: asyncio.Task[Any]) -> DiscordTaskErrorContext:
         """Build rich error context for troubleshooting Discord issues."""
-        return {
-            "task_exists": self._discord_client_task is not None,
-            "task_done": self._discord_client_task.done() if self._discord_client_task else None,
-            "task_cancelled": self._discord_client_task.cancelled() if self._discord_client_task else None,
-            "task_exception": (
+        return DiscordTaskErrorContext(
+            task_exists=self._discord_client_task is not None,
+            task_done=self._discord_client_task.done() if self._discord_client_task else None,
+            task_cancelled=self._discord_client_task.cancelled() if self._discord_client_task else None,
+            task_exception=(
                 str(self._discord_client_task.exception())
                 if self._discord_client_task and self._discord_client_task.done()
                 else None
             ),
-            "client_closed": self.client.is_closed() if self.client else None,
-            "client_user": str(self.client.user) if self.client and hasattr(self.client, "user") else None,
-            "reconnect_attempts": self._reconnect_attempts,
-            "agent_task_name": current_agent_task.get_name(),
-            "agent_task_done": current_agent_task.done(),
-        }
+            client_closed=self.client.is_closed() if self.client else None,
+            client_user=str(self.client.user) if self.client and hasattr(self.client, "user") else None,
+            reconnect_attempts=self._reconnect_attempts,
+            agent_task_name=current_agent_task.get_name(),
+            agent_task_done=current_agent_task.done(),
+        )
 
-    async def _recreate_discord_task(self, context: Dict[str, Any]) -> bool:
+    async def _recreate_discord_task(self, context: DiscordTaskErrorContext) -> bool:
         """
         Recreate Discord client task when it dies unexpectedly.
 
@@ -327,11 +360,14 @@ class DiscordPlatform(Service):
             self._discord_client_task = asyncio.create_task(
                 self.client.start(self.token, reconnect=True), name="DiscordClientTask"
             )
-            logger.info(f"Discord client task recreated successfully. Context: {context}")
+            logger.info(f"Discord client task recreated successfully. Context: {context.model_dump()}")
             return True
 
         except Exception as recreate_error:
-            logger.error(f"Failed to recreate Discord client task: {recreate_error}. Context: {context}", exc_info=True)
+            logger.error(
+                f"Failed to recreate Discord client task: {recreate_error}. Context: {context.model_dump()}",
+                exc_info=True,
+            )
 
             # Exponential backoff to avoid tight loop
             backoff_time = min(5.0 * (2 ** min(self._reconnect_attempts, 6)), 60.0)

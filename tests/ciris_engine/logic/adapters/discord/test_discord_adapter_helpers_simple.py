@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform
+from ciris_engine.logic.adapters.discord.adapter import DiscordPlatform, DiscordTaskErrorContext
 
 
 @pytest.fixture
@@ -58,9 +58,10 @@ class TestDiscordHelpers:
 
         context = platform._build_error_context(agent_task)
 
-        assert context["agent_task_name"] == "TestTask"
-        assert context["reconnect_attempts"] == 2
-        assert context["task_exists"] is True
+        # Context is now a DiscordTaskErrorContext Pydantic model, use attribute access
+        assert context.agent_task_name == "TestTask"
+        assert context.reconnect_attempts == 2
+        assert context.task_exists is True
 
     def test_build_error_context_none_task(self, platform):
         """Test error context when Discord task is None."""
@@ -72,13 +73,20 @@ class TestDiscordHelpers:
 
         context = platform._build_error_context(agent_task)
 
-        assert context["task_exists"] is False
-        assert context["task_done"] is None
+        # Context is now a DiscordTaskErrorContext Pydantic model, use attribute access
+        assert context.task_exists is False
+        assert context.task_done is None
 
     @pytest.mark.asyncio
     async def test_recreate_discord_task_success(self, platform):
         """Test successful task recreation."""
-        context = {"test": "context"}
+        context = DiscordTaskErrorContext(
+            task_exists=True,
+            task_done=True,
+            reconnect_attempts=0,
+            agent_task_name="TestTask",
+            agent_task_done=False,
+        )
 
         with patch("asyncio.create_task") as mock_create:
             mock_task = Mock()
@@ -92,7 +100,13 @@ class TestDiscordHelpers:
     @pytest.mark.asyncio
     async def test_recreate_discord_task_failure(self, platform):
         """Test task recreation failure."""
-        context = {"test": "context"}
+        context = DiscordTaskErrorContext(
+            task_exists=True,
+            task_done=True,
+            reconnect_attempts=0,
+            agent_task_name="TestTask",
+            agent_task_done=False,
+        )
 
         with patch("asyncio.create_task", side_effect=Exception("failed")):
             with patch("asyncio.sleep") as mock_sleep:
@@ -117,9 +131,11 @@ class TestDiscordHelpers:
         """Test unhealthy task check."""
         agent_task = Mock()
         agent_task.get_name.return_value = "TestTask"
+        agent_task.done.return_value = False  # Agent task is still running
 
         discord_task = Mock()
-        discord_task.done.return_value = True
+        discord_task.done.return_value = True  # Discord task died
+        discord_task.cancelled.return_value = False
         platform._discord_client_task = discord_task
 
         result = platform._check_task_health(agent_task)

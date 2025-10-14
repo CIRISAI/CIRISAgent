@@ -179,10 +179,11 @@ class TestAgentProcessor:
         result = await main_processor.process(1)
 
         assert result is not None
-        # Result should be a dict with processor result fields
-        assert isinstance(result, dict)
-        assert "errors" in result
-        assert "duration_seconds" in result
+        # Result is a ProcessingRoundResult Pydantic model
+        from ciris_engine.schemas.processors.main import ProcessingRoundResult
+        assert isinstance(result, ProcessingRoundResult)
+        assert result.errors >= 0
+        assert result.processing_time_ms >= 0
 
     @pytest.mark.asyncio
     async def test_state_transition(self, main_processor, mock_processors):
@@ -353,12 +354,13 @@ class TestAgentProcessor:
         # Remove work processor
         del main_processor.state_processors[AgentState.WORK]
 
-        # Processing will return error
+        # Processing will return error result
         result = await main_processor.process(1)
-        # Result should be a dict with error
-        assert isinstance(result, dict)
-        assert "error" in result
-        assert result["error"] == "No processor available"
+        # Result is a ProcessingRoundResult with error info
+        from ciris_engine.schemas.processors.main import ProcessingRoundResult
+        assert isinstance(result, ProcessingRoundResult)
+        assert result.success is False
+        assert result.errors > 0
 
     @pytest.mark.asyncio
     async def test_state_transition_delay(self, main_processor):
@@ -538,24 +540,29 @@ class TestAgentProcessor:
         assert main_processor.is_paused()
 
         # Mock pipeline controller with execute_single_step_point method
+        # Must return SingleStepResult Pydantic model, not dict
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
         mock_controller = AsyncMock()
-        mock_step_result = {
-            "step_point": "GATHER_CONTEXT",
-            "step_results": [{"thought_id": "test-thought-1", "success": True, "step_data": {"context": "test"}}],
-            "pipeline_state": {"current_round": 1, "pipeline_empty": False, "thoughts_by_step": {}},
-            "current_round": 1,
-            "pipeline_empty": False,
-        }
+        mock_step_result = SingleStepResult(
+            success=True,
+            step_point="GATHER_CONTEXT",
+            message="Processed 1 thought at GATHER_CONTEXT",
+            thoughts_advanced=1,
+            processing_time_ms=10.0,
+            pipeline_state={"current_round": 1, "pipeline_empty": False, "thoughts_by_step": {}},
+            step_results=[{"thought_id": "test-thought-1", "success": True, "step_data": {"context": "test"}}],
+        )
         mock_controller.execute_single_step_point.return_value = mock_step_result
         main_processor._pipeline_controller = mock_controller
 
         # Single step should succeed
         result = await main_processor.single_step()
-        assert result["success"] is True
-        assert result["step_point"] == "GATHER_CONTEXT"
-        assert result["thoughts_processed"] == 1
-        assert "processing_time_ms" in result
-        assert "pipeline_state" in result
+        assert result.success is True
+        assert result.step_point == "GATHER_CONTEXT"
+        assert result.thoughts_advanced == 1
+        assert result.message is not None
+        assert result.processing_time_ms >= 0
+        assert result.pipeline_state is not None
 
         # Verify controller was called
         mock_controller.execute_single_step_point.assert_called_once()

@@ -120,8 +120,20 @@ class EssentialConfig(BaseModel):
     debug_mode: bool = Field(False, description="Enable debug mode")
     template_directory: Path = Field(Path("ciris_templates"), description="Directory containing identity templates")
     default_template: str = Field("default", description="Default template name for agent identity creation")
+    agent_occurrence_id: str = Field(
+        "default",
+        description="Unique ID for this runtime occurrence (enables multiple instances against same database)"
+    )
 
     model_config = ConfigDict(extra="forbid")  # No ambiguity allowed in mission-critical config
+
+    def load_env_vars(self) -> None:
+        """Load configuration from environment variables if present."""
+        import os
+
+        env_occurrence_id = os.getenv("AGENT_OCCURRENCE_ID")
+        if env_occurrence_id:
+            self.agent_occurrence_id = env_occurrence_id
 
 
 class CIRISNodeConfig(BaseModel):

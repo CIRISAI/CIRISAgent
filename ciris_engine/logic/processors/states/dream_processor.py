@@ -97,6 +97,7 @@ class DreamProcessor(BaseProcessor):
         max_dream_duration: int = 120,  # Maximum 2 hours
         max_active_tasks: int = 50,  # More tasks during dream
         max_active_thoughts: int = 100,  # More thoughts during dream
+        agent_occurrence_id: str = "default",
     ) -> None:
         # Initialize base processor
         super().__init__(config_accessor, thought_processor, action_dispatcher, services)
@@ -118,6 +119,7 @@ class DreamProcessor(BaseProcessor):
         self.max_dream_duration = max_dream_duration
         self.max_active_tasks = max_active_tasks
         self.max_active_thoughts = max_active_thoughts
+        self.agent_occurrence_id = agent_occurrence_id
 
         # Check if CIRISNode is configured
         self.cirisnode_enabled = self._check_cirisnode_enabled()
@@ -193,7 +195,7 @@ class DreamProcessor(BaseProcessor):
         if not self.task_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for TaskManager")
-            self.task_manager = TaskManager(max_active_tasks=self.max_active_tasks, time_service=self._time_service)
+            self.task_manager = TaskManager(max_active_tasks=self.max_active_tasks, time_service=self._time_service, agent_occurrence_id=self.agent_occurrence_id)
         if not self.thought_manager:
             if not self._time_service:
                 raise RuntimeError("TimeService not available for ThoughtManager")
@@ -201,6 +203,7 @@ class DreamProcessor(BaseProcessor):
                 time_service=self._time_service,
                 max_active_thoughts=self.max_active_thoughts,
                 default_channel_id=self.startup_channel_id,
+                agent_occurrence_id=self.agent_occurrence_id,
             )
 
         # Clear any previous tasks
@@ -307,7 +310,7 @@ class DreamProcessor(BaseProcessor):
 
         if self._time_service:
             for task in self._dream_tasks:
-                persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self._time_service)
+                persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, "default", self._time_service)
 
         logger.info(f"Created and activated {len(self._dream_tasks)} dream tasks")
 

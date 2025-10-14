@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 def map_row_to_task(row: Any) -> Task:
     row_dict = dict(row)
+    # Get agent_occurrence_id from row (defaults to "default" for backwards compatibility)
+    agent_occurrence_id = row_dict.get("agent_occurrence_id", "default")
+
     if row_dict.get("context_json"):
         try:
             ctx_data = json.loads(row_dict["context_json"])
@@ -22,20 +25,24 @@ def map_row_to_task(row: Any) -> Task:
                     user_id=ctx_data.get("user_id"),
                     correlation_id=ctx_data.get("correlation_id", str(uuid.uuid4())),
                     parent_task_id=ctx_data.get("parent_task_id"),
+                    agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
                 )
             else:
                 # Provide required fields for TaskContext
                 row_dict["context"] = TaskContext(
-                    channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None
+                    channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
+                    agent_occurrence_id=agent_occurrence_id
                 )
         except Exception as e:
             logger.warning(f"Failed to decode context_json for task {row_dict.get('task_id')}: {e}")
             row_dict["context"] = TaskContext(
-                channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None
+                channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
+                agent_occurrence_id=agent_occurrence_id
             )
     else:
         row_dict["context"] = TaskContext(
-            channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None
+            channel_id=None, user_id=None, correlation_id=str(uuid.uuid4()), parent_task_id=None,
+            agent_occurrence_id=agent_occurrence_id
         )
     if row_dict.get("outcome_json"):
         try:
@@ -68,6 +75,9 @@ def map_row_to_task(row: Any) -> Task:
 
 def map_row_to_thought(row: Any) -> Thought:
     row_dict = dict(row)
+    # Get agent_occurrence_id from row (defaults to "default" for backwards compatibility)
+    agent_occurrence_id = row_dict.get("agent_occurrence_id", "default")
+
     if row_dict.get("context_json"):
         try:
             ctx_data = json.loads(row_dict["context_json"])
@@ -86,6 +96,7 @@ def map_row_to_thought(row: Any) -> Thought:
                         depth=ctx_data.get("depth", 0),
                         parent_thought_id=ctx_data.get("parent_thought_id"),
                         correlation_id=correlation_id,
+                        agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
                     )
                 else:
                     # Missing required fields, set to None

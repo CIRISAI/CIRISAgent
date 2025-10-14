@@ -376,6 +376,106 @@ guidance = await wise_bus.seek_wisdom(
 - Infrastructure service (Shutdown, Init, Auth)
 - Performance critical (no bus overhead)
 
+## Telemetry Architecture
+
+CIRIS uses a **two-tier telemetry architecture** that balances type safety with implementation simplicity:
+
+### Tier 1: Message Buses → BusMetrics
+
+All 6 message buses return typed `BusMetrics` (Pydantic models) instead of untyped dicts. This ensures type safety for the complex routing and provider selection logic that buses handle.
+
+```python
+from ciris_engine.schemas.infrastructure.base import BusMetrics
+
+def get_metrics(self) -> BusMetrics:
+    """Get bus metrics as typed BusMetrics schema."""
+    return BusMetrics(
+        messages_sent=self._sent_count,
+        messages_received=self._received_count,
+        messages_dropped=0,
+        average_latency_ms=0.0,
+        active_subscriptions=len(self._subscribers),
+        queue_depth=self.get_queue_size(),
+        errors_last_hour=self._error_count,
+        busiest_service=None,
+        additional_metrics={
+            "bus_specific_metric": self._custom_value,
+        },
+    )
+```
+
+### Tier 2: Services → Dict[str, float]
+
+Services return simple `Dict[str, float]` which the telemetry service converts to `ServiceTelemetryData`. This keeps service implementations lightweight while maintaining type safety at the collection boundary.
+
+```python
+async def get_metrics(self) -> Dict[str, float]:
+    """Return service metrics as dict."""
+    return {
+        "uptime_seconds": uptime,
+        "requests_handled": float(self._requests),
+        "error_count": float(self._errors),
+        "error_rate": self._calculate_error_rate(),
+        "incidents_active": float(len(self._active_incidents)),
+    }
+```
+
+### Telemetry Collection Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Telemetry Service                         │
+│                  (Central Collector)                         │
+└─────────────────────────────────────────────────────────────┘
+                          ▲
+                          │
+         ┌────────────────┴────────────────┐
+         │                                  │
+    ┌────▼─────┐                     ┌─────▼────┐
+    │  Buses   │                     │ Services │
+    │  (Tier 1)│                     │ (Tier 2) │
+    └────┬─────┘                     └─────┬────┘
+         │                                  │
+         │ BusMetrics                       │ Dict[str,float]
+         │ (Pydantic)                       │
+         │                                  │
+         └────────────────┬─────────────────┘
+                          │
+                          ▼
+                 ┌────────────────────┐
+                 │ ServiceTelemetryData│
+                 │    (Pydantic)       │
+                 └────────────────────┘
+```
+
+### Why This Architecture?
+
+**Buses need strict typing** because they:
+- Route between multiple providers
+- Handle complex operational metrics
+- Expose public APIs for monitoring
+- Need validation for distributed systems
+
+**Services use simple dicts** because they:
+- Have straightforward metrics (counters, gauges)
+- Benefit from lightweight implementations
+- Are converted centrally by telemetry service
+- Don't need complex validation logic
+
+### Metric Collection Methods
+
+The telemetry service tries these methods in priority order:
+
+1. **`async def get_metrics(self) -> Dict[str, float]`** ← Preferred
+2. **`def _collect_metrics(self) -> Dict[str, float]`** ← Fallback
+3. **`def get_status(self) -> ServiceStatus`** ← Last resort
+
+### Documentation
+
+For detailed telemetry implementation patterns, see:
+- `ciris_engine/logic/services/graph/telemetry_service/TELEMETRY_ARCHITECTURE.md`
+- `ciris_engine/logic/services/graph/telemetry_service/BEST_PRACTICES.md`
+
 ## Type Safety
 
 CIRIS achieves zero `Dict[str, Any]` through comprehensive type safety:

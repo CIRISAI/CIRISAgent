@@ -19,6 +19,7 @@ from ciris_engine.logic.buses.runtime_control_bus import RuntimeControlBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
 from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.registries.base import ServiceRegistry
+from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 
@@ -51,12 +52,13 @@ class TestCommunicationBusCoverage:
         """Test initialization and metrics."""
         bus = CommunicationBus(mock_registry, mock_time_service)
 
-        # Test get_metrics exists and returns dict
+        # Test get_metrics exists and returns BusMetrics
         metrics = bus.get_metrics()
-        assert isinstance(metrics, dict)
-        assert "communication_messages_sent" in metrics
-        assert "communication_broadcasts" in metrics
-        assert "communication_uptime_seconds" in metrics
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert "communication_messages_sent" in metrics.additional_metrics
+        assert "communication_broadcasts" in metrics.additional_metrics
+        assert "communication_uptime_seconds" in metrics.additional_metrics
 
     async def test_send_message(self, mock_registry, mock_time_service):
         """Test send_message method."""
@@ -143,11 +145,12 @@ class TestLLMBusCoverage:
 
         metrics = bus.get_metrics()
 
-        assert isinstance(metrics, dict)
-        assert "llm_requests_total" in metrics
-        assert "llm_providers_available" in metrics
-        assert "llm_circuit_breakers_open" in metrics
-        assert "llm_uptime_seconds" in metrics
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert "llm_requests_total" in metrics.additional_metrics
+        assert "llm_providers_available" in metrics.additional_metrics
+        assert "llm_circuit_breakers_open" in metrics.additional_metrics
+        assert "llm_uptime_seconds" in metrics.additional_metrics
 
     async def test_call_llm_structured(self, mock_registry, mock_time_service):
         """Test call_llm_structured method."""
@@ -215,11 +218,12 @@ class TestMemoryBusCoverage:
 
         metrics = bus.get_metrics()
 
-        assert isinstance(metrics, dict)
-        assert "memory_operations_total" in metrics
-        assert "memory_errors_total" in metrics
-        assert "memory_broadcasts" in metrics
-        assert "memory_uptime_seconds" in metrics
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert "memory_operations_total" in metrics.additional_metrics
+        # Note: memory_errors_total was renamed to match BusMetrics errors_last_hour pattern
+        assert "memory_broadcasts" in metrics.additional_metrics
+        assert "memory_uptime_seconds" in metrics.additional_metrics
 
     async def test_memorize_basic(self, mock_registry, mock_time_service):
         """Test basic memorize operation."""
@@ -272,10 +276,11 @@ class TestToolBusCoverage:
 
         metrics = bus.get_metrics()
 
-        assert isinstance(metrics, dict)
-        assert metrics["tool_executions_total"] == 100
-        assert metrics["tool_execution_errors"] == 10
-        assert metrics["tools_available"] == 5
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert metrics_dict["additional_metrics"]["tool_executions_total"] == 100
+        assert metrics_dict["additional_metrics"]["tool_execution_errors"] == 10
+        assert metrics_dict["additional_metrics"]["tools_available"] == 5
 
     async def test_execute_tool(self, mock_registry, mock_time_service):
         """Test tool execution."""
@@ -326,9 +331,10 @@ class TestWiseBusCoverage:
 
         metrics = bus.get_metrics()
 
-        assert isinstance(metrics, dict)
-        assert metrics["wise_guidance_requests"] == 100
-        assert metrics["wise_guidance_deferrals"] == 20
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert metrics_dict["additional_metrics"]["wise_guidance_requests"] == 100
+        assert metrics_dict["additional_metrics"]["wise_guidance_deferrals"] == 20
 
     async def test_check_capability_allowed(self, mock_registry, mock_time_service):
         """Test capability checking."""
@@ -359,9 +365,10 @@ class TestRuntimeControlBusCoverage:
 
         metrics = bus.get_metrics()
 
-        assert isinstance(metrics, dict)
-        assert "runtime_control_commands" in metrics
-        assert "runtime_control_uptime_seconds" in metrics
+        assert isinstance(metrics, BusMetrics)
+        metrics_dict = metrics.model_dump()
+        assert "runtime_control_commands" in metrics.additional_metrics
+        assert "runtime_control_uptime_seconds" in metrics.additional_metrics
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecuti
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation, ServiceCorrelationStatus
+from ciris_engine.schemas.types import JSONDict
 
 
 class CLIToolService(BaseService, ToolService):
@@ -56,7 +57,7 @@ class CLIToolService(BaseService, ToolService):
         """Stop the CLI tool service."""
         await BaseService.stop(self)
 
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         # Track request for telemetry
         self._track_request()
         self._tool_executions += 1
@@ -80,7 +81,7 @@ class CLIToolService(BaseService, ToolService):
         start_time = self._time_service.timestamp()
 
         # Declare result type explicitly to allow mixed types (str error, float execution_time_ms)
-        result: Dict[str, Any]
+        result: JSONDict
         success: bool
         error_msg: Optional[str]
 
@@ -135,7 +136,7 @@ class CLIToolService(BaseService, ToolService):
             persistence.update_correlation(correlation_id, corr, self._time_service)
         return tool_result
 
-    async def _list_files(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _list_files(self, params: JSONDict) -> JSONDict:
         """List files using typed parameters."""
         # Parse parameters
         list_params = ListFilesParams.model_validate(params)
@@ -148,7 +149,7 @@ class CLIToolService(BaseService, ToolService):
             result = ListFilesResult(files=[], path=list_params.path, error=str(e))
             return result.model_dump()
 
-    async def _read_file(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _read_file(self, params: JSONDict) -> JSONDict:
         """Read file contents using typed parameters."""
         try:
             # Parse and validate parameters
@@ -166,7 +167,7 @@ class CLIToolService(BaseService, ToolService):
             result = ReadFileResult(error=str(e))
             return result.model_dump()
 
-    async def _write_file(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _write_file(self, params: JSONDict) -> JSONDict:
         """Write file using typed parameters."""
         try:
             # Parse and validate parameters
@@ -187,7 +188,7 @@ class CLIToolService(BaseService, ToolService):
         with open(path, "w") as f:
             f.write(content)
 
-    async def _shell_command(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _shell_command(self, params: JSONDict) -> JSONDict:
         """Execute shell command using typed parameters."""
         try:
             # Parse and validate parameters
@@ -208,7 +209,7 @@ class CLIToolService(BaseService, ToolService):
             result = ShellCommandResult(error=str(e))
             return result.model_dump()
 
-    async def _search_text(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _search_text(self, params: JSONDict) -> JSONDict:
         """Search text in file using typed parameters."""
         try:
             # Parse and validate parameters
@@ -244,7 +245,7 @@ class CLIToolService(BaseService, ToolService):
             await asyncio.sleep(0.1)
         return None
 
-    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         return tool_name in self._tools
 
     async def list_tools(self) -> List[str]:

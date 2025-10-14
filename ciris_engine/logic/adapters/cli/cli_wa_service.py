@@ -12,6 +12,7 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.services.context import GuidanceContext
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation, ServiceCorrelationStatus
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class CLIWiseAuthorityService(WiseAuthorityService):
     def __init__(self, time_service: Optional[TimeService] = None) -> None:
         super().__init__()
         self.time_service = time_service or TimeService()
-        self.deferral_log: List[Dict[str, Any]] = []
+        self.deferral_log: List[JSONDict] = []
 
     async def start(self) -> None:
         """Start the CLI wise authority service."""

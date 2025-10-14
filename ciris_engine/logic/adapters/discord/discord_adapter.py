@@ -3,6 +3,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 
 import discord
 from discord.errors import ConnectionClosed, HTTPException
@@ -845,9 +846,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     async def execute_tool(
         self,
         tool_name: str,
-        tool_args: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
+        tool_args: Optional[Dict[str, Union[str, int, float, bool, List[Any], JSONDict]]] = None,
         *,
-        parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
+        parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], JSONDict]]] = None,
     ) -> ToolExecutionResult:
         """Execute a tool through the tool handler."""
 

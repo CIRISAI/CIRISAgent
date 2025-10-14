@@ -11,6 +11,7 @@ This ensures OBSERVER users only see memories they created or participated in.
 import json
 import logging
 from typing import Any, Dict, List, Optional, Set
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.services.graph_core import GraphNode
@@ -78,7 +79,7 @@ def build_user_filter_sql(allowed_user_ids: Set[str]) -> tuple[str, List[str]]:
     return (where_clause, params)
 
 
-def _extract_attributes_dict(node: GraphNode) -> Optional[Dict[str, Any]]:
+def _extract_attributes_dict(node: GraphNode) -> Optional[JSONDict]:
     """
     Extract attributes as a dictionary from a GraphNode.
 
@@ -100,19 +101,19 @@ def _extract_attributes_dict(node: GraphNode) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _check_created_by(attrs_dict: Dict[str, Any], allowed_user_ids: Set[str]) -> bool:
+def _check_created_by(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
     """Check if node creator is in allowed users."""
     created_by = attrs_dict.get("created_by")
     return bool(created_by and created_by in allowed_user_ids)
 
 
-def _check_user_list(attrs_dict: Dict[str, Any], allowed_user_ids: Set[str]) -> bool:
+def _check_user_list(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
     """Check if any user in user_list is allowed."""
     user_list = attrs_dict.get("user_list", [])
     return any(uid in allowed_user_ids for uid in user_list)
 
 
-def _check_task_summaries(attrs_dict: Dict[str, Any], allowed_user_ids: Set[str]) -> bool:
+def _check_task_summaries(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
     """Check if any task summary user_id is allowed."""
     task_summaries = attrs_dict.get("task_summaries", {})
     if not isinstance(task_summaries, dict):
@@ -126,7 +127,7 @@ def _check_task_summaries(attrs_dict: Dict[str, Any], allowed_user_ids: Set[str]
     return False
 
 
-def _check_conversations(attrs_dict: Dict[str, Any], allowed_user_ids: Set[str]) -> bool:
+def _check_conversations(attrs_dict: JSONDict, allowed_user_ids: Set[str]) -> bool:
     """Check if any conversation author_id is allowed."""
     conversations = attrs_dict.get("conversations_by_channel", {})
     if not isinstance(conversations, dict):

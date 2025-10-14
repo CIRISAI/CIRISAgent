@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
+from ciris_engine.schemas.types import JSONDict
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -539,7 +540,7 @@ async def update_my_settings(
         user_results = await memory_service.recall(user_query)
 
         # Prepare attributes to update (only include fields that were provided)
-        attrs_to_update: Dict[str, Any] = {}
+        attrs_to_update: JSONDict = {}
         if request.user_preferred_name is not None:
             attrs_to_update["user_preferred_name"] = request.user_preferred_name
         if request.location is not None:

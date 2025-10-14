@@ -12,9 +12,9 @@ import hashlib
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.constants import CIRIS_VERSION
+from ciris_engine.schemas.types import JSONDict
 
 # OTLP attribute key constants
 SERVICE_NAMESPACE_KEY = "service.namespace"
@@ -26,9 +26,7 @@ def safe_telemetry_get(data: JSONDict, key: str, default: Any = None) -> Any:
     return data.get(key, default) if isinstance(data, dict) else default
 
 
-def create_resource_attributes(
-    service_name: str, service_version: str, telemetry_data: JSONDict
-) -> List[JSONDict]:
+def create_resource_attributes(service_name: str, service_version: str, telemetry_data: JSONDict) -> List[JSONDict]:
     """Create standard resource attributes for OTLP format."""
     attributes = [
         {"key": "service.name", "value": {"stringValue": service_name}},

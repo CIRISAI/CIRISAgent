@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
+from ciris_engine.schemas.types import JSONDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -123,7 +124,7 @@ class AgentStatus(BaseModel):
     # System state
     services_active: int = Field(..., description="Number of active services")
     memory_usage_mb: float = Field(..., description="Current memory usage in MB")
-    multi_provider_services: Optional[Dict[str, Any]] = Field(None, description="Services with provider counts")
+    multi_provider_services: Optional[JSONDict] = Field(None, description="Services with provider counts")
 
 
 class AgentIdentity(BaseModel):
@@ -770,10 +771,10 @@ def _count_wakeup_tasks(uptime: float) -> int:
         return 0
 
 
-def _count_active_services(service_registry: Any) -> Tuple[int, Dict[str, Any]]:
+def _count_active_services(service_registry: Any) -> Tuple[int, JSONDict]:
     """Count active services and get multi-provider service details."""
     multi_provider_count = 0
-    multi_provider_services: Dict[str, Any] = {}
+    multi_provider_services: JSONDict = {}
 
     if service_registry:
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -834,7 +835,7 @@ def _convert_timestamp(timestamp: Any) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _create_conversation_message_from_mock(msg: Dict[str, Any], is_response: bool = False) -> ConversationMessage:
+def _create_conversation_message_from_mock(msg: JSONDict, is_response: bool = False) -> ConversationMessage:
     """Create ConversationMessage from mock message data."""
     if is_response:
         return ConversationMessage(
@@ -854,7 +855,7 @@ def _create_conversation_message_from_mock(msg: Dict[str, Any], is_response: boo
         )
 
 
-def _expand_mock_messages(user_messages: List[Dict[str, Any]]) -> List[ConversationMessage]:
+def _expand_mock_messages(user_messages: List[JSONDict]) -> List[ConversationMessage]:
     """Expand mock messages into user message + response pairs."""
     all_messages = []
     for msg in user_messages:
@@ -874,7 +875,7 @@ def _apply_message_limit(messages: List[ConversationMessage], limit: int) -> Lis
 
 
 async def _get_history_from_mock(
-    message_history: List[Dict[str, Any]], channels_to_query: List[str], limit: int
+    message_history: List[JSONDict], channels_to_query: List[str], limit: int
 ) -> ConversationHistory:
     """Process conversation history from mock data."""
     # Filter messages for requested channels
@@ -1465,7 +1466,7 @@ async def _authenticate_websocket_user(websocket: WebSocket, api_key: str) -> Op
 
 
 async def _handle_websocket_subscription_action(
-    websocket: WebSocket, data: Dict[str, Any], subscribed_channels: set[str]
+    websocket: WebSocket, data: JSONDict, subscribed_channels: set[str]
 ) -> None:
     """Handle websocket subscribe/unsubscribe actions."""
     action = data.get("action")

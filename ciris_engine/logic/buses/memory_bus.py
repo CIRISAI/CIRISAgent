@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass
 
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
@@ -210,9 +211,11 @@ class MemoryBus(BaseBus[MemoryService]):
                 # Extract content from attributes
                 content = ""
                 if isinstance(node.attributes, dict):
-                    content = (
-                        node.attributes.get("content", "") or node.attributes.get("message", "") or str(node.attributes)
-                    )
+                    content_val = node.attributes.get("content") or node.attributes.get("message")
+                    if isinstance(content_val, str):
+                        content = content_val
+                    else:
+                        content = str(node.attributes)
                 else:
                     content = (
                         getattr(node.attributes, "content", "")
@@ -224,9 +227,11 @@ class MemoryBus(BaseBus[MemoryService]):
                 created_at = datetime.now(timezone.utc)
                 if isinstance(node.attributes, dict):
                     if "created_at" in node.attributes:
-                        created_at = node.attributes["created_at"]
-                        if isinstance(created_at, str):
-                            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        created_at_val = node.attributes["created_at"]
+                        if isinstance(created_at_val, str):
+                            created_at = datetime.fromisoformat(created_at_val.replace("Z", "+00:00"))
+                        elif isinstance(created_at_val, datetime):
+                            created_at = created_at_val
                 elif hasattr(node.attributes, "created_at"):
                     created_at = node.attributes.created_at
 
@@ -425,12 +430,22 @@ class MemoryBus(BaseBus[MemoryService]):
     ) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
-            aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-            aggregated["total_nodes"] += telemetry.get("total_nodes", 0)
-            aggregated["query_count"] += telemetry.get("query_count", 0)
+            service_name = get_str(telemetry, "service_name", "unknown")
+            providers_list = aggregated["providers"]
+            if isinstance(providers_list, list):
+                providers_list.append(service_name)
+
+            total_nodes = aggregated["total_nodes"]
+            if isinstance(total_nodes, int):
+                aggregated["total_nodes"] = total_nodes + get_int(telemetry, "total_nodes", 0)
+
+            query_count = aggregated["query_count"]
+            if isinstance(query_count, int):
+                aggregated["query_count"] = query_count + get_int(telemetry, "query_count", 0)
 
             if "cache_hit_rate" in telemetry:
-                cache_rates.append(telemetry["cache_hit_rate"])
+                cache_hit_rate = get_float(telemetry, "cache_hit_rate", 0.0)
+                cache_rates.append(cache_hit_rate)
 
     async def collect_telemetry(self) -> JSONDict:
         """
@@ -453,7 +468,7 @@ class MemoryBus(BaseBus[MemoryService]):
         tasks = self._create_telemetry_tasks(all_memory_services)
 
         # Initialize aggregated metrics
-        aggregated = {
+        aggregated: JSONDict = {
             "service_name": "memory_bus",
             "healthy": True,
             "total_nodes": 0,

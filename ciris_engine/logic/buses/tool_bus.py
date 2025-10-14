@@ -7,6 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 from ciris_engine.schemas.types import JSONDict
 
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_list
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo
@@ -316,13 +317,25 @@ class ToolBus(BaseBus[ToolService]):
     def _aggregate_tool_telemetry(self, telemetry: JSONDict, aggregated: JSONDict) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
-            aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-            aggregated["failed_count"] += telemetry.get("error_count", 0)
-            aggregated["processed_count"] += telemetry.get("tool_executions", 0)
+            service_name = get_str(telemetry, "service_name", "unknown")
+            providers_list = aggregated["providers"]
+            if isinstance(providers_list, list):
+                providers_list.append(service_name)
+
+            failed_count = aggregated["failed_count"]
+            if isinstance(failed_count, int):
+                aggregated["failed_count"] = failed_count + get_int(telemetry, "error_count", 0)
+
+            processed_count = aggregated["processed_count"]
+            if isinstance(processed_count, int):
+                aggregated["processed_count"] = processed_count + get_int(telemetry, "tool_executions", 0)
 
             if "available_tools" in telemetry:
                 # Use update() to add each tool from the list, not add() which would add the list itself
-                aggregated["unique_tools"].update(telemetry["available_tools"])
+                unique_tools = aggregated["unique_tools"]
+                available_tools = get_list(telemetry, "available_tools", [])
+                if isinstance(unique_tools, set):
+                    unique_tools.update(available_tools)
 
     def _collect_metrics(self) -> dict[str, float]:
         """Collect base metrics for the tool bus."""
@@ -393,7 +406,7 @@ class ToolBus(BaseBus[ToolService]):
         tasks = self._create_tool_telemetry_tasks(all_tool_services)
 
         # Initialize aggregated metrics
-        aggregated = {
+        aggregated: Dict[str, Any] = {
             "service_name": "tool_bus",
             "healthy": True,
             "failed_count": 0,
@@ -408,7 +421,7 @@ class ToolBus(BaseBus[ToolService]):
             unique_tools_set = cast(Set[str], aggregated["unique_tools"])
             aggregated["total_tools"] = len(unique_tools_set)
             del aggregated["unique_tools"]
-            return aggregated
+            return cast(JSONDict, aggregated)
 
         # Collect results with timeout
         done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
@@ -435,4 +448,4 @@ class ToolBus(BaseBus[ToolService]):
 
         del aggregated["unique_tools"]  # Remove set from final result
 
-        return aggregated
+        return cast(JSONDict, aggregated)

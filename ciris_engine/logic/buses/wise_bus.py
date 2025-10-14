@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 from ciris_engine.schemas.types import JSONDict
 
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
@@ -666,8 +667,18 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 telemetry = task.result()
                 if not telemetry:
                     continue
-                aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-                aggregated["failed_count"] += telemetry.get("failed_count", 0)
-                aggregated["processed_count"] += telemetry.get("processed_count", 0)
+
+                service_name = get_str(telemetry, "service_name", "unknown")
+                providers_list = aggregated["providers"]
+                if isinstance(providers_list, list):
+                    providers_list.append(service_name)
+
+                failed_count = aggregated["failed_count"]
+                if isinstance(failed_count, int):
+                    aggregated["failed_count"] = failed_count + get_int(telemetry, "failed_count", 0)
+
+                processed_count = aggregated["processed_count"]
+                if isinstance(processed_count, int):
+                    aggregated["processed_count"] = processed_count + get_int(telemetry, "processed_count", 0)
             except Exception as e:
                 logger.warning(f"Failed to collect telemetry from provider: {e}")

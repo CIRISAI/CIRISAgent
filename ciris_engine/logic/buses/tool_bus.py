@@ -5,6 +5,7 @@ Tool message bus - handles all tool service operations
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -49,7 +50,7 @@ class ToolBus(BaseBus[ToolService]):
         self._cached_tools_count = 0  # Updated by collect_telemetry when available
 
     async def execute_tool(
-        self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default"
+        self, tool_name: str, parameters: JSONDict, handler_name: str = "default"
     ) -> ToolExecutionResult:
         """Execute a tool and return the result"""
         logger.debug(f"execute_tool called with tool_name={tool_name}, parameters={parameters}")
@@ -195,7 +196,7 @@ class ToolBus(BaseBus[ToolService]):
             return None
 
     async def validate_parameters(
-        self, tool_name: str, parameters: Dict[str, Any], handler_name: str = "default"
+        self, tool_name: str, parameters: JSONDict, handler_name: str = "default"
     ) -> bool:
         """Validate parameters for a tool"""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["validate_parameters"])
@@ -312,7 +313,7 @@ class ToolBus(BaseBus[ToolService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_tool_telemetry(self, telemetry: Dict[str, Any], aggregated: Dict[str, Any]) -> None:
+    def _aggregate_tool_telemetry(self, telemetry: JSONDict, aggregated: JSONDict) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             aggregated["providers"].append(telemetry.get("service_name", "unknown"))
@@ -371,7 +372,7 @@ class ToolBus(BaseBus[ToolService]):
             },
         )
 
-    async def collect_telemetry(self) -> Dict[str, Any]:
+    async def collect_telemetry(self) -> JSONDict:
         """
         Collect telemetry from all tool providers in parallel.
 

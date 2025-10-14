@@ -5,6 +5,7 @@ Wise Authority message bus - handles all WA service operations
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -242,7 +243,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"Failed to fetch guidance: {e}", exc_info=True)
             return None
 
-    async def request_review(self, review_type: str, review_data: Dict[str, Any], handler_name: str) -> bool:
+    async def request_review(self, review_type: str, review_data: JSONDict, handler_name: str) -> bool:
         """Request a review from wise authority (e.g., for identity variance)"""
         # Create a deferral context for the review
         context = DeferralContext(
@@ -587,7 +588,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         total_prohibited: int,
         community_counts: Dict[str, int],
         total_community: int,
-    ) -> Dict[str, Any]:
+    ) -> JSONDict:
         """Create base telemetry dictionary."""
         return {
             "service_name": "wise_bus",
@@ -597,7 +598,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "total_community": total_community,
         }
 
-    async def collect_telemetry(self) -> Dict[str, Any]:
+    async def collect_telemetry(self) -> JSONDict:
         """
         Collect telemetry from all wise authority providers in parallel.
 
@@ -658,7 +659,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return aggregated
 
-    def _aggregate_provider_telemetry(self, aggregated: Dict[str, Any], completed_tasks: Set[Any]) -> None:
+    def _aggregate_provider_telemetry(self, aggregated: JSONDict, completed_tasks: Set[Any]) -> None:
         """Aggregate telemetry from completed provider tasks."""
         for task in completed_tasks:
             try:

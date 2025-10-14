@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import Service
@@ -23,7 +24,7 @@ class BusMessage:
     id: str
     handler_name: str
     timestamp: datetime
-    metadata: Dict[str, Any]
+    metadata: JSONDict
 
 
 # Define the service type variable
@@ -137,7 +138,7 @@ class BaseBus(ABC, Generic[ServiceT]):
         """Get current queue size"""
         return self._queue.qsize()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get bus statistics"""
         return {
             "service_type": self.service_type.value,

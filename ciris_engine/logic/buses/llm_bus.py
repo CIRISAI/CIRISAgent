@@ -5,6 +5,7 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -97,7 +98,7 @@ class LLMBus(BaseBus[LLMService]):
         time_service: TimeServiceProtocol,
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         distribution_strategy: DistributionStrategy = DistributionStrategy.LATENCY_BASED,
-        circuit_breaker_config: Optional[Dict[str, Any]] = None,
+        circuit_breaker_config: Optional[JSONDict] = None,
     ):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
 
@@ -116,7 +117,7 @@ class LLMBus(BaseBus[LLMService]):
 
         logger.info(f"LLMBus initialized with {distribution_strategy} distribution strategy")
 
-    def _normalize_messages(self, messages: Union[List[Dict[str, Any]], List["LLMMessage"]]) -> List[Dict[str, Any]]:
+    def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
 
         Args:
@@ -127,7 +128,7 @@ class LLMBus(BaseBus[LLMService]):
         """
         from ciris_engine.schemas.services.llm import LLMMessage
 
-        normalized_messages: List[Dict[str, Any]] = []
+        normalized_messages: List[JSONDict] = []
         for msg in messages:
             if isinstance(msg, LLMMessage):
                 # Use exclude_none=True to avoid sending name: None to providers
@@ -146,7 +147,7 @@ class LLMBus(BaseBus[LLMService]):
 
     async def call_llm_structured(
         self,
-        messages: Union[List[Dict[str, Any]], List["LLMMessage"]],
+        messages: Union[List[JSONDict], List["LLMMessage"]],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -246,7 +247,7 @@ class LLMBus(BaseBus[LLMService]):
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[JSONDict],
         response_model: Type[BaseModel],
         handler_name: str,
         max_tokens: int = 1024,
@@ -279,7 +280,7 @@ class LLMBus(BaseBus[LLMService]):
             return LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
         return True
 
-    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, Dict[str, Any]]:
+    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, JSONDict]:
         """Get priority value and metadata for a service."""
         provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
         priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
@@ -293,7 +294,7 @@ class LLMBus(BaseBus[LLMService]):
         return 0, {}  # Default to highest priority, empty metadata
 
     def _should_include_service_for_domain(
-        self, service_metadata: Dict[str, Any], domain: Optional[str]
+        self, service_metadata: JSONDict, domain: Optional[str]
     ) -> Tuple[bool, int]:
         """Check if service should be included based on domain and get priority adjustment.
 
@@ -525,7 +526,7 @@ class LLMBus(BaseBus[LLMService]):
         except Exception as e:
             logger.warning(f"Failed to record telemetry: {e}")
 
-    def get_service_stats(self) -> Dict[str, Any]:
+    def get_service_stats(self) -> JSONDict:
         """Get detailed statistics for all services"""
         stats = {}
 
@@ -595,7 +596,7 @@ class LLMBus(BaseBus[LLMService]):
         else:
             logger.error(f"Unknown message type: {type(message)}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get bus statistics including service stats"""
         base_stats = super().get_stats()
         base_stats["service_stats"] = self.get_service_stats()

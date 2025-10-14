@@ -1,7 +1,8 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ciris_engine.protocols.services import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.processors.core import ConscienceApplicationResult
@@ -19,7 +20,7 @@ def build_dispatch_context(
     task: Optional[Any] = None,
     app_config: Optional[Any] = None,
     round_number: Optional[int] = None,
-    extra_context: Optional[Dict[str, Any]] = None,
+    extra_context: Optional[JSONDict] = None,
     conscience_result: Optional["ConscienceApplicationResult"] = None,
     action_type: Optional[Any] = None,
 ) -> DispatchContext:
@@ -28,22 +29,17 @@ def build_dispatch_context(
 
     Args:
         thought: The thought object being processed
+        time_service: Time service for timestamps
         task: Optional task associated with the thought
         app_config: Optional app configuration for determining origin service
         round_number: Optional round number for processing
-        extra_context: Optional additional context to merge
+        extra_context: Optional additional runtime context (wa_id, correlation_id, etc.)
         conscience_result: Optional conscience evaluation results
+        action_type: Optional action type override
 
     Returns:
         DispatchContext object with all relevant fields populated
     """
-    # Start with base context data
-    context_data: Dict[str, Any] = {}
-
-    # Extract initial context from thought if available
-    if hasattr(thought, "initial_context") and thought.initial_context:
-        if isinstance(thought.initial_context, dict):
-            context_data.update(thought.initial_context)
 
     # Core identification
     thought_id = getattr(thought, "thought_id", None)

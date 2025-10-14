@@ -8,6 +8,7 @@ from ciris_engine.logic.utils import GraphQLContextProvider
 from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.types import JSONDict
 
 from .batch_context import build_system_snapshot_with_batch as _build_snapshot_unified
 from .channel_resolution import resolve_channel_id_and_context
@@ -134,8 +135,14 @@ class ContextBuilder:
             runtime=self.runtime,
         )
 
-    async def _build_secrets_snapshot(self) -> Dict[str, Any]:
-        """Build secrets information for SystemSnapshot."""
+    async def _build_secrets_snapshot(self) -> JSONDict:
+        """Build secrets information for SystemSnapshot.
+
+        Returns JSON-compatible dict with SystemSnapshot secret fields:
+        - detected_secrets: List[str]
+        - secrets_filter_version: int
+        - total_secrets_stored: int
+        """
         if self.secrets_service is None:
             # Return empty snapshot if no secrets service
             return {"detected_secrets": [], "secrets_filter_version": 0, "total_secrets_stored": 0}

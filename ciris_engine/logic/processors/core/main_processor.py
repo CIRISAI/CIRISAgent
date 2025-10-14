@@ -7,6 +7,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -69,7 +70,7 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Union[Dict[str, Any], ProcessorServices],
+        services: Union[JSONDict, ProcessorServices],
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
@@ -85,7 +86,7 @@ class AgentProcessor:
         self._action_dispatcher = action_dispatcher  # Store internally
 
         # Store services - keep as-is for now to avoid breaking existing code
-        self.services: Union[Dict[str, Any], ProcessorServices] = services
+        self.services: Union[JSONDict, ProcessorServices] = services
         self.startup_channel_id = startup_channel_id
         self.runtime = runtime  # Store runtime reference for preload tasks
         self._time_service = time_service  # Store injected time service
@@ -1422,9 +1423,9 @@ class AgentProcessor:
         """
         return self.state_manager.get_state().value
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current processor status."""
-        status: Dict[str, Any] = {
+        status: JSONDict = {
             "state": self.state_manager.get_state().value,
             "state_duration": self.state_manager.get_state_duration(),
             "round_number": self.current_round_number,
@@ -1567,7 +1568,7 @@ class AgentProcessor:
             logger.error(f"Error checking scheduled dreams: {e}")
             return False
 
-    def _get_detailed_queue_status(self) -> Dict[str, Any]:
+    def _get_detailed_queue_status(self) -> JSONDict:
         """Get detailed processing queue status information."""
         try:
             # Get thought counts by status
@@ -1602,7 +1603,7 @@ class AgentProcessor:
                 recent_thoughts = []
 
             # Get task information
-            task_info: Dict[str, Any] = {}
+            task_info: JSONDict = {}
             try:
                 if hasattr(self, "work_processor") and self.work_processor:
                     task_info = {
@@ -1668,7 +1669,7 @@ class AgentProcessor:
         # Use the centralized persistence function
         return persistence.get_queue_status()
 
-    def _collect_metrics(self) -> Dict[str, Any]:
+    def _collect_metrics(self) -> JSONDict:
         """Collect base metrics for the agent processor."""
         # Calculate uptime - MUST have start time
         if not hasattr(self, "_start_time") or not self._start_time:
@@ -1696,7 +1697,7 @@ class AgentProcessor:
 
         return metrics
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> JSONDict:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()

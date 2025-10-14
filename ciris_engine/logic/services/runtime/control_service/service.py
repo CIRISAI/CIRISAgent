@@ -1374,7 +1374,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             timestamp=self._now(),
         )
 
-    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[JSONDict]:
+    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[Dict[str, Any]]:
         """Find a provider in the service registry."""
         for service_type, providers in registry._services.items():
             for provider in providers:
@@ -1384,11 +1384,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     def _apply_priority_updates(
         self,
-        provider_info: JSONDict,
+        provider_info: Dict[str, Any],
         new_priority_enum: Any,
         new_priority_group: Optional[int],
         new_strategy_enum: Optional[Any],
-    ) -> JSONDict:
+    ) -> Dict[str, Any]:
         """Apply priority and strategy updates to provider."""
         provider = provider_info["provider"]
         providers_list = provider_info["providers_list"]

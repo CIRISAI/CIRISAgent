@@ -32,6 +32,7 @@ from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional, get_list, get_float, get_dict
 
 logger = logging.getLogger(__name__)
 
@@ -143,13 +144,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             status = ConsentStatus(
                 user_id=user_id,
-                stream=ConsentStream(attrs["stream"]),
-                categories=[ConsentCategory(c) for c in attrs["categories"]],
-                granted_at=datetime.fromisoformat(attrs["granted_at"]),
-                expires_at=(datetime.fromisoformat(attrs["expires_at"]) if attrs.get("expires_at") else None),
-                last_modified=datetime.fromisoformat(attrs["last_modified"]),
-                impact_score=attrs.get("impact_score", 0.0),
-                attribution_count=attrs.get("attribution_count", 0),
+                stream=ConsentStream(get_str(attrs, "stream", "temporary")),
+                categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
+                granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
+                expires_at=(datetime.fromisoformat(expires_str) if (expires_str := get_str_optional(attrs, "expires_at")) else None),
+                last_modified=datetime.fromisoformat(get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())),
+                impact_score=get_float(attrs, "impact_score", 0.0),
+                attribution_count=int(get_float(attrs, "attribution_count", 0)),
             )
 
             # Check expiry
@@ -253,12 +254,14 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
 
         # Store pending partnership request
+        # Note: We store non-JSONDict values here (ConsentRequest, datetime)
+        # This is internal state, not persisted JSON, so we use Dict[str, Any]
         if request.user_id not in self._pending_partnerships:
             self._pending_partnerships = {}
         self._pending_partnerships[request.user_id] = {
             "task_id": task.task_id,
-            "request": request,
-            "created_at": now,
+            "request": request.model_dump(mode="json"),  # Store as dict
+            "created_at": now.isoformat(),  # Store as ISO string
         }
 
         logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
@@ -665,15 +668,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                     if node.attributes:
                         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
                         entry = ConsentAuditEntry(
-                            entry_id=attrs.get("entry_id", "unknown"),
+                            entry_id=get_str(attrs, "entry_id", "unknown"),
                             user_id=user_id,
                             timestamp=node.updated_at,
-                            previous_stream=ConsentStream(attrs.get("previous_stream", "temporary")),
-                            new_stream=ConsentStream(attrs.get("new_stream", "temporary")),
-                            previous_categories=[ConsentCategory(c) for c in attrs.get("previous_categories", [])],
-                            new_categories=[ConsentCategory(c) for c in attrs.get("new_categories", [])],
-                            initiated_by=attrs.get("initiated_by", "unknown"),
-                            reason=attrs.get("reason"),
+                            previous_stream=ConsentStream(get_str(attrs, "previous_stream", "temporary")),
+                            new_stream=ConsentStream(get_str(attrs, "new_stream", "temporary")),
+                            previous_categories=[ConsentCategory(c) for c in get_list(attrs, "previous_categories", [])],
+                            new_categories=[ConsentCategory(c) for c in get_list(attrs, "new_categories", [])],
+                            initiated_by=get_str(attrs, "initiated_by", "unknown"),
+                            reason=get_str_optional(attrs, "reason"),
                         )
                         audit_entries.append(entry)
 
@@ -698,7 +701,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return None
 
         pending = self._pending_partnerships[user_id]
-        task_id = pending["task_id"]
+        task_id = get_str(pending, "task_id", "")
 
         # Check task outcome
         from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
@@ -710,14 +713,18 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         if outcome == "accepted":
             # Finalize the partnership
-            request = pending["request"]
+            request_dict = get_dict(pending, "request", {})
             now = self._now()
+
+            # Reconstruct categories from dict
+            categories_data = get_list(request_dict, "categories", [])
+            categories = [ConsentCategory(c) if isinstance(c, str) else ConsentCategory(c.get("value", "interaction")) for c in categories_data]
 
             # Create PARTNERED status
             partnered_status = ConsentStatus(
                 user_id=user_id,
                 stream=ConsentStream.PARTNERED,
-                categories=request.categories,
+                categories=categories,
                 granted_at=now,
                 expires_at=None,  # PARTNERED doesn't expire
                 last_modified=now,
@@ -774,7 +781,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     async def _get_example_contributions(self, user_id: str) -> List[str]:
         """Get example contributions from the graph."""
-        examples = []
+        examples: List[str] = []
 
         if self._memory_bus:
             try:
@@ -792,13 +799,17 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 for node in contribution_nodes[:5]:
                     if node.attributes:
                         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
-                        if "description" in attrs:
-                            examples.append(attrs["description"])
-                        elif "content" in attrs:
-                            examples.append(attrs["content"])
+                        # Use get_str to extract string values safely
+                        description = get_str_optional(attrs, "description")
+                        if description:
+                            examples.append(description)
                         else:
-                            # Fallback to node ID if no meaningful description
-                            examples.append(f"Contribution: {node.id}")
+                            content = get_str_optional(attrs, "content")
+                            if content:
+                                examples.append(content)
+                            else:
+                                # Fallback to node ID if no meaningful description
+                                examples.append(f"Contribution: {node.id}")
 
                 logger.debug(f"Found {len(examples)} example contributions for {user_id}")
             except Exception as e:
@@ -1176,8 +1187,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def _upgrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
         """Tool implementation for upgrading relationship to PARTNERED."""
         try:
-            user_id = parameters.get("user_id")
-            reason = parameters.get("reason", "User requested partnership")
+            user_id = get_str(parameters, "user_id", "")
+            reason = get_str(parameters, "reason", "User requested partnership")
 
             if not user_id:
                 return {"success": False, "error": "user_id is required"}
@@ -1232,9 +1243,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def _degrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
         """Tool implementation for downgrading relationship."""
         try:
-            user_id = parameters.get("user_id")
-            target_stream = parameters.get("target_stream", "TEMPORARY")
-            reason = parameters.get("reason", "User requested downgrade")
+            user_id = get_str(parameters, "user_id", "")
+            target_stream = get_str(parameters, "target_stream", "TEMPORARY")
+            reason = get_str(parameters, "reason", "User requested downgrade")
 
             if not user_id:
                 return {"success": False, "error": "user_id is required"}

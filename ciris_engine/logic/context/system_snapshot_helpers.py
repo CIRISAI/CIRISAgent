@@ -32,6 +32,7 @@ from ciris_engine.schemas.services.graph.attributes import NodeAttributes
 from ciris_engine.schemas.services.graph_core import ConnectedNodeInfo, GraphNode, GraphScope, NodeType, SecretsData
 from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
@@ -74,15 +75,16 @@ def _extract_thought_summary(thought: Any) -> Optional[ThoughtSummary]:
 # =============================================================================
 
 
-def extract_node_attributes(
-    node: Any,
-) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def extract_node_attributes(node: Any) -> JSONDict:
     """Extract attributes dictionary from any GraphNode - standardized and reusable.
 
     This function handles all the different ways GraphNode attributes can be stored
     and provides a consistent interface for accessing them.
 
-    Always returns a dict (never None), returning empty dict for invalid nodes.
+    Always returns a JSON-compatible dict (never None), returning empty dict for invalid nodes.
+
+    Returns:
+        JSONDict: Graph node attributes as JSON-serializable dictionary
     """
     if not node or not hasattr(node, "attributes"):
         return {}
@@ -99,13 +101,18 @@ def extract_node_attributes(
         return {}
 
 
-def collect_memorized_attributes(
-    attrs: Dict[str, Any], known_fields: Set[str]
-) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+def collect_memorized_attributes(attrs: JSONDict, known_fields: Set[str]) -> Dict[str, str]:
     """Collect arbitrary attributes as memorized_attributes - standardized and reusable.
 
     This function extracts all attributes that aren't in the known_fields set
     and converts them to string values for type safety.
+
+    Args:
+        attrs: Node attributes from graph (JSON-compatible dict)
+        known_fields: Set of known field names to exclude
+
+    Returns:
+        Dict mapping attribute names to string values
     """
     import json
 
@@ -124,10 +131,16 @@ def collect_memorized_attributes(
     return memorized_attributes
 
 
-def get_channel_id_from_node(
-    node: Any, attrs: Dict[str, Any]
-) -> str:  # NOQA - Graph node attributes are Dict[str, Any] by design
-    """Extract channel_id from node, with fallback to node.id."""
+def get_channel_id_from_node(node: Any, attrs: JSONDict) -> str:
+    """Extract channel_id from node, with fallback to node.id.
+
+    Args:
+        node: GraphNode object
+        attrs: Node attributes (JSON-compatible dict)
+
+    Returns:
+        Channel ID string
+    """
     return str(attrs.get("channel_id", node.id.split("/")[-1] if "/" in node.id else node.id))
 
 
@@ -245,7 +258,7 @@ def _extract_channel_from_search_results(search_results: List[Any], channel_id: 
 # Legacy function - now uses standardized extract_node_attributes
 def _extract_channel_node_attributes(
     node: Any,
-) -> Optional[Dict[str, Any]]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+) -> Optional[JSONDict]:
     """Extract attributes dictionary from channel GraphNode."""
     return extract_node_attributes(node)
 
@@ -268,8 +281,8 @@ def _get_known_channel_fields() -> Set[str]:
 
 
 def _build_required_channel_fields(
-    attrs: Dict[str, Any], node: Any
-) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
+    attrs: JSONDict, node: Any
+) -> JSONDict:
     """Build required ChannelContext fields with defaults."""
     return {
         "channel_id": get_channel_id_from_node(node, attrs),
@@ -279,8 +292,8 @@ def _build_required_channel_fields(
 
 
 def _build_optional_channel_fields(
-    attrs: Dict[str, Any],
-) -> Dict[str, Any]:  # NOQA - Channel field building requires Dict[str, Any] for flexibility
+    attrs: JSONDict,
+) -> JSONDict:
     """Build optional ChannelContext fields with defaults."""
     return {
         "channel_name": attrs.get("channel_name", None),
@@ -296,8 +309,8 @@ def _build_optional_channel_fields(
 
 # Legacy function - now uses standardized collect_memorized_attributes
 def _collect_memorized_attributes(
-    attrs: Dict[str, Any], known_fields: Set[str]
-) -> Dict[str, str]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+    attrs: JSONDict, known_fields: Set[str]
+) -> Dict[str, str]:
     """Collect arbitrary attributes the agent memorized about this channel."""
     return collect_memorized_attributes(attrs, known_fields)
 
@@ -510,7 +523,7 @@ async def _get_secrets_data(secrets_service: Optional[SecretsService]) -> Secret
         # Get the raw snapshot data
         snapshot_data = await build_secrets_snapshot(
             secrets_service
-        )  # NOQA - build_secrets_snapshot returns Dict[str, Any] for compatibility
+        )
 
         # Check if there was an error
         error_message = snapshot_data.get(ERROR_KEY)
@@ -643,10 +656,10 @@ async def _process_single_service(
 
 
 async def _process_services_group(
-    services_group: Dict[str, Any],
+    services_group: JSONDict,
     prefix: str,
     service_health: Dict[str, bool],
-    circuit_breaker_status: Dict[str, str],  # NOQA - Service registry data is Dict[str, Any] by design
+    circuit_breaker_status: Dict[str, str],
 ) -> None:
     """Process a group of services (handlers or global services)."""
     for service_type, services in services_group.items():
@@ -1060,8 +1073,8 @@ async def _create_default_user_node(
         # Create timestamp for first_seen
         current_time = datetime.now(timezone.utc)
 
-        # Build base attributes - Dict[str, Any] for flexible attribute types
-        base_attributes: Dict[str, Any] = {
+        # Build base attributes as JSON-compatible dict
+        base_attributes: JSONDict = {
             "user_id": user_id,
             "display_name": "Admin" if is_admin else f"User_{user_id}",
             "first_seen": current_time.isoformat(),
@@ -1279,7 +1292,7 @@ def get_known_user_fields() -> Set[str]:
 
 def build_user_profile_from_node(
     user_id: str,
-    attrs: Dict[str, Any],  # NOQA - Node attributes are Dict[str, Any] by design for graph flexibility
+    attrs: JSONDict,
     connected_nodes_info: List[ConnectedNodeInfo],
     last_interaction: Optional[datetime],
     created_at: Optional[datetime],
@@ -1337,7 +1350,7 @@ def build_user_profile_from_node(
 # Legacy function - now uses standardized extract_node_attributes
 def _extract_node_attributes(
     node: GraphNode,
-) -> Dict[str, Any]:  # NOQA - Graph node attributes are Dict[str, Any] by design
+) -> JSONDict:
     """Extract attributes from a graph node, handling both dict and Pydantic models."""
     return extract_node_attributes(node)
 
@@ -1403,7 +1416,7 @@ async def _collect_connected_nodes(memory_service: LocalGraphMemoryService, user
 # Legacy function - now uses standardized build_user_profile_from_node
 def _create_user_profile_from_node(
     user_id: str,
-    attrs: Dict[str, Any],  # NOQA - Node attributes are Dict[str, Any] by design for graph flexibility
+    attrs: JSONDict,
     connected_nodes_info: List[ConnectedNodeInfo],
     last_interaction: Optional[datetime],
     created_at: Optional[datetime],
@@ -1414,7 +1427,7 @@ def _create_user_profile_from_node(
 
 async def _collect_cross_channel_messages(
     user_id: str, channel_id: str
-) -> List[Dict[str, Any]]:  # NOQA - Database query results are Dict[str, Any] by design
+) -> List[JSONDict]:
     """Collect recent messages from this user in other channels."""
     recent_messages = []
     try:

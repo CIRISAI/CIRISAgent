@@ -6,9 +6,10 @@ Provides functions to sanitize data based on user consent stream.
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ciris_engine.schemas.audit.verification import RefutationProof
+from ciris_engine.schemas.types import JSONDict
 
 # Redaction placeholders - constants to avoid duplication
 REDACTED_MENTION = "[mention]"
@@ -19,14 +20,19 @@ REDACTED_URL = "[url]"
 REDACTED_NAME = "[name]"
 
 
-def sanitize_for_anonymous(
-    data: Dict[str, Any], user_id: Optional[str] = None
-) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any data structure
+def sanitize_for_anonymous(data: JSONDict, user_id: Optional[str] = None) -> JSONDict:
     """
     Sanitize data for anonymous users.
 
     Removes PII while preserving necessary audit information.
     Stores content hash for future verification/refutation.
+
+    Args:
+        data: Data to sanitize (JSON-compatible dict)
+        user_id: Optional user ID for context
+
+    Returns:
+        Sanitized data with PII removed/hashed
     """
     sanitized = data.copy()
 
@@ -132,13 +138,18 @@ def should_sanitize_for_user(user_consent_stream: Optional[str]) -> bool:
     return user_consent_stream.lower() in ["anonymous", "expired", "revoked"]
 
 
-def sanitize_correlation_parameters(
-    parameters: Dict[str, Any], consent_stream: Optional[str] = None
-) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any parameter structure
+def sanitize_correlation_parameters(parameters: JSONDict, consent_stream: Optional[str] = None) -> JSONDict:
     """
     Sanitize correlation parameters based on consent.
 
     Used when storing ServiceRequestData parameters.
+
+    Args:
+        parameters: Correlation parameters to sanitize
+        consent_stream: User consent stream status
+
+    Returns:
+        Sanitized parameters if consent requires it, otherwise original
     """
     if not should_sanitize_for_user(consent_stream):
         return parameters
@@ -146,13 +157,18 @@ def sanitize_correlation_parameters(
     return sanitize_for_anonymous(parameters)
 
 
-def sanitize_audit_details(
-    details: Dict[str, Any], consent_stream: Optional[str] = None
-) -> Dict[str, Any]:  # NOQA - Generic privacy sanitizer handles any audit detail structure
+def sanitize_audit_details(details: JSONDict, consent_stream: Optional[str] = None) -> JSONDict:
     """
     Sanitize audit entry details based on consent.
 
     Used when creating audit entries.
+
+    Args:
+        details: Audit entry details to sanitize
+        consent_stream: User consent stream status
+
+    Returns:
+        Sanitized details if consent requires it, otherwise original
     """
     if not should_sanitize_for_user(consent_stream):
         return details

@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict, Union
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_list, get_str
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph.consolidation import TraceSpanData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -122,8 +123,13 @@ class TraceConsolidator:
                         "trace_ids": set(),
                     }
 
-                task_summaries[task_id]["trace_ids"].add(trace_id)
-                task_summaries[task_id]["end_time"] = timestamp
+                # Type narrowing for nested access
+                task_summary_val = task_summaries.get(task_id)
+                if isinstance(task_summary_val, dict):
+                    trace_ids_val = task_summary_val.get("trace_ids")
+                    if isinstance(trace_ids_val, set):
+                        trace_ids_val.add(trace_id)
+                    task_summary_val["end_time"] = timestamp
 
             if thought_id:
                 unique_thoughts.add(thought_id)
@@ -143,23 +149,30 @@ class TraceConsolidator:
                         action_type = str(action_type_val) if action_type_val else "unknown"
                     handler_actions[action_type] += 1
 
-                    if task_id in task_summaries:
-                        task_summaries[task_id]["handlers_selected"].append(action_type)
-                        task_summaries[task_id]["thoughts"].append(
-                            {
-                                "thought_id": thought_id,
-                                "handler": action_type,
-                                "timestamp": timestamp.isoformat() if timestamp else None,
-                            }
-                        )
+                    task_summary_handler = task_summaries.get(task_id)
+                    if isinstance(task_summary_handler, dict):
+                        handlers_sel = task_summary_handler.get("handlers_selected")
+                        if isinstance(handlers_sel, list):
+                            handlers_sel.append(action_type)
+
+                        thoughts_list = task_summary_handler.get("thoughts")
+                        if isinstance(thoughts_list, list):
+                            thoughts_list.append(
+                                {
+                                    "thought_id": thought_id,
+                                    "handler": action_type,
+                                    "timestamp": timestamp.isoformat() if timestamp else None,
+                                }
+                            )
 
             # Track task completion
             if task_id and tags and hasattr(tags, "additional_tags") and tags.additional_tags.get("task_status"):
                 status_val = tags.additional_tags["task_status"]
                 status = str(status_val) if isinstance(status_val, (str, int, float)) else "unknown"
                 tasks_by_status[status] += 1
-                if task_id in task_summaries:
-                    task_summaries[task_id]["status"] = status
+                task_summary_status = task_summaries.get(task_id)
+                if isinstance(task_summary_status, dict):
+                    task_summary_status["status"] = status
 
             # Component tracking
             component_calls[component_type] += 1
@@ -209,14 +222,22 @@ class TraceConsolidator:
 
         # Calculate task processing times
         task_processing_times = []
-        for task_id, summary in task_summaries.items():
-            if summary["start_time"] and summary["end_time"]:
-                duration_ms = (summary["end_time"] - summary["start_time"]).total_seconds() * 1000
+        for task_id, summary_val in task_summaries.items():
+            if not isinstance(summary_val, dict):
+                continue
+            summary = summary_val
+
+            start_time = summary.get("start_time")
+            end_time = summary.get("end_time")
+            if isinstance(start_time, datetime) and isinstance(end_time, datetime):
+                duration_ms = (end_time - start_time).total_seconds() * 1000
                 task_processing_times.append(duration_ms)
                 summary["duration_ms"] = duration_ms
 
             # Convert sets to lists for JSON serialization
-            summary["trace_ids"] = list(summary["trace_ids"])
+            trace_ids = summary.get("trace_ids")
+            if isinstance(trace_ids, set):
+                summary["trace_ids"] = list(trace_ids)
 
         # Calculate task time percentiles
         avg_task_time = 0.0
@@ -232,7 +253,11 @@ class TraceConsolidator:
             p99_task_time = sorted_times[int(len(sorted_times) * 0.99)]
 
         # Calculate trace depth metrics
-        trace_depths = [len(s.get("thoughts", [])) for s in task_summaries.values()]
+        trace_depths = []
+        for s in task_summaries.values():
+            if isinstance(s, dict):
+                thoughts = get_list(s, "thoughts", [])
+                trace_depths.append(len(thoughts))
         max_trace_depth = max(trace_depths) if trace_depths else 0
         avg_trace_depth = sum(trace_depths) / len(trace_depths) if trace_depths else 0.0
 
@@ -308,7 +333,7 @@ class TraceConsolidator:
         - Tasks with high latency
         - Components with errors
         """
-        edges = []
+        edges: List[Tuple[GraphNode, GraphNode, str, JSONDict]] = []
 
         # Find unique tasks
         tasks_with_errors = set()
@@ -328,23 +353,11 @@ class TraceConsolidator:
 
         # Create edges to problematic tasks (limit to 10 each)
         for i, task_id in enumerate(list(tasks_with_errors)[:10]):
-            edges.append(
-                (
-                    summary_node,
-                    summary_node,  # Self-reference with task data
-                    "ERROR_TASK",
-                    {"task_id": task_id, "error_type": "trace_error"},
-                )
-            )
+            edge_attrs: JSONDict = {"task_id": task_id, "error_type": "trace_error"}
+            edges.append((summary_node, summary_node, "ERROR_TASK", edge_attrs))
 
         for i, task_id in enumerate(list(high_latency_tasks)[:10]):
-            edges.append(
-                (
-                    summary_node,
-                    summary_node,  # Self-reference with task data
-                    "HIGH_LATENCY_TASK",
-                    {"task_id": task_id, "latency_category": "high"},
-                )
-            )
+            edge_attrs_latency: JSONDict = {"task_id": task_id, "latency_category": "high"}
+            edges.append((summary_node, summary_node, "HIGH_LATENCY_TASK", edge_attrs_latency))
 
         return edges

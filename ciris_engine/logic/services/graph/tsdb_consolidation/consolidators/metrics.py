@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph.consolidation import MetricCorrelationData
@@ -60,20 +61,20 @@ class MetricsConsolidator:
             attrs = node.attributes
             if isinstance(attrs, dict):
                 metric_data = {
-                    "metric_name": attrs.get("metric_name", "unknown"),
-                    "value": float(attrs.get("value", 0)),
+                    "metric_name": get_str(attrs, "metric_name", "unknown"),
+                    "value": get_float(attrs, "value", 0.0),
                     "timestamp": attrs.get("timestamp"),
-                    "tags": attrs.get("tags", {}),
+                    "tags": get_dict(attrs, "tags", {}),
                     "source": "graph_node",
                 }
             else:
                 # Handle GraphNodeAttributes
                 attrs_dict = attrs.model_dump() if hasattr(attrs, "model_dump") else {}
                 metric_data = {
-                    "metric_name": attrs_dict.get("metric_name", "unknown"),
-                    "value": float(attrs_dict.get("value", 0)),
+                    "metric_name": get_str(attrs_dict, "metric_name", "unknown"),
+                    "value": get_float(attrs_dict, "value", 0.0),
                     "timestamp": attrs_dict.get("timestamp"),
-                    "tags": attrs_dict.get("tags", {}),
+                    "tags": get_dict(attrs_dict, "tags", {}),
                     "source": "graph_node",
                 }
             all_metrics.append(metric_data)
@@ -105,8 +106,15 @@ class MetricsConsolidator:
         total_operations = 0
 
         for metric in all_metrics:
-            metric_name = metric["metric_name"]
-            value = metric["value"]
+            # Type narrowing with isinstance checks
+            metric_name_val = metric.get("metric_name")
+            metric_name = str(metric_name_val) if isinstance(metric_name_val, str) else "unknown"
+
+            value_val = metric.get("value")
+            if isinstance(value_val, (int, float)):
+                value = float(value_val)
+            else:
+                value = 0.0
 
             # Collect values by metric name
             metrics_by_name[metric_name].append(value)
@@ -212,22 +220,19 @@ class MetricsConsolidator:
         - Error-generating nodes
         - Anomalous metric patterns
         """
-        edges = []
+        edges: List[Tuple[GraphNode, GraphNode, str, JSONDict]] = []
 
         # Link to high-cost metrics
         for node in tsdb_nodes:
             attrs = node.attributes
             if isinstance(attrs, dict):
-                cost = attrs.get("cost_cents", 0)
+                cost = get_float(attrs, "cost_cents", 0.0)
                 if cost > 1.0:  # Metrics costing more than 1 cent
-                    edges.append(
-                        (
-                            summary_node,
-                            node,
-                            "HIGH_COST_METRIC",
-                            {"cost_cents": str(cost), "metric_name": attrs.get("metric_name", "unknown")},
-                        )
-                    )
+                    edge_attrs: JSONDict = {
+                        "cost_cents": str(cost),
+                        "metric_name": get_str(attrs, "metric_name", "unknown"),
+                    }
+                    edges.append((summary_node, node, "HIGH_COST_METRIC", edge_attrs))
 
         # Link to error metrics from correlations
         error_count = 0
@@ -236,17 +241,11 @@ class MetricsConsolidator:
                 error_count += 1
                 if error_count <= 10:  # Limit to first 10 errors
                     # Create a reference edge using correlation ID
-                    edges.append(
-                        (
-                            summary_node,
-                            summary_node,  # Self-reference with correlation data
-                            "ERROR_METRIC",
-                            {
-                                "correlation_id": corr.correlation_id,
-                                "error_type": corr.tags.get("error_type", "unknown"),
-                                "component": corr.tags.get("component_id", "unknown"),
-                            },
-                        )
-                    )
+                    edge_attrs_error: JSONDict = {
+                        "correlation_id": corr.correlation_id,
+                        "error_type": corr.tags.get("error_type", "unknown"),
+                        "component": corr.tags.get("component_id", "unknown"),
+                    }
+                    edges.append((summary_node, summary_node, "ERROR_METRIC", edge_attrs_error))
 
         return edges

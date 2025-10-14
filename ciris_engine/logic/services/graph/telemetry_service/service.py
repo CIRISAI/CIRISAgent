@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_dict, get_float, get_int, get_bool
 
 # Optional import for psutil
 try:
@@ -272,17 +273,17 @@ class TelemetryAggregator:
 
         # Dispatch table for known provider patterns
         if "APICommunication" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_api_{suffix}"
 
         if "CLIAdapter" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "@") if "@" in adapter_id else _get_instance_id()
             return f"{service_type}_cli_{suffix}"
 
         if "DiscordAdapter" in provider_name or "Discord" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_discord_{suffix}"
 
@@ -651,16 +652,16 @@ class TelemetryAggregator:
         """Convert dict metrics to ServiceTelemetryData with proper uptime detection."""
         # Look for various uptime keys
         uptime = (
-            metrics.get("uptime_seconds")
-            or metrics.get("incident_uptime_seconds")
-            or metrics.get("tsdb_uptime_seconds")
-            or metrics.get("auth_uptime_seconds")
-            or metrics.get("scheduler_uptime_seconds")
+            get_float(metrics, "uptime_seconds", 0.0)
+            or get_float(metrics, "incident_uptime_seconds", 0.0)
+            or get_float(metrics, "tsdb_uptime_seconds", 0.0)
+            or get_float(metrics, "auth_uptime_seconds", 0.0)
+            or get_float(metrics, "scheduler_uptime_seconds", 0.0)
             or 0.0
         )
 
         # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
-        healthy = metrics.get("healthy", uptime > 0)
+        healthy = get_bool(metrics, "healthy", uptime > 0.0)
 
         logger.debug(
             f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}"
@@ -966,10 +967,11 @@ class TelemetryAggregator:
                 custom_metrics["start_time"] = adapter_info.started_at.isoformat()
 
         # Update with custom_metrics from metrics, filtering out None values
-        raw_custom_metrics = metrics.get("custom_metrics", {})
-        custom_metrics.update(
-            {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
-        )
+        raw_custom_metrics = get_dict(metrics, "custom_metrics", {})
+        if isinstance(raw_custom_metrics, dict):
+            custom_metrics.update(
+                {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
+            )
 
         # Final filter to ensure all values are valid types (int, float, str) and not None
         filtered_custom_metrics = {

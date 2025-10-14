@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import discord
 from discord.errors import Forbidden, NotFound
@@ -245,7 +246,7 @@ class DiscordChannelManager:
         self.client = client
         # Event handling is now done by CIRISDiscordClient
 
-    def get_client_info(self) -> Dict[str, Any]:
+    def get_client_info(self) -> JSONDict:
         """Get information about the Discord client.
 
         Returns:
@@ -265,7 +266,7 @@ class DiscordChannelManager:
             logger.exception(f"Error getting client info: {e}")
             return {"status": "error", "error": str(e)}
 
-    async def get_channel_info(self, channel_id: str) -> Dict[str, Any]:
+    async def get_channel_info(self, channel_id: str) -> JSONDict:
         """Get information about a Discord channel.
 
         Args:
@@ -300,7 +301,7 @@ class DiscordChannelManager:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
             return {"exists": True, "accessible": False, "error": str(e)}
 
-    async def _sanitize_message_parameters(self, params: Dict[str, Any], author_id: str) -> Dict[str, Any]:
+    async def _sanitize_message_parameters(self, params: JSONDict, author_id: str) -> JSONDict:
         """
         Sanitize message parameters based on user consent.
 

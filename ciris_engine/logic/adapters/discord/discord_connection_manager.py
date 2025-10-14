@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
+from ciris_engine.schemas.types import JSONDict
 
 import discord
 
@@ -231,7 +232,7 @@ class DiscordConnectionManager:
         logger.debug("DiscordConnectionManager.is_connected: client is None, returning False")
         return False
 
-    def get_connection_info(self) -> Dict[str, Any]:
+    def get_connection_info(self) -> JSONDict:
         """Get current connection information.
 
         Returns:

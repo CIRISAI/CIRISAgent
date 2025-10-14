@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_bool, get_dict
 
 from ciris_engine.logic.adapters import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus
@@ -107,11 +108,15 @@ class DreamProcessor(BaseProcessor):
         if service_registry:
             self._initialize_time_service(service_registry)
         elif services and "time_service" in services:
-            self._time_service = services["time_service"]
+            time_service_val = services["time_service"]
+            if hasattr(time_service_val, "now"):
+                self._time_service = time_service_val  # type: ignore[assignment]
 
         # Dream-specific initialization
-        self.service_registry = service_registry or services.get("service_registry")
-        self.identity_manager = identity_manager or services.get("identity_manager")
+        service_registry_val = services.get("service_registry") if services else None
+        identity_manager_val = services.get("identity_manager") if services else None
+        self.service_registry = service_registry or service_registry_val
+        self.identity_manager = identity_manager or identity_manager_val
         self.startup_channel_id = startup_channel_id
         self.cirisnode_url = cirisnode_url
         self.pulse_interval = pulse_interval
@@ -353,10 +358,11 @@ class DreamProcessor(BaseProcessor):
             self.telemetry_service._set_service_registry(self.service_registry)
 
             # Initialize identity baseline if needed
-            if self.identity_manager and self.identity_manager.agent_identity:
+            if self.identity_manager and hasattr(self.identity_manager, "agent_identity"):
                 # Use the existing identity directly
                 identity = self.identity_manager.agent_identity
-                await self.self_observation_service.initialize_baseline(identity)
+                if identity:
+                    await self.self_observation_service.initialize_baseline(identity)
 
             logger.info("Dream processor services initialized")
             return True
@@ -404,7 +410,8 @@ class DreamProcessor(BaseProcessor):
         )
 
         self.dream_metrics["start_time"] = current_time.isoformat()
-        self.dream_metrics["total_dreams"] += 1
+        total_dreams = get_int(self.dream_metrics, "total_dreams", 0)
+        self.dream_metrics["total_dreams"] = total_dreams + 1
 
         # Announce dream entry
         await self._announce_dream_entry(duration)
@@ -588,16 +595,12 @@ class DreamProcessor(BaseProcessor):
 
                 # Update session metrics
                 if self.current_session:
-                    memories = metrics.get("memories_consolidated", 0)
-                    patterns = metrics.get("patterns_analyzed", 0)
-                    adaptations = metrics.get("adaptations_made", 0)
-                    self.current_session.memories_consolidated += (
-                        int(memories) if isinstance(memories, (int, float)) else 0
-                    )
-                    self.current_session.patterns_analyzed += int(patterns) if isinstance(patterns, (int, float)) else 0
-                    self.current_session.adaptations_made += (
-                        int(adaptations) if isinstance(adaptations, (int, float)) else 0
-                    )
+                    memories = get_int(metrics, "memories_consolidated", 0)
+                    patterns = get_int(metrics, "patterns_analyzed", 0)
+                    adaptations = get_int(metrics, "adaptations_made", 0)
+                    self.current_session.memories_consolidated += memories
+                    self.current_session.patterns_analyzed += patterns
+                    self.current_session.adaptations_made += adaptations
 
                 # Log round completion
                 if self._time_service:
@@ -737,10 +740,14 @@ class DreamProcessor(BaseProcessor):
             questions = []
             for thought in thoughts[-100:]:  # Last 100 thoughts
                 attrs = thought.attributes if hasattr(thought, "attributes") else {}
-                if isinstance(attrs, dict) and attrs.get("action") == HandlerActionType.PONDER.value:
-                    ponder_data = attrs.get("ponder_data", {})
-                    if "questions" in ponder_data:
-                        questions.extend(ponder_data["questions"])
+                if isinstance(attrs, dict):
+                    action_val = get_str(attrs, "action", "")
+                    if action_val == HandlerActionType.PONDER.value:
+                        ponder_data = get_dict(attrs, "ponder_data", {})
+                        if "questions" in ponder_data:
+                            questions_val = ponder_data.get("questions")
+                            if isinstance(questions_val, list):
+                                questions.extend(questions_val)
 
             return questions
 
@@ -880,10 +887,13 @@ class DreamProcessor(BaseProcessor):
 
             # Log summary
             details = incident_insight.details
+            incident_count = get_int(details, "incident_count", 0)
+            pattern_count = get_int(details, "pattern_count", 0)
+            problem_count = get_int(details, "problem_count", 0)
             logger.info(
-                f"Processed {details.get('incident_count', 0)} incidents, "
-                f"found {details.get('pattern_count', 0)} patterns, "
-                f"identified {details.get('problem_count', 0)} problems"
+                f"Processed {incident_count} incidents, "
+                f"found {pattern_count} patterns, "
+                f"identified {problem_count} problems"
             )
 
         except Exception as e:
@@ -927,23 +937,25 @@ class DreamProcessor(BaseProcessor):
             insight_nodes = []
             for node in all_concept_nodes:
                 attrs = node.attributes if hasattr(node, "attributes") else {}
-                if isinstance(attrs, dict) and attrs.get("insight_type") == "behavioral_pattern":
-                    # Check if within time window
-                    detected_at = attrs.get("detected_at")
-                    if detected_at:
-                        try:
-                            node_time = datetime.fromisoformat(detected_at)
-                            if node_time >= window_start:
+                if isinstance(attrs, dict):
+                    insight_type = get_str(attrs, "insight_type", "")
+                    if insight_type == "behavioral_pattern":
+                        # Check if within time window
+                        detected_at = get_str(attrs, "detected_at", "")
+                        if detected_at:
+                            try:
+                                node_time = datetime.fromisoformat(detected_at)
+                                if node_time >= window_start:
+                                    insight_nodes.append(node)
+                            except (ValueError, TypeError) as e:
+                                # If can't parse time, include it anyway
+                                logger.warning(
+                                    f"Failed to parse insight detection timestamp '{detected_at}': {e}. Including insight regardless of time."
+                                )
                                 insight_nodes.append(node)
-                        except (ValueError, TypeError) as e:
-                            # If can't parse time, include it anyway
-                            logger.warning(
-                                f"Failed to parse insight detection timestamp '{detected_at}': {e}. Including insight regardless of time."
-                            )
+                        else:
+                            # No timestamp, include it
                             insight_nodes.append(node)
-                    else:
-                        # No timestamp, include it
-                        insight_nodes.append(node)
 
             logger.info(f"Found {len(insight_nodes)} behavioral pattern insights")
 
@@ -953,8 +965,8 @@ class DreamProcessor(BaseProcessor):
 
                 if isinstance(attrs, dict):
                     # Extract key information
-                    pattern_type = attrs.get("pattern_type", "unknown")
-                    description = attrs.get("description", "")
+                    pattern_type = get_str(attrs, "pattern_type", "unknown")
+                    description = get_str(attrs, "description", "")
 
                     # Process all insights
                     insight_str = f"Pattern ({pattern_type}): {description}"
@@ -964,7 +976,8 @@ class DreamProcessor(BaseProcessor):
                     logger.debug(f"Processing insight: {pattern_type} - {description}")
 
                     # Check if this is an actionable insight
-                    if attrs.get("actionable", False):
+                    actionable = get_bool(attrs, "actionable", False)
+                    if actionable:
                         # The agent can decide to act on this during future work planning
                         insights.append(f"Action Opportunity: {description}")
 
@@ -1048,11 +1061,11 @@ class DreamProcessor(BaseProcessor):
         if not self.cirisnode_client:
             return
 
-        agent_id = (
-            self.identity_manager.agent_identity.agent_id
-            if self.identity_manager and self.identity_manager.agent_identity
-            else "ciris"
-        )
+        agent_id = "ciris"
+        if self.identity_manager and hasattr(self.identity_manager, "agent_identity"):
+            agent_identity = self.identity_manager.agent_identity
+            if agent_identity and hasattr(agent_identity, "agent_id"):
+                agent_id = agent_identity.agent_id
         model_id = "unknown"
 
         if hasattr(self.config, "llm_services") and hasattr(self.config.llm_services, "openai"):
@@ -1069,7 +1082,8 @@ class DreamProcessor(BaseProcessor):
         if self.current_session:
             self.current_session.insights_gained.append(f"Benchmark reflection: {topic} (score: {score})")
 
-        self.dream_metrics["benchmarks_run"] += 1
+        benchmarks_run = get_int(self.dream_metrics, "benchmarks_run", 0)
+        self.dream_metrics["benchmarks_run"] = benchmarks_run + 1
 
     async def _record_dream_session(self) -> None:
         """Record the dream session in memory."""
@@ -1146,14 +1160,15 @@ class DreamProcessor(BaseProcessor):
 
             for vibe in vibes:
                 attrs = vibe.attributes if hasattr(vibe, "attributes") else {}
-                if isinstance(attrs, dict) and attrs.get("timestamp"):
-                    # Handle both 'Z' and '+00:00' formats
-                    vibe_str = attrs["timestamp"]
-                    if vibe_str.endswith("Z"):
-                        vibe_str = vibe_str[:-1] + "+00:00"
-                    vibe_time = datetime.fromisoformat(vibe_str)
-                    if vibe_time > recent_cutoff:
-                        recent_vibes.append(vibe)
+                if isinstance(attrs, dict):
+                    vibe_str = get_str(attrs, "timestamp", "")
+                    if vibe_str:
+                        # Handle both 'Z' and '+00:00' formats
+                        if vibe_str.endswith("Z"):
+                            vibe_str = vibe_str[:-1] + "+00:00"
+                        vibe_time = datetime.fromisoformat(vibe_str)
+                        if vibe_time > recent_cutoff:
+                            recent_vibes.append(vibe)
 
             if not recent_vibes:
                 return None
@@ -1311,8 +1326,9 @@ class DreamProcessor(BaseProcessor):
             return False
 
         # Check if we're due for a dream (every 6 hours)
-        if self.dream_metrics.get("end_time") and self._time_service:
-            last_dream = datetime.fromisoformat(self.dream_metrics["end_time"])
+        end_time_str = get_str(self.dream_metrics, "end_time", "")
+        if end_time_str and self._time_service:
+            last_dream = datetime.fromisoformat(end_time_str)
             hours_since = (self._time_service.now() - last_dream).total_seconds() / 3600
 
             if hours_since >= 6:

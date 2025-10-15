@@ -218,7 +218,11 @@ class ThoughtProcessor(
 
         # Phase 4: Finalize action
         # conscience_result is already a ConscienceApplicationResult object, not a dict
-        conscience_result = action_result_dict.get("conscience_result")
+        conscience_result_raw = action_result_dict.get("conscience_result")
+        # Type assertion: we know this is ConscienceApplicationResult from _perform_action_selection_phase
+        conscience_result: Optional[ConscienceApplicationResult] = (
+            conscience_result_raw if isinstance(conscience_result_raw, ConscienceApplicationResult) else None
+        )
         action_from_conscience = self._handle_special_cases(conscience_result)
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 

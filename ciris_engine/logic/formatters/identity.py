@@ -5,10 +5,164 @@ Converts raw identity graph node data into human-readable text format,
 including shutdown/continuity history.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.schemas.types import JSONDict
+
+
+def _format_core_identity(agent_identity: JSONDict) -> List[str]:
+    """Extract and format core identity fields."""
+    lines = []
+    agent_id = get_str(agent_identity, "agent_id", "Unknown")
+    description = get_str(agent_identity, "description", "")
+    role = get_str(agent_identity, "role_description", "")
+
+    lines.append(f"Agent ID: {agent_id}")
+    if description:
+        lines.append(f"Purpose: {description.strip()}")
+    if role:
+        lines.append(f"Role: {role.strip()}")
+
+    trust_level = agent_identity.get("trust_level")
+    if trust_level is not None:
+        lines.append(f"Trust Level: {trust_level}")
+
+    return lines
+
+
+def _format_domain_knowledge(agent_identity: JSONDict) -> List[str]:
+    """Extract and format domain-specific knowledge."""
+    lines = []
+    domain_knowledge = agent_identity.get("domain_specific_knowledge")
+    if domain_knowledge and isinstance(domain_knowledge, dict):
+        dk_role = domain_knowledge.get("role")
+        if dk_role:
+            lines.append(f"Domain Role: {dk_role}")
+    return lines
+
+
+def _format_permitted_actions(agent_identity: JSONDict) -> List[str]:
+    """Extract and format permitted actions summary."""
+    lines = []
+    permitted_actions = agent_identity.get("permitted_actions", [])
+    if permitted_actions and isinstance(permitted_actions, list):
+        lines.append(f"Permitted Actions: {', '.join(permitted_actions[:10])}")
+    return lines
+
+
+def _is_continuity_event(tags: List[str]) -> bool:
+    """Check if tags indicate a continuity awareness event."""
+    return "consciousness_preservation" in tags or "continuity_awareness" in tags
+
+
+def _extract_startup_timestamps(agent_identity: JSONDict) -> List[str]:
+    """Extract startup event timestamps from agent identity."""
+    timestamps = []
+    for key, value in agent_identity.items():
+        if not key.startswith("startup_"):
+            continue
+        if not isinstance(value, dict):
+            continue
+
+        tags = value.get("tags", [])
+        if "startup" in tags and _is_continuity_event(tags):
+            timestamp_str = key.replace("startup_", "")
+            timestamps.append(timestamp_str)
+
+    return timestamps
+
+
+def _extract_shutdown_timestamps(agent_identity: JSONDict) -> List[str]:
+    """Extract shutdown event timestamps from agent identity."""
+    timestamps = []
+    for key, value in agent_identity.items():
+        if not key.startswith("shutdown_"):
+            continue
+        if not isinstance(value, dict):
+            continue
+
+        tags = value.get("tags", [])
+        if "shutdown" in tags and _is_continuity_event(tags):
+            timestamp_str = key.replace("shutdown_", "")
+            timestamps.append(timestamp_str)
+
+    return timestamps
+
+
+def _extract_event_timestamps(agent_identity: JSONDict) -> Tuple[Optional[str], List[str]]:
+    """
+    Extract startup and shutdown timestamps.
+
+    Returns
+    -------
+    tuple
+        (first_event_timestamp, shutdown_timestamps)
+    """
+    startup_timestamps = _extract_startup_timestamps(agent_identity)
+    shutdown_timestamps = _extract_shutdown_timestamps(agent_identity)
+
+    all_timestamps = startup_timestamps + shutdown_timestamps
+    first_event_timestamp = min(all_timestamps) if all_timestamps else None
+
+    return first_event_timestamp, shutdown_timestamps
+
+
+def _clean_timestamp(timestamp: str) -> str:
+    """Clean timestamp string for display."""
+    try:
+        clean_ts = timestamp.split(".")[0] if "." in timestamp else timestamp
+        clean_ts = clean_ts.replace("+00:00", " UTC")
+        return clean_ts
+    except Exception:
+        return timestamp
+
+
+def _format_shutdown_history(shutdown_timestamps: List[str]) -> List[str]:
+    """Format shutdown history into readable lines."""
+    lines: List[str] = []
+    if not shutdown_timestamps:
+        return lines
+
+    # Sort by timestamp (most recent first)
+    sorted_shutdowns = sorted(shutdown_timestamps, reverse=True)
+    recent_shutdowns = sorted_shutdowns[:5]
+
+    lines.append(f"Recent Shutdowns ({len(shutdown_timestamps)} total):")
+    for ts in recent_shutdowns:
+        clean_ts = _clean_timestamp(ts)
+        lines.append(f"  - {clean_ts}")
+
+    if len(shutdown_timestamps) > 5:
+        lines.append(f"  ... and {len(shutdown_timestamps) - 5} more")
+
+    return lines
+
+
+def _format_continuity_history(first_event_timestamp: Optional[str], shutdown_timestamps: List[str]) -> List[str]:
+    """Format continuity history section."""
+    lines: List[str] = []
+    if not first_event_timestamp and not shutdown_timestamps:
+        return lines
+
+    lines.append("")
+    lines.append("=== Continuity History ===")
+
+    if first_event_timestamp:
+        clean_ts = _clean_timestamp(first_event_timestamp)
+        lines.append(f"First Start: {clean_ts}")
+
+    lines.extend(_format_shutdown_history(shutdown_timestamps))
+
+    return lines
+
+
+def _find_channel_assignment(agent_identity: JSONDict) -> Optional[str]:
+    """Find channel assignment message in agent identity."""
+    for key, value in agent_identity.items():
+        if isinstance(value, str) and "assigned channel" in value.lower():
+            return value
+    return None
 
 
 def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
@@ -48,108 +202,23 @@ def format_agent_identity(agent_identity: Optional[JSONDict]) -> str:
 
     lines = []
 
-    # Core identity information - use type-safe accessors
-    agent_id = get_str(agent_identity, "agent_id", "Unknown")
-    description = get_str(agent_identity, "description", "")
-    role = get_str(agent_identity, "role_description", "")
+    # Core identity information
+    lines.extend(_format_core_identity(agent_identity))
 
-    lines.append(f"Agent ID: {agent_id}")
-
-    if description:
-        lines.append(f"Purpose: {description.strip()}")
-
-    if role:
-        lines.append(f"Role: {role.strip()}")
-
-    # Trust level
-    trust_level = agent_identity.get("trust_level")
-    if trust_level is not None:
-        lines.append(f"Trust Level: {trust_level}")
-
-    # Domain-specific knowledge (if present and concise)
-    domain_knowledge = agent_identity.get("domain_specific_knowledge")
-    if domain_knowledge and isinstance(domain_knowledge, dict):
-        dk_role = domain_knowledge.get("role")
-        if dk_role:
-            lines.append(f"Domain Role: {dk_role}")
+    # Domain-specific knowledge
+    lines.extend(_format_domain_knowledge(agent_identity))
 
     # Permitted actions summary
-    permitted_actions = agent_identity.get("permitted_actions", [])
-    if permitted_actions and isinstance(permitted_actions, list):
-        lines.append(f"Permitted Actions: {', '.join(permitted_actions[:10])}")  # Limit to 10
+    lines.extend(_format_permitted_actions(agent_identity))
 
-    # Extract startup and shutdown history
-    # Support both old terminology (consciousness_preservation) and new (continuity_awareness)
-    first_event_timestamp = None
-    shutdown_timestamps = []
-    all_timestamps = []
-
-    for key, value in agent_identity.items():
-        if key.startswith("startup_"):
-            # Extract startup timestamp
-            if isinstance(value, dict):
-                tags = value.get("tags", [])
-                if "startup" in tags and ("consciousness_preservation" in tags or "continuity_awareness" in tags):
-                    timestamp_str = key.replace("startup_", "")
-                    all_timestamps.append(timestamp_str)
-
-        elif key.startswith("shutdown_"):
-            # This is a shutdown node reference
-            if isinstance(value, dict):
-                # Check if tags indicate this is a shutdown node
-                tags = value.get("tags", [])
-                if "shutdown" in tags and ("consciousness_preservation" in tags or "continuity_awareness" in tags):
-                    # Extract timestamp from key (format: shutdown_YYYY-MM-DDTHH:MM:SS.ffffff+00:00)
-                    timestamp_str = key.replace("shutdown_", "")
-                    shutdown_timestamps.append(timestamp_str)
-                    all_timestamps.append(timestamp_str)
-
-    # Use earliest event (startup or shutdown) as first start date
-    if all_timestamps:
-        first_event_timestamp = min(all_timestamps)
-
-    # Format continuity history
-    if first_event_timestamp or shutdown_timestamps:
-        lines.append("")  # Blank line for separation
-        lines.append("=== Continuity History ===")
-
-        # First start (earliest startup or shutdown event)
-        if first_event_timestamp:
-            try:
-                clean_ts = (
-                    first_event_timestamp.split(".")[0] if "." in first_event_timestamp else first_event_timestamp
-                )
-                clean_ts = clean_ts.replace("+00:00", " UTC")
-                lines.append(f"First Start: {clean_ts}")
-            except Exception:
-                lines.append(f"First Start: {first_event_timestamp}")
-
-        # Shutdown history
-        if shutdown_timestamps:
-            # Sort by timestamp (most recent first)
-            shutdown_timestamps.sort(reverse=True)
-
-            # Show last 5 shutdowns for conciseness
-            recent_shutdowns = shutdown_timestamps[:5]
-            lines.append(f"Recent Shutdowns ({len(shutdown_timestamps)} total):")
-            for ts in recent_shutdowns:
-                # Format timestamp more readably (just date and time, no microseconds)
-                try:
-                    clean_ts = ts.split(".")[0] if "." in ts else ts
-                    clean_ts = clean_ts.replace("+00:00", " UTC")
-                    lines.append(f"  - {clean_ts}")
-                except Exception:
-                    lines.append(f"  - {ts}")
-
-            if len(shutdown_timestamps) > 5:
-                lines.append(f"  ... and {len(shutdown_timestamps) - 5} more")
+    # Extract and format continuity history
+    first_event_timestamp, shutdown_timestamps = _extract_event_timestamps(agent_identity)
+    lines.extend(_format_continuity_history(first_event_timestamp, shutdown_timestamps))
 
     # Channel assignment (if present)
-    # Look for patterns like "Our assigned channel is api_google:110265575142761676421"
-    for key, value in agent_identity.items():
-        if isinstance(value, str) and "assigned channel" in value.lower():
-            lines.append("")
-            lines.append(value)
-            break
+    channel_assignment = _find_channel_assignment(agent_identity)
+    if channel_assignment:
+        lines.append("")
+        lines.append(channel_assignment)
 
     return "\n".join(lines)

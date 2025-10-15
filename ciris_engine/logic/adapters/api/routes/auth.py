@@ -771,7 +771,11 @@ def _build_redirect_response(
         # Backward compatibility: relative path
         gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
         redirect_url = f"{gui_callback_url}?{query_string}"
-        logger.warning(f"No redirect_uri or OAUTH_FRONTEND_URL configured, using relative path: {redirect_url}")
+        # Do NOT log the full redirect_url with sensitive credentials (access_token, api_key)
+        logger.warning(
+            f"No redirect_uri or OAUTH_FRONTEND_URL configured, using relative path: {gui_callback_url} "
+            "(query params redacted for security)"
+        )
 
     return RedirectResponse(url=redirect_url, status_code=302)
 

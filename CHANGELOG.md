@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Created comprehensive documentation: `docs/OAUTH_REDIRECT_CONFIGURATION.md`
 
 ### Fixed
+- **🔗 OAuth Redirect Query Parameter Preservation**: Fixed redirect_uri stripping existing query params
+  - **Root Cause**: `_build_redirect_response` was using `.split("?")[0]` to strip all query params from redirect_uri
+  - **Impact**: Frontend routing parameters like `?next=/dashboard` or `?return_to=/profile` were being lost
+  - **Solution**: Parse existing query params with urllib.parse, merge with server params (server params override on conflict)
+  - **Security**: Server-generated params (access_token, role, etc.) take precedence if there's a naming conflict
+  - **Testing**: Added comprehensive test validating preservation of multiple frontend params alongside server params
+  - Located at `auth.py:752-763`
 - **🐛 OAuth Callback Tests**: Fixed 3 failing tests not updated for new `request` parameter
   - Updated `test_oauth_callback_with_redirect_uri_in_state` to pass mock request
   - Updated `test_oauth_callback_without_redirect_uri_in_state` to pass mock request
@@ -34,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated billing integration to convert `marketing_opt_in` boolean to string
 
 ### Testing
-- **✅ Comprehensive Test Coverage**: 100% coverage of new billing integration code
+- **✅ Comprehensive Test Coverage**: 100% coverage of new features
   - Added 7 new tests in `test_auth_routes_coverage.py::TestBillingIntegration`:
     - `test_trigger_billing_credit_check_enabled_success` - Successful billing check
     - `test_trigger_billing_credit_check_no_resource_monitor` - Graceful no-op when billing disabled
@@ -43,8 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `test_trigger_billing_credit_check_simple_provider` - SimpleCreditProvider compatibility
     - `test_trigger_billing_credit_check_no_email` - Edge case handling
     - `test_oauth_callback_with_billing_integration` - End-to-end integration test
-  - All 10 OAuth tests passing (7 billing + 3 redirect URI)
-  - Full test suite: 5185 passed, 117 skipped
+  - Added 1 new test in `test_auth_routes_coverage.py::TestOAuthRedirectURI`:
+    - `test_oauth_callback_preserves_redirect_uri_query_params` - Validates query param merging
+  - All 10 OAuth redirect tests passing (9 existing + 1 new)
+  - All 7 billing integration tests passing
+  - Full test suite: 5186 passed, 117 skipped
 
 ## [1.3.4] - 2025-10-14
 

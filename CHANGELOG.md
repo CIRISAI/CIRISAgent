@@ -5,6 +5,47 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2025-10-15
+
+### Added
+- **💳 OAuth Billing Integration**: Automatic billing user creation on OAuth login
+  - Added `_trigger_billing_credit_check_if_enabled()` helper function in auth.py
+  - Triggers billing credit check after successful OAuth login (non-blocking)
+  - Ensures billing users are created immediately so frontend can display available credits
+  - Works with both `SimpleCreditProvider` (free credits) and `CIRISBillingProvider` (paid credits)
+  - OAuth login succeeds even if billing backend is unavailable (fail-safe design)
+  - Passes user email and marketing_opt_in to billing context for user creation
+- **🌐 Environment-Driven OAuth Redirect Configuration**: Flexible OAuth redirect URL management
+  - Added `OAUTH_FRONTEND_URL` environment variable for separate frontend/backend domains
+  - Added `OAUTH_FRONTEND_PATH` environment variable (default: `/oauth-complete.html`)
+  - Added `OAUTH_REDIRECT_PARAMS` environment variable for configurable parameter list
+  - Supports Scout architecture: `scout.ciris.ai` frontend + `scoutapi.ciris.ai` backend
+  - Maintains backward compatibility with relative path redirects
+  - Extracts marketing_opt_in from redirect_uri query parameters
+  - Created comprehensive documentation: `docs/OAUTH_REDIRECT_CONFIGURATION.md`
+
+### Fixed
+- **🐛 OAuth Callback Tests**: Fixed 3 failing tests not updated for new `request` parameter
+  - Updated `test_oauth_callback_with_redirect_uri_in_state` to pass mock request
+  - Updated `test_oauth_callback_without_redirect_uri_in_state` to pass mock request
+  - Updated `test_oauth_callback_malformed_state` to pass mock request
+- **🔧 Billing Metadata Type**: Fixed boolean to string conversion for CreditContext
+  - CreditContext.metadata requires `Dict[str, str]`
+  - Updated billing integration to convert `marketing_opt_in` boolean to string
+
+### Testing
+- **✅ Comprehensive Test Coverage**: 100% coverage of new billing integration code
+  - Added 7 new tests in `test_auth_routes_coverage.py::TestBillingIntegration`:
+    - `test_trigger_billing_credit_check_enabled_success` - Successful billing check
+    - `test_trigger_billing_credit_check_no_resource_monitor` - Graceful no-op when billing disabled
+    - `test_trigger_billing_credit_check_no_credit_provider` - Backward compatibility
+    - `test_trigger_billing_credit_check_failure_non_blocking` - Non-blocking failure behavior
+    - `test_trigger_billing_credit_check_simple_provider` - SimpleCreditProvider compatibility
+    - `test_trigger_billing_credit_check_no_email` - Edge case handling
+    - `test_oauth_callback_with_billing_integration` - End-to-end integration test
+  - All 10 OAuth tests passing (7 billing + 3 redirect URI)
+  - Full test suite: 5185 passed, 117 skipped
+
 ## [1.3.4] - 2025-10-14
 
 ### Fixed

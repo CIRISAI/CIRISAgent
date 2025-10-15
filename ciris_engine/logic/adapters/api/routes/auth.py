@@ -770,11 +770,75 @@ def _build_redirect_response(
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
+async def _trigger_billing_credit_check_if_enabled(
+    request: Request,
+    oauth_user: OAuthUser,
+    user_email: Optional[str],
+    marketing_opt_in: bool,
+) -> None:
+    """
+    Trigger billing credit check if billing is enabled.
+
+    This ensures the billing user is created on first OAuth login so the frontend
+    can display available credits immediately. Only runs if resource_monitor with
+    credit_provider is configured.
+    """
+    # Check if resource_monitor exists (billing may not be enabled)
+    if not hasattr(request.app.state, "resource_monitor"):
+        logger.debug("No resource_monitor configured - skipping billing credit check")
+        return
+
+    resource_monitor = request.app.state.resource_monitor
+
+    # Check if credit provider is configured
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        logger.debug("No credit_provider configured - skipping billing credit check")
+        return
+
+    # Perform credit check to ensure billing user is created
+    try:
+        from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
+
+        # Extract provider and external_id from oauth_user.user_id (format: "provider:external_id")
+        oauth_provider = oauth_user.provider
+        external_id = oauth_user.external_id
+
+        account = CreditAccount(
+            provider=f"oauth:{oauth_provider}",
+            account_id=external_id,
+            authority_id=oauth_user.user_id,
+            tenant_id=None,
+        )
+
+        context = CreditContext(
+            agent_id=AGENT_ID,
+            channel_id="oauth:callback",
+            request_id=None,
+            metadata={
+                "source": "oauth_login",
+                "email": user_email or "",
+                "marketing_opt_in": marketing_opt_in,
+            },
+        )
+
+        result = await resource_monitor.check_credit(account, context)
+
+        logger.info(
+            f"Billing credit check for {oauth_user.user_id}: has_credit={result.has_credit}, "
+            f"provider={resource_monitor.credit_provider.__class__.__name__}"
+        )
+
+    except Exception as e:
+        # Don't fail OAuth login if billing check fails
+        logger.warning(f"Billing credit check failed for {oauth_user.user_id}: {e}")
+
+
 @router.get("/auth/oauth/{provider}/callback")
 async def oauth_callback(
     provider: str,
     code: str,
     state: str,
+    request: Request,
     auth_service: APIAuthService = Depends(get_auth_service),
     marketing_opt_in: bool = False,
 ) -> RedirectResponse:
@@ -857,6 +921,11 @@ async def oauth_callback(
         api_key = _generate_api_key_and_store(auth_service, oauth_user, provider)
 
         logger.info(f"OAuth user {oauth_user.user_id} logged in successfully via {provider}")
+
+        # Trigger billing credit check if billing is enabled
+        # This ensures billing user is created and credits are initialized
+        # so the frontend can display available credits immediately
+        await _trigger_billing_credit_check_if_enabled(request, oauth_user, user_email, final_marketing_opt_in)
 
         # Build and return redirect response with email and marketing preference
         return _build_redirect_response(

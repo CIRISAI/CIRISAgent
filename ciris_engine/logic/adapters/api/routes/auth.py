@@ -817,7 +817,7 @@ async def _trigger_billing_credit_check_if_enabled(
             metadata={
                 "source": "oauth_login",
                 "email": user_email or "",
-                "marketing_opt_in": marketing_opt_in,
+                "marketing_opt_in": str(marketing_opt_in).lower(),
             },
         )
 

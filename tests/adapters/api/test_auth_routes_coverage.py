@@ -28,6 +28,7 @@ from ciris_engine.logic.adapters.api.routes.auth import (
     _handle_github_oauth,
     _handle_google_oauth,
     _load_oauth_config,
+    _trigger_billing_credit_check_if_enabled,
     get_oauth_callback_url,
     router,
 )
@@ -688,3 +689,258 @@ class TestOAuthRedirectURI:
         # Should redirect to safe default (/)
         assert response.status_code == 302
         assert response.headers["location"] == "/"
+
+
+class TestBillingIntegration:
+    """Test billing credit check integration with OAuth callback."""
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_enabled_success(self):
+        """Test billing credit check when billing is enabled and check succeeds."""
+        # Mock request with resource_monitor configured
+        mock_request = Mock()
+        mock_resource_monitor = Mock()
+        mock_credit_provider = Mock()
+        mock_credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        mock_resource_monitor.credit_provider = mock_credit_provider
+
+        # Mock successful credit check
+        from ciris_engine.schemas.services.credit_gate import CreditCheckResult
+
+        mock_credit_result = CreditCheckResult(has_credit=True, credits_remaining=10)
+        mock_resource_monitor.check_credit = AsyncMock(return_value=mock_credit_result)
+
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
+        mock_request.app.state.resource_monitor = mock_resource_monitor
+
+        # Mock OAuth user
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "google:12345"
+        mock_oauth_user.provider = "google"
+        mock_oauth_user.external_id = "12345"
+
+        # Call the function
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=True
+        )
+
+        # Verify credit check was called
+        mock_resource_monitor.check_credit.assert_called_once()
+        call_args = mock_resource_monitor.check_credit.call_args
+
+        # Verify account and context parameters
+        account = call_args[0][0]
+        context = call_args[0][1]
+
+        assert account.provider == "oauth:google"
+        assert account.account_id == "12345"
+        assert account.authority_id == "google:12345"
+        assert context.channel_id == "oauth:callback"
+        assert context.metadata["source"] == "oauth_login"
+        assert context.metadata["email"] == "test@example.com"
+        assert context.metadata["marketing_opt_in"] == "true"  # Boolean converted to string
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_no_resource_monitor(self):
+        """Test billing credit check when resource_monitor is not configured."""
+        # Mock request without resource_monitor
+        mock_request = Mock()
+        mock_request.app = Mock()
+        mock_request.app.state = Mock(spec=[])  # Empty state, no resource_monitor
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "google:12345"
+        mock_oauth_user.provider = "google"
+        mock_oauth_user.external_id = "12345"
+
+        # Should not raise, just log and return
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
+        )
+
+        # No assertions needed - function should return gracefully
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_no_credit_provider(self):
+        """Test billing credit check when credit_provider is not configured."""
+        # Mock request with resource_monitor but no credit_provider
+        mock_request = Mock()
+        mock_resource_monitor = Mock()
+        mock_resource_monitor.credit_provider = None  # No credit provider
+
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
+        mock_request.app.state.resource_monitor = mock_resource_monitor
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "google:12345"
+        mock_oauth_user.provider = "google"
+        mock_oauth_user.external_id = "12345"
+
+        # Should not raise, just log and return
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
+        )
+
+        # No assertions needed - function should return gracefully
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_failure_non_blocking(self):
+        """Test billing credit check failure does not block OAuth login."""
+        # Mock request with resource_monitor that raises an exception
+        mock_request = Mock()
+        mock_resource_monitor = Mock()
+        mock_credit_provider = Mock()
+        mock_credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        mock_resource_monitor.credit_provider = mock_credit_provider
+
+        # Mock credit check that raises an exception
+        mock_resource_monitor.check_credit = AsyncMock(side_effect=Exception("Billing backend unavailable"))
+
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
+        mock_request.app.state.resource_monitor = mock_resource_monitor
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "google:12345"
+        mock_oauth_user.provider = "google"
+        mock_oauth_user.external_id = "12345"
+
+        # Should not raise - error should be logged but OAuth should succeed
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
+        )
+
+        # Verify credit check was attempted
+        mock_resource_monitor.check_credit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_simple_provider(self):
+        """Test billing credit check with SimpleCreditProvider."""
+        # Mock request with SimpleCreditProvider
+        mock_request = Mock()
+        mock_resource_monitor = Mock()
+        mock_credit_provider = Mock()
+        mock_credit_provider.__class__.__name__ = "SimpleCreditProvider"
+        mock_resource_monitor.credit_provider = mock_credit_provider
+
+        # Mock credit check
+        from ciris_engine.schemas.services.credit_gate import CreditCheckResult
+
+        mock_credit_result = CreditCheckResult(has_credit=True, credits_remaining=1)
+        mock_resource_monitor.check_credit = AsyncMock(return_value=mock_credit_result)
+
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
+        mock_request.app.state.resource_monitor = mock_resource_monitor
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "github:67890"
+        mock_oauth_user.provider = "github"
+        mock_oauth_user.external_id = "67890"
+
+        # Call the function
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, "user@github.com", marketing_opt_in=False
+        )
+
+        # Verify credit check was called
+        mock_resource_monitor.check_credit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_trigger_billing_credit_check_no_email(self):
+        """Test billing credit check when user has no email."""
+        # Mock request with resource_monitor
+        mock_request = Mock()
+        mock_resource_monitor = Mock()
+        mock_credit_provider = Mock()
+        mock_resource_monitor.credit_provider = mock_credit_provider
+
+        from ciris_engine.schemas.services.credit_gate import CreditCheckResult
+
+        mock_credit_result = CreditCheckResult(has_credit=True, credits_remaining=5)
+        mock_resource_monitor.check_credit = AsyncMock(return_value=mock_credit_result)
+
+        mock_request.app = Mock()
+        mock_request.app.state = Mock()
+        mock_request.app.state.resource_monitor = mock_resource_monitor
+
+        mock_oauth_user = Mock()
+        mock_oauth_user.user_id = "discord:99999"
+        mock_oauth_user.provider = "discord"
+        mock_oauth_user.external_id = "99999"
+
+        # Call with None email
+        await _trigger_billing_credit_check_if_enabled(
+            mock_request, mock_oauth_user, None, marketing_opt_in=False
+        )
+
+        # Verify credit check was called with empty email
+        mock_resource_monitor.check_credit.assert_called_once()
+        call_args = mock_resource_monitor.check_credit.call_args
+        context = call_args[0][1]
+        assert context.metadata["email"] == ""
+
+    @pytest.mark.asyncio
+    async def test_oauth_callback_with_billing_integration(self):
+        """Test that oauth_callback triggers billing credit check."""
+        import base64
+        import json
+
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
+
+        # Create state
+        state_data = {"csrf": "test-csrf-token"}
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
+        # Mock OAuth config and handlers
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
+        ) as mock_oauth_handler, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"
+        ) as mock_billing_check, patch.dict(
+            os.environ, {"CIRIS_AGENT_ID": "datum"}
+        ):
+            mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
+
+            mock_oauth_handler.return_value = {
+                "external_id": "12345",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://example.com/pic.jpg",
+            }
+
+            # Mock auth service
+            mock_auth_service = Mock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "google:12345"
+            mock_oauth_user.provider = "google"
+            mock_oauth_user.external_id = "12345"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+
+            # Mock request
+            mock_request = Mock()
+            mock_request.app = Mock()
+            mock_request.app.state = Mock()
+
+            # Call callback with marketing_opt_in
+            response = await oauth_callback(
+                "google", "test-code", state, mock_request, mock_auth_service, marketing_opt_in=True
+            )
+
+            # Verify billing check was called
+            mock_billing_check.assert_called_once()
+            call_args = mock_billing_check.call_args
+
+            # Verify parameters passed to billing check
+            assert call_args[0][0] == mock_request  # request
+            assert call_args[0][1] == mock_oauth_user  # oauth_user
+            assert call_args[0][2] == "test@example.com"  # email
+            assert call_args[0][3] is True  # marketing_opt_in
+
+            # Verify OAuth succeeded
+            assert response.status_code == 302

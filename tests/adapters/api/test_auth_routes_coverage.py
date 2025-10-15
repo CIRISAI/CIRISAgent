@@ -547,8 +547,13 @@ class TestOAuthRedirectURI:
             mock_auth_service.get_user = Mock(return_value=None)
             mock_auth_service.store_api_key = Mock()
 
+            # Mock request
+            mock_request = Mock()
+            mock_request.app = Mock()
+            mock_request.app.state = Mock()
+
             # Call callback
-            response = await oauth_callback("google", "test-code", state, mock_auth_service, marketing_opt_in=False)
+            response = await oauth_callback("google", "test-code", state, mock_request, mock_auth_service, marketing_opt_in=False)
 
             # Verify redirect to frontend domain (not relative path)
             assert response.status_code == 302
@@ -589,7 +594,12 @@ class TestOAuthRedirectURI:
             mock_auth_service.get_user = Mock(return_value=None)
             mock_auth_service.store_api_key = Mock()
 
-            response = await oauth_callback("google", "test-code", state, mock_auth_service)
+            # Mock request
+            mock_request = Mock()
+            mock_request.app = Mock()
+            mock_request.app.state = Mock()
+
+            response = await oauth_callback("google", "test-code", state, mock_request, mock_auth_service)
 
             # Verify redirect to relative path (backward compatibility)
             assert response.status_code == 302
@@ -625,8 +635,13 @@ class TestOAuthRedirectURI:
             mock_auth_service.get_user = Mock(return_value=None)
             mock_auth_service.store_api_key = Mock()
 
+            # Mock request
+            mock_request = Mock()
+            mock_request.app = Mock()
+            mock_request.app.state = Mock()
+
             # Should not raise, should fall back to relative path
-            response = await oauth_callback("google", "test-code", malformed_state, mock_auth_service)
+            response = await oauth_callback("google", "test-code", malformed_state, mock_request, mock_auth_service)
 
             # Should still work, using default redirect
             assert response.status_code == 302

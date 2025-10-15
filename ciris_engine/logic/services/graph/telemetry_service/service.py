@@ -17,8 +17,8 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_float, get_int, get_str
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_dict, get_float, get_int, get_bool
 
 # Optional import for psutil
 try:

@@ -244,7 +244,9 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             logger.info(f"Loading adapter {adapter_id} of type {adapter_type}")
             self._commands_sent += 1
             # Cast config to Dict[str, object] for protocol compatibility
-            operation_response = await service.load_adapter(adapter_type, adapter_id, cast(Dict[str, object], config), auto_start)
+            operation_response = await service.load_adapter(
+                adapter_type, adapter_id, cast(Dict[str, object], config), auto_start
+            )
             # Convert AdapterOperationResponse to AdapterInfo
             return AdapterInfo(
                 adapter_id=operation_response.adapter_id,

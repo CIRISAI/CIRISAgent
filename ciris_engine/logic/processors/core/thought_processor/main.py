@@ -14,6 +14,7 @@ from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandle
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 from ciris_engine.logic.utils.channel_utils import create_channel_context
+from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
@@ -33,7 +34,6 @@ from ciris_engine.schemas.telemetry.core import (
     TraceContext,
 )
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_bool
 
 from .action_execution import ActionExecutionPhase
 from .conscience_execution import ConscienceExecutionPhase
@@ -212,7 +212,9 @@ class ThoughtProcessor(
             )
 
         # Phase 3: Action selection
-        action_result_dict = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
+        action_result_dict = await self._perform_action_selection_phase(
+            thought_item, thought, thought_context, dma_results
+        )
 
         # Phase 4: Finalize action
         # conscience_result is already a ConscienceApplicationResult object, not a dict

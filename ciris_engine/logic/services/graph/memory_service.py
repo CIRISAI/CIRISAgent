@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence import get_db_connection, initialize_database
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.protocols.services import GraphMemoryServiceProtocol, MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType

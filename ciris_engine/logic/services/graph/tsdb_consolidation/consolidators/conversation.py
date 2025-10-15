@@ -9,9 +9,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
+from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.services.graph.consolidation import ConversationEntry, ParticipantData, ServiceInteractionData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -216,7 +216,7 @@ class ConversationConsolidator:
 
                 edge_attrs: JSONDict = {
                     "message_count": str(participant.message_count),
-                    "channels": str(participant.channels)
+                    "channels": str(participant.channels),
                 }
                 edges.append(
                     (

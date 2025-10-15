@@ -1,7 +1,6 @@
 import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -12,6 +11,7 @@ from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 from . import BaseActionHandler
 

@@ -11,7 +11,6 @@ import webbrowser
 from pathlib import Path
 from threading import Thread
 from typing import TYPE_CHECKING, Any, Dict, Optional
-from ciris_engine.schemas.types import JSONDict
 
 from rich.console import Console
 
@@ -24,6 +23,7 @@ from ciris_engine.schemas.infrastructure.oauth import (
     OAuthUserInfo,
 )
 from ciris_engine.schemas.services.authority_core import WACertificate, WARole
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol

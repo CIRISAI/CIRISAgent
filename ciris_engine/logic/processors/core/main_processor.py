@@ -1446,7 +1446,11 @@ class AgentProcessor:
         elif current_state == AgentState.SOLITUDE:
             # Serialize solitude status to dict for JSONDict compatibility
             solitude_status = self.solitude_processor.get_status()
-            status["solitude_status"] = solitude_status.model_dump() if hasattr(solitude_status, "model_dump") else dict(solitude_status) if isinstance(solitude_status, dict) else {"status": "unknown"}
+            status["solitude_status"] = (
+                solitude_status.model_dump()
+                if hasattr(solitude_status, "model_dump")
+                else dict(solitude_status) if isinstance(solitude_status, dict) else {"status": "unknown"}
+            )
 
         elif current_state == AgentState.DREAM:
             if self.dream_processor:
@@ -1459,7 +1463,11 @@ class AgentProcessor:
         for state, processor in self.state_processors.items():
             metrics = processor.get_metrics()
             # Serialize ProcessorMetrics to dict if it's a Pydantic model, ensuring JSONDict compatibility
-            processor_metrics[state.value] = metrics.model_dump() if hasattr(metrics, "model_dump") else dict(metrics) if isinstance(metrics, dict) else {"error": "metrics unavailable"}
+            processor_metrics[state.value] = (
+                metrics.model_dump()
+                if hasattr(metrics, "model_dump")
+                else dict(metrics) if isinstance(metrics, dict) else {"error": "metrics unavailable"}
+            )
         status["processor_metrics"] = processor_metrics
 
         status["queue_status"] = self._get_detailed_queue_status()
@@ -1558,6 +1566,7 @@ class AgentProcessor:
                         # Check dream health - when was last dream?
                         if self.dream_processor and self.dream_processor.dream_metrics.get("end_time"):
                             from ciris_engine.logic.utils.jsondict_helpers import get_str
+
                             end_time_str = get_str(self.dream_processor.dream_metrics, "end_time", "")
                             if end_time_str:
                                 last_dream = datetime.fromisoformat(end_time_str)

@@ -28,7 +28,7 @@ from ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor im
 from ciris_engine.logic.infrastructure.sub_services.pattern_analysis_loop import PatternAnalysisLoop
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_float, get_int
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.protocols.services import SelfObservationServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol

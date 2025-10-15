@@ -375,6 +375,7 @@ async def get_purchase_status(
 
     try:
         from typing import Mapping, cast
+
         # Query billing backend for specific payment status
         payment_response = await billing_client.get(
             f"/v1/billing/purchases/{payment_id}/status",

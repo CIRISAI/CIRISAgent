@@ -237,9 +237,12 @@ async def prefetch_batch_context(
     if secrets_service:
         logger.info("[DEBUG DB TIMING] Batch: building secrets snapshot")
         from typing import cast
+
         from .secrets_snapshot import build_secrets_snapshot
 
-        batch_data.secrets_snapshot = cast(Dict[str, Union[List[str], int]], await build_secrets_snapshot(secrets_service))
+        batch_data.secrets_snapshot = cast(
+            Dict[str, Union[List[str], int]], await build_secrets_snapshot(secrets_service)
+        )
 
     # 7. Shutdown Context
     if runtime and hasattr(runtime, "current_shutdown_context"):

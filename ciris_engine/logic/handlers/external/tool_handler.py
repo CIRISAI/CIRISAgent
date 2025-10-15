@@ -3,7 +3,6 @@ import uuid
 from typing import Optional
 
 from ciris_engine.logic import persistence
-from ciris_engine.schemas.types import JSONDict
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
@@ -11,6 +10,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ class ToolHandler(BaseActionHandler):
                 # If channel_id is provided in action params but not in tool parameters, add it
                 # This helps tools that need channel context
                 from typing import cast
+
                 tool_params = dict(params.parameters)
                 if params.channel_id and "channel_id" not in tool_params:
                     tool_params["channel_id"] = params.channel_id

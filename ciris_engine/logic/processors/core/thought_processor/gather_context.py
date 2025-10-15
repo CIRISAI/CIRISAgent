@@ -87,6 +87,7 @@ class ContextGatheringPhase:
         batch_context_data_raw = context.get("batch_context") if context else None
         # Type narrow: batch_context could be dict or BatchContextData
         from ciris_engine.logic.context.batch_context import BatchContextData
+
         batch_context_data = batch_context_data_raw if isinstance(batch_context_data_raw, BatchContextData) else None
 
         # ALWAYS use unified batch approach

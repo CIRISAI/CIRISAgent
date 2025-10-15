@@ -210,9 +210,7 @@ class AuditVerifier:
         signing_key_id_val = get_str(entry, "signing_key_id", "")
         signing_key_id = signing_key_id_val if signing_key_id_val else None
 
-        signature_valid = self.signature_manager.verify_signature(
-            entry_hash, signature, signing_key_id
-        )
+        signature_valid = self.signature_manager.verify_signature(entry_hash, signature, signing_key_id)
         if not signature_valid:
             errors.append(f"Invalid signature for entry {entry['entry_id']}")
 

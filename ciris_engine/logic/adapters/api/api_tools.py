@@ -7,17 +7,17 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float, get_dict
 
 import aiohttp
 
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

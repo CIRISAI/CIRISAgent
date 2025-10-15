@@ -101,6 +101,7 @@ class BasicTelemetryCollector(BaseService):
             self._enhanced_history: Dict[str, Deque[JSONDict]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
 
         from typing import cast
+
         self._enhanced_history[name].append(cast(JSONDict, metric_entry))
 
         # Store metric in TSDB as correlation

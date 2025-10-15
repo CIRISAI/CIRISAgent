@@ -11,8 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_bool, get_dict
 
 from ciris_engine.logic.adapters import CIRISNodeClient
 from ciris_engine.logic.buses.communication_bus import CommunicationBus
@@ -22,6 +20,7 @@ from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.services.governance.self_observation import SelfObservationService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
+from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.base import MetricsUpdate
 from ciris_engine.schemas.processors.results import DreamResult

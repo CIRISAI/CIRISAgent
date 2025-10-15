@@ -55,6 +55,7 @@ class CLIWiseAuthorityService(WiseAuthorityService):
     async def send_deferral(self, deferral: DeferralRequest) -> str:
         """Log deferral to CLI output with rich context"""
         from typing import cast
+
         deferral_id = str(uuid.uuid4())
         deferral_entry: JSONDict = {
             "deferral_id": deferral_id,

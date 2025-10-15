@@ -47,12 +47,8 @@ class SingleConscienceCheckResult(BaseModel):
     replacement_action: Optional[ActionSelectionDMAResult] = Field(
         None, description="Replacement action if conscience overrides"
     )
-    thought_depth_triggered: Optional[bool] = Field(
-        None, description="Whether thought depth guardrail was triggered"
-    )
-    updated_status_detected: Optional[bool] = Field(
-        None, description="Whether updated status was detected"
-    )
+    thought_depth_triggered: Optional[bool] = Field(None, description="Whether thought depth guardrail was triggered")
+    updated_status_detected: Optional[bool] = Field(None, description="Whether updated status was detected")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -66,9 +62,7 @@ class ConscienceCheckInternalResult(BaseModel):
     epistemic_data: Optional[EpistemicData] = Field(
         None, description="Aggregated epistemic data from conscience checks"
     )
-    thought_depth_triggered: Optional[bool] = Field(
-        None, description="Whether the thought depth guardrail triggered"
-    )
+    thought_depth_triggered: Optional[bool] = Field(None, description="Whether the thought depth guardrail triggered")
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether the updated status conscience detected changes"
     )

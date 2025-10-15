@@ -17,9 +17,8 @@ import logging
 from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int, get_float, get_bool, get_dict, get_list
 
+from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_float, get_int, get_list, get_str
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.services.runtime_control import (
     ActionCompleteStepData,
@@ -42,6 +41,7 @@ from ciris_engine.schemas.services.runtime_control import (
     StepResultData,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

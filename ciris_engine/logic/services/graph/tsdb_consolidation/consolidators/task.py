@@ -242,7 +242,7 @@ class TaskConsolidator:
                 task_attrs: Dict[str, Optional[str]] = {
                     "task_id": task_id,
                     "duration_seconds": str(duration_seconds),
-                    "status": task.status
+                    "status": task.status,
                 }
                 edges.append(
                     (

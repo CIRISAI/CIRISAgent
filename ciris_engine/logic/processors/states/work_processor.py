@@ -5,8 +5,9 @@ Enhanced with proper context building and service passing.
 
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from ciris_engine.schemas.types import JSONDict
+
 from ciris_engine.logic.utils.jsondict_helpers import get_int
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor

@@ -232,7 +232,11 @@ async def test_build_system_snapshot_with_memory_service(mock_time_service):
     # agent_identity can be IdentityData model or dict
     assert snapshot.agent_identity is not None
     # Access as model attribute if it's IdentityData, or dict key if it's a dict
-    agent_id = snapshot.agent_identity.agent_id if hasattr(snapshot.agent_identity, "agent_id") else snapshot.agent_identity.get("agent_id")
+    agent_id = (
+        snapshot.agent_identity.agent_id
+        if hasattr(snapshot.agent_identity, "agent_id")
+        else snapshot.agent_identity.get("agent_id")
+    )
     assert agent_id == "test_agent"
 
 
@@ -296,7 +300,11 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
     assert isinstance(snapshot, SystemSnapshot)
     assert snapshot.agent_identity is not None
     # Access as model attribute if it's IdentityData, or dict key if it's a dict
-    agent_id = snapshot.agent_identity.agent_id if hasattr(snapshot.agent_identity, "agent_id") else snapshot.agent_identity.get("agent_id")
+    agent_id = (
+        snapshot.agent_identity.agent_id
+        if hasattr(snapshot.agent_identity, "agent_id")
+        else snapshot.agent_identity.get("agent_id")
+    )
     assert agent_id == "steward_agent"
     # Check stewardship data exists (either as attribute or dict key)
     if hasattr(snapshot.agent_identity, "stewardship"):

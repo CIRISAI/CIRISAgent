@@ -21,9 +21,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_int
 from uuid import uuid4
+
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
+from ciris_engine.schemas.types import JSONDict
 
 # Optional import for psutil
 try:

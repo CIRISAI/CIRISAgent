@@ -135,6 +135,7 @@ class SummaryCompressor:
 
             # Now cast the Dict[str, int] to the Union type the field expects
             from typing import Union
+
             attrs.messages_by_channel = cast(Dict[str, Union[int, JSONDict]], compressed_channels)
 
         # Compress participant data

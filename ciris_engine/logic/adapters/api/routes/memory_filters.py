@@ -12,10 +12,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Set
 
+from ciris_engine.logic.utils.jsondict_helpers import get_list
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_list
 
 logger = logging.getLogger(__name__)
 

@@ -700,7 +700,9 @@ def _build_redirect_response(
     # If redirect_uri was provided, use it (frontend domain)
     # Otherwise, use relative path (backward compatibility)
     if redirect_uri:
-        redirect_url = f"{redirect_uri}?{query_string}"
+        # Check if redirect_uri already contains query parameters
+        separator = "&" if "?" in redirect_uri else "?"
+        redirect_url = f"{redirect_uri}{separator}{query_string}"
         logger.info(f"Redirecting OAuth user to frontend: {redirect_uri}")
     else:
         gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"

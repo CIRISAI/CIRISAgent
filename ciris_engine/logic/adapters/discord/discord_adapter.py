@@ -854,6 +854,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         # Support both tool_args and parameters for compatibility
         from typing import cast
+
         args = tool_args or parameters or {}
         result = await self._tool_handler.execute_tool(tool_name, cast(JSONDict, args))
 

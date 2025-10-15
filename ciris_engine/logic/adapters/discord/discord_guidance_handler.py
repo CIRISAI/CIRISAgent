@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import discord
 from discord import ui
 
+from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.jsondict_helpers import get_str, get_list
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol

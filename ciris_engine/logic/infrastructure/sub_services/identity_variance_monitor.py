@@ -14,7 +14,6 @@ from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.types import JSONDict
 from ciris_engine.schemas.infrastructure.behavioral_patterns import BehavioralPattern
 from ciris_engine.schemas.infrastructure.identity_variance import (
     CurrentIdentityData,
@@ -31,6 +30,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import CONFIG_SCOPE_MAP, ConfigNodeType, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.nodes import IdentitySnapshot
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 

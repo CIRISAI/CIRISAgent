@@ -118,6 +118,7 @@ class CIRISNodeClient(Service):
 
     async def _get(self, endpoint: str, params: JSONDict) -> Any:
         from typing import Mapping, cast
+
         async def _make_request() -> Any:
             resp = await self._client.get(endpoint, params=cast(Mapping[str, str | int | float | bool | None], params))
             if 400 <= resp.status_code < 500:

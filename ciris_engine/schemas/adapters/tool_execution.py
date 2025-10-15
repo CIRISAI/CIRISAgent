@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class ToolExecutionArgs(BaseModel):
@@ -22,13 +22,13 @@ class ToolExecutionArgs(BaseModel):
     timeout_seconds: float = Field(30.0, description="Timeout for tool execution in seconds")
 
     # Additional dynamic parameters for specific tools
-    tool_specific_params: NodeAttributes = Field(
+    tool_specific_params: JSONDict = Field(
         default_factory=dict, description="Tool-specific parameters that vary by tool type"
     )
 
     model_config = ConfigDict(extra="allow")  # Allow extra fields for tool-specific params
 
-    def get_all_params(self) -> NodeAttributes:
+    def get_all_params(self) -> JSONDict:
         """Get all parameters including tool-specific ones."""
         base_params = self.model_dump(exclude={"tool_specific_params"})
         # Merge with tool-specific params

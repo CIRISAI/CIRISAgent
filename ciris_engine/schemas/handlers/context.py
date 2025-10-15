@@ -9,9 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import JSONDict, NodeAttributes
-
-
+from ciris_engine.schemas.types import JSONDict
 class HandlerData(BaseModel):
     """Base class for handler-specific data."""
 
@@ -85,7 +83,7 @@ class MemoryActionParams(ActionContextParams):
     operation: str = Field(..., description="memorize, recall, or forget")
     node_id: Optional[str] = Field(None, description="Node ID for recall/forget")
     query: Optional[str] = Field(None, description="Query for recall")
-    content: Optional[NodeAttributes] = Field(None, description="Content for memorize")
+    content: Optional[JSONDict] = Field(None, description="Content for memorize")
 
 
 class ActionContext(BaseModel):

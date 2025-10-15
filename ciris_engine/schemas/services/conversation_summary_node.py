@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class ConversationMessage(BaseModel):
@@ -105,7 +105,7 @@ class ConversationSummaryNode(TypedGraphNode):
     scope: GraphScope = Field(default=GraphScope.LOCAL)
     id: str = Field(..., description="Node ID")
     version: int = Field(default=1)
-    attributes: NodeAttributes = Field(default_factory=dict, description="Node attributes")
+    attributes: JSONDict = Field(default_factory=dict, description="Node attributes")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to GraphNode for storage."""
@@ -145,8 +145,7 @@ class ConversationSummaryNode(TypedGraphNode):
             attributes=extra_fields,
             version=self.version,
             updated_by=self.updated_by or "TSDBConsolidationService",
-            updated_at=self.updated_at or self.consolidation_timestamp,
-        )
+            updated_at=self.updated_at or self.consolidation_timestamp)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "ConversationSummaryNode":
@@ -185,5 +184,4 @@ class ConversationSummaryNode(TypedGraphNode):
             # Metadata
             source_correlation_count=attrs.get("source_correlation_count", 0),
             consolidation_timestamp=cls._deserialize_datetime(attrs.get("consolidation_timestamp"))
-            or datetime.now(timezone.utc),
-        )
+            or datetime.now(timezone.utc))

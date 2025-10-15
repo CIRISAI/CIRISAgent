@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class AuditContext(BaseModel):
@@ -24,7 +24,7 @@ class AuditContext(BaseModel):
     user_agent: Optional[str] = Field(None, description="User agent if applicable")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
-    metadata: Optional[NodeAttributes] = Field(None, description="Additional metadata")
+    metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
 
 
 class EntryVerification(BaseModel):

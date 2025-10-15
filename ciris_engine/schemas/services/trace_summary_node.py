@@ -13,7 +13,7 @@ from pydantic import Field
 from ciris_engine.logic.utils.jsondict_helpers import get_list
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 @register_node_type("TRACE_SUMMARY")
@@ -34,7 +34,7 @@ class TraceSummaryNode(TypedGraphNode):
     total_tasks_processed: int = Field(0, description="Total tasks processed")
     tasks_by_status: Dict[str, int] = Field(default_factory=dict, description="Task count by final status")
     unique_task_ids: Set[str] = Field(default_factory=set, description="Set of unique task IDs processed")
-    task_summaries: Dict[str, NodeAttributes] = Field(
+    task_summaries: Dict[str, JSONDict] = Field(
         default_factory=dict, description="Elegant task summaries showing handler selections per thought"
     )
 
@@ -91,7 +91,7 @@ class TraceSummaryNode(TypedGraphNode):
     scope: GraphScope = Field(default=GraphScope.LOCAL)
     id: str = Field(..., description="Node ID")
     version: int = Field(default=1)
-    attributes: NodeAttributes = Field(default_factory=dict, description="Node attributes")
+    attributes: JSONDict = Field(default_factory=dict, description="Node attributes")
 
     def to_graph_node(self) -> GraphNode:
         """Convert to GraphNode for storage."""
@@ -143,8 +143,7 @@ class TraceSummaryNode(TypedGraphNode):
             attributes=extra_fields,
             version=self.version,
             updated_by=self.updated_by or "TSDBConsolidationService",
-            updated_at=self.updated_at or self.consolidation_timestamp,
-        )
+            updated_at=self.updated_at or self.consolidation_timestamp)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "TraceSummaryNode":
@@ -195,5 +194,4 @@ class TraceSummaryNode(TypedGraphNode):
             # Metadata
             source_correlation_count=attrs.get("source_correlation_count", 0),
             consolidation_timestamp=cls._deserialize_datetime(attrs.get("consolidation_timestamp"))
-            or datetime.now(timezone.utc),
-        )
+            or datetime.now(timezone.utc))

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 from pydantic import BaseModel, Field
 
 from ciris_engine.constants import CIRIS_VERSION
-from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, NodeAttributes
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type

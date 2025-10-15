@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class DeferralListResponse(BaseModel):
@@ -82,7 +82,7 @@ class WAGuidanceResponse(BaseModel):
     guidance: str = Field(..., description="Wisdom guidance provided")
     wa_id: str = Field(..., description="ID of WA who provided guidance")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence level (0-1)")
-    additional_context: NodeAttributes = Field(default_factory=dict, description="Additional context")
+    additional_context: JSONDict = Field(default_factory=dict, description="Additional context")
     timestamp: datetime = Field(..., description="When guidance was provided")
 
     @field_serializer("timestamp")

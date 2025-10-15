@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class PatternType(str, Enum):
@@ -32,7 +32,7 @@ class PatternMetrics(BaseModel):
     time_range_hours: float = Field(24.0, description="Time range analyzed")
     data_points: int = Field(0, description="Number of data points")
     trend: str = Field("stable", description="Trend: increasing, decreasing, stable")
-    metadata: NodeAttributes = Field(default_factory=dict, description="Additional metrics")
+    metadata: JSONDict = Field(default_factory=dict, description="Additional metrics")
 
 
 class DetectedPattern(BaseModel):

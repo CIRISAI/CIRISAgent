@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import EventData, JSONDict, NodeAttributes
+from ciris_engine.schemas.types import JSONDict 
 
 
 # Request/Response schemas for benchmarks
@@ -102,7 +102,7 @@ class EventLogRequest(BaseModel):
     """Request to log an event."""
 
     event_type: str = Field(..., description="Type of event")
-    event_data: EventData = Field(..., description="Event data")
+    event_data: JSONDict = Field(..., description="Event data")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_id: Optional[str] = Field(None, description="Agent that generated event")
 
@@ -121,7 +121,7 @@ class AssessmentSubmission(BaseModel):
 
     assessment_id: str = Field(..., description="Assessment ID")
     agent_id: str = Field(..., description="Agent taking assessment")
-    answers: List[NodeAttributes] = Field(..., description="Assessment answers as attribute dictionaries")
+    answers: List[JSONDict] = Field(..., description="Assessment answers as attribute dictionaries")
 
 
 class AssessmentResult(BaseModel):

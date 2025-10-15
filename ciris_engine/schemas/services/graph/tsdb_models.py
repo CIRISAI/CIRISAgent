@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class SummaryAttributes(BaseModel):
@@ -40,10 +40,10 @@ class SummaryAttributes(BaseModel):
     telemetry_refs: List[str] = Field(default_factory=list, description="References to telemetry data")
 
     # Dynamic data fields (for backward compatibility during migration)
-    messages_by_channel: Optional[Dict[str, Union[int, NodeAttributes]]] = Field(
+    messages_by_channel: Optional[Dict[str, Union[int, JSONDict]]] = Field(
         default=None, description="Messages by channel - flexible for migration"
     )
-    participants: Optional[Dict[str, NodeAttributes]] = Field(
+    participants: Optional[Dict[str, JSONDict]] = Field(
         default=None, description="Participant data - flexible for migration"
     )
 

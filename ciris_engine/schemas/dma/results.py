@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 from ..actions.parameters import (
     DeferParams,
@@ -20,8 +20,7 @@ from ..actions.parameters import (
     RejectParams,
     SpeakParams,
     TaskCompleteParams,
-    ToolParams,
-)
+    ToolParams)
 from ..runtime.enums import HandlerActionType
 
 
@@ -34,12 +33,10 @@ class EthicalDMAResult(BaseModel):
 
     stakeholders: str = Field(
         ...,
-        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
-    )
+        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')")
     conflicts: str = Field(
         ...,
-        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.",
-    )
+        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.")
     reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
 
@@ -92,7 +89,7 @@ class ActionSelectionDMAResult(BaseModel):
     # Processing metadata
     reasoning: Optional[str] = Field(None, description="Detailed reasoning process")
     evaluation_time_ms: Optional[float] = Field(None, description="Time taken for evaluation")
-    resource_usage: Optional[NodeAttributes] = Field(None, description="Resource usage details")
+    resource_usage: Optional[JSONDict] = Field(None, description="Resource usage details")
 
     model_config = ConfigDict(extra="forbid")
 

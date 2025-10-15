@@ -1,7 +1,7 @@
 """
 Typed node data schemas for graph nodes.
 
-Replaces the generic NodeAttributes.data: Dict[str, Union[...]] with specific typed schemas.
+Replaces the generic JSONDict.data: Dict[str, Union[...]] with specific typed schemas.
 """
 
 from datetime import datetime, timezone
@@ -146,7 +146,9 @@ class EnvironmentNodeData(BaseNodeData):
 NodeData = Union[ConfigNodeData, TelemetryNodeData, AuditNodeData, MemoryNodeData, TaskNodeData, EnvironmentNodeData]
 
 
-def create_node_data(node_type: str, data: Dict[str, Any]) -> NodeData:  # NOQA: Modifies dict to add datetime objects for model construction
+def create_node_data(
+    node_type: str, data: Dict[str, Any]
+) -> NodeData:  # NOQA: Modifies dict to add datetime objects for model construction
     """Factory function to create appropriate node data based on type."""
     type_map = {
         "config": ConfigNodeData,

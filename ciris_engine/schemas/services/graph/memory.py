@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONDict
 
 
-class NodeAttributes(BaseModel):
+class MemoryNodeData(BaseModel):
     """Attributes for a graph node."""
 
     # Core attributes

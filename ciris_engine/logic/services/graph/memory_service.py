@@ -17,7 +17,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 from ciris_engine.schemas.secrets.service import DecapsulationContext
-from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, NodeAttributes, TelemetryNodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, TelemetryNodeAttributes
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
@@ -570,16 +570,17 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             node_id = f"log_{log_level}_{int(now.timestamp())}"
 
             # Create typed attributes with log-specific data
-            # Using base NodeAttributes with additional log fields in the dict
-            node_attrs = NodeAttributes(
-                created_at=now, updated_at=now, created_by="memory_service", tags=["log", log_level.lower()]
-            )
-
-            # Convert to dict and add log-specific fields
-            attrs_dict = node_attrs.model_dump()
-            attrs_dict.update(
-                {"log_message": log_message, "log_level": log_level, "log_tags": tags or {}, "retention_policy": "raw"}
-            )
+            # JSONDict is a type alias for dict, so create dict directly
+            attrs_dict: JSONDict = {
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "created_by": "memory_service",
+                "tags": ["log", log_level.lower()],
+                "log_message": log_message,
+                "log_level": log_level,
+                "log_tags": tags or {},
+                "retention_policy": "raw",
+            }
 
             node = GraphNode(
                 id=node_id,

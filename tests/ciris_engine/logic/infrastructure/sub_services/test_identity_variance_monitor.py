@@ -16,7 +16,6 @@ from ciris_engine.schemas.infrastructure.behavioral_patterns import BehavioralPa
 from ciris_engine.schemas.infrastructure.identity_variance import (
     CurrentIdentityData,
     IdentityDiff,
-    NodeAttributes,
     VarianceImpact,
     VarianceReport,
     WAReviewRequest,

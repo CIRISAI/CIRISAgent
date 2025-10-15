@@ -18,7 +18,6 @@ from ciris_engine.schemas.infrastructure.behavioral_patterns import BehavioralPa
 from ciris_engine.schemas.infrastructure.identity_variance import (
     CurrentIdentityData,
     IdentityDiff,
-    NodeAttributes,
     ServiceStatusMetrics,
     VarianceCheckMetadata,
     VarianceImpact,
@@ -983,19 +982,17 @@ class IdentityVarianceMonitor(BaseScheduledService):
                     if isinstance(node.attributes, dict)
                     else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
                 )
-                # Parse attrs into NodeAttributes for type safety
-                parsed_attrs = NodeAttributes(**attrs) if isinstance(attrs, dict) else NodeAttributes()
 
                 return CurrentIdentityData(
-                    agent_id=parsed_attrs.agent_id or "unknown",
-                    identity_hash=parsed_attrs.identity_hash or "unknown",
-                    core_purpose=parsed_attrs.description or "unknown",
-                    role=parsed_attrs.role_description or "unknown",
-                    permitted_actions=parsed_attrs.permitted_actions or [],
-                    restricted_capabilities=parsed_attrs.restricted_capabilities or [],
-                    ethical_boundaries=self._extract_ethical_boundaries_from_node_attrs(parsed_attrs),
-                    personality_traits=parsed_attrs.areas_of_expertise or [],
-                    communication_style=parsed_attrs.startup_instructions or "standard",
+                    agent_id=attrs.get("agent_id", "unknown"),
+                    identity_hash=attrs.get("identity_hash", "unknown"),
+                    core_purpose=attrs.get("description", "unknown"),
+                    role=attrs.get("role_description", "unknown"),
+                    permitted_actions=attrs.get("permitted_actions", []),
+                    restricted_capabilities=attrs.get("restricted_capabilities", []),
+                    ethical_boundaries=self._extract_ethical_boundaries_from_node_attrs(attrs),
+                    personality_traits=attrs.get("areas_of_expertise", []),
+                    communication_style=attrs.get("startup_instructions", "standard"),
                     learning_enabled=True,
                     adaptation_rate=0.1,
                 )
@@ -1003,18 +1000,20 @@ class IdentityVarianceMonitor(BaseScheduledService):
         # Fallback if no identity node found
         return CurrentIdentityData()
 
-    def _extract_ethical_boundaries_from_node_attrs(self, attrs: NodeAttributes) -> List[str]:
+    def _extract_ethical_boundaries_from_node_attrs(self, attrs: JSONDict) -> List[str]:
         """Extract ethical boundaries from node attributes."""
         boundaries = []
 
         # Extract from restricted capabilities
-        if attrs.restricted_capabilities:
-            for cap in attrs.restricted_capabilities:
+        restricted_caps = attrs.get("restricted_capabilities", [])
+        if restricted_caps and isinstance(restricted_caps, list):
+            for cap in restricted_caps:
                 boundaries.append(f"restricted:{cap}")
 
         # Extract from any ethical-related fields
-        if attrs.ethical_boundaries:
-            boundaries.extend(attrs.ethical_boundaries)
+        ethical_bounds = attrs.get("ethical_boundaries", [])
+        if ethical_bounds and isinstance(ethical_bounds, list):
+            boundaries.extend(ethical_bounds)
 
         return boundaries
 

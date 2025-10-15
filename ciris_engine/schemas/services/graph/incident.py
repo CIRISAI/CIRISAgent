@@ -12,7 +12,7 @@ from pydantic import Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class IncidentSeverity(str, Enum):
@@ -99,8 +99,7 @@ class IncidentNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentNode":
@@ -190,8 +189,7 @@ class ProblemNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "ProblemNode":
@@ -245,7 +243,7 @@ class IncidentInsightNode(TypedGraphNode):
 
     insight_type: str = Field(..., description="Type of insight (PERIODIC_ANALYSIS, PATTERN_DETECTED, etc.)")
     summary: str = Field(..., description="High-level summary of the insight")
-    details: NodeAttributes = Field(default_factory=dict, description="Detailed analysis results")
+    details: JSONDict = Field(default_factory=dict, description="Detailed analysis results")
 
     # Recommendations
     behavioral_adjustments: List[str] = Field(default_factory=list, description="Suggested behavioral changes")
@@ -275,8 +273,7 @@ class IncidentInsightNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentInsightNode":

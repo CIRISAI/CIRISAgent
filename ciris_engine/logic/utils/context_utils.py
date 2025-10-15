@@ -93,7 +93,7 @@ def build_dispatch_context(
     # Check extra_context for channel_id as fallback
     if channel_context is None and extra_context:
         channel_id = extra_context.get("channel_id")
-        if channel_id:
+        if channel_id and isinstance(channel_id, str):
             channel_context = create_channel_context(channel_id)
 
     # Channel context is required

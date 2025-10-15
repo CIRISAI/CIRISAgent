@@ -107,7 +107,9 @@ class RecallHandler(BaseActionHandler):
 
                 from pydantic import BaseModel
 
-                attributes = {}
+                from ciris_engine.schemas.types import JSONDict, JSONValue
+
+                attributes: JSONDict = {}
 
                 # Handle both dict and Pydantic model attributes
                 if isinstance(n.attributes, BaseModel):
@@ -117,13 +119,13 @@ class RecallHandler(BaseActionHandler):
                         if isinstance(value, datetime):
                             attributes[key] = value.isoformat()
                         else:
-                            attributes[key] = value
+                            attributes[key] = value  # Value is already JSONValue compatible
                 elif isinstance(n.attributes, dict):
                     for key, value in n.attributes.items():
                         if isinstance(value, datetime):
                             attributes[key] = value.isoformat()
                         else:
-                            attributes[key] = value
+                            attributes[key] = value  # Value is already JSONValue compatible
 
                 # Create typed node info
                 node_info = RecalledNodeInfo(type=n.type, scope=n.scope, attributes=attributes)
@@ -150,7 +152,7 @@ class RecallHandler(BaseActionHandler):
                                     connected_node = connected_results[0]
 
                                     # Serialize connected node attributes
-                                    connected_attrs = {}
+                                    connected_attrs: JSONDict = {}
                                     # Handle both dict and Pydantic model attributes
                                     if isinstance(connected_node.attributes, BaseModel):
                                         attr_dict = connected_node.attributes.model_dump()
@@ -158,13 +160,13 @@ class RecallHandler(BaseActionHandler):
                                             if isinstance(value, datetime):
                                                 connected_attrs[key] = value.isoformat()
                                             else:
-                                                connected_attrs[key] = value
+                                                connected_attrs[key] = value  # Value is already JSONValue compatible
                                     elif isinstance(connected_node.attributes, dict):
                                         for key, value in connected_node.attributes.items():
                                             if isinstance(value, datetime):
                                                 connected_attrs[key] = value.isoformat()
                                             else:
-                                                connected_attrs[key] = value
+                                                connected_attrs[key] = value  # Value is already JSONValue compatible
 
                                     connected_node_info = ConnectedNodeInfo(
                                         node_id=connected_node.id,

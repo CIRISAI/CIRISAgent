@@ -208,16 +208,21 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     # when step_results only contain {"thought_id": ..., "initiated": True}
                     pass
 
+            # Map SingleStepResult fields to ProcessorControlResponse
+            # SingleStepResult has: success, message, thoughts_advanced (not thoughts_processed)
+            # When success=False, use message as error
+            error_text = None if result.success else result.message
+
             return ProcessorControlResponse(
                 success=result.success if hasattr(result, "success") else False,
                 processor_name="agent",
                 operation="single_step",
                 new_status=self._processor_status,
-                error=getattr(result, "error", None),
+                error=error_text,
                 # Pass through all the H3ERE step data
                 step_point=getattr(result, "step_point", None),
                 step_results=validated_step_results if validated_step_results else None,
-                thoughts_processed=getattr(result, "thoughts_processed", 0),
+                thoughts_processed=self._thoughts_processed,  # Use internal counter, not result field
                 processing_time_ms=getattr(result, "processing_time_ms", 0.0),
                 pipeline_state=getattr(result, "pipeline_state", {}),
                 current_round=getattr(result, "current_round", None),

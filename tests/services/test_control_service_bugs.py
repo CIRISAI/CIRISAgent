@@ -128,6 +128,8 @@ class TestSingleStepBugs:
         BUG: single_step() doesn't use the actual result from agent_processor.
         Always returns success=True if no exception is raised.
         """
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         mock_runtime = Mock()
         # Use Mock with specific async methods rather than AsyncMock for everything
         mock_processor = Mock()
@@ -135,8 +137,15 @@ class TestSingleStepBugs:
         # Mock the is_paused check - must be paused to single step (sync method)
         mock_processor.is_paused.return_value = True
 
-        # Simulate processor returning a failure result (async method)
-        mock_processor.single_step = AsyncMock(return_value={"success": False, "error": "Processing failed"})
+        # Simulate processor returning a failure result (async method) - now using SingleStepResult model
+        failure_result = SingleStepResult(
+            success=False,
+            step_point="test",
+            message="Processing failed",
+            processing_time_ms=100.0,
+            error="Processing failed",
+        )
+        mock_processor.single_step = AsyncMock(return_value=failure_result)
 
         mock_runtime.agent_processor = mock_processor
 
@@ -247,11 +256,16 @@ class TestMetricsTrackingBugs:
         """
         BUG: Many metrics are initialized but never properly updated.
         """
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         mock_runtime = Mock()
         # Use Mock with specific async methods to avoid all methods being async
         mock_processor = Mock()
         mock_processor.is_paused.return_value = True
-        mock_processor.single_step = AsyncMock(return_value={"success": True})
+
+        # Return SingleStepResult model instead of dict
+        success_result = SingleStepResult(success=True, step_point="test", message="Success", processing_time_ms=150.0)
+        mock_processor.single_step = AsyncMock(return_value=success_result)
         mock_runtime.agent_processor = mock_processor
 
         service = RuntimeControlService(runtime=mock_runtime)
@@ -267,9 +281,9 @@ class TestMetricsTrackingBugs:
         assert service._single_steps == 1
         assert service._commands_processed == 1
 
-        # BUG: These are never updated anywhere!
-        assert service._thoughts_processed == 0  # Should this increase?
-        assert service._messages_processed == 0  # Should this increase?
+        # FIX: Thought times are now tracked when processing_time_ms is present
+        assert service._thoughts_processed == 1  # Fixed! Updated when processing_time_ms exists
+        assert service._messages_processed == 0  # Still 0 - messages aren't tracked via single_step
 
 
 class TestErrorHandlingBugs:

@@ -52,6 +52,16 @@ DEFAULT_OAUTH_BASE_URL = "https://agents.ciris.ai"
 # Error messages
 FETCH_USER_INFO_ERROR = "Failed to fetch user info"
 
+# OAuth Frontend Redirect Configuration
+# These environment variables control where users are redirected after OAuth and what parameters are included
+OAUTH_FRONTEND_URL = os.getenv("OAUTH_FRONTEND_URL")  # e.g., https://scout.ciris.ai
+OAUTH_FRONTEND_PATH = os.getenv("OAUTH_FRONTEND_PATH", "/oauth-complete.html")  # Default: /oauth-complete.html
+# Comma-separated list of parameters to include in redirect
+# Default includes all ScoutGUI requirements
+OAUTH_REDIRECT_PARAMS = os.getenv(
+    "OAUTH_REDIRECT_PARAMS", "access_token,token_type,role,user_id,expires_in,email,marketing_opt_in,agent,provider"
+).split(",")
+
 
 # Helper functions
 def get_oauth_callback_url(provider: str, base_url: Optional[str] = None) -> str:
@@ -59,6 +69,14 @@ def get_oauth_callback_url(provider: str, base_url: Optional[str] = None) -> str
     if base_url is None:
         base_url = os.getenv("OAUTH_CALLBACK_BASE_URL", DEFAULT_OAUTH_BASE_URL)
     return base_url + OAUTH_CALLBACK_PATH.replace("{provider}", provider)
+
+
+def extract_query_params(url: str) -> Dict[str, str]:
+    """Extract query parameters from a URL."""
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(url)
+    return dict(urllib.parse.parse_qsl(parsed.query))
 
 
 logger = logging.getLogger(__name__)
@@ -676,42 +694,153 @@ def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthU
 
 
 def _build_redirect_response(
-    api_key: str, oauth_user: OAuthUser, provider: str, redirect_uri: Optional[str] = None
+    api_key: str,
+    oauth_user: OAuthUser,
+    provider: str,
+    redirect_uri: Optional[str] = None,
+    email: Optional[str] = None,
+    marketing_opt_in: Optional[bool] = None,
 ) -> RedirectResponse:
-    """Build the redirect response for OAuth callback."""
+    """
+    Build the redirect response for OAuth callback.
+
+    Supports flexible parameter configuration via OAUTH_REDIRECT_PARAMS environment variable.
+
+    Args:
+        api_key: Generated API key for the user
+        oauth_user: OAuth user object with role and user_id
+        provider: OAuth provider name (google, github, discord)
+        redirect_uri: Optional redirect URI from state parameter
+        email: User email from OAuth provider
+        marketing_opt_in: Marketing opt-in preference from redirect_uri
+
+    Environment Variables:
+        OAUTH_FRONTEND_URL: Frontend base URL (e.g., https://scout.ciris.ai)
+        OAUTH_FRONTEND_PATH: Frontend callback path (default: /oauth-complete.html)
+        OAUTH_REDIRECT_PARAMS: Comma-separated list of parameters to include in redirect
+    """
+    import urllib.parse
+
     VALID_PROVIDERS = {"google", "github", "discord"}
     if provider not in VALID_PROVIDERS:
         # Redirect to a safe default if provider is invalid
         return RedirectResponse(url="/", status_code=302)
 
-    # Build redirect parameters
-    redirect_params = {
+    # Build all available parameters
+    all_params = {
         "access_token": api_key,
         "token_type": "Bearer",
-        "expires_in": "2592000",
+        "expires_in": "2592000",  # 30 days
         "role": oauth_user.role.value,
         "user_id": oauth_user.user_id,
+        "email": email or "",
+        "marketing_opt_in": str(marketing_opt_in).lower() if marketing_opt_in is not None else "",
+        "agent": AGENT_ID,
+        "provider": provider,
     }
 
-    import urllib.parse
+    # Filter to only include configured parameters
+    redirect_params = {k: v for k, v in all_params.items() if k in OAUTH_REDIRECT_PARAMS and v}
 
     query_string = urllib.parse.urlencode(redirect_params)
 
-    # If redirect_uri was provided, use it (frontend domain)
-    # Otherwise, use relative path (backward compatibility)
+    # Determine redirect URL with priority:
+    # 1. Explicit redirect_uri from state parameter (highest priority)
+    # 2. OAUTH_FRONTEND_URL + OAUTH_FRONTEND_PATH
+    # 3. Relative path fallback (backward compatibility)
+
     if redirect_uri:
-        # Check if redirect_uri already contains query parameters
-        separator = "&" if "?" in redirect_uri else "?"
-        redirect_url = f"{redirect_uri}{separator}{query_string}"
-        logger.info(f"Redirecting OAuth user to frontend: {redirect_uri}")
+        # Parse existing query parameters from redirect_uri
+        parsed = urllib.parse.urlparse(redirect_uri)
+        base_redirect_uri = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+        # Merge existing params with new params (new params take precedence for security)
+        existing_params = dict(urllib.parse.parse_qsl(parsed.query))
+        merged_params = {**existing_params, **redirect_params}  # Server params override if conflict
+
+        query_string = urllib.parse.urlencode(merged_params)
+        redirect_url = f"{base_redirect_uri}?{query_string}"
+        logger.info(
+            f"Redirecting OAuth user to provided redirect_uri with {len(existing_params)} existing params: {base_redirect_uri}"
+        )
+    elif OAUTH_FRONTEND_URL:
+        # Use configured frontend URL
+        redirect_url = f"{OAUTH_FRONTEND_URL}{OAUTH_FRONTEND_PATH}?{query_string}"
+        logger.info(f"Redirecting OAuth user to configured frontend: {OAUTH_FRONTEND_URL}{OAUTH_FRONTEND_PATH}")
     else:
+        # Backward compatibility: relative path
         gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
         redirect_url = f"{gui_callback_url}?{query_string}"
+        # Do NOT log the full redirect_url with sensitive credentials (access_token, api_key)
         logger.warning(
-            f"No redirect_uri in state, using relative path (may fail for separate frontend): {redirect_url}"
+            f"No redirect_uri or OAUTH_FRONTEND_URL configured, using relative path: {gui_callback_url} "
+            "(query params redacted for security)"
         )
 
     return RedirectResponse(url=redirect_url, status_code=302)
+
+
+async def _trigger_billing_credit_check_if_enabled(
+    request: Request,
+    oauth_user: OAuthUser,
+    user_email: Optional[str],
+    marketing_opt_in: bool,
+) -> None:
+    """
+    Trigger billing credit check if billing is enabled.
+
+    This ensures the billing user is created on first OAuth login so the frontend
+    can display available credits immediately. Only runs if resource_monitor with
+    credit_provider is configured.
+    """
+    # Check if resource_monitor exists (billing may not be enabled)
+    if not hasattr(request.app.state, "resource_monitor"):
+        logger.debug("No resource_monitor configured - skipping billing credit check")
+        return
+
+    resource_monitor = request.app.state.resource_monitor
+
+    # Check if credit provider is configured
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        logger.debug("No credit_provider configured - skipping billing credit check")
+        return
+
+    # Perform credit check to ensure billing user is created
+    try:
+        from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
+
+        # Extract provider and external_id from oauth_user.user_id (format: "provider:external_id")
+        oauth_provider = oauth_user.provider
+        external_id = oauth_user.external_id
+
+        account = CreditAccount(
+            provider=f"oauth:{oauth_provider}",
+            account_id=external_id,
+            authority_id=oauth_user.user_id,
+            tenant_id=None,
+        )
+
+        context = CreditContext(
+            agent_id=AGENT_ID,
+            channel_id="oauth:callback",
+            request_id=None,
+            metadata={
+                "source": "oauth_login",
+                "email": user_email or "",
+                "marketing_opt_in": str(marketing_opt_in).lower(),
+            },
+        )
+
+        result = await resource_monitor.check_credit(account, context)
+
+        logger.info(
+            f"Billing credit check for {oauth_user.user_id}: has_credit={result.has_credit}, "
+            f"provider={resource_monitor.credit_provider.__class__.__name__}"
+        )
+
+    except Exception as e:
+        # Don't fail OAuth login if billing check fails
+        logger.warning(f"Billing credit check failed for {oauth_user.user_id}: {e}")
 
 
 @router.get("/auth/oauth/{provider}/callback")
@@ -719,6 +848,7 @@ async def oauth_callback(
     provider: str,
     code: str,
     state: str,
+    request: Request,
     auth_service: APIAuthService = Depends(get_auth_service),
     marketing_opt_in: bool = False,
 ) -> RedirectResponse:
@@ -726,7 +856,7 @@ async def oauth_callback(
     Handle OAuth callback.
 
     Exchanges authorization code for tokens and creates/updates user.
-    Accepts optional marketing_opt_in parameter from frontend.
+    Extracts marketing_opt_in from redirect_uri if present.
     """
     try:
         # Decode state parameter to extract redirect_uri
@@ -734,14 +864,31 @@ async def oauth_callback(
         import json
 
         redirect_uri = None
+        marketing_opt_in_from_uri = None
+
         try:
             state_json = base64.urlsafe_b64decode(state.encode()).decode()
             state_data = json.loads(state_json)
             redirect_uri = state_data.get("redirect_uri")
-            logger.debug(f"Decoded state: redirect_uri={redirect_uri}")
+
+            # Extract marketing_opt_in from redirect_uri query parameters
+            if redirect_uri:
+                uri_params = extract_query_params(redirect_uri)
+                marketing_opt_in_str = uri_params.get("marketing_opt_in", "").lower()
+                if marketing_opt_in_str in ("true", "1", "yes"):
+                    marketing_opt_in_from_uri = True
+                elif marketing_opt_in_str in ("false", "0", "no"):
+                    marketing_opt_in_from_uri = False
+
+            logger.debug(f"Decoded state: redirect_uri={redirect_uri}, marketing_opt_in={marketing_opt_in_from_uri}")
         except Exception as e:
             # If state decode fails, log but continue (backward compatibility)
             logger.warning(f"Failed to decode state parameter: {e}. Using default redirect.")
+
+        # Use marketing_opt_in from redirect_uri if available, otherwise use query param
+        final_marketing_opt_in = (
+            marketing_opt_in_from_uri if marketing_opt_in_from_uri is not None else marketing_opt_in
+        )
 
         # Load OAuth configuration
         provider_config = _load_oauth_config(provider)
@@ -761,7 +908,8 @@ async def oauth_callback(
             )
 
         # Determine user role and create OAuth user
-        user_role = _determine_user_role(user_data["email"])
+        user_email = user_data["email"]
+        user_role = _determine_user_role(user_email)
 
         # Validate required fields
         external_id = user_data["external_id"]
@@ -771,10 +919,10 @@ async def oauth_callback(
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
             external_id=external_id,
-            email=user_data["email"],
+            email=user_email,
             name=user_data["name"],
             role=user_role,
-            marketing_opt_in=marketing_opt_in,
+            marketing_opt_in=final_marketing_opt_in,
         )
 
         # Store OAuth profile data
@@ -786,8 +934,20 @@ async def oauth_callback(
 
         logger.info(f"OAuth user {oauth_user.user_id} logged in successfully via {provider}")
 
-        # Build and return redirect response
-        return _build_redirect_response(api_key, oauth_user, provider, redirect_uri)
+        # Trigger billing credit check if billing is enabled
+        # This ensures billing user is created and credits are initialized
+        # so the frontend can display available credits immediately
+        await _trigger_billing_credit_check_if_enabled(request, oauth_user, user_email, final_marketing_opt_in)
+
+        # Build and return redirect response with email and marketing preference
+        return _build_redirect_response(
+            api_key=api_key,
+            oauth_user=oauth_user,
+            provider=provider,
+            redirect_uri=redirect_uri,
+            email=user_email,
+            marketing_opt_in=final_marketing_opt_in,
+        )
 
     except HTTPException:
         raise

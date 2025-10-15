@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.types import JSONDict 
+from ciris_engine.schemas.types import JSONDict
 
 
 # Request/Response schemas for benchmarks

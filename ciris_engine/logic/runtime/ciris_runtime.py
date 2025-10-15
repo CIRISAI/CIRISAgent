@@ -1174,15 +1174,15 @@ class CIRISRuntime:
     async def _create_startup_node(self) -> None:
         """Create startup node for continuity tracking."""
         try:
-            from ciris_engine.schemas.types import JSONDict
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+            from ciris_engine.schemas.types import JSONDict
 
             # Create memory node for startup
             startup_node = GraphNode(
                 id=f"startup_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
-                attributes=JSONDict(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
+                attributes={"created_by": "runtime_startup", "tags": ["startup", "continuity_awareness"]},
             )
 
             # Store in memory service

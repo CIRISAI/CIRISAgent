@@ -20,7 +20,8 @@ from ..actions.parameters import (
     RejectParams,
     SpeakParams,
     TaskCompleteParams,
-    ToolParams)
+    ToolParams,
+)
 from ..runtime.enums import HandlerActionType
 
 
@@ -33,10 +34,12 @@ class EthicalDMAResult(BaseModel):
 
     stakeholders: str = Field(
         ...,
-        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')")
+        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
+    )
     conflicts: str = Field(
         ...,
-        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.")
+        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.",
+    )
     reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
     alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
 

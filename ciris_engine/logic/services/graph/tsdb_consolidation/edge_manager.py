@@ -793,9 +793,7 @@ class EdgeManager:
 
         return edge_data
 
-    def create_edges(
-        self, edges: List[EdgeSpecification] | List[Tuple[GraphNode, GraphNode, str, JSONDict]]
-    ) -> int:
+    def create_edges(self, edges: List[EdgeSpecification] | List[Tuple[GraphNode, GraphNode, str, JSONDict]]) -> int:
         """
         Create multiple edges from a list of edge specifications.
 

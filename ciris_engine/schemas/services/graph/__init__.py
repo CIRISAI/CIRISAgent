@@ -7,8 +7,8 @@ Provides strongly-typed schemas for all graph service operations.
 from ciris_engine.schemas.services.graph.attributes import (
     AnyNodeAttributes,
     ConfigNodeAttributes,
-    MemoryNodeAttributes,
     JSONDict,
+    MemoryNodeAttributes,
     TelemetryNodeAttributes,
     create_node_attributes,
 )

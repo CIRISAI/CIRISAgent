@@ -29,7 +29,6 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, IdentitySummary
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ChannelContext, TaskSummary, ThoughtSummary, UserProfile
-from ciris_engine.schemas.types import JSONDict
 from ciris_engine.schemas.services.graph_core import ConnectedNodeInfo, GraphNode, GraphScope, NodeType, SecretsData
 from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery

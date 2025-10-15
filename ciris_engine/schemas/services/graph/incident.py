@@ -99,7 +99,8 @@ class IncidentNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentNode":
@@ -189,7 +190,8 @@ class ProblemNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "ProblemNode":
@@ -273,7 +275,8 @@ class IncidentInsightNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentInsightNode":

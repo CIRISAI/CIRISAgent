@@ -75,7 +75,7 @@ class SystemSnapshot(BaseModel):
 
     # Agent identity (loaded once from graph memory)
     # Accepts both IdentityData model and JSONDict for backwards compatibility
-    agent_identity: Union[IdentityData, JSONDict] = Field(
+    agent_identity: IdentityData | JSONDict = Field(
         default_factory=dict, description="Raw agent identity data from graph node"
     )
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement extracted from identity")

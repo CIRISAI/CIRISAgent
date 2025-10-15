@@ -266,8 +266,8 @@ class IdentitySnapshot(TypedGraphNode):
     # Additional fields from other versions
     behavioral_patterns: Dict[str, float] = Field(default_factory=dict, description="Behavioral pattern scores")
     config_preferences: Dict[str, str] = Field(default_factory=dict, description="Configuration preferences")
-    # Type must match TypedGraphNode base class which expects Union[AnyNodeAttributes, JSONDict]
-    attributes: Union[AnyNodeAttributes, JSONDict] = Field(default_factory=dict, description="Additional attributes")
+    # Type must match TypedGraphNode base class which expects AnyNodeAttributes | JSONDict
+    attributes: AnyNodeAttributes | JSONDict = Field(default_factory=dict, description="Additional attributes")
     reason: str = Field(default="", description="Why snapshot was taken")
     system_state: Optional[Dict[str, str]] = Field(None, description="System state at snapshot time")
     active_tasks: List[str] = Field(default_factory=list, description="Active tasks at time")
@@ -527,8 +527,8 @@ class IdentityNode(TypedGraphNode):
 
     # Base GraphNode fields (required by TypedGraphNode)
     id: str = Field(default="agent/identity", description="Node ID")
-    # Type must match TypedGraphNode base class which expects Union[AnyNodeAttributes, JSONDict]
-    attributes: Union[AnyNodeAttributes, JSONDict] = Field(default_factory=dict, description="Raw attributes")
+    # Type must match TypedGraphNode base class which expects AnyNodeAttributes | JSONDict
+    attributes: AnyNodeAttributes | JSONDict = Field(default_factory=dict, description="Raw attributes")
     version: int = Field(default=1, description="Version number")
 
     def to_graph_node(self) -> GraphNode:

@@ -70,7 +70,7 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Union[JSONDict, ProcessorServices],
+        services: JSONDict | ProcessorServices,
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
@@ -1446,11 +1446,13 @@ class AgentProcessor:
         elif current_state == AgentState.SOLITUDE:
             # Serialize solitude status to dict for JSONDict compatibility
             solitude_status = self.solitude_processor.get_status()
-            status["solitude_status"] = (
-                solitude_status.model_dump()
-                if hasattr(solitude_status, "model_dump")
-                else dict(solitude_status) if isinstance(solitude_status, dict) else {"status": "unknown"}
-            )
+            if hasattr(solitude_status, "model_dump"):
+                serialized_status = solitude_status.model_dump()
+            elif isinstance(solitude_status, dict):
+                serialized_status = dict(solitude_status)
+            else:
+                serialized_status = {"status": "unknown"}
+            status["solitude_status"] = serialized_status
 
         elif current_state == AgentState.DREAM:
             if self.dream_processor:
@@ -1463,11 +1465,13 @@ class AgentProcessor:
         for state, processor in self.state_processors.items():
             metrics = processor.get_metrics()
             # Serialize ProcessorMetrics to dict if it's a Pydantic model, ensuring JSONDict compatibility
-            processor_metrics[state.value] = (
-                metrics.model_dump()
-                if hasattr(metrics, "model_dump")
-                else dict(metrics) if isinstance(metrics, dict) else {"error": "metrics unavailable"}
-            )
+            if hasattr(metrics, "model_dump"):
+                serialized_metrics = metrics.model_dump()
+            elif isinstance(metrics, dict):
+                serialized_metrics = dict(metrics)
+            else:
+                serialized_metrics = {"error": "metrics unavailable"}
+            processor_metrics[state.value] = serialized_metrics
         status["processor_metrics"] = processor_metrics
 
         status["queue_status"] = self._get_detailed_queue_status()

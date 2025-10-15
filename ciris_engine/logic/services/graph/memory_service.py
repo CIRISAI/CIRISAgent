@@ -158,7 +158,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
         # Process attributes - convert to proper schema
-        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict] = {}
+        processed_attrs: AnyNodeAttributes | GraphNodeAttributes | JSONDict = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -265,7 +265,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         )
 
     async def _process_secrets_for_recall(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict], action_type: str
+        self, attributes: AnyNodeAttributes | GraphNodeAttributes | JSONDict, action_type: str
     ) -> JSONDict:
         """Process secrets in recalled attributes for potential decryption."""
         if not attributes:
@@ -307,7 +307,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return attributes_dict
 
-    def _process_secrets_for_forget(self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, JSONDict]) -> None:
+    def _process_secrets_for_forget(self, attributes: AnyNodeAttributes | GraphNodeAttributes | JSONDict) -> None:
         """Clean up secrets when forgetting a node."""
         if not attributes:
             return

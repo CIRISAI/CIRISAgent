@@ -140,17 +140,18 @@ class IdentityVarianceMonitor(BaseScheduledService):
             # Create IdentityData from AgentIdentityRoot with proper field mapping
             from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 
-            identity_data = (
-                IdentityData(
+            if identity:
+                trust_level_value = identity.trust_level if hasattr(identity, "trust_level") else 0.5
+                stewardship_value = identity.stewardship if hasattr(identity, "stewardship") else None
+                identity_data = IdentityData(
                     agent_id=identity.agent_id,
                     description=identity.core_profile.description,
                     role=identity.core_profile.role_description,
-                    trust_level=identity.trust_level if hasattr(identity, "trust_level") else 0.5,
-                    stewardship=identity.stewardship if hasattr(identity, "stewardship") else None,
+                    trust_level=trust_level_value,
+                    stewardship=stewardship_value,
                 )
-                if identity
-                else None
-            )
+            else:
+                identity_data = None
 
             baseline_snapshot = IdentitySnapshot(
                 id=baseline_id,

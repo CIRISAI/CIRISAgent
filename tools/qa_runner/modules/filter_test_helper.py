@@ -24,8 +24,9 @@ class FilterTestHelper:
         self.should_stop = threading.Event()
         self.stream_error = threading.Event()
         self.stream_connected = threading.Event()
+        self.current_response: Optional[Any] = None  # Track response for cleanup
 
-    def start_monitoring(self):
+    def start_monitoring(self) -> None:
         """Start monitoring SSE stream for task completions."""
         if self.stream_thread and self.stream_thread.is_alive():
             return  # Already monitoring
@@ -40,9 +41,18 @@ class FilterTestHelper:
         if not self.stream_connected.wait(timeout=5):
             raise RuntimeError("Failed to connect to SSE stream")
 
-    def stop_monitoring(self):
+    def stop_monitoring(self) -> None:
         """Stop monitoring SSE stream."""
         self.should_stop.set()
+
+        # Close the response object to prevent connection leaks
+        if self.current_response:
+            try:
+                self.current_response.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            self.current_response = None
+
         if self.stream_thread:
             self.stream_thread.join(timeout=2)
 
@@ -78,7 +88,7 @@ class FilterTestHelper:
 
         return False
 
-    def _monitor_stream(self):
+    def _monitor_stream(self) -> None:
         """Monitor SSE stream in background thread with auto-reconnect."""
         retry_count = 0
         max_retries = 10
@@ -95,9 +105,17 @@ class FilterTestHelper:
                 )
 
                 if response.status_code != 200:
+                    # Close failed response
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
                     retry_count += 1
                     time.sleep(1)
                     continue
+
+                # Store response for cleanup
+                self.current_response = response
 
                 self.stream_connected.set()
                 retry_count = 0  # Reset on successful connection
@@ -153,7 +171,14 @@ class FilterTestHelper:
                             pass
 
             except (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError) as e:
-                # Connection lost - will retry
+                # Connection lost - close old response and retry
+                if self.current_response:
+                    try:
+                        self.current_response.close()
+                    except Exception:
+                        pass
+                    self.current_response = None
+
                 if self.verbose:
                     print(f"[SSE] Connection lost, reconnecting... ({e})")
                 self.stream_connected.clear()
@@ -161,10 +186,26 @@ class FilterTestHelper:
                 time.sleep(1)
                 continue
             except Exception as e:
+                # Close response on any error
+                if self.current_response:
+                    try:
+                        self.current_response.close()
+                    except Exception:
+                        pass
+                    self.current_response = None
+
                 if self.verbose:
                     print(f"[SSE] Error: {e}")
                 self.stream_error.set()
                 break
+
+        # Cleanup when loop exits
+        if self.current_response:
+            try:
+                self.current_response.close()
+            except Exception:
+                pass
+            self.current_response = None
 
 
 def wait_for_filter_test_completion(

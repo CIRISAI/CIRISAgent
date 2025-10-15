@@ -760,7 +760,9 @@ def _build_redirect_response(
 
         query_string = urllib.parse.urlencode(merged_params)
         redirect_url = f"{base_redirect_uri}?{query_string}"
-        logger.info(f"Redirecting OAuth user to provided redirect_uri with {len(existing_params)} existing params: {base_redirect_uri}")
+        logger.info(
+            f"Redirecting OAuth user to provided redirect_uri with {len(existing_params)} existing params: {base_redirect_uri}"
+        )
     elif OAUTH_FRONTEND_URL:
         # Use configured frontend URL
         redirect_url = f"{OAUTH_FRONTEND_URL}{OAUTH_FRONTEND_PATH}?{query_string}"

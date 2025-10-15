@@ -756,6 +756,30 @@ class StreamingVerificationModule:
         # Wait a bit for events to stream
         time.sleep(1)
 
+        # Ensure system is in runningstate before triggering test message
+        # (Runtime control tests may have left system paused/stepped)
+        try:
+            state_response = requests.get(
+                f"{base_url}/v1/system/runtime/queue",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5,
+            )
+            if state_response.status_code == 200:
+                queue_data = state_response.json().get("data", {})
+                is_paused = queue_data.get("is_paused", False)
+                if is_paused:
+                    # Resume the system
+                    resume_response = requests.post(
+                        f"{base_url}/v1/system/runtime/resume",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=5,
+                    )
+                    if resume_response.status_code != 200:
+                        errors.append(f"Failed to resume system: {resume_response.status_code}")
+                    time.sleep(0.5)  # Give it a moment to resume
+        except Exception as e:
+            errors.append(f"Failed to check/resume system state: {e}")
+
         # Trigger a task to generate events using new async message endpoint
         try:
             response = requests.post(

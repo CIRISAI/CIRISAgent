@@ -649,6 +649,67 @@ class TestOAuthRedirectURI:
             assert response.status_code == 302
             assert "access_token=" in response.headers["location"]
 
+    @pytest.mark.asyncio
+    async def test_oauth_callback_preserves_redirect_uri_query_params(self):
+        """Test oauth_callback preserves existing query params in redirect_uri (e.g., next, return_to)."""
+        import base64
+        import json
+        import urllib.parse
+
+        from ciris_engine.logic.adapters.api.routes.auth import oauth_callback
+
+        # Create state with redirect_uri containing existing query params
+        redirect_uri = "https://scout.ciris.ai/oauth-complete.html?next=/dashboard&return_to=/profile"
+        state_data = {"csrf": "test-csrf-token", "redirect_uri": redirect_uri}
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
+            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
+        ) as mock_oauth_handler:
+            mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
+
+            mock_oauth_handler.return_value = {
+                "external_id": "12345",
+                "email": "test@example.com",
+                "name": "Test User",
+                "picture": "https://example.com/pic.jpg",
+            }
+
+            mock_auth_service = Mock()
+            mock_oauth_user = Mock()
+            mock_oauth_user.user_id = "oauth-user-123"
+            mock_oauth_user.role = UserRole.OBSERVER
+            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+            mock_auth_service.get_user = Mock(return_value=None)
+            mock_auth_service.store_api_key = Mock()
+
+            mock_request = Mock()
+            mock_request.app = Mock()
+            mock_request.app.state = Mock()
+
+            response = await oauth_callback(
+                "google", "test-code", state, mock_request, mock_auth_service, marketing_opt_in=False
+            )
+
+            # Verify redirect includes both original params and server params
+            assert response.status_code == 302
+            redirect_location = response.headers["location"]
+
+            # Parse redirect URL
+            parsed = urllib.parse.urlparse(redirect_location)
+            query_params = urllib.parse.parse_qs(parsed.query)
+
+            # Verify existing query params are preserved
+            assert "next" in query_params
+            assert query_params["next"][0] == "/dashboard"
+            assert "return_to" in query_params
+            assert query_params["return_to"][0] == "/profile"
+
+            # Verify server params are also present
+            assert "access_token" in query_params
+            assert "role" in query_params
+            assert "user_id" in query_params
+
     def test_build_redirect_response_with_redirect_uri(self):
         """Test _build_redirect_response uses full URL when redirect_uri provided."""
         from ciris_engine.logic.adapters.api.routes.auth import _build_redirect_response

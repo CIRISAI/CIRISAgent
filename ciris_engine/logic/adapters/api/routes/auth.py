@@ -750,10 +750,17 @@ def _build_redirect_response(
     # 3. Relative path fallback (backward compatibility)
 
     if redirect_uri:
-        # Extract base redirect_uri (without existing query params)
-        base_redirect_uri = redirect_uri.split("?")[0]
+        # Parse existing query parameters from redirect_uri
+        parsed = urllib.parse.urlparse(redirect_uri)
+        base_redirect_uri = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+        # Merge existing params with new params (new params take precedence for security)
+        existing_params = dict(urllib.parse.parse_qsl(parsed.query))
+        merged_params = {**existing_params, **redirect_params}  # Server params override if conflict
+
+        query_string = urllib.parse.urlencode(merged_params)
         redirect_url = f"{base_redirect_uri}?{query_string}"
-        logger.info(f"Redirecting OAuth user to provided redirect_uri: {base_redirect_uri}")
+        logger.info(f"Redirecting OAuth user to provided redirect_uri with {len(existing_params)} existing params: {base_redirect_uri}")
     elif OAUTH_FRONTEND_URL:
         # Use configured frontend URL
         redirect_url = f"{OAUTH_FRONTEND_URL}{OAUTH_FRONTEND_PATH}?{query_string}"

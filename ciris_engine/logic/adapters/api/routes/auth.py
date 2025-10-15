@@ -59,8 +59,7 @@ OAUTH_FRONTEND_PATH = os.getenv("OAUTH_FRONTEND_PATH", "/oauth-complete.html")  
 # Comma-separated list of parameters to include in redirect
 # Default includes all ScoutGUI requirements
 OAUTH_REDIRECT_PARAMS = os.getenv(
-    "OAUTH_REDIRECT_PARAMS",
-    "access_token,token_type,role,user_id,expires_in,email,marketing_opt_in,agent,provider"
+    "OAUTH_REDIRECT_PARAMS", "access_token,token_type,role,user_id,expires_in,email,marketing_opt_in,agent,provider"
 ).split(",")
 
 
@@ -763,9 +762,7 @@ def _build_redirect_response(
         # Backward compatibility: relative path
         gui_callback_url = f"/oauth/{AGENT_ID}/{provider}/callback"
         redirect_url = f"{gui_callback_url}?{query_string}"
-        logger.warning(
-            f"No redirect_uri or OAUTH_FRONTEND_URL configured, using relative path: {redirect_url}"
-        )
+        logger.warning(f"No redirect_uri or OAUTH_FRONTEND_URL configured, using relative path: {redirect_url}")
 
     return RedirectResponse(url=redirect_url, status_code=302)
 
@@ -876,7 +873,9 @@ async def oauth_callback(
             logger.warning(f"Failed to decode state parameter: {e}. Using default redirect.")
 
         # Use marketing_opt_in from redirect_uri if available, otherwise use query param
-        final_marketing_opt_in = marketing_opt_in_from_uri if marketing_opt_in_from_uri is not None else marketing_opt_in
+        final_marketing_opt_in = (
+            marketing_opt_in_from_uri if marketing_opt_in_from_uri is not None else marketing_opt_in
+        )
 
         # Load OAuth configuration
         provider_config = _load_oauth_config(provider)

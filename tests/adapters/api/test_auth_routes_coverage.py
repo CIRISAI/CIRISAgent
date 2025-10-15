@@ -553,7 +553,9 @@ class TestOAuthRedirectURI:
             mock_request.app.state = Mock()
 
             # Call callback
-            response = await oauth_callback("google", "test-code", state, mock_request, mock_auth_service, marketing_opt_in=False)
+            response = await oauth_callback(
+                "google", "test-code", state, mock_request, mock_auth_service, marketing_opt_in=False
+            )
 
             # Verify redirect to frontend domain (not relative path)
             assert response.status_code == 302
@@ -887,9 +889,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "99999"
 
         # Call with None email
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, None, marketing_opt_in=False
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user, None, marketing_opt_in=False)
 
         # Verify credit check was called with empty email
         mock_resource_monitor.check_credit.assert_called_once()

@@ -284,16 +284,20 @@ class TestRuntimeControlServiceSingleStep:
     @pytest.fixture
     def mock_runtime(self):
         """Create mock runtime with agent processor."""
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         mock_runtime = Mock()
         mock_processor = Mock()  # Use regular Mock, not AsyncMock
         mock_processor.is_paused = Mock(return_value=True)  # is_paused is a regular method
+        # Return SingleStepResult model instead of dict
         mock_processor.single_step = AsyncMock(
-            return_value={  # single_step is async
-                "success": True,
-                "thought_id": "test_thought",
-                "processing_time_ms": 150.0,
-                "current_step": "build_context",
-            }
+            return_value=SingleStepResult(
+                success=True,
+                step_point="build_context",
+                message="Step completed",
+                thought_id="test_thought",
+                processing_time_ms=150.0,
+            )
         )
         mock_runtime.agent_processor = mock_processor
         return mock_runtime
@@ -337,14 +341,19 @@ class TestRuntimeControlServiceSingleStep:
     @pytest.mark.asyncio
     async def test_thought_times_list_trimmed(self, control_service):
         """Test thought times list is trimmed to max history."""
+        from ciris_engine.protocols.pipeline_control import SingleStepResult
+
         control_service._max_thought_history = 3
 
         # Add several thought times
         for i in range(5):
-            control_service.runtime.agent_processor.single_step.return_value = {
-                "success": True,
-                "processing_time_ms": float(100 + i * 10),
-            }
+            # Return SingleStepResult model instead of dict
+            control_service.runtime.agent_processor.single_step.return_value = SingleStepResult(
+                success=True,
+                step_point="test",
+                message="Success",
+                processing_time_ms=float(100 + i * 10),
+            )
             await control_service.single_step()
 
         # Should only keep last 3

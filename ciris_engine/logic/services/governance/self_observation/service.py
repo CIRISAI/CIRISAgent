@@ -28,6 +28,7 @@ from ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor im
 from ciris_engine.logic.infrastructure.sub_services.pattern_analysis_loop import PatternAnalysisLoop
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.protocols.services import SelfObservationServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -725,7 +726,7 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         # Group by type
         for pattern in patterns:
             if isinstance(pattern.attributes, dict):
-                pattern_type = pattern.attributes.get("pattern_type", "unknown")
+                pattern_type = get_str(pattern.attributes, "pattern_type", "unknown")
                 if pattern_type not in summary.pattern_categories:
                     summary.pattern_categories[pattern_type] = 0
                 summary.pattern_categories[pattern_type] += 1
@@ -867,8 +868,8 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
 
             for node in telemetry_nodes:
                 if isinstance(node.attributes, dict) and node.attributes.get("action"):
-                    action_name = node.attributes["action"]
-                    timestamp_str = node.attributes.get("timestamp")
+                    action_name = get_str(node.attributes, "action", "")
+                    timestamp_str = get_str(node.attributes, "timestamp", "")
                     if timestamp_str:
                         timestamp = datetime.fromisoformat(timestamp_str)
                         if timestamp >= cutoff_time:
@@ -919,24 +920,28 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
             for node in insight_nodes[:limit]:
                 if isinstance(node.attributes, dict):
                     # Map detected_at to last_seen for schema compatibility
-                    last_seen = node.attributes.get("detected_at", "")
-                    if isinstance(last_seen, str) and last_seen:
+                    last_seen_str = get_str(node.attributes, "detected_at", "")
+                    if last_seen_str:
                         try:
-                            last_seen = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                            last_seen_dt = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
                         except (ValueError, TypeError):
-                            last_seen = datetime.now()
+                            last_seen_dt = datetime.now()
                     else:
-                        last_seen = datetime.now()
+                        last_seen_dt = datetime.now()
 
                     insights.append(
                         PatternInsight(
                             pattern_id=node.id,
-                            pattern_type=node.attributes.get("pattern_type", "unknown"),
-                            description=node.attributes.get("description", ""),
-                            confidence=node.attributes.get("confidence", 0.0),
-                            occurrences=node.attributes.get("occurrences", 1),  # Default to 1 if not tracked
-                            last_seen=last_seen,
-                            metadata=node.attributes.get("metadata", {}),
+                            pattern_type=get_str(node.attributes, "pattern_type", "unknown"),
+                            description=get_str(node.attributes, "description", ""),
+                            confidence=get_float(node.attributes, "confidence", 0.0),
+                            occurrences=get_int(node.attributes, "occurrences", 1),
+                            last_seen=last_seen_dt,
+                            metadata=(
+                                node.attributes.get("metadata", {})
+                                if isinstance(node.attributes.get("metadata"), dict)
+                                else {}
+                            ),
                         )
                     )
 

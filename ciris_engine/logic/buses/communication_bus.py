@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
@@ -109,7 +111,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         return None
 
     async def send_message(
-        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[Dict[str, Any]] = None
+        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[JSONDict] = None
     ) -> bool:
         """
         Send a message to a channel.
@@ -132,7 +134,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         return success
 
     async def send_message_sync(
-        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[Dict[str, Any]] = None
+        self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[JSONDict] = None
     ) -> bool:
         """
         Send a message synchronously (wait for completion).

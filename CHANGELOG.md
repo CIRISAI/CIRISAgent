@@ -5,6 +5,40 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2025-10-14
+
+### Fixed
+- **🎯 Type Safety Migration**: Migrated test mocks from dicts to Pydantic models
+  - Updated `test_control_service_bugs.py` to use `SingleStepResult` models instead of dict mocks
+  - Updated `test_pipeline_stepping.py` fixture to return `SingleStepResult` with proper field mappings
+  - Updated `test_control_service_coverage.py` to use `SingleStepResult` with serialized fields
+  - Fixed control service to map `SingleStepResult.message` to error when `success=False`
+  - Fixed control service to use internal `thoughts_processed` counter instead of non-existent field
+  - Converted `step_results` and `pipeline_state` to dicts using `.model_dump()` for `SerializedModel` compatibility
+  - All 60 tests now passing (100% success rate)
+- **🔗 OAuth Callback URL Construction**: Fixed malformed query parameter URLs
+  - Issue: Backend was blindly appending `?access_token=...` even when `redirect_uri` already contained `?`
+  - Result: Invalid URLs like `callback?marketing_opt_in=false?access_token=xxx`
+  - Fix: Added separator detection to use `&` when `redirect_uri` already has query parameters
+  - Now generates valid URLs like `callback?marketing_opt_in=false&access_token=xxx`
+  - Located at `auth.py:703-705`
+- **🔧 Mypy Type Errors**: Resolved 3 type errors causing CI failures
+  - `context_utils.py:97` - Added `isinstance(channel_id, str)` check before passing to `create_channel_context()`
+  - `recall_handler.py:126` - Added `JSONDict` type annotation for attributes dict
+  - `recall_handler.py:167` - Added `JSONDict` type annotation for connected_attrs dict
+  - All mypy checks now pass (556 files checked, 0 errors)
+
+### Changed
+- **🎯 Control Service Response Mapping**: Enhanced SingleStepResult to ProcessorControlResponse conversion
+  - Maps `result.message` to error field when operation fails
+  - Uses internal metrics counter for `thoughts_processed` tracking
+  - Maintains backward compatibility with existing response structure
+
+### Testing
+- **✅ Unit Tests**: 60/60 tests passing in control service test suite
+- **✅ QA Tests**: 127/128 tests passing (99.2% success rate)
+- **✅ Mypy**: 556 source files, 0 errors (100% type safety)
+
 ## [1.3.3] - 2025-10-14
 
 ### Fixed

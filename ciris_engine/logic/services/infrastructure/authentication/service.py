@@ -38,6 +38,7 @@ from ciris_engine.schemas.services.authority_core import (
     WARole,
 )
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task
@@ -301,19 +302,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             conn.commit()
 
-    def _row_to_wa(self, row_dict: Dict[str, Any]) -> WACertificate:
+    def _row_to_wa(self, row_dict: JSONDict) -> WACertificate:
         """Convert a SQLite row dictionary to a WACertificate instance."""
 
         oauth_links_json = row_dict.get("oauth_links_json")
         oauth_links: List[OAuthIdentityLink] = []
         if oauth_links_json:
             try:
-                raw_links = json.loads(oauth_links_json)
-                for link in raw_links:
-                    try:
-                        oauth_links.append(OAuthIdentityLink(**link))
-                    except Exception as exc:
-                        logger.warning("Invalid OAuth link entry skipped: %s", exc)
+                # Type narrow: json.loads expects str, not the broader JSONDict value type
+                if isinstance(oauth_links_json, str):
+                    raw_links = json.loads(oauth_links_json)
+                    for link in raw_links:
+                        try:
+                            oauth_links.append(OAuthIdentityLink(**link))
+                        except Exception as exc:
+                            logger.warning("Invalid OAuth link entry skipped: %s", exc)
             except json.JSONDecodeError:
                 logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
 
@@ -473,7 +476,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             link for link in existing.oauth_links if not (link.provider == provider and link.external_id == external_id)
         ]
 
-        payload: Dict[str, Any] = {
+        payload: JSONDict = {
             "oauth_links_json": json.dumps([link.model_dump(mode="json") for link in links]) if links else None,
         }
 
@@ -490,7 +493,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 payload["oauth_provider"] = None
                 payload["oauth_external_id"] = None
 
-        await self.update_wa(wa_id, **payload)
+        # Filter out None values - update_wa kwargs expects Union[str, bool, datetime], not Optional
+        filtered_payload = {k: v for k, v in payload.items() if v is not None}
+        await self.update_wa(wa_id, **filtered_payload)  # type: ignore[arg-type]
         return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
@@ -1463,7 +1468,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             else:
                 logger.warning("No root WA certificate found - cannot create system WA")
 
-    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: Dict[str, Any]) -> str:
+    async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: JSONDict) -> str:
         """Create a channel token for an adapter."""
         # Ensure adapter_info has proper structure
         if not adapter_info:
@@ -1494,7 +1499,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return token
 
-    def verify_token_sync(self, token: str) -> Optional[Dict[str, Any]]:
+    def verify_token_sync(self, token: str) -> Optional[JSONDict]:
         """Synchronously verify a token (for non-async contexts)."""
         try:
             # For sync verification, we can only verify gateway-signed tokens

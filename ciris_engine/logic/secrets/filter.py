@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ciris_engine.schemas.secrets.core import ConfigExport, DetectedSecret, PatternStats
 from ciris_engine.schemas.secrets.core import SecretPattern as ConfigSecretPattern
 from ciris_engine.schemas.secrets.core import SecretsDetectionConfig, SecretsFilterResult
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ class SecretsFilter:
             auto_decrypt_for_actions=["speak", "tool"],  # Default
         )
 
-    def update_filter_config(self, updates: Dict[str, Any]) -> bool:  # pragma: no cover - rarely used
+    def update_filter_config(self, updates: JSONDict) -> bool:  # pragma: no cover - rarely used
         """Update filter configuration settings."""
         try:
             for key, value in updates.items():

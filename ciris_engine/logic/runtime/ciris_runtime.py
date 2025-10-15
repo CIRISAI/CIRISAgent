@@ -10,6 +10,8 @@ import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
 
@@ -877,7 +879,8 @@ class CIRISRuntime:
             try:
                 # Generate authentication token for adapter - REQUIRED for security
                 adapter_type = adapter.__class__.__name__.lower().replace("adapter", "")
-                adapter_info = {
+                # Explicitly type as JSONDict for authentication service compatibility
+                adapter_info: JSONDict = {
                     "instance_id": str(id(adapter)),
                     "startup_time": (
                         self.time_service.now().isoformat()
@@ -1171,14 +1174,15 @@ class CIRISRuntime:
     async def _create_startup_node(self) -> None:
         """Create startup node for continuity tracking."""
         try:
-            from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+            from ciris_engine.schemas.types import JSONDict
+            from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
             # Create memory node for startup
             startup_node = GraphNode(
                 id=f"startup_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
-                attributes=GraphNodeAttributes(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
+                attributes=JSONDict(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
             )
 
             # Store in memory service
@@ -1213,7 +1217,7 @@ class CIRISRuntime:
 
         return "manual"
 
-    def _build_shutdown_node_attributes(self, reason: str, consent_status: str) -> Dict[str, Any]:
+    def _build_shutdown_node_attributes(self, reason: str, consent_status: str) -> JSONDict:
         """Build attributes dict for shutdown memory node.
 
         Args:
@@ -1298,7 +1302,7 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[Dict[str, AdapterConfig]],
-        kwargs: Dict[str, Any],
+        kwargs: JSONDict,
     ) -> None:
         """Parse bootstrap configuration or create from legacy parameters."""
         if bootstrap is not None:
@@ -1321,15 +1325,18 @@ class CIRISRuntime:
         startup_channel_id: Optional[str],
         adapter_types: List[str],
         adapter_configs: Optional[Dict[str, AdapterConfig]],
-        kwargs: Dict[str, Any],
+        kwargs: JSONDict,
     ) -> None:
         """Create bootstrap config from legacy parameters."""
         self.essential_config = essential_config or EssentialConfig()
         self.essential_config.load_env_vars()  # Load environment variables
         self.startup_channel_id = startup_channel_id or ""
         self.adapter_configs = adapter_configs or {}
-        self.modules_to_load = kwargs.get("modules", [])
-        self.debug = kwargs.get("debug", False)
+        # Type narrow: kwargs.get returns JSONDict value, narrow to expected types
+        modules_raw = kwargs.get("modules", [])
+        self.modules_to_load = modules_raw if isinstance(modules_raw, list) else []
+        debug_raw = kwargs.get("debug", False)
+        self.debug = debug_raw if isinstance(debug_raw, bool) else False
         self._preload_tasks = []
 
         from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest

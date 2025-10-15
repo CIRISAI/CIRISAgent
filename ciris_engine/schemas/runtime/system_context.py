@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
 
+# Import IdentityData for backwards compatibility with new type
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
 # Import ShutdownContext directly to avoid forward reference issues
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -71,7 +74,10 @@ class SystemSnapshot(BaseModel):
     )
 
     # Agent identity (loaded once from graph memory)
-    agent_identity: JSONDict = Field(default_factory=dict, description="Raw agent identity data from graph node")
+    # Accepts both IdentityData model and JSONDict for backwards compatibility
+    agent_identity: IdentityData | JSONDict = Field(
+        default_factory=dict, description="Raw agent identity data from graph node"
+    )
     identity_purpose: Optional[str] = Field(None, description="Agent's purpose statement extracted from identity")
     identity_capabilities: List[str] = Field(
         default_factory=list, description="List of agent capabilities from identity"

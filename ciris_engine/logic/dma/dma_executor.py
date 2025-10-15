@@ -17,6 +17,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelationStatus,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .action_selection_pdma import ActionSelectionPDMAEvaluator
 from .csdma import CSDMAEvaluator
@@ -306,7 +307,7 @@ async def run_csdma(
 async def run_dsdma(
     dsdma: BaseDSDMA,
     thought: ProcessingQueueItem,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[JSONDict] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> DSDMAResult:
     """Run the domain-specific DMA using profile-driven configuration."""
@@ -360,7 +361,7 @@ async def run_dsdma(
         persistence.add_correlation(correlation, time_service)
 
     try:
-        # Use evaluate method which handles Dict[str, Any] to DMAInputData conversion
+        # Use evaluate method which handles JSONDict to DMAInputData conversion
         result = await dsdma.evaluate(thought, current_context=context)
 
         # Update correlation with success
@@ -404,7 +405,7 @@ async def run_dsdma(
 
 async def run_action_selection_pdma(
     evaluator: ActionSelectionPDMAEvaluator,
-    triaged_inputs: Union[Dict[str, Any], EnhancedDMAInputs],
+    triaged_inputs: Union[JSONDict, EnhancedDMAInputs],
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> ActionSelectionDMAResult:
     """Select the next handler action using the triaged DMA results."""

@@ -13,6 +13,7 @@ from ciris_engine.logic.processors.core.step_decorators import step_point, strea
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,8 @@ class RoundInitializationPhase:
     @streaming_step(StepPoint.START_ROUND)
     @step_point(StepPoint.START_ROUND)
     async def _start_round_step(
-        self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, thought_item: ProcessingQueueItem, context: Optional[JSONDict] = None
+    ) -> JSONDict:
         """Step 0: Initialize processing round and prepare thoughts for H3ERE pipeline."""
 
         # Get the thought ID from the queue item

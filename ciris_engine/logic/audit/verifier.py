@@ -7,8 +7,9 @@ hash chains, digital signatures, and root anchoring.
 
 import logging
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.protocols.services.lifecycle import TimeServiceProtocol
 from ciris_engine.schemas.audit.verification import (
     ChainSummary,
@@ -20,6 +21,7 @@ from ciris_engine.schemas.audit.verification import (
     SigningKeyInfo,
     VerificationReport,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .hash_chain import AuditHashChain
 from .signature_manager import AuditSignatureManager
@@ -185,8 +187,15 @@ class AuditVerifier:
         logger.info("Performing fast tampering detection")
         return self.hash_chain.find_tampering()
 
-    def _verify_single_entry(self, entry: Dict[str, Any]) -> EntryVerificationResult:
-        """Verify a single entry's hash and signature"""
+    def _verify_single_entry(self, entry: JSONDict) -> EntryVerificationResult:
+        """Verify a single entry's hash and signature
+
+        Args:
+            entry: Audit entry as JSON-compatible dict
+
+        Returns:
+            Verification result with hash and signature validation status
+        """
         errors: List[str] = []
 
         # Verify entry hash
@@ -195,16 +204,20 @@ class AuditVerifier:
         if not hash_valid:
             errors.append(f"Entry hash mismatch: computed {computed_hash}, stored {entry['entry_hash']}")
 
-        # Verify signature
-        signature_valid = self.signature_manager.verify_signature(
-            entry["entry_hash"], entry["signature"], entry["signing_key_id"]
-        )
+        # Verify signature - extract values with type narrowing
+        entry_hash = get_str(entry, "entry_hash", "")
+        signature = get_str(entry, "signature", "")
+        signing_key_id_val = get_str(entry, "signing_key_id", "")
+        signing_key_id = signing_key_id_val if signing_key_id_val else None
+
+        signature_valid = self.signature_manager.verify_signature(entry_hash, signature, signing_key_id)
         if not signature_valid:
             errors.append(f"Invalid signature for entry {entry['entry_id']}")
 
         # Check previous hash link
         previous_hash_valid = True  # Assume valid unless we find otherwise
-        if entry.get("sequence_number", 0) > 1 and entry.get("previous_hash") == "genesis":
+        sequence_number = get_int(entry, "sequence_number", 0)
+        if sequence_number > 1 and entry.get("previous_hash") == "genesis":
             previous_hash_valid = False
             errors.append("Invalid previous hash: 'genesis' only valid for first entry")
 

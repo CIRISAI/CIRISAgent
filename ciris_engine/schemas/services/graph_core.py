@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.consent.core import ConsentStream
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class GraphScope(str, Enum):
@@ -89,6 +90,7 @@ class GraphNodeAttributes(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = Field(..., description="Who created this node")
+    content: str | None = Field(None, description="Optional content for the node")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
 
     model_config = ConfigDict(extra="forbid")
@@ -100,17 +102,16 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     type: NodeType = Field(..., description="Type of node")
     scope: GraphScope = Field(..., description="Scope of the node")
-    attributes: Union[GraphNodeAttributes, NodeAttributes] = Field(
+    attributes: AnyNodeAttributes | JSONDict | GraphNodeAttributes = Field(
         ..., description="Node attributes"
     )  # NOQA - Graph flexibility pattern
     version: int = Field(default=1, ge=1, description="Version number")
-    updated_by: Optional[str] = Field(None, description="Who last updated")
-    updated_at: Optional[datetime] = Field(None, description="When last updated")
+    updated_by: str | None = Field(None, description="Who last updated")
+    updated_at: datetime | None = Field(None, description="When last updated")
     consent_stream: ConsentStream = Field(
         default=ConsentStream.TEMPORARY,
-        description="Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)",
-    )
-    expires_at: Optional[datetime] = Field(
+        description="Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)")
+    expires_at: datetime | None = Field(
         None, description="Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
     )
 
@@ -121,7 +122,7 @@ class GraphEdgeAttributes(BaseModel):
     """Typed attributes for graph edges."""
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    context: Optional[str] = Field(None, description="Context of the relationship")
+    context: str | None = Field(None, description="Context of the relationship")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -147,14 +148,14 @@ class ConnectedNodeInfo(BaseModel):
     node_id: str = Field(..., description="Connected node identifier")
     node_type: str = Field(..., description="Type of connected node")
     relationship: str = Field(..., description="Relationship type to the source node")
-    attributes: NodeAttributes = Field(
+    attributes: JSONDict = Field(
         default_factory=dict, description="Connected node attributes"
     )  # NOQA - Graph integration pattern
     source_service: str = Field(default="MemoryService", description="Service that provided connection info")
     retrieved_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When connection was retrieved"
     )
-    edge_metadata: Optional[NodeAttributes] = Field(
+    edge_metadata: JSONDict | None = Field(
         None, description="Additional edge metadata from future sources"
     )  # NOQA - Future source extensibility
 
@@ -164,14 +165,14 @@ class SecretsData(BaseModel):
 
     secrets_count: int = Field(0, description="Number of secrets stored")
     filter_status: str = Field("unknown", description="Secrets filter status")
-    last_updated: Optional[datetime] = Field(None, description="When secrets were last updated")
+    last_updated: datetime | None = Field(None, description="When secrets were last updated")
     detected_secrets: List[str] = Field(default_factory=list, description="List of detected secret patterns")
     secrets_filter_version: int = Field(0, description="Version of the secrets filter being used")
     source_service: str = Field(default="SecretsService", description="Service that provided secrets data")
     retrieved_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When secrets data was retrieved"
     )
-    additional_data: NodeAttributes = Field(  # NOQA - Future source extensibility
+    additional_data: JSONDict = Field(  # NOQA - Future source extensibility
         default_factory=dict, description="Additional secrets data from future sources"
     )
 

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class WizardResult(BaseModel):
@@ -20,7 +20,7 @@ class WizardResult(BaseModel):
     key_file: Optional[str] = Field(None, description="Key file path if created")
     join_code: Optional[str] = Field(None, description="Join code if generated")
     expires_at: Optional[str] = Field(None, description="Expiration time for join code")
-    additional_info: NodeAttributes = Field(default_factory=dict, description="Additional result information")
+    additional_info: JSONDict = Field(default_factory=dict, description="Additional result information")
 
 
 class RootCreationResult(WizardResult):

@@ -6,6 +6,9 @@ Enhanced with proper context building and service passing.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
@@ -32,7 +35,7 @@ class WorkProcessor(BaseProcessor):
         config_accessor: Any,  # ConfigAccessor
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: Any,  # Dict[str, Any] - using Any to avoid circular import issues
+        services: Any,  # JSONDict - using Any to avoid circular import issues
         startup_channel_id: Optional[str] = None,
         agent_occurrence_id: str = "default",
         **kwargs: Any,
@@ -81,7 +84,7 @@ class WorkProcessor(BaseProcessor):
         logger.debug(f"WorkProcessor.process called for round {round_number}")
         start_time = self.time_service.now()
 
-        round_metrics: Dict[str, Any] = {
+        round_metrics: JSONDict = {
             "round_number": round_number,
             "tasks_activated": 0,
             "thoughts_generated": 0,
@@ -135,7 +138,8 @@ class WorkProcessor(BaseProcessor):
 
         except Exception as e:
             logger.error(f"Error in work round {round_number}: {e}", exc_info=True)
-            round_metrics["errors"] += 1
+            errors = get_int(round_metrics, "errors", 0)
+            round_metrics["errors"] = errors + 1
             self.metrics.errors += 1
 
         # Calculate round duration
@@ -144,7 +148,9 @@ class WorkProcessor(BaseProcessor):
         round_metrics["duration_seconds"] = duration
 
         # Only log at INFO level if work was actually done
-        if round_metrics["thoughts_processed"] > 0 or round_metrics["tasks_activated"] > 0:
+        thoughts_processed = get_int(round_metrics, "thoughts_processed", 0)
+        tasks_activated = get_int(round_metrics, "tasks_activated", 0)
+        if thoughts_processed > 0 or tasks_activated > 0:
             logger.info(
                 f"Work round {round_number}: completed "
                 f"({round_metrics['thoughts_processed']} thoughts, {duration:.2f}s)"
@@ -282,7 +288,7 @@ class WorkProcessor(BaseProcessor):
         self._running = False
         logger.info("Work processor stopped")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current work processor status and metrics."""
         work_stats = {
             "last_activity": self.last_activity_time.isoformat(),

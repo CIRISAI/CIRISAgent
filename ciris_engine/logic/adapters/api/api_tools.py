@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,7 @@ class APIToolService(BaseService, ToolService):
         await BaseService.stop(self)
         logger.info("API tool service stopped")
 
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, parameters: JSONDict) -> ToolExecutionResult:
         """Execute a tool and return the result."""
         # Track request for telemetry
         self._track_request()
@@ -92,7 +94,8 @@ class APIToolService(BaseService, ToolService):
                 correlation_id=correlation_id,
             )
 
-            if correlation_id:
+            # Type narrow correlation_id to str for dict indexing
+            if correlation_id and isinstance(correlation_id, str):
                 self._results[correlation_id] = tool_result
 
             return tool_result
@@ -111,14 +114,14 @@ class APIToolService(BaseService, ToolService):
                 correlation_id=correlation_id,
             )
 
-    async def _curl(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _curl(self, params: JSONDict) -> JSONDict:
         """Execute a curl-like HTTP request."""
         logger.info(f"[API_TOOLS] _curl called with params: {params}")
-        url = params.get("url")
-        method = params.get("method", "GET").upper()
-        headers = params.get("headers", {})
+        url = get_str(params, "url", "")
+        method = get_str(params, "method", "GET").upper()
+        headers = get_dict(params, "headers", {})
         data = params.get("data")
-        timeout = params.get("timeout", 30)
+        timeout = get_float(params, "timeout", 30.0)
 
         if not url:
             logger.error(f"[API_TOOLS] URL parameter missing. Params keys: {list(params.keys())}")
@@ -126,7 +129,9 @@ class APIToolService(BaseService, ToolService):
 
         try:
             async with aiohttp.ClientSession() as session:
-                kwargs = {"headers": headers, "timeout": aiohttp.ClientTimeout(total=timeout)}
+                # Build kwargs with proper types
+                timeout_obj = aiohttp.ClientTimeout(total=timeout)
+                kwargs: Dict[str, Any] = {"headers": headers, "timeout": timeout_obj}
 
                 if data:
                     if isinstance(data, dict):
@@ -155,12 +160,12 @@ class APIToolService(BaseService, ToolService):
         except Exception as e:
             return {"error": str(e)}
 
-    async def _http_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _http_get(self, params: JSONDict) -> JSONDict:
         """Perform an HTTP GET request."""
         params["method"] = "GET"
         return await self._curl(params)
 
-    async def _http_post(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _http_post(self, params: JSONDict) -> JSONDict:
         """Perform an HTTP POST request."""
         params["method"] = "POST"
         return await self._curl(params)
@@ -174,7 +179,7 @@ class APIToolService(BaseService, ToolService):
         # All our tools are synchronous, so results should be available immediately
         return self._results.get(correlation_id)
 
-    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+    async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """Validate parameters for a tool."""
         if tool_name in ["curl", "http_get", "http_post"]:
             return "url" in parameters

@@ -11,6 +11,7 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.faculties import EpistemicFaculty
@@ -109,7 +110,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
     async def call_llm_structured(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[JSONDict],
         response_model: type,
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -159,7 +160,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return result
 
-    async def apply_faculties(self, content: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, BaseModel]:
+    async def apply_faculties(self, content: str, context: Optional[JSONDict] = None) -> Dict[str, BaseModel]:
         """Apply available epistemic faculties to content.
 
         Args:
@@ -171,7 +172,8 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         """
         from ciris_engine.schemas.dma.faculty import FacultyContext
 
-        results: Dict[str, Any] = {}
+        # Use Dict[str, BaseModel] to match return type
+        results: Dict[str, BaseModel] = {}
 
         if not self.faculties:
             return results

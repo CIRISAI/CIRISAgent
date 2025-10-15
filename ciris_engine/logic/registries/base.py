@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
@@ -44,7 +45,7 @@ class ServiceProvider:
     instance: Any
     capabilities: List[str]
     circuit_breaker: Optional[CircuitBreaker] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)  # ServiceMetadata.model_dump() result
+    metadata: JSONDict = field(default_factory=dict)  # ServiceMetadata.model_dump() result
     priority_group: int = 0
     strategy: SelectionStrategy = SelectionStrategy.FALLBACK
 
@@ -94,7 +95,7 @@ class ServiceRegistry:
         priority: Priority = Priority.NORMAL,
         capabilities: Optional[List[str]] = None,
         circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[JSONDict] = None,
         priority_group: int = 0,
         strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
     ) -> str:
@@ -296,7 +297,7 @@ class ServiceRegistry:
                 provider.circuit_breaker.record_failure()
             return None
 
-    def get_circuit_breaker_details(self) -> Dict[str, Any]:
+    def get_circuit_breaker_details(self) -> JSONDict:
         """Get detailed circuit breaker information for all services."""
         cb_details = {}
 
@@ -314,7 +315,7 @@ class ServiceRegistry:
                         "stats": provider.circuit_breaker.get_stats(),
                     }
 
-        return cb_details
+        return cast(JSONDict, cb_details)
 
     def get_provider_info(self, handler: Optional[str] = None, service_type: Optional[str] = None) -> dict[str, Any]:
         """

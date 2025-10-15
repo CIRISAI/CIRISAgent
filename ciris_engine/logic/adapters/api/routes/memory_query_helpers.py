@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -192,13 +193,13 @@ class AttributeParser:
     """Parses JSON attributes from database rows."""
 
     @staticmethod
-    def parse_attributes(attributes_json: Optional[str], node_id: str) -> Dict[str, Any]:
+    def parse_attributes(attributes_json: Optional[str], node_id: str) -> JSONDict:
         """Parse JSON attributes with error handling."""
         if not attributes_json:
             return {}
 
         try:
-            result: Dict[str, Any] = json.loads(attributes_json)
+            result: JSONDict = json.loads(attributes_json)
             return result
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse attributes for node {node_id}")

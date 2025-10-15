@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import discord
 
+from ciris_engine.schemas.types import JSONDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -235,7 +237,7 @@ class DiscordVisionHelper:
         """
         return bool(self.api_key)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current status of vision helper.
 
         Returns:

@@ -126,7 +126,7 @@ class ServiceStatusMetrics(BaseModel):
     variance_threshold: float = Field(0.20, description="Variance threshold for triggering WA review")
 
 
-class NodeAttributes(BaseModel):
+class JSONDict(BaseModel):
     """Generic node attributes for parsing."""
 
     agent_id: Optional[str] = Field(None, description="Agent ID from node")

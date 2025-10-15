@@ -53,10 +53,13 @@ class TestBatchContextData:
 
     def test_init_with_proper_types(self):
         """Verify all fields initialize with correct types per covenant type safety."""
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
         batch_data = BatchContextData()
 
         # Type assertions per "No Untyped Dicts, No Bypass Patterns, No Exceptions" principle
-        assert isinstance(batch_data.agent_identity, dict)
+        # agent_identity is now Optional[IdentityData], defaults to None
+        assert batch_data.agent_identity is None or isinstance(batch_data.agent_identity, IdentityData)
         assert batch_data.identity_purpose is None or isinstance(batch_data.identity_purpose, str)
         assert isinstance(batch_data.identity_capabilities, list)
         assert isinstance(batch_data.identity_restrictions, list)
@@ -140,7 +143,7 @@ class TestPrefetchBatchContext:
 
         # Should return valid empty state, not fail
         assert isinstance(batch_data, BatchContextData)
-        assert batch_data.agent_identity == {}
+        assert batch_data.agent_identity is None  # No identity service means None, not empty dict
         assert batch_data.recent_tasks == []
         assert batch_data.top_tasks == []
         assert batch_data.service_health == {}
@@ -220,9 +223,9 @@ class TestPrefetchBatchContext:
 
         batch_data = await prefetch_batch_context(memory_service=mock_memory)
 
-        # Verify identity was properly extracted
-        assert batch_data.agent_identity["agent_id"] == "ciris_001"
-        assert batch_data.agent_identity["trust_level"] == 0.85
+        # Verify identity was properly extracted - agent_identity is now IdentityData model
+        assert batch_data.agent_identity.agent_id == "ciris_001"
+        assert batch_data.agent_identity.trust_level == 0.85
         assert batch_data.identity_purpose == "Support human flourishing through ethical assistance"
         assert len(batch_data.identity_capabilities) == 4
         assert "speak" in batch_data.identity_capabilities
@@ -240,8 +243,8 @@ class TestPrefetchBatchContext:
             # Verify warning was logged
             mock_logger.warning.assert_called()
 
-            # Should have empty identity but continue
-            assert batch_data.agent_identity == {}
+            # Should have None identity but continue (failed to retrieve)
+            assert batch_data.agent_identity is None
             assert batch_data.identity_purpose is None
 
     async def test_prefetch_critical_resource_alerts(self):

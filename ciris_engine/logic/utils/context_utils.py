@@ -1,7 +1,9 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_bool
 from ciris_engine.protocols.services import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.processors.core import ConscienceApplicationResult
@@ -19,7 +21,7 @@ def build_dispatch_context(
     task: Optional[Any] = None,
     app_config: Optional[Any] = None,
     round_number: Optional[int] = None,
-    extra_context: Optional[Dict[str, Any]] = None,
+    extra_context: Optional[JSONDict] = None,
     conscience_result: Optional["ConscienceApplicationResult"] = None,
     action_type: Optional[Any] = None,
 ) -> DispatchContext:
@@ -28,22 +30,17 @@ def build_dispatch_context(
 
     Args:
         thought: The thought object being processed
+        time_service: Time service for timestamps
         task: Optional task associated with the thought
         app_config: Optional app configuration for determining origin service
         round_number: Optional round number for processing
-        extra_context: Optional additional context to merge
+        extra_context: Optional additional runtime context (wa_id, correlation_id, etc.)
         conscience_result: Optional conscience evaluation results
+        action_type: Optional action type override
 
     Returns:
         DispatchContext object with all relevant fields populated
     """
-    # Start with base context data
-    context_data: Dict[str, Any] = {}
-
-    # Extract initial context from thought if available
-    if hasattr(thought, "initial_context") and thought.initial_context:
-        if isinstance(thought.initial_context, dict):
-            context_data.update(thought.initial_context)
 
     # Core identification
     thought_id = getattr(thought, "thought_id", None)
@@ -96,7 +93,7 @@ def build_dispatch_context(
     # Check extra_context for channel_id as fallback
     if channel_context is None and extra_context:
         channel_id = extra_context.get("channel_id")
-        if channel_id:
+        if channel_id and isinstance(channel_id, str):
             channel_context = create_channel_context(channel_id)
 
     # Channel context is required
@@ -114,7 +111,7 @@ def build_dispatch_context(
 
     if extra_context:
         wa_id = extra_context.get("wa_id")
-        wa_authorized = extra_context.get("wa_authorized", False)
+        wa_authorized = get_bool(extra_context, "wa_authorized", False)  # Type-safe bool extraction
         correlation_id = extra_context.get("correlation_id")
         handler_name = extra_context.get("handler_name")
         event_summary = extra_context.get("event_summary")

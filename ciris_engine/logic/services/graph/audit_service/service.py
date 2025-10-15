@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
+from ciris_engine.schemas.types import JSONDict
+
 # Optional import for psutil
 try:
     import psutil
@@ -809,7 +812,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
     # ========== Private Helper Methods ==========
 
     async def _store_entry_in_graph(
-        self, entry: AuditRequest, action_type: HandlerActionType, hash_chain_data: Optional[Dict[str, Any]] = None
+        self, entry: AuditRequest, action_type: HandlerActionType, hash_chain_data: Optional[JSONDict] = None
     ) -> None:
         """Store an audit entry in the graph and create a trace correlation.
 
@@ -1052,7 +1055,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         await asyncio.to_thread(_create_tables)
         self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
 
-    async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[Dict[str, Any]]:
+    async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain.
 
         Returns:
@@ -1063,10 +1066,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             return None
 
         async with self._hash_chain_lock:
-            hash_chain_data: Optional[Dict[str, Any]] = None
+            hash_chain_data: Optional[JSONDict] = None
 
-            def _write_to_chain() -> Dict[str, Any]:
-                entry_dict = {
+            def _write_to_chain() -> JSONDict:
+                entry_dict: JSONDict = {
                     "event_id": entry.entry_id,
                     "event_timestamp": entry.timestamp.isoformat(),
                     "event_type": entry.event_type,
@@ -1078,7 +1081,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                     raise RuntimeError("Hash chain not available")
 
                 prepared = self.hash_chain.prepare_entry(entry_dict)
-                signature = self.signature_manager.sign_entry(prepared["entry_hash"])
+                entry_hash_val = get_str(prepared, "entry_hash", "")
+                signature = self.signature_manager.sign_entry(entry_hash_val)
 
                 if not self._db_connection:
                     raise RuntimeError("Database connection not available")
@@ -1110,13 +1114,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 self._db_connection.commit()
 
                 # Return hash chain data
-                return {
-                    "sequence_number": prepared["sequence_number"],
-                    "entry_hash": prepared["entry_hash"],
-                    "previous_hash": prepared["previous_hash"],
+                result_dict: JSONDict = {
+                    "sequence_number": get_int(prepared, "sequence_number", 0),
+                    "entry_hash": entry_hash_val,
+                    "previous_hash": get_str(prepared, "previous_hash", ""),
                     "signature": signature,
                     "signing_key_id": self.signature_manager.key_id or "unknown",
                 }
+                return result_dict
 
             try:
                 logger.debug(f"About to write to hash chain for entry {entry.entry_id}")
@@ -1351,16 +1356,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             timestamp = self._time_service.now() if self._time_service else datetime.now()
         return timestamp
 
-    def _extract_action_type_from_attrs(self, attrs: Dict[str, Any]) -> Optional[str]:
+    def _extract_action_type_from_attrs(self, attrs: JSONDict) -> Optional[str]:
         """Extract action_type from attributes with fallback."""
-        action_type = attrs.get("action_type")
-        if not action_type and "action_type" in attrs:
-            action_type = attrs["action_type"]
-        return action_type
+        action_type_val = get_str(attrs, "action_type", "")
+        if action_type_val:
+            return action_type_val
+        return None
 
-    def _create_audit_request_from_attrs(
-        self, attrs: Dict[str, Any], timestamp: datetime, action_type: str
-    ) -> AuditRequest:
+    def _create_audit_request_from_attrs(self, attrs: JSONDict, timestamp: datetime, action_type: str) -> AuditRequest:
         """Create AuditRequest from manual attribute parsing."""
         return AuditRequest(
             entry_id=attrs.get("event_id", str(uuid4())),
@@ -1464,7 +1467,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             result.append(log_entry)
         return result
 
-    def _convert_entry_to_audit_log_dict(self, entry: AuditRequest) -> Dict[str, Any]:
+    def _convert_entry_to_audit_log_dict(self, entry: AuditRequest) -> JSONDict:
         """Convert audit entry to audit log dictionary format."""
         return {
             "event_id": entry.entry_id,
@@ -1475,7 +1478,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             "metadata": {"outcome": entry.outcome} if entry.outcome else {},
         }
 
-    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[Dict[str, Any]]:
+    async def _search_event_in_memory_bus(self, event_id: str) -> Optional[JSONDict]:
         """Search for event in memory bus."""
         if not self._memory_bus:
             return None
@@ -1494,7 +1497,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
 
         return self._convert_entry_to_audit_log_dict(entry)
 
-    def _search_event_in_recent_cache(self, event_id: str) -> Optional[Dict[str, Any]]:
+    def _search_event_in_recent_cache(self, event_id: str) -> Optional[JSONDict]:
         """Search for event in recent entries cache."""
         for entry in self._recent_entries:
             if entry.entry_id == event_id:

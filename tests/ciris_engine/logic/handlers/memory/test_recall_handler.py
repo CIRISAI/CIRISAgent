@@ -203,39 +203,42 @@ def test_task() -> Task:
 @pytest.fixture
 def sample_memory_nodes() -> List[GraphNode]:
     """Create sample memory nodes for testing."""
+    from ciris_engine.schemas.services.graph_core import GraphNodeAttributes
+
+    now = datetime.now(timezone.utc)
     return [
         GraphNode(
             id="mem_identity_1",
             type=NodeType.IDENTITY,
             scope=GraphScope.LOCAL,
-            attributes={
-                "content": "I am CIRIS, an ethical AI assistant",
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-                "created_by": "test",
-            },
+            attributes=GraphNodeAttributes(
+                content="I am CIRIS, an ethical AI assistant",
+                created_at=now,
+                updated_at=now,
+                created_by="test",
+            ),
         ),
         GraphNode(
             id="mem_task_1",
             type=NodeType.TASK_SUMMARY,
             scope=GraphScope.LOCAL,
-            attributes={
-                "content": "Help user with Python programming",
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-                "created_by": "test",
-            },
+            attributes=GraphNodeAttributes(
+                content="Help user with Python programming",
+                created_at=now,
+                updated_at=now,
+                created_by="test",
+            ),
         ),
         GraphNode(
             id="mem_observation_1",
             type=NodeType.OBSERVATION,
             scope=GraphScope.LOCAL,
-            attributes={
-                "content": "User prefers concise answers",
-                "created_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-                "created_by": "test",
-            },
+            attributes=GraphNodeAttributes(
+                content="User prefers concise answers",
+                created_at=now,
+                updated_at=now,
+                created_by="test",
+            ),
         ),
     ]
 

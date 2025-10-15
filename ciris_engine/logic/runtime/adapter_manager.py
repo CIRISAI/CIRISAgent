@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import aiofiles
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
 
@@ -220,7 +222,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         adapter_type: str,
         message: str,
         error: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[JSONDict] = None,
     ) -> AdapterOperationResult:
         """Factory method for consistent AdapterOperationResult creation with strict typing."""
         return AdapterOperationResult(
@@ -489,9 +491,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             logger.error(f"Failed to list adapters: {e}", exc_info=True)
             return []
 
-    async def _determine_adapter_health_status(self, instance: AdapterInstance) -> tuple[str, Dict[str, Any]]:
+    async def _determine_adapter_health_status(self, instance: AdapterInstance) -> tuple[str, JSONDict]:
         """Determine adapter health status and details - fail fast on issues."""
-        health_details: Dict[str, Any] = {}
+        health_details: JSONDict = {}
 
         try:
             if hasattr(instance.adapter, "is_healthy"):
@@ -507,7 +509,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         return health_status, health_details
 
-    def _extract_adapter_service_details(self, instance: AdapterInstance) -> List[Dict[str, Any]]:
+    def _extract_adapter_service_details(self, instance: AdapterInstance) -> List[JSONDict]:
         """Extract service registration details from adapter - fail fast on invalid data."""
         try:
             if not hasattr(instance.adapter, "get_services_to_register"):

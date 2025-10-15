@@ -16,6 +16,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
@@ -98,24 +101,30 @@ class AuditConsolidator:
                 attrs = attrs.model_dump() if hasattr(attrs, "model_dump") else {}
 
             # Extract key fields
-            action = attrs.get("action", "unknown")
-            actor = attrs.get("actor", "unknown")
+            action = get_str(attrs, "action", "unknown")
+            actor = get_str(attrs, "actor", "unknown")
             timestamp = attrs.get("timestamp", attrs.get("created_at", ""))
 
             # Parse context data
-            context = attrs.get("context", {})
-            if isinstance(context, str):
+            context_val = attrs.get("context", {})
+            if isinstance(context_val, str):
                 try:
-                    context = json.loads(context)
+                    context = json.loads(context_val)
+                    if not isinstance(context, dict):
+                        context = {}
                 except (json.JSONDecodeError, ValueError):
                     context = {}
+            elif isinstance(context_val, dict):
+                context = context_val
+            else:
+                context = {}
 
-            service_name = context.get("service_name", "unknown")
-            additional_data = context.get("additional_data", {})
+            service_name = get_str(context, "service_name", "unknown")
+            additional_data = get_dict(context, "additional_data", {})
 
-            event_type = additional_data.get("event_type", action)
-            severity = additional_data.get("severity", "info")
-            outcome = additional_data.get("outcome", "success")
+            event_type = get_str(additional_data, "event_type", action)
+            severity = get_str(additional_data, "severity", "info")
+            outcome = get_str(additional_data, "outcome", "success")
 
             # Track metrics
             events_by_type[event_type] += 1
@@ -227,7 +236,7 @@ class AuditConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, audit_nodes: List[GraphNode]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for audit summary.
 
@@ -236,7 +245,7 @@ class AuditConsolidator:
         - Security-related events
         - First and last events in period
         """
-        edges = []
+        edges: List[Tuple[GraphNode, GraphNode, str, JSONDict]] = []
 
         # Sort nodes by timestamp
         current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
@@ -247,70 +256,52 @@ class AuditConsolidator:
             # First event - store data in edge attributes
             first_node = sorted_nodes[0]
             first_attrs = first_node.attributes if isinstance(first_node.attributes, dict) else {}
-            edges.append(
-                (
-                    summary_node,
-                    summary_node,  # Self-reference
-                    "FIRST_AUDIT_EVENT",
-                    {
-                        "event_order": "first",
-                        "audit_node_id": first_node.id,
-                        "event_type": first_attrs.get("event_type", "unknown"),
-                        "severity": first_attrs.get("severity", "unknown"),
-                        "target_entity": first_attrs.get("target_entity"),
-                        "timestamp": first_node.updated_at.isoformat() if first_node.updated_at else None,
-                    },
-                )
-            )
+            first_edge_attrs: JSONDict = {
+                "event_order": "first",
+                "audit_node_id": first_node.id,
+                "event_type": get_str(first_attrs, "event_type", "unknown"),
+                "severity": get_str(first_attrs, "severity", "unknown"),
+                "target_entity": first_attrs.get("target_entity"),
+                "timestamp": first_node.updated_at.isoformat() if first_node.updated_at else None,
+            }
+            edges.append((summary_node, summary_node, "FIRST_AUDIT_EVENT", first_edge_attrs))
 
             # Last event - store data in edge attributes
             if len(sorted_nodes) > 1:
                 last_node = sorted_nodes[-1]
                 last_attrs = last_node.attributes if isinstance(last_node.attributes, dict) else {}
-                edges.append(
-                    (
-                        summary_node,
-                        summary_node,  # Self-reference
-                        "LAST_AUDIT_EVENT",
-                        {
-                            "event_order": "last",
-                            "audit_node_id": last_node.id,
-                            "event_type": last_attrs.get("event_type", "unknown"),
-                            "severity": last_attrs.get("severity", "unknown"),
-                            "target_entity": last_attrs.get("target_entity"),
-                            "timestamp": last_node.updated_at.isoformat() if last_node.updated_at else None,
-                        },
-                    )
-                )
+                last_edge_attrs: JSONDict = {
+                    "event_order": "last",
+                    "audit_node_id": last_node.id,
+                    "event_type": get_str(last_attrs, "event_type", "unknown"),
+                    "severity": get_str(last_attrs, "severity", "unknown"),
+                    "target_entity": last_attrs.get("target_entity"),
+                    "timestamp": last_node.updated_at.isoformat() if last_node.updated_at else None,
+                }
+                edges.append((summary_node, summary_node, "LAST_AUDIT_EVENT", last_edge_attrs))
 
         # Link to security events
         security_count = 0
         for node in audit_nodes:
             attrs = node.attributes
             if isinstance(attrs, dict):
-                event_type = attrs.get("event_type", "").lower()
-                severity = attrs.get("severity", "").lower()
+                event_type_str = get_str(attrs, "event_type", "").lower()
+                severity_str = get_str(attrs, "severity", "").lower()
 
                 # Check if security-related
-                is_security = any(keyword in event_type for keyword in ["auth", "access", "permission", "security"])
-                is_high_severity = severity in ["high", "critical", "error"]
+                is_security = any(keyword in event_type_str for keyword in ["auth", "access", "permission", "security"])
+                is_high_severity = severity_str in ["high", "critical", "error"]
 
                 if (is_security or is_high_severity) and security_count < 10:
-                    edges.append(
-                        (
-                            summary_node,
-                            summary_node,  # Self-reference with audit data
-                            "SECURITY_AUDIT_EVENT",
-                            {
-                                "audit_node_id": node.id,
-                                "event_type": attrs.get("event_type", "unknown"),
-                                "severity": severity,
-                                "target_entity": attrs.get("target_entity"),
-                                "is_security": str(is_security),
-                                "timestamp": node.updated_at.isoformat() if node.updated_at else None,
-                            },
-                        )
-                    )
+                    security_edge_attrs: JSONDict = {
+                        "audit_node_id": node.id,
+                        "event_type": get_str(attrs, "event_type", "unknown"),
+                        "severity": severity_str,
+                        "target_entity": attrs.get("target_entity"),
+                        "is_security": str(is_security),
+                        "timestamp": node.updated_at.isoformat() if node.updated_at else None,
+                    }
+                    edges.append((summary_node, summary_node, "SECURITY_AUDIT_EVENT", security_edge_attrs))
                     security_count += 1
 
         return edges

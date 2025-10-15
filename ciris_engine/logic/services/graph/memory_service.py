@@ -11,12 +11,13 @@ from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence import get_db_connection, initialize_database
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_graph_service import BaseGraphService, GraphNodeConvertible
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.protocols.services import GraphMemoryServiceProtocol, MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 from ciris_engine.schemas.secrets.service import DecapsulationContext
-from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, NodeAttributes, TelemetryNodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, TelemetryNodeAttributes
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
@@ -157,7 +158,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
         # Process attributes - convert to proper schema
-        processed_attrs: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]] = {}
+        processed_attrs: AnyNodeAttributes | GraphNodeAttributes | JSONDict = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -248,7 +249,9 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Add secret references to node metadata if any were found
         if secret_refs:
             if isinstance(processed_attributes, dict):
-                processed_attributes.setdefault("secret_refs", []).extend([ref.uuid for ref in secret_refs])
+                refs_list = get_list(processed_attributes, "secret_refs", [])
+                refs_list.extend([ref.uuid for ref in secret_refs])
+                processed_attributes["secret_refs"] = refs_list
             logger.info(f"Stored {len(secret_refs)} secret references in memory node {node.id}")
 
         return GraphNode(
@@ -262,14 +265,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         )
 
     async def _process_secrets_for_recall(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]], action_type: str
-    ) -> Dict[str, Any]:
+        self, attributes: AnyNodeAttributes | GraphNodeAttributes | JSONDict, action_type: str
+    ) -> JSONDict:
         """Process secrets in recalled attributes for potential decryption."""
         if not attributes:
             return {}
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: Dict[str, Any]
+        attributes_dict: JSONDict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -304,15 +307,13 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return attributes_dict
 
-    def _process_secrets_for_forget(
-        self, attributes: Union[AnyNodeAttributes, GraphNodeAttributes, Dict[str, Any]]
-    ) -> None:
+    def _process_secrets_for_forget(self, attributes: AnyNodeAttributes | GraphNodeAttributes | JSONDict) -> None:
         """Clean up secrets when forgetting a node."""
         if not attributes:
             return
 
         # Convert GraphNodeAttributes to dict if needed
-        attributes_dict: Dict[str, Any]
+        attributes_dict: JSONDict
         if hasattr(attributes, "model_dump"):
             attributes_dict = attributes.model_dump()
         else:  # isinstance(attributes, dict)
@@ -504,7 +505,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 id=node_id,
                 type=NodeType.TSDB_DATA,
                 scope=GraphScope(scope),
-                attributes=telemetry_attrs.model_dump(),  # Convert to dict for storage
+                attributes=telemetry_attrs,  # Pass typed Pydantic model directly
                 updated_by="memory_service",
                 updated_at=now,
             )
@@ -569,16 +570,17 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             node_id = f"log_{log_level}_{int(now.timestamp())}"
 
             # Create typed attributes with log-specific data
-            # Using base NodeAttributes with additional log fields in the dict
-            node_attrs = NodeAttributes(
-                created_at=now, updated_at=now, created_by="memory_service", tags=["log", log_level.lower()]
-            )
-
-            # Convert to dict and add log-specific fields
-            attrs_dict = node_attrs.model_dump()
-            attrs_dict.update(
-                {"log_message": log_message, "log_level": log_level, "log_tags": tags or {}, "retention_policy": "raw"}
-            )
+            # JSONDict is a type alias for dict, so create dict directly
+            attrs_dict: JSONDict = {
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "created_by": "memory_service",
+                "tags": ["log", log_level.lower()],
+                "log_message": log_message,
+                "log_level": log_level,
+                "log_tags": tags or {},
+                "retention_policy": "raw",
+            }
 
             node = GraphNode(
                 id=node_id,
@@ -958,38 +960,46 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return connected_node, True
 
-    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
+    def _apply_time_filters(self, nodes: List[GraphNode], filters: Optional[JSONDict]) -> List[GraphNode]:
         """Apply time-based filters to a list of nodes."""
         if not filters:
             return nodes
 
         filtered = nodes
 
-        if "since" in filters:
-            since = filters["since"]
-            if isinstance(since, str):
-                from datetime import datetime
+        since_val = filters.get("since")
+        if since_val:
+            since_dt: datetime
+            if isinstance(since_val, str):
+                since_dt = datetime.fromisoformat(since_val)
+            elif isinstance(since_val, datetime):
+                since_dt = since_val
+            else:
+                # Skip invalid type
+                return filtered
+            filtered = [n for n in filtered if n.updated_at and n.updated_at >= since_dt]
 
-                since = datetime.fromisoformat(since)
-            filtered = [n for n in filtered if n.updated_at and n.updated_at >= since]
-
-        if "until" in filters:
-            until = filters["until"]
-            if isinstance(until, str):
-                from datetime import datetime
-
-                until = datetime.fromisoformat(until)
-            filtered = [n for n in filtered if n.updated_at and n.updated_at <= until]
+        until_val = filters.get("until")
+        if until_val:
+            until_dt: datetime
+            if isinstance(until_val, str):
+                until_dt = datetime.fromisoformat(until_val)
+            elif isinstance(until_val, datetime):
+                until_dt = until_val
+            else:
+                # Skip invalid type
+                return filtered
+            filtered = [n for n in filtered if n.updated_at and n.updated_at <= until_dt]
 
         return filtered
 
-    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[Dict[str, Any]]) -> List[GraphNode]:
+    def _apply_tag_filters(self, nodes: List[GraphNode], filters: Optional[JSONDict]) -> List[GraphNode]:
         """Apply tag-based filters to a list of nodes."""
         if not filters or "tags" not in filters:
             return nodes
 
-        tags = filters["tags"]
-        if not isinstance(tags, list):
+        tags_val = filters.get("tags", [])
+        if not isinstance(tags_val, list):
             return nodes
 
         filtered = []
@@ -1000,11 +1010,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # Handle both dict and object attributes
             node_tags = None
             if isinstance(n.attributes, dict):
-                node_tags = n.attributes.get("tags", [])
+                node_tags = get_list(n.attributes, "tags", [])
             elif hasattr(n.attributes, "tags"):
                 node_tags = n.attributes.tags
 
-            if node_tags and any(tag in node_tags for tag in tags):
+            if node_tags and any(tag in node_tags for tag in tags_val):
                 filtered.append(n)
 
         return filtered
@@ -1049,7 +1059,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return filtered
 
-    def _get_attributes_dict(self, attributes: Any) -> Dict[str, Any]:
+    def _get_attributes_dict(self, attributes: Any) -> JSONDict:
         """Extract attributes as dictionary from various formats."""
         if hasattr(attributes, "model_dump"):
             return attributes.model_dump()  # type: ignore[no-any-return]

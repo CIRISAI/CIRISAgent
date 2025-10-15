@@ -6,12 +6,14 @@ with existing CIRIS services following all architectural patterns.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 
 from ciris_engine.logic.services.graph.base import BaseGraphService
 from ciris_engine.logic.services.mixins import RequestMetricsMixin
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
 from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.buses import MemoryBus
@@ -80,7 +82,7 @@ class MetricsEnabledGraphService(RequestMetricsMixin, BaseGraphService):
             logger.error(f"Failed to query graph: {e}")
             raise
 
-    def get_extended_status(self) -> Dict[str, Any]:
+    def get_extended_status(self) -> JSONDict:
         """Get service status including request metrics.
 
         Extends the base status with request metrics information.
@@ -136,7 +138,7 @@ class MetricsEnabledAdapter:
         # Implementation would go here
         pass
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> JSONDict:
         """Get adapter metrics."""
         metrics = self._metrics.get_request_metrics()
         return {
@@ -148,25 +150,29 @@ class MetricsEnabledAdapter:
 
 
 # Example 3: Using metrics in an API endpoint
-async def api_endpoint_with_metrics(service: MetricsEnabledGraphService) -> Dict[str, Any]:
+async def api_endpoint_with_metrics(service: MetricsEnabledGraphService) -> JSONDict:
     """Example API endpoint that exposes service metrics."""
 
     # Get extended status including metrics
     status = service.get_extended_status()
 
+    # Extract nested dicts with proper typing
+    service_dict = get_dict(status, "service", {})
+    metrics_dict = get_dict(status, "metrics", {})
+
     # Could return this in an API response
     return {
-        "healthy": status["service"]["healthy"],
+        "healthy": service_dict.get("healthy"),
         "performance": {
-            "avg_response_ms": status["metrics"]["average_response_time_ms"],
-            "p95_response_ms": status["metrics"]["p95_response_time_ms"],
-            "success_rate": status["metrics"]["success_rate"],
-            "active_requests": status["metrics"]["active_requests"],
+            "avg_response_ms": metrics_dict.get("average_response_time_ms"),
+            "p95_response_ms": metrics_dict.get("p95_response_time_ms"),
+            "success_rate": metrics_dict.get("success_rate"),
+            "active_requests": metrics_dict.get("active_requests"),
         },
         "load": {
-            "total_requests": status["metrics"]["requests_handled"],
-            "error_count": status["metrics"]["error_count"],
-            "recent_error_rate": status["metrics"]["recent_error_rate"],
+            "total_requests": metrics_dict.get("requests_handled"),
+            "error_count": metrics_dict.get("error_count"),
+            "recent_error_rate": metrics_dict.get("recent_error_rate"),
         },
     }
 

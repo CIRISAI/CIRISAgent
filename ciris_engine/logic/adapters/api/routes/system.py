@@ -28,6 +28,7 @@ from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
+from ciris_engine.schemas.types import JSONDict
 from ciris_engine.utils.serialization import serialize_timestamp
 
 from ..constants import (
@@ -103,8 +104,8 @@ class RuntimeControlResponse(BaseModel):
 
     # Enhanced pause response fields for UI display
     current_step: Optional[str] = Field(None, description="Current pipeline step when paused")
-    current_step_schema: Optional[Dict[str, Any]] = Field(None, description="Full schema object for current step")
-    pipeline_state: Optional[Dict[str, Any]] = Field(None, description="Complete pipeline state when paused")
+    current_step_schema: Optional[JSONDict] = Field(None, description="Full schema object for current step")
+    pipeline_state: Optional[JSONDict] = Field(None, description="Complete pipeline state when paused")
 
 
 class ServiceStatus(BaseModel):
@@ -344,7 +345,7 @@ async def _execute_pause_action(runtime_control: Any, body: RuntimeAction) -> bo
 
 def _extract_pipeline_state_info(
     request: Request,
-) -> tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> tuple[Optional[str], Optional[JSONDict], Optional[JSONDict]]:
     """
     Extract pipeline state information for UI display.
 
@@ -352,8 +353,8 @@ def _extract_pipeline_state_info(
         Tuple of (current_step, current_step_schema, pipeline_state)
     """
     current_step: Optional[str] = None
-    current_step_schema: Optional[Dict[str, Any]] = None
-    pipeline_state: Optional[Dict[str, Any]] = None
+    current_step_schema: Optional[JSONDict] = None
+    pipeline_state: Optional[JSONDict] = None
 
     try:
         # Try to get current pipeline state from the runtime
@@ -397,8 +398,8 @@ def _extract_pipeline_state_info(
 def _create_pause_response(
     success: bool,
     current_step: Optional[str],
-    current_step_schema: Optional[Dict[str, Any]],
-    pipeline_state: Optional[Dict[str, Any]],
+    current_step_schema: Optional[JSONDict],
+    pipeline_state: Optional[JSONDict],
 ) -> RuntimeControlResponse:
     """Create pause action response."""
     # Create clear message based on success state
@@ -796,7 +797,7 @@ def _parse_service_key(service_key: str) -> tuple[str, str]:
         return "unknown", service_key
 
 
-def _create_service_status(service_key: str, details: Dict[str, Any]) -> ServiceStatus:
+def _create_service_status(service_key: str, details: JSONDict) -> ServiceStatus:
     """Create ServiceStatus from service key and details."""
     service_type, display_name = _parse_service_key(service_key)
 
@@ -1252,7 +1253,7 @@ async def reload_adapter(
 
 # Tool endpoints
 @router.get("/tools")
-async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> Dict[str, Any]:
+async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> JSONDict:
     """
     Get list of all available tools from all tool providers.
 

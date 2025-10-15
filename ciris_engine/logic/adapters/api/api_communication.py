@@ -11,6 +11,7 @@ from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.services.core import ServiceCapabilities, ServiceStatus
@@ -27,7 +28,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         super().__init__(time_service=None, service_name="APICommunicationService")
 
         self._response_queue: asyncio.Queue[Any] = asyncio.Queue()
-        self._websocket_clients: Dict[str, Any] = {}
+        self._websocket_clients: JSONDict = {}
         self._config = config  # Store the API adapter config
 
         # Metrics tracking
@@ -88,7 +89,12 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             logger.warning(f"WebSocket client not found: {client_id}")
             return False
 
-        ws = self._websocket_clients[client_id]
+        ws = self._websocket_clients.get(client_id)
+        # Type guard: ensure ws has send_json method
+        if ws is None or not hasattr(ws, "send_json"):
+            logger.warning(f"Invalid WebSocket client: {client_id}")
+            return False
+
         await ws.send_json(
             {
                 "type": "message",
@@ -166,7 +172,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             del self._websocket_clients[client_id]
             logger.info(f"WebSocket client unregistered: {client_id}")
 
-    def _extract_parameters(self, request_data: Any) -> Dict[str, Any]:
+    def _extract_parameters(self, request_data: Any) -> JSONDict:
         """Extract parameters from request data handling both dict and Pydantic model cases."""
         if hasattr(request_data, "get"):
             params = request_data.get("parameters", {})

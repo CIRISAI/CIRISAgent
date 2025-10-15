@@ -283,7 +283,7 @@ class ComponentBuilder:
                 "secrets_service": self.runtime.secrets_service,
                 "telemetry_service": self.runtime.telemetry_service,
                 "app_config": self.runtime.essential_config,
-                "graphql_provider": graphql_provider,
+                "graphql_provider": "initialized",  # Store status instead of object
                 "bus_manager": self.runtime.bus_manager,  # Add bus manager for access to buses
                 "communication_bus": self.runtime.bus_manager.communication,  # Direct access to communication bus
             },

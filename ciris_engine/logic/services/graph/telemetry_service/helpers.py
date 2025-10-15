@@ -9,6 +9,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
+from ciris_engine.schemas.types import JSONDict
+
 logger = logging.getLogger(__name__)
 
 from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
@@ -443,7 +445,7 @@ def store_summary_cache(
 # ============================================================================
 
 
-def _extract_service_stats_cb_data(stats: Dict[str, Any]) -> "CircuitBreakerState":
+def _extract_service_stats_cb_data(stats: JSONDict) -> "CircuitBreakerState":
     """Extract circuit breaker data from service stats dict.
 
     Args:

@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.schemas.audit.core import EventPayload
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
@@ -48,7 +49,7 @@ class DiscordAuditLogger:
         self,
         operation: str,
         actor: str,
-        context: Dict[str, Any],
+        context: JSONDict,
         success: bool = True,
         error_message: Optional[str] = None,
     ) -> None:
@@ -111,7 +112,7 @@ class DiscordAuditLogger:
         self,
         user_id: str,
         tool_name: str,
-        parameters: Dict[str, Any],
+        parameters: JSONDict,
         success: bool,
         execution_time_ms: float,
         error: Optional[str] = None,

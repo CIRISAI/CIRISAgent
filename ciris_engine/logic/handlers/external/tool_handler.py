@@ -10,6 +10,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,8 @@ class ToolHandler(BaseActionHandler):
 
                 # If channel_id is provided in action params but not in tool parameters, add it
                 # This helps tools that need channel context
+                from typing import cast
+
                 tool_params = dict(params.parameters)
                 if params.channel_id and "channel_id" not in tool_params:
                     tool_params["channel_id"] = params.channel_id
@@ -69,7 +72,7 @@ class ToolHandler(BaseActionHandler):
 
                 # Use the tool bus to execute the tool
                 tool_result = await self.bus_manager.tool.execute_tool(
-                    tool_name=params.name, parameters=tool_params, handler_name=self.__class__.__name__
+                    tool_name=params.name, parameters=cast(JSONDict, tool_params), handler_name=self.__class__.__name__
                 )
 
                 # tool_result is now ToolExecutionResult per protocol

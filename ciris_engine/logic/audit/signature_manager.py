@@ -11,7 +11,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes, PublicKeyTypes
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -287,8 +288,12 @@ class AuditSignatureManager:
         except sqlite3.Error as e:
             logger.error(f"Failed to revoke key {key_id}: {e}")
 
-    def get_key_info(self) -> Dict[str, Any]:
-        """Get information about the current signing key"""
+    def get_key_info(self) -> JSONDict:
+        """Get information about the current signing key.
+
+        Returns:
+            Dict containing key metadata (key_id, algorithm, key_size, etc.)
+        """
         if not self._key_id:
             return {"error": "Not initialized"}
 

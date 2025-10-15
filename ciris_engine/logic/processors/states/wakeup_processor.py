@@ -11,12 +11,14 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.results import WakeupResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +120,9 @@ class WakeupProcessor(BaseProcessor):
         if result.get("status") == "failed":
             errors = 1  # At least one error if status is failed
             if "steps_status" in result:
-                # Count actual number of failed tasks
-                errors = sum(1 for s in result["steps_status"] if s.get("status") == "failed")
+                # Count actual number of failed tasks - use get_list to type narrow
+                steps_status = get_list(result, "steps_status", [])
+                errors = sum(1 for s in steps_status if isinstance(s, dict) and get_str(s, "status", "") == "failed")
 
         return WakeupResult(
             thoughts_processed=result.get("processed_thoughts", 0),
@@ -128,7 +131,7 @@ class WakeupProcessor(BaseProcessor):
             duration_seconds=duration,
         )
 
-    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> Dict[str, Any]:
+    async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> JSONDict:
         """
         Execute wakeup processing for one round.
         In non-blocking mode, creates thoughts for incomplete steps and returns immediately.
@@ -586,7 +589,7 @@ class WakeupProcessor(BaseProcessor):
         self.wakeup_complete = True
         logger.info("Wakeup processor stopped")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current wakeup processor status and metrics."""
         wakeup_sequence = self._get_wakeup_sequence()
         total_steps = len(wakeup_sequence)

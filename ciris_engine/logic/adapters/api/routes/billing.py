@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.auth import AuthContext
+from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import require_observer
 
@@ -39,7 +40,7 @@ class CreditStatusResponse(BaseModel):
     total_uses: int = Field(..., description="Total uses so far")
     plan_name: Optional[str] = Field(None, description="Current plan name")
     purchase_required: bool = Field(..., description="Whether purchase is required to continue")
-    purchase_options: Optional[Dict[str, Any]] = Field(None, description="Purchase options if required")
+    purchase_options: Optional[JSONDict] = Field(None, description="Purchase options if required")
 
 
 class PurchaseInitiateRequest(BaseModel):
@@ -93,7 +94,7 @@ def _get_stripe_publishable_key() -> str:
     return key
 
 
-def _extract_user_identity(auth: AuthContext, request: Request) -> Dict[str, Any]:
+def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
     """Extract user identity from auth context including marketing opt-in preference and email."""
     # Extract marketing_opt_in and email from user record if available
     marketing_opt_in = False
@@ -373,10 +374,12 @@ async def get_purchase_status(
     credit_data = None
 
     try:
+        from typing import Mapping, cast
+
         # Query billing backend for specific payment status
         payment_response = await billing_client.get(
             f"/v1/billing/purchases/{payment_id}/status",
-            params=user_identity,
+            params=cast(Mapping[str, str | int | float | bool | None], user_identity),
         )
         payment_response.raise_for_status()
         payment_data = payment_response.json()

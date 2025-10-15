@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,8 @@ from ciris_engine.logic.utils.constants import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.results import DSDMAResult
+from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import get_prompt_loader
@@ -44,7 +46,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         domain_name: str,
         service_registry: ServiceRegistry,
         model_name: Optional[str] = None,
-        domain_specific_knowledge: Optional[Dict[str, Any]] = None,
+        domain_specific_knowledge: Optional[JSONDict] = None,
         prompt_template: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
@@ -109,7 +111,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             if "dma_input_data" in current_context:
                 dma_input_data = current_context["dma_input_data"]
             else:
-                logger.debug("No DMAInputData in context, using legacy Dict[str, Any]")
+                logger.debug("No DMAInputData in context, using legacy JSONDict")
 
         return await self.evaluate_thought(input_data, dma_input_data)
 
@@ -154,9 +156,17 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     f"CRITICAL: Agent identity is required for DSDMA evaluation in domain '{self.domain_name}'"
                 )
             # Format identity block from agent_identity data - FAIL FAST if incomplete
-            agent_id = system_snapshot.agent_identity.get("agent_id")
-            description = system_snapshot.agent_identity.get("description")
-            role = system_snapshot.agent_identity.get("role")
+            # Type narrow to dict for .get() access
+            agent_identity = system_snapshot.agent_identity
+            if isinstance(agent_identity, dict):
+                agent_id = agent_identity.get("agent_id")
+                description = agent_identity.get("description")
+                role = agent_identity.get("role")
+            else:
+                # It's IdentityData model
+                agent_id = agent_identity.agent_id
+                description = agent_identity.description
+                role = agent_identity.role
 
             # CRITICAL: Identity must be complete - no defaults allowed
             if not agent_id:
@@ -197,19 +207,24 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 )
 
             # Extract agent_identity - MUST exist and be complete
-            agent_identity = (
+            agent_identity_raw = (
                 system_snapshot_raw.get("agent_identity") if isinstance(system_snapshot_raw, dict) else None
             )
-            if not agent_identity:
+            if not agent_identity_raw:
                 raise ValueError(
                     f"CRITICAL: No agent_identity found in system_snapshot for DSDMA domain '{self.domain_name}'! "
                     "Identity is required for ALL DMA evaluations. This is a fatal error."
                 )
 
-            # Validate ALL required identity fields
-            agent_id = agent_identity.get("agent_id")
-            description = agent_identity.get("description")
-            role = agent_identity.get("role")
+            # Validate ALL required identity fields - type narrow for dict access
+            if not isinstance(agent_identity_raw, dict):
+                raise ValueError(
+                    f"CRITICAL: agent_identity must be a dict, got {type(agent_identity_raw).__name__}! "
+                    f"This is a fatal error. DSDMA domain '{self.domain_name}' requires properly typed inputs."
+                )
+            agent_id = agent_identity_raw.get("agent_id")
+            description = agent_identity_raw.get("description")
+            role = agent_identity_raw.get("role")
 
             if not agent_id:
                 raise ValueError(
@@ -231,10 +246,17 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             identity_block += f"Role: {role}\n"
             identity_block += "============================================"
 
-            # Format optional blocks
-            user_profiles_data = system_snapshot_raw.get("user_profiles")
-            user_profiles_block = format_user_profiles(user_profiles_data) if user_profiles_data else ""
-            system_snapshot_block = format_system_snapshot(system_snapshot_raw)
+            # Format optional blocks - type narrow for .get() access
+            if isinstance(system_snapshot_raw, dict):
+                user_profiles_data_raw = system_snapshot_raw.get("user_profiles")
+                # format_user_profiles accepts Union[List[Any], dict[str, Any], None]
+                user_profiles_block = format_user_profiles(user_profiles_data_raw) if user_profiles_data_raw else ""
+                # Cast dict to SystemSnapshot for format_system_snapshot
+                system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, system_snapshot_raw))
+            else:
+                # system_snapshot_raw is not a dict - shouldn't happen but handle gracefully
+                user_profiles_block = ""
+                system_snapshot_block = ""
 
         escalation_guidance_block = get_escalation_guidance(0)
 
@@ -309,7 +331,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
 
-        messages = [
+        messages: List[JSONDict] = [
             {"role": "system", "content": COVENANT_TEXT},
             {"role": "system", "content": system_message_content},
             {"role": "user", "content": user_message_content},

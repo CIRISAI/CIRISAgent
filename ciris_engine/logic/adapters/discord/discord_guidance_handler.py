@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import discord
 from discord import ui
 
+from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -121,7 +124,7 @@ class DiscordGuidanceHandler:
             logger.error(f"Failed to check Discord roles for {discord_id}: {e}")
             return False
 
-    async def fetch_guidance_from_channel(self, deferral_channel_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def fetch_guidance_from_channel(self, deferral_channel_id: str, context: JSONDict) -> JSONDict:
         """Send a guidance request to a Discord channel and check for responses.
 
         Args:
@@ -189,7 +192,7 @@ class DiscordGuidanceHandler:
         return {"guidance": None}
 
     async def send_deferral_to_channel(
-        self, deferral_channel_id: str, thought_id: str, reason: str, context: Optional[Dict[str, Any]] = None
+        self, deferral_channel_id: str, thought_id: str, reason: str, context: Optional[JSONDict] = None
     ) -> None:
         """Send a deferral report to a Discord channel with helper buttons.
 
@@ -227,11 +230,11 @@ class DiscordGuidanceHandler:
                 embed.add_field(name="Priority", value=context["priority"], inline=True)
 
             if "task_description" in context:
-                task_desc = self._truncate_text(context["task_description"], 1024)
+                task_desc = self._truncate_text(get_str(context, "task_description", ""), 1024)
                 embed.add_field(name="Task Description", value=task_desc, inline=False)
 
             if "thought_content" in context:
-                thought_content = self._truncate_text(context["thought_content"], 1024)
+                thought_content = self._truncate_text(get_str(context, "thought_content", ""), 1024)
                 embed.add_field(name="Thought Content", value=thought_content, inline=False)
 
             if "attempted_action" in context:
@@ -246,7 +249,7 @@ class DiscordGuidanceHandler:
         # Send embed with view
         await channel.send(embed=embed, view=view)
 
-    def _build_deferral_report(self, thought_id: str, reason: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def _build_deferral_report(self, thought_id: str, reason: str, context: Optional[JSONDict] = None) -> str:
         """Build a formatted deferral report.
 
         Args:
@@ -269,15 +272,15 @@ class DiscordGuidanceHandler:
                 report_lines.append(f"**Task ID:** `{context['task_id']}`")
 
             if "task_description" in context:
-                task_desc = self._truncate_text(context["task_description"], 200)
+                task_desc = self._truncate_text(get_str(context, "task_description", ""), 200)
                 report_lines.append(f"**Task:** {task_desc}")
 
             if "thought_content" in context:
-                thought_content = self._truncate_text(context["thought_content"], 300)
+                thought_content = self._truncate_text(get_str(context, "thought_content", ""), 300)
                 report_lines.append(f"**Thought:** {thought_content}")
 
             if "conversation_context" in context:
-                conv_context = self._truncate_text(context["conversation_context"], 400)
+                conv_context = self._truncate_text(get_str(context, "conversation_context", ""), 400)
                 report_lines.append(f"**Context:** {conv_context}")
 
             if "priority" in context:
@@ -368,7 +371,7 @@ class DiscordGuidanceHandler:
 class DeferralHelperView(ui.View):
     """Simple Discord UI View with helper buttons for deferral responses."""
 
-    def __init__(self, thought_id: str, context: Optional[Dict[str, Any]] = None):
+    def __init__(self, thought_id: str, context: Optional[JSONDict] = None):
         super().__init__(timeout=3600)  # 1 hour timeout
         self.thought_id = thought_id
         self.context = context or {}
@@ -401,21 +404,26 @@ class DeferralHelperView(ui.View):
             info_lines.append(f"**Task ID:** `{self.context['task_id']}`")
 
         if "task_description" in self.context:
-            task_desc = self._truncate_text(self.context["task_description"], 500)
+            task_desc = self._truncate_text(get_str(self.context, "task_description", ""), 500)
             info_lines.append(f"\n**Task Description:**\n{task_desc}")
 
         # Add thought history if available
         if "thought_history" in self.context:
             info_lines.append("\n**Recent Thought History:**")
-            for i, thought in enumerate(self.context["thought_history"][-5:], 1):  # Last 5 thoughts
-                thought_summary = self._truncate_text(thought.get("content", "No content"), 200)
-                info_lines.append(f"{i}. {thought_summary}")
+            thought_history = get_list(self.context, "thought_history", [])
+            for i, thought in enumerate(thought_history[-5:], 1):  # Last 5 thoughts
+                if isinstance(thought, dict):
+                    thought_summary = self._truncate_text(thought.get("content", "No content"), 200)
+                    info_lines.append(f"{i}. {thought_summary}")
 
         # Add ponder notes if available
-        if "ponder_notes" in self.context and self.context["ponder_notes"]:
-            info_lines.append("\n**Ponder Notes (Questions/Ambiguities):**")
-            for i, note in enumerate(self.context["ponder_notes"], 1):
-                info_lines.append(f"{i}. {note}")
+        if "ponder_notes" in self.context:
+            ponder_notes = get_list(self.context, "ponder_notes", [])
+            if ponder_notes:
+                info_lines.append("\n**Ponder Notes (Questions/Ambiguities):**")
+                for i, note in enumerate(ponder_notes, 1):
+                    if isinstance(note, str):
+                        info_lines.append(f"{i}. {note}")
 
         # Add processing rounds info
         if "current_round" in self.context:
@@ -425,9 +433,12 @@ class DeferralHelperView(ui.View):
 
         # Add attempted actions if available
         if "attempted_actions" in self.context:
-            info_lines.append("\n**Attempted Actions:**")
-            for action in self.context["attempted_actions"]:
-                info_lines.append(f"- {action}")
+            attempted_actions = get_list(self.context, "attempted_actions", [])
+            if attempted_actions:
+                info_lines.append("\n**Attempted Actions:**")
+                for action in attempted_actions:
+                    if isinstance(action, str):
+                        info_lines.append(f"- {action}")
 
         # Add template for requesting more info
         info_lines.append(

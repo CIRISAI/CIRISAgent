@@ -23,6 +23,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceResponseData,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,12 @@ TELEMETRY_TASK_SEMAPHORE = asyncio.Semaphore(100)
 
 def _prepare_log_context(
     func: Callable[..., Any], self: Any, args: Any, kwargs: Any, service_name: str, message_template: Optional[str]
-) -> Dict[str, Any]:
-    """Extract common logging context preparation logic."""
+) -> Dict[str, str]:
+    """Extract common logging context preparation logic.
+
+    Returns:
+        Dict containing log_message, method_name, and service_name (all strings)
+    """
     if message_template:
         # Bind arguments to parameter names
         sig = inspect.signature(func)
@@ -110,8 +115,16 @@ def _extract_service_name(instance: Any) -> str:
     return "unknown"
 
 
-def _get_correlation_context(self: Any, kwargs: Dict[str, Any]) -> tuple[str, Optional[Any]]:
-    """Extract correlation ID and trace context from self or kwargs."""
+def _get_correlation_context(self: Any, kwargs: JSONDict) -> tuple[str, Optional[Any]]:
+    """Extract correlation ID and trace context from self or kwargs.
+
+    Args:
+        self: Instance to check for correlation attributes
+        kwargs: Function kwargs that may contain correlation_id or trace_context
+
+    Returns:
+        Tuple of (correlation_id, trace_context)
+    """
     # Get correlation ID
     if hasattr(self, "correlation_id"):
         correlation_id = self.correlation_id

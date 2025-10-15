@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.types import ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class ConfigAccessor:
         value = await self.get(key, sentinel := object())
         return value is not sentinel
 
-    async def get_section(self, prefix: str) -> Dict[str, Any]:
+    async def get_section(self, prefix: str) -> ConfigDict:
         """
         Get all config values under a prefix.
 
@@ -175,8 +176,8 @@ class ConfigAccessor:
         # Fall back to bootstrap
         return self._get_section_from_bootstrap(prefix)
 
-    def _get_section_from_bootstrap(self, prefix: str) -> Dict[str, Any]:
-        """Get config section from bootstrap."""
+    def _get_section_from_bootstrap(self, prefix: str) -> ConfigDict:
+        """Get config section from bootstrap config."""
         parts = prefix.split(".")
         value = self.bootstrap
 

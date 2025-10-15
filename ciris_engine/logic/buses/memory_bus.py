@@ -6,11 +6,14 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
 from dataclasses import dataclass
 
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
@@ -74,7 +77,7 @@ class MemoryBus(BaseBus[MemoryService]):
         self._error_count = 0
 
     async def memorize(
-        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
+        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
     ) -> MemoryOpResult:
         """
         Memorize a node.
@@ -110,7 +113,7 @@ class MemoryBus(BaseBus[MemoryService]):
             return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def recall(
-        self, recall_query: MemoryQuery, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
+        self, recall_query: MemoryQuery, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
     ) -> List[GraphNode]:
         """
         Recall nodes based on query.
@@ -139,7 +142,7 @@ class MemoryBus(BaseBus[MemoryService]):
             return []
 
     async def forget(
-        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None
+        self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
     ) -> MemoryOpResult:
         """
         Forget a node.
@@ -209,9 +212,11 @@ class MemoryBus(BaseBus[MemoryService]):
                 # Extract content from attributes
                 content = ""
                 if isinstance(node.attributes, dict):
-                    content = (
-                        node.attributes.get("content", "") or node.attributes.get("message", "") or str(node.attributes)
-                    )
+                    content_val = node.attributes.get("content") or node.attributes.get("message")
+                    if isinstance(content_val, str):
+                        content = content_val
+                    else:
+                        content = str(node.attributes)
                 else:
                     content = (
                         getattr(node.attributes, "content", "")
@@ -223,9 +228,11 @@ class MemoryBus(BaseBus[MemoryService]):
                 created_at = datetime.now(timezone.utc)
                 if isinstance(node.attributes, dict):
                     if "created_at" in node.attributes:
-                        created_at = node.attributes["created_at"]
-                        if isinstance(created_at, str):
-                            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        created_at_val = node.attributes["created_at"]
+                        if isinstance(created_at_val, str):
+                            created_at = datetime.fromisoformat(created_at_val.replace("Z", "+00:00"))
+                        elif isinstance(created_at_val, datetime):
+                            created_at = created_at_val
                 elif hasattr(node.attributes, "created_at"):
                     created_at = node.attributes.created_at
 
@@ -397,7 +404,7 @@ class MemoryBus(BaseBus[MemoryService]):
         self._broadcast_count += 1
         logger.warning(f"Memory operations should be synchronous, got queued message: {type(message)}")
 
-    def _create_empty_telemetry(self) -> Dict[str, Any]:
+    def _create_empty_telemetry(self) -> JSONDict:
         """Create empty telemetry response when no services available."""
         return {
             "service_name": "memory_bus",
@@ -419,19 +426,27 @@ class MemoryBus(BaseBus[MemoryService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_telemetry_result(
-        self, telemetry: Dict[str, Any], aggregated: Dict[str, Any], cache_rates: List[float]
-    ) -> None:
+    def _aggregate_telemetry_result(self, telemetry: JSONDict, aggregated: JSONDict, cache_rates: List[float]) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
-            aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-            aggregated["total_nodes"] += telemetry.get("total_nodes", 0)
-            aggregated["query_count"] += telemetry.get("query_count", 0)
+            service_name = get_str(telemetry, "service_name", "unknown")
+            providers_list = aggregated["providers"]
+            if isinstance(providers_list, list):
+                providers_list.append(service_name)
+
+            total_nodes = aggregated["total_nodes"]
+            if isinstance(total_nodes, int):
+                aggregated["total_nodes"] = total_nodes + get_int(telemetry, "total_nodes", 0)
+
+            query_count = aggregated["query_count"]
+            if isinstance(query_count, int):
+                aggregated["query_count"] = query_count + get_int(telemetry, "query_count", 0)
 
             if "cache_hit_rate" in telemetry:
-                cache_rates.append(telemetry["cache_hit_rate"])
+                cache_hit_rate = get_float(telemetry, "cache_hit_rate", 0.0)
+                cache_rates.append(cache_hit_rate)
 
-    async def collect_telemetry(self) -> Dict[str, Any]:
+    async def collect_telemetry(self) -> JSONDict:
         """
         Collect telemetry from all memory providers in parallel.
 
@@ -452,7 +467,7 @@ class MemoryBus(BaseBus[MemoryService]):
         tasks = self._create_telemetry_tasks(all_memory_services)
 
         # Initialize aggregated metrics
-        aggregated = {
+        aggregated: JSONDict = {
             "service_name": "memory_bus",
             "healthy": True,
             "total_nodes": 0,

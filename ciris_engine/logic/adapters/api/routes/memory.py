@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
@@ -533,11 +534,14 @@ async def get_stats(
         if timeline_nodes:
             newest = timeline_nodes[0].updated_at
 
+        # Extract recent_activity dict with proper typing
+        recent_activity = get_dict(stats_data, "recent_activity", {})
+
         stats = MemoryStats(
             total_nodes=stats_data["total_nodes"],
             nodes_by_type=stats_data["nodes_by_type"],
             nodes_by_scope=stats_data["nodes_by_scope"],
-            recent_nodes_24h=stats_data["recent_activity"].get("nodes_24h", 0),
+            recent_nodes_24h=get_int(recent_activity, "nodes_24h", 0),
             oldest_node_date=oldest,
             newest_node_date=newest,
         )

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
@@ -8,6 +8,7 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
+from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import get_prompt_loader
@@ -63,7 +64,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         full_context_str = system_snapshot_context_str + user_profile_context_str
 
-        messages = []
+        messages: List[JSONDict] = []
 
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})

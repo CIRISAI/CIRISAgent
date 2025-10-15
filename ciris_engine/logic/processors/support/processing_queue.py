@@ -9,6 +9,7 @@ from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 
 # Import both types of ThoughtContext
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class ThoughtContent(BaseModel):
     """Typed content for a thought."""
 
     text: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: JSONDict = Field(default_factory=dict)
 
 
 class ProcessingQueueItem(BaseModel):
@@ -33,7 +34,7 @@ class ProcessingQueueItem(BaseModel):
     raw_input_string: Optional[str] = Field(
         default=None, description="The original input string that generated this thought, if applicable."
     )
-    initial_context: Optional[Union[Dict[str, Any], ProcessingThoughtContext, ThoughtContext]] = Field(
+    initial_context: Optional[Union[JSONDict, ProcessingThoughtContext, ThoughtContext]] = Field(
         default=None, description="Initial context when the thought was first received/generated for processing."
     )
     ponder_notes: Optional[List[str]] = Field(
@@ -53,8 +54,8 @@ class ProcessingQueueItem(BaseModel):
         cls,
         thought_instance: Thought,
         raw_input: Optional[str] = None,
-        initial_ctx: Optional[Dict[str, Any]] = None,
-        queue_item_content: Optional[Union[ThoughtContent, str, Dict[str, Any]]] = None,
+        initial_ctx: Optional[JSONDict] = None,
+        queue_item_content: Optional[Union[ThoughtContent, str, JSONDict]] = None,
     ) -> "ProcessingQueueItem":
         """
         Creates a ProcessingQueueItem from a Thought instance.

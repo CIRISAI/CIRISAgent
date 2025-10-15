@@ -15,6 +15,7 @@ from ciris_engine.schemas.config.agent import AgentTemplate
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot, CoreProfile, IdentityMetadata
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class IdentityManager:
 
     async def _get_identity_from_graph(
         self,
-    ) -> Optional[Dict[str, Any]]:  # NOSONAR: Maintains async consistency in identity chain
+    ) -> Optional[JSONDict]:  # NOSONAR: Maintains async consistency in identity chain
         """Retrieve agent identity from the persistence tier."""
         try:
             from ciris_engine.logic.config import get_sqlite_db_full_path

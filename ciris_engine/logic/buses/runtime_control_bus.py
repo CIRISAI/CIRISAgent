@@ -5,7 +5,9 @@ Runtime Control message bus - handles all runtime control operations with safety
 import asyncio
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
@@ -169,7 +171,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             logger.error(f"Failed to get config: {e}", exc_info=True)
             return ConfigSnapshot(configs={}, version="unknown", metadata={"error": str(e)})
 
-    async def get_runtime_status(self, handler_name: str = "default") -> Dict[str, Any]:
+    async def get_runtime_status(self, handler_name: str = "default") -> JSONDict:
         """Get runtime status - safe to call anytime"""
         service = await self.get_service(handler_name=handler_name, required_capabilities=["get_runtime_status"])
 
@@ -183,7 +185,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
             self._state_broadcasts += 1
 
             # Convert RuntimeStatusResponse to dict and add bus-level status
-            status_dict = {
+            status_dict: JSONDict = {
                 "is_running": response.is_running,
                 "uptime_seconds": response.uptime_seconds,
                 "processor_count": response.processor_count,
@@ -205,7 +207,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
         self,
         adapter_type: str,
         adapter_id: str,
-        config: Dict[str, Any],
+        config: JSONDict,
         auto_start: bool = True,
         handler_name: str = "default",
     ) -> AdapterInfo:
@@ -241,7 +243,10 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
         try:
             logger.info(f"Loading adapter {adapter_id} of type {adapter_type}")
             self._commands_sent += 1
-            operation_response = await service.load_adapter(adapter_type, adapter_id, config, auto_start)
+            # Cast config to Dict[str, object] for protocol compatibility
+            operation_response = await service.load_adapter(
+                adapter_type, adapter_id, cast(Dict[str, object], config), auto_start
+            )
             # Convert AdapterOperationResponse to AdapterInfo
             return AdapterInfo(
                 adapter_id=operation_response.adapter_id,

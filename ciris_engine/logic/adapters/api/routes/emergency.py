@@ -13,6 +13,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from ciris_engine.schemas.types import JSONDict
+
 try:
     # Try to import Ed25519 verification
     from cryptography.exceptions import InvalidSignature
@@ -67,7 +69,7 @@ def verify_signature(command: WASignedCommand) -> bool:
 
         # Build the message that was signed
         # This must match exactly what was signed on the client side
-        message_data: Dict[str, Any] = {
+        message_data: JSONDict = {
             "command_id": command.command_id,
             "command_type": command.command_type.value,  # Use enum value
             "wa_id": command.wa_id,
@@ -285,7 +287,7 @@ async def emergency_shutdown(command: WASignedCommand, request: Request) -> Succ
 
 
 @router.get("/emergency/test")
-async def test_emergency_endpoint() -> Dict[str, Any]:
+async def test_emergency_endpoint() -> JSONDict:
     """
     Test endpoint to verify emergency routes are mounted.
 

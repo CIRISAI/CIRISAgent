@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphScope, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 
 class StoreRequest(BaseModel):
@@ -86,7 +87,7 @@ class TimelineResponse(BaseModel):
     """Response containing timeline of memories."""
 
     memories: List[GraphNode] = Field(..., description="List of memory nodes")
-    buckets: Dict[str, Any] = Field(default_factory=dict, description="Time buckets with counts")
+    buckets: JSONDict = Field(default_factory=dict, description="Time buckets with counts")
     start_time: datetime = Field(..., description="Start of time range")
     end_time: datetime = Field(..., description="End of time range")
     total: int = Field(..., description="Total number of memories")

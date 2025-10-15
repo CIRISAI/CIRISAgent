@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_str
 from ciris_engine.schemas.actions.parameters import (
     DeferParams,
     ForgetParams,
@@ -24,6 +25,7 @@ from ciris_engine.schemas.actions.parameters import (
     ToolParams,
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -199,13 +201,13 @@ class ActionInstructionGenerator:
                 loop = asyncio.get_event_loop()
 
                 # Create a coroutine to get all tools
-                async def get_all_tools() -> Dict[str, Any]:
+                async def get_all_tools() -> JSONDict:
                     if not self.service_registry:
                         return {}
 
                     # Get ALL tool services registered in the system
                     tool_services = self.service_registry.get_services_by_type("tool")
-                    all_tools = {}
+                    all_tools: JSONDict = {}
 
                     # Aggregate tools from all services
                     for tool_service in tool_services:
@@ -301,20 +303,27 @@ class ActionInstructionGenerator:
                     tools_info = []
                     tools_info.append("\nAvailable tools and their parameters:")
 
-                    for tool_key, tool_info in all_tools.items():
-                        tool_desc = f"  - {tool_info['name']}: {tool_info['description']}"
-                        if tool_info["service"] != tool_info["name"]:
-                            tool_desc += f" (from {tool_info['service']})"
+                    for tool_key, tool_info_raw in all_tools.items():
+                        tool_info = get_dict({"info": tool_info_raw}, "info", {})
+                        tool_name = get_str(tool_info, "name", "")
+                        tool_desc_str = get_str(tool_info, "description", "")
+                        tool_service = get_str(tool_info, "service", "")
+
+                        tool_desc = f"  - {tool_name}: {tool_desc_str}"
+                        if tool_service != tool_name:
+                            tool_desc += f" (from {tool_service})"
                         tools_info.append(tool_desc)
 
                         # Add parameter schema if available
                         if "parameters" in tool_info:
-                            param_text = f"    parameters: {json.dumps(tool_info['parameters'], indent=6)}"
+                            params = get_dict(tool_info, "parameters", {})
+                            param_text = f"    parameters: {json.dumps(params, indent=6)}"
                             tools_info.append(param_text)
 
                         # Add usage guidance if available
                         if "when_to_use" in tool_info:
-                            tools_info.append(f"    Use when: {tool_info['when_to_use']}")
+                            when_to_use = get_str(tool_info, "when_to_use", "")
+                            tools_info.append(f"    Use when: {when_to_use}")
 
                     return base_schema + "\n".join(tools_info)
 
@@ -335,18 +344,21 @@ Available tools (check with tool service for current list):
   - discord_ban_user: Ban a user from the server
     parameters: {"guild_id": integer, "user_id": integer, "reason"?: string, "delete_message_days"?: integer}"""
 
-    def _simplify_schema(self, schema: Dict[str, Any]) -> str:
+    def _simplify_schema(self, schema: JSONDict) -> str:
         """Simplify a JSON schema to a readable format."""
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
+        from ciris_engine.logic.utils.jsondict_helpers import get_list
+
+        properties = get_dict(schema, "properties", {})
+        required_raw = schema.get("required", [])
+        required = list(required_raw) if isinstance(required_raw, list) else []
 
         params = []
-        for prop_name, prop_schema in properties.items():
+        for prop_name, prop_schema_raw in properties.items():
+            # Convert prop_schema to dict
+            prop_schema = get_dict({"s": prop_schema_raw}, "s", {})
+
             # Handle complex types (anyOf, oneOf, allOf)
             prop_type = self._extract_type(prop_schema)
-
-            # Add description if available
-            prop_schema.get("description", "")
 
             if prop_name in required:
                 params.append(f'"{prop_name}": {prop_type} (required)')
@@ -359,16 +371,16 @@ Available tools (check with tool service for current list):
 
         return "{" + ", ".join(params) + "}"
 
-    def _extract_type(self, prop_schema: Dict[str, Any]) -> str:
+    def _extract_type(self, prop_schema: JSONDict) -> str:
         """Extract type information from a property schema, handling complex types."""
         # Direct type
         if "type" in prop_schema:
-            base_type = prop_schema["type"]
+            base_type = get_str(prop_schema, "type", "any")
 
             # Handle object types with additionalProperties
             if base_type == "object" and "additionalProperties" in prop_schema:
-                add_props = prop_schema["additionalProperties"]
-                if isinstance(add_props, dict) and add_props.get("type") == "string":
+                add_props = get_dict(prop_schema, "additionalProperties", {})
+                if get_str(add_props, "type", "") == "string":
                     return "Dict[str, str]"
 
             return str(base_type)
@@ -376,21 +388,27 @@ Available tools (check with tool service for current list):
         # Handle anyOf (nullable types)
         if "anyOf" in prop_schema:
             types = []
-            for option in prop_schema["anyOf"]:
-                if option.get("type") == "null":
+            anyof_raw = prop_schema.get("anyOf", [])
+            anyof_list = list(anyof_raw) if isinstance(anyof_raw, list) else []
+
+            for option_raw in anyof_list:
+                option = get_dict({"o": option_raw}, "o", {})
+                opt_type = get_str(option, "type", "")
+
+                if opt_type == "null":
                     continue  # Skip null option
-                elif option.get("type") == "object":
+                elif opt_type == "object":
                     # Check if it's a Dict[str, str]
                     if "additionalProperties" in option:
-                        add_props = option["additionalProperties"]
-                        if isinstance(add_props, dict) and add_props.get("type") == "string":
+                        add_props = get_dict(option, "additionalProperties", {})
+                        if get_str(add_props, "type", "") == "string":
                             types.append("Dict[str, str]")
                         else:
                             types.append("object")
                     else:
                         types.append("object")
                 else:
-                    types.append(option.get("type", "any"))
+                    types.append(opt_type if opt_type else "any")
 
             return types[0] if len(types) == 1 else " | ".join(types)
 

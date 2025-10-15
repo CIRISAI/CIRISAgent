@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Set
 
 import aiohttp
 
+from ciris_engine.schemas.types import JSONDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -305,7 +307,7 @@ class DocumentParser:
             logger.exception(f"DOCX extraction error: {e}")
             return f"DOCX error: {str(e)}"
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get parser status for debugging."""
         return {
             "available": self.is_available(),

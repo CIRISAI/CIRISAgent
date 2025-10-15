@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -42,7 +43,7 @@ class TaskManager:
         description: str,
         channel_id: str,
         priority: int = 0,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[JSONDict] = None,
         parent_task_id: Optional[str] = None,
     ) -> Task:
         """Create a new task with v1 schema."""
@@ -128,7 +129,7 @@ class TaskManager:
         logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
         return filtered
 
-    def complete_task(self, task_id: str, outcome: Optional[Dict[str, Any]] = None) -> bool:
+    def complete_task(self, task_id: str, outcome: Optional[JSONDict] = None) -> bool:
         """Mark a task as completed with optional outcome."""
         task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
         if not task:

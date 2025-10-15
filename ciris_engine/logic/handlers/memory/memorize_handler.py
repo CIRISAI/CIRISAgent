@@ -331,7 +331,9 @@ class MemorizeHandler(BaseActionHandler):
                     # Handle both dict and GraphNodeAttributes types
                     if isinstance(node.attributes, dict):
                         if "content" in node.attributes:
-                            content_preview = f": {node.attributes['content'][:100]}"
+                            content_val = node.attributes["content"]
+                            content_str = str(content_val) if content_val is not None else ""
+                            content_preview = f": {content_str[:100]}" if content_str else ""
                         elif "name" in node.attributes:
                             content_preview = f": {node.attributes['name']}"
                         elif "value" in node.attributes:
@@ -339,7 +341,9 @@ class MemorizeHandler(BaseActionHandler):
                     else:
                         # For GraphNodeAttributes, check if it has these as actual attributes
                         if hasattr(node.attributes, "content"):
-                            content_preview = f": {node.attributes.content[:100]}"
+                            content_val = node.attributes.content
+                            content_str = str(content_val) if content_val is not None else ""
+                            content_preview = f": {content_str[:100]}" if content_str else ""
                         elif hasattr(node.attributes, "name"):
                             content_preview = f": {node.attributes.name}"
                         elif hasattr(node.attributes, "value"):

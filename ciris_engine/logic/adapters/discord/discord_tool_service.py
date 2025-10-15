@@ -444,7 +444,7 @@ class DiscordToolService(ToolService):
                 return {"success": False, "error": "Discord client not initialized"}
             user = await self._client.fetch_user(int(user_id))
 
-            data: Dict[str, Any] = {
+            data: JSONDict = {
                 "user_id": str(user.id),
                 "username": user.name,
                 "discriminator": user.discriminator,

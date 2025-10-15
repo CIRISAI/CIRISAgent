@@ -14,6 +14,7 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
+from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import get_prompt_loader
@@ -70,9 +71,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         identity_context_block: str,
         system_snapshot_block: str,
         user_profiles_block: str,
-    ) -> List[Dict[str, str]]:
+    ) -> List[JSONDict]:
         """Assemble prompt messages using canonical formatting utilities and prompt loader."""
-        messages = []
+        messages: List[JSONDict] = []
 
         if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
             messages.append({"role": "system", "content": COVENANT_TEXT})

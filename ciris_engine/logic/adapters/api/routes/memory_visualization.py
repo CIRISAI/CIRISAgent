@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, NodeType
+from ciris_engine.schemas.types import JSONDict
 
 from .memory_visualization_helpers import TimelineLayoutCalculator
 
@@ -105,7 +106,7 @@ def get_node_size(node: GraphNode, edge_count: int = 0) -> int:
 
     # Adjust based on number of attributes
     if node.attributes:
-        # Handle both GraphNodeAttributes and Dict[str, Any]
+        # Handle both GraphNodeAttributes and JSONDict
         if isinstance(node.attributes, dict):
             base_size += min(len(node.attributes), 4)
         else:

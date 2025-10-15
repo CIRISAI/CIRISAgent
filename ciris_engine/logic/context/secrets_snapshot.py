@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict, List
 
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -9,13 +10,16 @@ logger = logging.getLogger(__name__)
 ERROR_KEY = "error"
 
 
-async def build_secrets_snapshot(secrets_service: SecretsService) -> Dict[str, Any]:
+async def build_secrets_snapshot(secrets_service: SecretsService) -> JSONDict:
     """Build secrets information for SystemSnapshot.
 
-    Returns a legacy dictionary structure for compatibility with existing
-    callers. When an error occurs, the payload includes an ``error`` key so
-    downstream consumers can distinguish between an empty dataset and a
-    failure.
+    Returns a JSON-compatible dictionary with keys matching SystemSnapshot fields:
+    - detected_secrets: List[str]
+    - secrets_filter_version: int
+    - total_secrets_stored: int
+
+    When an error occurs, the payload includes an ``error`` key so downstream
+    consumers can distinguish between an empty dataset and a failure.
     """
     try:
         # Get recent secrets (limit to last 10 for context)

@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import Field
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
 from ciris_engine.schemas.telemetry.core import (
@@ -103,26 +104,31 @@ class CorrelationNode(TypedGraphNode, ServiceCorrelation):
         updated_at = cls._deserialize_datetime(attrs.get("updated_at"))
         timestamp = cls._deserialize_datetime(attrs.get("timestamp"))
 
-        # Reconstruct structured data
+        # Reconstruct structured data - use get_dict for type narrowing
         request_data = None
-        if attrs.get("request_data"):
-            request_data = ServiceRequestData(**attrs["request_data"])
+        request_data_dict = get_dict(attrs, "request_data", None)
+        if request_data_dict:
+            request_data = ServiceRequestData(**request_data_dict)
 
         response_data = None
-        if attrs.get("response_data"):
-            response_data = ServiceResponseData(**attrs["response_data"])
+        response_data_dict = get_dict(attrs, "response_data", None)
+        if response_data_dict:
+            response_data = ServiceResponseData(**response_data_dict)
 
         metric_data = None
-        if attrs.get("metric_data"):
-            metric_data = MetricData(**attrs["metric_data"])
+        metric_data_dict = get_dict(attrs, "metric_data", None)
+        if metric_data_dict:
+            metric_data = MetricData(**metric_data_dict)
 
         log_data = None
-        if attrs.get("log_data"):
-            log_data = LogData(**attrs["log_data"])
+        log_data_dict = get_dict(attrs, "log_data", None)
+        if log_data_dict:
+            log_data = LogData(**log_data_dict)
 
         trace_context = None
-        if attrs.get("trace_context"):
-            trace_context = TraceContext(**attrs["trace_context"])
+        trace_context_dict = get_dict(attrs, "trace_context", None)
+        if trace_context_dict:
+            trace_context = TraceContext(**trace_context_dict)
 
         return cls(
             # Base fields from GraphNode

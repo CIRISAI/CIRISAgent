@@ -4,7 +4,10 @@ from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Protocol
 
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolInfo, ToolParameterSchema
-from ciris_engine.schemas.types import ToolParameters
+from ciris_engine.schemas.types import JSONDict
+
+# ToolParameters is a JSONDict for flexible parameter passing
+ToolParameters = JSONDict
 
 from ...runtime.base import ServiceProtocol
 

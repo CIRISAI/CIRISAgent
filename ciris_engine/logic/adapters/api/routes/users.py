@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
+from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import check_permissions, get_auth_context, get_auth_service
 from ..services.auth_service import (
@@ -539,7 +540,7 @@ async def update_my_settings(
         user_results = await memory_service.recall(user_query)
 
         # Prepare attributes to update (only include fields that were provided)
-        attrs_to_update: Dict[str, Any] = {}
+        attrs_to_update: JSONDict = {}
         if request.user_preferred_name is not None:
             attrs_to_update["user_preferred_name"] = request.user_preferred_name
         if request.location is not None:

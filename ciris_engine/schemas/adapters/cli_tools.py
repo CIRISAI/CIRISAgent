@@ -8,14 +8,14 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class ToolParameters(BaseModel):
     """Base parameters for tool execution."""
 
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracking")
-    metadata: NodeAttributes = Field(default_factory=dict, description="Additional metadata")
+    metadata: JSONDict = Field(default_factory=dict, description="Additional metadata")
 
 
 class ListFilesParams(ToolParameters):

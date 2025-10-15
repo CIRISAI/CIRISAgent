@@ -8,14 +8,14 @@ from ciris_engine.schemas.services.graph.attributes import (
     AnyNodeAttributes,
     ConfigNodeAttributes,
     MemoryNodeAttributes,
-    NodeAttributes,
+    JSONDict,
     TelemetryNodeAttributes,
     create_node_attributes,
 )
 
 __all__ = [
     # Node attributes
-    "NodeAttributes",
+    "JSONDict",
     "MemoryNodeAttributes",
     "ConfigNodeAttributes",
     "TelemetryNodeAttributes",

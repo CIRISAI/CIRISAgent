@@ -10,12 +10,14 @@ from datetime import datetime, timedelta, timezone
 from sqlite3 import Connection, Cursor
 from typing import Any, Dict, List, Optional, Tuple
 
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int, get_str
 from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
 
-def parse_summary_attributes_with_fallback(attrs_dict: Dict[str, Any]) -> SummaryAttributes:
+def parse_summary_attributes_with_fallback(attrs_dict: JSONDict) -> SummaryAttributes:
     """
     Parse summary attributes dict into SummaryAttributes model with fallback.
 
@@ -39,23 +41,22 @@ def parse_summary_attributes_with_fallback(attrs_dict: Dict[str, Any]) -> Summar
         # Create minimal SummaryAttributes for compatibility
         # Use try/except for date parsing in case the values are invalid
         try:
-            period_start = datetime.fromisoformat(
-                attrs_dict.get("period_start", "2025-01-01T00:00:00Z").replace("Z", "+00:00")
-            )
+            period_start_str = get_str(attrs_dict, "period_start", "2025-01-01T00:00:00Z")
+            period_start = datetime.fromisoformat(period_start_str.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             period_start = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
         try:
-            period_end = datetime.fromisoformat(
-                attrs_dict.get("period_end", "2025-01-02T00:00:00Z").replace("Z", "+00:00")
-            )
+            period_end_str = get_str(attrs_dict, "period_end", "2025-01-02T00:00:00Z")
+            period_end = datetime.fromisoformat(period_end_str.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             period_end = datetime(2025, 1, 2, tzinfo=timezone.utc)
 
+        consolidation_level = get_str(attrs_dict, "consolidation_level", "basic")
         return SummaryAttributes(
             period_start=period_start,
             period_end=period_end,
-            consolidation_level=attrs_dict.get("consolidation_level", "basic"),
+            consolidation_level=consolidation_level,
         )
 
 

@@ -21,6 +21,7 @@ from ciris_engine.schemas.services.core.runtime import (
 )
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint
 from ciris_engine.schemas.services.runtime_control import StepResultUnion as StepResult
+from ciris_engine.schemas.types import JSONDict
 
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,
@@ -114,7 +115,7 @@ class SingleStepResponse(RuntimeControlResponse):
 
     # Step Point Information
     step_point: Optional[StepPoint] = Field(None, description="The step point that was just executed")
-    step_result: Optional[Dict[str, Any]] = Field(None, description="Complete step result data with full context")
+    step_result: Optional[JSONDict] = Field(None, description="Complete step result data with full context")
 
     # Pipeline State
     pipeline_state: Optional[PipelineState] = Field(None, description="Current pipeline state with all thoughts")
@@ -124,7 +125,7 @@ class SingleStepResponse(RuntimeControlResponse):
     tokens_used: Optional[int] = Field(None, description="LLM tokens consumed during this step")
 
     # Transparency Data
-    transparency_data: Optional[Dict[str, Any]] = Field(
+    transparency_data: Optional[JSONDict] = Field(
         None, description="Detailed reasoning and system state data for transparency"
     )
 
@@ -174,7 +175,7 @@ def _get_pipeline_state(pipeline_controller: Any) -> Optional[Any]:
         return None
 
 
-def _get_latest_step_data(pipeline_controller: Any) -> tuple[Optional[Any], Optional[Dict[str, Any]]]:
+def _get_latest_step_data(pipeline_controller: Any) -> tuple[Optional[Any], Optional[JSONDict]]:
     """Extract step point and result from pipeline controller."""
     if not pipeline_controller:
         return None, None
@@ -214,7 +215,7 @@ def _get_processing_metrics(pipeline_controller: Any) -> tuple[float, Optional[i
 
 def _extract_pipeline_data(
     runtime: Any,
-) -> tuple[Optional[Any], Optional[Dict[str, Any]], Optional[Any], float, Optional[int], Optional[Dict[str, Any]]]:
+) -> tuple[Optional[Any], Optional[JSONDict], Optional[Any], float, Optional[int], Optional[JSONDict]]:
     """Extract pipeline state, step result, and processing metrics."""
     try:
         pipeline_controller = _get_pipeline_controller(runtime)
@@ -239,7 +240,7 @@ def _get_runtime_control_service_for_step(request: Request) -> Any:
     return runtime_control
 
 
-def _create_basic_response_data(result: Any, cognitive_state: Optional[str], queue_depth: int) -> Dict[str, Any]:
+def _create_basic_response_data(result: Any, cognitive_state: Optional[str], queue_depth: int) -> JSONDict:
     """Create basic response data for single step."""
     return {
         "success": result.success,
@@ -263,7 +264,7 @@ def _convert_step_point(result: Any) -> Optional[Any]:
         return None
 
 
-def _consolidate_step_results(result: Any) -> Optional[Dict[str, Any]]:
+def _consolidate_step_results(result: Any) -> Optional[JSONDict]:
     """Convert step_results list to consolidated step_result dict for API response."""
     if not (result.step_results and isinstance(result.step_results, list)):
         return None
@@ -293,7 +294,7 @@ def _consolidate_step_results(result: Any) -> Optional[Dict[str, Any]]:
 
 @router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
 async def single_step_processor(
-    request: Request, auth: AuthContext = Depends(require_admin), body: Dict[str, Any] = Body(default={})
+    request: Request, auth: AuthContext = Depends(require_admin), body: JSONDict = Body(default={})
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -606,7 +607,7 @@ async def get_processor_states(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _determine_user_role(current_user: Dict[str, Any]) -> Any:
+def _determine_user_role(current_user: JSONDict) -> Any:
     """Determine user role from current_user dict."""
     from ciris_engine.schemas.api.auth import UserRole
 
@@ -686,7 +687,7 @@ def _is_snapshot_event(event: Any) -> bool:
     return bool(event.get("event_type") == "snapshot_and_context")
 
 
-def _remove_task_summaries(system_snapshot: Dict[str, Any]) -> None:
+def _remove_task_summaries(system_snapshot: JSONDict) -> None:
     """Remove sensitive task summaries from system snapshot."""
     system_snapshot["recently_completed_tasks_summary"] = []
     system_snapshot["top_pending_tasks_summary"] = []
@@ -705,7 +706,7 @@ def _filter_user_profiles(user_profiles: Any, allowed_user_ids: set[str]) -> Any
     return user_profiles
 
 
-def _redact_system_snapshot(system_snapshot: Dict[str, Any], allowed_user_ids: set[str]) -> None:
+def _redact_system_snapshot(system_snapshot: JSONDict, allowed_user_ids: set[str]) -> None:
     """Redact sensitive data from system snapshot in-place."""
     _remove_task_summaries(system_snapshot)
 

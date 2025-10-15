@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional
 
 import discord
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
@@ -231,13 +233,13 @@ class DiscordConnectionManager:
         logger.debug("DiscordConnectionManager.is_connected: client is None, returning False")
         return False
 
-    def get_connection_info(self) -> Dict[str, Any]:
+    def get_connection_info(self) -> JSONDict:
         """Get current connection information.
 
         Returns:
             Dictionary with connection details
         """
-        info = {
+        info: JSONDict = {
             "state": self.state.value,
             "reconnect_attempts": self.reconnect_attempts,
             "is_connected": self.is_connected(),

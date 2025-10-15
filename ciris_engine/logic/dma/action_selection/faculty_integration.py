@@ -13,6 +13,7 @@ from ciris_engine.schemas.dma.faculty import (
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class FacultyIntegration:
     async def enhance_evaluation_with_faculties(
         self,
         original_thought: Thought,
-        triaged_inputs: Dict[str, Any],
+        triaged_inputs: JSONDict,
         conscience_failure_context: Optional[ConscienceFailureContext] = None,
     ) -> EnhancedDMAInputs:
         """Enhance triaged inputs with faculty evaluations."""

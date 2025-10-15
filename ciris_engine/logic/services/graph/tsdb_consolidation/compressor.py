@@ -7,9 +7,11 @@ Future versions will include multimedia compression for images, video, and telem
 
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, cast
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.services.graph.tsdb_models import CompressionResult, SummaryAttributes
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -113,25 +115,43 @@ class SummaryCompressor:
         """
         # Compress conversation summaries
         if attrs.messages_by_channel:
-            compressed_channels = {}
+            # Build new dict with proper typing - compress to Dict[str, int]
+            compressed_channels: Dict[str, int] = {}
             for channel, data in attrs.messages_by_channel.items():
                 # Keep only channel ID and count
                 if isinstance(data, dict):
-                    compressed_channels[channel] = data.get("count", 0)
-                else:
+                    # Extract count from dict with type narrowing
+                    count_val = data.get("count", 0)
+                    if isinstance(count_val, int):
+                        compressed_channels[channel] = count_val
+                    else:
+                        compressed_channels[channel] = 0
+                elif isinstance(data, int):
+                    # Already an int, keep it
                     compressed_channels[channel] = data
-            attrs.messages_by_channel = compressed_channels
+                else:
+                    # Unknown type, default to 0
+                    compressed_channels[channel] = 0
+
+            # Now cast the Dict[str, int] to the Union type the field expects
+            from typing import Union
+
+            attrs.messages_by_channel = cast(Dict[str, Union[int, JSONDict]], compressed_channels)
 
         # Compress participant data
         if attrs.participants:
-            compressed_participants = {}
+            compressed_participants: JSONDict = {}
             for user_id, data in attrs.participants.items():
                 # Keep only essential data
-                compressed_participants[user_id] = {
-                    "msg_count": data.get("message_count", 0),
-                    "name": data.get("author_name", "")[:20],  # Truncate names
-                }
-            attrs.participants = compressed_participants
+                if isinstance(data, dict):
+                    # Use get_str and get_int for type-safe access
+                    author_name = get_str(data, "author_name", "")
+                    msg_count = get_int(data, "message_count", 0)
+                    compressed_participants[user_id] = {
+                        "msg_count": msg_count,
+                        "name": author_name[:20],  # Truncate names
+                    }
+            attrs.participants = cast(Dict[str, JSONDict], compressed_participants)
 
         # Compress patterns and events
         if attrs.dominant_patterns and len(attrs.dominant_patterns) > 5:

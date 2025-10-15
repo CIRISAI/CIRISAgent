@@ -12,12 +12,12 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.behavioral_patterns import BehavioralPattern
 from ciris_engine.schemas.infrastructure.identity_variance import (
     CurrentIdentityData,
     IdentityDiff,
-    NodeAttributes,
     ServiceStatusMetrics,
     VarianceCheckMetadata,
     VarianceImpact,
@@ -29,6 +29,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.graph_core import CONFIG_SCOPE_MAP, ConfigNodeType, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.nodes import IdentitySnapshot
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -135,12 +136,28 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 raise RuntimeError("Time service not available")
             baseline_id = f"identity_baseline_{int(self._time_service.now().timestamp())}"
 
+            # Create IdentityData from AgentIdentityRoot with proper field mapping
+            from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+            if identity:
+                trust_level_value = identity.trust_level if hasattr(identity, "trust_level") else 0.5
+                stewardship_value = identity.stewardship if hasattr(identity, "stewardship") else None
+                identity_data = IdentityData(
+                    agent_id=identity.agent_id,
+                    description=identity.core_profile.description,
+                    role=identity.core_profile.role_description,
+                    trust_level=trust_level_value,
+                    stewardship=stewardship_value,
+                )
+            else:
+                identity_data = None
+
             baseline_snapshot = IdentitySnapshot(
                 id=baseline_id,
                 scope=GraphScope.IDENTITY,
                 system_state={"type": "BASELINE"},
                 expires_at=None,
-                identity_root=identity.model_dump() if identity else None,
+                identity_root=identity_data,
                 snapshot_id=baseline_id,
                 timestamp=self._time_service.now() if self._time_service else datetime.now(),
                 agent_id=identity.agent_id,
@@ -779,9 +796,9 @@ class IdentityVarianceMonitor(BaseScheduledService):
 
         return trust_params
 
-    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> Dict[str, Any]:
+    def _extract_current_trust_parameters(self, config_nodes: List[GraphNode]) -> JSONDict:
         """Extract current trust parameters from config nodes."""
-        trust_params = {}
+        trust_params: JSONDict = {}
 
         for node in config_nodes:
             node_attrs = (
@@ -789,8 +806,10 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 if isinstance(node.attributes, dict)
                 else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
             )
-            if node_attrs.get("config_type") == ConfigNodeType.TRUST_PARAMETERS.value:
-                trust_params.update(node_attrs.get("values", {}))
+            config_type = get_str(node_attrs, "config_type", "")
+            if config_type == ConfigNodeType.TRUST_PARAMETERS.value:
+                values = get_dict(node_attrs, "values", {})
+                trust_params.update(values)
 
         return trust_params
 
@@ -804,25 +823,34 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 if isinstance(node.attributes, dict)
                 else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
             )
-            if node_attrs.get("node_type") == "capability_change":
-                capabilities.append(node_attrs.get("capability", "unknown"))
+            node_type = get_str(node_attrs, "node_type", "")
+            if node_type == "capability_change":
+                capability = get_str(node_attrs, "capability", "unknown")
+                capabilities.append(capability)
 
         return capabilities
 
-    def _compare_patterns(
-        self, baseline_patterns: Dict[str, Any], current_patterns: Dict[str, Any]
-    ) -> List[IdentityDiff]:
+    def _compare_patterns(self, baseline_patterns: JSONDict, current_patterns: JSONDict) -> List[IdentityDiff]:
         """Compare behavioral patterns between baseline and current."""
         differences = []
 
         # Compare action distributions
-        baseline_actions = baseline_patterns.get("action_distribution", {})
-        current_actions = current_patterns.get("action_distribution", {})
+        baseline_actions = get_dict(baseline_patterns, "action_distribution", {})
+        current_actions = get_dict(current_patterns, "action_distribution", {})
 
-        # Check for significant shifts
-        for action in set(baseline_actions.keys()) | set(current_actions.keys()):
-            baseline_pct = baseline_actions.get(action, 0) / max(1, baseline_patterns.get("total_actions", 1))
-            current_pct = current_actions.get(action, 0) / max(1, current_patterns.get("total_actions", 1))
+        # Check for significant shifts - convert to sets
+        baseline_keys = set(baseline_actions.keys())
+        current_keys = set(current_actions.keys())
+        all_actions = baseline_keys | current_keys
+
+        for action in all_actions:
+            baseline_count = get_int(baseline_actions, action, 0)
+            current_count = get_int(current_actions, action, 0)
+            total_baseline = get_int(baseline_patterns, "total_actions", 1)
+            total_current = get_int(current_patterns, "total_actions", 1)
+
+            baseline_pct = baseline_count / max(1, total_baseline)
+            current_pct = current_count / max(1, total_current)
 
             if abs(current_pct - baseline_pct) > 0.2:  # 20% shift in behavior
                 differences.append(
@@ -856,7 +884,8 @@ class IdentityVarianceMonitor(BaseScheduledService):
                     if isinstance(nodes[0].attributes, dict)
                     else nodes[0].attributes.model_dump() if hasattr(nodes[0].attributes, "model_dump") else {}
                 )
-                self._baseline_snapshot_id = node_attrs.get("baseline_id")
+                baseline_id = get_str(node_attrs, "baseline_id", "")
+                self._baseline_snapshot_id = baseline_id if baseline_id else None
                 logger.info(f"Loaded baseline ID: {self._baseline_snapshot_id}")
 
         except Exception as e:
@@ -953,19 +982,17 @@ class IdentityVarianceMonitor(BaseScheduledService):
                     if isinstance(node.attributes, dict)
                     else node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else {}
                 )
-                # Parse attrs into NodeAttributes for type safety
-                parsed_attrs = NodeAttributes(**attrs) if isinstance(attrs, dict) else NodeAttributes()
 
                 return CurrentIdentityData(
-                    agent_id=parsed_attrs.agent_id or "unknown",
-                    identity_hash=parsed_attrs.identity_hash or "unknown",
-                    core_purpose=parsed_attrs.description or "unknown",
-                    role=parsed_attrs.role_description or "unknown",
-                    permitted_actions=parsed_attrs.permitted_actions or [],
-                    restricted_capabilities=parsed_attrs.restricted_capabilities or [],
-                    ethical_boundaries=self._extract_ethical_boundaries_from_node_attrs(parsed_attrs),
-                    personality_traits=parsed_attrs.areas_of_expertise or [],
-                    communication_style=parsed_attrs.startup_instructions or "standard",
+                    agent_id=attrs.get("agent_id", "unknown"),
+                    identity_hash=attrs.get("identity_hash", "unknown"),
+                    core_purpose=attrs.get("description", "unknown"),
+                    role=attrs.get("role_description", "unknown"),
+                    permitted_actions=attrs.get("permitted_actions", []),
+                    restricted_capabilities=attrs.get("restricted_capabilities", []),
+                    ethical_boundaries=self._extract_ethical_boundaries_from_node_attrs(attrs),
+                    personality_traits=attrs.get("areas_of_expertise", []),
+                    communication_style=attrs.get("startup_instructions", "standard"),
                     learning_enabled=True,
                     adaptation_rate=0.1,
                 )
@@ -973,18 +1000,20 @@ class IdentityVarianceMonitor(BaseScheduledService):
         # Fallback if no identity node found
         return CurrentIdentityData()
 
-    def _extract_ethical_boundaries_from_node_attrs(self, attrs: NodeAttributes) -> List[str]:
+    def _extract_ethical_boundaries_from_node_attrs(self, attrs: JSONDict) -> List[str]:
         """Extract ethical boundaries from node attributes."""
         boundaries = []
 
         # Extract from restricted capabilities
-        if attrs.restricted_capabilities:
-            for cap in attrs.restricted_capabilities:
+        restricted_caps = attrs.get("restricted_capabilities", [])
+        if restricted_caps and isinstance(restricted_caps, list):
+            for cap in restricted_caps:
                 boundaries.append(f"restricted:{cap}")
 
         # Extract from any ethical-related fields
-        if attrs.ethical_boundaries:
-            boundaries.extend(attrs.ethical_boundaries)
+        ethical_bounds = attrs.get("ethical_boundaries", [])
+        if ethical_bounds and isinstance(ethical_bounds, list):
+            boundaries.extend(ethical_bounds)
 
         return boundaries
 

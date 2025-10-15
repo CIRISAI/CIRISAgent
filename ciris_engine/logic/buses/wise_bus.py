@@ -6,12 +6,14 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
+from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
 from .prohibitions import (
@@ -242,7 +244,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             logger.error(f"Failed to fetch guidance: {e}", exc_info=True)
             return None
 
-    async def request_review(self, review_type: str, review_data: Dict[str, Any], handler_name: str) -> bool:
+    async def request_review(self, review_type: str, review_data: JSONDict, handler_name: str) -> bool:
         """Request a review from wise authority (e.g., for identity variance)"""
         # Create a deferral context for the review
         context = DeferralContext(
@@ -587,7 +589,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         total_prohibited: int,
         community_counts: Dict[str, int],
         total_community: int,
-    ) -> Dict[str, Any]:
+    ) -> JSONDict:
         """Create base telemetry dictionary."""
         return {
             "service_name": "wise_bus",
@@ -597,7 +599,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             "total_community": total_community,
         }
 
-    async def collect_telemetry(self) -> Dict[str, Any]:
+    async def collect_telemetry(self) -> JSONDict:
         """
         Collect telemetry from all wise authority providers in parallel.
 
@@ -658,15 +660,25 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return aggregated
 
-    def _aggregate_provider_telemetry(self, aggregated: Dict[str, Any], completed_tasks: Set[Any]) -> None:
+    def _aggregate_provider_telemetry(self, aggregated: JSONDict, completed_tasks: Set[Any]) -> None:
         """Aggregate telemetry from completed provider tasks."""
         for task in completed_tasks:
             try:
                 telemetry = task.result()
                 if not telemetry:
                     continue
-                aggregated["providers"].append(telemetry.get("service_name", "unknown"))
-                aggregated["failed_count"] += telemetry.get("failed_count", 0)
-                aggregated["processed_count"] += telemetry.get("processed_count", 0)
+
+                service_name = get_str(telemetry, "service_name", "unknown")
+                providers_list = aggregated["providers"]
+                if isinstance(providers_list, list):
+                    providers_list.append(service_name)
+
+                failed_count = aggregated["failed_count"]
+                if isinstance(failed_count, int):
+                    aggregated["failed_count"] = failed_count + get_int(telemetry, "failed_count", 0)
+
+                processed_count = aggregated["processed_count"]
+                if isinstance(processed_count, int):
+                    aggregated["processed_count"] = processed_count + get_int(telemetry, "processed_count", 0)
             except Exception as e:
                 logger.warning(f"Failed to collect telemetry from provider: {e}")

@@ -12,6 +12,7 @@ from typing import Any, Dict
 from weakref import WeakSet
 
 from ciris_engine.schemas.streaming.reasoning_stream import ReasoningEventUnion, ReasoningStreamUpdate
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class ReasoningEventStream:
             f"Broadcasted {event.event_type} event #{self._sequence_number} to {len(self._subscribers)} subscribers"
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get streaming statistics."""
         return {
             "enabled": self._is_enabled,

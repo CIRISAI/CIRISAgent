@@ -6,6 +6,9 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
     from ciris_engine.schemas.services.llm import LLMMessage
@@ -97,7 +100,7 @@ class LLMBus(BaseBus[LLMService]):
         time_service: TimeServiceProtocol,
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         distribution_strategy: DistributionStrategy = DistributionStrategy.LATENCY_BASED,
-        circuit_breaker_config: Optional[Dict[str, Any]] = None,
+        circuit_breaker_config: Optional[JSONDict] = None,
     ):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
 
@@ -116,7 +119,7 @@ class LLMBus(BaseBus[LLMService]):
 
         logger.info(f"LLMBus initialized with {distribution_strategy} distribution strategy")
 
-    def _normalize_messages(self, messages: Union[List[Dict[str, Any]], List["LLMMessage"]]) -> List[Dict[str, Any]]:
+    def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
 
         Args:
@@ -127,7 +130,7 @@ class LLMBus(BaseBus[LLMService]):
         """
         from ciris_engine.schemas.services.llm import LLMMessage
 
-        normalized_messages: List[Dict[str, Any]] = []
+        normalized_messages: List[JSONDict] = []
         for msg in messages:
             if isinstance(msg, LLMMessage):
                 # Use exclude_none=True to avoid sending name: None to providers
@@ -146,7 +149,7 @@ class LLMBus(BaseBus[LLMService]):
 
     async def call_llm_structured(
         self,
-        messages: Union[List[Dict[str, Any]], List["LLMMessage"]],
+        messages: Union[List[JSONDict], List["LLMMessage"]],
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
@@ -246,7 +249,7 @@ class LLMBus(BaseBus[LLMService]):
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[JSONDict],
         response_model: Type[BaseModel],
         handler_name: str,
         max_tokens: int = 1024,
@@ -279,7 +282,7 @@ class LLMBus(BaseBus[LLMService]):
             return LLMCapabilities.CALL_LLM_STRUCTURED.value in caps.actions
         return True
 
-    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, Dict[str, Any]]:
+    def _get_service_priority_and_metadata(self, service: Any) -> Tuple[int, JSONDict]:
         """Get priority value and metadata for a service."""
         provider_info = self.service_registry.get_provider_info(service_type=ServiceType.LLM)
         priority_map = {"CRITICAL": 0, "HIGH": 1, "NORMAL": 2, "LOW": 3, "FALLBACK": 9}
@@ -292,9 +295,7 @@ class LLMBus(BaseBus[LLMService]):
 
         return 0, {}  # Default to highest priority, empty metadata
 
-    def _should_include_service_for_domain(
-        self, service_metadata: Dict[str, Any], domain: Optional[str]
-    ) -> Tuple[bool, int]:
+    def _should_include_service_for_domain(self, service_metadata: JSONDict, domain: Optional[str]) -> Tuple[bool, int]:
         """Check if service should be included based on domain and get priority adjustment.
 
         Returns:
@@ -407,12 +408,12 @@ class LLMBus(BaseBus[LLMService]):
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""
         if service_name not in self.circuit_breakers:
-            # Create CircuitBreakerConfig from the dict config
+            # Create CircuitBreakerConfig from the dict config - use jsondict_helpers for type safety
             config = CircuitBreakerConfig(
-                failure_threshold=self.circuit_breaker_config.get("failure_threshold", 5),
-                recovery_timeout=self.circuit_breaker_config.get("recovery_timeout", 60.0),
-                success_threshold=self.circuit_breaker_config.get("half_open_max_calls", 3),
-                timeout_duration=self.circuit_breaker_config.get("timeout_duration", 30.0),
+                failure_threshold=get_int(self.circuit_breaker_config, "failure_threshold", 5),
+                recovery_timeout=get_float(self.circuit_breaker_config, "recovery_timeout", 60.0),
+                success_threshold=get_int(self.circuit_breaker_config, "half_open_max_calls", 3),
+                timeout_duration=get_float(self.circuit_breaker_config, "timeout_duration", 30.0),
             )
             self.circuit_breakers[service_name] = CircuitBreaker(name=service_name, config=config)
 
@@ -525,9 +526,9 @@ class LLMBus(BaseBus[LLMService]):
         except Exception as e:
             logger.warning(f"Failed to record telemetry: {e}")
 
-    def get_service_stats(self) -> Dict[str, Any]:
+    def get_service_stats(self) -> JSONDict:
         """Get detailed statistics for all services"""
-        stats = {}
+        stats: JSONDict = {}
 
         for service_name, metrics in self.service_metrics.items():
             circuit_breaker = self.circuit_breakers.get(service_name)
@@ -538,7 +539,7 @@ class LLMBus(BaseBus[LLMService]):
                 "failure_rate": f"{metrics.failure_rate * 100:.2f}%",
                 "average_latency_ms": f"{metrics.average_latency_ms:.2f}",
                 "consecutive_failures": metrics.consecutive_failures,
-                "circuit_breaker_state": circuit_breaker.state if circuit_breaker else "none",
+                "circuit_breaker_state": circuit_breaker.state.value if circuit_breaker else "none",
                 "last_request": metrics.last_request_time.isoformat() if metrics.last_request_time else None,
                 "last_failure": metrics.last_failure_time.isoformat() if metrics.last_failure_time else None,
             }
@@ -595,7 +596,7 @@ class LLMBus(BaseBus[LLMService]):
         else:
             logger.error(f"Unknown message type: {type(message)}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get bus statistics including service stats"""
         base_stats = super().get_stats()
         base_stats["service_stats"] = self.get_service_stats()

@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.telemetry import MetricTags
+from ciris_engine.schemas.types import JSONDict
 
 # Field description constants
 DESC_SERVICE_NAME = "Service name"
@@ -112,7 +113,7 @@ class LogEntry(BaseModel):
     service: str = Field(..., description=DESC_SERVICE_NAME)
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
     user_id: Optional[str] = Field(None, description="User ID")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: JSONDict = Field(default_factory=dict, description="Additional metadata")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
@@ -130,7 +131,7 @@ class TraceSpan(BaseModel):
     start_time: datetime = Field(..., description="Start time")
     duration_ms: float = Field(..., description="Duration in milliseconds")
     status: str = Field(..., description="Status: ok or error")
-    tags: Dict[str, Any] = Field(default_factory=dict, description="Span tags")
+    tags: JSONDict = Field(default_factory=dict, description="Span tags")
 
     @field_serializer("start_time")
     def serialize_start_time(self, start_time: datetime, _info: Any) -> Optional[str]:

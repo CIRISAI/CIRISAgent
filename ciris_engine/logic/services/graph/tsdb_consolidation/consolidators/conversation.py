@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
+from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 from ciris_engine.schemas.services.graph.consolidation import ConversationEntry, ParticipantData, ServiceInteractionData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -167,7 +169,7 @@ class ConversationConsolidator:
 
     def get_edges(
         self, summary_node: GraphNode, service_interactions: List[ServiceInteractionData]
-    ) -> List[Tuple[GraphNode, GraphNode, str, Dict[str, Any]]]:
+    ) -> List[Tuple[GraphNode, GraphNode, str, JSONDict]]:
         """
         Get edges to create for conversation summary.
 
@@ -182,7 +184,7 @@ class ConversationConsolidator:
         # Get period_end from summary node attributes for fallback timestamp
         period_end = datetime.now(timezone.utc)
         if isinstance(summary_node.attributes, dict):
-            period_end_str = summary_node.attributes.get("period_end")
+            period_end_str = get_str(summary_node.attributes, "period_end", "")
             if period_end_str:
                 try:
                     period_end = datetime.fromisoformat(period_end_str.replace("Z", "+00:00"))
@@ -212,12 +214,16 @@ class ConversationConsolidator:
                     updated_at=self._time_service.now() if self._time_service else period_end,
                 )
 
+                edge_attrs: JSONDict = {
+                    "message_count": str(participant.message_count),
+                    "channels": str(participant.channels),
+                }
                 edges.append(
                     (
                         summary_node,
                         user_node,
                         "INVOLVED_USER",
-                        {"message_count": str(participant.message_count), "channels": str(participant.channels)},
+                        edge_attrs,
                     )
                 )
 
@@ -238,12 +244,15 @@ class ConversationConsolidator:
                 updated_at=self._time_service.now() if self._time_service else period_end,
             )
 
+            channel_attrs: JSONDict = {
+                "message_count": str(len([i for i in service_interactions if i.channel_id == channel_id]))
+            }
             edges.append(
                 (
                     summary_node,
                     channel_node,
                     "OCCURRED_IN_CHANNEL",
-                    {"message_count": str(len([i for i in service_interactions if i.channel_id == channel_id]))},
+                    channel_attrs,
                 )
             )
 

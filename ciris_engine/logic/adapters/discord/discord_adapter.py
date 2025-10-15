@@ -35,6 +35,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceRequestData,
     ServiceResponseData,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .config import DiscordAdapterConfig
 from .constants import ACTION_OBSERVE
@@ -845,15 +846,17 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
     async def execute_tool(
         self,
         tool_name: str,
-        tool_args: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
+        tool_args: Optional[Dict[str, Union[str, int, float, bool, List[Any], JSONDict]]] = None,
         *,
-        parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], Dict[str, Any]]]] = None,
+        parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], JSONDict]]] = None,
     ) -> ToolExecutionResult:
         """Execute a tool through the tool handler."""
 
         # Support both tool_args and parameters for compatibility
+        from typing import cast
+
         args = tool_args or parameters or {}
-        result = await self._tool_handler.execute_tool(tool_name, args)
+        result = await self._tool_handler.execute_tool(tool_name, cast(JSONDict, args))
 
         # Increment commands handled counter
         self._commands_handled += 1

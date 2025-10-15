@@ -6,13 +6,14 @@ background information for DMA processing.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.context.builder import ContextBuilder
@@ -46,7 +47,7 @@ class ContextGatheringPhase:
     @streaming_step(StepPoint.GATHER_CONTEXT)
     @step_point(StepPoint.GATHER_CONTEXT)
     async def _gather_context_step(
-        self, thought_item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None
+        self, thought_item: ProcessingQueueItem, context: Optional[JSONDict] = None
     ) -> ProcessingThoughtContext:
         """
         Step 1: Build context for DMA processing.
@@ -83,7 +84,11 @@ class ContextGatheringPhase:
             log_fn(f"[UNIFIED CONTEXT] {log_msg}")
 
         # Get pre-fetched batch context if available, otherwise will create on-demand
-        batch_context_data = context.get("batch_context") if context else None
+        batch_context_data_raw = context.get("batch_context") if context else None
+        # Type narrow: batch_context could be dict or BatchContextData
+        from ciris_engine.logic.context.batch_context import BatchContextData
+
+        batch_context_data = batch_context_data_raw if isinstance(batch_context_data_raw, BatchContextData) else None
 
         # ALWAYS use unified batch approach
         system_snapshot = await build_system_snapshot_with_batch(

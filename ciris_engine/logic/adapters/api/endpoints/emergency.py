@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, WASignedCommand
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def emergency_shutdown(
 @router.get("/kill-switch/status")
 async def get_kill_switch_status(
     runtime_service: RuntimeControlServiceProtocol = Depends(get_runtime_service),
-) -> Dict[str, Any]:
+) -> JSONDict:
     """
     Get current kill switch configuration status.
 

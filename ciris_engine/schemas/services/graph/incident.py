@@ -12,7 +12,7 @@ from pydantic import Field
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
-from ciris_engine.schemas.types import NodeAttributes
+from ciris_engine.schemas.types import JSONDict
 
 
 class IncidentSeverity(str, Enum):
@@ -99,8 +99,7 @@ class IncidentNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentNode":
@@ -108,17 +107,19 @@ class IncidentNode(TypedGraphNode):
         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
         attrs.pop("node_class", None)
 
-        # Handle datetime deserialization
-        if "detected_at" in attrs:
-            attrs["detected_at"] = cls._deserialize_datetime(attrs["detected_at"])
-        if "resolved_at" in attrs:
-            attrs["resolved_at"] = cls._deserialize_datetime(attrs["resolved_at"])
+        # Handle datetime deserialization - extract and convert, don't modify attrs
+        detected_at = cls._deserialize_datetime(attrs.get("detected_at")) if "detected_at" in attrs else None
+        resolved_at = cls._deserialize_datetime(attrs.get("resolved_at")) if "resolved_at" in attrs else None
 
-        # Handle enum deserialization
-        if "severity" in attrs:
-            attrs["severity"] = IncidentSeverity(attrs["severity"])
-        if "status" in attrs:
-            attrs["status"] = IncidentStatus(attrs["status"])
+        # Handle enum deserialization - extract and convert, don't modify attrs
+        severity = IncidentSeverity(attrs["severity"]) if "severity" in attrs else IncidentSeverity.LOW
+        status = IncidentStatus(attrs["status"]) if "status" in attrs else IncidentStatus.OPEN
+
+        # Remove these from attrs so they don't conflict with kwargs
+        attrs.pop("detected_at", None)
+        attrs.pop("resolved_at", None)
+        attrs.pop("severity", None)
+        attrs.pop("status", None)
 
         # Fall back to values from attributes if the GraphNode fields are None
         updated_by = node.updated_by or attrs.get("created_by", "unknown")
@@ -133,6 +134,12 @@ class IncidentNode(TypedGraphNode):
             version=node.version,
             updated_by=updated_by,
             updated_at=updated_at or datetime.now(timezone.utc),
+            # Datetime fields
+            detected_at=detected_at or datetime.now(timezone.utc),
+            resolved_at=resolved_at,
+            # Enum fields
+            severity=severity,
+            status=status,
             # Extra fields from attributes
             **attrs
         )
@@ -182,8 +189,7 @@ class ProblemNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "ProblemNode":
@@ -191,13 +197,19 @@ class ProblemNode(TypedGraphNode):
         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
         attrs.pop("node_class", None)
 
-        # Handle datetime deserialization
-        if "first_occurrence" in attrs:
-            attrs["first_occurrence"] = cls._deserialize_datetime(attrs["first_occurrence"])
-        if "last_occurrence" in attrs:
-            attrs["last_occurrence"] = cls._deserialize_datetime(attrs["last_occurrence"])
-        if "resolved_at" in attrs:
-            attrs["resolved_at"] = cls._deserialize_datetime(attrs["resolved_at"])
+        # Handle datetime deserialization - extract and convert, don't modify attrs
+        first_occurrence = (
+            cls._deserialize_datetime(attrs.get("first_occurrence")) if "first_occurrence" in attrs else None
+        )
+        last_occurrence = (
+            cls._deserialize_datetime(attrs.get("last_occurrence")) if "last_occurrence" in attrs else None
+        )
+        resolved_at = cls._deserialize_datetime(attrs.get("resolved_at")) if "resolved_at" in attrs else None
+
+        # Remove these from attrs so they don't conflict with kwargs
+        attrs.pop("first_occurrence", None)
+        attrs.pop("last_occurrence", None)
+        attrs.pop("resolved_at", None)
 
         # Fall back to values from attributes if the GraphNode fields are None
         updated_by = node.updated_by or attrs.get("created_by", "unknown")
@@ -212,6 +224,10 @@ class ProblemNode(TypedGraphNode):
             version=node.version,
             updated_by=updated_by,
             updated_at=updated_at or datetime.now(timezone.utc),
+            # Datetime fields
+            first_occurrence=first_occurrence or datetime.now(timezone.utc),
+            last_occurrence=last_occurrence or datetime.now(timezone.utc),
+            resolved_at=resolved_at,
             # Extra fields from attributes
             **attrs
         )
@@ -227,7 +243,7 @@ class IncidentInsightNode(TypedGraphNode):
 
     insight_type: str = Field(..., description="Type of insight (PERIODIC_ANALYSIS, PATTERN_DETECTED, etc.)")
     summary: str = Field(..., description="High-level summary of the insight")
-    details: NodeAttributes = Field(default_factory=dict, description="Detailed analysis results")
+    details: JSONDict = Field(default_factory=dict, description="Detailed analysis results")
 
     # Recommendations
     behavioral_adjustments: List[str] = Field(default_factory=list, description="Suggested behavioral changes")
@@ -257,8 +273,7 @@ class IncidentInsightNode(TypedGraphNode):
             attributes=extra_data,
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at,
-        )
+            updated_at=self.updated_at)
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "IncidentInsightNode":
@@ -266,9 +281,13 @@ class IncidentInsightNode(TypedGraphNode):
         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
         attrs.pop("node_class", None)
 
-        # Handle datetime deserialization
-        if "analysis_timestamp" in attrs:
-            attrs["analysis_timestamp"] = cls._deserialize_datetime(attrs["analysis_timestamp"])
+        # Handle datetime deserialization - extract and convert, don't modify attrs
+        analysis_timestamp = (
+            cls._deserialize_datetime(attrs.get("analysis_timestamp")) if "analysis_timestamp" in attrs else None
+        )
+
+        # Remove from attrs so it doesn't conflict with kwargs
+        attrs.pop("analysis_timestamp", None)
 
         # Fall back to values from attributes if the GraphNode fields are None
         updated_by = node.updated_by or attrs.get("created_by", "unknown")
@@ -283,6 +302,8 @@ class IncidentInsightNode(TypedGraphNode):
             version=node.version,
             updated_by=updated_by,
             updated_at=updated_at or datetime.now(timezone.utc),
+            # Datetime field
+            analysis_timestamp=analysis_timestamp or datetime.now(timezone.utc),
             # Extra fields from attributes
             **attrs
         )

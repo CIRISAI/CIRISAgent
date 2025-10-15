@@ -21,6 +21,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType, ThoughtStatus, Thoug
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo, ShutdownContext
 from ciris_engine.schemas.runtime.models import FinalAction, Thought
 from ciris_engine.schemas.services.core import ServiceCapabilities
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +345,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         return task
 
     async def schedule_deferred_task(
-        self, thought_id: str, task_id: str, defer_until: str, reason: str, context: Optional[Dict[str, Any]] = None
+        self, thought_id: str, task_id: str, defer_until: str, reason: str, context: Optional[JSONDict] = None
     ) -> ScheduledTask:
         """
         Schedule a deferred task for future reactivation.

@@ -18,6 +18,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceCorrelation,
     ServiceCorrelationStatus,
 )
+from ciris_engine.schemas.types import JSONDict
 
 from .security import SecurityFilter
 
@@ -97,11 +98,11 @@ class BasicTelemetryCollector(BaseService):
 
         # Store enhanced metrics in separate history for TSDB capabilities
         if not hasattr(self, "_enhanced_history"):
-            self._enhanced_history: Dict[str, Deque[Dict[str, Any]]] = defaultdict(
-                lambda: deque(maxlen=self.buffer_size)
-            )
+            self._enhanced_history: Dict[str, Deque[JSONDict]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
 
-        self._enhanced_history[name].append(metric_entry)
+        from typing import cast
+
+        self._enhanced_history[name].append(cast(JSONDict, metric_entry))
 
         # Store metric in TSDB as correlation
         try:

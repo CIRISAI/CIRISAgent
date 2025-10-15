@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.types import JSONDict
 
 
 @runtime_checkable
@@ -12,7 +13,7 @@ class ConscienceInterface(Protocol):
     """Protocol for all conscience implementations.
 
     All conscience check implementations must accept ConscienceCheckContext
-    instead of Dict[str, Any] for type safety.
+    instead of JSONDict for type safety.
     """
 
     async def check(

@@ -22,6 +22,7 @@ from ciris_engine.schemas.secrets.service import (
 )
 from ciris_engine.schemas.services.core import ServiceStatus
 from ciris_engine.schemas.services.core.secrets import SecretsServiceStats
+from ciris_engine.schemas.types import JSONDict
 
 from .filter import SecretsFilter
 from .store import SecretsStore
@@ -172,8 +173,8 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         return result
 
     async def decapsulate_secrets_in_parameters(
-        self, action_type: str, action_params: Dict[str, Any], context: DecapsulationContext
-    ) -> Dict[str, Any]:
+        self, action_type: str, action_params: JSONDict, context: DecapsulationContext
+    ) -> JSONDict:
         """
         Automatically decapsulate secrets in action parameters.
 
@@ -199,15 +200,15 @@ class SecretsService(BaseService, SecretsServiceProtocol):
 
     async def _deep_decapsulate(
         self,
-        obj: Union[Dict[str, Any], List[Any], str, int, float, bool, None],
+        obj: Union[JSONDict, List[Any], str, int, float, bool, None],
         action_type: str,
         context: DecapsulationContext,
-    ) -> Union[Dict[str, Any], List[Any], str, int, float, bool, None]:
+    ) -> Union[JSONDict, List[Any], str, int, float, bool, None]:
         """Recursively decapsulate secrets in nested structures."""
         if isinstance(obj, str):
             return await self._decapsulate_string(obj, action_type, context)
         elif isinstance(obj, dict):
-            result: Dict[str, Any] = {}
+            result: JSONDict = {}
             for key, value in obj.items():
                 result[key] = await self._deep_decapsulate(value, action_type, context)
             return result
@@ -439,7 +440,7 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         except Exception:
             return None
 
-    async def get_filter_config(self) -> Dict[str, Any]:
+    async def get_filter_config(self) -> JSONDict:
         """Get current filter configuration."""
         # Wrap the filter's get_filter_config to prevent direct access
         config_export = self.filter.get_filter_config()

@@ -17,6 +17,9 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_float, get_int, get_str
+from ciris_engine.schemas.types import JSONDict
+
 # Optional import for psutil
 try:
     import psutil  # type: ignore[import,unused-ignore]
@@ -248,7 +251,7 @@ class TelemetryAggregator:
         return telemetry
 
     def _generate_semantic_service_name(
-        self, service_type: str, provider_name: str, provider_metadata: Optional[Dict[str, Any]] = None
+        self, service_type: str, provider_name: str, provider_metadata: Optional[JSONDict] = None
     ) -> str:
         """
         Generate a semantic name for a dynamic service.
@@ -270,17 +273,17 @@ class TelemetryAggregator:
 
         # Dispatch table for known provider patterns
         if "APICommunication" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_api_{suffix}"
 
         if "CLIAdapter" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "@") if "@" in adapter_id else _get_instance_id()
             return f"{service_type}_cli_{suffix}"
 
         if "DiscordAdapter" in provider_name or "Discord" in provider_name:
-            adapter_id = provider_metadata.get("adapter_id", "") if provider_metadata else ""
+            adapter_id = get_str(provider_metadata, "adapter_id", "") if provider_metadata else ""
             suffix = _extract_adapter_suffix(adapter_id, "_")
             return f"{service_type}_discord_{suffix}"
 
@@ -645,20 +648,20 @@ class TelemetryAggregator:
         logger.debug(f"Service {service_name} not found in {len(all_services)} services")
         return None
 
-    def _convert_dict_to_telemetry(self, metrics: Dict[str, Any], service_name: str) -> ServiceTelemetryData:
+    def _convert_dict_to_telemetry(self, metrics: JSONDict, service_name: str) -> ServiceTelemetryData:
         """Convert dict metrics to ServiceTelemetryData with proper uptime detection."""
         # Look for various uptime keys
         uptime = (
-            metrics.get("uptime_seconds")
-            or metrics.get("incident_uptime_seconds")
-            or metrics.get("tsdb_uptime_seconds")
-            or metrics.get("auth_uptime_seconds")
-            or metrics.get("scheduler_uptime_seconds")
+            get_float(metrics, "uptime_seconds", 0.0)
+            or get_float(metrics, "incident_uptime_seconds", 0.0)
+            or get_float(metrics, "tsdb_uptime_seconds", 0.0)
+            or get_float(metrics, "auth_uptime_seconds", 0.0)
+            or get_float(metrics, "scheduler_uptime_seconds", 0.0)
             or 0.0
         )
 
         # If service has uptime > 0, consider it healthy unless explicitly marked unhealthy
-        healthy = metrics.get("healthy", uptime > 0)
+        healthy = get_bool(metrics, "healthy", uptime > 0.0)
 
         logger.debug(
             f"Converting dict metrics to ServiceTelemetryData for {service_name}: healthy={healthy}, uptime={uptime}"
@@ -927,7 +930,7 @@ class TelemetryAggregator:
                     return adapter
         return None
 
-    async def _get_adapter_metrics(self, adapter_instance: Any) -> Optional[Dict[str, Any]]:
+    async def _get_adapter_metrics(self, adapter_instance: Any) -> Optional[JSONDict]:
         """Get metrics from adapter instance."""
         if hasattr(adapter_instance, "get_metrics"):
             if asyncio.iscoroutinefunction(adapter_instance.get_metrics):
@@ -939,7 +942,7 @@ class TelemetryAggregator:
 
     def _create_telemetry_data(
         self,
-        metrics: Dict[str, Any],
+        metrics: JSONDict,
         adapter_info: Optional[Any] = None,
         adapter_id: Optional[str] = None,
         healthy: bool = True,
@@ -955,7 +958,7 @@ class TelemetryAggregator:
                 custom_metrics={"adapter_id": adapter_id} if adapter_id else {},
             )
 
-        custom_metrics: Dict[str, Any] = {"adapter_id": adapter_id} if adapter_id else {}
+        custom_metrics: JSONDict = {"adapter_id": adapter_id} if adapter_id else {}
         if adapter_info:
             adapter_type_value: Any = adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
             if adapter_type_value is not None:  # Only add if not None
@@ -964,10 +967,11 @@ class TelemetryAggregator:
                 custom_metrics["start_time"] = adapter_info.started_at.isoformat()
 
         # Update with custom_metrics from metrics, filtering out None values
-        raw_custom_metrics = metrics.get("custom_metrics", {})
-        custom_metrics.update(
-            {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
-        )
+        raw_custom_metrics = get_dict(metrics, "custom_metrics", {})
+        if isinstance(raw_custom_metrics, dict):
+            custom_metrics.update(
+                {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
+            )
 
         # Final filter to ensure all values are valid types (int, float, str) and not None
         filtered_custom_metrics = {
@@ -1111,7 +1115,7 @@ class TelemetryAggregator:
             healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
         )
 
-    def status_to_telemetry(self, status: Any) -> Dict[str, Any]:
+    def status_to_telemetry(self, status: Any) -> JSONDict:
         """Convert ServiceStatus to telemetry dict."""
         if hasattr(status, "model_dump"):
             result = status.model_dump()
@@ -2332,7 +2336,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
             node_id = f"correlation/{correlation.correlation_id}"
 
             # Build attributes including task/thought linkage
-            attributes: Dict[str, Any] = {
+            attributes: JSONDict = {
                 "correlation_id": correlation.correlation_id,
                 "correlation_type": (
                     correlation.correlation_type.value

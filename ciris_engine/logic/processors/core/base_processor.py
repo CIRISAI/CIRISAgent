@@ -15,6 +15,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorMetrics, ProcessorServices
 from ciris_engine.schemas.processors.results import ProcessingResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
@@ -30,12 +31,12 @@ class BaseProcessor(ABC):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Union[Dict[str, Any], ProcessorServices],
+        services: Union[JSONDict, ProcessorServices],
     ) -> None:
         """Initialize base processor with common dependencies.
 
         Args:
-            services: Can be Dict[str, Any] (legacy) or ProcessorServices (typed)
+            services: Can be JSONDict (legacy) or ProcessorServices (typed)
         """
         self.config = config_accessor
         self.thought_processor = thought_processor
@@ -198,7 +199,7 @@ class BaseProcessor(ABC):
             return float((dispatch_end - dispatch_start).total_seconds() * 1000)
         return 0.0
 
-    async def dispatch_action(self, result: Any, thought: Any, context: Dict[str, Any]) -> bool:
+    async def dispatch_action(self, result: Any, thought: Any, context: JSONDict) -> bool:
         """
         Common action dispatch logic.
         Returns True if dispatch succeeded.
@@ -239,7 +240,7 @@ class BaseProcessor(ABC):
             self.metrics.errors += 1
             return False
 
-    async def process_thought_item(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> Any:
+    async def process_thought_item(self, item: ProcessingQueueItem, context: Optional[JSONDict] = None) -> Any:
         """
         Process a single thought item through the thought processor.
         Returns the processing result.
@@ -266,12 +267,12 @@ class BaseProcessor(ABC):
                     return self.force_defer(item, context)
             raise
 
-    def force_ponder(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> None:
+    def force_ponder(self, item: ProcessingQueueItem, context: Optional[JSONDict] = None) -> None:
         """Force a PONDER action for the given thought item. Override in subclass for custom logic."""
         logger.info(f"Forcing PONDER for thought {item.thought_id}")
         # Implement actual logic in subclass
 
-    def force_defer(self, item: ProcessingQueueItem, context: Optional[Dict[str, Any]] = None) -> None:
+    def force_defer(self, item: ProcessingQueueItem, context: Optional[JSONDict] = None) -> None:
         """Force a DEFER action for the given thought item. Override in subclass for custom logic."""
         logger.info(f"Forcing DEFER for thought {item.thought_id}")
 

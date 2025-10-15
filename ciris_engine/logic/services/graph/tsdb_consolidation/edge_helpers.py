@@ -14,6 +14,7 @@ from ciris_engine.schemas.services.graph.edges import (
     TaskSummaryAttributes,
     TraceSummaryAttributes,
 )
+from ciris_engine.schemas.types import JSONDict
 
 
 def create_summary_edge_attributes(
@@ -77,9 +78,7 @@ def create_cross_summary_attributes(
     )
 
 
-def create_generic_edge_attributes(
-    data: Optional[Dict[str, Any]] = None, context: Optional[str] = None
-) -> EdgeAttributes:
+def create_generic_edge_attributes(data: Optional[JSONDict] = None, context: Optional[str] = None) -> EdgeAttributes:
     """Create generic edge attributes for flexible use cases."""
     return GenericEdgeAttributes(context=context or "Generic edge", created_by="tsdb_consolidation", data=data or {})
 

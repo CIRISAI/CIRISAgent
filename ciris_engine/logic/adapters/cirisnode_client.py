@@ -101,7 +101,7 @@ class CIRISNodeClient(Service):
     def is_closed(self) -> bool:
         return self._closed
 
-    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Any:
+    async def _post(self, endpoint: str, payload: JSONDict) -> Any:
         async def _make_request() -> Any:
             resp = await self._client.post(endpoint, json=payload)
             if 400 <= resp.status_code < 500:
@@ -116,9 +116,11 @@ class CIRISNodeClient(Service):
             **self.get_retry_config("http_request"),
         )
 
-    async def _get(self, endpoint: str, params: Dict[str, Any]) -> Any:
+    async def _get(self, endpoint: str, params: JSONDict) -> Any:
+        from typing import Mapping, cast
+
         async def _make_request() -> Any:
-            resp = await self._client.get(endpoint, params=params)
+            resp = await self._client.get(endpoint, params=cast(Mapping[str, str | int | float | bool | None], params))
             if 400 <= resp.status_code < 500:
                 resp.raise_for_status()  # Don't retry 4xx client errors
             resp.raise_for_status()  # Raise for any other errors (will be retried)
@@ -131,7 +133,7 @@ class CIRISNodeClient(Service):
             **self.get_retry_config("http_request"),
         )
 
-    async def _put(self, endpoint: str, payload: Dict[str, Any]) -> Any:
+    async def _put(self, endpoint: str, payload: JSONDict) -> Any:
         async def _make_request() -> Any:
             resp = await self._client.put(endpoint, json=payload)
             if 400 <= resp.status_code < 500:
@@ -203,7 +205,7 @@ class CIRISNodeClient(Service):
             )
         return result
 
-    async def run_wa_service(self, service: str, action: str, params: Dict[str, Any]) -> WAServiceResponse:
+    async def run_wa_service(self, service: str, action: str, params: JSONDict) -> WAServiceResponse:
         """Call a WA service on CIRISNode."""
         request = WAServiceRequest(service=service, action=action, params=params)
         response = await self._post(f"/wa/{service}", request.model_dump())
@@ -223,7 +225,7 @@ class CIRISNodeClient(Service):
         return result
 
     async def log_event(
-        self, event_type: str, event_data: Dict[str, Any], agent_id: Optional[str] = None
+        self, event_type: str, event_data: JSONDict, agent_id: Optional[str] = None
     ) -> EventLogResponse:
         """Send an event payload to CIRISNode for storage."""
         request = EventLogRequest(event_type=event_type, event_data=event_data, agent_id=agent_id)

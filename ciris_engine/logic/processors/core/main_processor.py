@@ -41,6 +41,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceResponseData,
     TraceContext,
 )
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
@@ -69,7 +70,7 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Union[Dict[str, Any], ProcessorServices],
+        services: JSONDict | ProcessorServices,
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
@@ -85,7 +86,7 @@ class AgentProcessor:
         self._action_dispatcher = action_dispatcher  # Store internally
 
         # Store services - keep as-is for now to avoid breaking existing code
-        self.services: Union[Dict[str, Any], ProcessorServices] = services
+        self.services: Union[JSONDict, ProcessorServices] = services
         self.startup_channel_id = startup_channel_id
         self.runtime = runtime  # Store runtime reference for preload tasks
         self._time_service = time_service  # Store injected time service
@@ -1422,9 +1423,9 @@ class AgentProcessor:
         """
         return self.state_manager.get_state().value
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> JSONDict:
         """Get current processor status."""
-        status: Dict[str, Any] = {
+        status: JSONDict = {
             "state": self.state_manager.get_state().value,
             "state_duration": self.state_manager.get_state_duration(),
             "round_number": self.current_round_number,
@@ -1443,7 +1444,15 @@ class AgentProcessor:
             status["play_status"] = self.play_processor.get_status()
 
         elif current_state == AgentState.SOLITUDE:
-            status["solitude_status"] = self.solitude_processor.get_status()
+            # Serialize solitude status to dict for JSONDict compatibility
+            solitude_status = self.solitude_processor.get_status()
+            if hasattr(solitude_status, "model_dump"):
+                serialized_status = solitude_status.model_dump()
+            elif isinstance(solitude_status, dict):
+                serialized_status = dict(solitude_status)
+            else:
+                serialized_status = {"status": "unknown"}
+            status["solitude_status"] = serialized_status
 
         elif current_state == AgentState.DREAM:
             if self.dream_processor:
@@ -1451,9 +1460,19 @@ class AgentProcessor:
             else:
                 status["dream_summary"] = {"state": "unavailable", "error": "Dream processor not available"}
 
-        status["processor_metrics"] = {}
+        # Initialize processor_metrics as a dict for JSONDict compatibility
+        processor_metrics: JSONDict = {}
         for state, processor in self.state_processors.items():
-            status["processor_metrics"][state.value] = processor.get_metrics()
+            metrics = processor.get_metrics()
+            # Serialize ProcessorMetrics to dict if it's a Pydantic model, ensuring JSONDict compatibility
+            if hasattr(metrics, "model_dump"):
+                serialized_metrics = metrics.model_dump()
+            elif isinstance(metrics, dict):
+                serialized_metrics = dict(metrics)
+            else:
+                serialized_metrics = {"error": "metrics unavailable"}
+            processor_metrics[state.value] = serialized_metrics
+        status["processor_metrics"] = processor_metrics
 
         status["queue_status"] = self._get_detailed_queue_status()
 
@@ -1550,7 +1569,16 @@ class AgentProcessor:
                     if now >= scheduled_time and now <= scheduled_time + defer_window:
                         # Check dream health - when was last dream?
                         if self.dream_processor and self.dream_processor.dream_metrics.get("end_time"):
-                            last_dream = datetime.fromisoformat(self.dream_processor.dream_metrics["end_time"])
+                            from ciris_engine.logic.utils.jsondict_helpers import get_str
+
+                            end_time_str = get_str(self.dream_processor.dream_metrics, "end_time", "")
+                            if end_time_str:
+                                last_dream = datetime.fromisoformat(end_time_str)
+                            else:
+                                # No valid end time, skip this check
+                                logger.debug("No valid dream end_time, allowing scheduled dream")
+                                logger.info(f"Scheduled dream task {task.id} is due")
+                                return True
                             hours_since = (now - last_dream).total_seconds() / 3600
 
                             # Don't dream if we dreamed less than 4 hours ago
@@ -1567,7 +1595,7 @@ class AgentProcessor:
             logger.error(f"Error checking scheduled dreams: {e}")
             return False
 
-    def _get_detailed_queue_status(self) -> Dict[str, Any]:
+    def _get_detailed_queue_status(self) -> JSONDict:
         """Get detailed processing queue status information."""
         try:
             # Get thought counts by status
@@ -1602,7 +1630,7 @@ class AgentProcessor:
                 recent_thoughts = []
 
             # Get task information
-            task_info: Dict[str, Any] = {}
+            task_info: JSONDict = {}
             try:
                 if hasattr(self, "work_processor") and self.work_processor:
                     task_info = {
@@ -1668,7 +1696,7 @@ class AgentProcessor:
         # Use the centralized persistence function
         return persistence.get_queue_status()
 
-    def _collect_metrics(self) -> Dict[str, Any]:
+    def _collect_metrics(self) -> JSONDict:
         """Collect base metrics for the agent processor."""
         # Calculate uptime - MUST have start time
         if not hasattr(self, "_start_time") or not self._start_time:
@@ -1684,8 +1712,8 @@ class AgentProcessor:
         # Get current state
         current_state = self.state_manager.get_state() if hasattr(self, "state_manager") else None
 
-        # Basic metrics
-        metrics = {
+        # Basic metrics - explicitly type as JSONDict
+        metrics: JSONDict = {
             "processor_uptime_seconds": uptime_seconds,
             "processor_queue_size": queue_size,
             "processor_healthy": True,  # If we're collecting metrics, we're healthy
@@ -1696,7 +1724,7 @@ class AgentProcessor:
 
         return metrics
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> JSONDict:
         """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONValue
 
 
-class NodeAttributes(BaseModel):
+class JSONDict(BaseModel):
     """
     Base schema for all graph node attributes.
 
@@ -47,7 +47,7 @@ class NodeAttributes(BaseModel):
     )
 
 
-class MemoryNodeAttributes(NodeAttributes):
+class MemoryNodeAttributes(JSONDict):
     """
     Specific attributes for memory nodes.
 
@@ -87,7 +87,7 @@ class MemoryNodeAttributes(NodeAttributes):
     model_config = ConfigDict(extra="forbid")
 
 
-class ConfigNodeAttributes(NodeAttributes):
+class ConfigNodeAttributes(JSONDict):
     """
     Specific attributes for configuration nodes.
 
@@ -130,7 +130,7 @@ class ConfigNodeAttributes(NodeAttributes):
     model_config = ConfigDict(extra="forbid")
 
 
-class TelemetryNodeAttributes(NodeAttributes):
+class TelemetryNodeAttributes(JSONDict):
     """
     Specific attributes for telemetry nodes.
 
@@ -183,7 +183,7 @@ class TelemetryNodeAttributes(NodeAttributes):
 
 
 # Type unions for flexibility
-AnyNodeAttributes = Union[NodeAttributes, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes]
+AnyNodeAttributes = Union[JSONDict, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes]
 
 
 def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_by: str) -> AnyNodeAttributes:
@@ -216,14 +216,14 @@ def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_b
     attr_class = type_map.get(node_type)
     if not attr_class:
         # Fall back to base attributes for unknown types
-        return NodeAttributes(**data)
+        return JSONDict(**data)
 
     # Type is inferred correctly from the typed dictionary
     return attr_class(**data)
 
 
 __all__ = [
-    "NodeAttributes",
+    "JSONDict",
     "MemoryNodeAttributes",
     "ConfigNodeAttributes",
     "TelemetryNodeAttributes",

@@ -13,6 +13,7 @@ from ciris_engine.logic.processors.core.step_decorators import step_point, strea
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class RecursiveProcessingPhase:
         from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 
         last_error = None
-        retry_history: List[Dict[str, Any]] = []
+        retry_history: List[JSONDict] = []
 
         for attempt in range(max_retries):
             try:

@@ -283,10 +283,16 @@ class DMAOrchestrator:
 
         # Get identity from persistence tier
         from ciris_engine.logic.persistence.models import get_identity_for_context
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 
         identity_info = get_identity_for_context()
-        # Use attribute assignment for Pydantic model
-        triaged.agent_identity = identity_info.model_dump()  # Convert to dict for backward compatibility
+        # Convert IdentityContext to IdentityData for EnhancedDMAInputs
+        triaged.agent_identity = IdentityData(
+            agent_id=identity_info.agent_name,  # IdentityContext.agent_name
+            description=identity_info.description,
+            role=identity_info.agent_role,  # IdentityContext.agent_role
+            trust_level=0.5,  # Default trust level (IdentityContext doesn't have this field)
+        )
 
         logger.debug(f"Using identity '{identity_info.agent_name}' for thought {thought_item.thought_id}")
 

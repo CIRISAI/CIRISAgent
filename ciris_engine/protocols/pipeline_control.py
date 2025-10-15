@@ -8,12 +8,16 @@ the thought processing pipeline.
 from __future__ import annotations
 
 import asyncio
+
+# StepData is just a JSONDict - define as type alias
 from typing import Any, Dict, List, Optional, Protocol
 
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint, StepResultUnion, ThoughtInPipeline
-from ciris_engine.schemas.types import SerializedModel, StepData
+from ciris_engine.schemas.types import SerializedModel
+
+StepData = Dict[str, Any]
 
 
 # Pydantic models for pipeline control results

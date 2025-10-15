@@ -229,9 +229,15 @@ async def test_build_system_snapshot_with_memory_service(mock_time_service):
     )
 
     assert isinstance(snapshot, SystemSnapshot)
-    # agent_identity is a regular field
+    # agent_identity can be IdentityData model or dict
     assert snapshot.agent_identity is not None
-    assert snapshot.agent_identity["agent_id"] == "test_agent"
+    # Access as model attribute if it's IdentityData, or dict key if it's a dict
+    agent_id = (
+        snapshot.agent_identity.agent_id
+        if hasattr(snapshot.agent_identity, "agent_id")
+        else snapshot.agent_identity.get("agent_id")
+    )
+    assert agent_id == "test_agent"
 
 
 @pytest.mark.asyncio
@@ -293,9 +299,19 @@ async def test_build_system_snapshot_with_stewardship_data(mock_time_service):
 
     assert isinstance(snapshot, SystemSnapshot)
     assert snapshot.agent_identity is not None
-    assert snapshot.agent_identity["agent_id"] == "steward_agent"
-    assert "stewardship" in snapshot.agent_identity
-    stewardship_data = snapshot.agent_identity["stewardship"]
+    # Access as model attribute if it's IdentityData, or dict key if it's a dict
+    agent_id = (
+        snapshot.agent_identity.agent_id
+        if hasattr(snapshot.agent_identity, "agent_id")
+        else snapshot.agent_identity.get("agent_id")
+    )
+    assert agent_id == "steward_agent"
+    # Check stewardship data exists (either as attribute or dict key)
+    if hasattr(snapshot.agent_identity, "stewardship"):
+        stewardship_data = snapshot.agent_identity.stewardship
+    else:
+        assert "stewardship" in snapshot.agent_identity
+        stewardship_data = snapshot.agent_identity["stewardship"]
     assert stewardship_data["stewardship_tier"] == 2
     assert stewardship_data["creator_ledger_entry"]["signature"] == "test_signature"
     assert "To test stewardship" in stewardship_data["creator_intent_statement"]["purpose_and_functionalities"]

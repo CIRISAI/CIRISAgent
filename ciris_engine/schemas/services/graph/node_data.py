@@ -1,13 +1,15 @@
 """
 Typed node data schemas for graph nodes.
 
-Replaces the generic NodeAttributes.data: Dict[str, Union[...]] with specific typed schemas.
+Replaces the generic JSONDict.data: Dict[str, Union[...]] with specific typed schemas.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from ciris_engine.schemas.types import JSONDict
 
 
 class ValidationRule(BaseModel):
@@ -144,7 +146,9 @@ class EnvironmentNodeData(BaseNodeData):
 NodeData = Union[ConfigNodeData, TelemetryNodeData, AuditNodeData, MemoryNodeData, TaskNodeData, EnvironmentNodeData]
 
 
-def create_node_data(node_type: str, data: Dict[str, Any]) -> NodeData:
+def create_node_data(
+    node_type: str, data: Dict[str, Any]
+) -> NodeData:  # NOQA: Modifies dict to add datetime objects for model construction
     """Factory function to create appropriate node data based on type."""
     type_map = {
         "config": ConfigNodeData,

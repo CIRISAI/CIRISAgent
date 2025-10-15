@@ -19,6 +19,7 @@ from ciris_engine.schemas.telemetry.core import (
     ServiceRequestData,
     ServiceResponseData,
 )
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -115,7 +116,7 @@ class DiscordToolHandler:
         )
 
     def _process_tool_result(
-        self, tool_name: str, result_dict: Dict[str, Any], correlation_id: str, execution_time: float
+        self, tool_name: str, result_dict: JSONDict, correlation_id: str, execution_time: float
     ) -> ToolExecutionResult:
         """Process the result from tool execution.
 
@@ -230,7 +231,7 @@ class DiscordToolHandler:
             correlation_id=correlation_id or str(uuid.uuid4()),
         )
 
-    def _convert_to_typed_args(self, tool_args: Union[Dict[str, Any], ToolExecutionArgs]) -> ToolExecutionArgs:
+    def _convert_to_typed_args(self, tool_args: Union[JSONDict, ToolExecutionArgs]) -> ToolExecutionArgs:
         """Convert dict arguments to typed ToolExecutionArgs.
 
         Args:
@@ -255,9 +256,7 @@ class DiscordToolHandler:
             },
         )
 
-    async def execute_tool(
-        self, tool_name: str, tool_args: Union[Dict[str, Any], ToolExecutionArgs]
-    ) -> ToolExecutionResult:
+    async def execute_tool(self, tool_name: str, tool_args: Union[JSONDict, ToolExecutionArgs]) -> ToolExecutionResult:
         """Execute a registered Discord tool via the tool registry.
 
         Args:
@@ -404,7 +403,7 @@ class DiscordToolHandler:
                 tools.append(tool_info)
         return tools
 
-    def validate_tool_parameters(self, tool_name: str, parameters: Union[Dict[str, Any], ToolExecutionArgs]) -> bool:
+    def validate_tool_parameters(self, tool_name: str, parameters: Union[JSONDict, ToolExecutionArgs]) -> bool:
         """Basic parameter validation using tool registry schemas.
 
         Args:

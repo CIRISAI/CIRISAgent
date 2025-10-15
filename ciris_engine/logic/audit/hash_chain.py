@@ -10,9 +10,11 @@ import json
 import logging
 import sqlite3
 import threading
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.audit.hash_chain import ChainSummary, HashChainVerificationResult
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +36,9 @@ class AuditHashChain:
 
         last_entry = self.get_last_entry()
         if last_entry:
-            self._last_hash = last_entry["entry_hash"]
-            self._sequence_number = last_entry["sequence_number"]
+            entry_hash_val = get_str(last_entry, "entry_hash", "")
+            self._last_hash = entry_hash_val if entry_hash_val else None
+            self._sequence_number = get_int(last_entry, "sequence_number", 0)
         else:
             self._last_hash = None
             self._sequence_number = 0
@@ -43,8 +46,15 @@ class AuditHashChain:
         self._initialized = True
         logger.info(f"Hash chain initialized at sequence {self._sequence_number}")
 
-    def compute_entry_hash(self, entry: Dict[str, Any]) -> str:
-        """Compute deterministic hash of entry content"""
+    def compute_entry_hash(self, entry: JSONDict) -> str:
+        """Compute deterministic hash of entry content.
+
+        Args:
+            entry: Audit entry as JSON-compatible dict
+
+        Returns:
+            SHA-256 hash of the canonical entry representation
+        """
         # Create canonical representation for hashing
         canonical = {
             "event_id": entry["event_id"],
@@ -62,8 +72,15 @@ class AuditHashChain:
         # Compute SHA-256 hash
         return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-    def prepare_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare an entry for the hash chain by adding chain fields"""
+    def prepare_entry(self, entry: JSONDict) -> JSONDict:
+        """Prepare an entry for the hash chain by adding chain fields.
+
+        Args:
+            entry: Audit entry to prepare
+
+        Returns:
+            Entry with sequence_number, previous_hash, and entry_hash added
+        """
         if not self._initialized:
             self.initialize()
 
@@ -71,21 +88,27 @@ class AuditHashChain:
             # Re-read the last entry inside the lock to ensure we have the latest
             last_entry = self.get_last_entry()
             if last_entry:
-                self._last_hash = last_entry["entry_hash"]
-                self._sequence_number = last_entry["sequence_number"]
+                entry_hash_val = get_str(last_entry, "entry_hash", "")
+                self._last_hash = entry_hash_val if entry_hash_val else None
+                self._sequence_number = get_int(last_entry, "sequence_number", 0)
 
             self._sequence_number += 1
             entry["sequence_number"] = self._sequence_number
             entry["previous_hash"] = self._last_hash or "genesis"
 
-            entry["entry_hash"] = self.compute_entry_hash(entry)
+            entry_hash = self.compute_entry_hash(entry)
+            entry["entry_hash"] = entry_hash
 
-            self._last_hash = entry["entry_hash"]
+            self._last_hash = entry_hash
 
         return entry
 
-    def get_last_entry(self) -> Optional[Dict[str, Any]]:
-        """Retrieve the last entry from the chain"""
+    def get_last_entry(self) -> Optional[JSONDict]:
+        """Retrieve the last entry from the chain.
+
+        Returns:
+            Last audit entry as JSON-compatible dict, or None if chain is empty
+        """
         try:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row

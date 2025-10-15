@@ -42,6 +42,8 @@ class ActionFinalizationPhase:
 
         if not conscience_result:
             # If no conscience result, create ponder action and wrap in ConscienceApplicationResult
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
             ponder_action = ActionSelectionDMAResult(
                 selected_action=HandlerActionType.PONDER,
                 action_parameters=PonderParams(questions=["No valid action could be determined - what should I do?"]),
@@ -53,7 +55,12 @@ class ActionFinalizationPhase:
                 final_action=ponder_action,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "NONE", "reason": "No valid action determined - fallback to PONDER"},
+                epistemic_data=EpistemicData(
+                    entropy_level=0.5,  # Moderate uncertainty
+                    coherence_level=0.5,  # Moderate coherence
+                    uncertainty_acknowledged=True,  # System is aware of failure
+                    reasoning_transparency=1.0,  # Fully transparent about the issue
+                ),
             )
 
         return conscience_result  # type: ignore[no-any-return]

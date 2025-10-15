@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
@@ -16,6 +16,7 @@ from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
 from .action_selection.faculty_integration import FacultyIntegration
@@ -108,8 +109,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
     async def recursive_evaluate_with_faculties(
         self,
-        input_data: Union[Dict[str, Any], EnhancedDMAInputs],
-        conscience_failure_context: Union[Dict[str, Any], ConscienceFailureContext],
+        input_data: Union[JSONDict, EnhancedDMAInputs],
+        conscience_failure_context: Union[JSONDict, ConscienceFailureContext],
     ) -> ActionSelectionDMAResult:
         """Perform recursive evaluation using epistemic faculties."""
 
@@ -194,7 +195,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if original_thought and hasattr(original_thought, "thought_type"):
             covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
 
-        messages = [
+        messages: List[JSONDict] = [
             {"role": "system", "content": covenant_with_metadata},
             {"role": "system", "content": system_message},
             {"role": "user", "content": main_user_content},

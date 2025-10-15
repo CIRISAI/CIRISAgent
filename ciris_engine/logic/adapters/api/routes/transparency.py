@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/transparency", tags=["Transparency"])
@@ -263,7 +265,7 @@ async def get_transparency_policy() -> TransparencyPolicy:
 
 
 @router.get("/status")
-async def get_system_status() -> Dict[str, Any]:
+async def get_system_status() -> JSONDict:
     """
     Get current system status.
 

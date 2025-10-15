@@ -3,10 +3,11 @@ BusManager - Orchestrates all message buses
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus
 from .communication_bus import CommunicationBus
@@ -98,12 +99,12 @@ class BusManager:
                 # Continue stopping other buses
         logger.info("All message buses stopped")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> JSONDict:
         """Get statistics from all buses"""
         stats = {}
         for name, bus in self._buses.items():
             stats[name] = bus.get_stats()
-        return stats
+        return cast(JSONDict, stats)
 
     def get_total_queue_size(self) -> int:
         """Get total messages queued across all buses"""

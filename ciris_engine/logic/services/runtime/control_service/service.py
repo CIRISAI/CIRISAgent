@@ -5,6 +5,8 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
+from ciris_engine.schemas.types import JSONDict
+
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.config_service import GraphConfigService
     from ciris_engine.logic.runtime.runtime_interface import RuntimeInterface
@@ -44,6 +46,7 @@ from ciris_engine.schemas.services.runtime_control import (
     ConfigValueMap,
     ServicePriorityUpdateResponse,
     ServiceProviderInfo,
+    ServiceProviderUpdate,
     ServiceRegistryInfoResponse,
     WAPublicKeyMap,
 )
@@ -58,6 +61,19 @@ logger = logging.getLogger(__name__)
 # Error message constants
 _ERROR_AGENT_PROCESSOR_NOT_AVAILABLE = "Agent processor not available"
 _ERROR_SERVICE_REGISTRY_NOT_AVAILABLE = "Service registry not available"
+
+
+# Internal dataclass for provider lookup results
+from dataclasses import dataclass
+
+
+@dataclass
+class _ProviderLookupResult:
+    """Internal: Result from finding a provider in the registry."""
+
+    provider: Any
+    providers_list: List[Any]
+    service_type: str
 
 
 class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
@@ -164,8 +180,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             result = await self.runtime.agent_processor.single_step()
 
             # Track thought processing time if a thought was processed
-            if result.get("success") and result.get("processing_time_ms"):
-                processing_time = result["processing_time_ms"]
+            if result.success and result.processing_time_ms:
+                processing_time = result.processing_time_ms
 
                 # Add to thought times list
                 self._thought_times.append(processing_time)
@@ -182,11 +198,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             self._single_steps += 1
             self._commands_processed += 1
-            await self._record_event("processor_control", "single_step", success=True, result=result)
+            # Convert result to dict for event recording
+            result_dict = result.model_dump() if hasattr(result, "model_dump") else result
+            await self._record_event("processor_control", "single_step", success=True, result=result_dict)
 
             # Return the full step result data instead of discarding it
             # Validate step_results - only include if they match StepResultData schema
-            raw_step_results = result.get("step_results", [])
+            raw_step_results = result.step_results if hasattr(result, "step_results") else []
             validated_step_results = []
 
             from ciris_engine.schemas.services.runtime_control import StepResultData
@@ -204,20 +222,25 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     # when step_results only contain {"thought_id": ..., "initiated": True}
                     pass
 
+            # Map SingleStepResult fields to ProcessorControlResponse
+            # SingleStepResult has: success, message, thoughts_advanced (not thoughts_processed)
+            # When success=False, use message as error
+            error_text = None if result.success else result.message
+
             return ProcessorControlResponse(
-                success=result.get("success", False),
+                success=result.success if hasattr(result, "success") else False,
                 processor_name="agent",
                 operation="single_step",
                 new_status=self._processor_status,
-                error=result.get("error"),
+                error=error_text,
                 # Pass through all the H3ERE step data
-                step_point=result.get("step_point"),
+                step_point=getattr(result, "step_point", None),
                 step_results=validated_step_results if validated_step_results else None,
-                thoughts_processed=result.get("thoughts_processed", 0),
-                processing_time_ms=result.get("processing_time_ms", 0.0),
-                pipeline_state=result.get("pipeline_state", {}),
-                current_round=result.get("current_round"),
-                pipeline_empty=result.get("pipeline_empty", False),
+                thoughts_processed=self._thoughts_processed,  # Use internal counter, not result field
+                processing_time_ms=getattr(result, "processing_time_ms", 0.0),
+                pipeline_state=getattr(result, "pipeline_state", {}),
+                current_round=getattr(result, "current_round", None),
+                pipeline_empty=getattr(result, "pipeline_empty", False),
             )
 
         except Exception as e:
@@ -1050,7 +1073,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         else:
             raise ValueError("Backup data is not in expected format")
 
-    def _parse_structured_backup(self, backup_value: Dict[str, Any]) -> ConfigDict:
+    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigDict:
         """Parse structured backup data with metadata."""
         timestamp_str = backup_value.get("backup_timestamp")
         if not isinstance(timestamp_str, str):
@@ -1359,10 +1382,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             provider_info, new_priority_enum, new_priority_group, new_strategy_enum
         )
 
-        await self._record_event("service_management", "update_priority", success=True, result=updated_info)
+        await self._record_event(
+            "service_management", "update_priority", success=True, result=updated_info.model_dump()
+        )
         logger.info(
             f"Updated service provider '{provider_name}' priority from "
-            f"{updated_info['old_priority']} to {updated_info['new_priority']}"
+            f"{updated_info.old_priority} to {updated_info.new_priority}"
         )
 
         return ServicePriorityUpdateResponse(
@@ -1373,24 +1398,26 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             timestamp=self._now(),
         )
 
-    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[Dict[str, Any]]:
+    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[_ProviderLookupResult]:
         """Find a provider in the service registry."""
         for service_type, providers in registry._services.items():
             for provider in providers:
                 if provider.name == provider_name:
-                    return {"provider": provider, "providers_list": providers, "service_type": str(service_type)}
+                    return _ProviderLookupResult(
+                        provider=provider, providers_list=providers, service_type=str(service_type)
+                    )
         return None
 
     def _apply_priority_updates(
         self,
-        provider_info: Dict[str, Any],
+        provider_info: _ProviderLookupResult,
         new_priority_enum: Any,
         new_priority_group: Optional[int],
         new_strategy_enum: Optional[Any],
-    ) -> Dict[str, Any]:
+    ) -> ServiceProviderUpdate:
         """Apply priority and strategy updates to provider."""
-        provider = provider_info["provider"]
-        providers_list = provider_info["providers_list"]
+        provider = provider_info.provider
+        providers_list = provider_info.providers_list
 
         old_priority = provider.priority.name
         old_priority_group = provider.priority_group
@@ -1406,15 +1433,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Re-sort providers by priority
         providers_list.sort(key=lambda x: (x.priority_group, x.priority.value))
 
-        return {
-            "service_type": provider_info["service_type"],
-            "old_priority": old_priority,
-            "new_priority": provider.priority.name,
-            "old_priority_group": old_priority_group,
-            "new_priority_group": provider.priority_group,
-            "old_strategy": old_strategy,
-            "new_strategy": provider.strategy.name,
-        }
+        return ServiceProviderUpdate(
+            service_type=provider_info.service_type,
+            old_priority=old_priority,
+            new_priority=provider.priority.name,
+            old_priority_group=old_priority_group,
+            new_priority_group=provider.priority_group,
+            old_strategy=old_strategy,
+            new_strategy=provider.strategy.name,
+        )
 
     async def reset_circuit_breakers(self, service_type: Optional[str] = None) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for services."""

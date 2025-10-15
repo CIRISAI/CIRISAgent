@@ -9,6 +9,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
 from ciris_engine.schemas.persistence.correlations import ChannelInfo
 from ciris_engine.schemas.telemetry.core import CorrelationType, ServiceCorrelation, ServiceCorrelationStatus
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_response_data(
-    response_data_json: Optional[Dict[str, Any]], timestamp: Optional[datetime] = None
-) -> Optional[Dict[str, Any]]:
+    response_data_json: Optional[JSONDict], timestamp: Optional[datetime] = None
+) -> Optional[JSONDict]:
     """Parse response data JSON with backward compatibility for missing fields."""
     if not response_data_json:
         return None

@@ -1182,7 +1182,7 @@ class CIRISRuntime:
                 id=f"startup_{self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()}",
                 type=NodeType.AGENT,
                 scope=GraphScope.IDENTITY,
-                attributes=JSONDict(created_by="runtime_startup", tags=["startup", "continuity_awareness"]),
+                attributes={"created_by": "runtime_startup", "tags": ["startup", "continuity_awareness"]},
             )
 
             # Store in memory service

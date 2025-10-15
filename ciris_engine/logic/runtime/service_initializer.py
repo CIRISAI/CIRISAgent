@@ -335,16 +335,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
             # Use a different node type for test - don't pollute CONFIG namespace
             assert self.time_service is not None
+            now = self.time_service.now()
             test_node = GraphNode(
                 id="_verification_test",
-                type=NodeType.AUDIT_ENTRY,  # Use AUDIT_ENTRY for test
+                type=NodeType.OBSERVATION,  # Use OBSERVATION type for system verification test
                 attributes={
-                    "created_at": self.time_service.now(),
-                    "updated_at": self.time_service.now(),
+                    "created_at": now.isoformat(),  # Serialize to ISO string
+                    "updated_at": now.isoformat(),  # Serialize to ISO string
                     "created_by": "system_verification",
                     "tags": ["test", "verification"],
-                    "action": "memory_service_verification",
-                    "actor": "system",
+                    "verification_type": "memory_service",  # Custom field in attributes dict
+                    "verifier": "system",  # Custom field in attributes dict
                 },
                 scope=GraphScope.LOCAL,
             )

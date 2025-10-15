@@ -3,6 +3,7 @@ import uuid
 from typing import Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.schemas.types import JSONDict
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
@@ -62,6 +63,7 @@ class ToolHandler(BaseActionHandler):
 
                 # If channel_id is provided in action params but not in tool parameters, add it
                 # This helps tools that need channel context
+                from typing import cast
                 tool_params = dict(params.parameters)
                 if params.channel_id and "channel_id" not in tool_params:
                     tool_params["channel_id"] = params.channel_id
@@ -69,7 +71,7 @@ class ToolHandler(BaseActionHandler):
 
                 # Use the tool bus to execute the tool
                 tool_result = await self.bus_manager.tool.execute_tool(
-                    tool_name=params.name, parameters=tool_params, handler_name=self.__class__.__name__
+                    tool_name=params.name, parameters=cast(JSONDict, tool_params), handler_name=self.__class__.__name__
                 )
 
                 # tool_result is now ToolExecutionResult per protocol

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -407,12 +408,12 @@ class LLMBus(BaseBus[LLMService]):
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""
         if service_name not in self.circuit_breakers:
-            # Create CircuitBreakerConfig from the dict config
+            # Create CircuitBreakerConfig from the dict config - use jsondict_helpers for type safety
             config = CircuitBreakerConfig(
-                failure_threshold=self.circuit_breaker_config.get("failure_threshold", 5),
-                recovery_timeout=self.circuit_breaker_config.get("recovery_timeout", 60.0),
-                success_threshold=self.circuit_breaker_config.get("half_open_max_calls", 3),
-                timeout_duration=self.circuit_breaker_config.get("timeout_duration", 30.0),
+                failure_threshold=get_int(self.circuit_breaker_config, "failure_threshold", 5),
+                recovery_timeout=get_float(self.circuit_breaker_config, "recovery_timeout", 60.0),
+                success_threshold=get_int(self.circuit_breaker_config, "half_open_max_calls", 3),
+                timeout_duration=get_float(self.circuit_breaker_config, "timeout_duration", 30.0),
             )
             self.circuit_breakers[service_name] = CircuitBreaker(name=service_name, config=config)
 
@@ -527,7 +528,7 @@ class LLMBus(BaseBus[LLMService]):
 
     def get_service_stats(self) -> JSONDict:
         """Get detailed statistics for all services"""
-        stats = {}
+        stats: JSONDict = {}
 
         for service_name, metrics in self.service_metrics.items():
             circuit_breaker = self.circuit_breakers.get(service_name)
@@ -538,7 +539,7 @@ class LLMBus(BaseBus[LLMService]):
                 "failure_rate": f"{metrics.failure_rate * 100:.2f}%",
                 "average_latency_ms": f"{metrics.average_latency_ms:.2f}",
                 "consecutive_failures": metrics.consecutive_failures,
-                "circuit_breaker_state": circuit_breaker.state if circuit_breaker else "none",
+                "circuit_breaker_state": circuit_breaker.state.value if circuit_breaker else "none",
                 "last_request": metrics.last_request_time.isoformat() if metrics.last_request_time else None,
                 "last_failure": metrics.last_failure_time.isoformat() if metrics.last_failure_time else None,
             }

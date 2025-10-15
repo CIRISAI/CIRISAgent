@@ -11,7 +11,11 @@ from ciris_engine.schemas.secrets.service import (
     SecretRecallResult,
 )
 from ciris_engine.schemas.services.core.secrets import SecretsServiceStats
-from ciris_engine.schemas.types import ActionParameters, FilterConfig
+from ciris_engine.schemas.types import JSONDict
+
+# ActionParameters and FilterConfig don't exist as concrete types - use JSONDict
+ActionParameters = JSONDict
+FilterConfig = JSONDict
 
 from ...runtime.base import ServiceProtocol
 

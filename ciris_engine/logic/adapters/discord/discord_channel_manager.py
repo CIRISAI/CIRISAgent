@@ -280,7 +280,7 @@ class DiscordChannelManager:
             return {"exists": False, "accessible": False}
 
         try:
-            info = {
+            info: JSONDict = {
                 "exists": True,
                 "accessible": True,
                 "type": type(channel).__name__,
@@ -299,7 +299,8 @@ class DiscordChannelManager:
 
         except Exception as e:
             logger.exception(f"Error getting channel info for {channel_id}: {e}")
-            return {"exists": True, "accessible": False, "error": str(e)}
+            info_error: JSONDict = {"exists": True, "accessible": False, "error": str(e)}
+            return info_error
 
     async def _sanitize_message_parameters(self, params: JSONDict, author_id: str) -> JSONDict:
         """

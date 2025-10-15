@@ -374,10 +374,11 @@ async def get_purchase_status(
     credit_data = None
 
     try:
+        from typing import Mapping, cast
         # Query billing backend for specific payment status
         payment_response = await billing_client.get(
             f"/v1/billing/purchases/{payment_id}/status",
-            params=user_identity,
+            params=cast(Mapping[str, str | int | float | bool | None], user_identity),
         )
         payment_response.raise_for_status()
         payment_data = payment_response.json()

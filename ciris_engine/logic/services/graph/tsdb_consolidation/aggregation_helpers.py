@@ -8,7 +8,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import date, datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_int
 from ciris_engine.schemas.types import JSONDict
@@ -319,7 +319,7 @@ def create_aggregated_summary_attributes(
         if action_counts:
             attributes["task_outcomes"] = action_counts
 
-    return attributes
+    return cast(JSONDict, attributes)
 
 
 def parse_summary_attributes(summaries: List[Tuple[str, str]]) -> List[JSONDict]:

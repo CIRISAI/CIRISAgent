@@ -10,6 +10,7 @@ from typing import Any, Dict, Set, Union
 
 from pydantic import Field
 
+from ciris_engine.logic.utils.jsondict_helpers import get_list
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
 from ciris_engine.schemas.types import NodeAttributes
@@ -165,7 +166,7 @@ class TraceSummaryNode(TypedGraphNode):
             # Task metrics
             total_tasks_processed=attrs.get("total_tasks_processed", 0),
             tasks_by_status=attrs.get("tasks_by_status", {}),
-            unique_task_ids=set(attrs.get("unique_task_ids", [])),  # Convert list to set
+            unique_task_ids=set(get_list(attrs, "unique_task_ids", [])),  # Convert list to set - type-safe
             task_summaries=attrs.get("task_summaries", {}),
             # Thought metrics
             total_thoughts_processed=attrs.get("total_thoughts_processed", 0),

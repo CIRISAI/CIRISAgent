@@ -853,8 +853,9 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         """Execute a tool through the tool handler."""
 
         # Support both tool_args and parameters for compatibility
+        from typing import cast
         args = tool_args or parameters or {}
-        result = await self._tool_handler.execute_tool(tool_name, args)
+        result = await self._tool_handler.execute_tool(tool_name, cast(JSONDict, args))
 
         # Increment commands handled counter
         self._commands_handled += 1

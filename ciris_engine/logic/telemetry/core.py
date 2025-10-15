@@ -100,7 +100,8 @@ class BasicTelemetryCollector(BaseService):
         if not hasattr(self, "_enhanced_history"):
             self._enhanced_history: Dict[str, Deque[JSONDict]] = defaultdict(lambda: deque(maxlen=self.buffer_size))
 
-        self._enhanced_history[name].append(metric_entry)
+        from typing import cast
+        self._enhanced_history[name].append(cast(JSONDict, metric_entry))
 
         # Store metric in TSDB as correlation
         try:

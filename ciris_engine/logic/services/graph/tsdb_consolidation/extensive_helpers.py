@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from sqlite3 import Cursor
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 from uuid import uuid4
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -146,7 +146,7 @@ def create_daily_summary_attributes(
             }
         )
 
-    return daily_attrs
+    return cast(JSONDict, daily_attrs)
 
 
 def create_daily_summary_node(

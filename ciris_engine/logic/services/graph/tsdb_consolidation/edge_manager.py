@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.utils.jsondict_helpers import get_float
 from ciris_engine.schemas.services.graph.consolidation import ParticipantData
 from ciris_engine.schemas.services.graph.edge_types import EdgeSpecification
 from ciris_engine.schemas.services.graph.edges import UserParticipationAttributes
@@ -769,7 +770,7 @@ class EdgeManager:
             target_id,
             scope or "local",
             relationship,
-            attrs.get("weight", 1.0),
+            get_float(attrs, "weight", 1.0),  # Type-safe extraction
             attrs_json,
             datetime.now(timezone.utc).isoformat(),
         )

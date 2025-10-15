@@ -1470,7 +1470,9 @@ async def _handle_websocket_subscription_action(
 ) -> None:
     """Handle websocket subscribe/unsubscribe actions."""
     action = data.get("action")
-    channels = data.get("channels", [])
+    channels_raw = data.get("channels", [])
+    # Type narrow to list for set operations
+    channels = channels_raw if isinstance(channels_raw, list) else []
 
     if action == "subscribe":
         subscribed_channels.update(channels)

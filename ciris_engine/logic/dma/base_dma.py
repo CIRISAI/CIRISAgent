@@ -172,7 +172,8 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         """
         from ciris_engine.schemas.dma.faculty import FacultyContext
 
-        results: JSONDict = {}
+        # Use Dict[str, BaseModel] to match return type
+        results: Dict[str, BaseModel] = {}
 
         if not self.faculties:
             return results

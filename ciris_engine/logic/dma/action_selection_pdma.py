@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
@@ -195,7 +195,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if original_thought and hasattr(original_thought, "thought_type"):
             covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
 
-        messages = [
+        messages: List[JSONDict] = [
             {"role": "system", "content": covenant_with_metadata},
             {"role": "system", "content": system_message},
             {"role": "user", "content": main_user_content},

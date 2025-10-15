@@ -37,6 +37,45 @@ class DMAResults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SingleConscienceCheckResult(BaseModel):
+    """Result from checking a single conscience."""
+
+    skip: bool = Field(False, description="Whether this conscience check should be skipped")
+    passed: bool = Field(True, description="Whether the conscience check passed")
+    reason: Optional[str] = Field(None, description="Reason for failure if not passed")
+    epistemic_data: Optional[EpistemicData] = Field(None, description="Epistemic data from this conscience")
+    replacement_action: Optional[ActionSelectionDMAResult] = Field(
+        None, description="Replacement action if conscience overrides"
+    )
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether thought depth guardrail was triggered"
+    )
+    updated_status_detected: Optional[bool] = Field(
+        None, description="Whether updated status was detected"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConscienceCheckInternalResult(BaseModel):
+    """Internal result from _run_conscience_checks before creating ConscienceApplicationResult."""
+
+    final_action: ActionSelectionDMAResult = Field(..., description="Final action after all conscience checks")
+    overridden: bool = Field(False, description="Whether action was overridden by a conscience")
+    override_reason: Optional[str] = Field(None, description="Reason for conscience override")
+    epistemic_data: Optional[EpistemicData] = Field(
+        None, description="Aggregated epistemic data from conscience checks"
+    )
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether the thought depth guardrail triggered"
+    )
+    updated_status_detected: Optional[bool] = Field(
+        None, description="Whether the updated status conscience detected changes"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ConscienceApplicationResult(BaseModel):
     """Result from conscience application."""
 
@@ -110,6 +149,8 @@ class ProcessingError(BaseModel):
 
 __all__ = [
     "DMAResults",
+    "SingleConscienceCheckResult",
+    "ConscienceCheckInternalResult",
     "ConscienceApplicationResult",
     "ProcessedThoughtResult",
     "ThoughtProcessingMetrics",

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.consent.core import ConsentStream
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes
 from ciris_engine.schemas.types import NodeAttributes
 
 
@@ -89,6 +90,7 @@ class GraphNodeAttributes(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = Field(..., description="Who created this node")
+    content: Optional[str] = Field(None, description="Optional content for the node")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
 
     model_config = ConfigDict(extra="forbid")
@@ -100,7 +102,7 @@ class GraphNode(BaseModel):
     id: str = Field(..., description="Unique node identifier")
     type: NodeType = Field(..., description="Type of node")
     scope: GraphScope = Field(..., description="Scope of the node")
-    attributes: Union[GraphNodeAttributes, NodeAttributes] = Field(
+    attributes: Union[AnyNodeAttributes, NodeAttributes, GraphNodeAttributes] = Field(
         ..., description="Node attributes"
     )  # NOQA - Graph flexibility pattern
     version: int = Field(default=1, ge=1, description="Version number")

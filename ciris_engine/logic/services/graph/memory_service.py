@@ -505,7 +505,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 id=node_id,
                 type=NodeType.TSDB_DATA,
                 scope=GraphScope(scope),
-                attributes=telemetry_attrs.model_dump(),  # Convert to dict for storage
+                attributes=telemetry_attrs,  # Pass typed Pydantic model directly
                 updated_by="memory_service",
                 updated_at=now,
             )

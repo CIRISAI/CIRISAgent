@@ -334,9 +334,11 @@ async def get_consent_streams() -> JSONDict:
     """
     Get available consent streams and their descriptions.
     """
+    # Convert enum keys to strings for JSONDict compatibility
+    streams_dict = {str(k.value): v for k, v in STREAM_METADATA.items()}
     return {
-        "streams": STREAM_METADATA,
-        "default": ConsentStream.TEMPORARY,
+        "streams": streams_dict,
+        "default": ConsentStream.TEMPORARY.value,
     }
 
 
@@ -345,8 +347,10 @@ async def get_consent_categories() -> JSONDict:
     """
     Get available consent categories for PARTNERED stream.
     """
+    # Convert enum keys to strings for JSONDict compatibility
+    categories_dict = {str(k.value): v for k, v in CATEGORY_METADATA.items()}
     return {
-        "categories": CATEGORY_METADATA,
+        "categories": categories_dict,
     }
 
 
@@ -372,8 +376,9 @@ async def check_partnership_status(
     except ConsentNotFoundError:
         current_stream = ConsentStream.TEMPORARY
 
-    response = {
-        "current_stream": current_stream,
+    # Convert enum to string for JSONDict compatibility
+    response: JSONDict = {
+        "current_stream": current_stream.value if hasattr(current_stream, "value") else str(current_stream),
         "partnership_status": status or "none",
     }
 

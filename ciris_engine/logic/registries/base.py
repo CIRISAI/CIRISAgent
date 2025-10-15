@@ -315,7 +315,7 @@ class ServiceRegistry:
                         "stats": provider.circuit_breaker.get_stats(),
                     }
 
-        return cb_details
+        return cast(JSONDict, cb_details)
 
     def get_provider_info(self, handler: Optional[str] = None, service_type: Optional[str] = None) -> dict[str, Any]:
         """

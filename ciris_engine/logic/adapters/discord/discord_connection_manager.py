@@ -239,7 +239,7 @@ class DiscordConnectionManager:
         Returns:
             Dictionary with connection details
         """
-        info = {
+        info: JSONDict = {
             "state": self.state.value,
             "reconnect_attempts": self.reconnect_attempts,
             "is_connected": self.is_connected(),

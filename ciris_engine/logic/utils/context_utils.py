@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_bool
 from ciris_engine.protocols.services import TimeServiceProtocol
 from ciris_engine.schemas.types import JSONDict
 
@@ -110,7 +111,7 @@ def build_dispatch_context(
 
     if extra_context:
         wa_id = extra_context.get("wa_id")
-        wa_authorized = extra_context.get("wa_authorized", False)
+        wa_authorized = get_bool(extra_context, "wa_authorized", False)  # Type-safe bool extraction
         correlation_id = extra_context.get("correlation_id")
         handler_name = extra_context.get("handler_name")
         event_summary = extra_context.get("event_summary")

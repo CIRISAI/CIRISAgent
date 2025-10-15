@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from ciris_engine.logic import persistence
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.memory_service import LocalGraphMemoryService
+from ciris_engine.logic.utils.jsondict_helpers import get_list
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, IdentitySummary
@@ -282,10 +283,15 @@ def _get_known_channel_fields() -> Set[str]:
 
 def _build_required_channel_fields(attrs: JSONDict, node: Any) -> JSONDict:
     """Build required ChannelContext fields with defaults."""
+    # Get created_at, or generate new timestamp if missing
+    created_at_val = attrs.get("created_at")
+    if created_at_val is None:
+        created_at_val = datetime.now(timezone.utc).isoformat()
+
     return {
         "channel_id": get_channel_id_from_node(node, attrs),
         "channel_type": attrs.get("channel_type", "unknown"),
-        "created_at": attrs.get("created_at", datetime.now(timezone.utc)),
+        "created_at": created_at_val,
     }
 
 
@@ -656,8 +662,10 @@ async def _process_services_group(
     circuit_breaker_status: Dict[str, str],
 ) -> None:
     """Process a group of services (handlers or global services)."""
-    for service_type, services in services_group.items():
-        for service in services:
+    for service_type, services_raw in services_group.items():
+        # Type narrow services to list before iteration
+        services_list = get_list(services_group, service_type, [])
+        for service in services_list:
             service_name = f"{prefix}.{service_type}"
             await _process_single_service(service, service_name, service_health, circuit_breaker_status)
 

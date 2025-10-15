@@ -1444,7 +1444,9 @@ class AgentProcessor:
             status["play_status"] = self.play_processor.get_status()
 
         elif current_state == AgentState.SOLITUDE:
-            status["solitude_status"] = self.solitude_processor.get_status()
+            # Serialize solitude status to dict for JSONDict compatibility
+            solitude_status = self.solitude_processor.get_status()
+            status["solitude_status"] = solitude_status.model_dump() if hasattr(solitude_status, "model_dump") else dict(solitude_status) if isinstance(solitude_status, dict) else {"status": "unknown"}
 
         elif current_state == AgentState.DREAM:
             if self.dream_processor:
@@ -1452,9 +1454,13 @@ class AgentProcessor:
             else:
                 status["dream_summary"] = {"state": "unavailable", "error": "Dream processor not available"}
 
-        status["processor_metrics"] = {}
+        # Initialize processor_metrics as a dict for JSONDict compatibility
+        processor_metrics: JSONDict = {}
         for state, processor in self.state_processors.items():
-            status["processor_metrics"][state.value] = processor.get_metrics()
+            metrics = processor.get_metrics()
+            # Serialize ProcessorMetrics to dict if it's a Pydantic model, ensuring JSONDict compatibility
+            processor_metrics[state.value] = metrics.model_dump() if hasattr(metrics, "model_dump") else dict(metrics) if isinstance(metrics, dict) else {"error": "metrics unavailable"}
+        status["processor_metrics"] = processor_metrics
 
         status["queue_status"] = self._get_detailed_queue_status()
 
@@ -1551,7 +1557,15 @@ class AgentProcessor:
                     if now >= scheduled_time and now <= scheduled_time + defer_window:
                         # Check dream health - when was last dream?
                         if self.dream_processor and self.dream_processor.dream_metrics.get("end_time"):
-                            last_dream = datetime.fromisoformat(self.dream_processor.dream_metrics["end_time"])
+                            from ciris_engine.logic.utils.jsondict_helpers import get_str
+                            end_time_str = get_str(self.dream_processor.dream_metrics, "end_time", "")
+                            if end_time_str:
+                                last_dream = datetime.fromisoformat(end_time_str)
+                            else:
+                                # No valid end time, skip this check
+                                logger.debug("No valid dream end_time, allowing scheduled dream")
+                                logger.info(f"Scheduled dream task {task.id} is due")
+                                return True
                             hours_since = (now - last_dream).total_seconds() / 3600
 
                             # Don't dream if we dreamed less than 4 hours ago
@@ -1685,8 +1699,8 @@ class AgentProcessor:
         # Get current state
         current_state = self.state_manager.get_state() if hasattr(self, "state_manager") else None
 
-        # Basic metrics
-        metrics = {
+        # Basic metrics - explicitly type as JSONDict
+        metrics: JSONDict = {
             "processor_uptime_seconds": uptime_seconds,
             "processor_queue_size": queue_size,
             "processor_healthy": True,  # If we're collecting metrics, we're healthy

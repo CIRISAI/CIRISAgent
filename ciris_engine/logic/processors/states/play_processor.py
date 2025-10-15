@@ -63,7 +63,7 @@ class PlayProcessor(WorkProcessor):
 
     def get_play_stats(self) -> JSONDict:
         """Get play-specific statistics."""
-        base_stats = {
+        base_stats: JSONDict = {
             "last_activity": self.last_activity_time.isoformat(),
             "idle_duration_seconds": self.get_idle_duration(),
             "idle_rounds": self.idle_rounds,

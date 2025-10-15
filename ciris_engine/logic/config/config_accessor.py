@@ -169,7 +169,7 @@ class ConfigAccessor:
         if self._graph_available and self.graph:
             try:
                 configs = await self.graph.list_configs(prefix=prefix)
-                return configs  # type: ignore[return-value]  # Graph service returns dict-like
+                return configs
             except Exception as e:
                 logger.warning(f"Failed to get config section '{prefix}' from graph: {e}")
 

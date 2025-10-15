@@ -11,6 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.results import WakeupResult
@@ -119,8 +120,9 @@ class WakeupProcessor(BaseProcessor):
         if result.get("status") == "failed":
             errors = 1  # At least one error if status is failed
             if "steps_status" in result:
-                # Count actual number of failed tasks
-                errors = sum(1 for s in result["steps_status"] if s.get("status") == "failed")
+                # Count actual number of failed tasks - use get_list to type narrow
+                steps_status = get_list(result, "steps_status", [])
+                errors = sum(1 for s in steps_status if isinstance(s, dict) and get_str(s, "status", "") == "failed")
 
         return WakeupResult(
             thoughts_processed=result.get("processed_thoughts", 0),

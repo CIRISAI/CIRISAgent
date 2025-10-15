@@ -6,14 +6,16 @@ Everything in the graph is a memory - these are the different types of memories.
 """
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
 from ciris_engine.constants import CIRIS_VERSION
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, NodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.graph_typed_nodes import TypedGraphNode, register_node_type
-from ciris_engine.schemas.types import IdentityData, JSONValue, NodeAttributes
+from ciris_engine.schemas.types import JSONDict, JSONValue
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.core import AgentIdentityRoot
@@ -221,6 +223,11 @@ class ConfigNode(TypedGraphNode):
         # Get updated_by with fallback
         updated_by = attrs.get("updated_by") or attrs.get("created_by", "system")
 
+        # Get value dict safely
+        value_data = attrs.get("value", {})
+        if not isinstance(value_data, dict):
+            value_data = {}
+
         return cls(
             id=node.id,
             type=node.type,
@@ -231,7 +238,7 @@ class ConfigNode(TypedGraphNode):
             updated_at=updated_at or datetime.now(timezone.utc),  # Final fallback
             # Extra fields from attributes
             key=attrs["key"],
-            value=ConfigValue(**attrs["value"]),
+            value=ConfigValue(**value_data),
             previous_version=attrs.get("previous_version"),
         )
 
@@ -259,7 +266,8 @@ class IdentitySnapshot(TypedGraphNode):
     # Additional fields from other versions
     behavioral_patterns: Dict[str, float] = Field(default_factory=dict, description="Behavioral pattern scores")
     config_preferences: Dict[str, str] = Field(default_factory=dict, description="Configuration preferences")
-    attributes: NodeAttributes = Field(default_factory=dict, description="Additional attributes")
+    # Type must match TypedGraphNode base class which expects Union[AnyNodeAttributes, JSONDict]
+    attributes: Union[AnyNodeAttributes, JSONDict] = Field(default_factory=dict, description="Additional attributes")
     reason: str = Field(default="", description="Why snapshot was taken")
     system_state: Optional[Dict[str, str]] = Field(None, description="System state at snapshot time")
     active_tasks: List[str] = Field(default_factory=list, description="Active tasks at time")
@@ -519,7 +527,8 @@ class IdentityNode(TypedGraphNode):
 
     # Base GraphNode fields (required by TypedGraphNode)
     id: str = Field(default="agent/identity", description="Node ID")
-    attributes: Union[GraphNodeAttributes, NodeAttributes] = Field(default_factory=dict, description="Raw attributes")
+    # Type must match TypedGraphNode base class which expects Union[AnyNodeAttributes, JSONDict]
+    attributes: Union[AnyNodeAttributes, JSONDict] = Field(default_factory=dict, description="Raw attributes")
     version: int = Field(default=1, description="Version number")
 
     def to_graph_node(self) -> GraphNode:

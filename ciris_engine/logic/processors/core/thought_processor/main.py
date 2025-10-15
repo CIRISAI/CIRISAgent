@@ -19,7 +19,11 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
-from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+from ciris_engine.schemas.processors.core import (
+    ConscienceApplicationResult,
+    ConscienceCheckInternalResult,
+    SingleConscienceCheckResult,
+)
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.telemetry.core import (
@@ -29,6 +33,7 @@ from ciris_engine.schemas.telemetry.core import (
     TraceContext,
 )
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_bool
 
 from .action_execution import ActionExecutionPhase
 from .conscience_execution import ConscienceExecutionPhase
@@ -207,10 +212,12 @@ class ThoughtProcessor(
             )
 
         # Phase 3: Action selection
-        action_result = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
+        action_result_dict = await self._perform_action_selection_phase(thought_item, thought, thought_context, dma_results)
 
         # Phase 4: Finalize action
-        action_from_conscience = self._handle_special_cases(action_result["conscience_result"])
+        # conscience_result is already a ConscienceApplicationResult object, not a dict
+        conscience_result = action_result_dict.get("conscience_result")
+        action_from_conscience = self._handle_special_cases(conscience_result)
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 
         # _finalize_action_step returns ConscienceApplicationResult based on conscience_result input
@@ -574,13 +581,18 @@ class ThoughtProcessor(
                 final_action=action_result,
                 overridden=False,
                 override_reason=None,
-                epistemic_data={"status": "EXEMPT", "action": action_result.selected_action.value},
+                epistemic_data=EpistemicData(
+                    entropy_level=0.0,  # Exempt actions have no uncertainty
+                    coherence_level=1.0,  # Fully coherent
+                    uncertainty_acknowledged=True,  # System knows this is exempt
+                    reasoning_transparency=1.0,  # Fully transparent (exempt)
+                ),
             )
 
-        context: JSONDict = {"thought": thought, "dma_results": dma_results_dict}
+        context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
         conscience_result = await self._run_conscience_checks(action_result, context)
 
-        if is_conscience_retry and not conscience_result["overridden"]:
+        if is_conscience_retry and not conscience_result.overridden:
             conscience_result = self._handle_conscience_retry_without_override(conscience_result)
 
         return self._create_conscience_application_result(action_result, conscience_result)
@@ -607,48 +619,51 @@ class ThoughtProcessor(
         }
         return action_result.selected_action in exempt_actions
 
-    async def _run_conscience_checks(self, action_result: ActionSelectionDMAResult, context: JSONDict) -> JSONDict:
+    async def _run_conscience_checks(
+        self, action_result: ActionSelectionDMAResult, context: JSONDict
+    ) -> ConscienceCheckInternalResult:
         """Run all conscience checks and return the results."""
         final_action = action_result
         overridden = False
-        override_reason = None
-        epistemic_data: JSONDict = {}
+        override_reason: Optional[str] = None
+        epistemic_data: Optional[EpistemicData] = None
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
         for entry in self.conscience_registry.get_consciences():
             conscience_result = await self._check_single_conscience(entry, final_action, context)
 
-            if conscience_result["skip"]:
+            if conscience_result.skip:
                 continue
 
-            if conscience_result["epistemic_data"]:
-                epistemic_data[entry.name] = conscience_result["epistemic_data"]
+            # Take the first epistemic data we find (consciences run in order)
+            if conscience_result.epistemic_data and not epistemic_data:
+                epistemic_data = conscience_result.epistemic_data
 
-            if conscience_result.get("thought_depth_triggered") is not None:
-                thought_depth_triggered = conscience_result["thought_depth_triggered"]
+            if conscience_result.thought_depth_triggered is not None:
+                thought_depth_triggered = conscience_result.thought_depth_triggered
 
-            if conscience_result.get("updated_status_detected") is not None:
-                updated_status_detected = conscience_result["updated_status_detected"]
+            if conscience_result.updated_status_detected is not None:
+                updated_status_detected = conscience_result.updated_status_detected
 
-            if not conscience_result["passed"]:
+            if not conscience_result.passed:
                 overridden = True
-                override_reason = conscience_result["reason"]
-                final_action = conscience_result["replacement_action"]
+                override_reason = conscience_result.reason
+                final_action = conscience_result.replacement_action or action_result
                 break
 
-        return {
-            "final_action": final_action,
-            "overridden": overridden,
-            "override_reason": override_reason,
-            "epistemic_data": epistemic_data,
-            "thought_depth_triggered": thought_depth_triggered,
-            "updated_status_detected": updated_status_detected,
-        }
+        return ConscienceCheckInternalResult(
+            final_action=final_action,
+            overridden=overridden,
+            override_reason=override_reason,
+            epistemic_data=epistemic_data,
+            thought_depth_triggered=thought_depth_triggered,
+            updated_status_detected=updated_status_detected,
+        )
 
     async def _check_single_conscience(
         self, entry: Any, action_result: ActionSelectionDMAResult, context: JSONDict
-    ) -> JSONDict:
+    ) -> SingleConscienceCheckResult:
         """Check a single conscience and handle errors."""
         conscience = entry.conscience
         cb = entry.circuit_breaker
@@ -661,25 +676,24 @@ class ThoughtProcessor(
                 cb.record_success()
         except CircuitBreakerError as e:
             logger.warning(f"conscience {entry.name} unavailable: {e}")
-            return {"skip": True}
+            return SingleConscienceCheckResult(skip=True)
         except Exception as e:  # noqa: BLE001
             logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
             if cb:
                 cb.record_failure()
-            return {"skip": True}
+            return SingleConscienceCheckResult(skip=True)
 
-        epistemic_data = result.epistemic_data.model_dump_json() if result.epistemic_data else None
         replacement_action = self._create_replacement_action(result, action_result, entry.name)
 
-        return {
-            "skip": False,
-            "passed": result.passed,
-            "reason": result.reason,
-            "epistemic_data": epistemic_data,
-            "replacement_action": replacement_action,
-            "thought_depth_triggered": result.thought_depth_triggered,
-            "updated_status_detected": result.updated_status_detected,
-        }
+        return SingleConscienceCheckResult(
+            skip=False,
+            passed=result.passed,
+            reason=result.reason,
+            epistemic_data=result.epistemic_data,  # Already an EpistemicData instance or None
+            replacement_action=replacement_action,
+            thought_depth_triggered=result.thought_depth_triggered,
+            updated_status_detected=result.updated_status_detected,
+        )
 
     def _create_replacement_action(
         self, conscience_result: Any, original_action: ActionSelectionDMAResult, conscience_name: str
@@ -716,7 +730,9 @@ class ThoughtProcessor(
             resource_usage=None,
         )
 
-    def _handle_conscience_retry_without_override(self, conscience_result: JSONDict) -> JSONDict:
+    def _handle_conscience_retry_without_override(
+        self, conscience_result: ConscienceCheckInternalResult
+    ) -> ConscienceCheckInternalResult:
         """Handle conscience retry when no override occurred."""
         has_depth_guardrail = any(
             "ThoughtDepthGuardrail" in entry.conscience.__class__.__name__
@@ -734,38 +750,38 @@ class ThoughtProcessor(
                 evaluation_time_ms=None,
                 resource_usage=None,
             )
-            conscience_result.update(
-                {
-                    "final_action": final_action,
-                    "overridden": True,
-                    "override_reason": "Conscience retry - forcing PONDER to prevent loops",
-                }
+            return ConscienceCheckInternalResult(
+                final_action=final_action,
+                overridden=True,
+                override_reason="Conscience retry - forcing PONDER to prevent loops",
+                epistemic_data=conscience_result.epistemic_data,
+                thought_depth_triggered=conscience_result.thought_depth_triggered,
+                updated_status_detected=conscience_result.updated_status_detected,
             )
 
         return conscience_result
 
     def _create_conscience_application_result(
-        self, action_result: ActionSelectionDMAResult, conscience_result: JSONDict
+        self, action_result: ActionSelectionDMAResult, conscience_result: ConscienceCheckInternalResult
     ) -> ConscienceApplicationResult:
         """Create the final ConscienceApplicationResult."""
-        # epistemic_data is REQUIRED - use EMPTY marker if not provided
-        epistemic_data = conscience_result.get("epistemic_data") or {
-            "status": "NONE",
-            "reason": "No epistemic data from conscience checks",
-        }
-
-        result = ConscienceApplicationResult(
-            original_action=action_result,
-            final_action=conscience_result["final_action"],
-            overridden=conscience_result["overridden"],
-            override_reason=conscience_result["override_reason"],
-            epistemic_data=epistemic_data,
+        # epistemic_data is REQUIRED - use safe fallback if not provided
+        epistemic_data = conscience_result.epistemic_data or EpistemicData(
+            entropy_level=0.5,  # Moderate uncertainty when no data
+            coherence_level=0.5,  # Moderate coherence
+            uncertainty_acknowledged=True,  # System knows data is missing
+            reasoning_transparency=1.0,  # Transparent about the issue
         )
-        if conscience_result.get("thought_depth_triggered") is not None:
-            result.thought_depth_triggered = conscience_result["thought_depth_triggered"]
-        if conscience_result.get("updated_status_detected") is not None:
-            result.updated_status_detected = conscience_result["updated_status_detected"]
-        return result
+
+        return ConscienceApplicationResult(
+            original_action=action_result,
+            final_action=conscience_result.final_action,
+            overridden=conscience_result.overridden,
+            override_reason=conscience_result.override_reason,
+            epistemic_data=epistemic_data,
+            thought_depth_triggered=conscience_result.thought_depth_triggered,
+            updated_status_detected=conscience_result.updated_status_detected,
+        )
 
     def _format_speak_description(self, params: Any) -> str:
         """Format description for SPEAK action parameters."""

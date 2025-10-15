@@ -12,6 +12,7 @@ import sqlite3
 import threading
 from typing import List, Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.audit.hash_chain import ChainSummary, HashChainVerificationResult
 from ciris_engine.schemas.types import JSONDict
 
@@ -35,8 +36,9 @@ class AuditHashChain:
 
         last_entry = self.get_last_entry()
         if last_entry:
-            self._last_hash = last_entry["entry_hash"]
-            self._sequence_number = last_entry["sequence_number"]
+            entry_hash_val = get_str(last_entry, "entry_hash", "")
+            self._last_hash = entry_hash_val if entry_hash_val else None
+            self._sequence_number = get_int(last_entry, "sequence_number", 0)
         else:
             self._last_hash = None
             self._sequence_number = 0
@@ -86,16 +88,18 @@ class AuditHashChain:
             # Re-read the last entry inside the lock to ensure we have the latest
             last_entry = self.get_last_entry()
             if last_entry:
-                self._last_hash = last_entry["entry_hash"]
-                self._sequence_number = last_entry["sequence_number"]
+                entry_hash_val = get_str(last_entry, "entry_hash", "")
+                self._last_hash = entry_hash_val if entry_hash_val else None
+                self._sequence_number = get_int(last_entry, "sequence_number", 0)
 
             self._sequence_number += 1
             entry["sequence_number"] = self._sequence_number
             entry["previous_hash"] = self._last_hash or "genesis"
 
-            entry["entry_hash"] = self.compute_entry_hash(entry)
+            entry_hash = self.compute_entry_hash(entry)
+            entry["entry_hash"] = entry_hash
 
-            self._last_hash = entry["entry_hash"]
+            self._last_hash = entry_hash
 
         return entry
 

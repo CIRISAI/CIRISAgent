@@ -219,9 +219,11 @@ class TestBuildSystemSnapshot:
             time_service=mock_time_service,
         )
 
-        # Check identity was retrieved
-        assert snapshot.agent_identity["agent_id"] == "test_agent"
-        assert snapshot.agent_identity["trust_level"] == 0.8
+        # Check identity was retrieved - can be IdentityData model or dict
+        agent_id = snapshot.agent_identity.agent_id if hasattr(snapshot.agent_identity, "agent_id") else snapshot.agent_identity.get("agent_id")
+        trust_level = snapshot.agent_identity.trust_level if hasattr(snapshot.agent_identity, "trust_level") else snapshot.agent_identity.get("trust_level")
+        assert agent_id == "test_agent"
+        assert trust_level == 0.8
         assert snapshot.identity_purpose == "Testing assistant"
         assert "speak" in snapshot.identity_capabilities
         assert "tool" in snapshot.identity_restrictions

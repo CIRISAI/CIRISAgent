@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import (
@@ -23,7 +24,10 @@ from ciris_engine.schemas.adapters.tools import (
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.core.secrets import SecretContext
-from ciris_engine.schemas.types import ToolParameters
+from ciris_engine.schemas.types import JSONDict
+
+# ToolParameters is a JSONDict for flexible parameter passing
+ToolParameters = JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -103,33 +107,33 @@ class SecretsToolService(BaseService, ToolService):
     async def _recall_secret(self, params: ToolParameters) -> ToolResult:
         """Recall a secret by UUID."""
         try:
-            secret_uuid = params.get("secret_uuid")
+            secret_uuid_val = get_str(params, "secret_uuid", "")
             purpose = params.get("purpose", "No purpose specified")
             decrypt = params.get("decrypt", False)
 
-            if not secret_uuid:
+            if not secret_uuid_val:
                 return ToolResult(success=False, error="secret_uuid is required")
 
             # Create context for audit
             context = SecretContext(
                 operation="recall",
-                request_id=f"recall_{secret_uuid}_{self._now().timestamp()}",
+                request_id=f"recall_{secret_uuid_val}_{self._now().timestamp()}",
                 metadata={"purpose": purpose},
             )
 
             # Retrieve the secret
             if decrypt:
-                value = await self.secrets_service.retrieve_secret(secret_uuid)
+                value = await self.secrets_service.retrieve_secret(secret_uuid_val)
                 if value is None:
-                    return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                    return ToolResult(success=False, error=f"Secret {secret_uuid_val} not found")
                 self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"value": value, "decrypted": True}
             else:
                 # Just verify it exists
                 # Just check if it exists by trying to retrieve
-                value = await self.secrets_service.retrieve_secret(secret_uuid)
+                value = await self.secrets_service.retrieve_secret(secret_uuid_val)
                 if value is None:
-                    return ToolResult(success=False, error=f"Secret {secret_uuid} not found")
+                    return ToolResult(success=False, error=f"Secret {secret_uuid_val} not found")
                 self._secrets_retrieved += 1  # Track successful retrieval
                 result_data = {"exists": True, "decrypted": False}
 

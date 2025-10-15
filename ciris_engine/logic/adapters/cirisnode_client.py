@@ -117,8 +117,9 @@ class CIRISNodeClient(Service):
         )
 
     async def _get(self, endpoint: str, params: JSONDict) -> Any:
+        from typing import Mapping, cast
         async def _make_request() -> Any:
-            resp = await self._client.get(endpoint, params=params)
+            resp = await self._client.get(endpoint, params=cast(Mapping[str, str | int | float | bool | None], params))
             if 400 <= resp.status_code < 500:
                 resp.raise_for_status()  # Don't retry 4xx client errors
             resp.raise_for_status()  # Raise for any other errors (will be retried)

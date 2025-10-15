@@ -119,6 +119,7 @@ async def prefetch_batch_context(
                         batch_data.agent_identity = IdentityData(**identity_dict)
                     except Exception as e:
                         logger.warning(f"Failed to create IdentityData from attributes: {e}")
+                        # Keep as None - will be handled when building SystemSnapshot
                         batch_data.agent_identity = None
 
                     # Extract specific fields for structured access
@@ -235,9 +236,10 @@ async def prefetch_batch_context(
     # 6. Secrets Snapshot
     if secrets_service:
         logger.info("[DEBUG DB TIMING] Batch: building secrets snapshot")
+        from typing import cast
         from .secrets_snapshot import build_secrets_snapshot
 
-        batch_data.secrets_snapshot = await build_secrets_snapshot(secrets_service)
+        batch_data.secrets_snapshot = cast(Dict[str, Union[List[str], int]], await build_secrets_snapshot(secrets_service))
 
     # 7. Shutdown Context
     if runtime and hasattr(runtime, "current_shutdown_context"):
@@ -500,8 +502,8 @@ async def build_system_snapshot_with_batch(
         system_counts=system_counts,
         top_pending_tasks_summary=batch_data.top_tasks,
         recently_completed_tasks_summary=batch_data.recent_tasks,
-        # Agent identity fields
-        agent_identity=batch_data.agent_identity,
+        # Agent identity fields - convert None to empty dict per schema requirement
+        agent_identity=batch_data.agent_identity if batch_data.agent_identity is not None else {},
         identity_purpose=batch_data.identity_purpose or "",
         identity_capabilities=batch_data.identity_capabilities,
         identity_restrictions=batch_data.identity_restrictions,

@@ -137,12 +137,27 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 raise RuntimeError("Time service not available")
             baseline_id = f"identity_baseline_{int(self._time_service.now().timestamp())}"
 
+            # Create IdentityData from AgentIdentityRoot with proper field mapping
+            from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+            identity_data = (
+                IdentityData(
+                    agent_id=identity.agent_id,
+                    description=identity.core_profile.description,
+                    role=identity.core_profile.role_description,
+                    trust_level=identity.trust_level if hasattr(identity, "trust_level") else 0.5,
+                    stewardship=identity.stewardship if hasattr(identity, "stewardship") else None,
+                )
+                if identity
+                else None
+            )
+
             baseline_snapshot = IdentitySnapshot(
                 id=baseline_id,
                 scope=GraphScope.IDENTITY,
                 system_state={"type": "BASELINE"},
                 expires_at=None,
-                identity_root=identity.model_dump() if identity else None,
+                identity_root=identity_data,
                 snapshot_id=baseline_id,
                 timestamp=self._time_service.now() if self._time_service else datetime.now(),
                 agent_id=identity.agent_id,

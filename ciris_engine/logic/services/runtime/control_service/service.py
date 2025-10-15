@@ -166,8 +166,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             result = await self.runtime.agent_processor.single_step()
 
             # Track thought processing time if a thought was processed
-            if result.get("success") and result.get("processing_time_ms"):
-                processing_time = result["processing_time_ms"]
+            if result.success and result.processing_time_ms:
+                processing_time = result.processing_time_ms
 
                 # Add to thought times list
                 self._thought_times.append(processing_time)
@@ -184,11 +184,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             self._single_steps += 1
             self._commands_processed += 1
-            await self._record_event("processor_control", "single_step", success=True, result=result)
+            # Convert result to dict for event recording
+            result_dict = result.model_dump() if hasattr(result, "model_dump") else result
+            await self._record_event("processor_control", "single_step", success=True, result=result_dict)
 
             # Return the full step result data instead of discarding it
             # Validate step_results - only include if they match StepResultData schema
-            raw_step_results = result.get("step_results", [])
+            raw_step_results = result.step_results if hasattr(result, "step_results") else []
             validated_step_results = []
 
             from ciris_engine.schemas.services.runtime_control import StepResultData
@@ -207,19 +209,19 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     pass
 
             return ProcessorControlResponse(
-                success=result.get("success", False),
+                success=result.success if hasattr(result, "success") else False,
                 processor_name="agent",
                 operation="single_step",
                 new_status=self._processor_status,
-                error=result.get("error"),
+                error=getattr(result, "error", None),
                 # Pass through all the H3ERE step data
-                step_point=result.get("step_point"),
+                step_point=getattr(result, "step_point", None),
                 step_results=validated_step_results if validated_step_results else None,
-                thoughts_processed=result.get("thoughts_processed", 0),
-                processing_time_ms=result.get("processing_time_ms", 0.0),
-                pipeline_state=result.get("pipeline_state", {}),
-                current_round=result.get("current_round"),
-                pipeline_empty=result.get("pipeline_empty", False),
+                thoughts_processed=getattr(result, "thoughts_processed", 0),
+                processing_time_ms=getattr(result, "processing_time_ms", 0.0),
+                pipeline_state=getattr(result, "pipeline_state", {}),
+                current_round=getattr(result, "current_round", None),
+                pipeline_empty=getattr(result, "pipeline_empty", False),
             )
 
         except Exception as e:

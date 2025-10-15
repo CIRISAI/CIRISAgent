@@ -8,6 +8,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Optional
 
+from ciris_engine.logic.utils.jsondict_helpers import get_str
 from ciris_engine.schemas.audit.verification import RefutationProof
 from ciris_engine.schemas.types import JSONDict
 
@@ -82,8 +83,9 @@ def sanitize_for_anonymous(data: JSONDict, user_id: Optional[str] = None) -> JSO
             else:
                 sanitized[field] = original_content
 
-            # Redact any mentions or personal info patterns
-            sanitized[field] = redact_personal_info(sanitized[field])
+            # Redact any mentions or personal info patterns - get as string first
+            field_value = get_str(sanitized, field, "")
+            sanitized[field] = redact_personal_info(field_value)
 
     return sanitized
 

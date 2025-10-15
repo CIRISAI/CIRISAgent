@@ -103,10 +103,22 @@ class RecallHandler(BaseActionHandler):
 
             for n in nodes:
                 # Serialize attributes to JSON-compatible types
-                attributes = {}
-                if isinstance(n.attributes, dict):
-                    from datetime import datetime
+                from datetime import datetime
 
+                from pydantic import BaseModel
+
+                attributes = {}
+
+                # Handle both dict and Pydantic model attributes
+                if isinstance(n.attributes, BaseModel):
+                    # Convert Pydantic model to dict first
+                    attr_dict = n.attributes.model_dump()
+                    for key, value in attr_dict.items():
+                        if isinstance(value, datetime):
+                            attributes[key] = value.isoformat()
+                        else:
+                            attributes[key] = value
+                elif isinstance(n.attributes, dict):
                     for key, value in n.attributes.items():
                         if isinstance(value, datetime):
                             attributes[key] = value.isoformat()
@@ -139,7 +151,15 @@ class RecallHandler(BaseActionHandler):
 
                                     # Serialize connected node attributes
                                     connected_attrs = {}
-                                    if isinstance(connected_node.attributes, dict):
+                                    # Handle both dict and Pydantic model attributes
+                                    if isinstance(connected_node.attributes, BaseModel):
+                                        attr_dict = connected_node.attributes.model_dump()
+                                        for key, value in attr_dict.items():
+                                            if isinstance(value, datetime):
+                                                connected_attrs[key] = value.isoformat()
+                                            else:
+                                                connected_attrs[key] = value
+                                    elif isinstance(connected_node.attributes, dict):
                                         for key, value in connected_node.attributes.items():
                                             if isinstance(value, datetime):
                                                 connected_attrs[key] = value.isoformat()

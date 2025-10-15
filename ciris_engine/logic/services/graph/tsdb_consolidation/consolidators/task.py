@@ -7,7 +7,7 @@ Creates TaskSummaryNode with final task results and handler selections.
 import logging
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.schemas.services.graph.consolidation import TaskCorrelationData
@@ -239,14 +239,19 @@ class TaskConsolidator:
             # Long-running tasks (> 1 minute)
             duration_seconds = task.duration_ms / 1000.0
             if duration_seconds > 60 and long_running_count < 5:
+                task_attrs: Dict[str, Optional[str]] = {
+                    "task_id": task_id,
+                    "duration_seconds": str(duration_seconds),
+                    "status": task.status
+                }
                 edges.append(
                     (
                         summary_node,
                         summary_node,  # Self-reference with task data
                         "LONG_RUNNING_TASK",
-                        {"task_id": task_id, "duration_seconds": str(duration_seconds), "status": task.status},
+                        task_attrs,
                     )
                 )
                 long_running_count += 1
 
-        return edges
+        return cast(List[Tuple[GraphNode, GraphNode, str, JSONDict]], edges)

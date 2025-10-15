@@ -309,12 +309,14 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         oauth_links: List[OAuthIdentityLink] = []
         if oauth_links_json:
             try:
-                raw_links = json.loads(oauth_links_json)
-                for link in raw_links:
-                    try:
-                        oauth_links.append(OAuthIdentityLink(**link))
-                    except Exception as exc:
-                        logger.warning("Invalid OAuth link entry skipped: %s", exc)
+                # Type narrow: json.loads expects str, not the broader JSONDict value type
+                if isinstance(oauth_links_json, str):
+                    raw_links = json.loads(oauth_links_json)
+                    for link in raw_links:
+                        try:
+                            oauth_links.append(OAuthIdentityLink(**link))
+                        except Exception as exc:
+                            logger.warning("Invalid OAuth link entry skipped: %s", exc)
             except json.JSONDecodeError:
                 logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
 
@@ -491,7 +493,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 payload["oauth_provider"] = None
                 payload["oauth_external_id"] = None
 
-        await self.update_wa(wa_id, **payload)
+        # Filter out None values - update_wa kwargs expects Union[str, bool, datetime], not Optional
+        filtered_payload = {k: v for k, v in payload.items() if v is not None}
+        await self.update_wa(wa_id, **filtered_payload)  # type: ignore[arg-type]
         return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:

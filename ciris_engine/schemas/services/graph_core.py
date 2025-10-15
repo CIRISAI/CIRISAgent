@@ -110,7 +110,8 @@ class GraphNode(BaseModel):
     updated_at: datetime | None = Field(None, description="When last updated")
     consent_stream: ConsentStream = Field(
         default=ConsentStream.TEMPORARY,
-        description="Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)")
+        description="Consent stream for this node (TEMPORARY=14-day, PARTNERED=persistent, ANONYMOUS=stats-only)",
+    )
     expires_at: datetime | None = Field(
         None, description="Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
     )

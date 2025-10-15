@@ -1174,8 +1174,8 @@ class CIRISRuntime:
     async def _create_startup_node(self) -> None:
         """Create startup node for continuity tracking."""
         try:
-            from ciris_engine.schemas.types import JSONDict
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+            from ciris_engine.schemas.types import JSONDict
 
             # Create memory node for startup
             startup_node = GraphNode(

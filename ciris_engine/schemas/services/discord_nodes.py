@@ -45,7 +45,8 @@ class DiscordDeferralNode(TypedGraphNode):
             attributes=self._serialize_extra_fields(),
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "DiscordDeferralNode":
@@ -101,7 +102,8 @@ class DiscordDeferralNode(TypedGraphNode):
             resolved_at=cls._deserialize_datetime(attrs.get("resolved_at")),
             resolved_by=attrs.get("resolved_by"),
             resolution=attrs.get("resolution"),
-            context=attrs.get("context", {}))
+            context=attrs.get("context", {}),
+        )
 
 
 @register_node_type("DISCORD_APPROVAL")
@@ -143,7 +145,8 @@ class DiscordApprovalNode(TypedGraphNode):
             attributes=self._serialize_extra_fields(),
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "DiscordApprovalNode":
@@ -201,7 +204,8 @@ class DiscordApprovalNode(TypedGraphNode):
             resolver_id=attrs.get("resolver_id"),
             resolver_name=attrs.get("resolver_name"),
             context=attrs.get("context", {}),
-            action_params=attrs.get("action_params", {}))
+            action_params=attrs.get("action_params", {}),
+        )
 
 
 @register_node_type("DISCORD_WA")
@@ -240,7 +244,8 @@ class DiscordWANode(TypedGraphNode):
             attributes=self._serialize_extra_fields(),
             version=self.version,
             updated_by=self.updated_by,
-            updated_at=self.updated_at)
+            updated_at=self.updated_at,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "DiscordWANode":
@@ -287,7 +292,8 @@ class DiscordWANode(TypedGraphNode):
             last_seen=last_seen,
             approval_count=attrs.get("approval_count", 0),
             deferral_count=attrs.get("deferral_count", 0),
-            guilds=attrs.get("guilds", []))
+            guilds=attrs.get("guilds", []),
+        )
 
 
 # Discord-specific node types are registered via the @register_node_type decorator

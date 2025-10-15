@@ -10,6 +10,8 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.types import JSONDict
+
+
 class OAuthProviderConfig(BaseModel):
     """Configuration for an OAuth provider."""
 

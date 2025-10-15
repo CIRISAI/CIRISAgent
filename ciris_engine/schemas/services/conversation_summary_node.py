@@ -145,7 +145,8 @@ class ConversationSummaryNode(TypedGraphNode):
             attributes=extra_fields,
             version=self.version,
             updated_by=self.updated_by or "TSDBConsolidationService",
-            updated_at=self.updated_at or self.consolidation_timestamp)
+            updated_at=self.updated_at or self.consolidation_timestamp,
+        )
 
     @classmethod
     def from_graph_node(cls, node: GraphNode) -> "ConversationSummaryNode":
@@ -184,4 +185,5 @@ class ConversationSummaryNode(TypedGraphNode):
             # Metadata
             source_correlation_count=attrs.get("source_correlation_count", 0),
             consolidation_timestamp=cls._deserialize_datetime(attrs.get("consolidation_timestamp"))
-            or datetime.now(timezone.utc))
+            or datetime.now(timezone.utc),
+        )

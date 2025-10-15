@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class ValidationRule(BaseModel):
     """A single validation rule for configuration."""
@@ -144,7 +146,7 @@ class EnvironmentNodeData(BaseNodeData):
 NodeData = Union[ConfigNodeData, TelemetryNodeData, AuditNodeData, MemoryNodeData, TaskNodeData, EnvironmentNodeData]
 
 
-def create_node_data(node_type: str, data: Dict[str, Any]) -> NodeData:
+def create_node_data(node_type: str, data: Dict[str, Any]) -> NodeData:  # NOQA: Modifies dict to add datetime objects for model construction
     """Factory function to create appropriate node data based on type."""
     type_map = {
         "config": ConfigNodeData,

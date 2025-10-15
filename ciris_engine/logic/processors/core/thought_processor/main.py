@@ -595,6 +595,7 @@ class ThoughtProcessor(
                 ),
             )
 
+        # NOQA: Runtime state passed to conscience checks contains non-JSON-serializable objects (Thought instances)
         context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
         conscience_result = await self._run_conscience_checks(action_result, context)
 
@@ -626,7 +627,7 @@ class ThoughtProcessor(
         return action_result.selected_action in exempt_actions
 
     async def _run_conscience_checks(
-        self, action_result: ActionSelectionDMAResult, context: JSONDict
+        self, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
     ) -> ConscienceCheckInternalResult:
         """Run all conscience checks and return the results."""
         final_action = action_result
@@ -668,7 +669,7 @@ class ThoughtProcessor(
         )
 
     async def _check_single_conscience(
-        self, entry: Any, action_result: ActionSelectionDMAResult, context: JSONDict
+        self, entry: Any, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
     ) -> SingleConscienceCheckResult:
         """Check a single conscience and handle errors."""
         conscience = entry.conscience

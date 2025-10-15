@@ -46,6 +46,7 @@ from ciris_engine.schemas.services.runtime_control import (
     ConfigValueMap,
     ServicePriorityUpdateResponse,
     ServiceProviderInfo,
+    ServiceProviderUpdate,
     ServiceRegistryInfoResponse,
     WAPublicKeyMap,
 )
@@ -60,6 +61,19 @@ logger = logging.getLogger(__name__)
 # Error message constants
 _ERROR_AGENT_PROCESSOR_NOT_AVAILABLE = "Agent processor not available"
 _ERROR_SERVICE_REGISTRY_NOT_AVAILABLE = "Service registry not available"
+
+
+# Internal dataclass for provider lookup results
+from dataclasses import dataclass
+
+
+@dataclass
+class _ProviderLookupResult:
+    """Internal: Result from finding a provider in the registry."""
+
+    provider: Any
+    providers_list: List[Any]
+    service_type: str
 
 
 class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
@@ -1368,10 +1382,12 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             provider_info, new_priority_enum, new_priority_group, new_strategy_enum
         )
 
-        await self._record_event("service_management", "update_priority", success=True, result=updated_info)
+        await self._record_event(
+            "service_management", "update_priority", success=True, result=updated_info.model_dump()
+        )
         logger.info(
             f"Updated service provider '{provider_name}' priority from "
-            f"{updated_info['old_priority']} to {updated_info['new_priority']}"
+            f"{updated_info.old_priority} to {updated_info.new_priority}"
         )
 
         return ServicePriorityUpdateResponse(
@@ -1382,24 +1398,26 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             timestamp=self._now(),
         )
 
-    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[Dict[str, Any]]:
+    def _find_provider_in_registry(self, registry: Any, provider_name: str) -> Optional[_ProviderLookupResult]:
         """Find a provider in the service registry."""
         for service_type, providers in registry._services.items():
             for provider in providers:
                 if provider.name == provider_name:
-                    return {"provider": provider, "providers_list": providers, "service_type": str(service_type)}
+                    return _ProviderLookupResult(
+                        provider=provider, providers_list=providers, service_type=str(service_type)
+                    )
         return None
 
     def _apply_priority_updates(
         self,
-        provider_info: Dict[str, Any],
+        provider_info: _ProviderLookupResult,
         new_priority_enum: Any,
         new_priority_group: Optional[int],
         new_strategy_enum: Optional[Any],
-    ) -> Dict[str, Any]:
+    ) -> ServiceProviderUpdate:
         """Apply priority and strategy updates to provider."""
-        provider = provider_info["provider"]
-        providers_list = provider_info["providers_list"]
+        provider = provider_info.provider
+        providers_list = provider_info.providers_list
 
         old_priority = provider.priority.name
         old_priority_group = provider.priority_group
@@ -1415,15 +1433,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Re-sort providers by priority
         providers_list.sort(key=lambda x: (x.priority_group, x.priority.value))
 
-        return {
-            "service_type": provider_info["service_type"],
-            "old_priority": old_priority,
-            "new_priority": provider.priority.name,
-            "old_priority_group": old_priority_group,
-            "new_priority_group": provider.priority_group,
-            "old_strategy": old_strategy,
-            "new_strategy": provider.strategy.name,
-        }
+        return ServiceProviderUpdate(
+            service_type=provider_info.service_type,
+            old_priority=old_priority,
+            new_priority=provider.priority.name,
+            old_priority_group=old_priority_group,
+            new_priority_group=provider.priority_group,
+            old_strategy=old_strategy,
+            new_strategy=provider.strategy.name,
+        )
 
     async def reset_circuit_breakers(self, service_type: Optional[str] = None) -> CircuitBreakerResetResponse:
         """Reset circuit breakers for services."""

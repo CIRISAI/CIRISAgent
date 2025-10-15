@@ -312,7 +312,7 @@ class ToolBus(BaseBus[ToolService]):
                 tasks.append(asyncio.create_task(service.get_telemetry()))
         return tasks
 
-    def _aggregate_tool_telemetry(self, telemetry: JSONDict, aggregated: JSONDict) -> None:
+    def _aggregate_tool_telemetry(self, telemetry: JSONDict, aggregated: JSONDict, unique_tools: Set[str]) -> None:
         """Aggregate a single telemetry result into the combined metrics."""
         if telemetry:
             service_name = get_str(telemetry, "service_name", "unknown")
@@ -329,11 +329,9 @@ class ToolBus(BaseBus[ToolService]):
                 aggregated["processed_count"] = processed_count + get_int(telemetry, "tool_executions", 0)
 
             if "available_tools" in telemetry:
-                # Use update() to add each tool from the list, not add() which would add the list itself
-                unique_tools = aggregated["unique_tools"]
+                # Use update() to add each tool from the list to the separate unique_tools set
                 available_tools = get_list(telemetry, "available_tools", [])
-                if isinstance(unique_tools, set):
-                    unique_tools.update(available_tools)
+                unique_tools.update(available_tools)
 
     def _collect_metrics(self) -> dict[str, float]:
         """Collect base metrics for the tool bus."""
@@ -403,23 +401,21 @@ class ToolBus(BaseBus[ToolService]):
         # Create tasks to collect telemetry from all providers
         tasks = self._create_tool_telemetry_tasks(all_tool_services)
 
-        # Initialize aggregated metrics
-        aggregated: Dict[str, Any] = {
+        # Initialize aggregated metrics (separate set from dict)
+        unique_tools: Set[str] = set()
+        aggregated: JSONDict = {
             "service_name": "tool_bus",
             "healthy": True,
             "failed_count": 0,
             "processed_count": 0,
             "provider_count": len(all_tool_services),
             "total_tools": 0,
-            "unique_tools": set(),
             "providers": [],
         }
 
         if not tasks:
-            unique_tools_set = cast(Set[str], aggregated["unique_tools"])
-            aggregated["total_tools"] = len(unique_tools_set)
-            del aggregated["unique_tools"]
-            return cast(JSONDict, aggregated)
+            aggregated["total_tools"] = len(unique_tools)
+            return aggregated
 
         # Collect results with timeout
         done, pending = await asyncio.wait(tasks, timeout=2.0, return_when=asyncio.ALL_COMPLETED)
@@ -432,18 +428,14 @@ class ToolBus(BaseBus[ToolService]):
         for task in done:
             try:
                 telemetry = task.result()
-                self._aggregate_tool_telemetry(telemetry, aggregated)
+                self._aggregate_tool_telemetry(telemetry, aggregated, unique_tools)
             except Exception as e:
                 logger.warning(f"Failed to collect telemetry from tool provider: {e}")
 
-        # Count unique tools
-        unique_tools_set = cast(Set[str], aggregated["unique_tools"])
-        aggregated["total_tools"] = len(unique_tools_set)
+        # Count unique tools and add to aggregated
+        aggregated["total_tools"] = len(unique_tools)
 
         # Cache the tools count for get_metrics()
-        total_tools = cast(int, aggregated["total_tools"])
-        self._cached_tools_count = total_tools
+        self._cached_tools_count = len(unique_tools)
 
-        del aggregated["unique_tools"]  # Remove set from final result
-
-        return cast(JSONDict, aggregated)
+        return aggregated

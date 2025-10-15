@@ -19,7 +19,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResu
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
-from ciris_engine.schemas.types import ConfigDict, ConfigValue, SerializedModel
+from ciris_engine.schemas.types import ConfigDict, ConfigValue, JSONDict, SerializedModel
 
 # Type aliases for configuration values
 ConfigItem = Tuple[str, ConfigValue]
@@ -147,9 +147,9 @@ class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
     key: str = Field(..., description="Attribute key")
-    value: Dict[str, Any] = Field(
+    value: JSONDict = Field(
         ..., description="Attribute value in OTLP format"
-    )  # NOQA - OTLP standard requires Dict[str, Any]
+    )  # OTLP standard requires JSON-compatible dict
 
 
 class ConfigValueMap(ConfigDictMixin, BaseModel):

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepResultData
-from ciris_engine.schemas.types import ConfigDict
+from ciris_engine.schemas.types import ConfigDict, JSONDict
 
 
 class AdapterStatus(str, Enum):
@@ -221,13 +221,11 @@ class RuntimeStateSnapshot(BaseModel):
 class ConfigSnapshot(BaseModel):
     """Configuration snapshot for runtime control."""
 
-    configs: Dict[str, Any] = Field(..., description="Configuration key-value pairs")  # NOQA - Config KV store pattern
+    configs: ConfigDict = Field(..., description="Configuration key-value pairs")
     version: str = Field(..., description="Configuration version")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sensitive_keys: List[str] = Field(default_factory=list, description="Keys containing sensitive data")
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )  # NOQA - Extensible metadata pattern
+    metadata: JSONDict = Field(default_factory=dict, description="Additional metadata")
 
 
 class ConfigOperationResponse(BaseModel):

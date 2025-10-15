@@ -32,6 +32,18 @@ from ..dependencies.auth import AuthContext, require_admin, require_observer
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
+
+# Internal dataclass for audit entry merging
+from dataclasses import dataclass
+
+
+@dataclass
+class _MergedAuditEntry:
+    """Internal: Audit entry with source tracking during merge."""
+
+    entry: "AuditEntryResponse"
+    sources: List[str]
+
 # Response schemas specific to API
 
 
@@ -253,20 +265,18 @@ async def _query_jsonl_audit(
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
-def _process_graph_entries(merged: Dict[str, Any], graph_entries: List[AuditEntry]) -> None:
+def _process_graph_entries(merged: Dict[str, _MergedAuditEntry], graph_entries: List[AuditEntry]) -> None:
     """Process graph entries and add them to merged results."""
     for entry in graph_entries:
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
         if entry_id not in merged:
-            merged[entry_id] = {"entry": _convert_audit_entry(entry), "sources": ["graph"]}
+            merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
         else:
-            sources = merged[entry_id].get("sources")
-            if isinstance(sources, list):
-                sources.append("graph")
+            merged[entry_id].sources.append("graph")
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, Any], sqlite_entries: List[JSONDict]
+    merged: Dict[str, _MergedAuditEntry], sqlite_entries: List[JSONDict]
 ) -> None:  # NOQA - SQLite query results are JSONDict by design
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
@@ -282,8 +292,8 @@ def _process_sqlite_entries(
                 entity_id=get_str_optional(sqlite_entry, "originator_id"),
             )
 
-            merged[entry_id] = {
-                "entry": AuditEntryResponse(
+            merged[entry_id] = _MergedAuditEntry(
+                entry=AuditEntryResponse(
                     id=entry_id,
                     action=get_str(sqlite_entry, "event_type", "unknown"),
                     actor=originator_id,
@@ -293,16 +303,14 @@ def _process_sqlite_entries(
                     hash_chain=get_str_optional(sqlite_entry, "previous_hash"),
                     storage_sources=["sqlite"],
                 ),
-                "sources": ["sqlite"],
-            }
+                sources=["sqlite"],
+            )
         else:
-            sources = merged[entry_id].get("sources")
-            if isinstance(sources, list):
-                sources.append("sqlite")
+            merged[entry_id].sources.append("sqlite")
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, Any], jsonl_entries: List[JSONDict]
+    merged: Dict[str, _MergedAuditEntry], jsonl_entries: List[JSONDict]
 ) -> None:  # NOQA - JSONL entries are JSONDict by design
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
@@ -322,8 +330,8 @@ def _process_jsonl_entries(
             description = get_str_optional(jsonl_entry, "description") or get_str_optional(jsonl_entry, "event_payload")
             context = AuditContext(description=description)
 
-            merged[entry_id] = {
-                "entry": AuditEntryResponse(
+            merged[entry_id] = _MergedAuditEntry(
+                entry=AuditEntryResponse(
                     id=entry_id,
                     action=get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "unknown"),
                     actor=get_str_optional(jsonl_entry, "actor") or get_str(jsonl_entry, "originator_id", "unknown"),
@@ -334,12 +342,10 @@ def _process_jsonl_entries(
                     or get_str_optional(jsonl_entry, "previous_hash"),
                     storage_sources=["jsonl"],
                 ),
-                "sources": ["jsonl"],
-            }
+                sources=["jsonl"],
+            )
         else:
-            sources = merged[entry_id].get("sources")
-            if isinstance(sources, list):
-                sources.append("jsonl")
+            merged[entry_id].sources.append("jsonl")
 
 
 async def _merge_audit_sources(
@@ -348,7 +354,7 @@ async def _merge_audit_sources(
     jsonl_entries: List[JSONDict],  # NOQA - Raw database results are JSONDict by design
 ) -> List[AuditEntryResponse]:
     """Merge audit entries from all sources and track storage locations."""
-    merged: Dict[str, Any] = {}  # Track entries by ID with their sources
+    merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
 
     # Process entries from all sources
     _process_graph_entries(merged, graph_entries)
@@ -358,12 +364,8 @@ async def _merge_audit_sources(
     # Update storage_sources for all merged entries and build result
     result = []
     for entry_data in merged.values():
-        if isinstance(entry_data, dict):
-            entry = entry_data.get("entry")
-            sources = entry_data.get("sources")
-            if isinstance(entry, AuditEntryResponse) and isinstance(sources, list):
-                entry.storage_sources = sorted(sources)
-                result.append(entry)
+        entry_data.entry.storage_sources = sorted(entry_data.sources)
+        result.append(entry_data.entry)
 
     # Sort by timestamp (newest first)
     result.sort(key=lambda x: x.timestamp, reverse=True)

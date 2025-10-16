@@ -7,22 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.6] - 2025-10-15
 
+### Added
+- **💬 OBSERVER Message Sending**: Added SEND_MESSAGES permission to OBSERVER role
+  - OBSERVER users can now send messages to agents without manual permission grants
+  - Access control delegated to billing/credit system (proper 402 responses on credit denial)
+  - Simplifies OAuth user onboarding - no explicit permission grant required
+  - Resolves 403 Forbidden errors for OAuth OBSERVER users with billing credits
+- **💳 Billing Field Extraction**: Comprehensive test coverage for OAuth billing integration
+  - 4 new tests covering customer_email, marketing_opt_in, and context field extraction
+  - Tests validate 12 boolean string conversion cases ("true", "1", "yes" → True)
+  - All billing fields properly extracted and sent to CIRIS Billing API
+
 ### Fixed
+- **🔒 SSE Filtering Database Access**: Fixed database access pattern for OAuth user filtering
+  - Changed to use `auth_service.db_path` with sync sqlite3 connections
+  - Fixed `_get_user_allowed_channel_ids()` to query wa_cert table correctly
+  - Fixed `_batch_fetch_task_channel_ids()` to query tasks table in main database
+  - Removed unused `auth_service` parameter (SonarCloud code smell)
 - **🧹 Code Quality**: Refactored billing provider and system extensions
   - Extracted duplicated billing field extraction logic into shared `_extract_context_fields()` helper
-  - Removed unused `auth_service` parameter from `_batch_fetch_task_channel_ids()` (SonarCloud code smell)
   - Both functions now cleaner and more maintainable
 
 ### Changed
 - **🧪 QA Runner Enhancement**: Made "all" the default test module
   - Running `python -m tools.qa_runner` now executes all tests by default
   - Automatic server lifecycle management (no manual server startup needed)
-
-### Added
-- **💳 Billing Field Extraction**: Comprehensive test coverage for OAuth billing integration
-  - 4 new tests covering customer_email, marketing_opt_in, and context field extraction
-  - Tests validate 12 boolean string conversion cases ("true", "1", "yes" → True)
-  - All billing fields properly extracted and sent to CIRIS Billing API
 
 ## [1.3.5] - 2025-10-15
 

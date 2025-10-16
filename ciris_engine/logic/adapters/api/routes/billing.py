@@ -108,14 +108,25 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
             # Try to get email from OAuth user data
             user_email = user.oauth_email
 
-    return {
-        "oauth_provider": "api:internal",  # Or extract from auth context
-        "external_id": auth.user_id,
+    # Parse OAuth provider from user_id format (e.g., "google:115300315355793131383")
+    oauth_provider = "api:internal"
+    external_id = auth.user_id
+
+    if ":" in auth.user_id:
+        parts = auth.user_id.split(":", 1)
+        oauth_provider = parts[0]  # e.g., "google", "discord"
+        external_id = parts[1]  # e.g., "115300315355793131383"
+
+    identity = {
+        "oauth_provider": oauth_provider,
+        "external_id": external_id,
         "wa_id": auth.user_id,
         "tenant_id": None,
         "marketing_opt_in": marketing_opt_in,
         "email": user_email,
     }
+    logger.info(f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email}")
+    return identity
 
 
 # Endpoints
@@ -136,6 +147,8 @@ async def get_credits(
     The frontend calls this to display credit status.
     """
     user_identity = _extract_user_identity(auth, request)
+    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+    logger.info(f"Credit check for {user_identity.get('email', 'no-email')} on agent {agent_id}")
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
@@ -288,9 +301,11 @@ async def initiate_purchase(
     # Billing enabled - proceed with purchase
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
+    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
 
     # Get user email (needed for Stripe) - extract from OAuth profile
     customer_email = user_identity.get("email")
+    logger.info(f"Purchase initiate for {customer_email} on agent {agent_id}")
     if not customer_email:
         raise HTTPException(
             status_code=400,

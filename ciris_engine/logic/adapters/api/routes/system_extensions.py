@@ -621,10 +621,13 @@ def _determine_user_role(current_user: JSONDict) -> Any:
 
 
 async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
-    """Get set of channel IDs user is allowed to see (user_id + OAuth links)."""
+    """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
     import sqlite3
 
     allowed_channel_ids = {user_id}
+    # BUGFIX: API adapter prefixes channel_id with "api_"
+    # See agent.py:221: channel_id = f"api_{auth.user_id}"
+    allowed_channel_ids.add(f"api_{user_id}")
 
     try:
         # Use db_path with direct sqlite3 connection (AuthenticationService uses sync sqlite3)
@@ -639,8 +642,13 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
             rows = cursor.fetchall()
             for row in rows:
                 oauth_provider, oauth_external_id = row
-                allowed_channel_ids.add(f"{oauth_provider}:{oauth_external_id}")
+                # Add OAuth channel ID formats
+                oauth_channel = f"{oauth_provider}:{oauth_external_id}"
+                allowed_channel_ids.add(oauth_channel)
                 allowed_channel_ids.add(oauth_external_id)
+                # BUGFIX: Also add API-prefixed versions for SSE filtering
+                allowed_channel_ids.add(f"api_{oauth_channel}")
+                allowed_channel_ids.add(f"api_{oauth_external_id}")
     except Exception as e:
         logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
 
@@ -661,6 +669,7 @@ async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
         from ciris_engine.logic.persistence import get_sqlite_db_full_path
 
         main_db_path = get_sqlite_db_full_path()  # Gets main DB path from config via registry
+        logger.debug(f"SSE Filter: Fetching from main_db_path={main_db_path}")
 
         placeholders = ",".join("?" * len(task_ids))
         query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
@@ -668,9 +677,11 @@ async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
         with sqlite3.connect(main_db_path) as conn:
             cursor = conn.execute(query, task_ids)
             rows = cursor.fetchall()
+            logger.debug(f"SSE Filter: Query returned {len(rows)} rows")
             for row in rows:
                 tid, cid = row
                 task_channel_map[tid] = cid
+                logger.debug(f"SSE Filter: Found task_id={tid} -> channel_id={cid}")
     except Exception as e:
         logger.error(f"Error batch fetching task channel_ids: {e}", exc_info=True)
 
@@ -684,13 +695,26 @@ def _filter_events_by_channel_access(
     filtered_events = []
     for event in events:
         task_id = event.get("task_id")
+        event_type = event.get("event_type", "unknown")
+
         if not task_id:
             # No task_id means system event - skip for non-admin users
+            logger.debug(f"SSE Filter: Skipping event {event_type} - no task_id")
             continue
 
         channel_id = task_channel_cache.get(task_id)
-        if channel_id and channel_id in allowed_channel_ids:
+        if not channel_id:
+            logger.warning(f"SSE Filter: No channel_id found for task_id={task_id}, event_type={event_type}")
+            continue
+
+        if channel_id in allowed_channel_ids:
+            logger.debug(f"SSE Filter: ALLOWED event {event_type} - task_id={task_id}, channel_id={channel_id}")
             filtered_events.append(event)
+        else:
+            logger.warning(
+                f"SSE Filter: BLOCKED event {event_type} - task_id={task_id}, "
+                f"channel_id={channel_id} not in allowed_channel_ids={allowed_channel_ids}"
+            )
 
     return filtered_events
 
@@ -800,6 +824,9 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
         allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
         allowed_user_ids = {user_id}  # User can only see their own profile
 
+        # DEBUG: Log allowed channel IDs for OBSERVER users
+        logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
+
     async def stream_reasoning_steps() -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
         try:
@@ -836,13 +863,23 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
                             # SECURITY: Batch fetch channel_ids for efficiency
                             if uncached_task_ids:
+                                logger.info(f"SSE Filter: Fetching channel_ids for uncached tasks: {uncached_task_ids}")
                                 new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
+                                logger.info(f"SSE Filter: Fetched task->channel mappings: {new_mappings}")
                                 task_channel_cache.update(new_mappings)
+
+                            # DEBUG: Log event task_ids before filtering
+                            event_task_ids = [event.get("task_id") for event in events if event.get("task_id")]
+                            logger.info(f"SSE Filter: Processing {len(events)} events with task_ids: {event_task_ids}")
+                            logger.info(f"SSE Filter: Current task_channel_cache: {task_channel_cache}")
 
                             # Filter events based on channel_id whitelist
                             filtered_events = _filter_events_by_channel_access(
                                 events, allowed_channel_ids, task_channel_cache
                             )
+
+                            # DEBUG: Log filtering results
+                            logger.info(f"SSE Filter: Filtered to {len(filtered_events)}/{len(events)} events")
 
                             # SECURITY: Redact sensitive task information for OBSERVER users
                             # This removes recently_completed_tasks and pending_tasks from snapshots

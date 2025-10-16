@@ -568,9 +568,9 @@ async def test_billing_provider_boolean_conversion():
 
             await provider.check_credit(account, context)
 
-            assert captured_payload["marketing_opt_in"] == expected_bool, (
-                f"Failed for input '{input_str}': expected {expected_bool}, got {captured_payload['marketing_opt_in']}"
-            )
+            assert (
+                captured_payload["marketing_opt_in"] == expected_bool
+            ), f"Failed for input '{input_str}': expected {expected_bool}, got {captured_payload['marketing_opt_in']}"
 
         finally:
             await provider.stop()

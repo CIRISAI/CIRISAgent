@@ -5,6 +5,31 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - 2025-10-16
+
+### Fixed
+- **📡 OBSERVER SSE Streaming**: Fixed channel ID mismatch preventing OBSERVER users from receiving events
+  - **Root Cause**: Tasks created with `api_{user_id}` channel format but whitelist only had unprefixed versions
+  - **Solution**: Added "api_" prefixed channel IDs to `_get_user_allowed_channel_ids()` in system_extensions.py
+  - **Impact**: OBSERVER users now receive all SSE events for their own tasks
+  - **Example**: Task with `api_google:115300...` now matches whitelist `api_google:115300...`
+  - Located at system_extensions.py:623-655
+- **💳 Billing API 422 Errors**: Fixed OAuth provider parsing in billing identity extraction
+  - **Root Cause**: `_extract_user_identity()` hardcoded `oauth_provider` as "api:internal" for all users
+  - **Solution**: Parse user_id by splitting on ":" to extract correct provider and external_id
+  - **Impact**: OAuth users can now successfully call billing endpoints without validation errors
+  - **Example**: `google:115300...` → `provider=google`, `external_id=115300...`
+  - Located at billing.py:111-118
+- **🔍 Billing Diagnostics**: Added clean logging for debugging billing integration issues
+  - Log format: "Credit check for email@example.com on agent scout-remote"
+  - Shows email address, agent ID, and parsed OAuth identity for all billing operations
+  - Located at billing.py:128, 149, 306
+
+### Testing
+- **✅ Unit Tests**: 32/32 helper tests passing (system_extensions_helpers.py)
+- **✅ Mypy**: 556 source files, 0 errors (100% type safety)
+- **✅ QA Tests**: 28/28 tests passing (100% success rate)
+
 ## [1.3.6] - 2025-10-15
 
 ### Added

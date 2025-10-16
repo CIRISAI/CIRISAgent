@@ -18,7 +18,7 @@ from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
-from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
+from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 from ciris_engine.schemas.types import JSONDict
 
@@ -839,6 +839,8 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return
 
         account, context = envelope
+
+        # Step 1: Check if user has credit
         try:
             result = await self.resource_monitor.check_credit(account, context)
         except Exception as exc:  # pragma: no cover - provider failure is rare
@@ -861,6 +863,42 @@ class BaseObserver[MessageT: BaseModel](ABC):
                     reason,
                 )
             raise CreditDenied(reason)
+
+        # Step 2: Charge the credit BEFORE processing message
+        spend_request = CreditSpendRequest(
+            amount_minor=1,
+            currency="USD",
+            description="Message interaction",
+            metadata={
+                "message_id": getattr(msg, "message_id", None),
+                "channel_id": getattr(msg, "channel_id", None),
+            },
+        )
+
+        try:
+            spend_result = await self.resource_monitor.spend_credit(account, spend_request, context)
+            if not spend_result.succeeded:
+                logger.warning(
+                    "Credit charge failed for message %s: %s",
+                    getattr(msg, "message_id", "unknown"),
+                    spend_result.reason,
+                )
+                raise CreditCheckFailed(f"Credit charge failed: {spend_result.reason}")
+            logger.info(
+                "Credit charged successfully for message %s (account %s)",
+                getattr(msg, "message_id", "unknown"),
+                account.cache_key(),
+            )
+        except CreditCheckFailed:
+            # Re-raise CreditCheckFailed as-is
+            raise
+        except Exception as exc:  # pragma: no cover - provider failure is rare
+            logger.error(
+                "Credit charge error for message %s: %s",
+                getattr(msg, "message_id", "unknown"),
+                exc,
+            )
+            raise CreditCheckFailed(str(exc)) from exc
 
     def _resolve_credit_envelope(self, msg: MessageT) -> Optional[Tuple[CreditAccount, CreditContext]]:
         """Extract credit account/context metadata from the message."""

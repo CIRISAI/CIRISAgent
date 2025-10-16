@@ -854,7 +854,11 @@ class BaseObserver[MessageT: BaseModel](ABC):
         return resource_monitor
 
     async def _check_and_charge_credit(
-        self, resource_monitor: ResourceMonitorServiceProtocol, account: CreditAccount, context: CreditContext, msg: MessageT
+        self,
+        resource_monitor: ResourceMonitorServiceProtocol,
+        account: CreditAccount,
+        context: CreditContext,
+        msg: MessageT,
     ) -> None:
         """Check credit availability and charge the user."""
         # Step 1: Check if user has credit
@@ -926,8 +930,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
 
         # Determine source for logging
         monitor_source = self._get_resource_monitor_source(
-            self.resource_monitor is not None,
-            resource_monitor is not None
+            self.resource_monitor is not None, resource_monitor is not None
         )
 
         logger.info(

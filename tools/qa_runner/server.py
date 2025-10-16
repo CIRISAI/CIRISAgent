@@ -68,9 +68,7 @@ class APIServerManager:
         try:
             # Open log file to capture console output (includes early startup logs)
             console_log = open("/tmp/qa_runner_console_output.txt", "w")
-            self.process = subprocess.Popen(
-                cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd()
-            )
+            self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
             self.pid = self.process.pid
             self._console_log_file = console_log  # Store reference to close later
 

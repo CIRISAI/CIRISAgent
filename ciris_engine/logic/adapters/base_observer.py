@@ -126,6 +126,10 @@ class BaseObserver[MessageT: BaseModel](ABC):
         origin_service: str = "unknown",
         resource_monitor: Optional[ResourceMonitorServiceProtocol] = None,
     ) -> None:
+        logger.info(
+            f"[OBSERVER_INIT] BaseObserver.__init__ received resource_monitor: {resource_monitor is not None}, type={type(resource_monitor).__name__ if resource_monitor else 'None'}, origin={origin_service}"
+        )
+
         self.on_observe = on_observe
         self.bus_manager = bus_manager
         self.memory_service = memory_service
@@ -139,6 +143,10 @@ class BaseObserver[MessageT: BaseModel](ABC):
         self.origin_service = origin_service
         self.resource_monitor = resource_monitor
         self._credit_log_cache: Dict[str, float] = {}
+
+        logger.info(
+            f"[OBSERVER_INIT] BaseObserver.__init__ completed, self.resource_monitor: {self.resource_monitor is not None}"
+        )
 
         # Initialize document parser for all adapters
         self._document_parser = DocumentParser()
@@ -831,18 +839,48 @@ class BaseObserver[MessageT: BaseModel](ABC):
     async def _enforce_credit_policy(self, msg: MessageT) -> None:
         """Ensure external credit policy allows processing of this message."""
 
-        if not self.resource_monitor or not getattr(self.resource_monitor, "credit_provider", None):
+        msg_id = getattr(msg, "message_id", "unknown")
+
+        # Try to get resource_monitor - check instance variable first, then try to get from message metadata
+        resource_monitor = self.resource_monitor
+        if not resource_monitor:
+            # Check if message has resource_monitor attached (for adapters that inject it per-message)
+            resource_monitor = getattr(msg, "_resource_monitor", None)
+
+        logger.info(
+            f"[CREDIT] Policy check for message {msg_id}: resource_monitor={resource_monitor is not None}, source={'instance' if self.resource_monitor else 'message' if resource_monitor else 'none'}"
+        )
+
+        if not resource_monitor:
+            logger.debug(f"[CREDIT] NO RESOURCE MONITOR for message {msg_id} - skipping credit enforcement")
+            return
+
+        credit_provider = getattr(resource_monitor, "credit_provider", None)
+        logger.info(
+            f"[CREDIT] Provider status: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
+        )
+
+        if not credit_provider:
+            logger.debug("[CREDIT] No credit provider - skipping credit enforcement")
             return
 
         envelope = self._resolve_credit_envelope(msg)
         if envelope is None:
+            # CRITICAL: Credit provider is active but no credit metadata attached to message
+            msg_id = getattr(msg, "message_id", "unknown")
+            channel_id = getattr(msg, "channel_id", "unknown")
+            logger.critical(
+                f"[CREDIT] ENFORCEMENT SKIPPED: No credit envelope for message {msg_id} in channel {channel_id}. "
+                f"Credit provider IS active but message has no credit metadata attached!"
+            )
             return
 
         account, context = envelope
+        logger.info(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
 
         # Step 1: Check if user has credit
         try:
-            result = await self.resource_monitor.check_credit(account, context)
+            result = await resource_monitor.check_credit(account, context)
         except Exception as exc:  # pragma: no cover - provider failure is rare
             if self._should_log_credit_event(f"provider_error:{account.cache_key()}"):
                 logger.warning(
@@ -876,7 +914,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
         )
 
         try:
-            spend_result = await self.resource_monitor.spend_credit(account, spend_request, context)
+            spend_result = await resource_monitor.spend_credit(account, spend_request, context)
             if not spend_result.succeeded:
                 logger.warning(
                     "Credit charge failed for message %s: %s",

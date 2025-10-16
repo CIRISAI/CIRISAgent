@@ -89,10 +89,11 @@ class CIRISBillingProvider(CreditGateProtocol):
 
         try:
             assert self._client is not None  # nosec - ensured by _ensure_started
+            logger.info("Sending credit check to %s/v1/billing/credits/check", self._base_url)
             response = await self._client.post("/v1/billing/credits/check", json=payload)
-            logger.debug("Credit response status=%s", response.status_code)
+            logger.info("Credit response status=%s", response.status_code)
         except (httpx.RequestError, asyncio.TimeoutError) as exc:
-            logger.warning("Credit request failed for %s: %s", cache_key, exc)
+            logger.error("Credit request failed for %s: %s (%s)", cache_key, type(exc).__name__, exc, exc_info=True)
             return self._handle_failure("request_error", str(exc))
 
         if response.status_code == httpx.codes.OK:
@@ -191,23 +192,15 @@ class CIRISBillingProvider(CreditGateProtocol):
 
     @staticmethod
     def _extract_context_fields(context: CreditContext, payload: dict[str, object]) -> None:
-        """Extract billing-specific fields from context metadata into payload.
+        """Extract billing-specific fields from context into payload.
 
         Args:
-            context: Credit context containing metadata and agent_id
+            context: Credit context containing agent_id
             payload: Payload dict to update with extracted fields
         """
-        if context.metadata:
-            if "email" in context.metadata and context.metadata["email"]:
-                payload["customer_email"] = context.metadata["email"]
-            if "marketing_opt_in" in context.metadata:
-                # Convert string "true"/"false" to boolean
-                opt_in_str = str(context.metadata["marketing_opt_in"]).lower()
-                payload["marketing_opt_in"] = opt_in_str in ("true", "1", "yes")
-            if "source" in context.metadata:
-                payload["marketing_opt_in_source"] = context.metadata["source"]
-            if "user_role" in context.metadata:
-                payload["user_role"] = context.metadata["user_role"]
+        # Note: context.metadata has been removed to match billing backend schema
+        # customer_email, user_role, and marketing_opt_in are now passed directly
+        # in the identity dict from the calling code (billing.py)
 
         # Add agent_id as top-level field (billing expects this)
         if context.agent_id:
@@ -224,7 +217,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         payload: dict[str, object] = {
             "oauth_provider": provider,
             "external_id": account.account_id,
-            "amount_minor": 1,  # Default check amount
+            # Note: amount_minor removed - /credits/check doesn't accept it
         }
         if account.authority_id:
             payload["wa_id"] = account.authority_id

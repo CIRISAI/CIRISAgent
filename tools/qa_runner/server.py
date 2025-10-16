@@ -46,11 +46,19 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
-        # Pass through billing configuration if present
+        # Set billing configuration from QAConfig if enabled
+        if self.config.billing_enabled:
+            env["CIRIS_BILLING_ENABLED"] = "true"
+            if self.config.billing_api_key:
+                env["CIRIS_BILLING_API_KEY"] = self.config.billing_api_key
+                self.console.print(f"[dim]Setting CIRIS_BILLING_ENABLED=true[/dim]")
+                self.console.print(f"[dim]Setting CIRIS_BILLING_API_KEY=<redacted>[/dim]")
+            if self.config.billing_api_url:
+                env["CIRIS_BILLING_API_URL"] = self.config.billing_api_url
+                self.console.print(f"[dim]Setting CIRIS_BILLING_API_URL={self.config.billing_api_url}[/dim]")
+
+        # Pass through additional billing configuration from environment if present
         billing_vars = [
-            "CIRIS_BILLING_ENABLED",
-            "CIRIS_BILLING_API_KEY",
-            "CIRIS_BILLING_API_URL",
             "CIRIS_BILLING_TIMEOUT_SECONDS",
             "CIRIS_BILLING_CACHE_TTL_SECONDS",
             "CIRIS_BILLING_FAIL_OPEN",
@@ -58,11 +66,7 @@ class APIServerManager:
         for var in billing_vars:
             if var in os.environ:
                 env[var] = os.environ[var]
-                # Debug: Show which billing vars are being passed
-                if var == "CIRIS_BILLING_API_KEY":
-                    self.console.print(f"[dim]Setting {var}=<redacted>[/dim]")
-                else:
-                    self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
+                self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
 
         # Start server process
         try:

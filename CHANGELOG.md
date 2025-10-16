@@ -5,6 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2025-10-16
+
+### Fixed
+- **💳 Credit Enforcement Initialization Order**: Fixed credit enforcement failing due to observer initialization timing
+  - **Root Cause**: API adapter creates observer during `adapter.start()` before ResourceMonitorService is initialized on runtime
+  - **Solution**: Two-part fix using message-attached resource_monitor with fallback pattern
+    1. Modified `base_observer.py:_enforce_credit_policy()` to check instance variable first, then message metadata (`msg._resource_monitor`)
+    2. Modified `agent.py:_attach_credit_metadata()` to attach resource_monitor to each message object
+  - **Impact**: Credit checking, spending, and denial now work correctly for all messages
+  - **Verification**: Test logs show successful credit enforcement - 3 messages charged, 4th message denied with "No free uses or credits remaining"
+  - Located at base_observer.py:835-853, agent.py:389-393
+
+### Testing
+- **✅ Credit Enforcement**: Validated end-to-end billing integration with OAuth test users
+- **✅ Mypy**: 556 source files, 0 errors (100% type safety)
+
 ## [1.3.7] - 2025-10-16
 
 ### Fixed

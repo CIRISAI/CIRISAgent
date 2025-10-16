@@ -23,6 +23,7 @@ class QAModule(Enum):
     GUIDANCE = "guidance"
     CONSENT = "consent"
     BILLING = "billing"
+    BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
 
     # Handler modules
@@ -83,6 +84,17 @@ class QAConfig:
     admin_username: str = "admin"
     admin_password: str = "ciris_admin_password"
 
+    # OAuth test user configuration (for billing integration tests)
+    oauth_test_user_id: str = "google:999888777666555444"
+    oauth_test_email: str = "test.billing@example.com"
+    oauth_test_provider: str = "google"
+    oauth_test_external_id: str = "999888777666555444"
+
+    # Billing backend configuration (for billing integration tests)
+    billing_enabled: bool = False
+    billing_api_key: Optional[str] = None
+    billing_api_url: str = "https://billing.ciris.ai"
+
     # Test configuration
     parallel_tests: bool = False
     max_workers: int = 4
@@ -135,6 +147,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.BILLING:
             # Billing tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.BILLING_INTEGRATION:
+            # Billing integration tests use SDK client with OAuth user
             return []  # Will be handled separately by runner
         elif module == QAModule.MULTI_OCCURRENCE:
             return MultiOccurrenceTestModule.get_all_multi_occurrence_tests()

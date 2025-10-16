@@ -342,33 +342,68 @@ def _attach_credit_metadata(
 ) -> IncomingMessage:
     """Attach credit envelope data to the message for downstream processing."""
 
+    logger.info(f"[CREDIT_ATTACH] Called for message {msg.message_id}")
+
     resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    if not resource_monitor or not getattr(resource_monitor, "credit_provider", None):
+    logger.info(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
+
+    if not resource_monitor:
+        logger.critical(f"[CREDIT_ATTACH] NO RESOURCE MONITOR - credit metadata NOT attached to {msg.message_id}")
         return msg
 
-    account, metadata = _derive_credit_account(auth, request)
-
-    runtime = getattr(request.app.state, "runtime", None)
-    agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
-    agent_id = getattr(agent_identity, "agent_id", None)
-
-    credit_context = CreditContext(
-        agent_id=agent_id,
-        channel_id=channel_id,
-        request_id=msg.message_id,
-        metadata={
-            **metadata,
-            "channel_id": channel_id,
-            "message_id": msg.message_id,
-        },
+    credit_provider = getattr(resource_monitor, "credit_provider", None)
+    logger.info(
+        f"[CREDIT_ATTACH] credit_provider exists: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
     )
 
-    return msg.model_copy(
-        update={
-            "credit_account": account.model_dump(),
-            "credit_context": credit_context.model_dump(),
-        }
-    )
+    if not credit_provider:
+        logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
+        return msg
+
+    try:
+        account, metadata = _derive_credit_account(auth, request)
+        logger.info(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
+
+        runtime = getattr(request.app.state, "runtime", None)
+        agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
+        agent_id = getattr(agent_identity, "agent_id", None)
+
+        logger.info(f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}")
+
+        credit_context = CreditContext(
+            agent_id=agent_id,
+            channel_id=channel_id,
+            request_id=msg.message_id,
+        )
+
+        logger.info(f"[CREDIT_ATTACH] CreditContext created successfully")
+        logger.info(
+            f"[CREDIT_ATTACH] Attaching credit metadata to message {msg.message_id}: account={account.cache_key()}"
+        )
+
+        updated_msg = msg.model_copy(
+            update={
+                "credit_account": account.model_dump(),
+                "credit_context": credit_context.model_dump(),
+            }
+        )
+
+        logger.info(f"[CREDIT_ATTACH] Credit metadata SUCCESSFULLY attached to message {msg.message_id}")
+
+        # CRITICAL: Also attach resource_monitor to message for observer access
+        # The observer may be initialized before resource_monitor exists on runtime,
+        # so we attach it per-message to ensure credit enforcement works
+        updated_msg._resource_monitor = resource_monitor  # type: ignore[attr-defined]
+        logger.info(f"[CREDIT_ATTACH] resource_monitor attached to message {msg.message_id}")
+
+        return updated_msg
+
+    except Exception as e:
+        logger.critical(
+            f"[CREDIT_ATTACH] EXCEPTION for message {msg.message_id}: {type(e).__name__}: {e}", exc_info=True
+        )
+        # Return original message without metadata on error
+        return msg
 
 
 def _get_runtime_processor(request: Request) -> Any:

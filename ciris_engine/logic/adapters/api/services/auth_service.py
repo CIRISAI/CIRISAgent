@@ -170,38 +170,63 @@ class APIAuthService:
 
     async def _process_wa_record(self, wa: "WACertificate") -> None:
         """Process a single WA record and add/update user."""
+        print(f"  🔧 [AUTH DEBUG] _process_wa_record: wa_id={wa.wa_id}, name={wa.name}")
+
         # Remove stale cache entries for this WA
         to_remove = [key for key, value in self._users.items() if getattr(value, "wa_id", None) == wa.wa_id]
+        if to_remove:
+            print(f"  🗑️  [AUTH DEBUG] Removing {len(to_remove)} stale entries for {wa.wa_id}")
         for key in to_remove:
             self._users.pop(key, None)
 
         user = self._create_user_from_wa(wa)
+        print(
+            f"  👤 [AUTH DEBUG] Created User: name={user.name}, auth_type={user.auth_type}, has_password={user.password_hash is not None}"
+        )
+
         self._users[wa.wa_id] = user
+        print(f"  🔑 [AUTH DEBUG] Stored user under key: '{wa.wa_id}'")
 
         if wa.oauth_provider and wa.oauth_external_id:
             primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
             self._users[primary_key] = user
+            print(f"  🔑 [AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
 
         for link in wa.oauth_links:
             link_key = f"{link.provider}:{link.external_id}"
             self._users[link_key] = user
+            print(f"  🔑 [AUTH DEBUG] Stored user under link key: '{link_key}'")
 
     async def _load_users_from_db(self) -> None:
         """Load existing users from the database."""
+        print("=" * 80)
+        print("🔍 [AUTH DEBUG] _load_users_from_db() called")
+        print("=" * 80)
+
         if not self._auth_service:
+            print("⚠️  [AUTH DEBUG] No auth service - skipping DB load")
             return
 
         try:
             was = await self._auth_service.list_was(active_only=False)
+            print(f"📊 [AUTH DEBUG] Loaded {len(was)} WA certificates from database")
 
-            for wa in was:
+            for i, wa in enumerate(was, 1):
+                print(
+                    f"📝 [AUTH DEBUG] Processing WA {i}/{len(was)}: wa_id={wa.wa_id}, name={wa.name}, has_password={wa.password_hash is not None}"
+                )
                 await self._process_wa_record(wa)
 
             if not any(u.name == "admin" for u in self._users.values()):
+                print("🔧 [AUTH DEBUG] No admin user found, creating default admin")
                 await self._create_default_admin()
 
+            print(f"✅ [AUTH DEBUG] User loading complete. Total users in cache: {len(self._users)}")
+            print(f"👤 [AUTH DEBUG] Usernames in cache: {list(set(u.name for u in self._users.values()))}")
+            print("=" * 80)
+
         except Exception as e:
-            print(f"Error loading users from database: {e}")
+            print(f"❌ [AUTH DEBUG] Error loading users from database: {e}")
             raise
 
     async def _create_default_admin(self) -> None:
@@ -402,22 +427,69 @@ class APIAuthService:
 
     async def verify_user_password(self, username: str, password: str) -> Optional[User]:
         """Verify a user's password and return the user if valid."""
+        print("=" * 80)
+        print(f"🔐 [AUTH DEBUG] verify_user_password('{username}') called")
+        print(f"📊 [AUTH DEBUG] _users_loaded flag: {self._users_loaded}")
+
         # Ensure users are loaded from database
         await self._ensure_users_loaded()
 
+        print(f"📊 [AUTH DEBUG] After _ensure_users_loaded, _users_loaded: {self._users_loaded}")
+        print(f"📊 [AUTH DEBUG] _users dict size: {len(self._users)}")
+
         user = self.get_user_by_username(username)
         if not user:
+            print(f"❌ [AUTH DEBUG] User lookup failed - returning None")
+            print("=" * 80)
             return None
 
-        if user.password_hash and self._verify_password(password, user.password_hash):
-            return user
-        return None
+        print(f"✅ [AUTH DEBUG] User found: wa_id={user.wa_id}")
+        print(f"📝 [AUTH DEBUG] User.name: '{user.name}'")
+        print(f"📝 [AUTH DEBUG] User.auth_type: '{user.auth_type}'")
+        print(f"📝 [AUTH DEBUG] Has password_hash: {user.password_hash is not None}")
+
+        if user.password_hash:
+            print(f"📝 [AUTH DEBUG] password_hash length: {len(user.password_hash)}")
+            print(f"📝 [AUTH DEBUG] password_hash prefix: {user.password_hash[:10]}")
+
+            verify_result = self._verify_password(password, user.password_hash)
+            print(f"🔑 [AUTH DEBUG] Password verification result: {verify_result}")
+
+            if verify_result:
+                print(f"✅ [AUTH DEBUG] Authentication SUCCESS for '{username}'")
+                print("=" * 80)
+                return user
+            else:
+                print(f"❌ [AUTH DEBUG] Password verification FAILED")
+                print("=" * 80)
+                return None
+        else:
+            print(f"❌ [AUTH DEBUG] No password_hash for user")
+            print("=" * 80)
+            return None
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         """Get a user by username."""
+        print(f"🔍 [AUTH DEBUG] get_user_by_username('{username}') called")
+        print(f"📊 [AUTH DEBUG] _users dict has {len(self._users)} entries")
+
+        # Get unique usernames (since users can be stored under multiple keys)
+        unique_users = {}
+        for key, user in self._users.items():
+            if user.wa_id not in unique_users:
+                unique_users[user.wa_id] = user
+
+        usernames = [u.name for u in unique_users.values()]
+        print(f"👤 [AUTH DEBUG] Available usernames: {usernames}")
+
         for user in self._users.values():
             if user.name == username:
+                print(
+                    f"✅ [AUTH DEBUG] FOUND user: wa_id={user.wa_id}, name={user.name}, has_password={user.password_hash is not None}"
+                )
                 return user
+
+        print(f"❌ [AUTH DEBUG] User '{username}' NOT FOUND")
         return None
 
     async def create_user(self, username: str, password: str, api_role: APIRole = APIRole.OBSERVER) -> Optional[User]:

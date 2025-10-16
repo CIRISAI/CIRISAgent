@@ -322,6 +322,11 @@ class ApiPlatform(Service):
         logger.info("Started API tool service")
 
         # Create message observer for handling incoming messages
+        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor_service", None)
+        logger.info(
+            f"[OBSERVER_INIT] resource_monitor_service from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
+        )
+
         self.message_observer = APIObserver(
             on_observe=lambda _: asyncio.sleep(0),
             bus_manager=getattr(self.runtime, "bus_manager", None),
@@ -331,7 +336,7 @@ class ApiPlatform(Service):
             secrets_service=getattr(self.runtime, "secrets_service", None),
             time_service=getattr(self.runtime, "time_service", None),
             origin_service="api",
-            resource_monitor=getattr(self.runtime, "resource_monitor_service", None),
+            resource_monitor=resource_monitor_from_runtime,
         )
         await self.message_observer.start()
         logger.info("Started API message observer")

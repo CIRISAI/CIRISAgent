@@ -78,7 +78,15 @@ def _get_billing_client(request: Request) -> httpx.AsyncClient:
         import os
 
         billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
-        new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0)
+        api_key = os.getenv("CIRIS_BILLING_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Billing API key not configured")
+
+        headers = {
+            "X-API-Key": api_key,
+            "User-Agent": "CIRIS-Agent-Frontend/1.0",
+        }
+        new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
         request.app.state.billing_client = new_client
     client: httpx.AsyncClient = request.app.state.billing_client
     return client
@@ -109,12 +117,12 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
             user_email = user.oauth_email
 
     # Parse OAuth provider from user_id format (e.g., "google:115300315355793131383")
-    oauth_provider = "api:internal"
+    oauth_provider = "oauth:api:internal"
     external_id = auth.user_id
 
     if ":" in auth.user_id:
         parts = auth.user_id.split(":", 1)
-        oauth_provider = parts[0]  # e.g., "google", "discord"
+        oauth_provider = f"oauth:{parts[0]}"  # e.g., "oauth:google", "oauth:discord"
         external_id = parts[1]  # e.g., "115300315355793131383"
 
     identity = {
@@ -123,7 +131,8 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "wa_id": auth.user_id,
         "tenant_id": None,
         "marketing_opt_in": marketing_opt_in,
-        "email": user_email,
+        "customer_email": user_email or "qa_runner@qa.ciris.ai",  # Default email for test users
+        "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
     logger.info(f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email}")
     return identity
@@ -185,14 +194,13 @@ async def get_credits(
         ),
         channel_id="api:frontend",
         request_id=None,
-        metadata={"source": "frontend_credit_display"},
     )
 
     try:
         result = await resource_monitor.check_credit(account, context)
     except Exception as e:
-        logger.error(f"Credit check error: {e}")
-        raise HTTPException(status_code=503, detail="Credit check failed")
+        logger.error(f"Credit check error: {e}", exc_info=True)
+        raise HTTPException(status_code=503, detail=f"Credit check failed: {type(e).__name__}: {str(e)}")
 
     # Determine if this is SimpleCreditProvider or CIRISBillingProvider
     # SimpleCreditProvider: 1 free use, no purchases
@@ -233,19 +241,36 @@ async def get_credits(
         # This requires actual API call to billing backend for full details
         billing_client = _get_billing_client(request)
 
+        # Build payload matching CIRISBillingProvider format
+        # Only send fields accepted by /credits/check endpoint
+        check_payload = {
+            "oauth_provider": user_identity["oauth_provider"],
+            "external_id": user_identity["external_id"],
+        }
+        if user_identity.get("wa_id"):
+            check_payload["wa_id"] = user_identity["wa_id"]
+        if user_identity.get("tenant_id"):
+            check_payload["tenant_id"] = user_identity["tenant_id"]
+
+        # Add agent_id at top level (not in context)
+        check_payload["agent_id"] = context.agent_id
+
+        # Add minimal context
+        check_payload["context"] = {
+            "channel_id": context.channel_id,
+            "request_id": context.request_id,
+        }
+
         try:
             response = await billing_client.post(
                 "/v1/billing/credits/check",
-                json={
-                    **user_identity,
-                    "context": context.model_dump(exclude_none=True),
-                },
+                json=check_payload,
             )
             response.raise_for_status()
             credit_data = response.json()
 
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            logger.error(f"Billing API error: {e}")
+            logger.error(f"Billing API error: {e}", exc_info=True)
             raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
         # Format response for frontend

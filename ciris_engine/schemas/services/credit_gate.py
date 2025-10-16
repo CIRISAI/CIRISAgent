@@ -29,7 +29,7 @@ class CreditContext(BaseModel):
     agent_id: Optional[str] = Field(None, description="Agent performing the interaction")
     channel_id: Optional[str] = Field(None, description="Interaction channel identifier")
     request_id: Optional[str] = Field(None, description="Request correlation ID")
-    metadata: Dict[str, str] = Field(default_factory=dict, description="Auxiliary metadata for audits")
+    # Removed metadata field to match billing backend schema
 
 
 class CreditCheckResult(BaseModel):

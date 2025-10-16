@@ -329,7 +329,7 @@ async def initiate_purchase(
     agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
 
     # Get user email (needed for Stripe) - extract from OAuth profile
-    customer_email = user_identity.get("email")
+    customer_email = user_identity.get("customer_email")
     logger.info(f"Purchase initiate for {customer_email} on agent {agent_id}")
     if not customer_email:
         raise HTTPException(

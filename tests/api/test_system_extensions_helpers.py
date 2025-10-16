@@ -312,11 +312,9 @@ class TestUserRoleHelpers:
         conn.commit()
         conn.close()
 
-        auth_service = Mock()
-
         # Mock get_sqlite_db_full_path to return our temp database
         with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
-            result = await _batch_fetch_task_channel_ids(auth_service, ["task1", "task2", "task3"])
+            result = await _batch_fetch_task_channel_ids(["task1", "task2", "task3"])
 
         assert result == {"task1": "channel1", "task2": "channel2", "task3": "channel1"}
 
@@ -328,9 +326,7 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_empty(self):
         """Test batch fetching with empty task list."""
-        auth_service = Mock()
-
-        result = await _batch_fetch_task_channel_ids(auth_service, [])
+        result = await _batch_fetch_task_channel_ids([])
 
         assert result == {}
 
@@ -339,11 +335,9 @@ class TestUserRoleHelpers:
         """Test batch fetching handles exceptions."""
         from unittest.mock import patch
 
-        auth_service = Mock()
-
         # Mock get_sqlite_db_full_path to return nonexistent path
         with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value="/nonexistent/path.db"):
-            result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
+            result = await _batch_fetch_task_channel_ids(["task1"])
 
         assert result == {}
 
@@ -455,11 +449,9 @@ class TestEdgeCasesAndCoverage:
         conn.commit()
         conn.close()
 
-        auth_service = Mock()
-
         # Query with non-existent task should return empty dict
         with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
-            result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
+            result = await _batch_fetch_task_channel_ids(["task1"])
 
         # Function should handle empty results gracefully
         assert isinstance(result, dict)

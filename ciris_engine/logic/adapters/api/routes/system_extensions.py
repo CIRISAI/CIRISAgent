@@ -647,7 +647,7 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
     return allowed_channel_ids
 
 
-async def _batch_fetch_task_channel_ids(auth_service: Any, task_ids: List[str]) -> Dict[str, str]:
+async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
     """Batch fetch channel_ids for multiple task_ids from main database."""
     import sqlite3
 
@@ -836,7 +836,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
 
                             # SECURITY: Batch fetch channel_ids for efficiency
                             if uncached_task_ids:
-                                new_mappings = await _batch_fetch_task_channel_ids(auth_service, uncached_task_ids)
+                                new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
                                 task_channel_cache.update(new_mappings)
 
                             # Filter events based on channel_id whitelist

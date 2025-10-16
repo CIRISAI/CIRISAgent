@@ -6,16 +6,11 @@ import pytest
 from fastapi import HTTPException
 
 from ciris_engine.logic.adapters.api.api_observer import APIObserver
-from ciris_engine.logic.adapters.api.routes.agent import (
-    InteractRequest,
-    _message_responses,
-    _response_events,
-    interact,
-)
+from ciris_engine.logic.adapters.api.routes.agent import InteractRequest, _message_responses, _response_events, interact
 from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, User
 from ciris_engine.schemas.api.auth import AuthContext, Permission, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
-from ciris_engine.schemas.services.credit_gate import CreditCheckResult
+from ciris_engine.schemas.services.credit_gate import CreditCheckResult, CreditSpendResult
 
 
 class StubResourceMonitor:
@@ -31,6 +26,7 @@ class StubResourceMonitor:
         self._exc = exc
         self.credit_provider = object() if with_provider else None
         self.calls = []
+        self.spend_calls = []
 
     async def check_credit(self, account, context):
         self.calls.append((account, context))
@@ -38,6 +34,20 @@ class StubResourceMonitor:
             raise self._exc
         assert self._result is not None
         return self._result
+
+    async def spend_credit(self, account, request, context):
+        """Mock spend_credit that succeeds by default."""
+        self.spend_calls.append((account, request, context))
+        if self._exc:
+            raise self._exc
+        # Return successful spend result
+        return CreditSpendResult(
+            succeeded=True,
+            transaction_id="test-txn-123",
+            balance_remaining=None,
+            reason=None,
+            provider_metadata={},
+        )
 
 
 class StubSecretsService:
@@ -118,7 +128,8 @@ async def test_interact_allows_when_credit_available() -> None:
         _message_responses.clear()
 
     assert response.data.response == "Acknowledged"
-    assert len(monitor.calls) == 1
+    assert len(monitor.calls) == 1  # check_credit called
+    assert len(monitor.spend_calls) == 1  # spend_credit called after check passes
 
 
 @pytest.mark.asyncio
@@ -159,7 +170,8 @@ async def test_interact_blocks_when_credit_insufficient() -> None:
 
     assert exc.value.status_code == 402
     assert called["value"] is False
-    assert len(monitor.calls) == 1
+    assert len(monitor.calls) == 1  # check_credit called
+    assert len(monitor.spend_calls) == 0  # spend_credit NOT called when check fails
 
 
 @pytest.mark.asyncio
@@ -174,7 +186,8 @@ async def test_interact_returns_service_unavailable_on_provider_error() -> None:
     _message_responses.clear()
 
     assert exc.value.status_code == 503
-    assert len(monitor.calls) == 1
+    assert len(monitor.calls) == 1  # check_credit called before error
+    # spend_credit not reached due to check_credit error
 
 
 @pytest.mark.asyncio
@@ -191,3 +204,4 @@ async def test_interact_skips_credit_when_provider_missing() -> None:
     assert response.data.response == "Acknowledged"
     # No credit calls recorded when provider absent
     assert len(monitor.calls) == 0
+    assert len(monitor.spend_calls) == 0

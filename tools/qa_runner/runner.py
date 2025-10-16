@@ -455,17 +455,20 @@ class QARunner:
 
                 # Store OAuth profile with email in oauth_links_json
                 # This makes the email available for billing purchase requests
-                oauth_profile = json.dumps([{
-                    "provider": self.config.oauth_test_provider,
-                    "external_id": self.config.oauth_test_external_id,
-                    "account_name": "QA Test User",
-                    "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
-                    "primary": True,
-                    "metadata": {
-                        "name": "QA Test User",
-                        "picture": None,
-                    }
-                }])
+                oauth_profile = json.dumps(
+                    [
+                        {
+                            "provider": self.config.oauth_test_provider,
+                            "external_id": self.config.oauth_test_external_id,
+                            "account_name": "QA Test User",
+                            "is_primary": True,
+                            "metadata": {
+                                "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                                "name": "QA Test User",
+                            },
+                        }
+                    ]
+                )
 
                 # Create user - using proper wa_id format
                 cursor.execute(
@@ -508,17 +511,20 @@ class QARunner:
                 password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
 
                 # Store OAuth profile with email in oauth_links_json
-                oauth_profile = json.dumps([{
-                    "provider": self.config.oauth_test_provider,
-                    "external_id": self.config.oauth_test_external_id,
-                    "account_name": "QA Test User",
-                    "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
-                    "primary": True,
-                    "metadata": {
-                        "name": "QA Test User",
-                        "picture": None,
-                    }
-                }])
+                oauth_profile = json.dumps(
+                    [
+                        {
+                            "provider": self.config.oauth_test_provider,
+                            "external_id": self.config.oauth_test_external_id,
+                            "account_name": "QA Test User",
+                            "is_primary": True,
+                            "metadata": {
+                                "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                                "name": "QA Test User",
+                            },
+                        }
+                    ]
+                )
 
                 # Update name, password, and OAuth profile
                 cursor.execute(

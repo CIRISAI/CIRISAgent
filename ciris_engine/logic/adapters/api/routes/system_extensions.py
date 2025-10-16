@@ -622,17 +622,21 @@ def _determine_user_role(current_user: JSONDict) -> Any:
 
 async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
     """Get set of channel IDs user is allowed to see (user_id + OAuth links)."""
+    import sqlite3
+
     allowed_channel_ids = {user_id}
 
     try:
-        db = auth_service.db_manager
+        # Use db_path with direct sqlite3 connection (AuthenticationService uses sync sqlite3)
+        db_path = auth_service.db_path
         query = """
             SELECT oauth_provider, oauth_external_id
             FROM wa_cert
-            WHERE user_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL
+            WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
         """
-        async with db.connection() as conn:
-            rows = await conn.execute_fetchall(query, (user_id,))
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(query, (user_id,))
+            rows = cursor.fetchall()
             for row in rows:
                 oauth_provider, oauth_external_id = row
                 allowed_channel_ids.add(f"{oauth_provider}:{oauth_external_id}")
@@ -644,17 +648,31 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
 
 
 async def _batch_fetch_task_channel_ids(auth_service: Any, task_ids: List[str]) -> Dict[str, str]:
-    """Batch fetch channel_ids for multiple task_ids."""
+    """Batch fetch channel_ids for multiple task_ids from thoughts database."""
+    import os
+    import sqlite3
+
     task_channel_map: Dict[str, str] = {}
     if not task_ids:
         return task_channel_map
 
     try:
-        db = auth_service.db_manager
+        # Tasks are stored in thoughts.db, not the auth database
+        # Derive thoughts db path from auth db path (both in same directory)
+        auth_db_path = auth_service.db_path
+        db_dir = os.path.dirname(auth_db_path)
+        thoughts_db_path = os.path.join(db_dir, "thoughts.db")
+
+        if not os.path.exists(thoughts_db_path):
+            logger.warning(f"Thoughts database not found at {thoughts_db_path}")
+            return task_channel_map
+
         placeholders = ",".join("?" * len(task_ids))
         query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
-        async with db.connection() as conn:
-            rows = await conn.execute_fetchall(query, task_ids)
+
+        with sqlite3.connect(thoughts_db_path) as conn:
+            cursor = conn.execute(query, task_ids)
+            rows = cursor.fetchall()
             for row in rows:
                 tid, cid = row
                 task_channel_map[tid] = cid

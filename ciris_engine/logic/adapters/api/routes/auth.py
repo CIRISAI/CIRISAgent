@@ -783,8 +783,6 @@ def _build_redirect_response(
 async def _trigger_billing_credit_check_if_enabled(
     request: Request,
     oauth_user: OAuthUser,
-    user_email: Optional[str],
-    marketing_opt_in: bool,
 ) -> None:
     """
     Trigger billing credit check if billing is enabled.
@@ -932,7 +930,7 @@ async def oauth_callback(
         # Trigger billing credit check if billing is enabled
         # This ensures billing user is created and credits are initialized
         # so the frontend can display available credits immediately
-        await _trigger_billing_credit_check_if_enabled(request, oauth_user, user_email, final_marketing_opt_in)
+        await _trigger_billing_credit_check_if_enabled(request, oauth_user)
 
         # Build and return redirect response with email and marketing preference
         return _build_redirect_response(

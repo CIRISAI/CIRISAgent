@@ -799,9 +799,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "12345"
 
         # Call the function
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=True
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # Verify credit check was called
         mock_resource_monitor.check_credit.assert_called_once()
@@ -833,9 +831,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "12345"
 
         # Should not raise, just log and return
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # No assertions needed - function should return gracefully
 
@@ -857,9 +853,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "12345"
 
         # Should not raise, just log and return
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # No assertions needed - function should return gracefully
 
@@ -886,9 +880,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "12345"
 
         # Should not raise - error should be logged but OAuth should succeed
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, "test@example.com", marketing_opt_in=False
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # Verify credit check was attempted
         mock_resource_monitor.check_credit.assert_called_once()
@@ -919,9 +911,7 @@ class TestBillingIntegration:
         mock_oauth_user.external_id = "67890"
 
         # Call the function
-        await _trigger_billing_credit_check_if_enabled(
-            mock_request, mock_oauth_user, "user@github.com", marketing_opt_in=False
-        )
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # Verify credit check was called
         mock_resource_monitor.check_credit.assert_called_once()
@@ -949,8 +939,8 @@ class TestBillingIntegration:
         mock_oauth_user.provider = "discord"
         mock_oauth_user.external_id = "99999"
 
-        # Call with None email
-        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user, None, marketing_opt_in=False)
+        # Call function
+        await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
 
         # Verify credit check was called
         mock_resource_monitor.check_credit.assert_called_once()
@@ -1014,11 +1004,11 @@ class TestBillingIntegration:
             mock_billing_check.assert_called_once()
             call_args = mock_billing_check.call_args
 
-            # Verify parameters passed to billing check
+            # Verify parameters passed to billing check (email and marketing_opt_in removed)
             assert call_args[0][0] == mock_request  # request
             assert call_args[0][1] == mock_oauth_user  # oauth_user
-            assert call_args[0][2] == "test@example.com"  # email
-            assert call_args[0][3] is True  # marketing_opt_in
+            # Note: email and marketing_opt_in are no longer passed to this function
+            # They are already stored in oauth_user object
 
             # Verify OAuth succeeded
             assert response.status_code == 302

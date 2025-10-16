@@ -319,6 +319,15 @@ def _derive_credit_account(
     metadata: Dict[str, str] = {
         "role": auth.role.value,
     }
+
+    # Extract email address for billing backend user management
+    if user and hasattr(user, "oauth_email") and user.oauth_email:
+        metadata["email"] = user.oauth_email
+
+    # Extract marketing opt-in preference if available
+    if user and hasattr(user, "marketing_opt_in"):
+        metadata["marketing_opt_in"] = str(user.marketing_opt_in).lower()
+
     if auth.api_key_id:
         metadata["api_key_id"] = auth.api_key_id
 

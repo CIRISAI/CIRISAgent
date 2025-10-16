@@ -65,7 +65,9 @@ class ApiServiceConfiguration:
             special_handler="_handle_auth_service",
             description="User authentication and session management",
         ),
-        ServiceMapping("resource_monitor_service", app_state_name="resource_monitor", description="System resource monitoring"),
+        ServiceMapping(
+            "resource_monitor_service", app_state_name="resource_monitor", description="System resource monitoring"
+        ),
         ServiceMapping("database_maintenance_service", description="Database maintenance operations"),
         ServiceMapping("secrets_service", description="Secrets and credential management"),
     ]

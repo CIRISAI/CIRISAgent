@@ -108,10 +108,19 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
             # Try to get email from OAuth user data
             user_email = user.oauth_email
 
+    # Parse OAuth provider from user_id format (e.g., "google:115300315355793131383")
+    oauth_provider = "api:internal"
+    external_id = auth.user_id
+
+    if ":" in auth.user_id:
+        parts = auth.user_id.split(":", 1)
+        oauth_provider = parts[0]  # e.g., "google", "discord"
+        external_id = parts[1]  # e.g., "115300315355793131383"
+
     return {
-        "oauth_provider": "api:internal",  # Or extract from auth context
-        "external_id": auth.user_id,
-        "wa_id": auth.user_id,
+        "oauth_provider": oauth_provider,
+        "external_id": external_id,
+        "wa_id": auth.user_id,  # Keep full user_id as wa_id
         "tenant_id": None,
         "marketing_opt_in": marketing_opt_in,
         "email": user_email,

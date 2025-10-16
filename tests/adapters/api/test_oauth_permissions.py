@@ -117,78 +117,48 @@ class TestOAuthPermissions:
 
         assert oauth_user_found, "OAuth user not found in user list"
 
-    async def test_oauth_user_denied_without_permission(self, oauth_client, oauth_user):
-        """Test that OAuth users cannot interact without permission."""
-        # Try to interact without permission
+    async def test_oauth_user_can_interact_with_observer_role(self, oauth_client, oauth_user):
+        """Test that OAuth users with OBSERVER role can interact (SEND_MESSAGES is now in OBSERVER role)."""
+        # OBSERVER role now includes SEND_MESSAGES permission by default
+        # Access control is handled by billing/credit system instead
         response = await oauth_client.post(
             "/v1/agent/interact",
             headers={"Authorization": f"Bearer {oauth_user['api_key']}"},
             json={"message": "Hello", "channel_id": f"api_oauth_{oauth_user['user'].user_id}"},
         )
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        detail = response.json()["detail"]
-        assert detail["error"] == "insufficient_permissions"
-        assert "permission" in detail["message"].lower()
+        # Should succeed with 200, not 403
+        assert response.status_code == status.HTTP_200_OK
+        result = response.json()
+        assert "data" in result
 
-    async def test_permission_request_creation(self, oauth_client, oauth_user, admin_token):
-        """Test that permission requests are created when OAuth users try to interact."""
-        # First interaction attempt creates permission request
-        response = await oauth_client.post(
-            "/v1/agent/interact",
-            headers={"Authorization": f"Bearer {oauth_user['api_key']}"},
-            json={"message": "Hello", "channel_id": f"api_oauth_{oauth_user['user'].user_id}"},
-        )
-        # Should get 403 forbidden
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Verify permission request was created by checking admin endpoint
-        response = await oauth_client.get(
-            "/v1/users/permission-requests", headers={"Authorization": f"Bearer {admin_token}"}
-        )
+    async def test_observer_role_has_send_messages(self, oauth_client, oauth_user):
+        """Test that OBSERVER role includes SEND_MESSAGES permission by default."""
+        # Check that OAuth OBSERVER users have send_messages permission
+        response = await oauth_client.get("/v1/auth/me", headers={"Authorization": f"Bearer {oauth_user['api_key']}"})
         assert response.status_code == status.HTTP_200_OK
 
-        requests = response.json()
-        found = False
-        for req in requests:
-            if req["id"] == oauth_user["user"].user_id:
-                found = True
-                assert req["email"] == oauth_user["email"]
-                assert req["oauth_name"] == oauth_user["name"]
-                assert req["permission_requested_at"] is not None
-                assert req["has_send_messages"] is False
-                break
+        current = response.json()
+        # OBSERVER role should include send_messages permission
+        assert "send_messages" in current["permissions"]
+        assert current["role"] == "OBSERVER"
 
-        assert found, "Permission request not found in admin list"
-
-    async def test_admin_view_permission_requests(self, oauth_client, admin_token, oauth_user):
-        """Test that admins can view permission requests."""
-        # Create permission request
-        await oauth_client.post(
-            "/v1/agent/interact",
-            headers={"Authorization": f"Bearer {oauth_user['api_key']}"},
-            json={"message": "Hello", "channel_id": f"api_oauth_{oauth_user['user'].user_id}"},
-        )
-
-        # Admin views permission requests
-        response = await oauth_client.get(
-            "/v1/users/permission-requests", headers={"Authorization": f"Bearer {admin_token}"}
-        )
+    async def test_admin_can_view_user_permissions(self, oauth_client, admin_token, oauth_user):
+        """Test that admins can view user permissions via user list."""
+        # Admin views users to see OAuth user permissions
+        response = await oauth_client.get("/v1/users", headers={"Authorization": f"Bearer {admin_token}"})
         assert response.status_code == status.HTTP_200_OK
 
-        # Response is a list, not a dict with items
-        requests = response.json()
+        users = response.json()["items"]
         found = False
-        for req in requests:
-            if req["id"] == oauth_user["user"].user_id:
+        for user in users:
+            if user["user_id"] == oauth_user["user"].user_id:
                 found = True
-                assert req["email"] == oauth_user["email"]
-                assert req["oauth_name"] == oauth_user["name"]
-                assert req["role"] == "OBSERVER"
-                assert req["permission_requested_at"] is not None
-                assert req["has_send_messages"] is False
+                assert user["api_role"] == "OBSERVER"  # Field is api_role not role
+                assert user["oauth_provider"] == "google"
+                assert user["oauth_email"] == oauth_user["email"]
                 break
 
-        assert found, "Permission request not found"
+        assert found, "OAuth user not found in user list"
 
     async def test_admin_grant_permission(self, oauth_client, admin_token, oauth_user):
         """Test that admins can grant permissions to OAuth users."""

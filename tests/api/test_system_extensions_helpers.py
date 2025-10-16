@@ -200,60 +200,84 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_get_user_allowed_channel_ids_no_oauth(self):
         """Test channel IDs with no OAuth links."""
-        from unittest.mock import MagicMock
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        # Create temp database
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        # Initialize database with wa_cert table
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE wa_cert (
+                wa_id TEXT,
+                oauth_provider TEXT,
+                oauth_external_id TEXT,
+                active INTEGER
+            )
+        """)
+        conn.commit()
+        conn.close()
 
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(return_value=[])
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        auth_service.db_path = db_path
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
         assert result == {"user123"}
 
+        # Cleanup
+        import os
+        os.unlink(db_path)
+
     @pytest.mark.asyncio
     async def test_get_user_allowed_channel_ids_with_oauth(self):
         """Test channel IDs with OAuth links."""
-        from unittest.mock import MagicMock
+        import sqlite3
+        import tempfile
+
+        # Create temp database
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        # Initialize database with wa_cert table and OAuth data
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE wa_cert (
+                wa_id TEXT,
+                oauth_provider TEXT,
+                oauth_external_id TEXT,
+                active INTEGER
+            )
+        """)
+        conn.execute(
+            "INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "discord", "discord123", 1)
+        )
+        conn.execute(
+            "INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "google", "google456", 1)
+        )
+        conn.commit()
+        conn.close()
 
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(
-            return_value=[
-                ("discord", "discord123"),
-                ("google", "google456"),
-            ]
-        )
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        auth_service.db_path = db_path
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
         expected = {"user123", "discord:discord123", "discord123", "google:google456", "google456"}
         assert result == expected
 
+        # Cleanup
+        import os
+        os.unlink(db_path)
+
     @pytest.mark.asyncio
     async def test_get_user_allowed_channel_ids_exception(self):
         """Test channel IDs handles exceptions gracefully."""
-        from unittest.mock import MagicMock
-
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.__aenter__ = AsyncMock(side_effect=Exception("DB Error"))
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        auth_service.db_path = "/nonexistent/path.db"
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
@@ -263,27 +287,38 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_success(self):
         """Test batch fetching task channel IDs."""
-        from unittest.mock import MagicMock
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        # Create temp database with tasks table
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE tasks (
+                task_id TEXT,
+                channel_id TEXT
+            )
+        """)
+        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task1", "channel1"))
+        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task2", "channel2"))
+        conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task3", "channel1"))
+        conn.commit()
+        conn.close()
 
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(
-            return_value=[
-                ("task1", "channel1"),
-                ("task2", "channel2"),
-                ("task3", "channel1"),
-            ]
-        )
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
 
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
-
-        result = await _batch_fetch_task_channel_ids(auth_service, ["task1", "task2", "task3"])
+        # Mock get_sqlite_db_full_path to return our temp database
+        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
+            result = await _batch_fetch_task_channel_ids(auth_service, ["task1", "task2", "task3"])
 
         assert result == {"task1": "channel1", "task2": "channel2", "task3": "channel1"}
+
+        # Cleanup
+        import os
+        os.unlink(db_path)
 
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_empty(self):
@@ -297,18 +332,13 @@ class TestUserRoleHelpers:
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_exception(self):
         """Test batch fetching handles exceptions."""
-        from unittest.mock import MagicMock
+        from unittest.mock import patch
 
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.__aenter__ = AsyncMock(side_effect=Exception("DB Error"))
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
 
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
-
-        result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
+        # Mock get_sqlite_db_full_path to return nonexistent path
+        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value="/nonexistent/path.db"):
+            result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
 
         assert result == {}
 
@@ -399,21 +429,35 @@ class TestEdgeCasesAndCoverage:
 
     @pytest.mark.asyncio
     async def test_batch_fetch_none_results(self):
-        """Test batch fetch when query returns None."""
-        from unittest.mock import MagicMock
+        """Test batch fetch when query returns empty results."""
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        # Create temp database with empty tasks table
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE tasks (
+                task_id TEXT,
+                channel_id TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
 
         auth_service = Mock()
-        mock_conn = MagicMock()
-        mock_conn.execute_fetchall = AsyncMock(return_value=None)
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
 
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        # Query with non-existent task should return empty dict
+        with patch("ciris_engine.logic.persistence.get_sqlite_db_full_path", return_value=db_path):
+            result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
 
-        # Should handle None gracefully
-        result = await _batch_fetch_task_channel_ids(auth_service, ["task1"])
-
-        # Function should handle this gracefully
+        # Function should handle empty results gracefully
         assert isinstance(result, dict)
+        assert result == {}
+
+        # Cleanup
+        import os
+        os.unlink(db_path)

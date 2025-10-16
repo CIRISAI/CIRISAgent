@@ -190,6 +190,30 @@ class CIRISBillingProvider(CreditGateProtocol):
         return datetime.now(timezone.utc) >= expiry
 
     @staticmethod
+    def _extract_context_fields(context: CreditContext, payload: dict[str, object]) -> None:
+        """Extract billing-specific fields from context metadata into payload.
+
+        Args:
+            context: Credit context containing metadata and agent_id
+            payload: Payload dict to update with extracted fields
+        """
+        if context.metadata:
+            if "email" in context.metadata and context.metadata["email"]:
+                payload["customer_email"] = context.metadata["email"]
+            if "marketing_opt_in" in context.metadata:
+                # Convert string "true"/"false" to boolean
+                opt_in_str = str(context.metadata["marketing_opt_in"]).lower()
+                payload["marketing_opt_in"] = opt_in_str in ("true", "1", "yes")
+            if "source" in context.metadata:
+                payload["marketing_opt_in_source"] = context.metadata["source"]
+            if "user_role" in context.metadata:
+                payload["user_role"] = context.metadata["user_role"]
+
+        # Add agent_id as top-level field (billing expects this)
+        if context.agent_id:
+            payload["agent_id"] = context.agent_id
+
+    @staticmethod
     def _build_check_payload(
         account: CreditAccount,
         context: CreditContext | None,
@@ -208,21 +232,7 @@ class CIRISBillingProvider(CreditGateProtocol):
             payload["tenant_id"] = account.tenant_id
         if context:
             # Extract billing-specific fields from metadata
-            if context.metadata:
-                if "email" in context.metadata and context.metadata["email"]:
-                    payload["customer_email"] = context.metadata["email"]
-                if "marketing_opt_in" in context.metadata:
-                    # Convert string "true"/"false" to boolean
-                    opt_in_str = str(context.metadata["marketing_opt_in"]).lower()
-                    payload["marketing_opt_in"] = opt_in_str in ("true", "1", "yes")
-                if "source" in context.metadata:
-                    payload["marketing_opt_in_source"] = context.metadata["source"]
-                if "user_role" in context.metadata:
-                    payload["user_role"] = context.metadata["user_role"]
-
-            # Add agent_id as top-level field (billing expects this)
-            if context.agent_id:
-                payload["agent_id"] = context.agent_id
+            CIRISBillingProvider._extract_context_fields(context, payload)
 
             # Only include remaining context fields
             context_dict = {}
@@ -269,21 +279,7 @@ class CIRISBillingProvider(CreditGateProtocol):
 
         # Extract billing-specific fields from context metadata (same as check_credit)
         if context:
-            if context.metadata:
-                if "email" in context.metadata and context.metadata["email"]:
-                    payload["customer_email"] = context.metadata["email"]
-                if "marketing_opt_in" in context.metadata:
-                    # Convert string "true"/"false" to boolean
-                    opt_in_str = str(context.metadata["marketing_opt_in"]).lower()
-                    payload["marketing_opt_in"] = opt_in_str in ("true", "1", "yes")
-                if "source" in context.metadata:
-                    payload["marketing_opt_in_source"] = context.metadata["source"]
-                if "user_role" in context.metadata:
-                    payload["user_role"] = context.metadata["user_role"]
-
-            # Add agent_id as top-level field (billing expects this)
-            if context.agent_id:
-                payload["agent_id"] = context.agent_id
+            CIRISBillingProvider._extract_context_fields(context, payload)
 
         # Include request metadata (excluding billing fields that are now top-level)
         if request.metadata:

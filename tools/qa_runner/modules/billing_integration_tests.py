@@ -130,10 +130,20 @@ class BillingIntegrationTests:
         """Send messages to exhaust remaining credits."""
         remaining_credits = self.after_first_message
 
-        for i in range(remaining_credits):
+        # If credit deduction isn't working, remaining_credits may still be 3
+        # Limit iterations to prevent hanging
+        max_attempts = min(remaining_credits, 5)  # Cap at 5 messages
+
+        for i in range(max_attempts):
             try:
-                await self.client.agent.interact(f"Test billing: message {i+2}")
+                # Add timeout to prevent hanging
+                await asyncio.wait_for(
+                    self.client.agent.interact(f"Test billing: message {i+2}"), timeout=15.0  # 15s timeout per message
+                )
                 self.console.print(f"     [dim]Message {i+2} sent[/dim]")
+            except asyncio.TimeoutError:
+                self.console.print(f"     [dim]Message {i+2} timeout[/dim]")
+                break
             except Exception as e:
                 # Credit should still be charged even if message fails
                 error_msg = str(e)

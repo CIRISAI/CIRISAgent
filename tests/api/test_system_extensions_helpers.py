@@ -210,14 +210,16 @@ class TestUserRoleHelpers:
 
         # Initialize database with wa_cert table
         conn = sqlite3.connect(db_path)
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE wa_cert (
                 wa_id TEXT,
                 oauth_provider TEXT,
                 oauth_external_id TEXT,
                 active INTEGER
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -230,6 +232,7 @@ class TestUserRoleHelpers:
 
         # Cleanup
         import os
+
         os.unlink(db_path)
 
     @pytest.mark.asyncio
@@ -244,20 +247,18 @@ class TestUserRoleHelpers:
 
         # Initialize database with wa_cert table and OAuth data
         conn = sqlite3.connect(db_path)
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE wa_cert (
                 wa_id TEXT,
                 oauth_provider TEXT,
                 oauth_external_id TEXT,
                 active INTEGER
             )
-        """)
-        conn.execute(
-            "INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "discord", "discord123", 1)
+        """
         )
-        conn.execute(
-            "INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "google", "google456", 1)
-        )
+        conn.execute("INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "discord", "discord123", 1))
+        conn.execute("INSERT INTO wa_cert VALUES (?, ?, ?, ?)", ("user123", "google", "google456", 1))
         conn.commit()
         conn.close()
 
@@ -271,6 +272,7 @@ class TestUserRoleHelpers:
 
         # Cleanup
         import os
+
         os.unlink(db_path)
 
     @pytest.mark.asyncio
@@ -296,12 +298,14 @@ class TestUserRoleHelpers:
             db_path = f.name
 
         conn = sqlite3.connect(db_path)
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE tasks (
                 task_id TEXT,
                 channel_id TEXT
             )
-        """)
+        """
+        )
         conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task1", "channel1"))
         conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task2", "channel2"))
         conn.execute("INSERT INTO tasks VALUES (?, ?)", ("task3", "channel1"))
@@ -318,6 +322,7 @@ class TestUserRoleHelpers:
 
         # Cleanup
         import os
+
         os.unlink(db_path)
 
     @pytest.mark.asyncio
@@ -439,12 +444,14 @@ class TestEdgeCasesAndCoverage:
             db_path = f.name
 
         conn = sqlite3.connect(db_path)
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE tasks (
                 task_id TEXT,
                 channel_id TEXT
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -460,4 +467,5 @@ class TestEdgeCasesAndCoverage:
 
         # Cleanup
         import os
+
         os.unlink(db_path)

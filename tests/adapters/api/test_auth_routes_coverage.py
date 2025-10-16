@@ -815,9 +815,9 @@ class TestBillingIntegration:
         assert account.account_id == "12345"
         assert account.authority_id == "google:12345"
         assert context.channel_id == "oauth:callback"
-        assert context.metadata["source"] == "oauth_login"
-        assert context.metadata["email"] == "test@example.com"
-        assert context.metadata["marketing_opt_in"] == "true"  # Boolean converted to string
+        assert context.agent_id == "datum"
+        # Note: email and marketing_opt_in are no longer passed via CreditContext.metadata
+        # They are passed directly in API calls to billing backend
 
     @pytest.mark.asyncio
     async def test_trigger_billing_credit_check_no_resource_monitor(self):
@@ -952,11 +952,13 @@ class TestBillingIntegration:
         # Call with None email
         await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user, None, marketing_opt_in=False)
 
-        # Verify credit check was called with empty email
+        # Verify credit check was called
         mock_resource_monitor.check_credit.assert_called_once()
         call_args = mock_resource_monitor.check_credit.call_args
         context = call_args[0][1]
-        assert context.metadata["email"] == ""
+        # Note: email is no longer passed via CreditContext.metadata
+        # It's passed directly to billing backend via API calls
+        assert context.channel_id == "oauth:callback"
 
     @pytest.mark.asyncio
     async def test_oauth_callback_with_billing_integration(self):

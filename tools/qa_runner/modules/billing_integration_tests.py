@@ -109,8 +109,9 @@ class BillingIntegrationTests:
 
     async def test_credit_after_message(self):
         """Verify credits decreased after message."""
-        # Brief wait for credit deduction to be processed
-        await asyncio.sleep(1)
+        # Wait for cache to expire (15s TTL) + backend processing
+        # Cache must expire before we can see updated credits
+        await asyncio.sleep(16)
 
         status = await self.client.billing.get_credits()
         self.after_first_message = status.free_uses_remaining
@@ -159,7 +160,8 @@ class BillingIntegrationTests:
 
     async def test_credits_exhausted(self):
         """Verify no credits remaining."""
-        await asyncio.sleep(1)
+        # Wait for cache to expire + backend processing
+        await asyncio.sleep(16)
 
         status = await self.client.billing.get_credits()
         self.after_exhaustion = status.free_uses_remaining

@@ -81,8 +81,20 @@ class CIRISBillingProvider(CreditGateProtocol):
         cache_key = account.cache_key()
         cached = self._cache.get(cache_key)
         if cached and not self._is_expired(cached[1]):
-            logger.debug("Credit cache hit for %s", cache_key)
+            logger.info(
+                "[CREDIT_CHECK] CACHE HIT for %s: free_uses=%s, credits=%s, has_credit=%s (expires in %ss)",
+                cache_key,
+                cached[0].free_uses_remaining,
+                cached[0].credits_remaining,
+                cached[0].has_credit,
+                int((cached[1] - datetime.now(timezone.utc)).total_seconds()),
+            )
             return cached[0].model_copy()
+
+        if cached:
+            logger.info("[CREDIT_CHECK] Cache expired for %s - querying backend", cache_key)
+        else:
+            logger.info("[CREDIT_CHECK] No cache for %s - querying backend", cache_key)
 
         payload = self._build_check_payload(account, context)
         logger.debug("Credit check payload for %s: %s", cache_key, payload)
@@ -97,7 +109,15 @@ class CIRISBillingProvider(CreditGateProtocol):
             return self._handle_failure("request_error", str(exc))
 
         if response.status_code == httpx.codes.OK:
-            result = self._parse_check_success(response.json())
+            response_data = response.json()
+            logger.info(
+                "[CREDIT_CHECK] Backend response for %s: free_uses=%s, credits=%s, has_credit=%s",
+                cache_key,
+                response_data.get("free_uses_remaining"),
+                response_data.get("credits_remaining"),
+                response_data.get("has_credit"),
+            )
+            result = self._parse_check_success(response_data)
             self._store_cache(cache_key, result)
             return result
 
@@ -140,7 +160,15 @@ class CIRISBillingProvider(CreditGateProtocol):
             return CreditSpendResult(succeeded=False, reason=f"charge_failure:request_error:{exc}")
 
         if response.status_code in {httpx.codes.OK, httpx.codes.CREATED}:
-            result = self._parse_spend_success(response.json())
+            response_data = response.json()
+            logger.info(
+                "[CREDIT_SPEND] Charge successful for %s: charge_id=%s, balance_after=%s",
+                cache_key,
+                response_data.get("charge_id"),
+                response_data.get("balance_after"),
+            )
+            result = self._parse_spend_success(response_data)
+            logger.info("[CREDIT_SPEND] Cache invalidated for %s - next check will hit backend", cache_key)
             self._invalidate_cache(cache_key)
             return result
 

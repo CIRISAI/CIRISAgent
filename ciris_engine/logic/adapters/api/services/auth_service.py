@@ -155,12 +155,12 @@ class APIAuthService:
         if wa.oauth_links:
             for link in wa.oauth_links:
                 # Check if link has email in metadata or as direct attribute
-                if hasattr(link, 'email') and link.email:
+                if hasattr(link, "email") and link.email:
                     oauth_email = link.email
                     break
-                elif hasattr(link, 'metadata') and isinstance(link.metadata, dict):
-                    if 'email' in link.metadata:
-                        oauth_email = link.metadata['email']
+                elif hasattr(link, "metadata") and isinstance(link.metadata, dict):
+                    if "email" in link.metadata:
+                        oauth_email = link.metadata["email"]
                         break
 
         return User(

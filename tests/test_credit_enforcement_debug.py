@@ -198,6 +198,8 @@ async def test_full_message_handling_with_credits(mock_resource_monitor, incomin
 @pytest.mark.asyncio
 async def test_observer_without_resource_monitor():
     """Test that observer works when NO resource_monitor provided."""
+    from unittest.mock import patch
+
     on_observe = AsyncMock()
     mock_secrets_service = Mock()
     mock_secrets_service.process_incoming_text = AsyncMock(return_value=("Test message", []))
@@ -217,8 +219,12 @@ async def test_observer_without_resource_monitor():
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
-    # Should work without errors
-    result = await observer.handle_incoming_message(msg)
+    # Mock persistence layer to avoid database errors
+    with patch("ciris_engine.logic.persistence.add_task"), patch("ciris_engine.logic.persistence.add_thought"), patch(
+        "ciris_engine.logic.persistence.models.tasks.get_active_task_for_channel", return_value=None
+    ):
+        # Should work without errors
+        result = await observer.handle_incoming_message(msg)
 
     # Verify task was still created (no credit gating when no monitor)
     assert result.task_id is not None

@@ -824,11 +824,6 @@ async def _trigger_billing_credit_check_if_enabled(
             agent_id=AGENT_ID,
             channel_id="oauth:callback",
             request_id=None,
-            metadata={
-                "source": "oauth_login",
-                "email": user_email or "",
-                "marketing_opt_in": str(marketing_opt_in).lower(),
-            },
         )
 
         result = await resource_monitor.check_credit(account, context)

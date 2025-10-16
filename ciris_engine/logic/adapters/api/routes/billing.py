@@ -179,14 +179,11 @@ async def get_credits(
         )
 
     # Query credit provider via resource monitor
-    from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
+    # CRITICAL: Use same credit account derivation as message interactions!
+    from ciris_engine.logic.adapters.api.routes.agent import _derive_credit_account
+    from ciris_engine.schemas.services.credit_gate import CreditContext
 
-    account = CreditAccount(
-        provider=user_identity["oauth_provider"],
-        account_id=user_identity["external_id"],
-        authority_id=user_identity.get("wa_id"),
-        tenant_id=user_identity.get("tenant_id"),
-    )
+    account, _ = _derive_credit_account(auth, request)
 
     context = CreditContext(
         agent_id=(

@@ -453,7 +453,7 @@ class APIAuthService:
 
         user = self.get_user_by_username(username)
         if not user:
-            print(f"❌ [AUTH DEBUG] User lookup failed - returning None")
+            print("❌ [AUTH DEBUG] User lookup failed - returning None")
             print("=" * 80)
             return None
 
@@ -474,11 +474,11 @@ class APIAuthService:
                 print("=" * 80)
                 return user
             else:
-                print(f"❌ [AUTH DEBUG] Password verification FAILED")
+                print("❌ [AUTH DEBUG] Password verification FAILED")
                 print("=" * 80)
                 return None
         else:
-            print(f"❌ [AUTH DEBUG] No password_hash for user")
+            print("❌ [AUTH DEBUG] No password_hash for user")
             print("=" * 80)
             return None
 

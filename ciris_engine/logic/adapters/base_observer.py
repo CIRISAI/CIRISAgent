@@ -836,48 +836,27 @@ class BaseObserver[MessageT: BaseModel](ABC):
             logger.debug(f"Ignoring passive message from channel {getattr(msg, 'channel_id', 'unknown')}")
             return None
 
-    async def _enforce_credit_policy(self, msg: MessageT) -> None:
-        """Ensure external credit policy allows processing of this message."""
+    def _get_resource_monitor_source(self, has_instance: bool, has_message: bool) -> str:
+        """Determine the source of the resource monitor."""
+        if has_instance:
+            return "instance"
+        elif has_message:
+            return "message"
+        else:
+            return "none"
 
-        msg_id = getattr(msg, "message_id", "unknown")
-
-        # Try to get resource_monitor - check instance variable first, then try to get from message metadata
+    def _get_resource_monitor(self, msg: MessageT) -> Optional[ResourceMonitorServiceProtocol]:
+        """Get resource monitor from instance or message metadata."""
         resource_monitor = self.resource_monitor
         if not resource_monitor:
             # Check if message has resource_monitor attached (for adapters that inject it per-message)
             resource_monitor = getattr(msg, "_resource_monitor", None)
+        return resource_monitor
 
-        logger.info(
-            f"[CREDIT] Policy check for message {msg_id}: resource_monitor={resource_monitor is not None}, source={'instance' if self.resource_monitor else 'message' if resource_monitor else 'none'}"
-        )
-
-        if not resource_monitor:
-            logger.debug(f"[CREDIT] NO RESOURCE MONITOR for message {msg_id} - skipping credit enforcement")
-            return
-
-        credit_provider = getattr(resource_monitor, "credit_provider", None)
-        logger.info(
-            f"[CREDIT] Provider status: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
-        )
-
-        if not credit_provider:
-            logger.debug("[CREDIT] No credit provider - skipping credit enforcement")
-            return
-
-        envelope = self._resolve_credit_envelope(msg)
-        if envelope is None:
-            # CRITICAL: Credit provider is active but no credit metadata attached to message
-            msg_id = getattr(msg, "message_id", "unknown")
-            channel_id = getattr(msg, "channel_id", "unknown")
-            logger.critical(
-                f"[CREDIT] ENFORCEMENT SKIPPED: No credit envelope for message {msg_id} in channel {channel_id}. "
-                f"Credit provider IS active but message has no credit metadata attached!"
-            )
-            return
-
-        account, context = envelope
-        logger.info(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
-
+    async def _check_and_charge_credit(
+        self, resource_monitor: ResourceMonitorServiceProtocol, account: CreditAccount, context: CreditContext, msg: MessageT
+    ) -> None:
+        """Check credit availability and charge the user."""
         # Step 1: Check if user has credit
         try:
             result = await resource_monitor.check_credit(account, context)
@@ -937,6 +916,51 @@ class BaseObserver[MessageT: BaseModel](ABC):
                 exc,
             )
             raise CreditCheckFailed(str(exc)) from exc
+
+    async def _enforce_credit_policy(self, msg: MessageT) -> None:
+        """Ensure external credit policy allows processing of this message."""
+        msg_id = getattr(msg, "message_id", "unknown")
+
+        # Get resource monitor from instance or message metadata
+        resource_monitor = self._get_resource_monitor(msg)
+
+        # Determine source for logging
+        monitor_source = self._get_resource_monitor_source(
+            self.resource_monitor is not None,
+            resource_monitor is not None
+        )
+
+        logger.info(
+            f"[CREDIT] Policy check for message {msg_id}: resource_monitor={resource_monitor is not None}, source={monitor_source}"
+        )
+
+        if not resource_monitor:
+            logger.debug(f"[CREDIT] NO RESOURCE MONITOR for message {msg_id} - skipping credit enforcement")
+            return
+
+        credit_provider = getattr(resource_monitor, "credit_provider", None)
+        logger.info(
+            f"[CREDIT] Provider status: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
+        )
+
+        if not credit_provider:
+            logger.debug("[CREDIT] No credit provider - skipping credit enforcement")
+            return
+
+        envelope = self._resolve_credit_envelope(msg)
+        if envelope is None:
+            # CRITICAL: Credit provider is active but no credit metadata attached to message
+            channel_id = getattr(msg, "channel_id", "unknown")
+            logger.critical(
+                f"[CREDIT] ENFORCEMENT SKIPPED: No credit envelope for message {msg_id} in channel {channel_id}. "
+                f"Credit provider IS active but message has no credit metadata attached!"
+            )
+            return
+
+        account, context = envelope
+        logger.info(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
+
+        await self._check_and_charge_credit(resource_monitor, account, context, msg)
 
     def _resolve_credit_envelope(self, msg: MessageT) -> Optional[Tuple[CreditAccount, CreditContext]]:
         """Extract credit account/context metadata from the message."""

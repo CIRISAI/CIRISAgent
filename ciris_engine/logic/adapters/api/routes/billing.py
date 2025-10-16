@@ -218,7 +218,8 @@ async def _query_billing_backend(billing_client: httpx.AsyncClient, check_payloa
             json=check_payload,
         )
         response.raise_for_status()
-        return response.json()
+        result: JSONDict = response.json()
+        return result
 
     except (httpx.HTTPStatusError, httpx.RequestError) as e:
         logger.error(f"Billing API error: {e}", exc_info=True)

@@ -648,8 +648,7 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
 
 
 async def _batch_fetch_task_channel_ids(auth_service: Any, task_ids: List[str]) -> Dict[str, str]:
-    """Batch fetch channel_ids for multiple task_ids from thoughts database."""
-    import os
+    """Batch fetch channel_ids for multiple task_ids from main database."""
     import sqlite3
 
     task_channel_map: Dict[str, str] = {}
@@ -657,20 +656,16 @@ async def _batch_fetch_task_channel_ids(auth_service: Any, task_ids: List[str]) 
         return task_channel_map
 
     try:
-        # Tasks are stored in thoughts.db, not the auth database
-        # Derive thoughts db path from auth db path (both in same directory)
-        auth_db_path = auth_service.db_path
-        db_dir = os.path.dirname(auth_db_path)
-        thoughts_db_path = os.path.join(db_dir, "thoughts.db")
+        # Tasks are stored in the main database
+        # Use the proper database path helper which gets config from ServiceRegistry
+        from ciris_engine.logic.persistence import get_sqlite_db_full_path
 
-        if not os.path.exists(thoughts_db_path):
-            logger.warning(f"Thoughts database not found at {thoughts_db_path}")
-            return task_channel_map
+        main_db_path = get_sqlite_db_full_path()  # Gets main DB path from config via registry
 
         placeholders = ",".join("?" * len(task_ids))
         query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
 
-        with sqlite3.connect(thoughts_db_path) as conn:
+        with sqlite3.connect(main_db_path) as conn:
             cursor = conn.execute(query, task_ids)
             rows = cursor.fetchall()
             for row in rows:

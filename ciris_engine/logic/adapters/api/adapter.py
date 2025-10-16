@@ -206,6 +206,12 @@ class ApiPlatform(Service):
                 self._log_service_registry(service)
             else:
                 logger.info(f"Injected {runtime_attr}")
+        else:
+            # Log when service is not injected
+            if not hasattr(runtime, runtime_attr):
+                logger.warning(f"Runtime does not have attribute '{runtime_attr}' - skipping injection")
+            else:
+                logger.warning(f"Runtime attribute '{runtime_attr}' is None - skipping injection")
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""

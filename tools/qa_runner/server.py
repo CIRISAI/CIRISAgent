@@ -46,12 +46,33 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # Pass through billing configuration if present
+        billing_vars = [
+            "CIRIS_BILLING_ENABLED",
+            "CIRIS_BILLING_API_KEY",
+            "CIRIS_BILLING_API_URL",
+            "CIRIS_BILLING_TIMEOUT_SECONDS",
+            "CIRIS_BILLING_CACHE_TTL_SECONDS",
+            "CIRIS_BILLING_FAIL_OPEN",
+        ]
+        for var in billing_vars:
+            if var in os.environ:
+                env[var] = os.environ[var]
+                # Debug: Show which billing vars are being passed
+                if var == "CIRIS_BILLING_API_KEY":
+                    self.console.print(f"[dim]Setting {var}=<redacted>[/dim]")
+                else:
+                    self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
+
         # Start server process
         try:
+            # Open log file to capture console output (includes early startup logs)
+            console_log = open("/tmp/qa_runner_console_output.txt", "w")
             self.process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=Path.cwd()
+                cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd()
             )
             self.pid = self.process.pid
+            self._console_log_file = console_log  # Store reference to close later
 
             # Wait for server to be ready
             if self._wait_for_server():
@@ -86,6 +107,13 @@ class APIServerManager:
 
                 self.process = None
                 self.pid = None
+
+                # Close console log file
+                if hasattr(self, "_console_log_file"):
+                    try:
+                        self._console_log_file.close()
+                    except:
+                        pass
 
             except Exception as e:
                 self.console.print(f"[red]Error stopping server: {e}[/red]")

@@ -361,7 +361,7 @@ def _attach_credit_metadata(
         return msg
 
     try:
-        account, metadata = _derive_credit_account(auth, request)
+        account, _ = _derive_credit_account(auth, request)
         logger.info(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
 
         runtime = getattr(request.app.state, "runtime", None)
@@ -376,7 +376,7 @@ def _attach_credit_metadata(
             request_id=msg.message_id,
         )
 
-        logger.info(f"[CREDIT_ATTACH] CreditContext created successfully")
+        logger.info("[CREDIT_ATTACH] CreditContext created successfully")
         logger.info(
             f"[CREDIT_ATTACH] Attaching credit metadata to message {msg.message_id}: account={account.cache_key()}"
         )

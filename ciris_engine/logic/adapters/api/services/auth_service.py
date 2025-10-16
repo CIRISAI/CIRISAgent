@@ -150,6 +150,19 @@ class APIAuthService:
 
     def _create_user_from_wa(self, wa: "WACertificate") -> User:
         """Convert WA certificate to User."""
+        # Extract email from oauth_links if available
+        oauth_email = None
+        if wa.oauth_links:
+            for link in wa.oauth_links:
+                # Check if link has email in metadata or as direct attribute
+                if hasattr(link, 'email') and link.email:
+                    oauth_email = link.email
+                    break
+                elif hasattr(link, 'metadata') and isinstance(link.metadata, dict):
+                    if 'email' in link.metadata:
+                        oauth_email = link.metadata['email']
+                        break
+
         return User(
             wa_id=wa.wa_id,
             name=wa.name,
@@ -163,6 +176,7 @@ class APIAuthService:
             wa_auto_minted=wa.auto_minted,
             password_hash=wa.password_hash,
             oauth_provider=wa.oauth_provider,
+            oauth_email=oauth_email,  # Extract from oauth_links
             oauth_external_id=wa.oauth_external_id,
             custom_permissions=wa.custom_permissions if hasattr(wa, "custom_permissions") else None,
             oauth_links=list(wa.oauth_links),

@@ -453,13 +453,27 @@ class QARunner:
                 salt = bcrypt.gensalt(rounds=12)
                 password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
 
+                # Store OAuth profile with email in oauth_links_json
+                # This makes the email available for billing purchase requests
+                oauth_profile = json.dumps([{
+                    "provider": self.config.oauth_test_provider,
+                    "external_id": self.config.oauth_test_external_id,
+                    "account_name": "QA Test User",
+                    "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                    "primary": True,
+                    "metadata": {
+                        "name": "QA Test User",
+                        "picture": None,
+                    }
+                }])
+
                 # Create user - using proper wa_id format
                 cursor.execute(
                     """
                     INSERT INTO wa_cert (
                         wa_id, name, oauth_provider, oauth_external_id, password_hash,
-                        role, pubkey, jwt_kid, scopes_json, created, active, auto_minted
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+                        role, pubkey, jwt_kid, scopes_json, oauth_links_json, created, active, auto_minted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
                 """,
                     (
                         proper_wa_id,  # Use proper wa_id format
@@ -471,6 +485,7 @@ class QARunner:
                         dummy_pubkey,
                         jwt_kid,
                         scopes,
+                        oauth_profile,  # OAuth profile with email
                         1,  # active
                         1,  # auto_minted
                     ),
@@ -492,12 +507,25 @@ class QARunner:
                 salt = bcrypt.gensalt(rounds=12)
                 password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
 
-                # Update both name and password
+                # Store OAuth profile with email in oauth_links_json
+                oauth_profile = json.dumps([{
+                    "provider": self.config.oauth_test_provider,
+                    "external_id": self.config.oauth_test_external_id,
+                    "account_name": "QA Test User",
+                    "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                    "primary": True,
+                    "metadata": {
+                        "name": "QA Test User",
+                        "picture": None,
+                    }
+                }])
+
+                # Update name, password, and OAuth profile
                 cursor.execute(
                     """
-                    UPDATE wa_cert SET name = ?, password_hash = ? WHERE wa_id = ?
+                    UPDATE wa_cert SET name = ?, password_hash = ?, oauth_links_json = ? WHERE wa_id = ?
                 """,
-                    ("qa_oauth_user", password_hash, existing_wa_id),
+                    ("qa_oauth_user", password_hash, oauth_profile, existing_wa_id),
                 )
                 conn.commit()
                 self.console.print(f"[dim]   Updated login credentials for existing user[/dim]")

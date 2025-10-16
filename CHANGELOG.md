@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **🔒 SSE Filtering Database Access**: Fixed database access pattern for OAuth user filtering
-  - Changed to use `auth_service.db_path` with sync sqlite3 connections
-  - Fixed `_get_user_allowed_channel_ids()` to query wa_cert table correctly
-  - Fixed `_batch_fetch_task_channel_ids()` to query tasks table in main database
-  - Removed unused `auth_service` parameter (SonarCloud code smell)
+  - Fixed `_batch_fetch_task_channel_ids()` to use `get_sqlite_db_full_path()` instead of deriving path from auth database
+  - Changed from nonexistent "thoughts.db" to correct main database (ciris.db) with tasks table
+  - Fixed `_get_user_allowed_channel_ids()` to use `auth_service.db_path` for wa_cert table queries
+  - Removed unused `auth_service` parameter from `_batch_fetch_task_channel_ids()` (SonarCloud code smell)
 - **🧹 Code Quality**: Refactored billing provider and system extensions
   - Extracted duplicated billing field extraction logic into shared `_extract_context_fields()` helper
   - Both functions now cleaner and more maintainable

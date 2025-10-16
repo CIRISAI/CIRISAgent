@@ -415,3 +415,202 @@ async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_se
         assert metrics["credit_error_flag"] == 1.0
     finally:
         await monitor.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_context_fields_extraction():
+    """Test that context metadata fields are correctly extracted to top-level payload fields."""
+    import json
+
+    captured_payload = None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_payload
+        if request.url.path.endswith("/credits/check"):
+            # Capture the payload sent to billing API
+            captured_payload = json.loads(request.content)
+            return httpx.Response(200, json={"has_credit": True, "credits_remaining": 10})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-oauth-123")
+        context = CreditContext(
+            agent_id="agent-datum",
+            channel_id="api_oauth_user123",
+            metadata={
+                "email": "user@example.com",
+                "marketing_opt_in": "true",
+                "source": "oauth_login",
+                "user_role": "observer",
+            },
+        )
+
+        result = await provider.check_credit(account, context)
+
+        # Verify result
+        assert result.has_credit is True
+
+        # Verify payload contains extracted fields at top level
+        assert captured_payload is not None
+        assert captured_payload["customer_email"] == "user@example.com"
+        assert captured_payload["marketing_opt_in"] is True  # Converted to boolean
+        assert captured_payload["marketing_opt_in_source"] == "oauth_login"
+        assert captured_payload["user_role"] == "observer"
+        assert captured_payload["agent_id"] == "agent-datum"
+
+        # Verify context dict only has non-extracted fields
+        assert "context" in captured_payload
+        assert captured_payload["context"]["channel_id"] == "api_oauth_user123"
+        assert "email" not in captured_payload["context"]
+        assert "marketing_opt_in" not in captured_payload["context"]
+
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_spend_context_fields():
+    """Test that spend_credit also extracts context fields correctly."""
+    import json
+
+    captured_payload = None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_payload
+        if request.url.path.endswith("/charges"):
+            captured_payload = json.loads(request.content)
+            return httpx.Response(
+                201,
+                json={
+                    "charge_id": "charge-123",
+                    "balance_after": 7,
+                    "amount_minor": 100,
+                    "currency": "USD",
+                },
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="google", account_id="user-spend-456")
+        context = CreditContext(
+            agent_id="agent-qa",
+            metadata={
+                "email": "tester@example.com",
+                "marketing_opt_in": "1",  # Test "1" -> True conversion
+                "source": "settings",
+                "user_role": "admin",
+            },
+        )
+        spend_req = CreditSpendRequest(amount_minor=100, currency="USD", description="Test charge")
+
+        result = await provider.spend_credit(account, spend_req, context)
+
+        # Verify result
+        assert result.succeeded is True
+        assert result.transaction_id == "charge-123"
+
+        # Verify payload contains extracted fields
+        assert captured_payload is not None
+        assert captured_payload["customer_email"] == "tester@example.com"
+        assert captured_payload["marketing_opt_in"] is True
+        assert captured_payload["marketing_opt_in_source"] == "settings"
+        assert captured_payload["user_role"] == "admin"
+        assert captured_payload["agent_id"] == "agent-qa"
+
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_boolean_conversion():
+    """Test marketing_opt_in boolean conversion from various string formats."""
+    import json
+
+    test_cases = [
+        ("true", True),
+        ("True", True),
+        ("TRUE", True),
+        ("1", True),
+        ("yes", True),
+        ("YES", True),
+        ("false", False),
+        ("False", False),
+        ("0", False),
+        ("no", False),
+        ("", False),
+        ("invalid", False),
+    ]
+
+    for input_str, expected_bool in test_cases:
+        captured_payload = None
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_payload
+            if request.url.path.endswith("/credits/check"):
+                captured_payload = json.loads(request.content)
+                return httpx.Response(200, json={"has_credit": True})
+            raise AssertionError(f"Unexpected path {request.url.path}")
+
+        provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
+        await provider.start()
+
+        try:
+            account = CreditAccount(provider="oauth:test", account_id="user-bool-test")
+            context = CreditContext(
+                agent_id="agent-test", metadata={"marketing_opt_in": input_str, "email": "test@example.com"}
+            )
+
+            await provider.check_credit(account, context)
+
+            assert (
+                captured_payload["marketing_opt_in"] == expected_bool
+            ), f"Failed for input '{input_str}': expected {expected_bool}, got {captured_payload['marketing_opt_in']}"
+
+        finally:
+            await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_missing_optional_fields():
+    """Test that missing optional context fields don't cause errors."""
+    import json
+
+    captured_payload = None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_payload
+        if request.url.path.endswith("/credits/check"):
+            captured_payload = json.loads(request.content)
+            return httpx.Response(200, json={"has_credit": True})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:github", account_id="user-minimal")
+        # Context with no metadata or minimal metadata
+        context = CreditContext(agent_id="agent-minimal", channel_id="api_test")
+
+        result = await provider.check_credit(account, context)
+
+        assert result.has_credit is True
+        assert captured_payload is not None
+
+        # Verify optional fields are not present when not provided
+        assert "customer_email" not in captured_payload
+        assert "marketing_opt_in" not in captured_payload
+        assert "marketing_opt_in_source" not in captured_payload
+        assert "user_role" not in captured_payload
+
+        # But agent_id should be present
+        assert captured_payload["agent_id"] == "agent-minimal"
+
+    finally:
+        await provider.stop()

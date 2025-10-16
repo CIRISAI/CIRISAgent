@@ -1135,7 +1135,7 @@ class TestReasoningStreamEndpoint:
         mock_stream.unsubscribe = MagicMock()
 
         # Mock batch fetch to return channel mappings
-        async def mock_batch_fetch(service, task_ids):
+        async def mock_batch_fetch(task_ids):
             return {"task1": "observer_user", "task2": "other_user"}
 
         with patch("ciris_engine.logic.infrastructure.step_streaming.reasoning_event_stream", mock_stream):

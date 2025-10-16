@@ -18,6 +18,9 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Run everything (default)
+  python -m tools.qa_runner
+
   # Run all API tests
   python -m tools.qa_runner api_full
 
@@ -27,14 +30,11 @@ Examples:
   # Run handler tests
   python -m tools.qa_runner handlers
 
-  # Run everything
-  python -m tools.qa_runner all
-
   # Run with custom configuration
   python -m tools.qa_runner auth --url http://localhost:8080 --no-auto-start
 
   # Run in parallel with JSON output
-  python -m tools.qa_runner api_full --parallel --json --report-dir ./reports
+  python -m tools.qa_runner --parallel --json --report-dir ./reports
 
 Available modules:
   auth            - Authentication endpoints
@@ -60,7 +60,7 @@ Available modules:
 """,
     )
 
-    parser.add_argument("modules", nargs="+", help="Modules to test (e.g., auth, telemetry, api_full, all)")
+    parser.add_argument("modules", nargs="*", default=["all"], help="Modules to test (default: all)")
 
     # Server configuration
     parser.add_argument(
@@ -98,9 +98,10 @@ def main():
     """Main entry point."""
     args = parse_args()
 
-    # Parse modules
+    # Parse modules (default to "all" if none specified)
+    module_names = args.modules if args.modules else ["all"]
     modules: List[QAModule] = []
-    for module_name in args.modules:
+    for module_name in module_names:
         try:
             module = QAModule(module_name.lower())
             modules.append(module)

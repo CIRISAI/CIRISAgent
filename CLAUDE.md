@@ -329,9 +329,12 @@ python -m tools.analysis.sonar quality-gate  # SonarCloud quality gate status
 
 ### QA Runner - API Test Suite
 
-The CIRIS QA Runner provides comprehensive API testing:
+The CIRIS QA Runner provides comprehensive API testing with automatic server lifecycle management:
 
 ```bash
+# Run all tests (default) - QA runner manages server lifecycle
+python -m tools.qa_runner                # Run all test modules
+
 # Quick module testing
 python -m tools.qa_runner auth          # Authentication tests
 python -m tools.qa_runner agent         # Agent interaction tests
@@ -355,15 +358,18 @@ python -m tools.qa_runner <module> --verbose
 ```
 
 **QA Runner Features:**
+- 🤖 **Automatic Lifecycle Management** - Starts/stops API server automatically
 - 🔑 **Smart Token Management** - Auto re-authentication after logout/refresh tests
 - ⚡ **Fast Execution** - Most modules complete quickly
 - 🧪 **Comprehensive Coverage** - Authentication, API endpoints, streaming, filtering
 - 🔍 **Detailed Reporting** - Success rates, duration, failure analysis
 - 🚀 **Production Ready** - Validates all critical system functionality
 
-**Prerequisites:**
-1. Start API server: `python main.py --adapter api --mock-llm --port 8000`
-2. QA runner handles authentication automatically (admin/ciris_admin_password)
+**IMPORTANT - Server Lifecycle:**
+- QA runner automatically starts and stops the API server
+- DO NOT manually start the server before running QA tests
+- If you have a server already running, kill it first: `pkill -f "python main.py --adapter api"`
+- Use `--no-auto-start` only if you need to debug with an existing server
 
 ### Testing API Locally
 

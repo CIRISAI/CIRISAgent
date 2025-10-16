@@ -5,6 +5,26 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2025-10-15
+
+### Added
+- **💬 OBSERVER Message Sending**: Added SEND_MESSAGES permission to OBSERVER role
+  - OBSERVER users can now send messages to agents without manual permission grants
+  - Access control delegated to billing/credit system (proper 402 responses on credit denial)
+  - Simplifies OAuth user onboarding - no explicit permission grant required
+  - Permission system now focuses on admin/management operations
+  - Resolves 403 Forbidden errors for OAuth OBSERVER users with billing credits
+
+### Fixed
+- **🔒 SSE Filtering Database Access**: Fixed AuthenticationService.db_manager AttributeError
+  - **Root Cause**: Code attempted to access non-existent `auth_service.db_manager` attribute
+  - **Impact**: OAuth users couldn't access SSE reasoning stream, causing AttributeError
+  - **Solution**: Changed to use `auth_service.db_path` with sync sqlite3 connections
+  - Fixed `_get_user_allowed_channel_ids()` to use correct database access pattern
+  - Fixed `_batch_fetch_task_channel_ids()` to query thoughts.db (not auth.db) for task channels
+  - Updated query to use `wa_id` column (not `user_id`) and added `active=1` filter
+  - Located at `system_extensions.py:623-682`
+
 ## [1.3.5] - 2025-10-15
 
 ### Added

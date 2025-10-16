@@ -134,11 +134,116 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.info(f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email or 'NO_EMAIL'}")
+    logger.info(
+        f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email or 'NO_EMAIL'}"
+    )
     return identity
 
 
 # Endpoints
+
+
+def _get_unlimited_credit_response() -> CreditStatusResponse:
+    """Return unlimited credit response when no credit provider configured."""
+    return CreditStatusResponse(
+        has_credit=True,
+        credits_remaining=999,
+        free_uses_remaining=999,
+        total_uses=0,
+        plan_name="unlimited",
+        purchase_required=False,
+        purchase_options=None,
+    )
+
+
+def _get_simple_provider_response(has_credit: bool) -> CreditStatusResponse:
+    """Return credit response for SimpleCreditProvider (1 free use)."""
+    if has_credit:
+        # Still have free credit
+        return CreditStatusResponse(
+            has_credit=True,
+            credits_remaining=0,
+            free_uses_remaining=1,
+            total_uses=0,
+            plan_name="free",
+            purchase_required=False,
+            purchase_options=None,
+        )
+    else:
+        # Free credit exhausted, billing not enabled
+        return CreditStatusResponse(
+            has_credit=False,
+            credits_remaining=0,
+            free_uses_remaining=0,
+            total_uses=1,
+            plan_name="free",
+            purchase_required=False,  # Can't purchase when billing disabled
+            purchase_options={
+                "price_minor": 0,
+                "uses": 0,
+                "currency": "USD",
+                "message": "Contact administrator to enable billing",
+            },
+        )
+
+
+def _build_credit_check_payload(user_identity: JSONDict, context: Any) -> JSONDict:
+    """Build payload for billing backend credit check."""
+    check_payload = {
+        "oauth_provider": user_identity["oauth_provider"],
+        "external_id": user_identity["external_id"],
+    }
+    if user_identity.get("wa_id"):
+        check_payload["wa_id"] = user_identity["wa_id"]
+    if user_identity.get("tenant_id"):
+        check_payload["tenant_id"] = user_identity["tenant_id"]
+
+    # Add agent_id at top level (not in context)
+    check_payload["agent_id"] = context.agent_id
+
+    # Add minimal context
+    check_payload["context"] = {
+        "channel_id": context.channel_id,
+        "request_id": context.request_id,
+    }
+
+    return check_payload
+
+
+async def _query_billing_backend(billing_client: httpx.AsyncClient, check_payload: JSONDict) -> JSONDict:
+    """Query billing backend for credit status."""
+    try:
+        response = await billing_client.post(
+            "/v1/billing/credits/check",
+            json=check_payload,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+        logger.error(f"Billing API error: {e}", exc_info=True)
+        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+
+
+def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
+    """Format billing backend response for frontend."""
+    purchase_options = None
+    if credit_data.get("purchase_required"):
+        purchase_options = {
+            "price_minor": credit_data.get("purchase_price_minor"),
+            "uses": credit_data.get("purchase_uses"),
+            "currency": "USD",
+        }
+
+    return CreditStatusResponse(
+        has_credit=credit_data["has_credit"],
+        credits_remaining=credit_data.get("credits_remaining", 0),
+        free_uses_remaining=credit_data.get("free_uses_remaining", 0),
+        total_uses=credit_data.get("total_uses", 0),
+        plan_name=credit_data.get("plan_name"),
+        purchase_required=credit_data.get("purchase_required", False),
+        purchase_options=purchase_options,
+    )
 
 
 @router.get("/credits", response_model=CreditStatusResponse)
@@ -167,16 +272,7 @@ async def get_credits(
 
     # Check if credit provider is configured
     if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
-        # No credit gating - unlimited use
-        return CreditStatusResponse(
-            has_credit=True,
-            credits_remaining=999,
-            free_uses_remaining=999,
-            total_uses=0,
-            plan_name="unlimited",
-            purchase_required=False,
-            purchase_options=None,
-        )
+        return _get_unlimited_credit_response()
 
     # Query credit provider via resource monitor
     # CRITICAL: Use same credit account derivation as message interactions!
@@ -200,94 +296,16 @@ async def get_credits(
         raise HTTPException(status_code=503, detail=f"Credit check failed: {type(e).__name__}: {str(e)}")
 
     # Determine if this is SimpleCreditProvider or CIRISBillingProvider
-    # SimpleCreditProvider: 1 free use, no purchases
-    # CIRISBillingProvider: Free uses + paid credits, purchases enabled
     is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
 
     if is_simple_provider:
-        # SimpleCreditProvider: 1 free credit per user
-        if result.has_credit:
-            # Still have free credit
-            return CreditStatusResponse(
-                has_credit=True,
-                credits_remaining=0,
-                free_uses_remaining=1,
-                total_uses=0,
-                plan_name="free",
-                purchase_required=False,
-                purchase_options=None,
-            )
-        else:
-            # Free credit exhausted, billing not enabled
-            return CreditStatusResponse(
-                has_credit=False,
-                credits_remaining=0,
-                free_uses_remaining=0,
-                total_uses=1,
-                plan_name="free",
-                purchase_required=False,  # Can't purchase when billing disabled
-                purchase_options={
-                    "price_minor": 0,
-                    "uses": 0,
-                    "currency": "USD",
-                    "message": "Contact administrator to enable billing",
-                },
-            )
-    else:
-        # CIRISBillingProvider: Return full billing data
-        # This requires actual API call to billing backend for full details
-        billing_client = _get_billing_client(request)
+        return _get_simple_provider_response(result.has_credit)
 
-        # Build payload matching CIRISBillingProvider format
-        # Only send fields accepted by /credits/check endpoint
-        check_payload = {
-            "oauth_provider": user_identity["oauth_provider"],
-            "external_id": user_identity["external_id"],
-        }
-        if user_identity.get("wa_id"):
-            check_payload["wa_id"] = user_identity["wa_id"]
-        if user_identity.get("tenant_id"):
-            check_payload["tenant_id"] = user_identity["tenant_id"]
-
-        # Add agent_id at top level (not in context)
-        check_payload["agent_id"] = context.agent_id
-
-        # Add minimal context
-        check_payload["context"] = {
-            "channel_id": context.channel_id,
-            "request_id": context.request_id,
-        }
-
-        try:
-            response = await billing_client.post(
-                "/v1/billing/credits/check",
-                json=check_payload,
-            )
-            response.raise_for_status()
-            credit_data = response.json()
-
-        except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            logger.error(f"Billing API error: {e}", exc_info=True)
-            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
-
-        # Format response for frontend
-        purchase_options = None
-        if credit_data.get("purchase_required"):
-            purchase_options = {
-                "price_minor": credit_data.get("purchase_price_minor"),
-                "uses": credit_data.get("purchase_uses"),
-                "currency": "USD",
-            }
-
-        return CreditStatusResponse(
-            has_credit=credit_data["has_credit"],
-            credits_remaining=credit_data.get("credits_remaining", 0),
-            free_uses_remaining=credit_data.get("free_uses_remaining", 0),
-            total_uses=credit_data.get("total_uses", 0),
-            plan_name=credit_data.get("plan_name"),
-            purchase_required=credit_data.get("purchase_required", False),
-            purchase_options=purchase_options,
-        )
+    # CIRISBillingProvider: Query billing backend for full details
+    billing_client = _get_billing_client(request)
+    check_payload = _build_credit_check_payload(user_identity, context)
+    credit_data = await _query_billing_backend(billing_client, check_payload)
+    return _format_billing_response(credit_data)
 
 
 @router.post("/purchase/initiate", response_model=PurchaseInitiateResponse)

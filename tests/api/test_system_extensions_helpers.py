@@ -228,7 +228,8 @@ class TestUserRoleHelpers:
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
-        assert result == {"user123"}
+        # BUGFIX: Should include "api_" prefixed version even with no OAuth links
+        assert result == {"user123", "api_user123"}
 
         # Cleanup
         import os
@@ -267,7 +268,20 @@ class TestUserRoleHelpers:
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
-        expected = {"user123", "discord:discord123", "discord123", "google:google456", "google456"}
+        # BUGFIX: Should include "api_" prefixed versions for SSE filtering
+        # See system_extensions.py:628-630 and agent.py:221
+        expected = {
+            "user123",
+            "api_user123",
+            "discord:discord123",
+            "api_discord:discord123",
+            "discord123",
+            "api_discord123",
+            "google:google456",
+            "api_google:google456",
+            "google456",
+            "api_google456",
+        }
         assert result == expected
 
         # Cleanup
@@ -283,8 +297,8 @@ class TestUserRoleHelpers:
 
         result = await _get_user_allowed_channel_ids(auth_service, "user123")
 
-        # Should still return user_id even on error
-        assert result == {"user123"}
+        # Should still return user_id + api_ version even on error
+        assert result == {"user123", "api_user123"}
 
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_success(self):

@@ -621,10 +621,13 @@ def _determine_user_role(current_user: JSONDict) -> Any:
 
 
 async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
-    """Get set of channel IDs user is allowed to see (user_id + OAuth links)."""
+    """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
     import sqlite3
 
     allowed_channel_ids = {user_id}
+    # BUGFIX: API adapter prefixes channel_id with "api_"
+    # See agent.py:221: channel_id = f"api_{auth.user_id}"
+    allowed_channel_ids.add(f"api_{user_id}")
 
     try:
         # Use db_path with direct sqlite3 connection (AuthenticationService uses sync sqlite3)
@@ -639,8 +642,13 @@ async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[
             rows = cursor.fetchall()
             for row in rows:
                 oauth_provider, oauth_external_id = row
-                allowed_channel_ids.add(f"{oauth_provider}:{oauth_external_id}")
+                # Add OAuth channel ID formats
+                oauth_channel = f"{oauth_provider}:{oauth_external_id}"
+                allowed_channel_ids.add(oauth_channel)
                 allowed_channel_ids.add(oauth_external_id)
+                # BUGFIX: Also add API-prefixed versions for SSE filtering
+                allowed_channel_ids.add(f"api_{oauth_channel}")
+                allowed_channel_ids.add(f"api_{oauth_external_id}")
     except Exception as e:
         logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
 

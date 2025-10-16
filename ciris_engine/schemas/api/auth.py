@@ -82,7 +82,7 @@ ROLE_PERMISSIONS: Dict[UserRole, Set[Permission]] = {
         Permission.VIEW_AUDIT,
         Permission.VIEW_TOOLS,
         Permission.VIEW_LOGS,
-        # Note: SEND_MESSAGES not included by default for OBSERVER
+        Permission.SEND_MESSAGES,  # OBSERVER can send messages (gated by billing/credit system)
     },
     UserRole.ADMIN: {
         # Includes all OBSERVER permissions

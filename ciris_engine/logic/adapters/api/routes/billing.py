@@ -131,10 +131,10 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "wa_id": auth.user_id,
         "tenant_id": None,
         "marketing_opt_in": marketing_opt_in,
-        "customer_email": user_email or "qa_runner@qa.ciris.ai",  # Default email for test users
+        "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.info(f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email}")
+    logger.info(f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email or 'NO_EMAIL'}")
     return identity
 
 

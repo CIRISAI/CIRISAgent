@@ -322,10 +322,11 @@ class TestInitiatePurchase:
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_no_email(self, mock_auth_context, mock_purchase_request):
-        """Test purchase uses default email when OAuth email not available.
+        """Test purchase rejection when OAuth email not available.
 
-        Note: _extract_user_identity provides default email 'qa_runner@qa.ciris.ai'
-        when OAuth email is None, so purchase proceeds with fallback email.
+        CRITICAL: Without a valid email, we cannot safely charge the customer
+        or send receipts. The request MUST be rejected with 400 error.
+        This prevents billing the wrong account or leaking receipts.
         """
         request = Mock()
         request.app.state = Mock()
@@ -334,7 +335,7 @@ class TestInitiatePurchase:
         auth_service = Mock()
         user_without_email = Mock()
         user_without_email.marketing_opt_in = False
-        user_without_email.oauth_email = None  # Will use default qa_runner@qa.ciris.ai
+        user_without_email.oauth_email = None  # No email available
         auth_service.get_user = Mock(return_value=user_without_email)
         request.app.state.auth_service = auth_service
 
@@ -348,31 +349,14 @@ class TestInitiatePurchase:
         request.app.state.runtime = Mock()
         request.app.state.runtime.agent_identity.agent_id = "test-agent"
 
-        # Mock billing client - purchase succeeds with default email
-        billing_client = AsyncMock()
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "payment_id": "pi_default_123",
-            "client_secret": "pi_default_secret",
-            "amount_minor": 500,
-            "currency": "USD",
-            "uses_purchased": 20,
-        }
-        billing_client.post = AsyncMock(return_value=mock_response)
-        request.app.state.billing_client = billing_client
+        # Should raise 400 error - email required for purchase
+        with pytest.raises(HTTPException) as exc_info:
+            await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
-        # Mock Stripe publishable key
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.billing._get_stripe_publishable_key", return_value="pk_test_123"
-        ):
-            response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
-
-        # Verify purchase succeeded with default email
-        assert response.payment_id == "pi_default_123"
-
-        # Verify default email was used
-        call_args = billing_client.post.call_args
-        assert call_args[1]["json"]["customer_email"] == "qa_runner@qa.ciris.ai"
+        # Verify correct error
+        assert exc_info.value.status_code == 400
+        assert "Email address required" in exc_info.value.detail
+        assert "OAuth provider" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_api_error(self, mock_auth_context, mock_purchase_request):

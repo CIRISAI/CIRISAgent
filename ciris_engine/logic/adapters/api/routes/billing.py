@@ -117,16 +117,6 @@ def _get_billing_client(request: Request) -> httpx.AsyncClient:
     return client
 
 
-def _get_stripe_publishable_key() -> str:
-    """Get Stripe publishable key from environment."""
-    import os
-
-    key = os.getenv("STRIPE_PUBLISHABLE_KEY")
-    if not key:
-        raise HTTPException(status_code=500, detail="Stripe not configured")
-    return key
-
-
 def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
     """Extract user identity from auth context including marketing opt-in preference and email."""
     # Extract user information from auth service
@@ -416,12 +406,8 @@ async def initiate_purchase(
         logger.error(f"Billing API request error: {e}")
         raise HTTPException(status_code=503, detail="Cannot reach billing service")
 
-    # Get Stripe publishable key for frontend
-    try:
-        publishable_key = _get_stripe_publishable_key()
-    except HTTPException:
-        # If Stripe not configured, still return payment intent data
-        publishable_key = "pk_test_not_configured"
+    # Get Stripe publishable key from billing backend response (single source of truth)
+    publishable_key = purchase_data.get("publishable_key", "pk_test_not_configured")
 
     return PurchaseInitiateResponse(
         payment_id=purchase_data["payment_id"],

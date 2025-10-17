@@ -27,8 +27,39 @@ from ciris_engine.logic.utils.shutdown_manager import (
     is_global_shutdown_requested,
     wait_for_global_shutdown_async,
 )
+from ciris_engine.protocols.infrastructure.base import BusManagerProtocol
 from ciris_engine.protocols.runtime.base import BaseAdapterProtocol
+from ciris_engine.protocols.services.adaptation.self_observation import SelfObservationServiceProtocol
+
+# Governance service protocols
+# Note: WiseAuthorityService doesn't have a unified protocol - it's a complex system with multiple protocols
+from ciris_engine.protocols.services.governance.filter import AdaptiveFilterServiceProtocol
+from ciris_engine.protocols.services.governance.visibility import VisibilityServiceProtocol
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
+from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
+from ciris_engine.protocols.services.graph.incident_management import IncidentManagementServiceProtocol
+
+# Graph service protocols
+from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
+from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
+from ciris_engine.protocols.services.graph.tsdb_consolidation import TSDBConsolidationServiceProtocol
+
+# Infrastructure service protocols
+from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
+from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
+from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
+from ciris_engine.protocols.services.lifecycle.initialization import InitializationServiceProtocol
+
+# Lifecycle service protocols
+from ciris_engine.protocols.services.lifecycle.scheduler import TaskSchedulerServiceProtocol
+from ciris_engine.protocols.services.lifecycle.shutdown import ShutdownServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+
+# Runtime service protocols
+from ciris_engine.protocols.services.runtime.llm import LLMServiceProtocol
+from ciris_engine.protocols.services.runtime.runtime_control import RuntimeControlServiceProtocol
+from ciris_engine.protocols.services.runtime.secrets import SecretsServiceProtocol
+from ciris_engine.protocols.services.runtime.tool import ToolServiceProtocol
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.processors.states import AgentState
@@ -129,44 +160,45 @@ class CIRISRuntime:
         return self.service_initializer.service_registry if self.service_initializer else None
 
     @property
-    def bus_manager(self) -> Optional[Any]:
+    def bus_manager(self) -> Optional[BusManagerProtocol]:
         return self.service_initializer.bus_manager if self.service_initializer else None
 
     @property
-    def memory_service(self) -> Optional[Any]:
+    def memory_service(self) -> Optional[MemoryServiceProtocol]:
         return self.service_initializer.memory_service if self.service_initializer else None
 
     @property
-    def resource_monitor(self) -> Optional[Any]:
+    def resource_monitor(self) -> Optional[ResourceMonitorServiceProtocol]:
         """Access to resource monitor service - CRITICAL for mission-critical systems."""
         return self.service_initializer.resource_monitor_service if self.service_initializer else None
 
     @property
-    def secrets_service(self) -> Optional[Any]:
+    def secrets_service(self) -> Optional[SecretsServiceProtocol]:
         return self.service_initializer.secrets_service if self.service_initializer else None
 
     @property
     def wa_auth_system(self) -> Optional[Any]:
+        """WiseAuthorityService - complex system without unified protocol."""
         return self.service_initializer.wa_auth_system if self.service_initializer else None
 
     @property
-    def telemetry_service(self) -> Optional[Any]:
+    def telemetry_service(self) -> Optional[TelemetryServiceProtocol]:
         return self.service_initializer.telemetry_service if self.service_initializer else None
 
     @property
-    def llm_service(self) -> Optional[Any]:
+    def llm_service(self) -> Optional[LLMServiceProtocol]:
         return self.service_initializer.llm_service if self.service_initializer else None
 
     @property
-    def audit_services(self) -> List[Any]:
+    def audit_services(self) -> List[AuditServiceProtocol]:
         return self.service_initializer.audit_services if self.service_initializer else []
 
     @property
-    def audit_service(self) -> Optional[Any]:
+    def audit_service(self) -> Optional[AuditServiceProtocol]:
         return self.service_initializer.audit_service if self.service_initializer else None
 
     @property
-    def adaptive_filter_service(self) -> Optional[Any]:
+    def adaptive_filter_service(self) -> Optional[AdaptiveFilterServiceProtocol]:
         return self.service_initializer.adaptive_filter_service if self.service_initializer else None
 
     @property
@@ -174,7 +206,7 @@ class CIRISRuntime:
         return self.service_initializer.agent_config_service if self.service_initializer else None
 
     @property
-    def config_manager(self) -> Optional[Any]:
+    def config_manager(self) -> Optional[GraphConfigServiceProtocol]:
         """Return GraphConfigService for RuntimeControlService compatibility."""
         return self.service_initializer.config_service if self.service_initializer else None
 
@@ -183,7 +215,7 @@ class CIRISRuntime:
         return self.service_initializer.transaction_orchestrator if self.service_initializer else None
 
     @property
-    def core_tool_service(self) -> Optional[Any]:
+    def core_tool_service(self) -> Optional[ToolServiceProtocol]:
         return self.service_initializer.core_tool_service if self.service_initializer else None
 
     @property
@@ -191,27 +223,27 @@ class CIRISRuntime:
         return self.service_initializer.time_service if self.service_initializer else None
 
     @property
-    def config_service(self) -> Optional[Any]:
+    def config_service(self) -> Optional[GraphConfigServiceProtocol]:
         """Access to configuration service."""
         return self.service_initializer.config_service if self.service_initializer else None
 
     @property
-    def task_scheduler(self) -> Optional[Any]:
+    def task_scheduler(self) -> Optional[TaskSchedulerServiceProtocol]:
         """Access to task scheduler service."""
         return self.service_initializer.task_scheduler_service if self.service_initializer else None
 
     @property
-    def authentication_service(self) -> Optional[Any]:
+    def authentication_service(self) -> Optional[AuthenticationServiceProtocol]:
         """Access to authentication service."""
         return self.service_initializer.auth_service if self.service_initializer else None
 
     @property
-    def incident_management_service(self) -> Optional[Any]:
+    def incident_management_service(self) -> Optional[IncidentManagementServiceProtocol]:
         """Access to incident management service."""
         return self.service_initializer.incident_management_service if self.service_initializer else None
 
     @property
-    def runtime_control_service(self) -> Optional[Any]:
+    def runtime_control_service(self) -> Optional[RuntimeControlServiceProtocol]:
         """Access to runtime control service."""
         return self.service_initializer.runtime_control_service if self.service_initializer else None
 
@@ -246,31 +278,31 @@ class CIRISRuntime:
         )
 
     @property
-    def maintenance_service(self) -> Optional[Any]:
+    def maintenance_service(self) -> Optional[DatabaseMaintenanceServiceProtocol]:
         return self.service_initializer.maintenance_service if self.service_initializer else None
 
     @property
-    def shutdown_service(self) -> Optional[Any]:
+    def shutdown_service(self) -> Optional[ShutdownServiceProtocol]:
         """Access to shutdown service."""
         return self.service_initializer.shutdown_service if self.service_initializer else None
 
     @property
-    def initialization_service(self) -> Optional[Any]:
+    def initialization_service(self) -> Optional[InitializationServiceProtocol]:
         """Access to initialization service."""
         return self.service_initializer.initialization_service if self.service_initializer else None
 
     @property
-    def tsdb_consolidation_service(self) -> Optional[Any]:
+    def tsdb_consolidation_service(self) -> Optional[TSDBConsolidationServiceProtocol]:
         """Access to TSDB consolidation service."""
         return self.service_initializer.tsdb_consolidation_service if self.service_initializer else None
 
     @property
-    def self_observation_service(self) -> Optional[Any]:
+    def self_observation_service(self) -> Optional[SelfObservationServiceProtocol]:
         """Access to self observation service."""
         return self.service_initializer.self_observation_service if self.service_initializer else None
 
     @property
-    def visibility_service(self) -> Optional[Any]:
+    def visibility_service(self) -> Optional[VisibilityServiceProtocol]:
         """Access to visibility service."""
         return self.service_initializer.visibility_service if self.service_initializer else None
 
@@ -626,12 +658,12 @@ class CIRISRuntime:
 
         # Set runtime on audit service so it can create trace correlations
         if self.audit_service:
-            self.audit_service._runtime = self
+            self.audit_service._runtime = self  # type: ignore[attr-defined]
             logger.debug("Set runtime reference on audit service for trace correlations")
 
         # Set runtime on visibility service so it can access telemetry for traces
         if self.visibility_service:
-            self.visibility_service._runtime = self
+            self.visibility_service._runtime = self  # type: ignore[attr-defined]
             logger.debug("Set runtime reference on visibility service for trace retrieval")
 
         # Update runtime control service with runtime reference
@@ -639,7 +671,7 @@ class CIRISRuntime:
             if hasattr(self.runtime_control_service, "_set_runtime"):
                 self.runtime_control_service._set_runtime(self)
             else:
-                self.runtime_control_service.runtime = self
+                self.runtime_control_service.runtime = self  # type: ignore[attr-defined]
             logger.info("Updated runtime control service with runtime reference")
 
         # Update telemetry service with runtime reference for aggregator
@@ -856,7 +888,7 @@ class CIRISRuntime:
 
                         # Convert to GraphNode and use memory service to forget it
                         graph_node = config_node.to_graph_node()
-                        await self.config_service.graph.forget(graph_node)
+                        await self.config_service.graph.forget(graph_node)  # type: ignore[attr-defined]
                         deleted_count += 1
                         logger.debug(f"Deleted runtime config node: {key}")
 
@@ -955,7 +987,7 @@ class CIRISRuntime:
             # This avoids the race condition where RuntimeControlService tried to access
             # agent_processor during Phase 5 (SERVICES) before it was created in Phase 6 (COMPONENTS)
             if self.runtime_control_service:
-                self.runtime_control_service.setup_thought_tracking()
+                self.runtime_control_service.setup_thought_tracking()  # type: ignore[attr-defined]
                 logger.debug("Thought tracking callback set up after agent_processor creation")
 
         except Exception as e:

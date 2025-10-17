@@ -243,7 +243,9 @@ class BillingTests:
                 page2 = await self.client.billing.get_transactions(limit=10, offset=10)
                 if not hasattr(page2, "transactions"):
                     raise ValueError("Pagination failed - missing transactions field")
-                self.console.print(f"     [dim]Pagination test: page 2 has {len(page2.transactions)} transactions[/dim]")
+                self.console.print(
+                    f"     [dim]Pagination test: page 2 has {len(page2.transactions)} transactions[/dim]"
+                )
 
         except Exception as e:
             # SimpleCreditProvider doesn't track transactions - this is acceptable

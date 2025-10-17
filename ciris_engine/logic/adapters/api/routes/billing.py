@@ -80,7 +80,9 @@ class TransactionItem(BaseModel):
     balance_after: int = Field(..., description="Account balance after this transaction")
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata for charges")
     transaction_type: Optional[str] = Field(None, description="Type of credit transaction (purchase, refund, etc)")
-    external_transaction_id: Optional[str] = Field(None, description="External payment ID (e.g., Stripe payment intent)")
+    external_transaction_id: Optional[str] = Field(
+        None, description="External payment ID (e.g., Stripe payment intent)"
+    )
 
 
 class TransactionListResponse(BaseModel):

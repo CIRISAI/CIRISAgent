@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.1] - 2025-10-17
 
 ### Changed
+- **🎯 Type Safety: Protocol-Based Service Types (56% Optional[Any] Reduction)**
+  - **CIRISRuntime Service Properties**: Replaced 22 `Optional[Any]` return types with specific protocol types
+  - **Protocol Mapping**:
+    - Graph Services (7): `MemoryServiceProtocol`, `GraphConfigServiceProtocol`, `TelemetryServiceProtocol`, `AuditServiceProtocol`, `IncidentManagementServiceProtocol`, `TSDBConsolidationServiceProtocol`
+    - Infrastructure Services (4): `BusManagerProtocol`, `ResourceMonitorServiceProtocol`, `AuthenticationServiceProtocol`, `DatabaseMaintenanceServiceProtocol`, `SecretsServiceProtocol`
+    - Lifecycle Services (3): `TaskSchedulerServiceProtocol`, `InitializationServiceProtocol`, `ShutdownServiceProtocol`
+    - Governance Services (3): `AdaptiveFilterServiceProtocol`, `SelfObservationServiceProtocol`, `VisibilityServiceProtocol`
+    - Runtime Services (4): `LLMServiceProtocol`, `RuntimeControlServiceProtocol`, `ToolServiceProtocol`
+    - List Types (1): `List[AuditServiceProtocol]`
+  - **Impact**:
+    - ✅ Reduced Optional[Any] from 39 → 17 occurrences (56% reduction)
+    - ✅ Enables compile-time type checking for all service access
+    - ✅ Improves IDE autocomplete and refactoring support
+    - ✅ Documents service interface contracts explicitly
+    - ✅ 100% mypy compliance (zero errors)
+    - ✅ All 135 runtime tests passing (no behavioral changes)
+  - **Implementation**:
+    - Added 22 protocol imports organized by service category
+    - Used `# type: ignore[attr-defined]` for implementation-specific attributes
+    - Kept 3 properties as `Optional[Any]`: `wa_auth_system` (no unified protocol), `agent_config_service` and `transaction_orchestrator` (unimplemented)
+
 - **🎯 Type Safety: Dict[str, Any] Reduction**: 41% reduction in untyped dictionary usage
   - Replaced 7 occurrences of `Dict[str, Any]` with strongly-typed alternatives
   - `thought_processor/main.py`: Use `ConscienceCheckContext` for conscience checks (3 occurrences)

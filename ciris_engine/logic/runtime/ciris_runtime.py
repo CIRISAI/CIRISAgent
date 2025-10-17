@@ -202,17 +202,9 @@ class CIRISRuntime:
         return self.service_initializer.adaptive_filter_service if self.service_initializer else None
 
     @property
-    def agent_config_service(self) -> Optional[Any]:
-        return self.service_initializer.agent_config_service if self.service_initializer else None
-
-    @property
     def config_manager(self) -> Optional[GraphConfigServiceProtocol]:
         """Return GraphConfigService for RuntimeControlService compatibility."""
         return self.service_initializer.config_service if self.service_initializer else None
-
-    @property
-    def transaction_orchestrator(self) -> Optional[Any]:
-        return self.service_initializer.transaction_orchestrator if self.service_initializer else None
 
     @property
     def core_tool_service(self) -> Optional[ToolServiceProtocol]:

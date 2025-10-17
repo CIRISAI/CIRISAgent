@@ -348,8 +348,6 @@ def _get_direct_service_references(runtime: Any) -> List[Any]:
         getattr(runtime.service_initializer, "time_service", None),
         # From runtime
         runtime.maintenance_service,
-        runtime.transaction_orchestrator,
-        runtime.agent_config_service,
         runtime.adaptive_filter_service,
         runtime.telemetry_service,
         runtime.audit_service,

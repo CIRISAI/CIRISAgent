@@ -69,8 +69,6 @@ class ServiceInitializer:
         self.audit_service: Optional[AuditService] = None
         # Removed audit_sink_manager - audit is consolidated
         self.adaptive_filter_service: Optional[AdaptiveFilterService] = None
-        self.agent_config_service: Optional[Any] = None  # Optional[AgentConfigService]
-        self.transaction_orchestrator: Optional[Any] = None  # Optional[MultiServiceTransactionOrchestrator]
         self.core_tool_service: Optional[Any] = None  # SecretsToolService
         self.maintenance_service: Optional[DatabaseMaintenanceService] = None
         self.incident_management_service: Optional[Any] = None  # Will be IncidentManagementService

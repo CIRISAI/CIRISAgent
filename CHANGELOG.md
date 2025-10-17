@@ -5,6 +5,26 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2025-10-17
+
+### Changed
+- **🎯 Type Safety: Dict[str, Any] Reduction**: 41% reduction in untyped dictionary usage
+  - Replaced 7 occurrences of `Dict[str, Any]` with strongly-typed alternatives
+  - `thought_processor/main.py`: Use `ConscienceCheckContext` for conscience checks (3 occurrences)
+  - `prompts.py`: Use `JSONDict` for JSON serialization (1 occurrence)
+  - `graph_typed_nodes.py`: Use `JSONDict` for node serialization (2 occurrences)
+  - `wa_updates.py`: Use `JSONDict` for update fields (1 occurrence)
+  - **Impact**:
+    - ✅ Reduced from 17 → 10 `Dict[str, Any]` occurrences (41% reduction)
+    - ✅ Remaining 10 are legitimate type aliases and protocol boundaries
+    - ✅ 100% mypy compliance (556 files, zero issues)
+    - ✅ All 5205 tests passing
+
+### Testing
+- **✅ Unit Tests**: 5205/5205 tests passing (100% success rate)
+- **✅ QA Suite**: 127/128 tests passing (99.2% success rate)
+- **✅ Type Safety**: Mypy 100% compliance across 556 files
+
 ## [1.4.0-code_quality] - 2025-10-17
 
 ### Fixed

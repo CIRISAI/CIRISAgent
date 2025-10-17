@@ -161,8 +161,9 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
     logger.debug(
-        f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, "
-        f"has_email={user_email is not None}, marketing_opt_in={marketing_opt_in}"
+        f"[BILLING_IDENTITY] Extracted identity: has_provider={oauth_provider is not None}, "
+        f"has_external_id={external_id is not None}, has_email={user_email is not None}, "
+        f"marketing_opt_in={marketing_opt_in}"
     )
     return identity
 
@@ -335,7 +336,7 @@ async def get_credits(
     credit_data = await _query_billing_backend(billing_client, check_payload)
     response = _format_billing_response(credit_data)
     logger.info(
-        f"[BILLING_CREDITS] Returning credits for {auth.user_id}: "
+        f"[BILLING_CREDITS] Credit check complete: "
         f"free={response.free_uses_remaining}, paid={response.credits_remaining}, has_credit={response.has_credit}"
     )
     return response
@@ -536,7 +537,7 @@ async def get_transactions(
         return TransactionListResponse(transactions=[], total_count=0, has_more=False)
 
     # CIRISBillingProvider - query billing backend for transaction history
-    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions for {auth.user_id} (limit={limit}, offset={offset})")
+    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions (limit={limit}, offset={offset})")
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 
@@ -586,7 +587,7 @@ async def get_transactions(
         transactions = [TransactionItem(**txn) for txn in transactions_raw if isinstance(txn, dict)]
 
         logger.info(
-            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions for {auth.user_id} "
+            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions "
             f"(total={transaction_data.get('total_count', 0)}, has_more={transaction_data.get('has_more', False)})"
         )
         return TransactionListResponse(

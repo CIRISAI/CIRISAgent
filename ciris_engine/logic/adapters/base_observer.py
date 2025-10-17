@@ -933,7 +933,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             self.resource_monitor is not None, resource_monitor is not None
         )
 
-        logger.info(
+        logger.debug(
             f"[CREDIT] Policy check for message {msg_id}: resource_monitor={resource_monitor is not None}, source={monitor_source}"
         )
 
@@ -942,7 +942,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return
 
         credit_provider = getattr(resource_monitor, "credit_provider", None)
-        logger.info(
+        logger.debug(
             f"[CREDIT] Provider status: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
         )
 
@@ -961,7 +961,7 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return
 
         account, context = envelope
-        logger.info(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
+        logger.debug(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
 
         await self._check_and_charge_credit(resource_monitor, account, context, msg)
 

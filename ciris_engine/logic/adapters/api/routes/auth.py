@@ -656,7 +656,7 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
 def _determine_user_role(email: Optional[str]) -> UserRole:
     """Determine user role based on email domain."""
     if email and email.endswith("@ciris.ai"):
-        logger.info(f"Granting ADMIN role to @ciris.ai user: {email}")
+        logger.debug("Granting ADMIN role to @ciris.ai user")
         return UserRole.ADMIN
     return UserRole.OBSERVER
 

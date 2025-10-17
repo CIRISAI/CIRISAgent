@@ -95,11 +95,11 @@ class ApiPlatform(Service):
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
 
         # Debug logging
-        logger.info(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
+        logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
-            logger.info(f"[DEBUG] adapter_config type: {type(kwargs['adapter_config'])}")
+            logger.debug(f"[DEBUG] adapter_config type: {type(kwargs['adapter_config'])}")
             if hasattr(kwargs["adapter_config"], "host"):
-                logger.info(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
+                logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
 
         logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
 
@@ -305,7 +305,7 @@ class ApiPlatform(Service):
 
     async def start(self) -> None:
         """Start the API server."""
-        logger.info(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
+        logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
         await super().start()
 
         # Track start time for metrics

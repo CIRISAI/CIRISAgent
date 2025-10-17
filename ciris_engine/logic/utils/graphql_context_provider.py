@@ -111,7 +111,7 @@ class GraphQLContextProvider:
                 try:
                     # Use search to find user nodes that match the username
                     search_filter = MemorySearchFilter(node_type=NodeType.USER.value, scope=GraphScope.LOCAL.value)
-                    logger.info(f"[DEBUG DB TIMING] Searching memory for user profile: {name}")
+                    logger.debug(f"[DEBUG DB TIMING] Searching memory for user profile: {name}")
                     search_results = await self.memory_service.search(query=name, filters=search_filter)
                     logger.info(
                         f"[DEBUG DB TIMING] User search complete: found {len(search_results)} results for {name}"

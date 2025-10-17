@@ -134,8 +134,8 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.info(
-        f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., email={user_email or 'NO_EMAIL'}"
+    logger.debug(
+        f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., has_email={user_email is not None}"
     )
     return identity
 
@@ -263,7 +263,7 @@ async def get_credits(
     """
     user_identity = _extract_user_identity(auth, request)
     agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
-    logger.info(f"Credit check for {user_identity.get('email', 'no-email')} on agent {agent_id}")
+    logger.debug(f"Credit check for user_id={auth.user_id} on agent {agent_id}")
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
@@ -346,7 +346,7 @@ async def initiate_purchase(
 
     # Get user email (needed for Stripe) - extract from OAuth profile
     customer_email = user_identity.get("customer_email")
-    logger.info(f"Purchase initiate for {customer_email} on agent {agent_id}")
+    logger.debug(f"Purchase initiate for user_id={auth.user_id} on agent {agent_id}")
     if not customer_email:
         raise HTTPException(
             status_code=400,

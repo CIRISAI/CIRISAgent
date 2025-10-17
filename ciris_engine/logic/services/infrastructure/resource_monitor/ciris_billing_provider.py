@@ -92,9 +92,9 @@ class CIRISBillingProvider(CreditGateProtocol):
             return cached[0].model_copy()
 
         if cached:
-            logger.info("[CREDIT_CHECK] Cache expired for %s - querying backend", cache_key)
+            logger.debug("[CREDIT_CHECK] Cache expired for %s - querying backend", cache_key)
         else:
-            logger.info("[CREDIT_CHECK] No cache for %s - querying backend", cache_key)
+            logger.debug("[CREDIT_CHECK] No cache for %s - querying backend", cache_key)
 
         payload = self._build_check_payload(account, context)
         logger.debug("Credit check payload for %s: %s", cache_key, payload)
@@ -168,7 +168,7 @@ class CIRISBillingProvider(CreditGateProtocol):
                 response_data.get("balance_after"),
             )
             result = self._parse_spend_success(response_data)
-            logger.info("[CREDIT_SPEND] Cache invalidated for %s - next check will hit backend", cache_key)
+            logger.debug("[CREDIT_SPEND] Cache invalidated for %s - next check will hit backend", cache_key)
             self._invalidate_cache(cache_key)
             return result
 

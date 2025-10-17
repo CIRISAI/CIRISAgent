@@ -342,17 +342,17 @@ def _attach_credit_metadata(
 ) -> IncomingMessage:
     """Attach credit envelope data to the message for downstream processing."""
 
-    logger.info(f"[CREDIT_ATTACH] Called for message {msg.message_id}")
+    logger.debug(f"[CREDIT_ATTACH] Called for message {msg.message_id}")
 
     resource_monitor = getattr(request.app.state, "resource_monitor", None)
-    logger.info(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
+    logger.debug(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
 
     if not resource_monitor:
         logger.critical(f"[CREDIT_ATTACH] NO RESOURCE MONITOR - credit metadata NOT attached to {msg.message_id}")
         return msg
 
     credit_provider = getattr(resource_monitor, "credit_provider", None)
-    logger.info(
+    logger.debug(
         f"[CREDIT_ATTACH] credit_provider exists: {credit_provider is not None}, type={type(credit_provider).__name__ if credit_provider else 'None'}"
     )
 
@@ -362,13 +362,13 @@ def _attach_credit_metadata(
 
     try:
         account, _ = _derive_credit_account(auth, request)
-        logger.info(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
+        logger.debug(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
 
         runtime = getattr(request.app.state, "runtime", None)
         agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
         agent_id = getattr(agent_identity, "agent_id", None)
 
-        logger.info(f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}")
+        logger.debug(f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}")
 
         credit_context = CreditContext(
             agent_id=agent_id,
@@ -376,8 +376,8 @@ def _attach_credit_metadata(
             request_id=msg.message_id,
         )
 
-        logger.info("[CREDIT_ATTACH] CreditContext created successfully")
-        logger.info(
+        logger.debug("[CREDIT_ATTACH] CreditContext created successfully")
+        logger.debug(
             f"[CREDIT_ATTACH] Attaching credit metadata to message {msg.message_id}: account={account.cache_key()}"
         )
 
@@ -388,13 +388,13 @@ def _attach_credit_metadata(
             }
         )
 
-        logger.info(f"[CREDIT_ATTACH] Credit metadata SUCCESSFULLY attached to message {msg.message_id}")
+        logger.debug(f"[CREDIT_ATTACH] Credit metadata SUCCESSFULLY attached to message {msg.message_id}")
 
         # CRITICAL: Also attach resource_monitor to message for observer access
         # The observer may be initialized before resource_monitor exists on runtime,
         # so we attach it per-message to ensure credit enforcement works
         updated_msg._resource_monitor = resource_monitor  # type: ignore[attr-defined]
-        logger.info(f"[CREDIT_ATTACH] resource_monitor attached to message {msg.message_id}")
+        logger.debug(f"[CREDIT_ATTACH] resource_monitor attached to message {msg.message_id}")
 
         return updated_msg
 

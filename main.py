@@ -99,12 +99,12 @@ async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional
 
 async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds: Optional[int] = None) -> None:
     """Run the runtime with optional timeout and graceful shutdown."""
-    logger.info(f"[DEBUG] _run_runtime called with timeout={timeout}, num_rounds={num_rounds}")
+    logger.debug(f"[DEBUG] _run_runtime called with timeout={timeout}, num_rounds={num_rounds}")
     shutdown_called = False
     try:
         if timeout:
             # Create task and handle timeout manually to allow graceful shutdown
-            logger.info(f"[DEBUG] Setting up timeout for {timeout} seconds")
+            logger.debug(f"[DEBUG] Setting up timeout for {timeout} seconds")
             runtime_task = asyncio.create_task(runtime.run(num_rounds))
 
             try:
@@ -135,7 +135,7 @@ async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds
                 shutdown_called = True
         else:
             # Run without timeout
-            logger.info("[DEBUG] Running without timeout")
+            logger.debug("[DEBUG] Running without timeout")
             await runtime.run(num_rounds)
     except KeyboardInterrupt:
         logger.info("Received interrupt signal, shutting down gracefully...")

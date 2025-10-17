@@ -447,14 +447,14 @@ class AgentProcessor:
 
                     # Pre-fetch all thoughts in the batch to avoid serialization
                     thought_ids = [t.thought_id for t in batch]
-                    logger.info(f"[DEBUG TIMING] Pre-fetching {len(thought_ids)} thoughts in batch")
+                    logger.debug(f"[DEBUG TIMING] Pre-fetching {len(thought_ids)} thoughts in batch")
                     prefetched_thoughts = await persistence.async_get_thoughts_by_ids(
                         thought_ids, self.agent_occurrence_id
                     )
-                    logger.info(f"[DEBUG TIMING] Pre-fetched {len(prefetched_thoughts)} thoughts")
+                    logger.debug(f"[DEBUG TIMING] Pre-fetched {len(prefetched_thoughts)} thoughts")
 
                     # Pre-fetch batch context data (same for all thoughts)
-                    logger.info("[DEBUG TIMING] Pre-fetching batch context data")
+                    logger.debug("[DEBUG TIMING] Pre-fetching batch context data")
                     from ciris_engine.logic.context.batch_context import prefetch_batch_context
 
                     batch_context_data = await prefetch_batch_context(
@@ -465,7 +465,7 @@ class AgentProcessor:
                         telemetry_service=self._get_service("telemetry_service"),
                         runtime=self.runtime,
                     )
-                    logger.info("[DEBUG TIMING] Pre-fetched batch context data")
+                    logger.debug("[DEBUG TIMING] Pre-fetched batch context data")
 
                     tasks: List[Any] = []
                     for thought in batch:
@@ -786,17 +786,17 @@ class AgentProcessor:
         Returns:
             True if successfully paused (or already paused), False if error occurred
         """
-        logger.info(f"[DEBUG] pause_processing() called, current _is_paused: {self._is_paused}")
+        logger.debug(f"[DEBUG] pause_processing() called, current _is_paused: {self._is_paused}")
 
         if self._is_paused:
             logger.info("AgentProcessor already paused")
-            logger.info(f"[DEBUG] Returning True from pause_processing, _is_paused: {self._is_paused}")
+            logger.debug(f"[DEBUG] Returning True from pause_processing, _is_paused: {self._is_paused}")
             return True  # Already paused, still in desired state
 
         try:
             logger.info("Pausing AgentProcessor")
             self._is_paused = True
-            logger.info(f"[DEBUG] Set _is_paused to True: {self._is_paused}")
+            logger.debug(f"[DEBUG] Set _is_paused to True: {self._is_paused}")
 
             # Create pause event if needed
             if self._pause_event is None:
@@ -810,7 +810,7 @@ class AgentProcessor:
             # Pipeline controller is always available at self._pipeline_controller
             # No injection needed - components use it directly
 
-            logger.info(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
+            logger.debug(f"[DEBUG] Successfully paused, final _is_paused: {self._is_paused}")
             return True  # Successfully paused
 
         except Exception as e:
@@ -825,17 +825,17 @@ class AgentProcessor:
         Returns:
             True if successfully resumed
         """
-        logger.info(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
+        logger.debug(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
 
         if not self._is_paused:
             logger.info("AgentProcessor not paused")
-            logger.info(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
+            logger.debug(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
             return False
 
         logger.info("Resuming AgentProcessor")
         self._is_paused = False
         self._single_step_mode = False
-        logger.info(f"[DEBUG] Set _is_paused to False: {self._is_paused}")
+        logger.debug(f"[DEBUG] Set _is_paused to False: {self._is_paused}")
 
         # Update pipeline controller state and resume all paused thoughts
         self._pipeline_controller.is_paused = False
@@ -845,12 +845,12 @@ class AgentProcessor:
         if self._pause_event and isinstance(self._pause_event, asyncio.Event):
             self._pause_event.set()
 
-        logger.info(f"[DEBUG] Successfully resumed, final _is_paused: {self._is_paused}")
+        logger.debug(f"[DEBUG] Successfully resumed, final _is_paused: {self._is_paused}")
         return True
 
     def is_paused(self) -> bool:
         """Check if processor is paused."""
-        logger.info(f"[DEBUG] is_paused() called, returning: {self._is_paused}")
+        logger.debug(f"[DEBUG] is_paused() called, returning: {self._is_paused}")
         return self._is_paused
 
     def set_thought_processing_callback(self, callback: Any) -> None:

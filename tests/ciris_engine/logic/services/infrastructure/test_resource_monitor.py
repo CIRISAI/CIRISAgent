@@ -419,7 +419,7 @@ async def test_resource_monitor_credit_failure(resource_budget, temp_db, time_se
 
 @pytest.mark.asyncio
 async def test_billing_provider_context_fields_extraction():
-    """Test that context metadata fields are correctly extracted to top-level payload fields."""
+    """Test that context agent_id is correctly extracted to top-level payload field."""
     import json
 
     captured_payload = None
@@ -440,12 +440,6 @@ async def test_billing_provider_context_fields_extraction():
         context = CreditContext(
             agent_id="agent-datum",
             channel_id="api_oauth_user123",
-            metadata={
-                "email": "user@example.com",
-                "marketing_opt_in": "true",
-                "source": "oauth_login",
-                "user_role": "observer",
-            },
         )
 
         result = await provider.check_credit(account, context)
@@ -453,19 +447,16 @@ async def test_billing_provider_context_fields_extraction():
         # Verify result
         assert result.has_credit is True
 
-        # Verify payload contains extracted fields at top level
+        # Verify payload contains agent_id at top level (extracted from context)
         assert captured_payload is not None
-        assert captured_payload["customer_email"] == "user@example.com"
-        assert captured_payload["marketing_opt_in"] is True  # Converted to boolean
-        assert captured_payload["marketing_opt_in_source"] == "oauth_login"
-        assert captured_payload["user_role"] == "observer"
         assert captured_payload["agent_id"] == "agent-datum"
 
-        # Verify context dict only has non-extracted fields
+        # Verify context dict contains channel_id only (not agent_id)
         assert "context" in captured_payload
         assert captured_payload["context"]["channel_id"] == "api_oauth_user123"
-        assert "email" not in captured_payload["context"]
-        assert "marketing_opt_in" not in captured_payload["context"]
+
+        # Note: customer_email, marketing_opt_in, user_role are now passed
+        # directly by calling code (billing.py) from identity dict, not from CreditContext
 
     finally:
         await provider.stop()
@@ -473,7 +464,7 @@ async def test_billing_provider_context_fields_extraction():
 
 @pytest.mark.asyncio
 async def test_billing_provider_spend_context_fields():
-    """Test that spend_credit also extracts context fields correctly."""
+    """Test that spend_credit extracts agent_id from context correctly."""
     import json
 
     captured_payload = None
@@ -500,12 +491,6 @@ async def test_billing_provider_spend_context_fields():
         account = CreditAccount(provider="google", account_id="user-spend-456")
         context = CreditContext(
             agent_id="agent-qa",
-            metadata={
-                "email": "tester@example.com",
-                "marketing_opt_in": "1",  # Test "1" -> True conversion
-                "source": "settings",
-                "user_role": "admin",
-            },
         )
         spend_req = CreditSpendRequest(amount_minor=100, currency="USD", description="Test charge")
 
@@ -515,13 +500,12 @@ async def test_billing_provider_spend_context_fields():
         assert result.succeeded is True
         assert result.transaction_id == "charge-123"
 
-        # Verify payload contains extracted fields
+        # Verify payload contains agent_id extracted from context
         assert captured_payload is not None
-        assert captured_payload["customer_email"] == "tester@example.com"
-        assert captured_payload["marketing_opt_in"] is True
-        assert captured_payload["marketing_opt_in_source"] == "settings"
-        assert captured_payload["user_role"] == "admin"
         assert captured_payload["agent_id"] == "agent-qa"
+
+        # Note: customer_email, marketing_opt_in, user_role are now passed
+        # directly by calling code (billing.py) from identity dict, not from CreditContext
 
     finally:
         await provider.stop()
@@ -529,51 +513,39 @@ async def test_billing_provider_spend_context_fields():
 
 @pytest.mark.asyncio
 async def test_billing_provider_boolean_conversion():
-    """Test marketing_opt_in boolean conversion from various string formats."""
+    """Test that CreditContext no longer handles metadata - metadata is passed by calling code."""
     import json
 
-    test_cases = [
-        ("true", True),
-        ("True", True),
-        ("TRUE", True),
-        ("1", True),
-        ("yes", True),
-        ("YES", True),
-        ("false", False),
-        ("False", False),
-        ("0", False),
-        ("no", False),
-        ("", False),
-        ("invalid", False),
-    ]
+    captured_payload = None
 
-    for input_str, expected_bool in test_cases:
-        captured_payload = None
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_payload
+        if request.url.path.endswith("/credits/check"):
+            captured_payload = json.loads(request.content)
+            return httpx.Response(200, json={"has_credit": True})
+        raise AssertionError(f"Unexpected path {request.url.path}")
 
-        async def handler(request: httpx.Request) -> httpx.Response:
-            nonlocal captured_payload
-            if request.url.path.endswith("/credits/check"):
-                captured_payload = json.loads(request.content)
-                return httpx.Response(200, json={"has_credit": True})
-            raise AssertionError(f"Unexpected path {request.url.path}")
+    provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
+    await provider.start()
 
-        provider = CIRISBillingProvider(api_key="test_key", transport=httpx.MockTransport(handler))
-        await provider.start()
+    try:
+        account = CreditAccount(provider="oauth:test", account_id="user-bool-test")
+        context = CreditContext(agent_id="agent-test")
 
-        try:
-            account = CreditAccount(provider="oauth:test", account_id="user-bool-test")
-            context = CreditContext(
-                agent_id="agent-test", metadata={"marketing_opt_in": input_str, "email": "test@example.com"}
-            )
+        await provider.check_credit(account, context)
 
-            await provider.check_credit(account, context)
+        # Verify agent_id is extracted from context
+        assert captured_payload is not None
+        assert captured_payload["agent_id"] == "agent-test"
 
-            assert (
-                captured_payload["marketing_opt_in"] == expected_bool
-            ), f"Failed for input '{input_str}': expected {expected_bool}, got {captured_payload['marketing_opt_in']}"
+        # Verify that metadata fields are NOT in payload (they're not in CreditContext anymore)
+        # In production, billing.py passes customer_email, marketing_opt_in, user_role
+        # directly from identity dict, NOT from CreditContext
+        assert "customer_email" not in captured_payload
+        assert "marketing_opt_in" not in captured_payload
 
-        finally:
-            await provider.stop()
+    finally:
+        await provider.stop()
 
 
 @pytest.mark.asyncio

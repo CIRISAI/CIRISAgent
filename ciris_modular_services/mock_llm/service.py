@@ -101,7 +101,7 @@ class MockLLMClient:
         Create method that instructor.patch() will call.
         Must return responses in OpenAI API format for instructor to parse correctly.
         """
-        logger.info(f"[DEBUG TIMING] MockLLMClient._create called with response_model: {response_model}")
+        logger.debug(f"[DEBUG TIMING] MockLLMClient._create called with response_model: {response_model}")
         logger.debug(f"_create called with response_model: {response_model}")
 
         # Extract messages for context analysis
@@ -237,7 +237,7 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         **kwargs: Any,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Mock implementation of structured LLM call."""
-        logger.info(f"[DEBUG TIMING] MockLLMService.call_llm_structured called with response_model: {response_model}")
+        logger.debug(f"[DEBUG TIMING] MockLLMService.call_llm_structured called with response_model: {response_model}")
         if not self._client:
             raise RuntimeError("MockLLMService has not been started")
 

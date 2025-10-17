@@ -95,11 +95,11 @@ class ApiPlatform(Service):
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
 
         # Debug logging
-        logger.info(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
+        logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
-            logger.info(f"[DEBUG] adapter_config type: {type(kwargs['adapter_config'])}")
+            logger.debug(f"[DEBUG] adapter_config type: {type(kwargs['adapter_config'])}")
             if hasattr(kwargs["adapter_config"], "host"):
-                logger.info(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
+                logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
 
         logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
 
@@ -206,6 +206,12 @@ class ApiPlatform(Service):
                 self._log_service_registry(service)
             else:
                 logger.info(f"Injected {runtime_attr}")
+        else:
+            # Log when service is not injected
+            if not hasattr(runtime, runtime_attr):
+                logger.warning(f"Runtime does not have attribute '{runtime_attr}' - skipping injection")
+            else:
+                logger.warning(f"Runtime attribute '{runtime_attr}' is None - skipping injection")
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""
@@ -299,7 +305,7 @@ class ApiPlatform(Service):
 
     async def start(self) -> None:
         """Start the API server."""
-        logger.info(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
+        logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
         await super().start()
 
         # Track start time for metrics
@@ -316,6 +322,11 @@ class ApiPlatform(Service):
         logger.info("Started API tool service")
 
         # Create message observer for handling incoming messages
+        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor_service", None)
+        logger.info(
+            f"[OBSERVER_INIT] resource_monitor_service from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
+        )
+
         self.message_observer = APIObserver(
             on_observe=lambda _: asyncio.sleep(0),
             bus_manager=getattr(self.runtime, "bus_manager", None),
@@ -325,7 +336,7 @@ class ApiPlatform(Service):
             secrets_service=getattr(self.runtime, "secrets_service", None),
             time_service=getattr(self.runtime, "time_service", None),
             origin_service="api",
-            resource_monitor=getattr(self.runtime, "resource_monitor_service", None),
+            resource_monitor=resource_monitor_from_runtime,
         )
         await self.message_observer.start()
         logger.info("Started API message observer")

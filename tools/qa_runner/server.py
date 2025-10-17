@@ -46,12 +46,35 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # Set billing configuration from QAConfig if enabled
+        if self.config.billing_enabled:
+            env["CIRIS_BILLING_ENABLED"] = "true"
+            if self.config.billing_api_key:
+                env["CIRIS_BILLING_API_KEY"] = self.config.billing_api_key
+                self.console.print(f"[dim]Setting CIRIS_BILLING_ENABLED=true[/dim]")
+                self.console.print(f"[dim]Setting CIRIS_BILLING_API_KEY=<redacted>[/dim]")
+            if self.config.billing_api_url:
+                env["CIRIS_BILLING_API_URL"] = self.config.billing_api_url
+                self.console.print(f"[dim]Setting CIRIS_BILLING_API_URL={self.config.billing_api_url}[/dim]")
+
+        # Pass through additional billing configuration from environment if present
+        billing_vars = [
+            "CIRIS_BILLING_TIMEOUT_SECONDS",
+            "CIRIS_BILLING_CACHE_TTL_SECONDS",
+            "CIRIS_BILLING_FAIL_OPEN",
+        ]
+        for var in billing_vars:
+            if var in os.environ:
+                env[var] = os.environ[var]
+                self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
+
         # Start server process
         try:
-            self.process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=Path.cwd()
-            )
+            # Open log file to capture console output (includes early startup logs)
+            console_log = open("/tmp/qa_runner_console_output.txt", "w")
+            self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
             self.pid = self.process.pid
+            self._console_log_file = console_log  # Store reference to close later
 
             # Wait for server to be ready
             if self._wait_for_server():
@@ -86,6 +109,13 @@ class APIServerManager:
 
                 self.process = None
                 self.pid = None
+
+                # Close console log file
+                if hasattr(self, "_console_log_file"):
+                    try:
+                        self._console_log_file.close()
+                    except:
+                        pass
 
             except Exception as e:
                 self.console.print(f"[red]Error stopping server: {e}[/red]")

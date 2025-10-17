@@ -5,6 +5,46 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2025-10-16
+
+### Fixed
+- **💳 Credit Enforcement Initialization Order**: Fixed credit enforcement failing due to observer initialization timing
+  - **Root Cause**: API adapter creates observer during `adapter.start()` before ResourceMonitorService is initialized on runtime
+  - **Solution**: Two-part fix using message-attached resource_monitor with fallback pattern
+    1. Modified `base_observer.py:_enforce_credit_policy()` to check instance variable first, then message metadata (`msg._resource_monitor`)
+    2. Modified `agent.py:_attach_credit_metadata()` to attach resource_monitor to each message object
+  - **Impact**: Credit checking, spending, and denial now work correctly for all messages
+  - **Verification**: Test logs show successful credit enforcement - 3 messages charged, 4th message denied with "No free uses or credits remaining"
+  - Located at base_observer.py:835-853, agent.py:389-393
+- **💳 Credit Schema Alignment**: Extended `CreditCheckResult` to match billing backend response fields
+  - Added billing-specific fields: `free_uses_remaining`, `total_uses`, `purchase_required`, `purchase_options`
+  - Ensures compatibility with CIRIS Billing API responses
+  - Located at ciris_engine/schemas/services/credit_gate.py:40-43
+- **💳 Credit Account Derivation Consistency**: Fixed billing routes using different credit account logic than message routes
+  - **Root Cause**: `billing.py` used local `_extract_user_identity()` while message routes used `_derive_credit_account()`
+  - **Solution**: Unified billing routes to use same `_derive_credit_account()` from agent.py
+  - **Impact**: Credit checks now use identical account derivation for all operations
+  - Located at billing.py:183-186
+- **🧪 Billing Integration Test Cache Timing**: Fixed tests checking credits before cache expiration
+  - **Root Cause**: Tests checked credits 3 seconds after charge, but cache TTL is 15 seconds
+  - **Solution**: Updated test delays from 3 to 16 seconds to account for cache expiration
+  - **Impact**: Tests now wait for cache to expire before validating credit deductions
+  - Located at tools/qa_runner/modules/billing_integration_tests.py:114,164
+- **🧪 Test Suite Fixes**: Resolved 12 test failures from schema and implementation changes
+  - **CreditContext.metadata removal** (3 tests): Updated to match new implementation where metadata is passed separately
+  - **Mock api_key_id attribute** (4 tests): Added `api_key_id = None` to auth context fixtures
+  - **Purchase without email** (1 test): Updated to expect default email fallback instead of error
+  - **OAuth identity tests** (2 tests): Fixed to use sqlite3 mocking instead of async db_manager
+  - All 21 previously failing tests now passing
+
+### Testing
+- **✅ Credit Enforcement**: Validated end-to-end billing integration with OAuth test users
+- **✅ Test Suite**: 21/21 previously failing tests now passing
+  - 3 CreditContext schema tests
+  - 15 billing endpoint tests
+  - 3 OAuth identity tests
+- **✅ Mypy**: 556 source files, 0 errors (100% type safety)
+
 ## [1.3.7] - 2025-10-16
 
 ### Fixed

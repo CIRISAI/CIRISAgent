@@ -228,9 +228,9 @@ async def _perform_direct_channel_lookup(memory_service: Any, channel_id: str) -
         include_edges=False,
         depth=1,
     )
-    logger.info(f"[DEBUG DB TIMING] About to query memory service for channel/{channel_id}")
+    logger.debug(f"[DEBUG DB TIMING] About to query memory service for channel/{channel_id}")
     channel_nodes = await memory_service.recall(query)
-    logger.info(f"[DEBUG DB TIMING] Completed memory service query for channel/{channel_id}")
+    logger.debug(f"[DEBUG DB TIMING] Completed memory service query for channel/{channel_id}")
     return list(channel_nodes) if channel_nodes else []
 
 
@@ -239,9 +239,9 @@ async def _perform_channel_search(memory_service: Any, channel_id: str) -> List[
     from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 
     search_filter = MemorySearchFilter(node_type=NodeType.CHANNEL.value, scope=GraphScope.LOCAL.value, limit=10)
-    logger.info(f"[DEBUG DB TIMING] About to search memory service for channel {channel_id}")
+    logger.debug(f"[DEBUG DB TIMING] About to search memory service for channel {channel_id}")
     search_results = await memory_service.search(query=channel_id, filters=search_filter)
-    logger.info(f"[DEBUG DB TIMING] Completed memory service search for channel {channel_id}")
+    logger.debug(f"[DEBUG DB TIMING] Completed memory service search for channel {channel_id}")
     return list(search_results) if search_results else []
 
 
@@ -405,9 +405,9 @@ async def _extract_agent_identity(
         identity_query = MemoryQuery(
             node_id="agent/identity", scope=GraphScope.IDENTITY, type=NodeType.AGENT, include_edges=False, depth=1
         )
-        logger.info("[DEBUG DB TIMING] About to query memory service for agent/identity")
+        logger.debug("[DEBUG DB TIMING] About to query memory service for agent/identity")
         identity_nodes = await memory_service.recall(identity_query)
-        logger.info("[DEBUG DB TIMING] Completed memory service query for agent/identity")
+        logger.debug("[DEBUG DB TIMING] Completed memory service query for agent/identity")
         identity_result = identity_nodes[0] if identity_nodes else None
 
         if not identity_result or not identity_result.attributes:
@@ -449,9 +449,9 @@ async def _extract_agent_identity(
 def _get_recent_tasks(limit: int = 10) -> List[TaskSummary]:
     """Get recent completed tasks as TaskSummary objects."""
     recent_tasks_list: List[TaskSummary] = []
-    logger.info("[DEBUG DB TIMING] About to get recent completed tasks")
+    logger.debug("[DEBUG DB TIMING] About to get recent completed tasks")
     db_recent_tasks = persistence.get_recent_completed_tasks("default", limit)
-    logger.info(f"[DEBUG DB TIMING] Completed get recent completed tasks: {len(db_recent_tasks)} tasks")
+    logger.debug(f"[DEBUG DB TIMING] Completed get recent completed tasks: {len(db_recent_tasks)} tasks")
 
     for t_obj in db_recent_tasks:
         # db_recent_tasks returns List[Task], convert to TaskSummary
@@ -473,9 +473,9 @@ def _get_recent_tasks(limit: int = 10) -> List[TaskSummary]:
 def _get_top_tasks(limit: int = 10) -> List[TaskSummary]:
     """Get top pending tasks as TaskSummary objects."""
     top_tasks_list: List[TaskSummary] = []
-    logger.info("[DEBUG DB TIMING] About to get top tasks")
+    logger.debug("[DEBUG DB TIMING] About to get top tasks")
     db_top_tasks = persistence.get_top_tasks("default", limit)
-    logger.info(f"[DEBUG DB TIMING] Completed get top tasks: {len(db_top_tasks)} tasks")
+    logger.debug(f"[DEBUG DB TIMING] Completed get top tasks: {len(db_top_tasks)} tasks")
 
     for t_obj in db_top_tasks:
         # db_top_tasks returns List[Task], convert to TaskSummary
@@ -1163,7 +1163,7 @@ async def _enrich_single_user_profile(
     try:
         # Query user node with ALL attributes
         user_query = _create_user_memory_query(user_id)
-        logger.info(f"[DEBUG] Querying memory for user/{user_id}")
+        logger.debug(f"[DEBUG] Querying memory for user/{user_id}")
         user_results = await memory_service.recall(user_query)
         logger.debug(
             f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}"

@@ -37,6 +37,7 @@ class TestGetCredits:
         auth = Mock(spec=AuthContext)
         auth.user_id = "user-123"
         auth.role = UserRole.OBSERVER
+        auth.api_key_id = None  # Required by _derive_credit_account
         return auth
 
     @pytest.fixture
@@ -230,6 +231,7 @@ class TestInitiatePurchase:
         auth = Mock(spec=AuthContext)
         auth.user_id = "user-123"
         auth.role = UserRole.OBSERVER
+        auth.api_key_id = None  # Required by _derive_credit_account
         return auth
 
     @pytest.fixture
@@ -320,7 +322,12 @@ class TestInitiatePurchase:
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_no_email(self, mock_auth_context, mock_purchase_request):
-        """Test purchase fails when OAuth email not available."""
+        """Test purchase rejection when OAuth email not available.
+
+        CRITICAL: Without a valid email, we cannot safely charge the customer
+        or send receipts. The request MUST be rejected with 400 error.
+        This prevents billing the wrong account or leaking receipts.
+        """
         request = Mock()
         request.app.state = Mock()
 
@@ -328,7 +335,7 @@ class TestInitiatePurchase:
         auth_service = Mock()
         user_without_email = Mock()
         user_without_email.marketing_opt_in = False
-        user_without_email.oauth_email = None
+        user_without_email.oauth_email = None  # No email available
         auth_service.get_user = Mock(return_value=user_without_email)
         request.app.state.auth_service = auth_service
 
@@ -338,12 +345,18 @@ class TestInitiatePurchase:
         resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
         request.app.state.resource_monitor = resource_monitor
 
-        # Should fail with 400 before reaching billing client
+        # Mock runtime
+        request.app.state.runtime = Mock()
+        request.app.state.runtime.agent_identity.agent_id = "test-agent"
+
+        # Should raise 400 error - email required for purchase
         with pytest.raises(HTTPException) as exc_info:
             await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
+        # Verify correct error
         assert exc_info.value.status_code == 400
         assert "Email address required" in exc_info.value.detail
+        assert "OAuth provider" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_initiate_purchase_api_error(self, mock_auth_context, mock_purchase_request):
@@ -386,6 +399,7 @@ class TestGetPurchaseStatus:
         auth = Mock(spec=AuthContext)
         auth.user_id = "user-123"
         auth.role = UserRole.OBSERVER
+        auth.api_key_id = None  # Required by _derive_credit_account
         return auth
 
     @pytest.mark.asyncio

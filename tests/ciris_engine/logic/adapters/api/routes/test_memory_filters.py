@@ -335,22 +335,39 @@ class TestGetUserAllowedIds:
     @pytest.mark.asyncio
     async def test_oauth_identities_added(self):
         """Should add OAuth identities to allowed set."""
+        import sqlite3
+        from unittest.mock import MagicMock, patch
+
         auth_service = Mock()
-        mock_conn = Mock()
-        mock_conn.execute_fetchall = AsyncMock(
-            return_value=[
-                ("discord", "discord_123"),
-                ("google", "google_456"),
-            ]
-        )
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
+        auth_service.db_path = ":memory:"
 
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        # Create actual in-memory SQLite database for testing
+        with sqlite3.connect(":memory:") as conn:
+            # Create wa_cert table
+            conn.execute(
+                """
+                CREATE TABLE wa_cert (
+                    wa_id TEXT,
+                    oauth_provider TEXT,
+                    oauth_external_id TEXT,
+                    active INTEGER
+                )
+            """
+            )
+            # Insert test OAuth identities
+            conn.execute(
+                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
+                ("user123", "discord", "discord_123", 1),
+            )
+            conn.execute(
+                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
+                ("user123", "google", "google_456", 1),
+            )
+            conn.commit()
 
-        result = await get_user_allowed_ids(auth_service, "user123")
+            # Patch sqlite3.connect directly in the sqlite3 module
+            with patch("sqlite3.connect", return_value=conn):
+                result = await get_user_allowed_ids(auth_service, "user123")
 
         assert "user123" in result
         assert "discord:discord_123" in result
@@ -362,19 +379,16 @@ class TestGetUserAllowedIds:
     @pytest.mark.asyncio
     async def test_database_error_handling(self):
         """Should handle database errors gracefully."""
+        from unittest.mock import patch
+
         auth_service = Mock()
-        mock_conn = Mock()
-        mock_conn.execute_fetchall = AsyncMock(side_effect=Exception("DB error"))
-        mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_conn.__aexit__ = AsyncMock(return_value=None)
+        auth_service.db_path = "/nonexistent/path/to/db.db"
 
-        mock_db = Mock()
-        mock_db.connection = Mock(return_value=mock_conn)
-        auth_service.db_manager = mock_db
+        # Patch sqlite3.connect directly in the sqlite3 module
+        with patch("sqlite3.connect", side_effect=Exception("DB error")):
+            result = await get_user_allowed_ids(auth_service, "user123")
 
-        result = await get_user_allowed_ids(auth_service, "user123")
-
-        # Should still include base user_id
+        # Should still include base user_id even when DB query fails
         assert "user123" in result
         assert len(result) == 1
 

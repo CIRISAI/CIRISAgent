@@ -51,6 +51,42 @@ class QARunner:
         self._show_incidents_status("STARTUP")
         self._record_startup_incidents_position()
 
+        # Setup OAuth test user and billing config BEFORE starting server if billing_integration is in modules
+        # This ensures the auth service loads the user with password when it initializes
+        if QAModule.BILLING_INTEGRATION in modules:
+            # Enable billing backend integration
+            import os
+
+            # Try to load billing key from ~/.ciris/qa_billing_key first, then env var
+            billing_api_key = None
+            key_file = Path.home() / ".ciris" / "qa_billing_key"
+
+            if key_file.exists():
+                try:
+                    billing_api_key = key_file.read_text().strip()
+                    self.console.print(f"[dim]Loaded billing API key from {key_file}[/dim]")
+                except Exception as e:
+                    self.console.print(f"[yellow]⚠️  Failed to read {key_file}: {e}[/yellow]")
+
+            # Fall back to environment variable
+            if not billing_api_key:
+                billing_api_key = os.getenv("CIRIS_BILLING_API_KEY")
+
+            if not billing_api_key:
+                self.console.print("[red]❌ Billing API key required for billing integration tests[/red]")
+                self.console.print("[red]   Place key in ~/.ciris/qa_billing_key or set CIRIS_BILLING_API_KEY[/red]")
+                return False
+
+            self.config.billing_enabled = True
+            self.config.billing_api_key = billing_api_key
+            self.config.billing_api_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+
+            self.console.print(f"[cyan]💳 Billing integration enabled: {self.config.billing_api_url}[/cyan]")
+
+            if not self._setup_oauth_test_user():
+                self.console.print("[red]❌ Failed to setup OAuth test user[/red]")
+                return False
+
         # Start API server if needed
         if self.config.auto_start_server:
             if not self.server_manager.start():
@@ -81,7 +117,7 @@ class QARunner:
                 self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
-        sdk_modules = [QAModule.CONSENT, QAModule.BILLING]
+        sdk_modules = [QAModule.CONSENT, QAModule.BILLING, QAModule.BILLING_INTEGRATION]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 
@@ -358,11 +394,195 @@ class QARunner:
             self.console.print(f"[red]Authentication error: {e}[/red]")
             return False
 
+    def _setup_oauth_test_user(self) -> bool:
+        """Create/verify OAuth test user in database for billing integration tests."""
+        try:
+            import base64
+            import hashlib
+            import json
+            import secrets
+            import sqlite3
+            from datetime import datetime, timezone
+
+            import bcrypt
+
+            # Find database - MUST use auth database where authentication service stores users
+            db_path = Path("data/ciris_engine_auth.db")
+            if not db_path.exists():
+                self.console.print(f"[red]❌ Auth database not found: {db_path}[/red]")
+                return False
+
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # Generate proper wa_id format (wa-YYYY-MM-DD-XXXXXX)
+            timestamp = datetime.now(timezone.utc)
+            proper_wa_id = f"wa-{timestamp.strftime('%Y-%m-%d')}-{secrets.token_hex(3).upper()}"
+
+            # Check if user exists (by OAuth provider:external_id)
+            cursor.execute(
+                "SELECT wa_id, name FROM wa_cert WHERE oauth_provider = ? AND oauth_external_id = ?",
+                (self.config.oauth_test_provider, self.config.oauth_test_external_id),
+            )
+            exists = cursor.fetchone()
+
+            if not exists:
+                # Generate dummy pubkey and jwt_kid for OAuth user
+                # OAuth users don't use real Ed25519 keys - these are just placeholders
+                dummy_pubkey = base64.b64encode(
+                    hashlib.sha256(self.config.oauth_test_user_id.encode()).digest()
+                ).decode()
+                jwt_kid = f"oauth_{self.config.oauth_test_provider}_{hashlib.sha256(self.config.oauth_test_external_id.encode()).hexdigest()[:16]}"
+
+                # Observer scopes
+                scopes = json.dumps(
+                    {
+                        "scopes": [
+                            "read:agent_status",
+                            "read:messages",
+                            "write:messages",
+                            "read:memory",
+                            "read:telemetry",
+                        ]
+                    }
+                )
+
+                # Generate password hash for test user (allows login via /v1/auth/login)
+                # This enables us to authenticate as the OAuth user and create API keys
+                test_password = "qa_test_oauth_password_temp"
+                salt = bcrypt.gensalt(rounds=12)
+                password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
+
+                # Store OAuth profile with email in oauth_links_json
+                # This makes the email available for billing purchase requests
+                oauth_profile = json.dumps(
+                    [
+                        {
+                            "provider": self.config.oauth_test_provider,
+                            "external_id": self.config.oauth_test_external_id,
+                            "account_name": "QA Test User",
+                            "is_primary": True,
+                            "metadata": {
+                                "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                                "name": "QA Test User",
+                            },
+                        }
+                    ]
+                )
+
+                # Create user - using proper wa_id format
+                cursor.execute(
+                    """
+                    INSERT INTO wa_cert (
+                        wa_id, name, oauth_provider, oauth_external_id, password_hash,
+                        role, pubkey, jwt_kid, scopes_json, oauth_links_json, created, active, auto_minted
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+                """,
+                    (
+                        proper_wa_id,  # Use proper wa_id format
+                        "qa_oauth_user",  # Username for login
+                        self.config.oauth_test_provider,
+                        self.config.oauth_test_external_id,
+                        password_hash,  # Add password for login
+                        "observer",
+                        dummy_pubkey,
+                        jwt_kid,
+                        scopes,
+                        oauth_profile,  # OAuth profile with email
+                        1,  # active
+                        1,  # auto_minted
+                    ),
+                )
+                conn.commit()
+                self.console.print(f"[green]✅ Created OAuth test user: {proper_wa_id}[/green]")
+                self.console.print(f"[dim]   Username: qa_oauth_user[/dim]")
+                self.console.print(f"[dim]   Provider: {self.config.oauth_test_provider}[/dim]")
+                self.console.print(f"[dim]   External ID: {self.config.oauth_test_external_id}[/dim]")
+            else:
+                existing_wa_id = exists[0]
+                self.console.print(f"[cyan]ℹ️  OAuth test user exists: {existing_wa_id}[/cyan]")
+
+                # Update the name and password if needed to ensure login works
+                user_name = exists[1]
+
+                # Generate password hash for login capability
+                test_password = "qa_test_oauth_password_temp"
+                salt = bcrypt.gensalt(rounds=12)
+                password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
+
+                # Store OAuth profile with email in oauth_links_json
+                oauth_profile = json.dumps(
+                    [
+                        {
+                            "provider": self.config.oauth_test_provider,
+                            "external_id": self.config.oauth_test_external_id,
+                            "account_name": "QA Test User",
+                            "is_primary": True,
+                            "metadata": {
+                                "email": "qa_test_oauth@ciris.ai",  # Email for purchase tests
+                                "name": "QA Test User",
+                            },
+                        }
+                    ]
+                )
+
+                # Update name, password, and OAuth profile
+                cursor.execute(
+                    """
+                    UPDATE wa_cert SET name = ?, password_hash = ?, oauth_links_json = ? WHERE wa_id = ?
+                """,
+                    ("qa_oauth_user", password_hash, oauth_profile, existing_wa_id),
+                )
+                conn.commit()
+                self.console.print(f"[dim]   Updated login credentials for existing user[/dim]")
+
+            conn.close()
+            return True
+
+        except Exception as e:
+            self.console.print(f"[red]❌ Failed to setup OAuth user: {e}[/red]")
+            import traceback
+
+            if self.config.verbose:
+                self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return False
+
+    def _get_oauth_user_token(self) -> Optional[str]:
+        """Get fresh API key for OAuth test user by logging in as them."""
+        try:
+            # Login as the OAuth test user using password authentication
+            # This will create an API key in the auth service's in-memory store
+            response = requests.post(
+                f"{self.config.base_url}/v1/auth/login",
+                json={"username": "qa_oauth_user", "password": "qa_test_oauth_password_temp"},
+                timeout=10,
+            )
+
+            if response.status_code == 200:
+                api_key = response.json()["access_token"]
+                user_id = response.json()["user_id"]
+                self.console.print(f"[green]✅ Logged in as OAuth user (user_id: {user_id})[/green]")
+                return api_key
+            else:
+                self.console.print(f"[yellow]⚠️  Failed to login as OAuth user: {response.status_code}[/yellow]")
+                if self.config.verbose:
+                    self.console.print(f"[dim]Response: {response.text[:200]}[/dim]")
+                return None
+
+        except Exception as e:
+            self.console.print(f"[red]❌ Error logging in as OAuth user: {e}[/red]")
+            import traceback
+
+            if self.config.verbose:
+                self.console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            return None
+
     def _run_sdk_modules(self, modules: List[QAModule]) -> bool:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
         from .modules import BillingTests, ConsentTests
+        from .modules.billing_integration_tests import BillingIntegrationTests
 
         all_passed = True
 
@@ -370,19 +590,23 @@ class QARunner:
         module_map = {
             QAModule.CONSENT: ConsentTests,
             QAModule.BILLING: BillingTests,
+            QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
         }
 
-        async def run_module(module: QAModule):
-            """Run a single SDK module."""
+        async def run_module(module: QAModule, auth_token: Optional[str] = None):
+            """Run a single SDK module with optional custom auth token."""
             test_class = module_map.get(module)
             if not test_class:
                 self.console.print(f"[red]❌ Unknown SDK module: {module.value}[/red]")
                 return False
 
+            # Use custom token if provided, otherwise use admin token
+            token_to_use = auth_token if auth_token else self.token
+
             # Create SDK client with authentication
             async with CIRISClient(base_url=self.config.base_url) as client:
                 # Manually set the token (skip login since we already have it)
-                client._transport.set_api_key(self.token, persist=False)
+                client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
                 test_instance = test_class(client, self.console)
@@ -407,7 +631,22 @@ class QARunner:
         for module in modules:
             self.console.print(f"\n📋 Running {module.value} SDK tests...")
             try:
-                module_passed = asyncio.run(run_module(module))
+                # Special handling for BILLING_INTEGRATION - uses OAuth user token
+                if module == QAModule.BILLING_INTEGRATION:
+                    # OAuth user was already setup before server start
+                    # Get fresh API key for OAuth user
+                    oauth_token = self._get_oauth_user_token()
+                    if not oauth_token:
+                        self.console.print(f"[red]❌ Failed to get OAuth token for {module.value}[/red]")
+                        all_passed = False
+                        continue
+
+                    # Run with OAuth token
+                    module_passed = asyncio.run(run_module(module, auth_token=oauth_token))
+                else:
+                    # Run with admin token
+                    module_passed = asyncio.run(run_module(module))
+
                 if not module_passed:
                     all_passed = False
             except Exception as e:

@@ -29,14 +29,19 @@ class CreditContext(BaseModel):
     agent_id: Optional[str] = Field(None, description="Agent performing the interaction")
     channel_id: Optional[str] = Field(None, description="Interaction channel identifier")
     request_id: Optional[str] = Field(None, description="Request correlation ID")
-    metadata: Dict[str, str] = Field(default_factory=dict, description="Auxiliary metadata for audits")
 
 
 class CreditCheckResult(BaseModel):
     """Outcome returned from the credit provider after a balance check."""
 
     has_credit: bool = Field(..., description="Whether the account has sufficient credit to proceed")
-    credits_remaining: Optional[int] = Field(None, description="Remaining credits in provider-specific units")
+    credits_remaining: Optional[int] = Field(None, description="Remaining paid credits in provider-specific units")
+    free_uses_remaining: Optional[int] = Field(None, description="Remaining free uses (CIRIS Billing specific)")
+    total_uses: Optional[int] = Field(None, description="Total uses ever made (CIRIS Billing specific)")
+    purchase_required: Optional[bool] = Field(None, description="Whether purchase is required (CIRIS Billing specific)")
+    purchase_options: Optional[Dict[str, int]] = Field(
+        None, description="Purchase pricing options (CIRIS Billing specific)"
+    )
     expires_at: Optional[datetime] = Field(None, description="Optional expiration timestamp for the credit window")
     plan_name: Optional[str] = Field(None, description="Plan or product name reported by the provider")
     reason: Optional[str] = Field(None, description="Provider-supplied reason for denial or failure")

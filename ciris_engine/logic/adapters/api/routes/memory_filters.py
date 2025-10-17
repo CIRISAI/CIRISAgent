@@ -36,14 +36,18 @@ async def get_user_allowed_ids(auth_service: Any, user_id: str) -> Set[str]:
     allowed_ids = {user_id}
 
     try:
-        db = auth_service.db_manager
+        import sqlite3
+
+        # Use db_path with direct sqlite3 connection (AuthenticationService uses sync sqlite3)
+        db_path = auth_service.db_path
         query = """
             SELECT oauth_provider, oauth_external_id
             FROM wa_cert
-            WHERE user_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL
+            WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
         """
-        async with db.connection() as conn:
-            rows = await conn.execute_fetchall(query, (user_id,))
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.execute(query, (user_id,))
+            rows = cursor.fetchall()
             for row in rows:
                 oauth_provider, oauth_external_id = row
                 # Add both provider:id and bare id format

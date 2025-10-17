@@ -68,7 +68,7 @@ class DMAOrchestrator:
         """
         Run EthicalPDMA, CSDMA, and DSDMA in parallel (async). All 3 DMA results are required.
         """
-        logger.info(f"[DEBUG TIMING] run_initial_dmas START for thought {thought_item.thought_id}")
+        logger.debug(f"[DEBUG TIMING] run_initial_dmas START for thought {thought_item.thought_id}")
 
         # FAIL FAST: All 3 DMAs are required
         if not self.dsdma:

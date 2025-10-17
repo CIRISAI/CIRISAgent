@@ -87,13 +87,13 @@ async def prefetch_batch_context(
 ) -> BatchContextData:
     """Pre-fetch all data that's common across a batch of thoughts."""
 
-    logger.info("[DEBUG DB TIMING] Starting batch context prefetch")
+    logger.debug("[DEBUG DB TIMING] Starting batch context prefetch")
     batch_data = BatchContextData()
 
     # 1. Agent Identity (single query)
     if memory_service:
         try:
-            logger.info("[DEBUG DB TIMING] Batch: fetching agent identity")
+            logger.debug("[DEBUG DB TIMING] Batch: fetching agent identity")
             identity_query = MemoryQuery(
                 node_id="agent/identity", scope=GraphScope.IDENTITY, type=NodeType.AGENT, include_edges=False, depth=1
             )
@@ -130,10 +130,10 @@ async def prefetch_batch_context(
             logger.warning(f"Failed to retrieve agent identity: {e}")
 
     # 2. Recent and Top Tasks (single query each)
-    logger.info("[DEBUG DB TIMING] Batch: fetching recent completed tasks")
+    logger.debug("[DEBUG DB TIMING] Batch: fetching recent completed tasks")
     db_recent_tasks = persistence.get_recent_completed_tasks("default", 10)
 
-    logger.info("[DEBUG DB TIMING] Batch: fetching top tasks")
+    logger.debug("[DEBUG DB TIMING] Batch: fetching top tasks")
     db_top_tasks = persistence.get_top_tasks("default", 10)
 
     # Convert to TaskSummary
@@ -169,7 +169,7 @@ async def prefetch_batch_context(
 
     # 3. Service Health (if needed)
     if service_registry:
-        logger.info("[DEBUG DB TIMING] Batch: collecting service health")
+        logger.debug("[DEBUG DB TIMING] Batch: collecting service health")
         try:
             registry_info = service_registry.get_provider_info()
 
@@ -201,7 +201,7 @@ async def prefetch_batch_context(
 
     # 4. Resource Alerts
     if resource_monitor:
-        logger.info("[DEBUG DB TIMING] Batch: checking resource monitor")
+        logger.debug("[DEBUG DB TIMING] Batch: checking resource monitor")
         try:
             snapshot = resource_monitor.snapshot
             if snapshot.critical:
@@ -219,7 +219,7 @@ async def prefetch_batch_context(
 
     # 5. Telemetry Summary
     if telemetry_service:
-        logger.info("[DEBUG DB TIMING] Batch: getting telemetry summary")
+        logger.debug("[DEBUG DB TIMING] Batch: getting telemetry summary")
         try:
             batch_data.telemetry_summary = await telemetry_service.get_telemetry_summary()
         except Exception as e:
@@ -227,7 +227,7 @@ async def prefetch_batch_context(
 
         # 5b. Continuity Summary
         if hasattr(telemetry_service, "get_continuity_summary"):
-            logger.info("[DEBUG DB TIMING] Batch: getting continuity summary")
+            logger.debug("[DEBUG DB TIMING] Batch: getting continuity summary")
             try:
                 batch_data.continuity_summary = await telemetry_service.get_continuity_summary()
             except Exception as e:
@@ -235,7 +235,7 @@ async def prefetch_batch_context(
 
     # 6. Secrets Snapshot
     if secrets_service:
-        logger.info("[DEBUG DB TIMING] Batch: building secrets snapshot")
+        logger.debug("[DEBUG DB TIMING] Batch: building secrets snapshot")
         from typing import cast
 
         from .secrets_snapshot import build_secrets_snapshot
@@ -248,7 +248,7 @@ async def prefetch_batch_context(
     if runtime and hasattr(runtime, "current_shutdown_context"):
         batch_data.shutdown_context = runtime.current_shutdown_context
 
-    logger.info("[DEBUG DB TIMING] Batch context prefetch complete")
+    logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
 
 
@@ -382,7 +382,7 @@ async def build_system_snapshot_with_batch(
 
     # Only query channel context if we have a channel_id
     if channel_id and memory_service:
-        logger.info(f"[DEBUG DB TIMING] Per-thought: querying channel context for {channel_id}")
+        logger.debug(f"[DEBUG DB TIMING] Per-thought: querying channel context for {channel_id}")
         try:
             query = MemoryQuery(
                 node_id=f"channel/{channel_id}",
@@ -464,7 +464,7 @@ async def build_system_snapshot_with_batch(
 
         user_ids_to_enrich = _extract_user_ids_from_context(task, thought)
         if user_ids_to_enrich:
-            logger.info(f"[DEBUG BATCH] Enriching {len(user_ids_to_enrich)} user profiles: {user_ids_to_enrich}")
+            logger.debug(f"[DEBUG BATCH] Enriching {len(user_ids_to_enrich)} user profiles: {user_ids_to_enrich}")
             user_profiles = await _enrich_user_profiles(memory_service, user_ids_to_enrich, channel_id, user_profiles)
 
     # Collect adapter channels and tools (if runtime available)

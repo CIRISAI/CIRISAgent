@@ -111,8 +111,6 @@ class DreamProcessor(BaseProcessor):
             if hasattr(time_service_val, "now"):
                 from typing import cast
 
-                from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-
                 self._time_service = cast(TimeServiceProtocol, time_service_val)
 
         # Dream-specific initialization
@@ -336,8 +334,6 @@ class DreamProcessor(BaseProcessor):
 
         try:
             from typing import cast
-
-            from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
             # Initialize buses
             # Get time service for MemoryBus

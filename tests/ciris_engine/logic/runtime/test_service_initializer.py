@@ -333,7 +333,7 @@ class TestServiceInitializer:
         service_initializer.memory_service = Mock()
         service_initializer.secrets_service = Mock()
         service_initializer.adaptive_filter_service = Mock()
-        service_initializer.audit_services = [Mock()]
+        service_initializer.audit_service = Mock()
 
         # Should return True
         result = service_initializer.verify_core_services()

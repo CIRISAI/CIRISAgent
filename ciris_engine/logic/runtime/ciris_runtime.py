@@ -190,10 +190,6 @@ class CIRISRuntime:
         return self.service_initializer.llm_service if self.service_initializer else None
 
     @property
-    def audit_services(self) -> List[AuditServiceProtocol]:
-        return self.service_initializer.audit_services if self.service_initializer else []
-
-    @property
     def audit_service(self) -> Optional[AuditServiceProtocol]:
         return self.service_initializer.audit_service if self.service_initializer else None
 

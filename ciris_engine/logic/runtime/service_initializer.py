@@ -65,7 +65,6 @@ class ServiceInitializer:
         self.wa_auth_system: Optional[WiseAuthorityService] = None
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
-        self.audit_services: List[Any] = []
         self.audit_service: Optional[AuditService] = None
         # Removed audit_sink_manager - audit is consolidated
         self.adaptive_filter_service: Optional[AdaptiveFilterService] = None
@@ -854,9 +853,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info(f"Secondary LLM service initialized: {model_name}")
 
     async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
-        """Initialize all three required audit services."""
-        self.audit_services = []
+        """Initialize the consolidated audit service with three storage backends.
 
+        The single GraphAuditService writes to three places:
+        1. SQLite hash chain database (cryptographic integrity)
+        2. Graph memory via MemoryBus (primary storage, searchable)
+        3. File export (optional, for compliance)
+        """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")
 
@@ -889,11 +892,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             graph_audit._set_service_registry(self.service_registry)
         await graph_audit.start()
         self._services_started_count += 1
-        self.audit_services.append(graph_audit)
+        self.audit_service = graph_audit
         logger.info("Consolidated GraphAuditService started")
-
-        # Keep reference to primary audit service for compatibility
-        self.audit_service = self.audit_services[0]
 
         # Update BusManager with the initialized audit service
         if self.bus_manager is not None:
@@ -942,9 +942,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     logger.error(f"Critical service {type(service).__name__} not initialized")
                     return False
 
-            # Verify audit services
-            if not self.audit_services or len(self.audit_services) == 0:
-                logger.error("No audit services found")
+            # Verify audit service
+            if not self.audit_service:
+                logger.error("Audit service not initialized")
                 return False
 
             logger.info("✓ All core services verified")

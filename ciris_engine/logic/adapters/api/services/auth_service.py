@@ -153,15 +153,21 @@ class APIAuthService:
         # Extract email from oauth_links if available
         oauth_email = None
         if wa.oauth_links:
-            for link in wa.oauth_links:
+            print(f"  📧 [AUTH DEBUG] Found {len(wa.oauth_links)} OAuth links for {wa.wa_id}")
+            for i, link in enumerate(wa.oauth_links):
+                print(f"  📧 [AUTH DEBUG] Link {i}: provider={link.provider}, external_id={link.external_id}, metadata={link.metadata}")
                 # Check if link has email in metadata or as direct attribute
                 if hasattr(link, "email") and link.email:
                     oauth_email = link.email
+                    print(f"  ✅ [AUTH DEBUG] Extracted email from link.email: {oauth_email}")
                     break
                 elif hasattr(link, "metadata") and isinstance(link.metadata, dict):
                     if "email" in link.metadata:
                         oauth_email = link.metadata["email"]
+                        print(f"  ✅ [AUTH DEBUG] Extracted email from link.metadata['email']: {oauth_email}")
                         break
+        else:
+            print(f"  ⚠️  [AUTH DEBUG] No OAuth links found for {wa.wa_id}")
 
         return User(
             wa_id=wa.wa_id,

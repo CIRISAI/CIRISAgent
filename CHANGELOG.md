@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-10-17
+
+### Changed
+- **💳 BREAKING: Centralized Stripe Configuration Management**
+  - **Problem**: Agents getting corrupted Stripe publishable keys from local environment variables, causing "Invalid API Key" errors during purchase
+  - **Root Cause**: Configuration drift between agent environment variables and billing backend database (single source of truth)
+  - **Solution**: Billing backend now returns `publishable_key` in purchase response
+  - **Impact**:
+    - ✅ Removed `STRIPE_PUBLISHABLE_KEY` environment variable requirement from agents
+    - ✅ Single source of truth: Stripe config lives in billing backend database
+    - ✅ No configuration drift across agent deployments
+    - ✅ Centralized Stripe key management via billing admin UI
+  - **Migration**: Remove `STRIPE_PUBLISHABLE_KEY` from agent environment variables (no longer needed)
+
+### Fixed
+- **🔑 Stripe Publishable Key Retrieval**: Changed from local environment variable to billing backend response
+  - Removed `_get_stripe_publishable_key()` helper function
+  - Updated `initiate_purchase` to extract `publishable_key` from backend response
+  - Fallback to `"pk_test_not_configured"` if key missing from response
+  - Follows same pattern as `client_secret` (already from backend)
+
 ## [1.3.9] - 2025-10-16
 
 ### Added

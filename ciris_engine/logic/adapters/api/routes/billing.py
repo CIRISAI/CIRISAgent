@@ -161,7 +161,8 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
     logger.info(
-        f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, has_email={user_email is not None}"
+        f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, "
+        f"email={user_email if user_email else 'NULL'}, marketing_opt_in={marketing_opt_in}"
     )
     return identity
 

@@ -575,13 +575,13 @@ async def get_transactions(
         if tenant_id:
             params["tenant_id"] = str(tenant_id)
 
-        # Log full request details for debugging
-        logger.info(
+        # Log request details for debugging (without PII)
+        logger.debug(
             f"[BILLING_TRANSACTIONS] Request to billing backend: "
             f"oauth_provider={params.get('oauth_provider')}, "
             f"external_id={params.get('external_id')}, "
             f"wa_id={params.get('wa_id')}, "
-            f"email={user_identity.get('customer_email')}"
+            f"has_email={user_identity.get('customer_email') is not None}"
         )
 
         # Query billing backend

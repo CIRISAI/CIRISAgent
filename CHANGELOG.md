@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.9] - 2025-10-16
 
+### Added
+- **💳 Transaction History**: Complete billing transaction history tracking and API
+  - New `GET /api/billing/transactions` endpoint with pagination support (limit/offset)
+  - Returns chronological list of all charges (message interactions) and credits (purchases, refunds)
+  - Per-transaction details: transaction_id, type, amount_minor, currency, description, created_at, balance_after
+  - Charge transactions include metadata (agent_id, channel, thought_id) for full audit trail
+  - Credit transactions include transaction_type (purchase, refund, etc.) and external_transaction_id (Stripe payment intent)
+  - Works with CIRISBillingProvider, returns empty list for SimpleCreditProvider
+  - SDK support: `client.billing.get_transactions(limit=50, offset=0)`
+  - Frontend-ready with proper error handling (404 returns empty list for new accounts)
+
 ### Fixed
 - **🔧 Billing Type Safety**: Fixed mypy strict mode violations in billing endpoints
   - Added explicit type casting for JSONDict values when building query parameters

@@ -625,7 +625,7 @@ async def get_transactions(
             return TransactionListResponse(transactions=[], total_count=0, has_more=False)
         if e.response.status_code == 401:
             # Authentication failed - log details and return empty
-            logger.error(f"401 Unauthorized - API key may be invalid or missing")
+            logger.error("401 Unauthorized - API key may be invalid or missing")
             return TransactionListResponse(transactions=[], total_count=0, has_more=False)
         raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
     except httpx.RequestError as e:

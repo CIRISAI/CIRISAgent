@@ -37,6 +37,7 @@ class BillingTests:
             ("Check Purchase Options", self.test_purchase_options),
             ("Initiate Purchase (if enabled)", self.test_initiate_purchase),
             ("Check Purchase Status (if initiated)", self.test_purchase_status),
+            ("Get Transaction History", self.test_get_transactions),
         ]
 
         for name, test_func in tests:
@@ -181,6 +182,76 @@ class BillingTests:
             error_msg = str(e).lower()
             if "404" in error_msg or "not found" in error_msg:
                 self.console.print("     [dim]Test payment not found (expected for test)[/dim]")
+            else:
+                raise
+
+    async def test_get_transactions(self):
+        """Test getting transaction history."""
+        try:
+            # Get transaction history
+            transactions = await self.client.billing.get_transactions(limit=10)
+
+            # Verify transaction list response structure
+            if not hasattr(transactions, "transactions"):
+                raise ValueError("Missing transactions field")
+            if not hasattr(transactions, "total_count"):
+                raise ValueError("Missing total_count field")
+            if not hasattr(transactions, "has_more"):
+                raise ValueError("Missing has_more field")
+
+            # Check if transactions list is valid
+            if not isinstance(transactions.transactions, list):
+                raise ValueError("transactions field should be a list")
+
+            # Log transaction count
+            self.console.print(
+                f"     [dim]Found {len(transactions.transactions)} transactions (total: {transactions.total_count})[/dim]"
+            )
+
+            # If we have transactions, verify structure of first one
+            if len(transactions.transactions) > 0:
+                txn = transactions.transactions[0]
+
+                # Verify required fields
+                required_fields = [
+                    "transaction_id",
+                    "type",
+                    "amount_minor",
+                    "currency",
+                    "description",
+                    "created_at",
+                    "balance_after",
+                ]
+                for field in required_fields:
+                    if not hasattr(txn, field):
+                        raise ValueError(f"Missing required field: {field}")
+
+                # Verify transaction type is valid
+                if txn.type not in ["charge", "credit"]:
+                    raise ValueError(f"Invalid transaction type: {txn.type}")
+
+                # Display first transaction details
+                amount_display = f"${abs(txn.amount_minor) / 100:.2f}"
+                sign = "-" if txn.amount_minor < 0 else "+"
+                self.console.print(
+                    f"     [dim]Latest: {txn.type} {sign}{amount_display} - {txn.description[:40]}[/dim]"
+                )
+
+            # Test pagination if we have more transactions
+            if transactions.has_more:
+                # Test getting second page
+                page2 = await self.client.billing.get_transactions(limit=10, offset=10)
+                if not hasattr(page2, "transactions"):
+                    raise ValueError("Pagination failed - missing transactions field")
+                self.console.print(
+                    f"     [dim]Pagination test: page 2 has {len(page2.transactions)} transactions[/dim]"
+                )
+
+        except Exception as e:
+            # SimpleCreditProvider doesn't track transactions - this is acceptable
+            error_msg = str(e).lower()
+            if any(err in error_msg for err in ["billing not enabled", "not configured", "simple"]):
+                self.console.print("     [dim]Transaction history unavailable (SimpleCreditProvider)[/dim]")
             else:
                 raise
 

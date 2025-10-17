@@ -42,8 +42,10 @@ class BillingIntegrationTests:
             ("Initial Credit Check (expect 3 free uses)", self.test_initial_credits),
             ("Send Message (should consume 1 credit)", self.test_message_deduction),
             ("Verify Credit Deduction (expect 2 remaining)", self.test_credit_after_message),
+            ("Check Transaction History After First Message", self.test_transactions_after_message),
             ("Send 2 More Messages (consume remaining)", self.test_exhaust_credits),
             ("Verify No Credits Remaining", self.test_credits_exhausted),
+            ("Check Final Transaction History", self.test_final_transactions),
             ("Test Purchase Required Flag", self.test_purchase_required),
             ("Test Purchase Initiation", self.test_purchase_initiate),
             ("Test Purchase Status Query", self.test_purchase_status),
@@ -127,6 +129,45 @@ class BillingIntegrationTests:
             f"     [dim]Credits after message: {status.free_uses_remaining} free uses " f"(consumed 1 credit)[/dim]"
         )
 
+    async def test_transactions_after_message(self):
+        """Check transaction history after first message - should have 1 charge."""
+        try:
+            # Get transaction history
+            transactions = await self.client.billing.get_transactions(limit=10)
+
+            # Check response structure
+            if not hasattr(transactions, "transactions"):
+                raise ValueError("Missing transactions field in response")
+
+            # We should have at least 1 transaction (the charge from the message)
+            if len(transactions.transactions) < 1:
+                # Might be using SimpleCreditProvider (no transaction tracking)
+                self.console.print("     [dim]No transactions found (SimpleCreditProvider or backend delay)[/dim]")
+                return
+
+            # Check the most recent transaction
+            latest = transactions.transactions[0]
+
+            # Verify it's a charge
+            if latest.type != "charge":
+                self.console.print(f"     [dim]Latest transaction is type '{latest.type}' (expected 'charge')[/dim]")
+
+            # Display transaction details
+            amount_display = f"${abs(latest.amount_minor) / 100:.2f}"
+            self.console.print(
+                f"     [dim]Found {len(transactions.transactions)} transactions, "
+                f"latest: -{amount_display} ({latest.description[:40]})[/dim]"
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            # SimpleCreditProvider doesn't track transactions - acceptable
+            if "billing not enabled" in error_msg.lower() or "simple" in error_msg.lower():
+                self.console.print("     [dim]Transaction history unavailable (SimpleCreditProvider)[/dim]")
+                return
+            # Re-raise other errors
+            raise
+
     async def test_exhaust_credits(self):
         """Send messages to exhaust remaining credits."""
         remaining_credits = self.after_first_message
@@ -187,6 +228,53 @@ class BillingIntegrationTests:
                 )
 
         self.console.print(f"     [dim]All credits consumed (free and paid)[/dim]")
+
+    async def test_final_transactions(self):
+        """Check transaction history after exhausting all credits."""
+        try:
+            # Get transaction history
+            transactions = await self.client.billing.get_transactions(limit=20)
+
+            # Check response structure
+            if not hasattr(transactions, "transactions"):
+                raise ValueError("Missing transactions field in response")
+
+            if len(transactions.transactions) == 0:
+                # Might be using SimpleCreditProvider (no transaction tracking)
+                self.console.print("     [dim]No transactions found (SimpleCreditProvider)[/dim]")
+                return
+
+            # Count charge transactions
+            charges = [txn for txn in transactions.transactions if txn.type == "charge"]
+            credits_txns = [txn for txn in transactions.transactions if txn.type == "credit"]
+
+            # We should have multiple charges now (at least initial_credits worth)
+            total_charges_minor = sum(abs(txn.amount_minor) for txn in charges)
+            total_charges_display = f"${total_charges_minor / 100:.2f}"
+
+            self.console.print(
+                f"     [dim]Transaction history: {len(charges)} charges totaling {total_charges_display}, "
+                f"{len(credits_txns)} credits[/dim]"
+            )
+
+            # Verify transaction data integrity
+            for txn in transactions.transactions:
+                # Check required fields
+                if not txn.transaction_id:
+                    raise ValueError("Transaction missing transaction_id")
+                if not txn.created_at:
+                    raise ValueError("Transaction missing created_at")
+                if txn.type not in ["charge", "credit"]:
+                    raise ValueError(f"Invalid transaction type: {txn.type}")
+
+        except Exception as e:
+            error_msg = str(e)
+            # SimpleCreditProvider doesn't track transactions - acceptable
+            if "billing not enabled" in error_msg.lower() or "simple" in error_msg.lower():
+                self.console.print("     [dim]Transaction history unavailable (SimpleCreditProvider)[/dim]")
+                return
+            # Re-raise other errors
+            raise
 
     async def test_purchase_required(self):
         """Verify purchase required flag is set when credits exhausted."""

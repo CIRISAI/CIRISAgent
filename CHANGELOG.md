@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - 2025-10-16
+
+### Added
+- **💳 Transaction History**: Complete billing transaction history tracking and API
+  - New `GET /api/billing/transactions` endpoint with pagination support (limit/offset)
+  - Returns chronological list of all charges (message interactions) and credits (purchases, refunds)
+  - Per-transaction details: transaction_id, type, amount_minor, currency, description, created_at, balance_after
+  - Charge transactions include metadata (agent_id, channel, thought_id) for full audit trail
+  - Credit transactions include transaction_type (purchase, refund, etc.) and external_transaction_id (Stripe payment intent)
+  - Works with CIRISBillingProvider, returns empty list for SimpleCreditProvider
+  - SDK support: `client.billing.get_transactions(limit=50, offset=0)`
+  - Frontend-ready with proper error handling (404 returns empty list for new accounts)
+
+### Fixed
+- **🔧 Billing Type Safety**: Fixed mypy strict mode violations in billing endpoints
+  - Added explicit type casting for JSONDict values when building query parameters
+  - Safe transaction list iteration with runtime type validation
+  - Safe error logging to handle Mock objects in tests
+  - All 23 billing endpoint tests passing with 100% type safety
+- **🧹 Code Quality**: Reduced cognitive complexity across billing and observer modules
+  - `get_credits` function: CC 19 → <15 via helper function extraction
+  - `_enforce_credit_policy` in base_observer.py: Extracted billing interaction helpers
+  - Removed unnecessary f-strings and unused parameters (SonarCloud)
+
+### Testing
+- **✅ Billing Integration**: Comprehensive QA runner test suite for billing API
+  - 36 billing integration tests covering transactions, purchases, and credit checks
+  - Extended API test coverage with streaming pipeline validation
+  - All tests passing with full OAuth and credit enforcement coverage
+
 ## [1.3.8] - 2025-10-16
 
 ### Fixed

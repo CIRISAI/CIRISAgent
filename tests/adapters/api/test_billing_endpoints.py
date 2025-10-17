@@ -5,6 +5,7 @@ This test file covers:
 - GET /api/billing/credits - Credit balance and status
 - POST /api/billing/purchase/initiate - Create payment intent
 - GET /api/billing/purchase/status/{payment_id} - Check payment status
+- GET /api/billing/transactions - Transaction history
 
 Tests cover both SimpleCreditProvider and CIRISBillingProvider scenarios,
 as well as all error handling paths and the implemented TODOs.
@@ -23,6 +24,7 @@ from ciris_engine.logic.adapters.api.routes.billing import (
     ERROR_RESOURCE_MONITOR_UNAVAILABLE,
     get_credits,
     get_purchase_status,
+    get_transactions,
     initiate_purchase,
 )
 from ciris_engine.schemas.api.auth import AuthContext, UserRole
@@ -508,6 +510,258 @@ class TestGetPurchaseStatus:
 
         with pytest.raises(HTTPException) as exc_info:
             await get_purchase_status("pi_123", request, mock_auth_context)
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE
+
+
+class TestGetTransactions:
+    """Test GET /api/billing/transactions endpoint."""
+
+    @pytest.fixture
+    def mock_auth_context(self):
+        """Create mock auth context."""
+        auth = Mock(spec=AuthContext)
+        auth.user_id = "google:115300315355793131383"
+        auth.role = UserRole.OBSERVER
+        auth.api_key_id = None
+        return auth
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_no_resource_monitor(self, mock_auth_context):
+        """Test that missing resource monitor returns 503."""
+        request = Mock()
+        request.app.state = Mock(spec=[])  # No resource_monitor
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == ERROR_RESOURCE_MONITOR_UNAVAILABLE
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_no_credit_provider(self, mock_auth_context):
+        """Test that no credit provider returns empty list."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.resource_monitor = Mock(spec=[])  # No credit_provider
+
+        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        assert response.transactions == []
+        assert response.total_count == 0
+        assert response.has_more is False
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_simple_provider(self, mock_auth_context):
+        """Test that SimpleCreditProvider returns empty list (no transaction tracking)."""
+        request = Mock()
+        request.app.state = Mock()
+
+        # Mock resource monitor with SimpleCreditProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "SimpleCreditProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        assert response.transactions == []
+        assert response.total_count == 0
+        assert response.has_more is False
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_billing_provider_success(self, mock_auth_context):
+        """Test CIRISBillingProvider with successful transaction listing."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        # Mock billing client
+        billing_client = AsyncMock()
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "transactions": [
+                {
+                    "transaction_id": "charge_abc123",
+                    "type": "charge",
+                    "amount_minor": -100,
+                    "currency": "USD",
+                    "description": "Agent interaction",
+                    "created_at": "2025-10-16T12:00:00Z",
+                    "balance_after": 900,
+                    "metadata": {"agent_id": "test-agent", "channel": "discord"},
+                },
+                {
+                    "transaction_id": "credit_xyz789",
+                    "type": "credit",
+                    "amount_minor": 1000,
+                    "currency": "USD",
+                    "description": "Purchased 20 uses",
+                    "created_at": "2025-10-15T10:00:00Z",
+                    "balance_after": 1000,
+                    "transaction_type": "purchase",
+                    "external_transaction_id": "pi_stripe123",
+                },
+            ],
+            "total_count": 2,
+            "has_more": False,
+        }
+        mock_response.raise_for_status = Mock()
+        billing_client.get = AsyncMock(return_value=mock_response)
+        request.app.state.billing_client = billing_client
+
+        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        assert len(response.transactions) == 2
+        assert response.total_count == 2
+        assert response.has_more is False
+
+        # Verify first transaction (charge)
+        charge = response.transactions[0]
+        assert charge.transaction_id == "charge_abc123"
+        assert charge.type == "charge"
+        assert charge.amount_minor == -100
+        assert charge.balance_after == 900
+
+        # Verify second transaction (credit)
+        credit = response.transactions[1]
+        assert credit.transaction_id == "credit_xyz789"
+        assert credit.type == "credit"
+        assert credit.amount_minor == 1000
+        assert credit.transaction_type == "purchase"
+
+        # Verify API call parameters
+        call_args = billing_client.get.call_args
+        assert call_args[0][0] == "/v1/billing/transactions"
+        params = call_args[1]["params"]
+        assert params["limit"] == 50
+        assert params["offset"] == 0
+        assert "oauth_provider" in params
+        assert "external_id" in params
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_with_pagination(self, mock_auth_context):
+        """Test transaction listing with custom pagination parameters."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        # Mock billing client
+        billing_client = AsyncMock()
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "transactions": [],
+            "total_count": 100,
+            "has_more": True,
+        }
+        mock_response.raise_for_status = Mock()
+        billing_client.get = AsyncMock(return_value=mock_response)
+        request.app.state.billing_client = billing_client
+
+        response = await get_transactions(request, mock_auth_context, limit=10, offset=20)
+
+        # Verify pagination parameters were passed
+        call_args = billing_client.get.call_args
+        params = call_args[1]["params"]
+        assert params["limit"] == 10
+        assert params["offset"] == 20
+
+        # Verify response
+        assert response.total_count == 100
+        assert response.has_more is True
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_404_account_not_found(self, mock_auth_context):
+        """Test transaction listing when account not found (404) returns empty list."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        # Mock billing client with 404 error
+        billing_client = AsyncMock()
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_response.text = "Account not found"
+        billing_client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError("Not found", request=Mock(), response=mock_response)
+        )
+        request.app.state.billing_client = billing_client
+
+        response = await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        # Should return empty list instead of raising error
+        assert response.transactions == []
+        assert response.total_count == 0
+        assert response.has_more is False
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_api_error(self, mock_auth_context):
+        """Test transaction listing with billing API error (500)."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        # Mock billing client with 500 error
+        billing_client = AsyncMock()
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal server error"
+        billing_client.get = AsyncMock(
+            side_effect=httpx.HTTPStatusError("Server error", request=Mock(), response=mock_response)
+        )
+        request.app.state.billing_client = billing_client
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_transactions(request, mock_auth_context, limit=50, offset=0)
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE
+
+    @pytest.mark.asyncio
+    async def test_get_transactions_request_error(self, mock_auth_context):
+        """Test transaction listing with network request error."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+        request.app.state.resource_monitor = resource_monitor
+
+        # Mock billing client with request error
+        billing_client = AsyncMock()
+        billing_client.get = AsyncMock(side_effect=httpx.RequestError("Connection failed"))
+        request.app.state.billing_client = billing_client
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_transactions(request, mock_auth_context, limit=50, offset=0)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == ERROR_BILLING_SERVICE_UNAVAILABLE

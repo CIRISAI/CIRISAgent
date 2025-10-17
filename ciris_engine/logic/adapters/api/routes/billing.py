@@ -68,6 +68,31 @@ class PurchaseStatusResponse(BaseModel):
     balance_after: Optional[int] = Field(None, description="Balance after credits added")
 
 
+class TransactionItem(BaseModel):
+    """Individual transaction (charge or credit)."""
+
+    transaction_id: str = Field(..., description="Unique transaction ID")
+    type: str = Field(..., description="Transaction type: charge or credit")
+    amount_minor: int = Field(..., description="Amount in minor units (negative for charges, positive for credits)")
+    currency: str = Field(..., description="Currency code (USD)")
+    description: str = Field(..., description="Transaction description")
+    created_at: str = Field(..., description="Transaction timestamp (ISO format)")
+    balance_after: int = Field(..., description="Account balance after this transaction")
+    metadata: Optional[JSONDict] = Field(None, description="Additional metadata for charges")
+    transaction_type: Optional[str] = Field(None, description="Type of credit transaction (purchase, refund, etc)")
+    external_transaction_id: Optional[str] = Field(
+        None, description="External payment ID (e.g., Stripe payment intent)"
+    )
+
+
+class TransactionListResponse(BaseModel):
+    """Transaction history response."""
+
+    transactions: list[TransactionItem] = Field(..., description="List of transactions")
+    total_count: int = Field(..., description="Total number of transactions")
+    has_more: bool = Field(..., description="Whether more transactions are available")
+
+
 # Helper functions
 
 
@@ -104,26 +129,37 @@ def _get_stripe_publishable_key() -> str:
 
 def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
     """Extract user identity from auth context including marketing opt-in preference and email."""
-    # Extract marketing_opt_in and email from user record if available
+    # Extract user information from auth service
     marketing_opt_in = False
     user_email = None
+    oauth_provider = None
+    external_id = None
 
     if hasattr(request.app.state, "auth_service") and request.app.state.auth_service is not None:
         auth_service = request.app.state.auth_service
         user = auth_service.get_user(auth.user_id)
         if user:
             marketing_opt_in = user.marketing_opt_in
-            # Try to get email from OAuth user data
             user_email = user.oauth_email
+            # Get OAuth provider and external_id from user object (stored in database)
+            if user.oauth_provider and user.oauth_external_id:
+                oauth_provider = user.oauth_provider
+                external_id = user.oauth_external_id
 
-    # Parse OAuth provider from user_id format (e.g., "google:115300315355793131383")
-    oauth_provider = "oauth:api:internal"
-    external_id = auth.user_id
+    # Fallback: Try to parse from user_id format (e.g., "google:115300315355793131383")
+    if not oauth_provider or not external_id:
+        if ":" in auth.user_id and not auth.user_id.startswith("wa-"):
+            parts = auth.user_id.split(":", 1)
+            oauth_provider = parts[0]  # e.g., "google", "discord"
+            external_id = parts[1]  # e.g., "115300315355793131383"
+        else:
+            # Internal/API user without OAuth
+            oauth_provider = "api:internal"
+            external_id = auth.user_id
 
-    if ":" in auth.user_id:
-        parts = auth.user_id.split(":", 1)
-        oauth_provider = f"oauth:{parts[0]}"  # e.g., "oauth:google", "oauth:discord"
-        external_id = parts[1]  # e.g., "115300315355793131383"
+    # Format oauth_provider with "oauth:" prefix for billing backend
+    if not oauth_provider.startswith("oauth:"):
+        oauth_provider = f"oauth:{oauth_provider}"
 
     identity = {
         "oauth_provider": oauth_provider,
@@ -134,8 +170,8 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.debug(
-        f"Extracted identity: provider={oauth_provider}, external_id={external_id[:8]}..., has_email={user_email is not None}"
+    logger.info(
+        f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, has_email={user_email is not None}"
     )
     return identity
 
@@ -306,7 +342,12 @@ async def get_credits(
     billing_client = _get_billing_client(request)
     check_payload = _build_credit_check_payload(user_identity, context)
     credit_data = await _query_billing_backend(billing_client, check_payload)
-    return _format_billing_response(credit_data)
+    response = _format_billing_response(credit_data)
+    logger.info(
+        f"[BILLING_CREDITS] Returning credits for {auth.user_id}: "
+        f"free={response.free_uses_remaining}, paid={response.credits_remaining}, has_credit={response.has_credit}"
+    )
+    return response
 
 
 @router.post("/purchase/initiate", response_model=PurchaseInitiateResponse)
@@ -474,3 +515,119 @@ async def get_purchase_status(
         credits_added=credits_added,
         balance_after=credit_data.get("credits_remaining"),
     )
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def get_transactions(
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+    limit: int = 50,
+    offset: int = 0,
+) -> TransactionListResponse:
+    """
+    Get transaction history for the current user.
+
+    Returns a paginated list of all transactions (charges and credits) in reverse chronological order.
+
+    Only works when CIRIS_BILLING_ENABLED=true (CIRISBillingProvider).
+    Returns empty list when SimpleCreditProvider is active (billing disabled).
+    """
+    # Check if billing is enabled (CIRISBillingProvider vs SimpleCreditProvider)
+    if not hasattr(request.app.state, "resource_monitor"):
+        raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
+
+    resource_monitor = request.app.state.resource_monitor
+
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        # No credit provider - return empty list
+        return TransactionListResponse(transactions=[], total_count=0, has_more=False)
+
+    is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
+
+    if is_simple_provider:
+        # SimpleCreditProvider doesn't track transactions - return empty list
+        return TransactionListResponse(transactions=[], total_count=0, has_more=False)
+
+    # CIRISBillingProvider - query billing backend for transaction history
+    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions for {auth.user_id} (limit={limit}, offset={offset})")
+    billing_client = _get_billing_client(request)
+    user_identity = _extract_user_identity(auth, request)
+
+    try:
+        from typing import Mapping, cast
+
+        # Build query parameters for billing backend - cast to expected types
+        oauth_provider = str(user_identity["oauth_provider"])
+        external_id = str(user_identity["external_id"])
+
+        params: dict[str, str | int] = {
+            "oauth_provider": oauth_provider,
+            "external_id": external_id,
+            "limit": limit,
+            "offset": offset,
+        }
+
+        # Add optional parameters if present
+        wa_id = user_identity.get("wa_id")
+        if wa_id:
+            params["wa_id"] = str(wa_id)
+        tenant_id = user_identity.get("tenant_id")
+        if tenant_id:
+            params["tenant_id"] = str(tenant_id)
+
+        # Log request details for debugging (without PII)
+        logger.debug(
+            f"[BILLING_TRANSACTIONS] Request to billing backend: "
+            f"oauth_provider={params.get('oauth_provider')}, "
+            f"external_id={params.get('external_id')}, "
+            f"wa_id={params.get('wa_id')}, "
+            f"has_email={user_identity.get('customer_email') is not None}"
+        )
+
+        # Query billing backend
+        response = await billing_client.get(
+            "/v1/billing/transactions",
+            params=cast(Mapping[str, str | int | float | bool | None], params),
+        )
+        response.raise_for_status()
+        transaction_data: JSONDict = response.json()
+
+        # Map backend response to our schema - safely extract and validate transactions list
+        transactions_raw = transaction_data.get("transactions", [])
+        if not isinstance(transactions_raw, list):
+            transactions_raw = []
+        transactions = [TransactionItem(**txn) for txn in transactions_raw if isinstance(txn, dict)]
+
+        logger.info(
+            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions for {auth.user_id} "
+            f"(total={transaction_data.get('total_count', 0)}, has_more={transaction_data.get('has_more', False)})"
+        )
+        return TransactionListResponse(
+            transactions=transactions,
+            total_count=transaction_data.get("total_count", 0),
+            has_more=transaction_data.get("has_more", False),
+        )
+
+    except httpx.HTTPStatusError as e:
+        # Safely extract request details for logging
+        try:
+            headers_str = str(dict(e.request.headers))
+        except (TypeError, AttributeError):
+            headers_str = "<unavailable>"
+
+        logger.error(
+            f"Billing API error fetching transactions: {e.response.status_code} - {e.response.text}\n"
+            f"Request URL: {e.request.url}\n"
+            f"Request headers: {headers_str}"
+        )
+        if e.response.status_code == 404:
+            # Account not found - return empty list
+            return TransactionListResponse(transactions=[], total_count=0, has_more=False)
+        if e.response.status_code == 401:
+            # Authentication failed - log details and return empty
+            logger.error("401 Unauthorized - API key may be invalid or missing")
+            return TransactionListResponse(transactions=[], total_count=0, has_more=False)
+        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+    except httpx.RequestError as e:
+        logger.error(f"Billing API request error: {e}")
+        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)

@@ -40,6 +40,29 @@ class PurchaseStatus(BaseModel):
     balance_after: Optional[int] = Field(None, description="Balance after credits added")
 
 
+class Transaction(BaseModel):
+    """Individual transaction (charge or credit)."""
+
+    transaction_id: str = Field(..., description="Unique transaction ID")
+    type: str = Field(..., description="Transaction type: charge or credit")
+    amount_minor: int = Field(..., description="Amount in minor units (negative for charges, positive for credits)")
+    currency: str = Field(..., description="Currency code (USD)")
+    description: str = Field(..., description="Transaction description")
+    created_at: str = Field(..., description="Transaction timestamp (ISO format)")
+    balance_after: int = Field(..., description="Account balance after this transaction")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata for charges")
+    transaction_type: Optional[str] = Field(None, description="Type of credit transaction (purchase, refund, etc)")
+    external_transaction_id: Optional[str] = Field(None, description="External payment ID (e.g., Stripe payment intent)")
+
+
+class TransactionList(BaseModel):
+    """Transaction history response."""
+
+    transactions: list[Transaction] = Field(..., description="List of transactions")
+    total_count: int = Field(..., description="Total number of transactions")
+    has_more: bool = Field(..., description="Whether more transactions are available")
+
+
 class BillingResource:
     """
     Billing client for v1 API.
@@ -127,3 +150,38 @@ class BillingResource:
             return PurchaseStatus(**result["data"])
         assert isinstance(result, dict), "Expected dict response from transport"
         return PurchaseStatus(**result)
+
+    async def get_transactions(self, limit: int = 50, offset: int = 0) -> TransactionList:
+        """
+        Get transaction history for the current user.
+
+        Returns a paginated list of all transactions (charges and credits) in reverse chronological order.
+
+        Only works when billing is enabled (CIRISBillingProvider).
+        Returns empty list when SimpleCreditProvider is active (billing disabled).
+
+        Args:
+            limit: Maximum number of transactions to return (default 50)
+            offset: Number of transactions to skip for pagination (default 0)
+
+        Returns:
+            TransactionList with transactions, total count, and pagination info
+
+        Example:
+            # Get first page of transactions
+            txns = await client.billing.get_transactions(limit=10)
+            print(f"Total transactions: {txns.total_count}")
+            for txn in txns.transactions:
+                print(f"{txn.created_at}: {txn.description} - {txn.amount_minor/100:.2f}")
+
+            # Get next page
+            if txns.has_more:
+                next_page = await client.billing.get_transactions(limit=10, offset=10)
+        """
+        params = {"limit": limit, "offset": offset}
+        result = await self._transport.request("GET", "/v1/api/billing/transactions", params=params)
+
+        if isinstance(result, dict) and "data" in result:
+            return TransactionList(**result["data"])
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return TransactionList(**result)

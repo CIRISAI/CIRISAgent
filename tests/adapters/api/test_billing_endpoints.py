@@ -12,7 +12,7 @@ as well as all error handling paths and the implemented TODOs.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -302,15 +302,13 @@ class TestInitiatePurchase:
             "amount_minor": 500,
             "currency": "USD",
             "uses_purchased": 20,
+            "publishable_key": "pk_test_123",  # Now returned by billing backend
         }
         billing_client.post = AsyncMock(return_value=mock_response)
         request.app.state.billing_client = billing_client
 
-        # Mock Stripe publishable key
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.billing._get_stripe_publishable_key", return_value="pk_test_123"
-        ):
-            response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
+        # No need to patch - publishable key comes from billing backend response
+        response = await initiate_purchase(request, mock_purchase_request, mock_auth_context)
 
         assert response.payment_id == "pi_123"
         assert response.client_secret == "pi_123_secret"

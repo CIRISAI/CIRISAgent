@@ -173,6 +173,17 @@ class QARunner:
         else:
             self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
 
+        # ALWAYS print log location reminders - helpful for debugging
+        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("[dim]   • Full logs: logs/latest.log[/dim]")
+        self.console.print("[dim]   • Incidents: logs/incidents_latest.log[/dim]")
+
+        # Billing-specific reminder for billing integration tests
+        if QAModule.BILLING_INTEGRATION in modules:
+            self.console.print("\n[yellow]💳 Billing Integration Note:[/yellow]")
+            self.console.print("[dim]   • Credit replenishment takes 5 minutes for QA user[/dim]")
+            self.console.print("[dim]   • If tests fail due to no credits, wait 5 minutes and retry[/dim]")
+
         return success
 
     def _check_incidents_for_test(self, test_name: str) -> List[str]:

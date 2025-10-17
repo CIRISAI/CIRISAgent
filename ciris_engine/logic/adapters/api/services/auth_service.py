@@ -155,7 +155,9 @@ class APIAuthService:
         if wa.oauth_links:
             print(f"  📧 [AUTH DEBUG] Found {len(wa.oauth_links)} OAuth links for {wa.wa_id}")
             for i, link in enumerate(wa.oauth_links):
-                print(f"  📧 [AUTH DEBUG] Link {i}: provider={link.provider}, external_id={link.external_id}, metadata={link.metadata}")
+                print(
+                    f"  📧 [AUTH DEBUG] Link {i}: provider={link.provider}, external_id={link.external_id}, metadata={link.metadata}"
+                )
                 # Check if link has email in metadata or as direct attribute
                 if hasattr(link, "email") and link.email:
                     oauth_email = link.email

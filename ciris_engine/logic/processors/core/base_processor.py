@@ -4,7 +4,7 @@ Base processor abstract class defining the interface for all processor types.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import ValidationError
 
@@ -31,46 +31,45 @@ class BaseProcessor(ABC):
         config_accessor: ConfigAccessor,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: Union[JSONDict, ProcessorServices],
+        services: ProcessorServices,
     ) -> None:
         """Initialize base processor with common dependencies.
 
         Args:
-            services: Can be JSONDict (legacy) or ProcessorServices (typed)
+            services: Type-safe ProcessorServices container with all dependencies
         """
         self.config = config_accessor
         self.thought_processor = thought_processor
         self.action_dispatcher = action_dispatcher
 
-        # Convert ProcessorServices to dict for backward compatibility
-        if isinstance(services, ProcessorServices):
-            services_dict = services.model_dump(exclude_none=True)
-        else:
-            services_dict = services
+        # Store services directly - no dict conversion
+        self.services = services
 
-        self.services = services_dict
-        if services_dict and "discord_service" in services_dict:
-            self.discord_service = services_dict["discord_service"]
+        # Direct attribute access with type safety
+        if services.discord_service:
+            self.discord_service = services.discord_service
 
-        # Get TimeService from services
-        time_service = services_dict.get("time_service")
-        if not time_service:
+        # Get TimeService from services - REQUIRED
+        if not services.time_service:
             raise ValueError("time_service is required for processors")
-        self.time_service: TimeServiceProtocol = time_service
+        # Cast to correct type for mypy strictness
+        from typing import cast
+
+        self.time_service: TimeServiceProtocol = cast(TimeServiceProtocol, services.time_service)
 
         # Get ResourceMonitor from services - REQUIRED for system snapshots
-        self.resource_monitor = services_dict.get("resource_monitor")
-        if not self.resource_monitor:
+        if not services.resource_monitor:
             raise ValueError("resource_monitor is required for processors")
+        self.resource_monitor = services.resource_monitor
 
-        # Extract other commonly used services
-        self.memory_service = services_dict.get("memory_service")
-        self.graphql_provider = services_dict.get("graphql_provider")
-        self.app_config = services_dict.get("app_config")
-        self.runtime = services_dict.get("runtime")
-        self.service_registry = services_dict.get("service_registry")
-        self.secrets_service = services_dict.get("secrets_service")
-        self.telemetry_service = services_dict.get("telemetry_service")
+        # Extract other commonly used services with direct attribute access
+        self.memory_service = services.memory_service
+        self.graphql_provider = getattr(services, "graphql_provider", None)
+        self.app_config = getattr(services, "app_config", None)
+        self.runtime = getattr(services, "runtime", None)
+        self.service_registry = getattr(services, "service_registry", None)
+        self.secrets_service = getattr(services, "secrets_service", None)
+        self.telemetry_service = services.telemetry_service
 
         self.metrics = ProcessorMetrics()
 

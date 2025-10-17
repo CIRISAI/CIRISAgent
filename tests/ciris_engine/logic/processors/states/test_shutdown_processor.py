@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from ciris_engine.logic.processors.states.shutdown_processor import ShutdownProcessor
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -60,12 +61,27 @@ def mock_action_dispatcher():
 
 @pytest.fixture
 def mock_services(mock_time_service):
-    """Mock services dict"""
+    """Mock services using ProcessorServices schema"""
     mock_resource_monitor = Mock()
-    return {
-        "time_service": mock_time_service,
-        "resource_monitor": mock_resource_monitor,
-    }
+    mock_communication_bus = Mock()
+    mock_communication_bus.get_default_channel = AsyncMock(return_value="default_channel_123")
+
+    return ProcessorServices(
+        time_service=mock_time_service,
+        resource_monitor=mock_resource_monitor,
+        communication_bus=mock_communication_bus,
+        discord_service=None,
+        memory_service=None,
+        audit_service=None,
+        telemetry_service=None,
+        service_registry=None,
+        identity_manager=None,
+        secrets_service=None,
+        graphql_provider=None,
+        app_config=None,
+        runtime=None,
+        llm_service=None,
+    )
 
 
 @pytest.fixture
@@ -357,7 +373,8 @@ class TestTaskCreation:
 
         mock_comm_bus = Mock()
         mock_comm_bus.get_default_channel = AsyncMock(return_value="comm_channel_456")
-        shutdown_processor.services["communication_bus"] = mock_comm_bus
+        # Update the communication_bus in the ProcessorServices object
+        shutdown_processor.services.communication_bus = mock_comm_bus
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"

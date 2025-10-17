@@ -51,8 +51,13 @@ class SolitudeProcessor(BaseProcessor):
         self._time_service: Optional[Any] = None
 
         # Initialize time service if service registry is available
-        if hasattr(self, "services") and isinstance(self.services, dict) and "service_registry" in self.services:
-            self._initialize_time_service(self.services["service_registry"])
+        if hasattr(self, "services") and self.services.service_registry:
+            from typing import cast
+
+            from ciris_engine.logic.registries.base import ServiceRegistry
+
+            service_registry = cast(ServiceRegistry, self.services.service_registry)
+            self._initialize_time_service(service_registry)
 
     def get_supported_states(self) -> List[AgentState]:
         """Solitude processor only handles SOLITUDE state."""
@@ -178,7 +183,7 @@ class SolitudeProcessor(BaseProcessor):
 
             self.reflection_data.tasks_reviewed += len(recent_completed)
 
-            if self.services.get("memory_service"):
+            if self.services.memory_service:
                 reflection_result.memories_consolidated = 0
 
         except Exception as e:

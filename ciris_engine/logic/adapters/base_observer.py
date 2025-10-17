@@ -961,7 +961,14 @@ class BaseObserver[MessageT: BaseModel](ABC):
             return
 
         account, context = envelope
-        logger.debug(f"[CREDIT] Enforcement starting for account {account.cache_key()}")
+
+        # Check if user role should bypass credit checks (ADMIN+)
+        user_role = context.user_role
+        if user_role in ["ADMIN", "AUTHORITY", "SYSTEM_ADMIN", "SERVICE_ACCOUNT"]:
+            logger.info(f"[CREDIT] User role {user_role} bypasses credit check for message {msg_id}")
+            return
+
+        logger.debug(f"[CREDIT] Enforcement starting for account {account.cache_key()}, role={user_role}")
 
         await self._check_and_charge_credit(resource_monitor, account, context, msg)
 

@@ -160,9 +160,9 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.info(
+    logger.debug(
         f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, "
-        f"email={user_email if user_email else 'NULL'}, marketing_opt_in={marketing_opt_in}"
+        f"has_email={user_email is not None}, marketing_opt_in={marketing_opt_in}"
     )
     return identity
 

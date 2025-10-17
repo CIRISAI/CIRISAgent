@@ -53,10 +53,16 @@ class WorkProcessor(BaseProcessor):
             max_active_tasks = 10
             max_active_thoughts = 50
 
-        time_service = services.get("time_service")
+        # Direct attribute access for type safety
+        time_service = services.time_service
         if not time_service:
             raise ValueError("time_service is required in services")
-        self.time_service = time_service
+
+        from typing import cast
+
+        from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+
+        self.time_service = cast(TimeServiceProtocol, time_service)
         self.task_manager = TaskManager(
             max_active_tasks=max_active_tasks,
             time_service=self.time_service,

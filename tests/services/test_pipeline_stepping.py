@@ -15,6 +15,7 @@ from ciris_engine.logic.processors.core.main_processor import AgentProcessor
 from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
 from ciris_engine.protocols.pipeline_control import PipelineController
 from ciris_engine.schemas.dma.core import DMAContext
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.models import Task, TaskStatus, Thought, ThoughtStatus
 from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus
@@ -41,19 +42,24 @@ class TestAgentProcessorPause:
         mock_time_service.now.return_value = current_time
         mock_time_service.now_iso.return_value = current_time.isoformat()
 
-        return {
-            "time_service": mock_time_service,
-            "memory_service": Mock(),
-            "llm_service": Mock(),
-            "config_service": Mock(),
-            "resource_monitor": Mock(
-                get_current_metrics=Mock(
-                    return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
-                )
-            ),
-            "telemetry_service": Mock(memorize_metric=AsyncMock()),
-            "identity_manager": Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
-        }
+        mock_resource_monitor = Mock(
+            get_current_metrics=Mock(
+                return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
+            )
+        )
+
+        mock_telemetry_service = Mock(memorize_metric=AsyncMock())
+        mock_identity_manager = Mock(get_identity=Mock(return_value={"name": "TestAgent"}))
+
+        return ProcessorServices(
+            time_service=mock_time_service,
+            memory_service=Mock(),
+            llm_service=Mock(),
+            resource_monitor=mock_resource_monitor,
+            telemetry_service=mock_telemetry_service,
+            identity_manager=mock_identity_manager,
+            app_config=Mock(),
+        )
 
     @pytest.fixture
     def agent_processor(self, mock_services):

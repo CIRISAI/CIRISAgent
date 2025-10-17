@@ -39,21 +39,23 @@ class TestSingleStepHangValidation:
     @pytest.fixture
     def mock_services(self, mock_time_service):
         """Mock all required services."""
-        return {
-            "time_service": mock_time_service,
-            "telemetry_service": Mock(memorize_metric=AsyncMock()),
-            "memory_service": Mock(
+        from ciris_engine.schemas.processors.base import ProcessorServices
+
+        return ProcessorServices(
+            time_service=mock_time_service,
+            telemetry_service=Mock(memorize_metric=AsyncMock()),
+            memory_service=Mock(
                 memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Test identity context")
             ),
-            "identity_manager": Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
-            "resource_monitor": Mock(
+            identity_manager=Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
+            resource_monitor=Mock(
                 get_current_metrics=Mock(
                     return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
                 )
             ),
-            "llm_service": Mock(),
-            "audit_service": Mock(log_event=AsyncMock()),
-        }
+            llm_service=Mock(),
+            audit_service=Mock(log_event=AsyncMock()),
+        )
 
     @pytest.fixture
     def mock_config(self):

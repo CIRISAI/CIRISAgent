@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ciris_engine.schemas.services.authority_core import WARole
+from ciris_engine.schemas.types import JSONDict
 
 
 class WACertificateUpdate(BaseModel):
@@ -69,9 +70,9 @@ class WACertificateUpdate(BaseModel):
                 return True
         return False
 
-    def get_update_fields(self) -> Dict[str, Any]:
+    def get_update_fields(self) -> JSONDict:
         """Get only the fields that are being updated."""
-        updates = {}
+        updates: JSONDict = {}
         exclude_fields = {"wa_id", "add_scopes", "remove_scopes"}
 
         for field_name, field_value in self.model_dump(exclude_unset=True).items():

@@ -5,7 +5,7 @@ These replace all Dict[str, Any] usage in base_processor.py.
 """
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,20 +47,33 @@ class ProcessorServices(BaseModel):
 
     This schema replaces Dict[str, Any] for service dependencies.
     All services are optional as different processors need different services.
+
+    Type safety: Processors must cast services to their expected types when
+    accessing them. This ensures mypy strictness while maintaining Pydantic's
+    runtime flexibility with arbitrary_types_allowed.
     """
 
-    # Core services
-    time_service: Optional[object] = Field(None, description="Time service (TimeServiceProtocol)")
-    resource_monitor: Optional[object] = Field(None, description="Resource monitor service")
+    # Core services (REQUIRED for most processors)
+    time_service: Any = Field(None, description="Time service (TimeServiceProtocol)")
+    resource_monitor: Any = Field(None, description="Resource monitor service")
 
     # Communication services
-    discord_service: Optional[object] = Field(None, description="Discord service if available")
-    communication_bus: Optional[object] = Field(None, description="Communication bus for multi-adapter support")
+    discord_service: Any = Field(None, description="Discord service if available")
+    communication_bus: Any = Field(None, description="Communication bus for multi-adapter support")
 
     # Storage services
-    memory_service: Optional[object] = Field(None, description="Memory service")
-    audit_service: Optional[object] = Field(None, description="Audit service")
-    telemetry_service: Optional[object] = Field(None, description="Telemetry service")
+    memory_service: Any = Field(None, description="Memory service")
+    audit_service: Any = Field(None, description="Audit service")
+    telemetry_service: Any = Field(None, description="Telemetry service")
+
+    # Additional services used by specialized processors
+    service_registry: Any = Field(None, description="Service registry for dynamic service lookup")
+    identity_manager: Any = Field(None, description="Agent identity manager")
+    secrets_service: Any = Field(None, description="Secrets management service")
+    graphql_provider: Any = Field(None, description="GraphQL provider for database access")
+    app_config: Any = Field(None, description="Application configuration accessor")
+    runtime: Any = Field(None, description="Runtime control interface")
+    llm_service: Any = Field(None, description="LLM service for AI operations")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

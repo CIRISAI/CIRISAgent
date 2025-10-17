@@ -17,6 +17,7 @@ from ciris_engine.logic.infrastructure.sub_services.pattern_analysis_loop import
 from ciris_engine.logic.processors.states.dream_processor import DreamProcessor
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.feedback_loop import DetectedPattern, PatternMetrics, PatternType
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
 
@@ -191,7 +192,7 @@ async def test_dream_processor_queries_behavioral_insights() -> None:
     thought_processor = MagicMock()
     action_dispatcher = MagicMock()
     resource_monitor = MagicMock()
-    services = {"time_service": time_service, "resource_monitor": resource_monitor}
+    services = ProcessorServices(time_service=time_service, resource_monitor=resource_monitor)
 
     dream_processor = DreamProcessor(
         config_accessor=config_accessor,
@@ -265,7 +266,7 @@ async def test_all_insights_processed_without_filtering() -> None:
     thought_processor = MagicMock()
     action_dispatcher = MagicMock()
     resource_monitor = MagicMock()
-    services = {"time_service": time_service, "resource_monitor": resource_monitor}
+    services = ProcessorServices(time_service=time_service, resource_monitor=resource_monitor)
 
     dream_processor = DreamProcessor(
         config_accessor=config_accessor,
@@ -373,7 +374,7 @@ async def test_integration_feedback_loop_to_dream_processor() -> None:
     thought_processor = MagicMock()
     action_dispatcher = MagicMock()
     resource_monitor = MagicMock()
-    services = {"time_service": time_service, "resource_monitor": resource_monitor}
+    services = ProcessorServices(time_service=time_service, resource_monitor=resource_monitor)
 
     dream_processor = DreamProcessor(
         config_accessor=config_accessor,
@@ -446,7 +447,7 @@ async def test_dream_processor_handles_missing_attributes() -> None:
     thought_processor = MagicMock()
     action_dispatcher = MagicMock()
     resource_monitor = MagicMock()
-    services = {"time_service": time_service, "resource_monitor": resource_monitor}
+    services = ProcessorServices(time_service=time_service, resource_monitor=resource_monitor)
 
     dream_processor = DreamProcessor(
         config_accessor=config_accessor,

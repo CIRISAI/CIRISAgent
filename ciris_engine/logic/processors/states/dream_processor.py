@@ -22,7 +22,7 @@ from ciris_engine.logic.services.governance.self_observation import SelfObservat
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict, get_int, get_str
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.processors.base import MetricsUpdate
+from ciris_engine.schemas.processors.base import MetricsUpdate, ProcessorServices
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
@@ -88,7 +88,7 @@ class DreamProcessor(BaseProcessor):
         config_accessor: ConfigAccessor,
         thought_processor: "ThoughtProcessor",
         action_dispatcher: "ActionDispatcher",
-        services: JSONDict,
+        services: ProcessorServices,
         service_registry: Optional["ServiceRegistry"] = None,
         identity_manager: Optional["IdentityManager"] = None,
         startup_channel_id: Optional[str] = None,
@@ -106,14 +106,16 @@ class DreamProcessor(BaseProcessor):
         self._time_service: Optional[TimeServiceProtocol] = None
         if service_registry:
             self._initialize_time_service(service_registry)
-        elif services and "time_service" in services:
-            time_service_val = services["time_service"]
+        elif services.time_service:
+            time_service_val = services.time_service
             if hasattr(time_service_val, "now"):
-                self._time_service = time_service_val  # type: ignore[assignment]
+                from typing import cast
+
+                self._time_service = cast(TimeServiceProtocol, time_service_val)
 
         # Dream-specific initialization
-        service_registry_val = services.get("service_registry") if services else None
-        identity_manager_val = services.get("identity_manager") if services else None
+        service_registry_val = services.service_registry
+        identity_manager_val = services.identity_manager
         self.service_registry = service_registry or service_registry_val
         self.identity_manager = identity_manager or identity_manager_val
         self.startup_channel_id = startup_channel_id
@@ -331,13 +333,16 @@ class DreamProcessor(BaseProcessor):
             return False
 
         try:
-            # Initialize buses
+            from typing import cast
 
+            # Initialize buses
             # Get time service for MemoryBus
-            time_service = self.services.get("time_service") if self.services else None
-            if not time_service:
+            time_service_raw = self.services.time_service
+            if not time_service_raw:
                 logger.error("TimeService not available for MemoryBus initialization")
                 return False
+            time_service = cast(TimeServiceProtocol, time_service_raw)
+
             from ciris_engine.logic.buses import CommunicationBus as CB
             from ciris_engine.logic.buses import MemoryBus as MB
 

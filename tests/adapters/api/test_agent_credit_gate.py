@@ -55,7 +55,10 @@ class StubSecretsService:
         return content, []
 
 
-def _build_request(monitor: StubResourceMonitor) -> tuple[SimpleNamespace, AuthContext]:
+def _build_request(
+    monitor: StubResourceMonitor, role: UserRole = UserRole.OBSERVER
+) -> tuple[SimpleNamespace, AuthContext]:
+    """Build request with configurable user role. Defaults to OBSERVER for credit testing."""
     auth_service = APIAuthService()
     user = User(
         wa_id="wa-test",
@@ -96,7 +99,7 @@ def _build_request(monitor: StubResourceMonitor) -> tuple[SimpleNamespace, AuthC
 
     auth_context = AuthContext(
         user_id=user.wa_id,
-        role=UserRole.ADMIN,
+        role=role,
         permissions={Permission.SEND_MESSAGES},
         api_key_id=None,
         session_id=None,
@@ -203,5 +206,63 @@ async def test_interact_skips_credit_when_provider_missing() -> None:
 
     assert response.data.response == "Acknowledged"
     # No credit calls recorded when provider absent
+    assert len(monitor.calls) == 0
+    assert len(monitor.spend_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_interact_admin_bypasses_credit_check() -> None:
+    """Test that ADMIN users bypass credit checks entirely."""
+    # Set up monitor that would fail credit check
+    monitor = StubResourceMonitor(
+        result=CreditCheckResult(
+            has_credit=False,  # Would normally block
+            credits_remaining=0,
+            expires_at=None,
+            plan_name=None,
+            reason="insufficient",
+            provider_metadata={},
+        )
+    )
+    # Use ADMIN role
+    request, auth = _build_request(monitor, role=UserRole.ADMIN)
+
+    try:
+        response = await interact(request, InteractRequest(message="hello"), auth)
+    finally:
+        _response_events.clear()
+        _message_responses.clear()
+
+    # Should succeed despite credit check failure because ADMIN bypasses
+    assert response.data.response == "Acknowledged"
+    # No credit calls should be made for ADMIN users
+    assert len(monitor.calls) == 0
+    assert len(monitor.spend_calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_interact_authority_bypasses_credit_check() -> None:
+    """Test that AUTHORITY users bypass credit checks entirely."""
+    monitor = StubResourceMonitor(
+        result=CreditCheckResult(
+            has_credit=False,
+            credits_remaining=0,
+            expires_at=None,
+            plan_name=None,
+            reason="insufficient",
+            provider_metadata={},
+        )
+    )
+    # Use AUTHORITY role
+    request, auth = _build_request(monitor, role=UserRole.AUTHORITY)
+
+    try:
+        response = await interact(request, InteractRequest(message="hello"), auth)
+    finally:
+        _response_events.clear()
+        _message_responses.clear()
+
+    # Should succeed despite credit check failure
+    assert response.data.response == "Acknowledged"
     assert len(monitor.calls) == 0
     assert len(monitor.spend_calls) == 0

@@ -28,6 +28,7 @@ from ciris_engine.logic.processors.core.thought_processor import ThoughtProcesso
 from ciris_engine.logic.processors.support.dma_orchestrator import DMAOrchestrator
 from ciris_engine.logic.utils.graphql_context_provider import GraphQLContextProvider
 from ciris_engine.logic.utils.shutdown_manager import register_global_shutdown_handler
+from ciris_engine.schemas.processors.base import ProcessorServices
 
 logger = logging.getLogger(__name__)
 
@@ -268,25 +269,28 @@ class ComponentBuilder:
         if not self.runtime.agent_identity:
             raise RuntimeError("Agent identity is required for AgentProcessor initialization")
 
+        # Create ProcessorServices with all required services
+        processor_services = ProcessorServices(
+            llm_service=self.runtime.llm_service,
+            memory_service=self.runtime.memory_service,
+            audit_service=self.runtime.audit_service,
+            service_registry=self.runtime.service_registry,
+            time_service=self.runtime.time_service,
+            resource_monitor=self.runtime.resource_monitor,
+            secrets_service=self.runtime.secrets_service,
+            telemetry_service=self.runtime.telemetry_service,
+            app_config=self.runtime.essential_config,
+            graphql_provider=graphql_provider,  # Use the actual GraphQL provider
+            runtime=self.runtime,
+            communication_bus=self.runtime.bus_manager.communication,
+        )
+
         self.agent_processor = AgentProcessor(
             app_config=self.runtime.essential_config,
             agent_identity=self.runtime.agent_identity,
             thought_processor=thought_processor,
             action_dispatcher=action_dispatcher,
-            services={
-                "llm_service": self.runtime.llm_service,
-                "memory_service": self.runtime.memory_service,
-                "audit_service": self.runtime.audit_service,
-                "service_registry": self.runtime.service_registry,
-                "time_service": self.runtime.time_service,
-                "resource_monitor": self.runtime.resource_monitor,
-                "secrets_service": self.runtime.secrets_service,
-                "telemetry_service": self.runtime.telemetry_service,
-                "app_config": self.runtime.essential_config,
-                "graphql_provider": "initialized",  # Store status instead of object
-                "bus_manager": self.runtime.bus_manager,  # Add bus manager for access to buses
-                "communication_bus": self.runtime.bus_manager.communication,  # Direct access to communication bus
-            },
+            services=processor_services,
             startup_channel_id=self.runtime.startup_channel_id,
             time_service=self.runtime.time_service,  # Add missing parameter
             runtime=self.runtime,  # Pass runtime reference for preload tasks

@@ -40,21 +40,21 @@ class TestSingleStepFixValidation:
     @pytest.fixture
     def mock_services(self, mock_time_service):
         """Mock all required services."""
-        return {
-            "time_service": mock_time_service,
-            "telemetry_service": Mock(memorize_metric=AsyncMock()),
-            "memory_service": Mock(
-                memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Fixed context")
-            ),
-            "identity_manager": Mock(get_identity=Mock(return_value={"name": "FixedAgent"})),
-            "resource_monitor": Mock(
+        from ciris_engine.schemas.processors.base import ProcessorServices
+
+        return ProcessorServices(
+            time_service=mock_time_service,
+            telemetry_service=Mock(memorize_metric=AsyncMock()),
+            memory_service=Mock(memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Fixed context")),
+            identity_manager=Mock(get_identity=Mock(return_value={"name": "FixedAgent"})),
+            resource_monitor=Mock(
                 get_current_metrics=Mock(
                     return_value={"cpu_percent": 12.0, "memory_percent": 22.0, "disk_usage_percent": 32.0}
                 )
             ),
-            "llm_service": Mock(),
-            "audit_service": Mock(log_event=AsyncMock()),
-        }
+            llm_service=Mock(),
+            audit_service=Mock(log_event=AsyncMock()),
+        )
 
     @pytest.fixture
     def mock_config(self):

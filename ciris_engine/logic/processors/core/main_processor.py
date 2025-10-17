@@ -6,7 +6,7 @@ Uses v1 schemas and integrates state management.
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
@@ -70,7 +70,7 @@ class AgentProcessor:
         agent_identity: AgentIdentityRoot,
         thought_processor: ThoughtProcessor,
         action_dispatcher: "ActionDispatcher",
-        services: JSONDict | ProcessorServices,
+        services: ProcessorServices,
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
@@ -85,106 +85,79 @@ class AgentProcessor:
         self.thought_processor = thought_processor
         self._action_dispatcher = action_dispatcher  # Store internally
 
-        # Store services - keep as-is for now to avoid breaking existing code
-        self.services: Union[JSONDict, ProcessorServices] = services
+        # Store services directly - type-safe ProcessorServices
+        self.services: ProcessorServices = services
         self.startup_channel_id = startup_channel_id
         self.runtime = runtime  # Store runtime reference for preload tasks
         self._time_service = time_service  # Store injected time service
         self.agent_occurrence_id = agent_occurrence_id  # Store occurrence ID for multi-instance support
 
-        # Helper to safely get from services regardless of type
-        def get_service(key: str) -> Any:
-            if isinstance(services, dict):
-                return services.get(key)
-            return getattr(services, key, None)
-
         # Initialize state manager - agent always starts in SHUTDOWN state
-        time_service_from_services = get_service("time_service")
-        if not time_service_from_services:
-            # Use the injected time service if not in services dict
-            time_service_from_services = time_service
+        time_service_from_services = services.time_service or time_service
         self.state_manager = StateManager(time_service=time_service_from_services, initial_state=AgentState.SHUTDOWN)
 
-        # Initialize specialized processors, passing the initial dispatcher
+        # Initialize specialized processors, passing the standard services container
         self.wakeup_processor = WakeupProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
-            action_dispatcher=self._action_dispatcher,  # Use internal dispatcher
+            action_dispatcher=self._action_dispatcher,
             services=services,
             startup_channel_id=startup_channel_id,
-            time_service=time_service,  # Use the injected time service directly
+            time_service=time_service,
         )
 
         self.work_processor = WorkProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
-            action_dispatcher=self._action_dispatcher,  # Use internal dispatcher
+            action_dispatcher=self._action_dispatcher,
             services=services,
             startup_channel_id=startup_channel_id,
             agent_occurrence_id=agent_occurrence_id,
         )
 
         self.play_processor = PlayProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
-            action_dispatcher=self._action_dispatcher,  # Use internal dispatcher
+            action_dispatcher=self._action_dispatcher,
             services=services,
         )
 
         self.solitude_processor = SolitudeProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
-            action_dispatcher=self._action_dispatcher,  # Use internal dispatcher
+            action_dispatcher=self._action_dispatcher,
             services=services,
         )
 
         # Enhanced dream processor with self-configuration and memory consolidation
-        # Dream processor needs dict, so convert if needed
-        services_dict = (
-            services
-            if isinstance(services, dict)
-            else {
-                "service_registry": getattr(services, "service_registry", None),
-                "identity_manager": getattr(services, "identity_manager", None),
-                "memory_service": getattr(services, "memory_service", None),
-                "audit_service": getattr(services, "audit_service", None),
-                "telemetry_service": getattr(services, "telemetry_service", None),
-                "time_service": getattr(services, "time_service", None),
-                "resource_monitor": getattr(services, "resource_monitor", None),
-            }
-        )
+        # Cast services for type safety
+        from typing import cast
+
+        from ciris_engine.logic.registries.base import ServiceRegistry
+        from ciris_engine.logic.runtime.identity_manager import IdentityManager
+
+        service_registry_typed = cast(ServiceRegistry, services.service_registry) if services.service_registry else None
+        identity_manager_typed = cast(IdentityManager, services.identity_manager) if services.identity_manager else None
+
         self.dream_processor = DreamProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
-            services=services_dict,
-            service_registry=get_service("service_registry"),
-            identity_manager=get_service("identity_manager"),
+            services=services,
+            service_registry=service_registry_typed,
+            identity_manager=identity_manager_typed,
             startup_channel_id=startup_channel_id,
             cirisnode_url="https://localhost:8001",  # Default since cirisnode config not in essential
             agent_occurrence_id=agent_occurrence_id,
         )
 
         # Shutdown processor for graceful shutdown negotiation
-        # Convert services dict to ProcessorServices for type safety
-        from ciris_engine.schemas.processors.base import ProcessorServices as ProcessorServicesSchema
-
-        processor_services = ProcessorServicesSchema(
-            time_service=get_service("time_service"),
-            resource_monitor=get_service("resource_monitor"),
-            discord_service=get_service("discord_service"),
-            communication_bus=get_service("communication_bus"),
-            memory_service=get_service("memory_service"),
-            audit_service=get_service("audit_service"),
-            telemetry_service=get_service("telemetry_service"),
-        )
-
         self.shutdown_processor = ShutdownProcessor(
-            config_accessor=app_config,  # app_config is actually a ConfigAccessor
+            config_accessor=app_config,
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
-            services=processor_services,
-            time_service=time_service,  # Use the injected time service directly
+            services=services,
+            time_service=time_service,
             runtime=runtime,
             agent_occurrence_id=agent_occurrence_id,
         )
@@ -220,9 +193,7 @@ class AgentProcessor:
         logger.info("AgentProcessor initialized with v1 schemas and modular processors")
 
     def _get_service(self, key: str) -> Any:
-        """Safely get a service from the services dict or ProcessorServices object."""
-        if isinstance(self.services, dict):
-            return self.services.get(key)
+        """Get a service from the ProcessorServices container."""
         return getattr(self.services, key, None)
 
     def _load_preload_tasks(self) -> None:

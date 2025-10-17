@@ -29,6 +29,7 @@ class CreditContext(BaseModel):
     agent_id: Optional[str] = Field(None, description="Agent performing the interaction")
     channel_id: Optional[str] = Field(None, description="Interaction channel identifier")
     request_id: Optional[str] = Field(None, description="Request correlation ID")
+    user_role: Optional[str] = Field(None, description="User role for bypass logic (ADMIN+ bypasses credit checks)")
 
 
 class CreditCheckResult(BaseModel):

@@ -368,12 +368,15 @@ def _attach_credit_metadata(
         agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
         agent_id = getattr(agent_identity, "agent_id", None)
 
-        logger.debug(f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}")
+        logger.debug(
+            f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}, user_role={auth.role.value}"
+        )
 
         credit_context = CreditContext(
             agent_id=agent_id,
             channel_id=channel_id,
             request_id=msg.message_id,
+            user_role=auth.role.value,
         )
 
         logger.debug("[CREDIT_ATTACH] CreditContext created successfully")

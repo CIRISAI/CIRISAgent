@@ -7,6 +7,7 @@ import pytest
 
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.states.dream_processor import DreamPhase, DreamProcessor
+from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -22,15 +23,23 @@ class TestDreamProcessor:
         mock_time_service = Mock()
         mock_time_service.now.return_value = current_time
         mock_time_service.now_iso.return_value = current_time.isoformat()
-        return {
-            "time_service": mock_time_service,
-            "resource_monitor": Mock(snapshot=Mock(healthy=True, warnings=[], critical=[])),
-            "memory_service": Mock(),
-            "telemetry_service": Mock(memorize_metric=AsyncMock()),
-            "self_configuration": Mock(
-                analyze_patterns=AsyncMock(return_value=[]), apply_recommendations=AsyncMock(return_value=0)
-            ),
-        }
+
+        return ProcessorServices(
+            time_service=mock_time_service,
+            resource_monitor=Mock(snapshot=Mock(healthy=True, warnings=[], critical=[])),
+            memory_service=Mock(),
+            telemetry_service=Mock(memorize_metric=AsyncMock()),
+            discord_service=None,  # Explicitly set to None
+            communication_bus=None,
+            audit_service=None,
+            service_registry=None,
+            identity_manager=None,
+            secrets_service=None,
+            graphql_provider=None,
+            app_config=None,
+            runtime=None,
+            llm_service=None,
+        )
 
     @pytest.fixture
     def mock_config(self):

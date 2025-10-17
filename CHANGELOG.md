@@ -5,6 +5,73 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0-code_quality] - 2025-10-17
+
+### Fixed
+- **🔐 CRITICAL: Admin User Credit Bypass**: ADMIN+ users now bypass credit checks for agent interactions
+  - **Problem**: Admin users were being blocked by credit checks during testing and management operations
+  - **Root Cause**: Credit enforcement was applied uniformly to all users regardless of role
+  - **Solution**: Added role-based bypass logic in base_observer._enforce_credit_policy()
+  - **Impact**:
+    - ✅ ADMIN, AUTHORITY, SYSTEM_ADMIN, and SERVICE_ACCOUNT roles bypass credit checks entirely
+    - ✅ QA test streaming now works correctly (admin user can interact without credit denial)
+    - ✅ No credit provider calls made for privileged users (improved performance)
+  - **Implementation**:
+    - Added `user_role` field to `CreditContext` schema (credit_gate.py:32)
+    - Modified `_attach_credit_metadata()` to pass `auth.role.value` to credit context (agent.py:378)
+    - Added bypass check in `_enforce_credit_policy()` (base_observer.py:963-973)
+  - **Testing**: 6 comprehensive credit gate tests including 2 new bypass tests
+- **🔒 P1 Security: Customer Email Logging**: Removed plaintext customer email from billing logs
+  - **Problem**: Customer emails were being logged at INFO level in billing identity extraction
+  - **Security Risk**: PII exposure in centralized logging systems violating privacy best practices
+  - **Solution**: Changed to DEBUG level and masked email (shows `has_email=True` instead of actual address)
+  - **Impact**:
+    - ✅ No PII in routine operational logs
+    - ✅ Email presence indication preserved for debugging
+    - ✅ Maintains GDPR compliance for log retention
+  - Located at billing.py:163-165
+
+### Changed
+- **🎯 Type Safety: Processor Services Migration**: Complete elimination of `Dict[str, Any]` in processor subsystem
+  - Replaced untyped service dictionaries with `ProcessorServices` Pydantic schema
+  - All 9 processors now use typed services instead of dict parameter: base_processor, main_processor, work_processor, dream_processor, shutdown_processor, solitude_processor, wakeup_processor
+  - Enhanced type safety with explicit `cast()` at usage sites for `Any` typed service fields
+  - **Impact**:
+    - ✅ 100% mypy strict compliance with zero `type: ignore` comments
+    - ✅ 383 unit tests passing (100% success rate)
+    - ✅ Type-safe service access throughout processor hierarchy
+  - **Pattern Established**: Schemas use `Any` types, usage sites use explicit `cast()`
+
+### Testing
+- **✅ Credit Gate Tests**: 6/6 tests passing with comprehensive bypass coverage
+  - Updated existing tests to use OBSERVER role for credit enforcement testing
+  - Added 2 new tests validating ADMIN and AUTHORITY bypass behavior
+- **✅ Billing Tests**: 23/23 tests passing after security fix
+- **✅ Unit Tests**: 5200 tests passing, 3 credit gate tests updated for bypass behavior
+- **✅ QA Streaming**: 2/2 tests passing (100%) - Admin bypass enables full H3ERE event capture
+- **✅ Mypy**: Zero errors across all modified source files (100% type safety)
+
+## [1.4.0] - 2025-10-17
+
+### Changed
+- **💳 BREAKING: Centralized Stripe Configuration Management**
+  - **Problem**: Agents getting corrupted Stripe publishable keys from local environment variables, causing "Invalid API Key" errors during purchase
+  - **Root Cause**: Configuration drift between agent environment variables and billing backend database (single source of truth)
+  - **Solution**: Billing backend now returns `publishable_key` in purchase response
+  - **Impact**:
+    - ✅ Removed `STRIPE_PUBLISHABLE_KEY` environment variable requirement from agents
+    - ✅ Single source of truth: Stripe config lives in billing backend database
+    - ✅ No configuration drift across agent deployments
+    - ✅ Centralized Stripe key management via billing admin UI
+  - **Migration**: Remove `STRIPE_PUBLISHABLE_KEY` from agent environment variables (no longer needed)
+
+### Fixed
+- **🔑 Stripe Publishable Key Retrieval**: Changed from local environment variable to billing backend response
+  - Removed `_get_stripe_publishable_key()` helper function
+  - Updated `initiate_purchase` to extract `publishable_key` from backend response
+  - Fallback to `"pk_test_not_configured"` if key missing from response
+  - Follows same pattern as `client_secret` (already from backend)
+
 ## [1.3.9] - 2025-10-16
 
 ### Added

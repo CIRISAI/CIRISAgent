@@ -117,16 +117,6 @@ def _get_billing_client(request: Request) -> httpx.AsyncClient:
     return client
 
 
-def _get_stripe_publishable_key() -> str:
-    """Get Stripe publishable key from environment."""
-    import os
-
-    key = os.getenv("STRIPE_PUBLISHABLE_KEY")
-    if not key:
-        raise HTTPException(status_code=500, detail="Stripe not configured")
-    return key
-
-
 def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
     """Extract user identity from auth context including marketing opt-in preference and email."""
     # Extract user information from auth service
@@ -170,8 +160,10 @@ def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
         "customer_email": user_email,  # CRITICAL: Never use fallback - let validation catch missing email
         "user_role": auth.role.value.lower(),  # Use actual user role from auth context
     }
-    logger.info(
-        f"[BILLING_IDENTITY] Extracted for {auth.user_id}: provider={oauth_provider}, external_id={external_id}, has_email={user_email is not None}"
+    logger.debug(
+        f"[BILLING_IDENTITY] Extracted identity: has_provider={oauth_provider is not None}, "
+        f"has_external_id={external_id is not None}, has_email={user_email is not None}, "
+        f"marketing_opt_in={marketing_opt_in}"
     )
     return identity
 
@@ -344,7 +336,7 @@ async def get_credits(
     credit_data = await _query_billing_backend(billing_client, check_payload)
     response = _format_billing_response(credit_data)
     logger.info(
-        f"[BILLING_CREDITS] Returning credits for {auth.user_id}: "
+        f"[BILLING_CREDITS] Credit check complete: "
         f"free={response.free_uses_remaining}, paid={response.credits_remaining}, has_credit={response.has_credit}"
     )
     return response
@@ -416,12 +408,8 @@ async def initiate_purchase(
         logger.error(f"Billing API request error: {e}")
         raise HTTPException(status_code=503, detail="Cannot reach billing service")
 
-    # Get Stripe publishable key for frontend
-    try:
-        publishable_key = _get_stripe_publishable_key()
-    except HTTPException:
-        # If Stripe not configured, still return payment intent data
-        publishable_key = "pk_test_not_configured"
+    # Get Stripe publishable key from billing backend response (single source of truth)
+    publishable_key = purchase_data.get("publishable_key", "pk_test_not_configured")
 
     return PurchaseInitiateResponse(
         payment_id=purchase_data["payment_id"],
@@ -549,7 +537,7 @@ async def get_transactions(
         return TransactionListResponse(transactions=[], total_count=0, has_more=False)
 
     # CIRISBillingProvider - query billing backend for transaction history
-    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions for {auth.user_id} (limit={limit}, offset={offset})")
+    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions (limit={limit}, offset={offset})")
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
 
@@ -599,7 +587,7 @@ async def get_transactions(
         transactions = [TransactionItem(**txn) for txn in transactions_raw if isinstance(txn, dict)]
 
         logger.info(
-            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions for {auth.user_id} "
+            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions "
             f"(total={transaction_data.get('total_count', 0)}, has_more={transaction_data.get('has_more', False)})"
         )
         return TransactionListResponse(

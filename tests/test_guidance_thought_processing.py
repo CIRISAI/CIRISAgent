@@ -150,6 +150,7 @@ class TestGuidanceThoughtProcessing:
     async def test_shutdown_processor_processes_guidance_thoughts(self):
         """Test that ShutdownProcessor properly processes guidance thoughts."""
         from ciris_engine.logic.processors.states.shutdown_processor import ShutdownProcessor
+        from ciris_engine.schemas.processors.base import ProcessorServices
 
         # Create mock services
         config_accessor = MagicMock()
@@ -158,7 +159,9 @@ class TestGuidanceThoughtProcessing:
         time_service = MagicMock()
         time_service.now.return_value = datetime.now(timezone.utc)
         time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
-        services = {"communication_bus": AsyncMock(), "time_service": time_service, "resource_monitor": MagicMock()}
+        services = ProcessorServices(
+            communication_bus=AsyncMock(), time_service=time_service, resource_monitor=MagicMock()
+        )
 
         # Create processor
         processor = ShutdownProcessor(

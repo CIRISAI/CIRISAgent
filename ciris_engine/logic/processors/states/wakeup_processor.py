@@ -321,16 +321,20 @@ class WakeupProcessor(BaseProcessor):
 
     async def _create_wakeup_tasks(self) -> None:
         """Always create new wakeup sequence tasks for each run, regardless of previous completions."""
+        from typing import cast
+
+        from ciris_engine.logic.buses.communication_bus import CommunicationBus
         from ciris_engine.logic.persistence.models.tasks import add_system_task
 
         now_iso = self.time_service.now().isoformat()
 
         # Get the communication bus to find the default channel
-        comm_bus = self.services.get("communication_bus")
-        if not comm_bus:
+        comm_bus_raw = self.services.communication_bus
+        if not comm_bus_raw:
             raise RuntimeError(
                 "Communication bus not available - cannot create wakeup tasks without communication channel"
             )
+        comm_bus = cast(CommunicationBus, comm_bus_raw)
 
         default_channel = await comm_bus.get_default_channel()
         if not default_channel:

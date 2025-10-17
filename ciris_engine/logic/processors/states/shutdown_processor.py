@@ -254,8 +254,13 @@ class ShutdownProcessor(BaseProcessor):
 
         # If no channel ID available, try to get from communication bus
         if not channel_id:
-            comm_bus = self.services.get("communication_bus")
-            if comm_bus:
+            from typing import cast
+
+            from ciris_engine.logic.buses.communication_bus import CommunicationBus
+
+            comm_bus_raw = self.services.communication_bus
+            if comm_bus_raw:
+                comm_bus = cast(CommunicationBus, comm_bus_raw)
                 try:
                     channel_id = await comm_bus.get_default_channel()
                     if channel_id:

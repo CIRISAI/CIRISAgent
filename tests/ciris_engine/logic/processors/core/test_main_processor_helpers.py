@@ -45,23 +45,25 @@ class TestAgentProcessorHelpers:
     @pytest.fixture
     def mock_services(self, mock_time_service):
         """Create mock services."""
+        from ciris_engine.schemas.processors.base import ProcessorServices
+
         mock_llm = Mock()
         mock_llm.__class__.__name__ = "MockLLMService"
 
-        return {
-            "time_service": mock_time_service,
-            "telemetry_service": Mock(memorize_metric=AsyncMock()),
-            "memory_service": Mock(
+        return ProcessorServices(
+            time_service=mock_time_service,
+            telemetry_service=Mock(memorize_metric=AsyncMock()),
+            memory_service=Mock(
                 memorize=AsyncMock(), export_identity_context=AsyncMock(return_value="Test identity context")
             ),
-            "identity_manager": Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
-            "resource_monitor": Mock(
+            identity_manager=Mock(get_identity=Mock(return_value={"name": "TestAgent"})),
+            resource_monitor=Mock(
                 get_current_metrics=Mock(
                     return_value={"cpu_percent": 10.0, "memory_percent": 20.0, "disk_usage_percent": 30.0}
                 )
             ),
-            "llm_service": mock_llm,
-        }
+            llm_service=mock_llm,
+        )
 
     @pytest.fixture
     def mock_processors(self):

@@ -310,11 +310,24 @@ class SecretsStore:
         async with self._lock:
             try:
                 with get_db_connection(str(self.db_path)) as conn:
+                    # Check if secret exists first
+                    cursor = conn.execute("SELECT secret_uuid FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
+                    exists = cursor.fetchone() is not None
+
+                    if not exists:
+                        logger.warning(f"Secret {secret_uuid} does not exist")
+                        return False
+
+                    # Log deletion BEFORE deleting (so foreign key constraint is satisfied)
+                    await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", True)
+
+                    # Delete access log entries first to avoid foreign key constraint violation
+                    conn.execute("DELETE FROM secret_access_log WHERE secret_uuid = ?", (secret_uuid,))
+
+                    # Now delete the secret itself
                     cursor = conn.execute("DELETE FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
                     deleted = cursor.rowcount > 0
                     conn.commit()
-
-                await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", deleted)
 
                 if deleted:
                     logger.info(f"Deleted secret {secret_uuid}")
@@ -322,7 +335,7 @@ class SecretsStore:
 
             except Exception as e:  # pragma: no cover - error path
                 logger.error(f"Failed to delete secret {secret_uuid}: {type(e).__name__}")
-                await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", False, str(e))
+                # Don't try to log access here - secret may already be deleted
                 return False
 
     async def list_secrets(

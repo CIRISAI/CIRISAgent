@@ -21,10 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - IDENTITY scope for user-specific audit entries
     - Service-tagged entries for efficient querying
     - Full timestamp and reason tracking
-  - **DSAR Automation**: Automated data subject access requests
-    - Consent data export, interaction history, preferences
-    - Impact metrics and contribution summaries
-    - Partnership and decay protocol status
+  - **DSAR Automation**: Automated data subject access requests with backend API
+    - **Backend Endpoints**:
+      - `/v1/consent/dsar/initiate` - Initiate DSAR with request_type: "full", "consent_only", "impact_only", "audit_only"
+      - `/v1/consent/dsar/status/{request_id}` - Track DSAR request status with ownership validation
+    - **Export Data Structure**:
+      - Consent data: stream, categories, granted_at, expires_at
+      - Impact metrics: total_interactions, patterns_contributed, users_helped, categories_active, impact_score
+      - Audit trail: complete consent change history with previous/new states
+    - Request ID format: `dsar_{user_id}_{timestamp}` for tracking
+    - Immediate completion with future async processing support
   - **Partnership Management**: Bilateral consent flow with agent approval
     - Task-based approval system with ACCEPT/REJECT/DEFER
     - Pending partnership status tracking
@@ -33,16 +39,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Time-based triggers (30 minutes continuous interaction)
     - Message-based triggers (20+ messages in session)
     - API-only scope (1:1 interactions, not community moderation)
-  - **SDK Extensions**: 10 new methods in ConsentResource
-    - `get_status()`, `query_consents()`, `grant_consent()`, `revoke_consent()`
-    - `get_impact_report()`, `get_audit_trail()`, `get_streams()`, `get_categories()`
-    - `get_partnership_status()`, `cleanup_expired()`
+  - **SDK Extensions**: 16 new methods in ConsentResource
+    - **Consent Management**: `get_status()`, `query_consents()`, `grant_consent()`, `revoke_consent()`
+    - **Impact & Audit**: `get_impact_report()`, `get_audit_trail()`, `get_streams()`, `get_categories()`
+    - **Partnership**: `get_partnership_status()`, `get_partnership_options()`, `accept_partnership()`, `reject_partnership()`, `defer_partnership()`
+    - **DSAR**: `initiate_dsar()`, `get_dsar_status()`
+    - **Maintenance**: `cleanup_expired()`
   - **Implementation**:
     - Memory bus integration for impact reporting and audit trail queries
     - Modular architecture: air.py, decay.py, partnership.py, metrics.py, exceptions.py
     - GraphScope.IDENTITY for user-specific data, GraphScope.COMMUNITY for shared patterns
     - Service-tagged audit entries for efficient filtering
-  - **Testing**: 8/8 consent QA tests passing (100% success rate)
+  - **Testing**: Comprehensive QA test coverage
+    - Consent tests: 8/8 passing (100%)
+    - DSAR tests: 6/6 passing (100%)
+    - Partnership tests: 5/5 passing (100%)
+    - Total: 19/19 consent system tests passing
 
 ### Changed
 - **🎯 Type Safety: Protocol-Based Service Types (56% Optional[Any] Reduction)**

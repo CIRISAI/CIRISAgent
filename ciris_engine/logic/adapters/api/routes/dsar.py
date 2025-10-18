@@ -11,7 +11,7 @@ INTEGRATED WITH CONSENSUAL EVOLUTION PROTOCOL v0.2:
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -199,6 +199,69 @@ async def _handle_delete_request(
         return None
 
 
+def _calculate_estimated_completion(is_automated: bool, urgent: bool, submitted_at: datetime) -> datetime:
+    """Calculate estimated completion time for DSAR request.
+
+    Args:
+        is_automated: Whether the request is automated (access/export)
+        urgent: Whether the request is marked urgent
+        submitted_at: When the request was submitted
+
+    Returns:
+        Estimated completion datetime
+    """
+    from datetime import timedelta
+
+    if is_automated:
+        return submitted_at
+
+    days_to_complete = 3 if urgent else 14
+    return submitted_at + timedelta(days=days_to_complete)
+
+
+def _build_dsar_record(
+    ticket_id: str,
+    request: DSARRequest,
+    request_status: str,
+    submitted_at: datetime,
+    estimated_completion: datetime,
+    is_automated: bool,
+    access_package: Optional[DSARAccessPackage],
+    export_package: Optional[DSARExportPackage],
+) -> dict[str, Any]:
+    """Build DSAR record dictionary.
+
+    Args:
+        ticket_id: Unique ticket identifier
+        request: The DSAR request
+        request_status: Status of the request
+        submitted_at: Submission timestamp
+        estimated_completion: Estimated completion timestamp
+        is_automated: Whether automated
+        access_package: Access package if any
+        export_package: Export package if any
+
+    Returns:
+        DSAR record dictionary
+    """
+    return {
+        "ticket_id": ticket_id,
+        "request_type": request.request_type,
+        "email": request.email,
+        "user_identifier": request.user_identifier,
+        "details": request.details,
+        "urgent": request.urgent,
+        "status": request_status,
+        "submitted_at": submitted_at.isoformat(),
+        "estimated_completion": estimated_completion.isoformat(),
+        "last_updated": submitted_at.isoformat(),
+        "notes": None,
+        "automated": is_automated,
+        "access_package": access_package.model_dump() if access_package else None,
+        "export_package": export_package.model_dump() if export_package else None,
+    }
+
+
 def _build_response_message(
     request_type: str,
     urgent: bool,
@@ -276,16 +339,10 @@ async def submit_dsar(
     # Generate unique ticket ID
     ticket_id = f"DSAR-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
 
-    # Calculate estimated completion (instant for access/export, 14 days for others)
-    from datetime import timedelta
-
+    # Calculate timestamps and metadata
     submitted_at = datetime.now(timezone.utc)
-
-    # Instant completion for automated requests
     is_automated = request.request_type in ["access", "export"]
-    estimated_completion = (
-        submitted_at if is_automated else submitted_at + timedelta(days=14 if not request.urgent else 3)
-    )
+    estimated_completion = _calculate_estimated_completion(is_automated, request.urgent, submitted_at)
 
     # Initialize services
     consent_manager, dsar_automation = _initialize_services(req)
@@ -302,27 +359,18 @@ async def submit_dsar(
     elif request.request_type == "delete" and request.user_identifier:
         decay_status = await _handle_delete_request(consent_manager, request.user_identifier, ticket_id)
 
-    # Store request (in production, this would go to a database)
-    # Mark automated requests as completed instantly
+    # Store request (mark automated requests as completed instantly)
     request_status = "completed" if is_automated and (access_package or export_package) else "pending_review"
-
-    dsar_record = {
-        "ticket_id": ticket_id,
-        "request_type": request.request_type,
-        "email": request.email,
-        "user_identifier": request.user_identifier,
-        "details": request.details,
-        "urgent": request.urgent,
-        "status": request_status,
-        "submitted_at": submitted_at.isoformat(),
-        "estimated_completion": estimated_completion.isoformat(),
-        "last_updated": submitted_at.isoformat(),
-        "notes": None,
-        "automated": is_automated,
-        "access_package": access_package.model_dump() if access_package else None,
-        "export_package": export_package.model_dump() if export_package else None,
-    }
-
+    dsar_record = _build_dsar_record(
+        ticket_id,
+        request,
+        request_status,
+        submitted_at,
+        estimated_completion,
+        is_automated,
+        access_package,
+        export_package,
+    )
     _dsar_requests[ticket_id] = dsar_record
 
     # Log for audit trail

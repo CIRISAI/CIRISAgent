@@ -11,6 +11,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Common field descriptions
+REQUEST_ID_DESC = "Unique request identifier"
+
 
 class ConsentStream(str, Enum):
     """
@@ -104,7 +107,7 @@ class DSARAccessPackage(BaseModel):
     """Package of user data for DSAR access requests - REAL DATA ONLY."""
 
     user_id: str = Field(..., description="User requesting access")
-    request_id: str = Field(..., description="Unique request identifier")
+    request_id: str = Field(..., description=REQUEST_ID_DESC)
     generated_at: datetime = Field(..., description="When package was generated")
     consent_status: ConsentStatus = Field(..., description="Current consent configuration")
     consent_history: List[ConsentAuditEntry] = Field(..., description="Complete consent audit trail")
@@ -127,7 +130,7 @@ class DSARExportPackage(BaseModel):
     """Package for DSAR data portability export."""
 
     user_id: str = Field(..., description="User requesting export")
-    request_id: str = Field(..., description="Unique request identifier")
+    request_id: str = Field(..., description=REQUEST_ID_DESC)
     export_format: DSARExportFormat = Field(..., description="Format of exported data")
     generated_at: datetime = Field(..., description="When export was generated")
     file_path: Optional[str] = Field(None, description="Path to export file (if file-based)")
@@ -151,7 +154,7 @@ class DSARCorrectionResult(BaseModel):
     """Result of DSAR correction request."""
 
     user_id: str = Field(..., description="User whose data was corrected")
-    request_id: str = Field(..., description="Unique request identifier")
+    request_id: str = Field(..., description=REQUEST_ID_DESC)
     corrections_applied: List[dict[str, object]] = Field(..., description="Successfully applied corrections")
     corrections_rejected: List[dict[str, object]] = Field(..., description="Rejected corrections with reasons")
     affected_systems: List[str] = Field(..., description="Systems notified of corrections")

@@ -434,3 +434,147 @@ async def cleanup_expired(
         "cleaned": count,
         "message": f"Cleaned up {count} expired consent records",
     }
+
+
+# DSAR (Data Subject Access Request) endpoints
+@router.post("/dsar/initiate", response_model=JSONDict)
+async def initiate_dsar(
+    request_type: str = "full",
+    auth: AuthContext = Depends(get_auth_context),
+    manager: ConsentService = Depends(get_consent_manager),
+) -> JSONDict:
+    """
+    Initiate automated DSAR (Data Subject Access Request).
+
+    Args:
+        request_type: Type of DSAR - "full", "consent_only", "impact_only", or "audit_only"
+
+    Returns:
+        Export data matching the request type
+    """
+    user_id = auth.user_id
+
+    try:
+        # Build the export data based on request type
+        export_data: JSONDict = {}
+
+        if request_type in ["full", "consent_only"]:
+            # Get consent data
+            try:
+                consent = await manager.get_consent(user_id)
+                export_data["consent"] = {
+                    "user_id": user_id,
+                    "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
+                    "categories": [c.value if hasattr(c, "value") else str(c) for c in consent.categories],
+                    "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
+                    "expires_at": (
+                        consent.expires_at.isoformat() if hasattr(consent, "expires_at") and consent.expires_at else None
+                    ),
+                    "last_modified": (
+                        consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None
+                    ),
+                }
+            except ConsentNotFoundError:
+                export_data["consent"] = None
+
+        if request_type in ["full", "impact_only"]:
+            # Get impact data
+            try:
+                impact = await manager.get_impact_report(user_id)
+                export_data["impact"] = {
+                    "total_interactions": impact.total_interactions,
+                    "patterns_contributed": impact.patterns_contributed,
+                    "users_helped": impact.users_helped,
+                    "categories_active": [
+                        c.value if hasattr(c, "value") else str(c) for c in impact.categories_active
+                    ],
+                    "impact_score": impact.impact_score,
+                    "example_contributions": impact.example_contributions,
+                }
+            except ConsentNotFoundError:
+                export_data["impact"] = None
+
+        if request_type in ["full", "audit_only"]:
+            # Get audit trail
+            try:
+                audit_entries = await manager.get_audit_trail(user_id, limit=1000)
+                export_data["audit_trail"] = [
+                    {
+                        "entry_id": entry.entry_id,
+                        "user_id": entry.user_id,
+                        "timestamp": entry.timestamp.isoformat(),
+                        "previous_stream": (
+                            entry.previous_stream.value
+                            if hasattr(entry.previous_stream, "value")
+                            else str(entry.previous_stream)
+                        ),
+                        "new_stream": (
+                            entry.new_stream.value if hasattr(entry.new_stream, "value") else str(entry.new_stream)
+                        ),
+                        "previous_categories": [
+                            c.value if hasattr(c, "value") else str(c) for c in entry.previous_categories
+                        ],
+                        "new_categories": [c.value if hasattr(c, "value") else str(c) for c in entry.new_categories],
+                        "initiated_by": entry.initiated_by,
+                        "reason": entry.reason,
+                    }
+                    for entry in audit_entries
+                ]
+            except Exception:
+                export_data["audit_trail"] = []
+
+        # Generate a request ID for tracking
+        from datetime import datetime
+
+        request_id = f"dsar_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+
+        return {
+            "request_id": request_id,
+            "user_id": user_id,
+            "request_type": request_type,
+            "status": "completed",
+            "export_data": export_data,
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating DSAR for {user_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate DSAR: {str(e)}",
+        )
+
+
+@router.get("/dsar/status/{request_id}", response_model=JSONDict)
+async def get_dsar_status(
+    request_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+) -> JSONDict:
+    """
+    Get status of a DSAR request.
+
+    Since DSAR requests are processed immediately, this always returns "completed".
+    In a production system with async processing, this would track actual status.
+    """
+    # Extract user_id from request_id (format: dsar_{user_id}_{timestamp})
+    parts = request_id.split("_")
+    if len(parts) < 3 or parts[0] != "dsar":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid request_id format",
+        )
+
+    request_user_id = "_".join(parts[1:-1])  # Reconstruct user_id (may contain underscores)
+
+    # Verify the request belongs to the authenticated user
+    if request_user_id != auth.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access another user's DSAR request",
+        )
+
+    return {
+        "request_id": request_id,
+        "user_id": auth.user_id,
+        "status": "completed",
+        "message": "DSAR request completed - data is immediately available",
+    }

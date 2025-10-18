@@ -294,6 +294,11 @@ class CIRISRuntime:
         """Access to visibility service."""
         return self.service_initializer.visibility_service if self.service_initializer else None
 
+    @property
+    def consent_service(self) -> Optional[Any]:
+        """Access to consent service - manages user consent, data retention, and DSAR automation."""
+        return self.service_initializer.consent_service if self.service_initializer else None
+
     def _ensure_shutdown_event(self) -> None:
         """Ensure shutdown event is created when needed in async context."""
         if self._shutdown_event is None:

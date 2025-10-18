@@ -36,18 +36,20 @@ class ApiServiceConfiguration:
     3. Adapter-specific services that will be created
 
     Based on the official service list from CLAUDE.md:
-    - Graph Services (6): memory, config, telemetry, audit, incident_management, tsdb_consolidation
-    - Infrastructure Services (7): time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
+    - Graph Services (7): memory, consent, config, telemetry, audit, incident_management, tsdb_consolidation
+    - Infrastructure Services (4): authentication, resource_monitor, database_maintenance, secrets
+    - Lifecycle Services (4): time, shutdown, initialization, task_scheduler
     - Governance Services (4): wise_authority, adaptive_filter, visibility, self_observation
-    - Runtime Services (3): llm, runtime_control, task_scheduler
+    - Runtime Services (2): llm, runtime_control
     - Tool Services (1): secrets_tool
     """
 
-    # ========== THE 21 CORE CIRIS SERVICES ==========
+    # ========== THE 22 CORE CIRIS SERVICES ==========
 
-    # 6 Graph Services - Data persistence and tracking
+    # 7 Graph Services - Data persistence and tracking
     GRAPH_SERVICES = [
         ServiceMapping("memory_service", description="Graph-based memory storage and retrieval"),
+        ServiceMapping("consent_service", app_state_name="consent_manager", description="Consent, data retention, and DSAR automation"),
         ServiceMapping("config_service", description="Configuration management"),
         ServiceMapping("telemetry_service", description="Telemetry data collection and storage"),
         ServiceMapping("audit_service", description="Audit trail and compliance logging"),

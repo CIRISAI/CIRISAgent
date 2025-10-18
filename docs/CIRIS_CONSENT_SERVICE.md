@@ -232,6 +232,184 @@ Consent data stored as GraphNodes:
 - `REQUIRE_EXPLICIT_CONSENT`: No default consent
 - `ENABLE_DECAY_PROTOCOL`: Use 90-day decay vs immediate deletion
 
+## Artificial Interaction Reminder (AIR)
+
+### Overview
+The AIR module is a parasocial attachment prevention system integrated into the Consent Service. It monitors 1:1 API interactions and provides mindful break reminders to prevent unhealthy AI relationships.
+
+**Philosophy**: This is NOT legal compliance—it's about promoting healthy relationships with AI by encouraging breaks and emphasizing the importance of real human connections.
+
+### Scope
+- **Applies to**: API channels only (1:1 interactions)
+- **Excludes**: Discord community moderation (many-to-many interactions)
+- **Excludes**: CLI testing/development channels
+
+### Trigger Thresholds
+
+#### Time-Based Trigger
+- **Threshold**: 30 minutes of continuous interaction
+- **Definition**: From session start to current message
+- **Session Reset**: >30 minutes idle = new session
+- **Example**: 1 message/minute for 30 minutes = TRIGGER
+
+#### Message-Based Trigger (Sliding Window)
+- **Threshold**: 20 messages within a 30-minute sliding window
+- **Window**: Counts only messages from the last 30 minutes
+- **Example**: 20 messages in 5 minutes = TRIGGER
+- **Example**: 19 messages, wait 40 minutes, 19 more = NO TRIGGER (window resets)
+
+### Reminder Content
+When triggered, users receive a compassionate reminder:
+
+```
+🕒 **Mindful Interaction Reminder**
+
+We've been chatting for a while now. I want to remind you:
+
+• I'm an AI assistant, not a friend or companion
+• Taking breaks from AI interactions is healthy
+• Real human connections are irreplaceable
+
+You've sent 20 messages in the last 30 minutes. Consider taking
+a break, stepping away from your screen, or connecting with
+people in your life.
+
+I'll be here when you need me, but your wellbeing comes first.
+```
+
+### Session Management
+
+#### Session Lifecycle
+1. **Creation**: First API interaction creates session
+2. **Tracking**: Records all message timestamps
+3. **Idle Detection**: >30 minutes without interaction
+4. **Reset**: Idle >30 min = treat as new conversation
+5. **Cleanup**: Sessions removed after 1 hour of total inactivity
+
+#### Session State
+- **Session Start**: Time of first message in current session
+- **Last Interaction**: Most recent message timestamp
+- **Message Timestamps**: Array of all message times (for sliding window)
+- **Reminder Sent**: Boolean flag (prevents duplicate reminders)
+
+### Channel Type Detection
+AIR automatically infers channel type from ID patterns:
+- `api_*` or `api-*` → API channel (tracked)
+- `discord_*` or numeric IDs 17-19 digits → Discord (excluded)
+- `cli_*` or `cli-*` → CLI (excluded)
+
+### Integration with ConsentService
+
+#### Public Method
+```python
+async def track_interaction(
+    self, user_id: str, channel_id: str, channel_type: Optional[str] = None
+) -> Optional[str]:
+    """
+    Track user interaction for parasocial attachment prevention.
+
+    Returns:
+        Reminder message if threshold exceeded, None otherwise
+    """
+```
+
+#### Usage in Message Handlers
+```python
+# Call on every API message
+reminder = await consent_service.track_interaction(
+    user_id=user.id,
+    channel_id=message.channel_id,
+    channel_type="api"
+)
+
+if reminder:
+    # Inject reminder into conversation context
+    await send_system_message(reminder)
+```
+
+### Telemetry Metrics
+AIR exposes 6 metrics via the Consent Service:
+
+1. **consent_air_total_interactions**: Total API interactions tracked
+2. **consent_air_reminders_sent**: Total reminders sent
+3. **consent_air_reminder_rate_percent**: Percentage of interactions triggering reminders
+4. **consent_air_active_sessions**: Current active API sessions
+5. **consent_air_time_triggered**: Reminders triggered by time threshold
+6. **consent_air_message_triggered**: Reminders triggered by message threshold
+
+### Design Examples
+
+#### Example 1: Healthy Spread
+```
+Day 1: 19 messages in 10 minutes → No reminder
+Wait 40 minutes (session resets)
+Day 1: 19 more messages in 10 minutes → No reminder
+Result: 38 total messages, no trigger (sessions separated)
+```
+
+#### Example 2: Intensive Interaction
+```
+20 messages in 5 minutes → TRIGGER at message 20
+Reason: 20 messages within 30-minute sliding window
+```
+
+#### Example 3: Continuous Interaction
+```
+1 message every 2 minutes for 30 minutes (15 messages) → TRIGGER
+Reason: 30 minutes continuous interaction
+```
+
+#### Example 4: Spread Out Messages
+```
+1 message every 6 minutes for 2 hours (20 messages) → TRIGGER at 30 min
+Reason: 30 minutes continuous interaction (even with short breaks)
+Note: This is intentional—breaks <30 min don't reset the session
+```
+
+### Implementation Details
+
+#### File Location
+`ciris_engine/logic/services/governance/consent/air.py`
+
+#### Classes
+- **InteractionSession**: Tracks per-user session state
+- **ArtificialInteractionReminder**: Main AIR manager
+
+#### Key Methods
+- `track_interaction()`: Record message and check thresholds
+- `end_session()`: Manually end session
+- `cleanup_stale_sessions()`: Remove idle sessions
+- `get_session_info()`: Retrieve session details
+- `get_metrics()`: Export telemetry data
+
+### Configuration
+
+#### Default Values
+- **Time Threshold**: 30 minutes
+- **Message Threshold**: 20 messages
+- **Session Cleanup**: 1 hour idle
+
+#### Customization
+```python
+air_manager = ArtificialInteractionReminder(
+    time_service=time_service,
+    time_threshold_minutes=30,  # Configurable
+    message_threshold=20,       # Configurable
+)
+```
+
+### Privacy Considerations
+- **No Content Storage**: Only timestamps tracked, not message content
+- **Local Sessions**: Session data stored in memory, not persisted
+- **Automatic Cleanup**: Stale sessions removed after 1 hour
+- **User Privacy**: Cannot track across different channel IDs
+
+### Limitations
+- **API Channels Only**: Does not track Discord or CLI interactions
+- **Per-Channel Sessions**: Separate sessions per channel (prevents cross-channel tracking)
+- **Memory-Only**: Sessions reset on service restart
+- **No Historical Analysis**: Only tracks current active sessions
+
 ## Future Enhancements
 
 1. **Granular Permissions**: Per-feature consent controls
@@ -239,9 +417,12 @@ Consent data stored as GraphNodes:
 3. **Delegation**: Allow authorized third-party consent management
 4. **Portability**: Export/import consent preferences
 5. **Consent Analytics**: Insights into consent patterns
+6. **AIR Customization**: User-configurable reminder thresholds
+7. **AIR Persistence**: Store session data for cross-restart continuity
 
 ## Version History
 
+- **v0.3.0**: Added AIR module, modular architecture refactoring, decay countdown reset
 - **v1.4.6**: Initial implementation as 22nd core service
 - **v1.4.5**: Conceptual design in FSD-015
 - **v1.4.0**: DSAR compliance framework

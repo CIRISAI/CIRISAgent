@@ -314,6 +314,23 @@ async def get_impact_report(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No consent data found",
         )
+    except ValueError as e:
+        # Handle memory bus requirement error
+        if "memory bus" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=str(e),  # Pass through the actual error message
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error generating impact report for {user_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate impact report: {str(e)}",
+        )
 
 
 @router.get("/audit", response_model=list[ConsentAuditEntry])
@@ -326,7 +343,20 @@ async def get_audit_trail(
     Get consent change history - IMMUTABLE AUDIT TRAIL.
     """
     user_id = auth.user_id
-    return await manager.get_audit_trail(user_id, limit)
+    try:
+        audit_entries = await manager.get_audit_trail(user_id, limit)
+
+        # Log if audit trail is empty (might indicate missing memory bus)
+        if not audit_entries:
+            logger.warning(f"Audit trail empty for {user_id} - may indicate missing memory bus or no consent history")
+
+        return audit_entries
+    except Exception as e:
+        logger.error(f"Error retrieving audit trail for {user_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve audit trail: {str(e)}",
+        )
 
 
 @router.get("/streams", response_model=JSONDict)

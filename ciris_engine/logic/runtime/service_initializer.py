@@ -702,14 +702,15 @@ This directory contains critical cryptographic keys for the CIRIS system.
         from ciris_engine.logic.services.governance.consent import ConsentService
 
         assert self.time_service is not None
+        assert self.bus_manager is not None
         self.consent_service = ConsentService(
             time_service=self.time_service,
-            memory_bus=None,  # Will use direct persistence
+            memory_bus=self.bus_manager.memory,  # Use memory bus for impact reporting and audit trail
             db_path=get_sqlite_db_full_path(self.essential_config),
         )
         await self.consent_service.start()
         self._services_started_count += 1
-        logger.info("ConsentService initialized - managing user consent and decay protocol")
+        logger.info("ConsentService initialized - managing user consent, decay protocol, and DSAR automation")
 
         # Initialize runtime control service
         from ciris_engine.logic.services.runtime.control_service import RuntimeControlService

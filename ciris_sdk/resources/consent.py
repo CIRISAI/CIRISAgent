@@ -238,3 +238,228 @@ class ConsentResource:
         if result.consents:
             return result.consents[0]
         return None
+
+    # ========== NEW CONSENT API METHODS (Consensual Evolution Protocol v0.2) ==========
+
+    async def get_status(self) -> Dict[str, Any]:
+        """
+        Get current consent status for authenticated user.
+
+        Returns:
+            Dictionary with consent status including has_consent, stream, granted_at, expires_at
+
+        Example:
+            status = await client.consent.get_status()
+            if status["has_consent"]:
+                print(f"Stream: {status['stream']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/status")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def query_consents(
+        self,
+        status: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Query consent records with optional filters.
+
+        Args:
+            status: Filter by status (ACTIVE, REVOKED, EXPIRED)
+            user_id: Filter by user ID (admin only)
+
+        Returns:
+            Dictionary with consents list and total count
+
+        Example:
+            result = await client.consent.query_consents()
+            print(f"Found {result['total']} consents")
+        """
+        params = {}
+        if status:
+            params["status"] = status
+        if user_id:
+            params["user_id"] = user_id
+
+        result = await self._transport.request("GET", "/v1/consent/query", params=params)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def grant_consent(
+        self,
+        stream: str,
+        categories: Optional[List[str]] = None,
+        reason: Optional[str] = None,
+    ) -> Any:
+        """
+        Grant or update consent with specified stream and categories.
+
+        Streams:
+        - temporary: 14-day auto-forget (default)
+        - partnered: Explicit consent for mutual growth (requires approval)
+        - anonymous: Statistics only, no identity
+
+        Args:
+            stream: Consent stream (temporary, partnered, anonymous)
+            categories: List of consent categories (required for partnered)
+            reason: Reason for granting consent
+
+        Returns:
+            ConsentStatus-like object with stream, categories, etc.
+
+        Example:
+            result = await client.consent.grant_consent(
+                stream="temporary",
+                categories=["interaction"],
+                reason="Testing consent"
+            )
+        """
+        payload = {
+            "user_id": "placeholder",  # Will be overridden by auth context on server
+            "stream": stream,
+            "categories": categories or [],
+            "reason": reason,
+        }
+
+        result = await self._transport.request("POST", "/v1/consent/grant", json=payload)
+
+        # Convert dict to object-like for easier access
+        if isinstance(result, dict):
+            class ConsentResult:
+                def __init__(self, data: Dict[str, Any]):
+                    for key, value in data.items():
+                        setattr(self, key, value)
+            return ConsentResult(result)
+
+        return result
+
+    async def revoke_consent(self, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Revoke consent and start decay protocol.
+
+        - Immediate identity severance
+        - 90-day pattern decay
+        - Safety patterns may be retained (anonymized)
+
+        Args:
+            reason: Optional reason for revoking consent
+
+        Returns:
+            ConsentDecayStatus object
+
+        Example:
+            result = await client.consent.revoke_consent(reason="User requested deletion")
+        """
+        params = {}
+        if reason:
+            params["reason"] = reason
+
+        result = await self._transport.request("POST", "/v1/consent/revoke", params=params)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_impact_report(self) -> Dict[str, Any]:
+        """
+        Get impact report showing contribution to collective learning.
+
+        Shows:
+        - Patterns contributed
+        - Users helped
+        - Impact score
+        - Example contributions (anonymized)
+
+        Returns:
+            ConsentImpactReport object
+
+        Example:
+            report = await client.consent.get_impact_report()
+            print(f"Impact score: {report['impact_score']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/impact")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_audit_trail(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get consent change history - IMMUTABLE AUDIT TRAIL.
+
+        Args:
+            limit: Maximum number of audit entries to return
+
+        Returns:
+            List of ConsentAuditEntry objects
+
+        Example:
+            audit = await client.consent.get_audit_trail(limit=50)
+            for entry in audit:
+                print(f"{entry['timestamp']}: {entry['action']}")
+        """
+        params = {"limit": limit}
+        result = await self._transport.request("GET", "/v1/consent/audit", params=params)
+        assert isinstance(result, list), "Expected list response from transport"
+        return result
+
+    async def get_streams(self) -> Dict[str, Any]:
+        """
+        Get available consent streams and their descriptions.
+
+        Returns:
+            Dictionary with streams and default stream
+
+        Example:
+            streams = await client.consent.get_streams()
+            print(f"Available streams: {list(streams['streams'].keys())}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/streams")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_categories(self) -> Dict[str, Any]:
+        """
+        Get available consent categories for PARTNERED stream.
+
+        Returns:
+            Dictionary with categories
+
+        Example:
+            categories = await client.consent.get_categories()
+            print(f"Available categories: {list(categories['categories'].keys())}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/categories")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_partnership_status(self) -> Dict[str, Any]:
+        """
+        Check status of pending partnership request.
+
+        Returns current status and any pending partnership request outcome.
+
+        Returns:
+            Dictionary with current_stream, partnership_status, and message
+
+        Example:
+            status = await client.consent.get_partnership_status()
+            print(f"Partnership status: {status['partnership_status']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/partnership/status")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def cleanup_expired(self) -> Dict[str, Any]:
+        """
+        Clean up expired TEMPORARY consents (admin only).
+
+        HARD DELETE after 14 days - NO GRACE PERIOD.
+
+        Returns:
+            Dictionary with cleaned count and message
+
+        Example:
+            result = await client.consent.cleanup_expired()
+            print(f"Cleaned {result['cleaned']} expired consents")
+        """
+        result = await self._transport.request("POST", "/v1/consent/cleanup")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result

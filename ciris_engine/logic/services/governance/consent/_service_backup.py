@@ -4,12 +4,6 @@ Consent Service - FAIL FAST, FAIL LOUD, NO FAKE DATA.
 Governance Service #5: Manages user consent for the Consensual Evolution Protocol.
 Default: TEMPORARY (14 days) unless explicitly changed.
 This is the 22nd core CIRIS service.
-
-REFACTORED: Now uses modular architecture with separate modules for:
-- exceptions: Custom errors
-- metrics: Metrics collection
-- partnership: Partnership management
-- decay: Decay protocol
 """
 
 import logging
@@ -40,14 +34,19 @@ from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
 
-# Import from new modules
-from .air import ArtificialInteractionReminder
-from .decay import DecayProtocolManager
-from .exceptions import ConsentNotFoundError, ConsentValidationError
-from .metrics import ConsentMetricsCollector
-from .partnership import PartnershipManager
-
 logger = logging.getLogger(__name__)
+
+
+class ConsentNotFoundError(Exception):
+    """Raised when consent status doesn't exist - FAIL FAST."""
+
+    pass
+
+
+class ConsentValidationError(Exception):
+    """Raised when consent request is invalid - FAIL LOUD."""
+
+    pass
 
 
 class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
@@ -73,18 +72,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._memory_bus = memory_bus
         self._db_path = db_path
 
-        # Initialize modular managers
-        self._metrics_collector = ConsentMetricsCollector()
-        self._partnership_manager = PartnershipManager(time_service=time_service)
-        self._decay_manager = DecayProtocolManager(time_service=time_service, db_path=db_path)
-        self._air_manager = ArtificialInteractionReminder(
-            time_service=time_service,
-            time_threshold_minutes=30,  # 30 minutes
-            message_threshold=20,  # 20 messages
-        )
-
         # Cache for active consents (NOT source of truth)
         self._consent_cache: Dict[str, ConsentStatus] = {}
+
+        # Decay tracking
+        self._active_decays: Dict[str, ConsentDecayStatus] = {}
 
         # Core Metrics (real, no fake data)
         self._consent_checks = 0
@@ -94,8 +86,27 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._tool_failures = 0
         self._expired_cleanups = 0
 
-        # Downgrade tracking
+        # Stream distribution metrics
+        self._temporary_count = 0
+        self._partnered_count = 0
+        self._anonymous_count = 0
+
+        # Partnership metrics
+        self._partnership_requests = 0
+        self._partnership_approvals = 0
+        self._partnership_rejections = 0
         self._downgrades_completed = 0
+
+        # Decay metrics
+        self._total_decays_initiated = 0
+        self._decays_completed = 0
+
+        # Consent age tracking
+        self._oldest_consent_days = 0.0
+        self._average_consent_age_hours = 0.0
+
+        # Pending partnership requests
+        self._pending_partnerships: Dict[str, JSONDict] = {}
 
     def _now(self) -> datetime:
         """Get current time from time service."""
@@ -103,57 +114,10 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return datetime.now(timezone.utc)
         return self._time_service.now()
 
-    async def _extend_temporary_expiry(self, user_id: str, status: ConsentStatus) -> None:
-        """
-        Reset TEMPORARY expiry to 2 weeks from now on every interaction.
-        This implements the "2 weeks without seeing them before decay" rule.
-        """
-        now = self._now()
-        new_expiry = now + timedelta(days=14)
-
-        # Only update if expiry changed significantly (avoid unnecessary writes)
-        if status.expires_at and (new_expiry - status.expires_at).total_seconds() < 3600:
-            # Less than 1 hour difference, skip update to reduce I/O
-            return
-
-        # Update status with new expiry
-        status.expires_at = new_expiry
-        status.last_modified = now
-
-        # Persist to graph
-        node = GraphNode(
-            id=f"consent/{user_id}",
-            type=NodeType.CONSENT,
-            scope=GraphScope.LOCAL,
-            attributes={
-                "stream": status.stream,
-                "categories": list(status.categories),
-                "granted_at": status.granted_at.isoformat(),
-                "expires_at": new_expiry.isoformat(),
-                "last_modified": now.isoformat(),
-                "impact_score": status.impact_score,
-                "attribution_count": status.attribution_count,
-            },
-            updated_by="consent_manager",
-            updated_at=now,
-        )
-        if self._time_service is None:
-            raise ValueError("TimeService required for extending expiry")
-        add_graph_node(node, self._time_service, self._db_path)
-
-        # Update cache
-        self._consent_cache[user_id] = status
-
-        logger.debug(f"Extended TEMPORARY expiry for {user_id} to {new_expiry.isoformat()}")
-
-    async def get_consent(self, user_id: str, extend_expiry: bool = True) -> ConsentStatus:
+    async def get_consent(self, user_id: str) -> ConsentStatus:
         """
         Get user's consent status.
         FAILS if user doesn't exist - NO DEFAULTS.
-
-        Args:
-            user_id: User ID to get consent for
-            extend_expiry: If True, reset TEMPORARY expiry to 2 weeks from now (default: True)
         """
         self._consent_checks += 1
 
@@ -166,11 +130,6 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                     # Expired - remove from cache and fail
                     del self._consent_cache[user_id]
                     raise ConsentNotFoundError(f"Consent for {user_id} has expired")
-
-            # Reset decay countdown on every interaction (2 weeks without seeing them)
-            if extend_expiry and cached.stream == ConsentStream.TEMPORARY:
-                await self._extend_temporary_expiry(user_id, cached)
-
             return cached
 
         # Load from graph
@@ -207,39 +166,12 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
             # Update cache
             self._consent_cache[user_id] = status
-
-            # Reset decay countdown on every interaction (2 weeks without seeing them)
-            if extend_expiry and status.stream == ConsentStream.TEMPORARY:
-                await self._extend_temporary_expiry(user_id, status)
-
             return status
 
         except Exception as e:
             if "not found" in str(e).lower():
                 raise ConsentNotFoundError(f"No consent found for user {user_id}")
             raise
-
-    async def track_interaction(
-        self, user_id: str, channel_id: str, channel_type: Optional[str] = None
-    ) -> Optional[str]:
-        """
-        Track user interaction for parasocial attachment prevention.
-
-        This method delegates to the AIR (Artificial Interaction Reminder) manager
-        to monitor 1:1 API interactions and provide break reminders when thresholds are exceeded.
-
-        Scope: API channels only (1:1 interactions, not community moderation)
-        Triggers: 30 minutes continuous interaction OR 20+ messages
-
-        Args:
-            user_id: User ID
-            channel_id: Channel ID
-            channel_type: Channel type (api, discord, cli, unknown) - if None, will infer from ID
-
-        Returns:
-            Reminder message if threshold exceeded, None otherwise
-        """
-        return self._air_manager.track_interaction(user_id, channel_id, channel_type)
 
     async def grant_consent(self, request: ConsentRequest, channel_id: Optional[str] = None) -> ConsentStatus:
         """
@@ -261,7 +193,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Check if upgrading to PARTNERED - requires bilateral agreement
         if request.stream == ConsentStream.PARTNERED:
-            return await self._partnership_manager.create_partnership_request(request, previous_status, channel_id)
+            return await self._handle_partnership_request(request, previous_status, channel_id)
 
         # Check for gaming behavior if switching streams
         await self._check_gaming_behavior(request, previous_status)
@@ -288,6 +220,58 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             return await self.get_consent(user_id)
         except ConsentNotFoundError:
             return None
+
+    async def _handle_partnership_request(
+        self, request: ConsentRequest, previous_status: Optional[ConsentStatus], channel_id: Optional[str]
+    ) -> ConsentStatus:
+        """Handle PARTNERED consent request with bilateral agreement."""
+        # Check if already partnered
+        if previous_status and previous_status.stream == ConsentStream.PARTNERED:
+            logger.info(f"User {request.user_id} already has PARTNERED consent")
+            return previous_status
+
+        # Track partnership request
+        self._partnership_requests += 1
+
+        # Create partnership task for agent approval
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
+
+        if self._time_service is None:
+            raise ValueError("TimeService required for partnership requests")
+        handler = PartnershipRequestHandler(time_service=self._time_service)
+        task = handler.create_partnership_task(
+            user_id=request.user_id,
+            categories=[c.value for c in request.categories],
+            reason=request.reason,
+            channel_id=channel_id,
+        )
+
+        # Create pending status
+        now = self._now()
+        pending_status = ConsentStatus(
+            user_id=request.user_id,
+            stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
+            categories=previous_status.categories if previous_status else [],
+            granted_at=previous_status.granted_at if previous_status else now,
+            expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
+            last_modified=now,
+            impact_score=previous_status.impact_score if previous_status else 0.0,
+            attribution_count=previous_status.attribution_count if previous_status else 0,
+        )
+
+        # Store pending partnership request
+        # Note: We store non-JSONDict values here (ConsentRequest, datetime)
+        # This is internal state, not persisted JSON, so we use Dict[str, Any]
+        if request.user_id not in self._pending_partnerships:
+            self._pending_partnerships = {}
+        self._pending_partnerships[request.user_id] = {
+            "task_id": task.task_id,
+            "request": request.model_dump(mode="json"),  # Store as dict
+            "created_at": now.isoformat(),  # Store as ISO string
+        }
+
+        logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
+        return pending_status
 
     async def _check_gaming_behavior(self, request: ConsentRequest, previous_status: Optional[ConsentStatus]) -> None:
         """Check for gaming behavior if switching consent streams."""
@@ -375,13 +359,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
 
         # Store audit entry
-        audit_attrs = audit.model_dump(mode="json")
-        audit_attrs["service"] = "consent"  # Add service identifier for querying
         audit_node = GraphNode(
             id=f"consent_audit/{audit.entry_id}",
             type=NodeType.AUDIT_ENTRY,
-            scope=GraphScope.IDENTITY,  # Use IDENTITY scope for user-specific audit trail
-            attributes=audit_attrs,
+            scope=GraphScope.LOCAL,
+            attributes=audit.model_dump(mode="json"),
             updated_by="consent_manager",
             updated_at=now,
         )
@@ -457,13 +439,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         )
 
         # Store audit entry
-        audit_attrs = audit.model_dump(mode="json")
-        audit_attrs["service"] = "consent"  # Add service identifier for querying
         audit_node = GraphNode(
             id=f"consent_audit/{audit.entry_id}",
             type=NodeType.AUDIT_ENTRY,
-            scope=GraphScope.IDENTITY,  # Use IDENTITY scope for user-specific audit trail
-            attributes=audit_attrs,
+            scope=GraphScope.LOCAL,
+            attributes=audit.model_dump(mode="json"),
             updated_by="consent_manager",
             updated_at=now,
         )
@@ -478,29 +458,106 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def revoke_consent(self, user_id: str, reason: Optional[str] = None) -> ConsentDecayStatus:
         """
         Start decay protocol - IMMEDIATE identity severance.
-        Delegates to DecayProtocolManager for actual decay handling.
         """
         self._consent_revokes += 1
+        self._total_decays_initiated += 1
 
         # Verify user exists
         status = await self.get_consent(user_id)
 
-        # Get filter service if available
-        filter_service = self._filter_service if hasattr(self, "_filter_service") else None
+        # Trigger anonymization in filter service
+        if hasattr(self, "_filter_service"):
+            # Anonymize user profile in filter service
+            await self._filter_service.anonymize_user_profile(user_id)
+            logger.info(f"Triggered filter profile anonymization for {user_id}")
 
-        # Delegate to decay manager
-        decay = await self._decay_manager.initiate_decay(
+        # Create decay status
+        now = self._now()
+        decay = ConsentDecayStatus(
             user_id=user_id,
-            reason=reason,
-            initiated_by="user",
-            current_status=status,
-            filter_service=filter_service,
+            decay_started=now,
+            identity_severed=True,  # Immediate
+            patterns_anonymized=False,  # Over 90 days
+            decay_complete_at=now + timedelta(days=90),
+            safety_patterns_retained=0,  # Will be calculated
         )
 
-        # Remove from cache (decay manager handles persistence)
+        # Store decay status
+        decay_node = GraphNode(
+            id=f"consent_decay/{user_id}",
+            type=NodeType.DECAY,
+            scope=GraphScope.LOCAL,
+            attributes=decay.model_dump(mode="json"),
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+        if self._time_service is None:
+            raise ValueError("TimeService required for revoking consent")
+        add_graph_node(decay_node, self._time_service, self._db_path)
+
+        # Update consent to expired
+        revoked_status = ConsentStatus(
+            user_id=user_id,
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=status.granted_at,
+            expires_at=now,  # Expired immediately
+            last_modified=now,
+            impact_score=status.impact_score,
+            attribution_count=status.attribution_count,
+        )
+
+        # Store updated consent
+        node = GraphNode(
+            id=f"consent/{user_id}",
+            type=NodeType.CONSENT,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "stream": revoked_status.stream,
+                "categories": [],
+                "granted_at": revoked_status.granted_at.isoformat(),
+                "expires_at": revoked_status.expires_at.isoformat() if revoked_status.expires_at else "",
+                "last_modified": revoked_status.last_modified.isoformat(),
+                "impact_score": revoked_status.impact_score,
+                "attribution_count": revoked_status.attribution_count,
+                "revoked": True,
+            },
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+        add_graph_node(node, self._time_service, self._db_path)
+
+        # Create audit entry
+        audit = ConsentAuditEntry(
+            entry_id=str(uuid4()),
+            user_id=user_id,
+            timestamp=now,
+            previous_stream=status.stream,
+            new_stream=ConsentStream.TEMPORARY,
+            previous_categories=status.categories,
+            new_categories=[],
+            initiated_by="user",
+            reason=reason or "User requested deletion",
+        )
+
+        audit_node = GraphNode(
+            id=f"consent_audit/{audit.entry_id}",
+            type=NodeType.AUDIT_ENTRY,
+            scope=GraphScope.LOCAL,
+            attributes=audit.model_dump(mode="json"),
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+        add_graph_node(audit_node, self._time_service, self._db_path)
+
+        # Remove from cache
         if user_id in self._consent_cache:
             del self._consent_cache[user_id]
 
+        # Track active decay
+        self._active_decays[user_id] = decay
+
+        logger.info(f"Decay protocol started for {user_id}: completes {decay.decay_complete_at}")
         return decay
 
     async def check_expiry(self, user_id: str) -> bool:
@@ -640,7 +697,6 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def check_pending_partnership(self, user_id: str) -> Optional[str]:
         """
         Check status of pending partnership request.
-        Delegates to PartnershipManager for checking and finalization.
 
         Returns:
             - "accepted": Partnership approved by agent
@@ -649,70 +705,90 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             - "pending": Still processing
             - None: No pending request
         """
-        # Check status via partnership manager
-        status = await self._partnership_manager.check_partnership_status(user_id)
+        if user_id not in self._pending_partnerships:
+            return None
 
-        # If accepted, finalize the partnership
-        if status == "accepted":
-            # Get task_id from pending partnerships
-            pending_list = self._partnership_manager.list_pending_partnerships()
-            task_id = None
-            for pending in pending_list:
-                if pending.get("user_id") == user_id:
-                    task_id = pending.get("task_id")
-                    break
+        pending = self._pending_partnerships[user_id]
+        task_id = get_str(pending, "task_id", "")
 
-            if not task_id:
-                logger.warning(f"Partnership accepted for {user_id} but no task_id found")
-                return status
+        # Check task outcome
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
 
-            # Finalize via partnership manager
-            partnership_data = self._partnership_manager.finalize_partnership_approval(user_id, str(task_id))
+        if self._time_service is None:
+            raise ValueError("TimeService required for partnership status check")
+        handler = PartnershipRequestHandler(time_service=self._time_service)
+        outcome, reason = handler.check_task_outcome(task_id)
 
-            if partnership_data:
-                # Create and persist PARTNERED consent status
-                now = self._now()
-                categories = partnership_data.get("categories", [])
+        if outcome == "accepted":
+            # Finalize the partnership
+            request_dict = get_dict(pending, "request", {})
+            now = self._now()
 
-                partnered_status = ConsentStatus(
-                    user_id=user_id,
-                    stream=ConsentStream.PARTNERED,
-                    categories=categories,
-                    granted_at=now,
-                    expires_at=None,  # PARTNERED doesn't expire
-                    last_modified=now,
-                    impact_score=0.0,
-                    attribution_count=0,
-                )
+            # Reconstruct categories from dict
+            categories_data = get_list(request_dict, "categories", [])
+            categories = [
+                ConsentCategory(c) if isinstance(c, str) else ConsentCategory(c.get("value", "interaction"))
+                for c in categories_data
+            ]
 
-                # Store in graph
-                node = GraphNode(
-                    id=f"consent/{user_id}",
-                    type=NodeType.CONSENT,
-                    scope=GraphScope.LOCAL,
-                    attributes={
-                        "stream": partnered_status.stream,
-                        "categories": list(partnered_status.categories),
-                        "granted_at": partnered_status.granted_at.isoformat(),
-                        "expires_at": None,
-                        "last_modified": partnered_status.last_modified.isoformat(),
-                        "impact_score": partnered_status.impact_score,
-                        "attribution_count": partnered_status.attribution_count,
-                        "partnership_approved": True,
-                        "approval_task_id": task_id,
-                    },
-                    updated_by="consent_manager",
-                    updated_at=now,
-                )
+            # Create PARTNERED status
+            partnered_status = ConsentStatus(
+                user_id=user_id,
+                stream=ConsentStream.PARTNERED,
+                categories=categories,
+                granted_at=now,
+                expires_at=None,  # PARTNERED doesn't expire
+                last_modified=now,
+                impact_score=0.0,
+                attribution_count=0,
+            )
 
-                if self._time_service is None:
-                    raise ValueError("TimeService required for finalizing partnership")
-                add_graph_node(node, self._time_service, self._db_path)
+            # Store in graph
+            node = GraphNode(
+                id=f"consent/{user_id}",
+                type=NodeType.CONSENT,
+                scope=GraphScope.LOCAL,
+                attributes={
+                    "stream": partnered_status.stream,
+                    "categories": list(partnered_status.categories),
+                    "granted_at": partnered_status.granted_at.isoformat(),
+                    "expires_at": None,
+                    "last_modified": partnered_status.last_modified.isoformat(),
+                    "impact_score": partnered_status.impact_score,
+                    "attribution_count": partnered_status.attribution_count,
+                    "partnership_approved": True,
+                    "approval_task_id": task_id,
+                },
+                updated_by="consent_manager",
+                updated_at=now,
+            )
 
-                # Update cache
-                self._consent_cache[user_id] = partnered_status
+            add_graph_node(node, self._time_service, self._db_path)
 
-        return status
+            # Update cache
+            self._consent_cache[user_id] = partnered_status
+
+            # Remove from pending
+            del self._pending_partnerships[user_id]
+
+            # Track approval
+            self._partnership_approvals += 1
+
+            logger.info(f"Partnership approved for {user_id} via task {task_id}")
+            return "accepted"
+
+        elif outcome in ["rejected", "deferred", "failed"]:
+            # Remove from pending
+            del self._pending_partnerships[user_id]
+
+            # Track rejection
+            if outcome == "rejected":
+                self._partnership_rejections += 1
+
+            logger.info(f"Partnership {outcome} for {user_id}: {reason}")
+            return outcome
+
+        return "pending"
 
     async def _get_example_contributions(self, user_id: str) -> List[str]:
         """Get example contributions from the graph."""
@@ -922,23 +998,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Calculate average age in days
         avg_age_days = (total_age_seconds / consent_count / 86400.0) if consent_count > 0 else 0.0
 
-        # Get partnership metrics from manager
-        partnership_requests, partnership_approvals, partnership_rejections = self._partnership_manager.get_request_counts()
+        # Calculate partnership success rate
         partnership_success_rate = 0.0
-        if partnership_requests > 0:
-            partnership_success_rate = (partnership_approvals / partnership_requests) * 100.0
+        if self._partnership_requests > 0:
+            partnership_success_rate = (self._partnership_approvals / self._partnership_requests) * 100.0
 
-        # Get decay metrics from manager
-        active_decays = self._decay_manager.get_active_decays()
+        # Calculate decay completion rate
         decay_completion_rate = 0.0
-        # Note: We don't have a _decays_completed counter yet, so set to 0
-        total_decays_initiated = len(active_decays)  # Approximate for now
-        _decays_completed = 0
-        if total_decays_initiated > 0:
-            decay_completion_rate = (_decays_completed / total_decays_initiated) * 100.0
-
-        # Get AIR (Artificial Interaction Reminder) metrics from manager
-        air_metrics = self._air_manager.get_metrics()
+        if self._total_decays_initiated > 0:
+            decay_completion_rate = (self._decays_completed / self._total_decays_initiated) * 100.0
 
         # Update metrics with the 5 most important ones
         metrics.update(
@@ -951,50 +1019,23 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 "consent_anonymous_percent": (anonymous_count / consent_count * 100.0) if consent_count > 0 else 0.0,
                 # 3. Partnership success rate
                 "consent_partnership_success_rate": partnership_success_rate,
-                "consent_partnership_requests_total": float(partnership_requests),
-                "consent_partnership_approvals_total": float(partnership_approvals),
+                "consent_partnership_requests_total": float(self._partnership_requests),
+                "consent_partnership_approvals_total": float(self._partnership_approvals),
                 # 4. Average consent age
                 "consent_average_age_days": avg_age_days,
                 # 5. Decay metrics
                 "consent_decay_completion_rate": decay_completion_rate,
-                "consent_active_decays": float(len(active_decays)),
-                "consent_total_decays_initiated": float(total_decays_initiated),
+                "consent_active_decays": float(len(self._active_decays)),
+                "consent_total_decays_initiated": float(self._total_decays_initiated),
                 # Additional operational metrics
                 "consent_checks_total": float(self._consent_checks),
                 "consent_grants_total": float(self._consent_grants),
                 "consent_revokes_total": float(self._consent_revokes),
                 "consent_expired_cleanups_total": float(self._expired_cleanups),
-                "consent_pending_partnerships": float(self._partnership_manager.get_pending_count()),
+                "consent_pending_partnerships": float(len(self._pending_partnerships)),
                 # Service health
                 "consent_service_uptime_seconds": (
                     self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
-                ),
-                # AIR (Artificial Interaction Reminder) metrics with safe type casting
-                "consent_air_total_interactions": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("total_interactions", 0)), (int, float))
-                    else 0.0
-                ),
-                "consent_air_reminders_sent": (
-                    float(val) if isinstance((val := air_metrics.get("reminders_sent", 0)), (int, float)) else 0.0
-                ),
-                "consent_air_reminder_rate_percent": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("reminder_rate_percent", 0.0)), (int, float))
-                    else 0.0
-                ),
-                "consent_air_active_sessions": (
-                    float(val) if isinstance((val := air_metrics.get("active_sessions", 0)), (int, float)) else 0.0
-                ),
-                "consent_air_time_triggered": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("time_triggered_reminders", 0)), (int, float))
-                    else 0.0
-                ),
-                "consent_air_message_triggered": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("message_triggered_reminders", 0)), (int, float))
-                    else 0.0
                 ),
             }
         )
@@ -1195,7 +1236,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             # Update to PARTNERED (pending agent approval via thought/task system)
             await self.update_consent(user_id, ConsentStream.PARTNERED, request.categories)
 
-            # Note: Partnership requests are now tracked by PartnershipManager
+            self._partnership_requests += 1
+
             return {
                 "success": True,
                 "message": "Partnership upgrade requested - requires agent approval",

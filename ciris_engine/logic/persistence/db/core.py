@@ -5,16 +5,8 @@ from datetime import datetime
 from typing import Any, Optional, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-from ciris_engine.schemas.persistence.tables import AUDIT_LOG_TABLE_V1 as audit_log_table_v1
-from ciris_engine.schemas.persistence.tables import AUDIT_ROOTS_TABLE_V1 as audit_roots_table_v1
-from ciris_engine.schemas.persistence.tables import AUDIT_SIGNING_KEYS_TABLE_V1 as audit_signing_keys_table_v1
-from ciris_engine.schemas.persistence.tables import FEEDBACK_MAPPINGS_TABLE_V1 as feedback_mappings_table_v1
-from ciris_engine.schemas.persistence.tables import GRAPH_EDGES_TABLE_V1 as graph_edges_table_v1
-from ciris_engine.schemas.persistence.tables import GRAPH_NODES_TABLE_V1 as graph_nodes_table_v1
-from ciris_engine.schemas.persistence.tables import SERVICE_CORRELATIONS_TABLE_V1 as service_correlations_table_v1
-from ciris_engine.schemas.persistence.tables import TASKS_TABLE_V1 as tasks_table_v1
-from ciris_engine.schemas.persistence.tables import THOUGHTS_TABLE_V1 as thoughts_table_v1
-from ciris_engine.schemas.persistence.tables import WA_CERT_TABLE_V1 as wa_cert_table_v1
+from ciris_engine.schemas.persistence import tables as sqlite_tables
+from ciris_engine.schemas.persistence import tables_postgresql as postgres_tables
 
 from .dialect import init_dialect
 from .migration_runner import run_migrations
@@ -217,19 +209,23 @@ def get_db_connection(
 
 
 def get_graph_nodes_table_schema_sql() -> str:
-    return graph_nodes_table_v1
+    return sqlite_tables.GRAPH_NODES_TABLE_V1
 
 
 def get_graph_edges_table_schema_sql() -> str:
-    return graph_edges_table_v1
+    return sqlite_tables.GRAPH_EDGES_TABLE_V1
 
 
 def get_service_correlations_table_schema_sql() -> str:
-    return service_correlations_table_v1
+    return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
-    """Initialize the database with base schema and apply migrations."""
+    """Initialize the database with base schema and apply migrations.
+
+    Note: Each deployment uses either SQLite or PostgreSQL exclusively.
+    No migration between database backends is supported.
+    """
     try:
         # Determine if we're using PostgreSQL or SQLite
         if db_path is None:
@@ -237,18 +233,24 @@ def initialize_database(db_path: Optional[str] = None) -> None:
 
         adapter = init_dialect(db_path)
 
+        # Select appropriate table schemas for the dialect
+        if adapter.is_postgresql():
+            tables_module = postgres_tables
+        else:
+            tables_module = sqlite_tables
+
         with get_db_connection(db_path) as conn:
             base_tables = [
-                tasks_table_v1,
-                thoughts_table_v1,
-                feedback_mappings_table_v1,
-                graph_nodes_table_v1,
-                graph_edges_table_v1,
-                service_correlations_table_v1,
-                audit_log_table_v1,
-                audit_roots_table_v1,
-                audit_signing_keys_table_v1,
-                wa_cert_table_v1,
+                tables_module.TASKS_TABLE_V1,
+                tables_module.THOUGHTS_TABLE_V1,
+                tables_module.FEEDBACK_MAPPINGS_TABLE_V1,
+                tables_module.GRAPH_NODES_TABLE_V1,
+                tables_module.GRAPH_EDGES_TABLE_V1,
+                tables_module.SERVICE_CORRELATIONS_TABLE_V1,
+                tables_module.AUDIT_LOG_TABLE_V1,
+                tables_module.AUDIT_ROOTS_TABLE_V1,
+                tables_module.AUDIT_SIGNING_KEYS_TABLE_V1,
+                tables_module.WA_CERT_TABLE_V1,
             ]
 
             # PostgreSQL doesn't support executescript, execute statements individually
@@ -256,7 +258,7 @@ def initialize_database(db_path: Optional[str] = None) -> None:
                 cursor = conn.cursor()
                 for table_sql in base_tables:
                     # Split SQL script into individual statements
-                    statements = [s.strip() for s in table_sql.split(';') if s.strip()]
+                    statements = [s.strip() for s in table_sql.split(";") if s.strip()]
                     for statement in statements:
                         cursor.execute(statement)
                 cursor.close()

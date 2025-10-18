@@ -141,6 +141,11 @@ class EssentialConfig(BaseModel):
         if env_occurrence_id:
             self.agent_occurrence_id = env_occurrence_id
 
+        # Load database URL from environment (supports PostgreSQL with credentials)
+        env_db_url = os.getenv("CIRIS_DB_URL")
+        if env_db_url:
+            self.database.database_url = env_db_url
+
 
 class CIRISNodeConfig(BaseModel):
     """Configuration for CIRISNode integration."""

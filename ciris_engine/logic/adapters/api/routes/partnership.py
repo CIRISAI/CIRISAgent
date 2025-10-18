@@ -39,6 +39,259 @@ from ciris_engine.schemas.runtime.enums import TaskStatus
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
 
+
+def _handle_partnership_accept(
+    partnership_user_id: str,
+    task_id: str,
+    task: Any,
+    partnership_manager: Any,
+    current_user: TokenData,
+) -> StandardResponse:
+    """Handle partnership acceptance - creates PARTNERED consent status.
+
+    Args:
+        partnership_user_id: User ID for the partnership
+        task_id: Partnership task ID
+        task: Task object
+        partnership_manager: Partnership manager instance
+        current_user: Current authenticated user
+
+    Returns:
+        StandardResponse with partnership acceptance confirmation
+
+    Raises:
+        HTTPException: If partnership approval fails
+    """
+    import uuid
+
+    from ciris_engine.logic.persistence import add_graph_node
+    from ciris_engine.logic.persistence.models.tasks import update_task_status
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, ConsentStream
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    # Finalize the partnership approval
+    partnership_data = partnership_manager.finalize_partnership_approval(partnership_user_id, task_id)
+
+    if not partnership_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Partnership approval failed - request may have expired or already been processed",
+        )
+
+    # Create PARTNERED consent status
+    now = datetime.now(timezone.utc)
+    categories = partnership_data.get("categories", [ConsentCategory.INTERACTION])
+
+    partnered_status = ConsentStatus(
+        user_id=partnership_user_id,
+        stream=ConsentStream.PARTNERED,
+        categories=categories,
+        granted_at=now,
+        expires_at=None,  # PARTNERED doesn't expire
+        last_modified=now,
+        impact_score=0.0,
+        attribution_count=0,
+    )
+
+    # Persist to graph
+    node = GraphNode(
+        id=f"consent/{partnership_user_id}",
+        type=NodeType.CONSENT,
+        scope=GraphScope.LOCAL,
+        attributes={
+            "stream": (
+                partnered_status.stream.value if hasattr(partnered_status.stream, "value") else partnered_status.stream
+            ),
+            "categories": [c.value if hasattr(c, "value") else c for c in partnered_status.categories],
+            "granted_at": partnered_status.granted_at.isoformat(),
+            "expires_at": None,
+            "last_modified": partnered_status.last_modified.isoformat(),
+            "impact_score": partnered_status.impact_score,
+            "attribution_count": partnered_status.attribution_count,
+            "partnership_approved": True,
+            "approval_task_id": task_id,
+        },
+        updated_by="consent_manager",
+        updated_at=now,
+    )
+
+    time_service = TimeService()
+    add_graph_node(node, time_service, None)
+
+    # Update task status to COMPLETED
+    update_task_status(
+        task_id=task.task_id,
+        new_status=TaskStatus.COMPLETED,
+        occurrence_id=str(uuid.uuid4()),
+        time_service=time_service,
+        db_path=None,
+    )
+
+    return StandardResponse(
+        success=True,
+        data={
+            "user_id": partnership_user_id,
+            "decision": "accepted",
+            "consent_status": partnered_status.model_dump(),
+            "task_id": task_id,
+        },
+        message=f"Partnership accepted for {partnership_user_id}",
+        metadata={
+            "timestamp": now.isoformat(),
+            "decided_by": current_user.username,
+        },
+    )
+
+
+def _handle_partnership_reject(
+    partnership_user_id: str,
+    task_id: str,
+    task: Any,
+    partnership_manager: Any,
+    current_user: TokenData,
+    reason: Optional[str],
+) -> StandardResponse:
+    """Handle partnership rejection.
+
+    Args:
+        partnership_user_id: User ID for the partnership
+        task_id: Partnership task ID
+        task: Task object
+        partnership_manager: Partnership manager instance
+        current_user: Current authenticated user
+        reason: Optional reason for rejection
+
+    Returns:
+        StandardResponse with partnership rejection confirmation
+    """
+    import uuid
+
+    from ciris_engine.logic.persistence.models.tasks import update_task_status
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.consent.core import PartnershipOutcome, PartnershipOutcomeType
+
+    # Remove from pending partnerships
+    if partnership_user_id in partnership_manager._pending_partnerships:
+        del partnership_manager._pending_partnerships[partnership_user_id]
+
+    # Update task status to REJECTED
+    time_service = TimeService()
+    update_task_status(
+        task_id=task.task_id,
+        new_status=TaskStatus.REJECTED,
+        occurrence_id=str(uuid.uuid4()),
+        time_service=time_service,
+        db_path=None,
+    )
+
+    # Track rejection
+    partnership_manager._partnership_rejections += 1
+
+    # Create outcome record
+    outcome = PartnershipOutcome(
+        user_id=partnership_user_id,
+        task_id=task_id,
+        outcome_type=PartnershipOutcomeType.REJECTED,
+        decided_by=current_user.username,
+        decided_at=datetime.now(timezone.utc),
+        reason=reason or "Partnership request was declined",
+        notes=None,
+    )
+
+    # Record in history
+    if partnership_user_id not in partnership_manager._partnership_history:
+        partnership_manager._partnership_history[partnership_user_id] = []
+    partnership_manager._partnership_history[partnership_user_id].append(outcome)
+
+    return StandardResponse(
+        success=True,
+        data={
+            "user_id": partnership_user_id,
+            "decision": "rejected",
+            "reason": reason or "Partnership request was declined",
+            "task_id": task_id,
+        },
+        message=f"Partnership rejected for {partnership_user_id}",
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "decided_by": current_user.username,
+        },
+    )
+
+
+def _handle_partnership_defer(
+    partnership_user_id: str,
+    task_id: str,
+    task: Any,
+    partnership_manager: Any,
+    current_user: TokenData,
+    reason: Optional[str],
+) -> StandardResponse:
+    """Handle partnership deferral.
+
+    Args:
+        partnership_user_id: User ID for the partnership
+        task_id: Partnership task ID
+        task: Task object
+        partnership_manager: Partnership manager instance
+        current_user: Current authenticated user
+        reason: Optional reason for deferral
+
+    Returns:
+        StandardResponse with partnership deferral confirmation
+    """
+    import uuid
+
+    from ciris_engine.logic.persistence.models.tasks import update_task_status
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.consent.core import PartnershipOutcome, PartnershipOutcomeType
+
+    # Update task status to DEFERRED
+    time_service = TimeService()
+    update_task_status(
+        task_id=task.task_id,
+        new_status=TaskStatus.DEFERRED,
+        occurrence_id=str(uuid.uuid4()),
+        time_service=time_service,
+        db_path=None,
+    )
+
+    # Track deferral
+    partnership_manager._partnership_deferrals += 1
+
+    # Create outcome record
+    outcome = PartnershipOutcome(
+        user_id=partnership_user_id,
+        task_id=task_id,
+        outcome_type=PartnershipOutcomeType.DEFERRED,
+        decided_by=current_user.username,
+        decided_at=datetime.now(timezone.utc),
+        reason=reason or "More information needed before deciding",
+        notes=None,
+    )
+
+    # Record in history
+    if partnership_user_id not in partnership_manager._partnership_history:
+        partnership_manager._partnership_history[partnership_user_id] = []
+    partnership_manager._partnership_history[partnership_user_id].append(outcome)
+
+    return StandardResponse(
+        success=True,
+        data={
+            "user_id": partnership_user_id,
+            "decision": "deferred",
+            "reason": reason or "More information needed before deciding",
+            "task_id": task_id,
+        },
+        message=f"Partnership deferred for {partnership_user_id}",
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "decided_by": current_user.username,
+        },
+    )
+
+
 router = APIRouter(prefix="/partnership", tags=["Partnership"])
 
 
@@ -277,201 +530,12 @@ async def decide_partnership(
             detail="You can only decide on your own partnership requests",
         )
 
-    # Handle the decision
+    # Handle the decision with extracted helper functions
     partnership_manager = consent_manager._partnership_manager
 
     if decision == "accept":
-        # Finalize the partnership approval
-        partnership_data = partnership_manager.finalize_partnership_approval(partnership_user_id, task_id)
-
-        if not partnership_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Partnership approval failed - request may have expired or already been processed",
-            )
-
-        # Create PARTNERED consent status
-        from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, ConsentStream
-        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
-
-        now = datetime.now(timezone.utc)
-        categories = partnership_data.get("categories", [ConsentCategory.INTERACTION])
-
-        partnered_status = ConsentStatus(
-            user_id=partnership_user_id,
-            stream=ConsentStream.PARTNERED,
-            categories=categories,
-            granted_at=now,
-            expires_at=None,  # PARTNERED doesn't expire
-            last_modified=now,
-            impact_score=0.0,
-            attribution_count=0,
-        )
-
-        # Persist to graph
-        node = GraphNode(
-            id=f"consent/{partnership_user_id}",
-            type=NodeType.CONSENT,
-            scope=GraphScope.LOCAL,
-            attributes={
-                "stream": (
-                    partnered_status.stream.value
-                    if hasattr(partnered_status.stream, "value")
-                    else partnered_status.stream
-                ),
-                "categories": [c.value if hasattr(c, "value") else c for c in partnered_status.categories],
-                "granted_at": partnered_status.granted_at.isoformat(),
-                "expires_at": None,
-                "last_modified": partnered_status.last_modified.isoformat(),
-                "impact_score": partnered_status.impact_score,
-                "attribution_count": partnered_status.attribution_count,
-                "partnership_approved": True,
-                "approval_task_id": task_id,
-            },
-            updated_by="consent_manager",
-            updated_at=now,
-        )
-
-        from ciris_engine.logic.persistence import add_graph_node
-        from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-        time_service = TimeService()
-        add_graph_node(node, time_service, None)
-
-        # Update task status to COMPLETED
-        import uuid
-
-        from ciris_engine.logic.persistence.models.tasks import update_task_status
-        from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-        time_service = TimeService()
-        update_task_status(
-            task_id=task.task_id,
-            new_status=TaskStatus.COMPLETED,
-            occurrence_id=str(uuid.uuid4()),
-            time_service=time_service,
-            db_path=None,
-        )
-
-        return StandardResponse(
-            success=True,
-            data={
-                "user_id": partnership_user_id,
-                "decision": "accepted",
-                "consent_status": partnered_status.model_dump(),
-                "task_id": task_id,
-            },
-            message=f"Partnership accepted for {partnership_user_id}",
-            metadata={
-                "timestamp": now.isoformat(),
-                "decided_by": current_user.username,
-            },
-        )
-
+        return _handle_partnership_accept(partnership_user_id, task_id, task, partnership_manager, current_user)
     elif decision == "reject":
-        # Remove from pending partnerships
-        if partnership_user_id in partnership_manager._pending_partnerships:
-            del partnership_manager._pending_partnerships[partnership_user_id]
-
-        # Update task status to REJECTED
-        import uuid
-
-        from ciris_engine.logic.persistence.models.tasks import update_task_status
-        from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-        time_service = TimeService()
-        update_task_status(
-            task_id=task.task_id,
-            new_status=TaskStatus.REJECTED,
-            occurrence_id=str(uuid.uuid4()),
-            time_service=time_service,
-            db_path=None,
-        )
-
-        # Track rejection
-        partnership_manager._partnership_rejections += 1
-
-        # Create outcome record
-        from ciris_engine.schemas.consent.core import PartnershipOutcome, PartnershipOutcomeType
-
-        outcome = PartnershipOutcome(
-            user_id=partnership_user_id,
-            task_id=task_id,
-            outcome_type=PartnershipOutcomeType.REJECTED,
-            decided_by=current_user.username,
-            decided_at=datetime.now(timezone.utc),
-            reason=reason or "Partnership request was declined",
-            notes=None,
-        )
-
-        # Record in history
-        if partnership_user_id not in partnership_manager._partnership_history:
-            partnership_manager._partnership_history[partnership_user_id] = []
-        partnership_manager._partnership_history[partnership_user_id].append(outcome)
-
-        return StandardResponse(
-            success=True,
-            data={
-                "user_id": partnership_user_id,
-                "decision": "rejected",
-                "reason": reason or "Partnership request was declined",
-                "task_id": task_id,
-            },
-            message=f"Partnership rejected for {partnership_user_id}",
-            metadata={
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "decided_by": current_user.username,
-            },
-        )
-
+        return _handle_partnership_reject(partnership_user_id, task_id, task, partnership_manager, current_user, reason)
     else:  # defer
-        # Update task status to DEFERRED
-        import uuid
-
-        from ciris_engine.logic.persistence.models.tasks import update_task_status
-        from ciris_engine.logic.services.lifecycle.time.service import TimeService
-
-        time_service = TimeService()
-        update_task_status(
-            task_id=task.task_id,
-            new_status=TaskStatus.DEFERRED,
-            occurrence_id=str(uuid.uuid4()),
-            time_service=time_service,
-            db_path=None,
-        )
-
-        # Track deferral
-        partnership_manager._partnership_deferrals += 1
-
-        # Create outcome record
-        from ciris_engine.schemas.consent.core import PartnershipOutcome, PartnershipOutcomeType
-
-        outcome = PartnershipOutcome(
-            user_id=partnership_user_id,
-            task_id=task_id,
-            outcome_type=PartnershipOutcomeType.DEFERRED,
-            decided_by=current_user.username,
-            decided_at=datetime.now(timezone.utc),
-            reason=reason or "More information needed before deciding",
-            notes=None,
-        )
-
-        # Record in history
-        if partnership_user_id not in partnership_manager._partnership_history:
-            partnership_manager._partnership_history[partnership_user_id] = []
-        partnership_manager._partnership_history[partnership_user_id].append(outcome)
-
-        return StandardResponse(
-            success=True,
-            data={
-                "user_id": partnership_user_id,
-                "decision": "deferred",
-                "reason": reason or "More information needed before deciding",
-                "task_id": task_id,
-            },
-            message=f"Partnership deferred for {partnership_user_id}",
-            metadata={
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "decided_by": current_user.username,
-            },
-        )
+        return _handle_partnership_defer(partnership_user_id, task_id, task, partnership_manager, current_user, reason)

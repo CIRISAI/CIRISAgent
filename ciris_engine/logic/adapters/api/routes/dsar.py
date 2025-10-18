@@ -18,7 +18,13 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
-from ciris_engine.schemas.consent.core import ConsentStream, DSARExportFormat
+from ciris_engine.schemas.consent.core import (
+    ConsentDecayStatus,
+    ConsentStream,
+    DSARAccessPackage,
+    DSARExportFormat,
+    DSARExportPackage,
+)
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
@@ -65,6 +71,187 @@ class DSARStatus(BaseModel):
 _dsar_requests = {}
 
 
+def _initialize_services(req: Request) -> tuple[ConsentService, DSARAutomationService]:
+    """Initialize consent and DSAR automation services.
+
+    Args:
+        req: FastAPI request object
+
+    Returns:
+        Tuple of (consent_manager, dsar_automation)
+    """
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+
+    # Get or create consent manager
+    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
+        consent_manager = req.app.state.consent_manager
+    else:
+        time_service = TimeService()
+        consent_manager = ConsentService(time_service=time_service)
+
+    # Get or create DSAR automation service
+    if hasattr(req.app.state, "dsar_automation") and req.app.state.dsar_automation:
+        dsar_automation = req.app.state.dsar_automation
+    else:
+        time_service = TimeService()
+        memory_bus = getattr(req.app.state, "memory_bus", None)
+        dsar_automation = DSARAutomationService(
+            time_service=time_service, consent_service=consent_manager, memory_bus=memory_bus
+        )
+
+    return consent_manager, dsar_automation
+
+
+async def _handle_access_request(
+    dsar_automation: DSARAutomationService, user_identifier: str, ticket_id: str
+) -> Optional[DSARAccessPackage]:
+    """Handle automated access request.
+
+    Args:
+        dsar_automation: DSAR automation service
+        user_identifier: User ID
+        ticket_id: Request ticket ID
+
+    Returns:
+        Access package or None if failed
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Use automation service for instant response
+        access_package = await dsar_automation.handle_access_request(user_id=user_identifier, request_id=ticket_id)
+        logger.info(f"DSAR access request {ticket_id} completed instantly via automation")
+        return access_package
+    except ConsentNotFoundError:
+        logger.info(f"DSAR access request {ticket_id} for user with no consent record")
+        return None
+    except Exception as e:
+        logger.warning(f"Could not automate access request {ticket_id}: {e}")
+        return None
+
+
+async def _handle_export_request(
+    dsar_automation: DSARAutomationService, user_identifier: str, ticket_id: str
+) -> Optional[DSARExportPackage]:
+    """Handle automated export request.
+
+    Args:
+        dsar_automation: DSAR automation service
+        user_identifier: User ID
+        ticket_id: Request ticket ID
+
+    Returns:
+        Export package or None if failed
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    export_format = DSARExportFormat.JSON
+
+    try:
+        # Use automation service for instant export
+        export_package = await dsar_automation.handle_export_request(
+            user_id=user_identifier, export_format=export_format, request_id=ticket_id
+        )
+        logger.info(f"DSAR export request {ticket_id} completed instantly via automation ({export_format})")
+        return export_package
+    except ConsentNotFoundError:
+        logger.info(f"DSAR export request {ticket_id} for user with no consent record")
+        return None
+    except Exception as e:
+        logger.warning(f"Could not automate export request {ticket_id}: {e}")
+        return None
+
+
+async def _handle_delete_request(
+    consent_manager: ConsentService, user_identifier: str, ticket_id: str
+) -> Optional[ConsentDecayStatus]:
+    """Handle delete request via decay protocol.
+
+    Args:
+        consent_manager: Consent service
+        user_identifier: User ID
+        ticket_id: Request ticket ID
+
+    Returns:
+        Decay status or None if failed
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Start decay protocol
+        decay_status = await consent_manager.revoke_consent(
+            user_id=user_identifier, reason=f"DSAR deletion request {ticket_id}"
+        )
+
+        # Use structured logging to avoid log injection
+        logger.info(
+            "Decay protocol initiated via DSAR", extra={"user_id": user_identifier, "ticket_id": ticket_id}
+        )
+        return decay_status
+    except ConsentNotFoundError:
+        # User has no consent record - that's fine for DSAR
+        return None
+    except Exception as e:
+        logger.warning(f"Could not initiate decay protocol for DSAR {ticket_id}: {e}")
+        return None
+
+
+def _build_response_message(
+    request_type: str,
+    urgent: bool,
+    contact_email: str,
+    access_package: Optional[DSARAccessPackage],
+    export_package: Optional[DSARExportPackage],
+    decay_status: Optional[ConsentDecayStatus],
+) -> str:
+    """Build response message based on request type and results.
+
+    Args:
+        request_type: Type of request (access/export/delete/correct)
+        urgent: Whether request is urgent
+        contact_email: Contact email
+        access_package: Access package if available
+        export_package: Export package if available
+        decay_status: Decay status if available
+
+    Returns:
+        Response message string
+    """
+    message = f"Your {request_type} request has been received. "
+
+    if request_type == "access" and access_package:
+        message += (
+            "Your data has been compiled instantly and is included in this response. "
+            "The package includes your consent status, audit history, interactions, and contributions."
+        )
+    elif request_type == "export" and export_package:
+        message += (
+            f"Your data export ({export_package.export_format}) has been generated instantly. "
+            f"File size: {export_package.file_size_bytes} bytes. "
+            f"Checksum: {export_package.checksum[:16]}... "
+            "The export is included in this response."
+        )
+    elif request_type == "delete" and decay_status:
+        message += (
+            "Decay protocol initiated: identity severed immediately, "
+            f"patterns will be anonymized over 90 days (complete by {decay_status.decay_complete_at.strftime('%Y-%m-%d')}). "
+        )
+    else:
+        # Manual processing for non-automated requests
+        timeline = '3 days' if urgent else '14 days'
+        message += (
+            f"We will process your request within {timeline} "
+            f"during the pilot phase. You will receive updates at {contact_email}."
+        )
+
+    return message
+
+
 @router.post("/", response_model=StandardResponse)
 async def submit_dsar(
     request: DSARRequest,
@@ -102,105 +289,20 @@ async def submit_dsar(
         submitted_at if is_automated else submitted_at + timedelta(days=14 if not request.urgent else 3)
     )
 
-    # Get services from app state
-    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    # Initialize services
+    consent_manager, dsar_automation = _initialize_services(req)
 
-    if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
-    else:
-        # Create default instance if not initialized
-        time_service = TimeService()
-        consent_manager = ConsentService(time_service=time_service)
-
-    # Initialize DSAR automation service
-    if hasattr(req.app.state, "dsar_automation") and req.app.state.dsar_automation:
-        dsar_automation = req.app.state.dsar_automation
-    else:
-        # Create instance with available services
-        time_service = TimeService()
-        memory_bus = getattr(req.app.state, "memory_bus", None)
-        dsar_automation = DSARAutomationService(
-            time_service=time_service, consent_service=consent_manager, memory_bus=memory_bus
-        )
-
-    # Handle ACCESS requests with automation
+    # Handle requests based on type
     access_package = None
-    if request.request_type == "access" and request.user_identifier:
-        try:
-            import logging
-
-            logger = logging.getLogger(__name__)
-
-            # Use automation service for instant response
-            access_package = await dsar_automation.handle_access_request(
-                user_id=request.user_identifier, request_id=ticket_id
-            )
-            logger.info(f"DSAR access request {ticket_id} completed instantly via automation")
-
-        except ConsentNotFoundError:
-            # User has no consent record - return empty package
-            logger.info(f"DSAR access request {ticket_id} for user with no consent record")
-        except Exception as e:
-            # Log but don't fail - fall back to manual processing
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not automate access request {ticket_id}: {e}")
-
-    # Handle EXPORT requests with automation
     export_package = None
-    if request.request_type == "export" and request.user_identifier:
-        try:
-            import logging
-
-            logger = logging.getLogger(__name__)
-
-            # Default to JSON export (could be made configurable)
-            export_format = DSARExportFormat.JSON
-
-            # Use automation service for instant export
-            export_package = await dsar_automation.handle_export_request(
-                user_id=request.user_identifier, export_format=export_format, request_id=ticket_id
-            )
-            logger.info(f"DSAR export request {ticket_id} completed instantly via automation ({export_format})")
-
-        except ConsentNotFoundError:
-            # User has no consent record
-            logger.info(f"DSAR export request {ticket_id} for user with no consent record")
-        except Exception as e:
-            # Log but don't fail - fall back to manual processing
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not automate export request {ticket_id}: {e}")
-
-    # For DELETE requests, trigger consent decay protocol
     decay_status = None
-    if request.request_type == "delete" and request.user_identifier:
-        try:
-            # Start decay protocol
-            decay_status = await consent_manager.revoke_consent(
-                user_id=request.user_identifier, reason=f"DSAR deletion request {ticket_id}"
-            )
 
-            # Log decay initiation
-            import logging
-
-            logger = logging.getLogger(__name__)
-            # Use structured logging to avoid log injection
-            logger.info(
-                "Decay protocol initiated via DSAR", extra={"user_id": request.user_identifier, "ticket_id": ticket_id}
-            )
-
-        except ConsentNotFoundError:
-            # User has no consent record - that's fine for DSAR
-            pass
-        except Exception as e:
-            # Log but don't fail DSAR request
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Could not initiate decay protocol for DSAR {ticket_id}: {e}")
+    if request.request_type == "access" and request.user_identifier:
+        access_package = await _handle_access_request(dsar_automation, request.user_identifier, ticket_id)
+    elif request.request_type == "export" and request.user_identifier:
+        export_package = await _handle_export_request(dsar_automation, request.user_identifier, ticket_id)
+    elif request.request_type == "delete" and request.user_identifier:
+        decay_status = await _handle_delete_request(consent_manager, request.user_identifier, ticket_id)
 
     # Store request (in production, this would go to a database)
     # Mark automated requests as completed instantly
@@ -236,33 +338,10 @@ async def submit_dsar(
     safe_type = sanitize_for_log(request.request_type, max_length=50)
     logger.info(f"DSAR request submitted: {ticket_id} - Type: {safe_type} - Email: {safe_email}")
 
-    # Prepare response with automation or decay protocol info
-    message = f"Your {request.request_type} request has been received. "
-
-    # Instant automated responses
-    if request.request_type == "access" and access_package:
-        message += (
-            "Your data has been compiled instantly and is included in this response. "
-            "The package includes your consent status, audit history, interactions, and contributions."
-        )
-    elif request.request_type == "export" and export_package:
-        message += (
-            f"Your data export ({export_package.export_format}) has been generated instantly. "
-            f"File size: {export_package.file_size_bytes} bytes. "
-            f"Checksum: {export_package.checksum[:16]}... "
-            "The export is included in this response."
-        )
-    elif request.request_type == "delete" and decay_status:
-        message += (
-            f"Decay protocol initiated: identity severed immediately, "
-            f"patterns will be anonymized over 90 days (complete by {decay_status.decay_complete_at.strftime('%Y-%m-%d')}). "
-        )
-    else:
-        # Manual processing for non-automated requests
-        message += (
-            f"We will process your request within {'3 days' if request.urgent else '14 days'} "
-            f"during the pilot phase. You will receive updates at {request.email}."
-        )
+    # Build response message
+    message = _build_response_message(
+        request.request_type, request.urgent, request.email, access_package, export_package, decay_status
+    )
 
     response_data = DSARResponse(
         ticket_id=ticket_id,

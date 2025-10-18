@@ -373,3 +373,71 @@ def mock_request_with_cognitive_state(mock_app_state_with_cognitive_state):
     request.app = Mock()
     request.app.state = mock_app_state_with_cognitive_state
     return request
+
+
+# =============================================================================
+# AUTH OVERRIDE FIXTURES - Use FastAPI dependency override system
+# =============================================================================
+
+
+async def _get_admin_user():
+    """Mock dependency that returns admin user."""
+    from ciris_engine.logic.adapters.api.models import TokenData
+
+    return TokenData(username="admin", email="admin@ciris.ai", role="ADMIN")
+
+
+async def _get_regular_user():
+    """Mock dependency that returns regular user."""
+    from ciris_engine.logic.adapters.api.models import TokenData
+
+    return TokenData(username="user", email="user@example.com", role="USER")
+
+
+async def _get_system_admin_user():
+    """Mock dependency that returns system admin user."""
+    from ciris_engine.logic.adapters.api.models import TokenData
+
+    return TokenData(username="sysadmin", email="sysadmin@ciris.ai", role="SYSTEM_ADMIN")
+
+
+@pytest.fixture
+def client_with_admin_auth(app):
+    """Create test client with admin auth override."""
+    from ciris_engine.logic.adapters.api.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = _get_admin_user
+    client = TestClient(app)
+
+    yield client
+
+    # Clean up override
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_with_user_auth(app):
+    """Create test client with regular user auth override."""
+    from ciris_engine.logic.adapters.api.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = _get_regular_user
+    client = TestClient(app)
+
+    yield client
+
+    # Clean up override
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_with_sysadmin_auth(app):
+    """Create test client with system admin auth override."""
+    from ciris_engine.logic.adapters.api.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = _get_system_admin_user
+    client = TestClient(app)
+
+    yield client
+
+    # Clean up override
+    app.dependency_overrides.clear()

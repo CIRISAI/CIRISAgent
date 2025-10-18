@@ -783,6 +783,8 @@ def _build_redirect_response(
 async def _trigger_billing_credit_check_if_enabled(
     request: Request,
     oauth_user: OAuthUser,
+    user_email: Optional[str] = None,
+    marketing_opt_in: Optional[bool] = None,
 ) -> None:
     """
     Trigger billing credit check if billing is enabled.
@@ -790,6 +792,12 @@ async def _trigger_billing_credit_check_if_enabled(
     This ensures the billing user is created on first OAuth login so the frontend
     can display available credits immediately. Only runs if resource_monitor with
     credit_provider is configured.
+
+    Args:
+        request: FastAPI request object
+        oauth_user: OAuth user object with provider, external_id, user_id, role
+        user_email: User email from OAuth provider (REQUIRED for billing backend)
+        marketing_opt_in: Marketing opt-in preference (REQUIRED for billing backend)
     """
     # Check if resource_monitor exists (billing may not be enabled)
     if not hasattr(request.app.state, "resource_monitor"):
@@ -816,18 +824,22 @@ async def _trigger_billing_credit_check_if_enabled(
             account_id=external_id,
             authority_id=oauth_user.user_id,
             tenant_id=None,
+            customer_email=user_email,  # Pass email to billing backend
+            marketing_opt_in=marketing_opt_in,  # Pass marketing preference to billing backend
         )
 
         context = CreditContext(
             agent_id=AGENT_ID,
             channel_id="oauth:callback",
             request_id=None,
+            user_role=oauth_user.role.value.lower(),  # Pass user role to billing backend
         )
 
         result = await resource_monitor.check_credit(account, context)
 
         logger.info(
             f"Billing credit check for {oauth_user.user_id}: has_credit={result.has_credit}, "
+            f"email={user_email}, marketing_opt_in={marketing_opt_in}, role={oauth_user.role.value}, "
             f"provider={resource_monitor.credit_provider.__class__.__name__}"
         )
 
@@ -930,7 +942,9 @@ async def oauth_callback(
         # Trigger billing credit check if billing is enabled
         # This ensures billing user is created and credits are initialized
         # so the frontend can display available credits immediately
-        await _trigger_billing_credit_check_if_enabled(request, oauth_user)
+        await _trigger_billing_credit_check_if_enabled(
+            request, oauth_user, user_email=user_email, marketing_opt_in=final_marketing_opt_in
+        )
 
         # Build and return redirect response with email and marketing preference
         return _build_redirect_response(

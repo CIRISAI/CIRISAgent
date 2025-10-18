@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.schemas.persistence.core import DeferralPackage, DeferralReportContext
 
 logger = logging.getLogger(__name__)
@@ -14,10 +15,10 @@ def save_deferral_report_mapping(
     package: Optional[DeferralPackage] = None,
     db_path: Optional[str] = None,
 ) -> None:
-    sql = """
-        INSERT OR REPLACE INTO deferral_reports (message_id, task_id, thought_id, package_json)
-        VALUES (?, ?, ?, ?)
-    """
+    adapter = get_adapter()
+    columns = ["message_id", "task_id", "thought_id", "package_json"]
+    sql = adapter.upsert(table="deferral_reports", columns=columns, conflict_columns=["message_id"])
+
     package_json = package.model_dump_json() if package is not None else None
     try:
         with get_db_connection(db_path=db_path) as conn:

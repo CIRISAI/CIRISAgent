@@ -268,8 +268,8 @@ grep -r "class.*YourThingHere" --include="*.py"
 
 ### 22 Core Services
 
-**Graph Services (6):**
-memory, config, telemetry, audit, incident_management, tsdb_consolidation
+**Graph Services (7):**
+memory, consent, config, telemetry, audit, incident_management, tsdb_consolidation
 
 **Infrastructure Services (4):**
 authentication, resource_monitor, database_maintenance, secrets
@@ -277,8 +277,8 @@ authentication, resource_monitor, database_maintenance, secrets
 **Lifecycle Services (4):**
 initialization, shutdown, time, task_scheduler
 
-**Governance Services (5):**
-wise_authority, adaptive_filter, visibility, consent, self_observation
+**Governance Services (4):**
+wise_authority, adaptive_filter, visibility, self_observation
 
 **Runtime Services (2):**
 llm, runtime_control
@@ -324,7 +324,11 @@ pytest -n 16 tests/ --timeout=300
 
 # Coverage analysis
 python -m tools.quality_analyzer       # Find gaps
-python -m tools.analysis.sonar quality-gate  # SonarCloud quality gate status
+
+# SonarCloud quality analysis
+python -m tools.analysis.sonar quality-gate  # PR + main quality gate status (IMPORTANT!)
+python -m tools.analysis.sonar status        # Main branch status only
+python -m tools.analysis.sonar_tool status   # Alternative main branch status
 ```
 
 ### QA Runner - API Test Suite

@@ -5,21 +5,24 @@ from datetime import datetime
 from typing import Any, Optional, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-from ciris_engine.schemas.persistence.tables import AUDIT_LOG_TABLE_V1 as audit_log_table_v1
-from ciris_engine.schemas.persistence.tables import AUDIT_ROOTS_TABLE_V1 as audit_roots_table_v1
-from ciris_engine.schemas.persistence.tables import AUDIT_SIGNING_KEYS_TABLE_V1 as audit_signing_keys_table_v1
-from ciris_engine.schemas.persistence.tables import FEEDBACK_MAPPINGS_TABLE_V1 as feedback_mappings_table_v1
-from ciris_engine.schemas.persistence.tables import GRAPH_EDGES_TABLE_V1 as graph_edges_table_v1
-from ciris_engine.schemas.persistence.tables import GRAPH_NODES_TABLE_V1 as graph_nodes_table_v1
-from ciris_engine.schemas.persistence.tables import SERVICE_CORRELATIONS_TABLE_V1 as service_correlations_table_v1
-from ciris_engine.schemas.persistence.tables import TASKS_TABLE_V1 as tasks_table_v1
-from ciris_engine.schemas.persistence.tables import THOUGHTS_TABLE_V1 as thoughts_table_v1
-from ciris_engine.schemas.persistence.tables import WA_CERT_TABLE_V1 as wa_cert_table_v1
+from ciris_engine.schemas.persistence import tables as sqlite_tables
+from ciris_engine.schemas.persistence import tables_postgresql as postgres_tables
 
+from .dialect import init_dialect
 from .migration_runner import run_migrations
 from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, is_retryable_error
 
 logger = logging.getLogger(__name__)
+
+# Try to import psycopg2 for PostgreSQL support
+try:
+    import psycopg2  # type: ignore[import-untyped]
+    import psycopg2.extras  # type: ignore[import-untyped]
+
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    logger.debug("psycopg2 not available - PostgreSQL support disabled")
 
 
 # Custom datetime adapter and converter for SQLite
@@ -139,36 +142,61 @@ class RetryConnection:
 
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
-) -> Union[sqlite3.Connection, RetryConnection]:
-    """Establishes a connection to the SQLite database with foreign key support.
+) -> Union[sqlite3.Connection, RetryConnection, Any]:
+    """Establishes a connection to the database (SQLite or PostgreSQL).
+
+    Supports both SQLite and PostgreSQL backends via connection string detection.
+    Connection string format:
+    - SQLite: "sqlite://path/to/db.db" or just "path/to/db.db"
+    - PostgreSQL: "postgresql://user:pass@host:port/dbname"
 
     Args:
-        db_path: Optional path to database file
-        busy_timeout: Optional busy timeout in milliseconds (e.g., 5000 for 5 seconds)
-        enable_retry: Enable automatic retry for write operations (default: True)
+        db_path: Optional database connection string (defaults to SQLite data/ciris.db)
+        busy_timeout: Optional busy timeout in milliseconds (SQLite only)
+        enable_retry: Enable automatic retry for write operations (SQLite only)
 
     Returns:
-        SQLite connection with row factory and foreign keys enabled.
-        By default, returns a RetryConnection that automatically retries write operations.
+        Database connection:
+        - SQLite: RetryConnection wrapper (if enable_retry=True) or raw Connection
+        - PostgreSQL: psycopg2 connection with dict cursor factory
     """
-    # Ensure adapters are registered before creating connection
-    _ensure_adapters_registered()
-
+    # Default to SQLite for backward compatibility
     if db_path is None:
         db_path = get_sqlite_db_full_path()
+
+    # Initialize dialect adapter based on connection string
+    adapter = init_dialect(db_path)
+
+    # PostgreSQL connection
+    if adapter.is_postgresql():
+        if not POSTGRES_AVAILABLE:
+            raise RuntimeError(
+                "PostgreSQL connection requested but psycopg2 not installed. "
+                "Install with: pip install psycopg2-binary"
+            )
+
+        conn = psycopg2.connect(adapter.db_url)
+        # Use dict cursor for compatibility with SQLite Row factory
+        conn.cursor_factory = psycopg2.extras.RealDictCursor
+        return conn
+
+    # SQLite connection (default)
+    _ensure_adapters_registered()
+
     conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
 
-    # Enable WAL mode for better concurrency
-    conn.execute("PRAGMA journal_mode=WAL;")
+    # Apply SQLite PRAGMA directives
+    pragma_statements = [
+        "PRAGMA foreign_keys = ON;",
+        "PRAGMA journal_mode=WAL;",
+        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
+    ]
 
-    # Set busy timeout if specified (also used as a fallback)
-    if busy_timeout is not None:
-        conn.execute(f"PRAGMA busy_timeout = {busy_timeout};")
-    else:
-        # Default 5 second busy timeout as a fallback
-        conn.execute("PRAGMA busy_timeout = 5000;")
+    for pragma in pragma_statements:
+        result = adapter.pragma(pragma)
+        if result:  # Only execute if dialect returns a statement
+            conn.execute(result)
 
     # Return wrapped connection with retry logic by default
     if enable_retry:
@@ -181,42 +209,69 @@ def get_db_connection(
 
 
 def get_graph_nodes_table_schema_sql() -> str:
-    return graph_nodes_table_v1
+    return sqlite_tables.GRAPH_NODES_TABLE_V1
 
 
 def get_graph_edges_table_schema_sql() -> str:
-    return graph_edges_table_v1
+    return sqlite_tables.GRAPH_EDGES_TABLE_V1
 
 
 def get_service_correlations_table_schema_sql() -> str:
-    return service_correlations_table_v1
+    return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
-    """Initialize the database with base schema and apply migrations."""
+    """Initialize the database with base schema and apply migrations.
+
+    Note: Each deployment uses either SQLite or PostgreSQL exclusively.
+    No migration between database backends is supported.
+    """
     try:
+        # Determine if we're using PostgreSQL or SQLite
+        if db_path is None:
+            db_path = get_sqlite_db_full_path()
+
+        adapter = init_dialect(db_path)
+
+        # Select appropriate table schemas for the dialect
+        if adapter.is_postgresql():
+            tables_module = postgres_tables
+        else:
+            tables_module = sqlite_tables
+
         with get_db_connection(db_path) as conn:
             base_tables = [
-                tasks_table_v1,
-                thoughts_table_v1,
-                feedback_mappings_table_v1,
-                graph_nodes_table_v1,
-                graph_edges_table_v1,
-                service_correlations_table_v1,
-                audit_log_table_v1,
-                audit_roots_table_v1,
-                audit_signing_keys_table_v1,
-                wa_cert_table_v1,
+                tables_module.TASKS_TABLE_V1,
+                tables_module.THOUGHTS_TABLE_V1,
+                tables_module.FEEDBACK_MAPPINGS_TABLE_V1,
+                tables_module.GRAPH_NODES_TABLE_V1,
+                tables_module.GRAPH_EDGES_TABLE_V1,
+                tables_module.SERVICE_CORRELATIONS_TABLE_V1,
+                tables_module.AUDIT_LOG_TABLE_V1,
+                tables_module.AUDIT_ROOTS_TABLE_V1,
+                tables_module.AUDIT_SIGNING_KEYS_TABLE_V1,
+                tables_module.WA_CERT_TABLE_V1,
             ]
 
-            for table_sql in base_tables:
-                conn.executescript(table_sql)
+            # PostgreSQL doesn't support executescript, execute statements individually
+            if adapter.is_postgresql():
+                cursor = conn.cursor()
+                for table_sql in base_tables:
+                    # Split SQL script into individual statements
+                    statements = [s.strip() for s in table_sql.split(";") if s.strip()]
+                    for statement in statements:
+                        cursor.execute(statement)
+                cursor.close()
+            else:
+                # SQLite supports executescript
+                for table_sql in base_tables:
+                    conn.executescript(table_sql)
 
             conn.commit()
 
         run_migrations(db_path)
 
         logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
-    except sqlite3.Error as e:
+    except (sqlite3.Error, Exception) as e:
         logger.exception(f"Database error during initialization: {e}")
         raise

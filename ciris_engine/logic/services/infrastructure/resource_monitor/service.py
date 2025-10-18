@@ -138,10 +138,16 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self.snapshot.cpu_percent = int(cpu_percent)
         self.snapshot.cpu_average_1m = int(sum(self._cpu_history) / len(self._cpu_history))
 
-        if psutil:
-            disk_usage = psutil.disk_usage(self.db_path)
-            self.snapshot.disk_free_mb = disk_usage.free // 1024 // 1024
-            self.snapshot.disk_used_mb = disk_usage.used // 1024 // 1024
+        # Skip disk usage for PostgreSQL connection strings (not file paths)
+        if psutil and not self.db_path.startswith(("postgresql://", "postgres://")):
+            try:
+                disk_usage = psutil.disk_usage(self.db_path)
+                self.snapshot.disk_free_mb = disk_usage.free // 1024 // 1024
+                self.snapshot.disk_used_mb = disk_usage.used // 1024 // 1024
+            except (OSError, FileNotFoundError):
+                # db_path may not be a valid filesystem path (e.g., connection string)
+                self.snapshot.disk_free_mb = 0
+                self.snapshot.disk_used_mb = 0
         else:  # pragma: no cover - fallback
             self.snapshot.disk_free_mb = 0
             self.snapshot.disk_used_mb = 0

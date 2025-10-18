@@ -649,7 +649,6 @@ class TestCIRISRuntimeIntegration:
         # Just check they don't raise exceptions when accessed
         _ = runtime.profile
         _ = getattr(runtime, "audit_service", None)
-        _ = getattr(runtime, "audit_services", [])
 
     @pytest.mark.asyncio
     async def test_runtime_initialization_error_handling(self, fast_runtime_for_integration_tests):

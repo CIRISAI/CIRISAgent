@@ -154,38 +154,30 @@ class ConsentTests:
                 raise
 
     async def test_impact_report(self):
-        """Test getting consent impact report."""
-        try:
-            report = await self.client.consent.get_impact_report()
+        """Test getting consent impact report - FAIL FAST."""
+        report = await self.client.consent.get_impact_report()
 
-            # Should have standard fields
-            if "total_interactions" not in report:
-                raise ValueError("Missing total_interactions in impact report")
-
-        except Exception as e:
-            # Impact report might require existing consent
-            if "consent" not in str(e).lower():
-                raise
+        # Should have standard fields
+        if "total_interactions" not in report:
+            raise ValueError("Missing total_interactions in impact report")
 
     async def test_audit_trail(self):
-        """Test getting consent audit trail."""
-        try:
-            # First make a change to create audit entry
-            await self.client.consent.grant_consent(
-                stream="temporary", categories=["interaction", "improvement"], reason="Test audit trail"
-            )
+        """Test getting consent audit trail - FAIL FAST."""
+        # First make a change to create audit entry
+        await self.client.consent.grant_consent(
+            stream="temporary", categories=["interaction", "improvement"], reason="Test audit trail"
+        )
 
-            # Get audit trail
-            audit = await self.client.consent.get_audit_trail()
+        # Get audit trail
+        audit = await self.client.consent.get_audit_trail()
 
-            # Should be a list
-            if not isinstance(audit, list):
-                raise ValueError("Audit trail should be a list")
+        # Should be a list
+        if not isinstance(audit, list):
+            raise ValueError(f"Audit trail should be a list, got: {type(audit)}")
 
-        except Exception as e:
-            # Audit might not be available
-            if "audit" not in str(e).lower() and "not found" not in str(e).lower():
-                raise
+        # Should have at least one entry after granting consent
+        if len(audit) == 0:
+            raise ValueError("Audit trail is empty after consent change")
 
     async def test_revoke_consent(self):
         """Test revoking consent."""

@@ -47,6 +47,8 @@ Available modules:
   tasks           - Task management
   guidance        - Guidance system
   consent         - Consent management
+  dsar            - DSAR automation
+  partnership     - Partnership management
   billing         - Billing and credit system
   handlers        - Message handlers
   simple_handlers - Simple handler tests

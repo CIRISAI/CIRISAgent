@@ -792,11 +792,12 @@ class TestBillingIntegration:
         mock_request.app.state = Mock()
         mock_request.app.state.resource_monitor = mock_resource_monitor
 
-        # Mock OAuth user
+        # Mock OAuth user with role attribute
         mock_oauth_user = Mock()
         mock_oauth_user.user_id = "google:12345"
         mock_oauth_user.provider = "google"
         mock_oauth_user.external_id = "12345"
+        mock_oauth_user.role = UserRole.OBSERVER  # Add role attribute
 
         # Call the function
         await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
@@ -878,6 +879,7 @@ class TestBillingIntegration:
         mock_oauth_user.user_id = "google:12345"
         mock_oauth_user.provider = "google"
         mock_oauth_user.external_id = "12345"
+        mock_oauth_user.role = UserRole.OBSERVER  # Add role attribute
 
         # Should not raise - error should be logged but OAuth should succeed
         await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
@@ -909,6 +911,7 @@ class TestBillingIntegration:
         mock_oauth_user.user_id = "github:67890"
         mock_oauth_user.provider = "github"
         mock_oauth_user.external_id = "67890"
+        mock_oauth_user.role = UserRole.OBSERVER  # Add role attribute
 
         # Call the function
         await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)
@@ -938,6 +941,7 @@ class TestBillingIntegration:
         mock_oauth_user.user_id = "discord:99999"
         mock_oauth_user.provider = "discord"
         mock_oauth_user.external_id = "99999"
+        mock_oauth_user.role = UserRole.OBSERVER  # Add role attribute
 
         # Call function
         await _trigger_billing_credit_check_if_enabled(mock_request, mock_oauth_user)

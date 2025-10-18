@@ -159,7 +159,9 @@ class TestRevokeConsentDecayProtocol:
 
         consent_service.get_consent = AsyncMock(return_value=existing)
 
-        with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node") as mock_add:
+        with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node") as mock_service_add, patch(
+            "ciris_engine.logic.services.governance.consent.decay.add_graph_node"
+        ) as mock_decay_add:
             decay_status = await consent_service.revoke_consent("revoke_user", reason="User requested deletion")
 
             assert decay_status.user_id == "revoke_user"
@@ -167,11 +169,12 @@ class TestRevokeConsentDecayProtocol:
             assert decay_status.patterns_anonymized is False
             assert decay_status.decay_complete_at == mock_time_service.now() + timedelta(days=90)
 
-            # Should call add_graph_node 3 times (decay node, consent node, audit node)
-            assert mock_add.call_count == 3
+            # Should call add_graph_node: 1 from decay manager (decay node) + 2 from service (consent node, audit node)
+            total_calls = mock_service_add.call_count + mock_decay_add.call_count
+            assert total_calls == 3
 
-            # Should be in active decays
-            assert "revoke_user" in consent_service._active_decays
+            # Should be in active decays (now in decay manager)
+            assert "revoke_user" in consent_service._decay_manager._active_decays
 
             # Should be removed from cache
             assert "revoke_user" not in consent_service._consent_cache
@@ -197,7 +200,9 @@ class TestRevokeConsentDecayProtocol:
         mock_filter.anonymize_user_profile = AsyncMock()
         consent_service._filter_service = mock_filter
 
-        with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node"):
+        with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node"), patch(
+            "ciris_engine.logic.services.governance.consent.decay.add_graph_node"
+        ):
             await consent_service.revoke_consent("user_with_filter")
 
             # Should call filter service
@@ -283,7 +288,7 @@ class TestCheckPendingPartnership:
     @pytest.mark.asyncio
     async def test_check_pending_partnership_exists(self, consent_service):
         """Test checking pending partnership that exists."""
-        consent_service._pending_partnerships["pending_user"] = {
+        consent_service._partnership_manager._pending_partnerships["pending_user"] = {
             "task_id": "task_123",
             "request": Mock(),
             "created_at": datetime.now(timezone.utc),

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttributes, GraphNode, GraphScope, NodeType
 
@@ -172,11 +173,10 @@ def delete_graph_node(node_id: str, scope: GraphScope, db_path: Optional[str] = 
 
 
 def add_graph_edge(edge: GraphEdge, db_path: Optional[str] = None) -> str:
-    sql = """
-        INSERT OR REPLACE INTO graph_edges
-        (edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json)
-        VALUES (:edge_id, :source_node_id, :target_node_id, :scope, :relationship, :weight, :attributes_json)
-    """
+    adapter = get_adapter()
+    columns = ["edge_id", "source_node_id", "target_node_id", "scope", "relationship", "weight", "attributes_json"]
+    sql = adapter.upsert(table="graph_edges", columns=columns, conflict_columns=["edge_id"])
+
     edge_id = f"{edge.source}->{edge.target}->{edge.relationship}"  # deterministic
     params = {
         "edge_id": edge_id,

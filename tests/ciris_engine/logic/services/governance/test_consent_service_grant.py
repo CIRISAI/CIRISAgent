@@ -21,12 +21,7 @@ from ciris_engine.logic.services.governance.consent.service import (
     ConsentValidationError,
 )
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.consent.core import (
-    ConsentCategory,
-    ConsentRequest,
-    ConsentStatus,
-    ConsentStream,
-)
+from ciris_engine.schemas.consent.core import ConsentCategory, ConsentRequest, ConsentStatus, ConsentStream
 
 
 @pytest.fixture
@@ -292,8 +287,8 @@ class TestGrantConsentFlow:
 
             # Should return pending status (not PARTNERED yet)
             assert result.stream != ConsentStream.PARTNERED
-            assert "partner_user" in consent_service._pending_partnerships
-            assert consent_service._pending_partnerships["partner_user"]["task_id"] == "task_123"
+            assert "partner_user" in consent_service._partnership_manager._pending_partnerships
+            assert consent_service._partnership_manager._pending_partnerships["partner_user"]["task_id"] == "task_123"
 
     @pytest.mark.asyncio
     async def test_grant_already_partnered_returns_existing(self, consent_service):

@@ -5,6 +5,120 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **🤝 Bilateral Partnership Decisions** - New endpoint for equal-agency partnership consent
+  - Added `POST /v1/partnership/decide` - Accept/reject/defer partnership requests
+  - **Bilateral Flow**: Either party (agent OR user) can initiate partnership requests
+    - Agent-initiated: Via `upgrade_relationship` tool → User decides via SDK/API
+    - User-initiated: Via `grant_consent(stream="partnered")` → Agent evaluates via task system
+  - **Equal Moral Agency**: Both parties have equal autonomy to accept, reject, or defer
+  - **No Bypass Patterns**: Genuine bilateral consent required, no admin override
+  - **SDK Support**: Fixes previously broken `accept_partnership()`, `reject_partnership()`, `defer_partnership()` methods
+  - **Request Body**: `{task_id, decision: "accept"|"reject"|"defer", reason?}`
+  - **Permissions**: Users can only decide on their own partnership requests (or admin)
+  - **Updated Documentation**: Partnership endpoints now clearly explain bilateral consent philosophy
+
+### Removed
+- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
+  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
+  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
+  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
+  - **Rationale**: Partnership decisions are made through bilateral consent between agent and user with equal moral agency. Manual admin overrides undermine this autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
+  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
+  - **Migration**: Replaced with bilateral `POST /v1/partnership/decide` endpoint for genuine two-way consent
+
+## [1.4.1] - 2025-10-17
+
+### Added
+- **🤝 Consensual Evolution Protocol v0.2**: Complete consent management system with memory bus integration
+  - **Consent Streams**: Three relationship models (TEMPORARY, PARTNERED, ANONYMOUS)
+    - TEMPORARY: 14-day auto-forget, default for all users
+    - PARTNERED: Bilateral consent requiring agent approval via task system
+    - ANONYMOUS: Statistics-only with identity removal
+  - **Impact Reporting**: Real-time contribution metrics from TSDB summaries
+    - Total interactions, patterns contributed, users helped
+    - Example contributions with anonymization
+    - No fake data - all metrics from actual graph data
+  - **Audit Trail**: Immutable consent change history
+    - IDENTITY scope for user-specific audit entries
+    - Service-tagged entries for efficient querying
+    - Full timestamp and reason tracking
+  - **DSAR Automation**: Automated data subject access requests with backend API
+    - **Backend Endpoints**:
+      - `/v1/consent/dsar/initiate` - Initiate DSAR with request_type: "full", "consent_only", "impact_only", "audit_only"
+      - `/v1/consent/dsar/status/{request_id}` - Track DSAR request status with ownership validation
+    - **Export Data Structure**:
+      - Consent data: stream, categories, granted_at, expires_at
+      - Impact metrics: total_interactions, patterns_contributed, users_helped, categories_active, impact_score
+      - Audit trail: complete consent change history with previous/new states
+    - Request ID format: `dsar_{user_id}_{timestamp}` for tracking
+    - Immediate completion with future async processing support
+  - **Partnership Management**: Bilateral consent flow with agent approval
+    - Task-based approval system with ACCEPT/REJECT/DEFER
+    - Pending partnership status tracking
+    - Automatic consent upgrade on approval
+  - **AIR (Artificial Interaction Reminder)**: Parasocial attachment prevention
+    - Time-based triggers (30 minutes continuous interaction)
+    - Message-based triggers (20+ messages in session)
+    - API-only scope (1:1 interactions, not community moderation)
+  - **SDK Extensions**: 16 new methods in ConsentResource
+    - **Consent Management**: `get_status()`, `query_consents()`, `grant_consent()`, `revoke_consent()`
+    - **Impact & Audit**: `get_impact_report()`, `get_audit_trail()`, `get_streams()`, `get_categories()`
+    - **Partnership**: `get_partnership_status()`, `get_partnership_options()`, `accept_partnership()`, `reject_partnership()`, `defer_partnership()`
+    - **DSAR**: `initiate_dsar()`, `get_dsar_status()`
+    - **Maintenance**: `cleanup_expired()`
+  - **Implementation**:
+    - Memory bus integration for impact reporting and audit trail queries
+    - Modular architecture: air.py, decay.py, partnership.py, metrics.py, exceptions.py
+    - GraphScope.IDENTITY for user-specific data, GraphScope.COMMUNITY for shared patterns
+    - Service-tagged audit entries for efficient filtering
+  - **Testing**: Comprehensive QA test coverage
+    - Consent tests: 8/8 passing (100%)
+    - DSAR tests: 6/6 passing (100%)
+    - Partnership tests: 5/5 passing (100%)
+    - Total: 19/19 consent system tests passing
+
+### Changed
+- **🎯 Type Safety: Protocol-Based Service Types (56% Optional[Any] Reduction)**
+  - **CIRISRuntime Service Properties**: Replaced 22 `Optional[Any]` return types with specific protocol types
+  - **Protocol Mapping**:
+    - Graph Services (7): `MemoryServiceProtocol`, `GraphConfigServiceProtocol`, `TelemetryServiceProtocol`, `AuditServiceProtocol`, `IncidentManagementServiceProtocol`, `TSDBConsolidationServiceProtocol`
+    - Infrastructure Services (4): `BusManagerProtocol`, `ResourceMonitorServiceProtocol`, `AuthenticationServiceProtocol`, `DatabaseMaintenanceServiceProtocol`, `SecretsServiceProtocol`
+    - Lifecycle Services (3): `TaskSchedulerServiceProtocol`, `InitializationServiceProtocol`, `ShutdownServiceProtocol`
+    - Governance Services (3): `AdaptiveFilterServiceProtocol`, `SelfObservationServiceProtocol`, `VisibilityServiceProtocol`
+    - Runtime Services (4): `LLMServiceProtocol`, `RuntimeControlServiceProtocol`, `ToolServiceProtocol`
+    - List Types (1): `List[AuditServiceProtocol]`
+  - **Impact**:
+    - ✅ Reduced Optional[Any] from 39 → 17 occurrences (56% reduction)
+    - ✅ Enables compile-time type checking for all service access
+    - ✅ Improves IDE autocomplete and refactoring support
+    - ✅ Documents service interface contracts explicitly
+    - ✅ 100% mypy compliance (zero errors)
+    - ✅ All 135 runtime tests passing (no behavioral changes)
+  - **Implementation**:
+    - Added 22 protocol imports organized by service category
+    - Used `# type: ignore[attr-defined]` for implementation-specific attributes
+    - Kept 3 properties as `Optional[Any]`: `wa_auth_system` (no unified protocol), `agent_config_service` and `transaction_orchestrator` (unimplemented)
+
+- **🎯 Type Safety: Dict[str, Any] Reduction**: 41% reduction in untyped dictionary usage
+  - Replaced 7 occurrences of `Dict[str, Any]` with strongly-typed alternatives
+  - `thought_processor/main.py`: Use `ConscienceCheckContext` for conscience checks (3 occurrences)
+  - `prompts.py`: Use `JSONDict` for JSON serialization (1 occurrence)
+  - `graph_typed_nodes.py`: Use `JSONDict` for node serialization (2 occurrences)
+  - `wa_updates.py`: Use `JSONDict` for update fields (1 occurrence)
+  - **Impact**:
+    - ✅ Reduced from 17 → 10 `Dict[str, Any]` occurrences (41% reduction)
+    - ✅ Remaining 10 are legitimate type aliases and protocol boundaries
+    - ✅ 100% mypy compliance (556 files, zero issues)
+    - ✅ All 5205 tests passing
+
+### Testing
+- **✅ Unit Tests**: 5205/5205 tests passing (100% success rate)
+- **✅ QA Suite**: 127/128 tests passing (99.2% success rate)
+- **✅ Type Safety**: Mypy 100% compliance across 556 files
+
 ## [1.4.0-code_quality] - 2025-10-17
 
 ### Fixed

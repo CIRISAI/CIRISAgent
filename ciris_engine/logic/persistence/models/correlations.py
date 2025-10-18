@@ -285,7 +285,7 @@ def get_correlations_by_channel(
     """Get correlations for a specific channel (for message history)."""
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
 
     sql = f"""
         SELECT * FROM service_correlations
@@ -467,7 +467,7 @@ def get_active_channels_by_adapter(
     # Query recent correlations for speak/observe actions
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
 
     sql = f"""
         SELECT
@@ -519,7 +519,7 @@ def get_active_channels_by_adapter(
     # These provide historical channel activity beyond the correlation retention window
     try:
         # Query memory graph for ConversationSummaryNodes
-        json_period_start = adapter.json_extract('node_data', '$.period_start')
+        json_period_start = adapter.json_extract("node_data", "$.period_start")
         sql_summaries = f"""
             SELECT
                 node_data
@@ -590,7 +590,7 @@ def get_channel_last_activity(
     # Check recent correlations
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
 
     sql = f"""
         SELECT MAX(timestamp) as last_activity
@@ -618,8 +618,8 @@ def get_channel_last_activity(
 
     # Also check conversation summaries for historical activity
     try:
-        json_period_end = adapter.json_extract('node_data', '$.period_end')
-        json_conversations = adapter.json_extract('node_data', '$.conversations_by_channel')
+        json_period_end = adapter.json_extract("node_data", "$.period_end")
+        json_conversations = adapter.json_extract("node_data", "$.conversations_by_channel")
 
         sql_summaries = f"""
             SELECT
@@ -759,10 +759,10 @@ def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
     # Check for admin role in correlation tags
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
-    json_user_role = adapter.json_extract('tags', '$.user_role')
-    json_is_admin = adapter.json_extract('tags', '$.is_admin')
-    json_auth_role = adapter.json_extract('tags', '$.auth.role')
+    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
+    json_user_role = adapter.json_extract("tags", "$.user_role")
+    json_is_admin = adapter.json_extract("tags", "$.is_admin")
+    json_auth_role = adapter.json_extract("tags", "$.auth.role")
 
     sql = f"""
         SELECT COUNT(*) as admin_count

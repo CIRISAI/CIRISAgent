@@ -58,9 +58,7 @@ class TestDialectAdapter:
     def test_sqlite_upsert(self):
         """Test SQLite INSERT OR REPLACE generation."""
         adapter = DialectAdapter("data/test.db")
-        sql = adapter.upsert(
-            table="test_table", columns=["id", "name", "value"], conflict_columns=["id"]
-        )
+        sql = adapter.upsert(table="test_table", columns=["id", "name", "value"], conflict_columns=["id"])
 
         assert "INSERT OR REPLACE INTO test_table" in sql
         assert "(id, name, value)" in sql
@@ -70,9 +68,7 @@ class TestDialectAdapter:
     def test_postgresql_upsert(self):
         """Test PostgreSQL INSERT ... ON CONFLICT generation."""
         adapter = DialectAdapter("postgresql://localhost/db")
-        sql = adapter.upsert(
-            table="test_table", columns=["id", "name", "value"], conflict_columns=["id"]
-        )
+        sql = adapter.upsert(table="test_table", columns=["id", "name", "value"], conflict_columns=["id"])
 
         assert "INSERT INTO test_table" in sql
         assert "(id, name, value)" in sql

@@ -455,9 +455,7 @@ async def _get_consent_export_data(manager: ConsentService, user_id: str) -> Opt
             "categories": [c.value if hasattr(c, "value") else str(c) for c in consent.categories],
             "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
             "expires_at": (
-                consent.expires_at.isoformat()
-                if hasattr(consent, "expires_at") and consent.expires_at
-                else None
+                consent.expires_at.isoformat() if hasattr(consent, "expires_at") and consent.expires_at else None
             ),
             "last_modified": (consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None),
         }
@@ -511,12 +509,8 @@ async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[
                     if hasattr(entry.previous_stream, "value")
                     else str(entry.previous_stream)
                 ),
-                "new_stream": (
-                    entry.new_stream.value if hasattr(entry.new_stream, "value") else str(entry.new_stream)
-                ),
-                "previous_categories": [
-                    c.value if hasattr(c, "value") else str(c) for c in entry.previous_categories
-                ],
+                "new_stream": (entry.new_stream.value if hasattr(entry.new_stream, "value") else str(entry.new_stream)),
+                "previous_categories": [c.value if hasattr(c, "value") else str(c) for c in entry.previous_categories],
                 "new_categories": [c.value if hasattr(c, "value") else str(c) for c in entry.new_categories],
                 "initiated_by": entry.initiated_by,
                 "reason": entry.reason,

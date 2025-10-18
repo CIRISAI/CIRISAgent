@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 # Try to import psycopg2 for PostgreSQL support
 try:
-    import psycopg2
-    import psycopg2.extras
+    import psycopg2  # type: ignore[import-untyped]
+    import psycopg2.extras  # type: ignore[import-untyped]
 
     POSTGRES_AVAILABLE = True
 except ImportError:
@@ -231,6 +231,12 @@ def get_service_correlations_table_schema_sql() -> str:
 def initialize_database(db_path: Optional[str] = None) -> None:
     """Initialize the database with base schema and apply migrations."""
     try:
+        # Determine if we're using PostgreSQL or SQLite
+        if db_path is None:
+            db_path = get_sqlite_db_full_path()
+
+        adapter = init_dialect(db_path)
+
         with get_db_connection(db_path) as conn:
             base_tables = [
                 tasks_table_v1,
@@ -245,14 +251,25 @@ def initialize_database(db_path: Optional[str] = None) -> None:
                 wa_cert_table_v1,
             ]
 
-            for table_sql in base_tables:
-                conn.executescript(table_sql)
+            # PostgreSQL doesn't support executescript, execute statements individually
+            if adapter.is_postgresql():
+                cursor = conn.cursor()
+                for table_sql in base_tables:
+                    # Split SQL script into individual statements
+                    statements = [s.strip() for s in table_sql.split(';') if s.strip()]
+                    for statement in statements:
+                        cursor.execute(statement)
+                cursor.close()
+            else:
+                # SQLite supports executescript
+                for table_sql in base_tables:
+                    conn.executescript(table_sql)
 
             conn.commit()
 
         run_migrations(db_path)
 
         logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
-    except sqlite3.Error as e:
+    except (sqlite3.Error, Exception) as e:
         logger.exception(f"Database error during initialization: {e}")
         raise

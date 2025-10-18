@@ -48,7 +48,7 @@ class DialectAdapter:
         elif parsed.scheme in ("postgresql", "postgres"):
             self.dialect = Dialect.POSTGRESQL
             self.db_url = connection_string
-            self.db_path = None
+            self.db_path = ""  # Empty string for PostgreSQL (not a file path)
         else:
             # Default to SQLite for backward compatibility
             self.dialect = Dialect.SQLITE

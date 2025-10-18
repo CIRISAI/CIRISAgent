@@ -5,6 +5,17 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
+  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
+  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
+  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
+  - **Rationale**: Partnership decisions are made autonomously by the agent based on trust evaluation and interaction history. Manual admin overrides undermine agent autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
+  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
+  - **Migration**: No breaking changes for user-facing features - partnership requests still flow through agent approval system
+
 ## [1.4.1] - 2025-10-17
 
 ### Added

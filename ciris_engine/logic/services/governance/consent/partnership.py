@@ -186,7 +186,10 @@ class PartnershipManager:
 
     def finalize_partnership_approval(self, user_id: str, task_id: str) -> Optional[Dict[str, object]]:
         """
-        Finalize an approved partnership.
+        Finalize an approved partnership (called by ConsentService after agent approval).
+
+        This is used by check_pending_partnership() when the agent approves a request.
+        NOT for manual admin bypass - that violates "No Bypass Patterns" philosophy.
 
         Args:
             user_id: User whose partnership was approved
@@ -323,152 +326,6 @@ class PartnershipManager:
             Tuple of (requests, approvals, rejections)
         """
         return (self._partnership_requests, self._partnership_approvals, self._partnership_rejections)
-
-    async def manual_approve(
-        self, user_id: str, admin_username: str, notes: Optional[str] = None
-    ) -> PartnershipOutcome:
-        """
-        Manually approve a partnership request (admin action).
-
-        Args:
-            user_id: User whose partnership to approve
-            admin_username: Username of admin approving
-            notes: Optional notes about approval
-
-        Returns:
-            Partnership outcome record
-
-        Raises:
-            ValueError: If no pending partnership found
-        """
-        if user_id not in self._pending_partnerships:
-            raise ValueError(f"No pending partnership request for user {user_id}")
-
-        pending = self._pending_partnerships[user_id]
-        task_id = get_str(pending, "task_id", "")
-
-        # Create outcome
-        outcome = PartnershipOutcome(
-            user_id=user_id,
-            task_id=task_id,
-            outcome_type=PartnershipOutcomeType.APPROVED,
-            decided_by=admin_username,
-            decided_at=self._now(),
-            reason="Manually approved by admin",
-            notes=notes,
-        )
-
-        # Record history
-        if user_id not in self._partnership_history:
-            self._partnership_history[user_id] = []
-        self._partnership_history[user_id].append(outcome)
-
-        # Remove from pending
-        del self._pending_partnerships[user_id]
-
-        # Track metrics
-        self._partnership_approvals += 1
-
-        logger.info(f"Partnership manually approved for {user_id} by {admin_username}")
-        return outcome
-
-    async def manual_reject(
-        self, user_id: str, admin_username: str, reason: str, notes: Optional[str] = None
-    ) -> PartnershipOutcome:
-        """
-        Manually reject a partnership request (admin action).
-
-        Args:
-            user_id: User whose partnership to reject
-            admin_username: Username of admin rejecting
-            reason: Reason for rejection
-            notes: Optional additional notes
-
-        Returns:
-            Partnership outcome record
-
-        Raises:
-            ValueError: If no pending partnership found
-        """
-        if user_id not in self._pending_partnerships:
-            raise ValueError(f"No pending partnership request for user {user_id}")
-
-        pending = self._pending_partnerships[user_id]
-        task_id = get_str(pending, "task_id", "")
-
-        # Create outcome
-        outcome = PartnershipOutcome(
-            user_id=user_id,
-            task_id=task_id,
-            outcome_type=PartnershipOutcomeType.REJECTED,
-            decided_by=admin_username,
-            decided_at=self._now(),
-            reason=reason,
-            notes=notes,
-        )
-
-        # Record history
-        if user_id not in self._partnership_history:
-            self._partnership_history[user_id] = []
-        self._partnership_history[user_id].append(outcome)
-
-        # Remove from pending
-        del self._pending_partnerships[user_id]
-
-        # Track metrics
-        self._partnership_rejections += 1
-
-        logger.info(f"Partnership manually rejected for {user_id} by {admin_username}: {reason}")
-        return outcome
-
-    async def manual_defer(
-        self, user_id: str, admin_username: str, reason: str, notes: Optional[str] = None
-    ) -> PartnershipOutcome:
-        """
-        Manually defer a partnership request (needs more info).
-
-        Args:
-            user_id: User whose partnership to defer
-            admin_username: Username of admin deferring
-            reason: Reason for deferral (what info is needed)
-            notes: Optional additional notes
-
-        Returns:
-            Partnership outcome record
-
-        Raises:
-            ValueError: If no pending partnership found
-        """
-        if user_id not in self._pending_partnerships:
-            raise ValueError(f"No pending partnership request for user {user_id}")
-
-        pending = self._pending_partnerships[user_id]
-        task_id = get_str(pending, "task_id", "")
-
-        # Create outcome
-        outcome = PartnershipOutcome(
-            user_id=user_id,
-            task_id=task_id,
-            outcome_type=PartnershipOutcomeType.DEFERRED,
-            decided_by=admin_username,
-            decided_at=self._now(),
-            reason=reason,
-            notes=notes,
-        )
-
-        # Record history
-        if user_id not in self._partnership_history:
-            self._partnership_history[user_id] = []
-        self._partnership_history[user_id].append(outcome)
-
-        # Remove from pending (user can re-request later)
-        del self._pending_partnerships[user_id]
-
-        # Track metrics
-        self._partnership_deferrals += 1
-
-        logger.info(f"Partnership deferred for {user_id} by {admin_username}: {reason}")
-        return outcome
 
     def get_partnership_history(self, user_id: str) -> PartnershipHistory:
         """

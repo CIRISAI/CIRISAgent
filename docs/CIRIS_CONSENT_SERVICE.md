@@ -118,7 +118,110 @@ Grant or update consent for a user.
 Revoke consent and initiate data deletion.
 
 ### GET /v1/consent/audit
-Retrieve consent change history (admin only).
+Retrieve consent change history for authenticated user.
+
+**Query Parameters**:
+- `limit`: Maximum number of entries (default: 100)
+
+**Response Schema**:
+```json
+[
+  {
+    "entry_id": "string",
+    "user_id": "string",
+    "timestamp": "2024-01-01T00:00:00Z",
+    "previous_stream": "TEMPORARY",
+    "new_stream": "PARTNERED",
+    "previous_categories": ["ESSENTIAL"],
+    "new_categories": ["ESSENTIAL", "BEHAVIORAL"],
+    "initiated_by": "user",
+    "reason": "User requested partnership"
+  }
+]
+```
+
+### POST /v1/consent/dsar/initiate
+Initiate automated DSAR (Data Subject Access Request) export.
+
+**Request Body**:
+```json
+{
+  "request_type": "full"  // Options: "full", "consent_only", "impact_only", "audit_only"
+}
+```
+
+**Response Schema**:
+```json
+{
+  "request_id": "dsar_wa-2025-08-25-391F3E_20251018022901",
+  "user_id": "wa-2025-08-25-391F3E",
+  "request_type": "full",
+  "status": "completed",
+  "export_data": {
+    "consent": {
+      "user_id": "wa-2025-08-25-391F3E",
+      "stream": "temporary",
+      "categories": ["interaction", "improvement"],
+      "granted_at": "2025-10-18T02:20:00Z",
+      "expires_at": "2025-11-01T02:20:00Z",
+      "last_modified": "2025-10-18T02:20:00Z"
+    },
+    "impact": {
+      "total_interactions": 1234,
+      "patterns_contributed": 456,
+      "users_helped": 78,
+      "categories_active": ["interaction", "improvement"],
+      "impact_score": 89.5,
+      "example_contributions": ["Pattern: User prefers concise responses", "..."]
+    },
+    "audit_trail": [
+      {
+        "entry_id": "audit_001",
+        "user_id": "wa-2025-08-25-391F3E",
+        "timestamp": "2025-10-18T02:20:00Z",
+        "previous_stream": "temporary",
+        "new_stream": "temporary",
+        "previous_categories": ["interaction"],
+        "new_categories": ["interaction", "improvement"],
+        "initiated_by": "user",
+        "reason": "Added improvement consent"
+      }
+    ]
+  }
+}
+```
+
+**Export Data Structure**:
+- `consent`: Current consent status (if request_type includes consent)
+- `impact`: Impact metrics (if request_type includes impact)
+- `audit_trail`: Complete consent change history (if request_type includes audit)
+
+**Request Types**:
+- `full`: All sections (consent + impact + audit_trail)
+- `consent_only`: Only consent section
+- `impact_only`: Only impact section
+- `audit_only`: Only audit_trail section
+
+### GET /v1/consent/dsar/status/{request_id}
+Check status of DSAR request.
+
+**Path Parameters**:
+- `request_id`: DSAR request ID (format: `dsar_{user_id}_{timestamp}`)
+
+**Response Schema**:
+```json
+{
+  "request_id": "dsar_wa-2025-08-25-391F3E_20251018022901",
+  "user_id": "wa-2025-08-25-391F3E",
+  "status": "completed",
+  "message": "DSAR request completed - data is immediately available"
+}
+```
+
+**Security**:
+- Returns 403 if request_id belongs to different user
+- Validates request_id format
+- Immediate completion (async processing possible in future)
 
 ## Tool Interface
 

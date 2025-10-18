@@ -131,13 +131,9 @@ class TestPartnershipEndpoints:
             assert "by_status" in data["data"]
             assert data["data"]["by_status"]["normal"] == 1
 
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_list_pending_partnerships_non_admin(self, mock_auth, client):
+    def test_list_pending_partnerships_non_admin(self, client_with_user_auth):
         """Test that non-admins cannot list pending partnerships."""
-        # Mock non-admin user
-        mock_auth.return_value = MagicMock(user_id="user", username="user", role="USER")
-
-        response = client.get("/v1/partnership/pending", headers={"Authorization": "Bearer user_token"})
+        response = client_with_user_auth.get("/v1/partnership/pending", headers={"Authorization": "Bearer user_token"})
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert "administrators" in response.json()["detail"].lower()
@@ -312,14 +308,10 @@ class TestPartnershipEndpoints:
             assert len(data["data"]["outcomes"]) == 1
             assert data["data"]["current_status"] == "approved"
 
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_partnership_actions_non_admin(self, mock_auth, client):
+    def test_partnership_actions_non_admin(self, client_with_user_auth):
         """Test that non-admins cannot perform partnership actions."""
-        # Mock non-admin user
-        mock_auth.return_value = MagicMock(user_id="user", username="user", role="USER")
-
         # Try approve
-        response = client.post(
+        response = client_with_user_auth.post(
             "/v1/partnership/discord_123/approve",
             json={},
             headers={"Authorization": "Bearer user_token"},
@@ -327,7 +319,7 @@ class TestPartnershipEndpoints:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Try reject
-        response = client.post(
+        response = client_with_user_auth.post(
             "/v1/partnership/discord_123/reject",
             json={},
             headers={"Authorization": "Bearer user_token"},
@@ -335,7 +327,7 @@ class TestPartnershipEndpoints:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Try defer
-        response = client.post(
+        response = client_with_user_auth.post(
             "/v1/partnership/discord_123/defer",
             json={},
             headers={"Authorization": "Bearer user_token"},
@@ -343,7 +335,7 @@ class TestPartnershipEndpoints:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Try history
-        response = client.get(
+        response = client_with_user_auth.get(
             "/v1/partnership/history/discord_123",
             headers={"Authorization": "Bearer user_token"},
         )

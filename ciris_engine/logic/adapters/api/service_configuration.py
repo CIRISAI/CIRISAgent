@@ -61,11 +61,8 @@ class ApiServiceConfiguration:
         ServiceMapping("tsdb_consolidation_service", description="Time-series data consolidation"),
     ]
 
-    # 7 Infrastructure Services - System operations
+    # 4 Infrastructure Services - System operations
     INFRASTRUCTURE_SERVICES = [
-        ServiceMapping("time_service", description="Centralized time management"),
-        ServiceMapping("shutdown_service", description="Graceful shutdown coordination"),
-        ServiceMapping("initialization_service", description="Service initialization management"),
         ServiceMapping(
             "authentication_service",
             special_handler="_handle_auth_service",
@@ -74,6 +71,14 @@ class ApiServiceConfiguration:
         ServiceMapping("resource_monitor", app_state_name="resource_monitor", description="System resource monitoring"),
         ServiceMapping("database_maintenance_service", description="Database maintenance operations"),
         ServiceMapping("secrets_service", description="Secrets and credential management"),
+    ]
+
+    # 4 Lifecycle Services - Service lifecycle management
+    LIFECYCLE_SERVICES = [
+        ServiceMapping("time_service", description="Centralized time management"),
+        ServiceMapping("shutdown_service", description="Graceful shutdown coordination"),
+        ServiceMapping("initialization_service", description="Service initialization management"),
+        ServiceMapping("task_scheduler", description="Task scheduling and execution"),
     ]
 
     # 4 Governance Services - System oversight and adaptation
@@ -86,7 +91,7 @@ class ApiServiceConfiguration:
         ServiceMapping("self_observation_service", description="Self-monitoring and adaptation"),
     ]
 
-    # 3 Runtime Services - Execution and processing
+    # 2 Runtime Services - Execution and processing
     RUNTIME_SERVICES = [
         ServiceMapping("llm_service", description="Language model integration"),
         ServiceMapping(
@@ -94,7 +99,6 @@ class ApiServiceConfiguration:
             app_state_name="main_runtime_control_service",
             description="Main runtime control from agent",
         ),
-        ServiceMapping("task_scheduler", description="Task scheduling and execution"),
     ]
 
     # 1 Tool Service - Specialized operations
@@ -120,6 +124,7 @@ class ApiServiceConfiguration:
         all_mappings = (
             cls.GRAPH_SERVICES
             + cls.INFRASTRUCTURE_SERVICES
+            + cls.LIFECYCLE_SERVICES
             + cls.GOVERNANCE_SERVICES
             + cls.RUNTIME_SERVICES
             + cls.TOOL_SERVICES

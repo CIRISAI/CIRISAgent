@@ -21,19 +21,13 @@ from ciris_engine.logic.utils.shutdown_manager import (
 from ciris_engine.protocols.pipeline_control import SingleStepResult
 from ciris_engine.schemas.processors.base import ProcessorMetrics, ProcessorServices
 from ciris_engine.schemas.processors.context import ProcessorContext
-from ciris_engine.schemas.processors.main import (
-    GlobalProcessingMetrics,
-    MainProcessorMetrics,
-    ProcessingRoundResult,
-    ProcessingStatus,
-)
+from ciris_engine.schemas.processors.main import MainProcessorMetrics, ProcessingRoundResult
 from ciris_engine.schemas.processors.state import StateTransitionRecord
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.services.runtime_control import PipelineState
-from ciris_engine.schemas.services.runtime_control import ProcessingQueueItem as QueueItem
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,

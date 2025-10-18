@@ -47,17 +47,19 @@ class TestApiServiceConfiguration:
         """Test that all service categories are defined."""
         assert hasattr(ApiServiceConfiguration, "GRAPH_SERVICES")
         assert hasattr(ApiServiceConfiguration, "INFRASTRUCTURE_SERVICES")
+        assert hasattr(ApiServiceConfiguration, "LIFECYCLE_SERVICES")
         assert hasattr(ApiServiceConfiguration, "GOVERNANCE_SERVICES")
         assert hasattr(ApiServiceConfiguration, "RUNTIME_SERVICES")
         assert hasattr(ApiServiceConfiguration, "TOOL_SERVICES")
         assert hasattr(ApiServiceConfiguration, "INFRASTRUCTURE_COMPONENTS")
 
     def test_service_counts(self):
-        """Test that service counts match expected values."""
-        assert len(ApiServiceConfiguration.GRAPH_SERVICES) == 6
-        assert len(ApiServiceConfiguration.INFRASTRUCTURE_SERVICES) == 7
+        """Test that service counts match expected values per CLAUDE.md."""
+        assert len(ApiServiceConfiguration.GRAPH_SERVICES) == 7
+        assert len(ApiServiceConfiguration.INFRASTRUCTURE_SERVICES) == 4
+        assert len(ApiServiceConfiguration.LIFECYCLE_SERVICES) == 4
         assert len(ApiServiceConfiguration.GOVERNANCE_SERVICES) == 4
-        assert len(ApiServiceConfiguration.RUNTIME_SERVICES) == 3
+        assert len(ApiServiceConfiguration.RUNTIME_SERVICES) == 2
         assert len(ApiServiceConfiguration.TOOL_SERVICES) == 1
         assert len(ApiServiceConfiguration.INFRASTRUCTURE_COMPONENTS) == 1
 
@@ -67,7 +69,7 @@ class TestApiServiceConfiguration:
 
         # Should return list of tuples
         assert isinstance(mappings, list)
-        assert len(mappings) == 22  # 6+7+4+3+1+1
+        assert len(mappings) == 23  # 22 core services + 1 infrastructure component (service_registry)
 
         # Check tuple format
         for mapping in mappings:
@@ -143,6 +145,7 @@ class TestServiceConfigurationIntegration:
         all_services = (
             ApiServiceConfiguration.GRAPH_SERVICES
             + ApiServiceConfiguration.INFRASTRUCTURE_SERVICES
+            + ApiServiceConfiguration.LIFECYCLE_SERVICES
             + ApiServiceConfiguration.GOVERNANCE_SERVICES
             + ApiServiceConfiguration.RUNTIME_SERVICES
             + ApiServiceConfiguration.TOOL_SERVICES
@@ -181,6 +184,7 @@ class TestServiceConfigurationIntegration:
         """Test that no service category is empty."""
         assert len(ApiServiceConfiguration.GRAPH_SERVICES) > 0
         assert len(ApiServiceConfiguration.INFRASTRUCTURE_SERVICES) > 0
+        assert len(ApiServiceConfiguration.LIFECYCLE_SERVICES) > 0
         assert len(ApiServiceConfiguration.GOVERNANCE_SERVICES) > 0
         assert len(ApiServiceConfiguration.RUNTIME_SERVICES) > 0
         assert len(ApiServiceConfiguration.TOOL_SERVICES) > 0

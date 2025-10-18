@@ -117,7 +117,13 @@ class QARunner:
                 self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
-        sdk_modules = [QAModule.CONSENT, QAModule.DSAR, QAModule.PARTNERSHIP, QAModule.BILLING, QAModule.BILLING_INTEGRATION]
+        sdk_modules = [
+            QAModule.CONSENT,
+            QAModule.DSAR,
+            QAModule.PARTNERSHIP,
+            QAModule.BILLING,
+            QAModule.BILLING_INTEGRATION,
+        ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 

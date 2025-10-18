@@ -468,11 +468,11 @@ async def initiate_dsar(
                     "categories": [c.value if hasattr(c, "value") else str(c) for c in consent.categories],
                     "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
                     "expires_at": (
-                        consent.expires_at.isoformat() if hasattr(consent, "expires_at") and consent.expires_at else None
+                        consent.expires_at.isoformat()
+                        if hasattr(consent, "expires_at") and consent.expires_at
+                        else None
                     ),
-                    "last_modified": (
-                        consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None
-                    ),
+                    "last_modified": (consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None),
                 }
             except ConsentNotFoundError:
                 export_data["consent"] = None
@@ -485,9 +485,7 @@ async def initiate_dsar(
                     "total_interactions": impact.total_interactions,
                     "patterns_contributed": impact.patterns_contributed,
                     "users_helped": impact.users_helped,
-                    "categories_active": [
-                        c.value if hasattr(c, "value") else str(c) for c in impact.categories_active
-                    ],
+                    "categories_active": [c.value if hasattr(c, "value") else str(c) for c in impact.categories_active],
                     "impact_score": impact.impact_score,
                     "example_contributions": impact.example_contributions,
                 }

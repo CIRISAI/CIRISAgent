@@ -6,14 +6,26 @@ Simple CLI for managing SonarCloud issues for the CIRIS project.
 Uses token from ~/.sonartoken for authentication.
 
 Usage:
-    python tools/sonar.py list [--severity CRITICAL] [--limit 10]
-    python tools/sonar.py mark-fp ISSUE_KEY [--comment "Reason"]
-    python tools/sonar.py mark-wontfix ISSUE_KEY [--comment "Reason"]
-    python tools/sonar.py reopen ISSUE_KEY
-    python tools/sonar.py stats
-    python tools/sonar.py quality-gate
-    python tools/sonar.py hotspots [--status TO_REVIEW]
-    python tools/sonar.py coverage [--new-code]
+    # Quality Gate Status (IMPORTANT: Shows both PR and main status!)
+    python -m tools.analysis.sonar quality-gate  # PR + main branch status
+    python -m tools.analysis.sonar status         # Main branch status only
+
+    # Issue Management
+    python -m tools.analysis.sonar list [--severity CRITICAL] [--limit 10]
+    python -m tools.analysis.sonar mark-fp ISSUE_KEY [--comment "Reason"]
+    python -m tools.analysis.sonar mark-wontfix ISSUE_KEY [--comment "Reason"]
+    python -m tools.analysis.sonar reopen ISSUE_KEY
+    python -m tools.analysis.sonar stats
+
+    # Security & Coverage
+    python -m tools.analysis.sonar hotspots [--status TO_REVIEW]
+    python -m tools.analysis.sonar coverage [--new-code] [--pr PR_NUMBER]
+    python -m tools.analysis.sonar pr PR_NUMBER  # Detailed PR analysis
+
+NOTE:
+- 'quality-gate' shows BOTH PR and main status (use this for PR checks!)
+- 'status' only shows main branch (use for overall project health)
+- SonarCloud analysis runs ~15 minutes after CI completes
 """
 
 import argparse
@@ -364,8 +376,11 @@ def main():
     comment_parser.add_argument("issue_key", help="Issue key to comment on")
     comment_parser.add_argument("comment", help="Comment text")
 
-    # Quality Gate
-    qg_parser = subparsers.add_parser("quality-gate", help="Show quality gate status")
+    # Quality Gate (PR + Main status)
+    qg_parser = subparsers.add_parser("quality-gate", help="Show quality gate status (PR + main)")
+
+    # Status (Main branch only)
+    status_parser = subparsers.add_parser("status", help="Show main branch status only")
 
     # Security Hotspots
     hotspots_parser = subparsers.add_parser("hotspots", help="List security hotspots")
@@ -456,6 +471,22 @@ def main():
             print("\nTop 5 Rules:")
             for rule, count in stats["top_rules"]:
                 print(f"  {rule}: {count} issues")
+
+        elif args.command == "status":
+            # Quick status - main branch only
+            try:
+                main_qg = client.get_quality_gate_status(branch="main")
+                metrics = client.get_coverage_metrics()
+                measures = {m["metric"]: m.get("value", "0") for m in metrics["component"].get("measures", [])}
+
+                print("CIRIS Quality Status")
+                print("=" * 40)
+                coverage = float(measures.get("coverage", 0))
+                print(f"Coverage: {coverage:.1f}% (Target: 80%)")
+                print(f"Quality Gate: {main_qg['status']}")
+            except Exception as e:
+                print(f"Error getting status: {e}")
+                sys.exit(1)
 
         elif args.command == "quality-gate":
             print("\n🔍 SonarCloud Quality Gate Status")

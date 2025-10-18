@@ -1,6 +1,11 @@
-"""Persistence schemas v1."""
+"""Persistence schemas v1.
 
-from .tables import (
+SQLite schemas are in sqlite/tables.py
+PostgreSQL schemas are in postgres/tables.py
+"""
+
+# For backward compatibility, export SQLite schemas by default
+from .sqlite.tables import (
     ALL_TABLES,
     AUDIT_LOG_TABLE_V1,
     AUDIT_ROOTS_TABLE_V1,

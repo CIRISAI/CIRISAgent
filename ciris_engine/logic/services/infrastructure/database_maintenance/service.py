@@ -218,18 +218,34 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _cleanup_invalid_thoughts(self) -> None:
         """Clean up thoughts with invalid or malformed context."""
         from ciris_engine.logic.persistence import get_db_connection
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
 
         logger.info("Cleaning up thoughts with invalid context...")
 
-        # Get all thoughts with empty or invalid context
-        sql = """
-            SELECT thought_id, context_json
-            FROM thoughts
-            WHERE context_json = '{}'
-               OR context_json IS NULL
-               OR context_json NOT LIKE '%task_id%'
-               OR context_json NOT LIKE '%correlation_id%'
-        """
+        # Get adapter to detect database type
+        adapter = get_adapter()
+
+        # Different SQL for PostgreSQL (JSONB) vs SQLite (TEXT)
+        if adapter.is_postgresql():
+            # PostgreSQL: Cast JSONB to text for LIKE operations
+            sql = """
+                SELECT thought_id, context_json
+                FROM thoughts
+                WHERE context_json::text = '{}'
+                   OR context_json IS NULL
+                   OR context_json::text NOT LIKE '%task_id%'
+                   OR context_json::text NOT LIKE '%correlation_id%'
+            """
+        else:
+            # SQLite: context_json is TEXT, use LIKE directly
+            sql = """
+                SELECT thought_id, context_json
+                FROM thoughts
+                WHERE context_json = '{}'
+                   OR context_json IS NULL
+                   OR context_json NOT LIKE '%task_id%'
+                   OR context_json NOT LIKE '%correlation_id%'
+            """
 
         invalid_thought_ids = []
 

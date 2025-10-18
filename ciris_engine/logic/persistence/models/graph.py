@@ -11,6 +11,21 @@ from ciris_engine.schemas.services.graph_core import GraphEdge, GraphEdgeAttribu
 logger = logging.getLogger(__name__)
 
 
+def parse_json_field(value: Any) -> Any:
+    """Parse JSON field from database.
+
+    PostgreSQL JSONB returns dict, SQLite returns string.
+    This function handles both cases.
+    """
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return json.loads(value) if value else {}
+    return {}
+
+
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles datetime objects and Pydantic models."""
 
@@ -28,18 +43,21 @@ class DateTimeEncoder(json.JSONEncoder):
 
 def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: Optional[str] = None) -> str:
     """Insert or update a graph node, merging attributes if it exists."""
+    logger.info(f"DEBUG add_graph_node: node_id={node.id!r}, scope={node.scope.value!r}, type={node.type.value!r}, db_path={db_path!r}")
     try:
         with get_db_connection(db_path=db_path) as conn:
             # First check if node exists and get its current attributes
             cursor = conn.cursor()
+            logger.debug(f"DEBUG add_graph_node: Executing SELECT to check if node exists")
             cursor.execute(
                 "SELECT attributes_json FROM graph_nodes WHERE node_id = ? AND scope = ?", (node.id, node.scope.value)
             )
             existing_row = cursor.fetchone()
+            logger.debug(f"DEBUG add_graph_node: existing_row = {existing_row}")
 
             if existing_row:
                 # Node exists - merge attributes
-                existing_attrs = json.loads(existing_row["attributes_json"]) if existing_row["attributes_json"] else {}
+                existing_attrs = parse_json_field(existing_row["attributes_json"])
 
                 # Convert node.attributes to dict if it's a Pydantic model
                 if hasattr(node.attributes, "model_dump"):
@@ -87,8 +105,11 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                 }
                 logger.debug("Inserting new graph node %s", node.id)
 
+            logger.info(f"DEBUG add_graph_node: Executing {'UPDATE' if existing_row else 'INSERT'} with params: {params}")
             cursor.execute(sql, params)
+            logger.info(f"DEBUG add_graph_node: cursor.rowcount = {cursor.rowcount}")
             conn.commit()
+            logger.info(f"DEBUG add_graph_node: Committed successfully")
 
             # If we just created a new USER node, ensure TEMPORARY consent exists
             if not existing_row and node.type == NodeType.USER:
@@ -138,13 +159,16 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
 
 def get_graph_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> Optional[GraphNode]:
     sql = "SELECT * FROM graph_nodes WHERE node_id = ? AND scope = ?"
+    logger.info(f"DEBUG get_graph_node: node_id={node_id!r}, scope={scope.value!r}, db_path={db_path!r}")
     try:
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
+            logger.debug(f"DEBUG get_graph_node: Executing SELECT")
             cursor.execute(sql, (node_id, scope.value))
             row = cursor.fetchone()
+            logger.info(f"DEBUG get_graph_node: row = {row}")
             if row:
-                attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
+                attrs = parse_json_field(row["attributes_json"])
                 return GraphNode(
                     id=row["node_id"],
                     type=row["node_type"],
@@ -219,7 +243,7 @@ def get_edges_for_node(node_id: str, scope: GraphScope, db_path: Optional[str] =
             cursor.execute(sql, (scope.value, node_id, node_id))
             rows = cursor.fetchall()
             for row in rows:
-                attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
+                attrs = parse_json_field(row["attributes_json"])
                 # Extract only valid GraphEdgeAttributes fields
                 valid_attrs = {}
                 if "created_at" in attrs:
@@ -291,7 +315,7 @@ def get_all_graph_nodes(
             rows = cursor.fetchall()
 
             for row in rows:
-                attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
+                attrs = parse_json_field(row["attributes_json"])
                 nodes.append(
                     GraphNode(
                         id=row["node_id"],

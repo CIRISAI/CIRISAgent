@@ -7,14 +7,14 @@ from .core import (
     get_service_correlations_table_schema_sql,
     initialize_database,
 )
-from .migration_runner import MIGRATIONS_DIR, run_migrations
+from .migration_runner import MIGRATIONS_BASE_DIR, run_migrations
 from .retry import execute_with_retry, get_db_connection_with_retry, with_retry
 
 __all__ = [
     "get_db_connection",
     "initialize_database",
     "run_migrations",
-    "MIGRATIONS_DIR",
+    "MIGRATIONS_BASE_DIR",
     "get_sqlite_db_full_path",
     "get_graph_nodes_table_schema_sql",
     "get_graph_edges_table_schema_sql",

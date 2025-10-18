@@ -1,0 +1,3 @@
+-- Sample migration (post-beta): add retry_count column to tasks
+-- NOTE: This is just a sample since retry_count is already in base schema for pre-beta
+-- In actual post-beta usage, this would be: ALTER TABLE tasks ADD COLUMN some_new_feature INTEGER DEFAULT 0;

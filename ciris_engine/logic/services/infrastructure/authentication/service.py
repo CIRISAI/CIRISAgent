@@ -280,7 +280,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     def _init_database(self) -> None:
         """Initialize database tables if needed."""
         # Import the table definition
-        from ciris_engine.schemas.persistence.tables import WA_CERT_TABLE_V1
+        from ciris_engine.schemas.persistence.sqlite.tables import WA_CERT_TABLE_V1
 
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("PRAGMA foreign_keys = ON")

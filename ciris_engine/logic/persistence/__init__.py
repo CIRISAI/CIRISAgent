@@ -10,7 +10,7 @@ from .analytics import (
     thought_exists_for,
 )
 from .db import (
-    MIGRATIONS_DIR,
+    MIGRATIONS_BASE_DIR,
     get_db_connection,
     get_graph_edges_table_schema_sql,
     get_graph_nodes_table_schema_sql,
@@ -70,7 +70,7 @@ __all__ = [
     "get_tasks_older_than",
     "get_thoughts_older_than",
     "run_migrations",
-    "MIGRATIONS_DIR",
+    "MIGRATIONS_BASE_DIR",
     "get_sqlite_db_full_path",
     "update_task_status",
     "task_exists",

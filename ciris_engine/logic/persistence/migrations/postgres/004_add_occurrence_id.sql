@@ -1,0 +1,4 @@
+-- Migration 004: Add agent_occurrence_id for multi-instance deployment support (PostgreSQL)
+-- NOTE: This migration is a no-op for PostgreSQL.
+-- The occurrence_id columns don't exist in the base PostgreSQL schemas yet (fresh implementation).
+-- Once PostgreSQL base schemas are complete, this migration can be updated.

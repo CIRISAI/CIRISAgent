@@ -56,7 +56,13 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Initialize BaseGraphService - LocalGraphMemoryService doesn't use memory_bus
         super().__init__(memory_bus=None, time_service=time_service)
 
+        import logging
+        logger_temp = logging.getLogger(__name__)
+        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - received db_path: {db_path!r}")
+
         self.db_path = db_path or get_sqlite_db_full_path()
+        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - self.db_path set to: {self.db_path!r}")
+
         initialize_database(db_path=self.db_path)
         self.secrets_service = secrets_service  # Must be provided, not created here
         self._start_time: Optional[datetime] = None

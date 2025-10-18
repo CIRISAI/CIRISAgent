@@ -591,14 +591,28 @@ class CIRISRuntime:
     async def _verify_database_integrity(self) -> bool:
         """Verify database integrity before proceeding."""
         try:
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             # Check core tables exist - pass the correct db path!
             db_path = persistence.get_sqlite_db_full_path(self.essential_config)
             conn = persistence.get_db_connection(db_path)
             cursor = conn.cursor()
 
+            adapter = get_adapter()
             required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+
             for table in required_tables:
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                # Use database-specific query
+                if adapter.is_postgresql():
+                    cursor.execute(
+                        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
+                        (table,),
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+                    )
+
                 if not cursor.fetchone():
                     raise RuntimeError(f"Required table '{table}' missing from database")
 

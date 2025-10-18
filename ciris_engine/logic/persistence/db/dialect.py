@@ -171,6 +171,18 @@ DO UPDATE SET {updates}
         """Check if using PostgreSQL dialect."""
         return self.dialect == Dialect.POSTGRESQL
 
+    def translate_placeholders(self, sql: str) -> str:
+        """Translate SQLite '?' placeholders to PostgreSQL '%s' placeholders."""
+        if not self.is_postgresql():
+            return sql
+        # Replace ? with %s for PostgreSQL
+        translated = sql.replace("?", "%s")
+        if "?" in sql:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"DEBUG translate_placeholders: {sql[:100]}... -> {translated[:100]}...")
+        return translated
+
 
 # Global adapter instance
 _adapter: Optional[DialectAdapter] = None

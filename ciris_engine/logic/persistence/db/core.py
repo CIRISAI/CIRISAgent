@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Any, Optional, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-from ciris_engine.schemas.persistence import tables as sqlite_tables
-from ciris_engine.schemas.persistence import tables_postgresql as postgres_tables
+from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
+from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
 
 from .dialect import init_dialect
 from .migration_runner import run_migrations
@@ -47,6 +47,171 @@ def _ensure_adapters_registered() -> None:
         sqlite3.register_adapter(datetime, adapt_datetime)
         sqlite3.register_converter("timestamp", convert_datetime)
         _adapters_registered = True
+
+
+class PostgreSQLCursorWrapper:
+    """Wrapper for PostgreSQL cursor to translate SQL placeholders.
+
+    This wrapper ensures that ? placeholders are translated to %s
+    even when code directly uses cursor.execute().
+    """
+
+    def __init__(self, cursor: Any):
+        """Initialize wrapper with psycopg2 cursor."""
+        self._cursor = cursor
+
+    def execute(self, sql: str, parameters: Any = None) -> Any:
+        """Execute SQL with placeholder translation.
+
+        Translates:
+        - ? -> %s (for positional parameters with tuple/list)
+        - :name -> %(name)s (for named parameters with dict)
+        """
+        import re
+
+        translated_sql = sql
+
+        # If using named parameters (dict), convert :name to %(name)s
+        if parameters and isinstance(parameters, dict):
+            # Replace :param_name with %(param_name)s
+            translated_sql = re.sub(r':(\w+)', r'%(\1)s', sql)
+        else:
+            # Using positional parameters, convert ? to %s
+            translated_sql = sql.replace("?", "%s")
+
+        if parameters:
+            return self._cursor.execute(translated_sql, parameters)
+        else:
+            return self._cursor.execute(translated_sql)
+
+    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
+        """Execute many SQL statements with placeholder translation."""
+        translated_sql = sql.replace("?", "%s")
+        return self._cursor.executemany(translated_sql, seq_of_parameters)
+
+    def fetchone(self) -> Any:
+        """Fetch one row."""
+        return self._cursor.fetchone()
+
+    def fetchall(self) -> Any:
+        """Fetch all rows."""
+        return self._cursor.fetchall()
+
+    def fetchmany(self, size: int = None) -> Any:
+        """Fetch many rows."""
+        if size is None:
+            return self._cursor.fetchmany()
+        return self._cursor.fetchmany(size)
+
+    def close(self) -> None:
+        """Close cursor."""
+        self._cursor.close()
+
+    @property
+    def rowcount(self) -> int:
+        """Get row count."""
+        return self._cursor.rowcount
+
+    @property
+    def description(self) -> Any:
+        """Get description."""
+        return self._cursor.description
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all other attributes to the underlying cursor."""
+        return getattr(self._cursor, name)
+
+    def __iter__(self) -> Any:
+        """Make cursor iterable."""
+        return iter(self._cursor)
+
+
+class PostgreSQLConnectionWrapper:
+    """Wrapper for PostgreSQL connection to provide SQLite-like interface.
+
+    This wrapper allows code written for SQLite (which supports conn.execute())
+    to work with PostgreSQL (which requires cursor.execute()).
+    """
+
+    def __init__(self, conn: Any):
+        """Initialize wrapper with psycopg2 connection."""
+        self._conn = conn
+
+    def execute(self, sql: str, parameters: Any = None) -> Any:
+        """Execute SQL statement using a cursor.
+
+        CRITICAL: Translates SQL placeholders for PostgreSQL compatibility:
+        - ? -> %s (for positional parameters)
+        - :name -> %(name)s (for named parameters)
+        """
+        import re
+
+        # Translate placeholders based on parameter type
+        if parameters and isinstance(parameters, dict):
+            # Named parameters: :name -> %(name)s
+            translated_sql = re.sub(r':(\w+)', r'%(\1)s', sql)
+        else:
+            # Positional parameters: ? -> %s
+            translated_sql = sql.replace("?", "%s")
+
+        cursor = self._conn.cursor()
+        logger.info(f"DEBUG PostgreSQLConnectionWrapper.execute: Placeholder translation")
+        logger.info(f"DEBUG   original: {sql[:150]}...")
+        logger.info(f"DEBUG   translated: {translated_sql[:150]}...")
+        logger.info(f"DEBUG   param type: {type(parameters).__name__}, value: {parameters}")
+
+        if parameters:
+            cursor.execute(translated_sql, parameters)
+        else:
+            cursor.execute(translated_sql)
+
+        logger.info(f"DEBUG PostgreSQLConnectionWrapper.execute: SUCCESS, rowcount={cursor.rowcount}")
+        return cursor
+
+    def executemany(self, sql: str, seq_of_parameters: Any) -> Any:
+        """Execute SQL statement multiple times.
+
+        CRITICAL: Translates ? placeholders to %s for PostgreSQL compatibility.
+        """
+        # CRITICAL: Translate placeholders for PostgreSQL
+        translated_sql = sql.replace("?", "%s")
+
+        cursor = self._conn.cursor()
+        cursor.executemany(translated_sql, seq_of_parameters)
+        return cursor
+
+    def cursor(self) -> Any:
+        """Create and return a new cursor wrapped for PostgreSQL compatibility."""
+        # Return a wrapped cursor that translates placeholders
+        return PostgreSQLCursorWrapper(self._conn.cursor())
+
+    def commit(self) -> None:
+        """Commit the current transaction."""
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        """Rollback the current transaction."""
+        self._conn.rollback()
+
+    def close(self) -> None:
+        """Close the connection."""
+        self._conn.close()
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all other attributes to the underlying connection."""
+        return getattr(self._conn, name)
+
+    def __enter__(self) -> "PostgreSQLConnectionWrapper":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Context manager exit - commit if no exception, rollback otherwise."""
+        if exc_type is None:
+            self._conn.commit()
+        else:
+            self._conn.rollback()
+        self._conn.close()
 
 
 class RetryConnection:
@@ -178,7 +343,8 @@ def get_db_connection(
         conn = psycopg2.connect(adapter.db_url)
         # Use dict cursor for compatibility with SQLite Row factory
         conn.cursor_factory = psycopg2.extras.RealDictCursor
-        return conn
+        # Wrap connection to provide SQLite-like execute() interface
+        return PostgreSQLConnectionWrapper(conn)
 
     # SQLite connection (default)
     _ensure_adapters_registered()

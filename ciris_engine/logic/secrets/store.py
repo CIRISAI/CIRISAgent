@@ -47,7 +47,11 @@ class SecretsStore:
             max_accesses_per_hour: Hourly access limit
         """
         self.time_service = time_service
-        self.db_path = Path(db_path)
+        # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
+        if db_path.startswith(("postgresql://", "postgres://")):
+            self.db_path = db_path  # type: ignore
+        else:
+            self.db_path = Path(db_path)
         self.encryption = SecretsEncryption(master_key)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
@@ -76,20 +80,26 @@ class SecretsStore:
             return ["tool", "speak", "memorize"]  # Most actions allowed
 
     def _init_database(self) -> None:
-        """Initialize SQLite database with required tables."""
-        # Ensure directory exists
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        """Initialize database with required tables."""
+        # Ensure directory exists (only for SQLite file paths)
+        if isinstance(self.db_path, Path):
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Detect database type - PostgreSQL uses BYTEA instead of BLOB
+        db_path_str = str(self.db_path)
+        is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
+        blob_type = "BYTEA" if is_postgres else "BLOB"
 
         with get_db_connection(str(self.db_path)) as conn:
             # Secrets table
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS secrets (
                     secret_uuid TEXT PRIMARY KEY,
-                    encrypted_value BLOB NOT NULL,
+                    encrypted_value {blob_type} NOT NULL,
                     encryption_key_ref TEXT NOT NULL,
-                    salt BLOB NOT NULL,
-                    nonce BLOB NOT NULL,
+                    salt {blob_type} NOT NULL,
+                    nonce {blob_type} NOT NULL,
                     description TEXT NOT NULL,
                     sensitivity_level TEXT NOT NULL,
                     detected_pattern TEXT NOT NULL,

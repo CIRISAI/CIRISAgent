@@ -251,6 +251,22 @@ class DecayProtocolManager:
 
         return len(completed_users)
 
+    def _determine_decay_phase(self, decay: ConsentDecayStatus) -> str:
+        """
+        Determine current decay phase based on status.
+
+        Args:
+            decay: Decay status to evaluate
+
+        Returns:
+            Current phase name
+        """
+        if decay.patterns_anonymized:
+            return "complete"
+        if decay.identity_severed:
+            return "anonymizing_patterns"
+        return "severing_identity"
+
     def get_decay_progress(self, user_id: str) -> Optional[Dict[str, object]]:
         """
         Get detailed progress information for a decay.
@@ -280,11 +296,7 @@ class DecayProtocolManager:
             "identity_severed": decay.identity_severed,
             "patterns_anonymized": decay.patterns_anonymized,
             "safety_patterns_retained": decay.safety_patterns_retained,
-            "current_phase": (
-                "complete"
-                if decay.patterns_anonymized
-                else "anonymizing_patterns" if decay.identity_severed else "severing_identity"
-            ),
+            "current_phase": self._determine_decay_phase(decay),
         }
 
     def get_decay_milestones(self, user_id: str) -> Optional[Dict[str, str]]:

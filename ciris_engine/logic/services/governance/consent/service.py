@@ -146,6 +146,51 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         logger.debug(f"Extended TEMPORARY expiry for {user_id} to {new_expiry.isoformat()}")
 
+    def _check_cached_expiry(self, user_id: str, cached: ConsentStatus) -> None:
+        """Check if cached consent has expired and remove if so."""
+        if cached.stream == ConsentStream.TEMPORARY and cached.expires_at:
+            if self._now() > cached.expires_at:
+                del self._consent_cache[user_id]
+                raise ConsentNotFoundError(f"Consent for {user_id} has expired")
+
+    def _reconstruct_consent_from_node(self, user_id: str, node: Any) -> ConsentStatus:
+        """Reconstruct ConsentStatus from graph node."""
+        attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
+
+        return ConsentStatus(
+            user_id=user_id,
+            stream=ConsentStream(get_str(attrs, "stream", "temporary")),
+            categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
+            granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
+            expires_at=(
+                datetime.fromisoformat(expires_str)
+                if (expires_str := get_str_optional(attrs, "expires_at"))
+                else None
+            ),
+            last_modified=datetime.fromisoformat(
+                get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())
+            ),
+            impact_score=get_float(attrs, "impact_score", 0.0),
+            attribution_count=int(get_float(attrs, "attribution_count", 0)),
+        )
+
+    async def _load_consent_from_graph(self, user_id: str) -> ConsentStatus:
+        """Load consent from graph storage."""
+        node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL, self._db_path)
+        if not node:
+            raise ConsentNotFoundError(f"No consent found for user {user_id}")
+
+        status = self._reconstruct_consent_from_node(user_id, node)
+
+        # Check expiry
+        if status.stream == ConsentStream.TEMPORARY and status.expires_at:
+            if self._now() > status.expires_at:
+                raise ConsentNotFoundError(f"Consent for {user_id} has expired")
+
+        # Update cache
+        self._consent_cache[user_id] = status
+        return status
+
     async def get_consent(self, user_id: str, extend_expiry: bool = True) -> ConsentStatus:
         """
         Get user's consent status.
@@ -160,12 +205,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Try cache first (but verify it's still valid)
         if user_id in self._consent_cache:
             cached = self._consent_cache[user_id]
-            # Verify TEMPORARY hasn't expired
-            if cached.stream == ConsentStream.TEMPORARY and cached.expires_at:
-                if self._now() > cached.expires_at:
-                    # Expired - remove from cache and fail
-                    del self._consent_cache[user_id]
-                    raise ConsentNotFoundError(f"Consent for {user_id} has expired")
+            self._check_cached_expiry(user_id, cached)
 
             # Reset decay countdown on every interaction (2 weeks without seeing them)
             if extend_expiry and cached.stream == ConsentStream.TEMPORARY:
@@ -175,38 +215,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Load from graph
         try:
-            node = get_graph_node(f"consent/{user_id}", GraphScope.LOCAL, self._db_path)
-            if not node:
-                raise ConsentNotFoundError(f"No consent found for user {user_id}")
-
-            # Reconstruct ConsentStatus from node
-            # Convert attributes to dict for easier access
-            attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
-
-            status = ConsentStatus(
-                user_id=user_id,
-                stream=ConsentStream(get_str(attrs, "stream", "temporary")),
-                categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
-                granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
-                expires_at=(
-                    datetime.fromisoformat(expires_str)
-                    if (expires_str := get_str_optional(attrs, "expires_at"))
-                    else None
-                ),
-                last_modified=datetime.fromisoformat(
-                    get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())
-                ),
-                impact_score=get_float(attrs, "impact_score", 0.0),
-                attribution_count=int(get_float(attrs, "attribution_count", 0)),
-            )
-
-            # Check expiry
-            if status.stream == ConsentStream.TEMPORARY and status.expires_at:
-                if self._now() > status.expires_at:
-                    raise ConsentNotFoundError(f"Consent for {user_id} has expired")
-
-            # Update cache
-            self._consent_cache[user_id] = status
+            status = await self._load_consent_from_graph(user_id)
 
             # Reset decay countdown on every interaction (2 weeks without seeing them)
             if extend_expiry and status.stream == ConsentStream.TEMPORARY:
@@ -882,6 +891,35 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             metadata=None,
         )
 
+    def _extract_air_metrics(self, air_metrics: dict) -> Dict[str, float]:
+        """Extract and safely cast AIR metrics."""
+        return {
+            "consent_air_total_interactions": (
+                float(val) if isinstance((val := air_metrics.get("total_interactions", 0)), (int, float)) else 0.0
+            ),
+            "consent_air_reminders_sent": (
+                float(val) if isinstance((val := air_metrics.get("reminders_sent", 0)), (int, float)) else 0.0
+            ),
+            "consent_air_reminder_rate_percent": (
+                float(val)
+                if isinstance((val := air_metrics.get("reminder_rate_percent", 0.0)), (int, float))
+                else 0.0
+            ),
+            "consent_air_active_sessions": (
+                float(val) if isinstance((val := air_metrics.get("active_sessions", 0)), (int, float)) else 0.0
+            ),
+            "consent_air_time_triggered": (
+                float(val)
+                if isinstance((val := air_metrics.get("time_triggered_reminders", 0)), (int, float))
+                else 0.0
+            ),
+            "consent_air_message_triggered": (
+                float(val)
+                if isinstance((val := air_metrics.get("message_triggered_reminders", 0)), (int, float))
+                else 0.0
+            ),
+        }
+
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """
         Collect consent-specific metrics - REAL DATA ONLY.
@@ -896,108 +934,42 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Get base metrics from parent
         metrics = super()._collect_custom_metrics()
 
-        # Calculate stream distribution from cache
-        temporary_count = 0
-        partnered_count = 0
-        anonymous_count = 0
-        total_age_seconds = 0.0
-        consent_count = 0
-
         now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
 
-        for user_id, status in self._consent_cache.items():
-            consent_count += 1
-            if status.stream == ConsentStream.TEMPORARY:
-                temporary_count += 1
-            elif status.stream == ConsentStream.PARTNERED:
-                partnered_count += 1
-            elif status.stream == ConsentStream.ANONYMOUS:
-                anonymous_count += 1
-
-            # Calculate age
-            if status.granted_at:
-                age = (now - status.granted_at).total_seconds()
-                total_age_seconds += age
-
-        # Calculate average age in days
-        avg_age_days = (total_age_seconds / consent_count / 86400.0) if consent_count > 0 else 0.0
+        # Collect stream distribution metrics using metrics collector
+        stream_metrics = self._metrics_collector.collect_stream_distribution(self._consent_cache, now)
+        metrics.update(stream_metrics)
 
         # Get partnership metrics from manager
-        partnership_requests, partnership_approvals, partnership_rejections = (
-            self._partnership_manager.get_request_counts()
+        partnership_requests, partnership_approvals, _ = self._partnership_manager.get_request_counts()
+        partnership_metrics = self._metrics_collector.collect_partnership_metrics(
+            partnership_requests, partnership_approvals, 0, self._partnership_manager.get_pending_count()
         )
-        partnership_success_rate = 0.0
-        if partnership_requests > 0:
-            partnership_success_rate = (partnership_approvals / partnership_requests) * 100.0
+        metrics.update(partnership_metrics)
 
         # Get decay metrics from manager
         active_decays = self._decay_manager.get_active_decays()
-        decay_completion_rate = 0.0
-        # Note: We don't have a _decays_completed counter yet, so set to 0
-        total_decays_initiated = len(active_decays)  # Approximate for now
-        _decays_completed = 0
-        if total_decays_initiated > 0:
-            decay_completion_rate = (_decays_completed / total_decays_initiated) * 100.0
+        decay_metrics = self._metrics_collector.collect_decay_metrics(len(active_decays), 0, len(active_decays))
+        metrics.update(decay_metrics)
 
-        # Get AIR (Artificial Interaction Reminder) metrics from manager
-        air_metrics = self._air_manager.get_metrics()
-
-        # Update metrics with the 5 most important ones
-        metrics.update(
-            {
-                # 1. Active users with consent
-                "consent_active_users": float(len(self._consent_cache)),
-                # 2. Stream distribution (percentage breakdown)
-                "consent_temporary_percent": (temporary_count / consent_count * 100.0) if consent_count > 0 else 0.0,
-                "consent_partnered_percent": (partnered_count / consent_count * 100.0) if consent_count > 0 else 0.0,
-                "consent_anonymous_percent": (anonymous_count / consent_count * 100.0) if consent_count > 0 else 0.0,
-                # 3. Partnership success rate
-                "consent_partnership_success_rate": partnership_success_rate,
-                "consent_partnership_requests_total": float(partnership_requests),
-                "consent_partnership_approvals_total": float(partnership_approvals),
-                # 4. Average consent age
-                "consent_average_age_days": avg_age_days,
-                # 5. Decay metrics
-                "consent_decay_completion_rate": decay_completion_rate,
-                "consent_active_decays": float(len(active_decays)),
-                "consent_total_decays_initiated": float(total_decays_initiated),
-                # Additional operational metrics
-                "consent_checks_total": float(self._consent_checks),
-                "consent_grants_total": float(self._consent_grants),
-                "consent_revokes_total": float(self._consent_revokes),
-                "consent_expired_cleanups_total": float(self._expired_cleanups),
-                "consent_pending_partnerships": float(self._partnership_manager.get_pending_count()),
-                # Service health
-                "consent_service_uptime_seconds": (
-                    self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
-                ),
-                # AIR (Artificial Interaction Reminder) metrics with safe type casting
-                "consent_air_total_interactions": (
-                    float(val) if isinstance((val := air_metrics.get("total_interactions", 0)), (int, float)) else 0.0
-                ),
-                "consent_air_reminders_sent": (
-                    float(val) if isinstance((val := air_metrics.get("reminders_sent", 0)), (int, float)) else 0.0
-                ),
-                "consent_air_reminder_rate_percent": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("reminder_rate_percent", 0.0)), (int, float))
-                    else 0.0
-                ),
-                "consent_air_active_sessions": (
-                    float(val) if isinstance((val := air_metrics.get("active_sessions", 0)), (int, float)) else 0.0
-                ),
-                "consent_air_time_triggered": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("time_triggered_reminders", 0)), (int, float))
-                    else 0.0
-                ),
-                "consent_air_message_triggered": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("message_triggered_reminders", 0)), (int, float))
-                    else 0.0
-                ),
-            }
+        # Operational metrics
+        operational_metrics = self._metrics_collector.collect_operational_metrics(
+            self._consent_checks,
+            self._consent_grants,
+            self._consent_revokes,
+            self._expired_cleanups,
+            self._tool_executions,
+            self._tool_failures,
         )
+        metrics.update(operational_metrics)
+
+        # AIR metrics
+        air_metrics_dict = self._air_manager.get_metrics()
+        air_metrics = self._extract_air_metrics(air_metrics_dict)
+        metrics.update(air_metrics)
+
+        # Service health
+        metrics["consent_service_uptime_seconds"] = self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
 
         return metrics
 

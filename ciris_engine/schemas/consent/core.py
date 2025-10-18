@@ -258,3 +258,34 @@ class PartnershipHistory(BaseModel):
     current_status: str = Field(..., description="Current partnership status (pending/approved/none)")
     last_request_at: Optional[datetime] = Field(None, description="When last request was made")
     last_decision_at: Optional[datetime] = Field(None, description="When last decision was made")
+
+
+# Metrics Collection Input Schemas
+
+
+class PartnershipCounters(BaseModel):
+    """Partnership counters for metrics collection."""
+
+    requests: int = Field(..., ge=0, description="Total partnership requests")
+    approvals: int = Field(..., ge=0, description="Total approvals")
+    rejections: int = Field(..., ge=0, description="Total rejections")
+    pending_count: int = Field(..., ge=0, description="Currently pending")
+
+
+class DecayCounters(BaseModel):
+    """Decay protocol counters for metrics collection."""
+
+    total_initiated: int = Field(..., ge=0, description="Total decays initiated")
+    completed: int = Field(..., ge=0, description="Decays completed")
+    active_count: int = Field(..., ge=0, description="Currently active decays")
+
+
+class OperationalCounters(BaseModel):
+    """Operational counters for metrics collection."""
+
+    consent_checks: int = Field(..., ge=0, description="Consent status checks")
+    consent_grants: int = Field(..., ge=0, description="Consent grants/updates")
+    consent_revokes: int = Field(..., ge=0, description="Consent revocations")
+    expired_cleanups: int = Field(..., ge=0, description="Cleanup operations")
+    tool_executions: int = Field(..., ge=0, description="Tool executions")
+    tool_failures: int = Field(..., ge=0, description="Tool failures")

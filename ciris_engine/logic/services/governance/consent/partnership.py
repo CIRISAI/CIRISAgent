@@ -63,6 +63,48 @@ class PartnershipManager:
             return datetime.now(timezone.utc)
         return self._time_service.now()
 
+    def _create_pending_status(self, user_id: str, previous_status: Optional[ConsentStatus]) -> ConsentStatus:
+        """Create a pending consent status while partnership is being reviewed."""
+        now = self._now()
+        return ConsentStatus(
+            user_id=user_id,
+            stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
+            categories=previous_status.categories if previous_status else [],
+            granted_at=previous_status.granted_at if previous_status else now,
+            expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
+            last_modified=now,
+            impact_score=previous_status.impact_score if previous_status else 0.0,
+            attribution_count=previous_status.attribution_count if previous_status else 0,
+        )
+
+    def _create_partnership_task(
+        self, user_id: str, categories: List[ConsentCategory], reason: Optional[str], channel_id: Optional[str]
+    ) -> Any:
+        """Create partnership approval task."""
+        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
+
+        if self._time_service is None:
+            raise ValueError("TimeService required for partnership requests")
+        handler = PartnershipRequestHandler(time_service=self._time_service)
+        return handler.create_partnership_task(
+            user_id=user_id,
+            categories=[c.value for c in categories],
+            reason=reason,
+            channel_id=channel_id,
+        )
+
+    def _store_pending_partnership(
+        self, user_id: str, task_id: str, request: ConsentRequest, channel_id: Optional[str]
+    ) -> None:
+        """Store pending partnership request in tracking dict."""
+        now = self._now()
+        self._pending_partnerships[user_id] = {
+            "task_id": task_id,
+            "request": request.model_dump(mode="json"),
+            "created_at": now.isoformat(),
+            "channel_id": channel_id or "unknown",
+        }
+
     async def create_partnership_request(
         self,
         request: ConsentRequest,
@@ -88,55 +130,19 @@ class PartnershipManager:
         # Check for duplicate pending request
         if request.user_id in self._pending_partnerships:
             logger.warning(f"User {request.user_id} already has pending partnership request")
-            # Return pending status
-            now = self._now()
-            return ConsentStatus(
-                user_id=request.user_id,
-                stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
-                categories=previous_status.categories if previous_status else [],
-                granted_at=previous_status.granted_at if previous_status else now,
-                expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
-                last_modified=now,
-                impact_score=previous_status.impact_score if previous_status else 0.0,
-                attribution_count=previous_status.attribution_count if previous_status else 0,
-            )
+            return self._create_pending_status(request.user_id, previous_status)
 
         # Track partnership request
         self._partnership_requests += 1
 
         # Create partnership task for agent approval
-        from ciris_engine.logic.utils.consent.partnership_utils import PartnershipRequestHandler
-
-        if self._time_service is None:
-            raise ValueError("TimeService required for partnership requests")
-        handler = PartnershipRequestHandler(time_service=self._time_service)
-        task = handler.create_partnership_task(
-            user_id=request.user_id,
-            categories=[c.value for c in request.categories],
-            reason=request.reason,
-            channel_id=channel_id,
-        )
+        task = self._create_partnership_task(request.user_id, request.categories, request.reason, channel_id)
 
         # Create pending status (stays on current stream)
-        now = self._now()
-        pending_status = ConsentStatus(
-            user_id=request.user_id,
-            stream=previous_status.stream if previous_status else ConsentStream.TEMPORARY,
-            categories=previous_status.categories if previous_status else [],
-            granted_at=previous_status.granted_at if previous_status else now,
-            expires_at=previous_status.expires_at if previous_status else now + timedelta(days=14),
-            last_modified=now,
-            impact_score=previous_status.impact_score if previous_status else 0.0,
-            attribution_count=previous_status.attribution_count if previous_status else 0,
-        )
+        pending_status = self._create_pending_status(request.user_id, previous_status)
 
         # Store pending partnership request
-        self._pending_partnerships[request.user_id] = {
-            "task_id": task.task_id,
-            "request": request.model_dump(mode="json"),
-            "created_at": now.isoformat(),
-            "channel_id": channel_id or "unknown",
-        }
+        self._store_pending_partnership(request.user_id, task.task_id, request, channel_id)
 
         logger.info(f"Partnership request created for {request.user_id}, task: {task.task_id}")
         return pending_status

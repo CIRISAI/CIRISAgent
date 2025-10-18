@@ -9,7 +9,12 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict
 
-from ciris_engine.schemas.consent.core import ConsentStream
+from ciris_engine.schemas.consent.core import (
+    ConsentStream,
+    DecayCounters,
+    OperationalCounters,
+    PartnershipCounters,
+)
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.consent.core import ConsentStatus
@@ -169,19 +174,9 @@ class ConsentMetricsCollector:
         self,
         consent_cache: Dict[str, "ConsentStatus"],
         now: datetime,
-        partnership_requests: int,
-        partnership_approvals: int,
-        partnership_rejections: int,
-        pending_partnerships_count: int,
-        total_decays_initiated: int,
-        decays_completed: int,
-        active_decays_count: int,
-        consent_checks: int,
-        consent_grants: int,
-        consent_revokes: int,
-        expired_cleanups: int,
-        tool_executions: int,
-        tool_failures: int,
+        partnership_counters: PartnershipCounters,
+        decay_counters: DecayCounters,
+        operational_counters: OperationalCounters,
         uptime_calculator: object = None,
     ) -> Dict[str, float]:
         """
@@ -190,7 +185,10 @@ class ConsentMetricsCollector:
         Args:
             consent_cache: Current consent cache
             now: Current timestamp
-            (remaining args): Various counters from service state
+            partnership_counters: Partnership-related counters
+            decay_counters: Decay protocol counters
+            operational_counters: Operational counters
+            uptime_calculator: Optional uptime calculator
 
         Returns:
             Dictionary with all metrics
@@ -203,17 +201,29 @@ class ConsentMetricsCollector:
         # Collect partnership metrics
         metrics.update(
             self.collect_partnership_metrics(
-                partnership_requests, partnership_approvals, partnership_rejections, pending_partnerships_count
+                partnership_counters.requests,
+                partnership_counters.approvals,
+                partnership_counters.rejections,
+                partnership_counters.pending_count,
             )
         )
 
         # Collect decay metrics
-        metrics.update(self.collect_decay_metrics(total_decays_initiated, decays_completed, active_decays_count))
+        metrics.update(
+            self.collect_decay_metrics(
+                decay_counters.total_initiated, decay_counters.completed, decay_counters.active_count
+            )
+        )
 
         # Collect operational metrics
         metrics.update(
             self.collect_operational_metrics(
-                consent_checks, consent_grants, consent_revokes, expired_cleanups, tool_executions, tool_failures
+                operational_counters.consent_checks,
+                operational_counters.consent_grants,
+                operational_counters.consent_revokes,
+                operational_counters.expired_cleanups,
+                operational_counters.tool_executions,
+                operational_counters.tool_failures,
             )
         )
 

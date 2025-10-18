@@ -319,9 +319,6 @@ class DSARAutomationService:
         if not progress_info:
             return None
 
-        # Get decay milestones
-        milestones = self._consent_service._decay_manager.get_decay_milestones(user_id)
-
         # Determine current phase
         if decay_status.patterns_anonymized:
             current_phase = "complete"
@@ -366,6 +363,52 @@ class DSARAutomationService:
         )
         return deletion_status
 
+    def _extract_attributes(self, conv_summary: object) -> dict:
+        """Extract attributes from conversation summary node."""
+        if isinstance(conv_summary.attributes, dict):
+            return conv_summary.attributes
+        return conv_summary.attributes.model_dump()
+
+    def _get_channel_id(self, attrs: dict) -> str:
+        """Extract channel ID from attributes."""
+        channel_id_raw = attrs.get("channel_id", "unknown")
+        return str(channel_id_raw) if channel_id_raw else "unknown"
+
+    def _get_current_count(self, summary: dict, channel_id: str) -> int:
+        """Get current interaction count for channel, handling type conversion."""
+        current_count = summary.get(channel_id, 0)
+        return int(current_count) if isinstance(current_count, (int, float)) else 0
+
+    def _process_participant(
+        self, participant_id: str, participant_data: dict, user_id: str, attrs: dict, summary: dict
+    ) -> int:
+        """Process a single participant's data and update summary."""
+        if participant_id != user_id or not isinstance(participant_data, dict):
+            return 0
+
+        message_count = participant_data.get("message_count", 0)
+        channel_id = self._get_channel_id(attrs)
+        current_count = self._get_current_count(summary, channel_id)
+        summary[channel_id] = current_count + message_count
+        return message_count
+
+    def _process_conversation_summary(self, conv_summary: object, user_id: str, summary: dict) -> int:
+        """Process a single conversation summary node."""
+        if not conv_summary.attributes:
+            return 0
+
+        attrs = self._extract_attributes(conv_summary)
+        participants = attrs.get("participants", {})
+
+        if not isinstance(participants, dict):
+            return 0
+
+        total = 0
+        for participant_id, participant_data in participants.items():
+            total += self._process_participant(participant_id, participant_data, user_id, attrs, summary)
+
+        return total
+
     async def _get_interaction_summary(self, user_id: str) -> dict[str, object]:
         """Get interaction statistics by channel."""
         summary: Dict[str, object] = {}
@@ -385,24 +428,7 @@ class DSARAutomationService:
 
             total_interactions = 0
             for conv_summary in conversation_summaries:
-                if conv_summary.attributes:
-                    attrs = (
-                        conv_summary.attributes
-                        if isinstance(conv_summary.attributes, dict)
-                        else conv_summary.attributes.model_dump()
-                    )
-                    participants = attrs.get("participants", {})
-                    if isinstance(participants, dict):
-                        for participant_id, participant_data in participants.items():
-                            if participant_id == user_id and isinstance(participant_data, dict):
-                                message_count = participant_data.get("message_count", 0)
-                                total_interactions += message_count
-                                channel_id_raw = attrs.get("channel_id", "unknown")
-                                channel_id_str = str(channel_id_raw) if channel_id_raw else "unknown"
-                                current_count = summary.get(channel_id_str, 0)
-                                summary[channel_id_str] = (
-                                    int(current_count) if isinstance(current_count, (int, float)) else 0
-                                ) + message_count
+                total_interactions += self._process_conversation_summary(conv_summary, user_id, summary)
 
             summary["total"] = total_interactions
             logger.debug(f"Interaction summary for {user_id}: {total_interactions} total interactions")

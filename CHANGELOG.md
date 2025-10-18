@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.1] - 2025-10-17
 
+### Added
+- **🤝 Consensual Evolution Protocol v0.2**: Complete consent management system with memory bus integration
+  - **Consent Streams**: Three relationship models (TEMPORARY, PARTNERED, ANONYMOUS)
+    - TEMPORARY: 14-day auto-forget, default for all users
+    - PARTNERED: Bilateral consent requiring agent approval via task system
+    - ANONYMOUS: Statistics-only with identity removal
+  - **Impact Reporting**: Real-time contribution metrics from TSDB summaries
+    - Total interactions, patterns contributed, users helped
+    - Example contributions with anonymization
+    - No fake data - all metrics from actual graph data
+  - **Audit Trail**: Immutable consent change history
+    - IDENTITY scope for user-specific audit entries
+    - Service-tagged entries for efficient querying
+    - Full timestamp and reason tracking
+  - **DSAR Automation**: Automated data subject access requests
+    - Consent data export, interaction history, preferences
+    - Impact metrics and contribution summaries
+    - Partnership and decay protocol status
+  - **Partnership Management**: Bilateral consent flow with agent approval
+    - Task-based approval system with ACCEPT/REJECT/DEFER
+    - Pending partnership status tracking
+    - Automatic consent upgrade on approval
+  - **AIR (Artificial Interaction Reminder)**: Parasocial attachment prevention
+    - Time-based triggers (30 minutes continuous interaction)
+    - Message-based triggers (20+ messages in session)
+    - API-only scope (1:1 interactions, not community moderation)
+  - **SDK Extensions**: 10 new methods in ConsentResource
+    - `get_status()`, `query_consents()`, `grant_consent()`, `revoke_consent()`
+    - `get_impact_report()`, `get_audit_trail()`, `get_streams()`, `get_categories()`
+    - `get_partnership_status()`, `cleanup_expired()`
+  - **Implementation**:
+    - Memory bus integration for impact reporting and audit trail queries
+    - Modular architecture: air.py, decay.py, partnership.py, metrics.py, exceptions.py
+    - GraphScope.IDENTITY for user-specific data, GraphScope.COMMUNITY for shared patterns
+    - Service-tagged audit entries for efficient filtering
+  - **Testing**: 8/8 consent QA tests passing (100% success rate)
+
 ### Changed
 - **🎯 Type Safety: Protocol-Based Service Types (56% Optional[Any] Reduction)**
   - **CIRISRuntime Service Properties**: Replaced 22 `Optional[Any]` return types with specific protocol types

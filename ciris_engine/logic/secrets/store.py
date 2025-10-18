@@ -7,11 +7,11 @@ and comprehensive access auditing.
 
 import asyncio
 import logging
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
+from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
 
@@ -80,7 +80,7 @@ class SecretsStore:
         # Ensure directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with get_db_connection(str(self.db_path)) as conn:
             # Secrets table
             conn.execute(
                 """
@@ -166,7 +166,7 @@ class SecretsStore:
                     manual_access_only=False,
                 )
 
-                with sqlite3.connect(self.db_path) as conn:
+                with get_db_connection(str(self.db_path)) as conn:
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO secrets (
@@ -223,7 +223,7 @@ class SecretsStore:
                 return None
 
             try:
-                with sqlite3.connect(self.db_path) as conn:
+                with get_db_connection(str(self.db_path)) as conn:
                     cursor = conn.execute(
                         """
                         SELECT * FROM secrets WHERE secret_uuid = ?
@@ -309,7 +309,7 @@ class SecretsStore:
         """
         async with self._lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
+                with get_db_connection(str(self.db_path)) as conn:
                     cursor = conn.execute("DELETE FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
                     deleted = cursor.rowcount > 0
                     conn.commit()
@@ -352,7 +352,7 @@ class SecretsStore:
 
             query += " ORDER BY created_at DESC"
 
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
 
@@ -436,7 +436,7 @@ class SecretsStore:
                 failure_reason=failure_reason,
             )
 
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 conn.execute(
                     """
                     INSERT INTO secret_access_log (
@@ -491,7 +491,7 @@ class SecretsStore:
         """Get access logs for auditing."""
         logs = []
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 if secret_uuid:
                     cursor = conn.execute(
                         """
@@ -532,7 +532,7 @@ class SecretsStore:
         """Re-encrypt all stored secrets with a new key."""
         try:
             # Get all secrets
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce FROM secrets")
                 secrets = cursor.fetchall()
 
@@ -560,7 +560,7 @@ class SecretsStore:
                     return False
 
             # Update all secrets in database
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 conn.executemany(
                     """
                     UPDATE secrets

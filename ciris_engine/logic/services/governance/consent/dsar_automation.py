@@ -380,7 +380,12 @@ class DSARAutomationService:
         return int(current_count) if isinstance(current_count, (int, float)) else 0
 
     def _process_participant(
-        self, participant_id: str, participant_data: Dict[str, Any], user_id: str, attrs: Dict[str, Any], summary: Dict[str, Any]
+        self,
+        participant_id: str,
+        participant_data: Dict[str, Any],
+        user_id: str,
+        attrs: Dict[str, Any],
+        summary: Dict[str, Any],
     ) -> int:
         """Process a single participant's data and update summary."""
         if participant_id != user_id or not isinstance(participant_data, dict):

@@ -17,6 +17,12 @@ class DatabaseConfig(BaseModel):
     main_db: Path = Field(Path("data/ciris_engine.db"), description="Main SQLite database for persistence")
     secrets_db: Path = Field(Path("data/secrets.db"), description="Encrypted secrets storage database")
     audit_db: Path = Field(Path("data/ciris_audit.db"), description="Audit trail database with signatures")
+    database_url: Optional[str] = Field(
+        None,
+        description="Database connection string. If set, overrides main_db path. "
+        "Format: 'sqlite://path/to/db' or 'postgresql://user:pass@host:port/dbname'. "
+        "Defaults to SQLite at main_db path for backward compatibility.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

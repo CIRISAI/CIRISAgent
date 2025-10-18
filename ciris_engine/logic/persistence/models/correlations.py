@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
 from ciris_engine.schemas.persistence.correlations import ChannelInfo
@@ -203,15 +204,16 @@ def get_correlations_by_task_and_action(
     task_id: str, action_type: str, status: Optional[ServiceCorrelationStatus] = None, db_path: Optional[str] = None
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific task and action type."""
-    sql = """
+    adapter = get_adapter()
+    sql = f"""
         SELECT * FROM service_correlations
-        WHERE action_type = ?
-        AND json_extract(request_data, '$.task_id') = ?
+        WHERE action_type = {adapter.placeholder()}
+        AND {adapter.json_extract('request_data', '$.task_id')} = {adapter.placeholder()}
     """
     params = [action_type, task_id]
 
     if status is not None:
-        sql += " AND status = ?"
+        sql += f" AND status = {adapter.placeholder()}"
         params.append(status.value)
 
     sql += " ORDER BY created_at DESC"
@@ -281,21 +283,25 @@ def get_correlations_by_channel(
     channel_id: str, limit: int = 50, before: Optional[datetime] = None, db_path: Optional[str] = None
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific channel (for message history)."""
-    sql = """
+    adapter = get_adapter()
+    ph = adapter.placeholder()
+    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+
+    sql = f"""
         SELECT * FROM service_correlations
         WHERE (
-            (action_type = 'speak' AND json_extract(request_data, '$.channel_id') = ?) OR
-            (action_type = 'observe' AND json_extract(request_data, '$.channel_id') = ?)
+            (action_type = 'speak' AND {json_channel_id} = {ph}) OR
+            (action_type = 'observe' AND {json_channel_id} = {ph})
         )
     """
     params: List[Any] = [channel_id, channel_id]
 
     if before:
-        sql += " AND timestamp < ?"
+        sql += f" AND timestamp < {ph}"
         before_str = before.isoformat() if hasattr(before, "isoformat") else str(before)
         params.append(before_str)
 
-    sql += " ORDER BY timestamp DESC LIMIT ?"
+    sql += f" ORDER BY timestamp DESC LIMIT {ph}"
     params.append(limit)
 
     try:
@@ -315,29 +321,32 @@ def get_correlations_by_channel(
 
 def get_metrics_timeseries(query: MetricsQuery, db_path: Optional[str] = None) -> List[ServiceCorrelation]:
     """Get metric correlations as time series data."""
-    sql = """
+    adapter = get_adapter()
+    ph = adapter.placeholder()
+
+    sql = f"""
         SELECT * FROM service_correlations
         WHERE correlation_type = 'metric_datapoint'
-        AND metric_name = ?
+        AND metric_name = {ph}
     """
     params: List[Any] = [query.metric_name]
 
     if query.start_time:
-        sql += " AND timestamp >= ?"
+        sql += f" AND timestamp >= {ph}"
         params.append(query.start_time.isoformat() if hasattr(query.start_time, "isoformat") else query.start_time)
 
     if query.end_time:
-        sql += " AND timestamp <= ?"
+        sql += f" AND timestamp <= {ph}"
         params.append(query.end_time.isoformat() if hasattr(query.end_time, "isoformat") else query.end_time)
 
     if query.tags:
         for key, value in query.tags.items():
-            sql += " AND json_extract(tags, ?) = ?"
-            params.extend([f"$.{key}", value])
+            sql += f" AND {adapter.json_extract('tags', f'$.{key}')} = {ph}"
+            params.append(value)
 
     # Default limit to 1000 if not specified
     limit = 1000 if not hasattr(query, "limit") else getattr(query, "limit", 1000)
-    sql += " ORDER BY timestamp ASC LIMIT ?"
+    sql += f" ORDER BY timestamp ASC LIMIT {ph}"
     params.append(limit)
 
     try:
@@ -456,16 +465,20 @@ def get_active_channels_by_adapter(
     channels: Dict[str, ChannelInfo] = {}
 
     # Query recent correlations for speak/observe actions
-    sql = """
+    adapter = get_adapter()
+    ph = adapter.placeholder()
+    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+
+    sql = f"""
         SELECT
-            json_extract(request_data, '$.channel_id') as channel_id,
+            {json_channel_id} as channel_id,
             MAX(timestamp) as last_activity,
             COUNT(*) as message_count
         FROM service_correlations
         WHERE action_type IN ('speak', 'observe')
-        AND timestamp >= ?
-        AND json_extract(request_data, '$.channel_id') IS NOT NULL
-        AND json_extract(request_data, '$.channel_id') LIKE ?
+        AND timestamp >= {ph}
+        AND {json_channel_id} IS NOT NULL
+        AND {json_channel_id} LIKE {ph}
         GROUP BY channel_id
     """
 
@@ -506,13 +519,14 @@ def get_active_channels_by_adapter(
     # These provide historical channel activity beyond the correlation retention window
     try:
         # Query memory graph for ConversationSummaryNodes
-        sql_summaries = """
+        json_period_start = adapter.json_extract('node_data', '$.period_start')
+        sql_summaries = f"""
             SELECT
                 node_data
             FROM graph_nodes
             WHERE node_type = 'ConversationSummaryNode'
-            AND json_extract(node_data, '$.period_start') >= ?
-            ORDER BY json_extract(node_data, '$.period_start') DESC
+            AND {json_period_start} >= {ph}
+            ORDER BY {json_period_start} DESC
         """
 
         with get_db_connection(db_path=db_path) as conn:
@@ -574,11 +588,15 @@ def get_channel_last_activity(
     last_activity = None
 
     # Check recent correlations
-    sql = """
+    adapter = get_adapter()
+    ph = adapter.placeholder()
+    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+
+    sql = f"""
         SELECT MAX(timestamp) as last_activity
         FROM service_correlations
         WHERE action_type IN ('speak', 'observe')
-        AND json_extract(request_data, '$.channel_id') = ?
+        AND {json_channel_id} = {ph}
     """
 
     try:
@@ -600,13 +618,16 @@ def get_channel_last_activity(
 
     # Also check conversation summaries for historical activity
     try:
-        sql_summaries = """
+        json_period_end = adapter.json_extract('node_data', '$.period_end')
+        json_conversations = adapter.json_extract('node_data', '$.conversations_by_channel')
+
+        sql_summaries = f"""
             SELECT
-                json_extract(node_data, '$.period_end') as period_end
+                {json_period_end} as period_end
             FROM graph_nodes
             WHERE node_type = 'ConversationSummaryNode'
-            AND json_extract(node_data, '$.conversations_by_channel') LIKE ?
-            ORDER BY json_extract(node_data, '$.period_end') DESC
+            AND {json_conversations} LIKE {ph}
+            ORDER BY {json_period_end} DESC
             LIMIT 1
         """
 
@@ -736,14 +757,21 @@ def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
         return False
 
     # Check for admin role in correlation tags
-    sql = """
+    adapter = get_adapter()
+    ph = adapter.placeholder()
+    json_channel_id = adapter.json_extract('request_data', '$.channel_id')
+    json_user_role = adapter.json_extract('tags', '$.user_role')
+    json_is_admin = adapter.json_extract('tags', '$.is_admin')
+    json_auth_role = adapter.json_extract('tags', '$.auth.role')
+
+    sql = f"""
         SELECT COUNT(*) as admin_count
         FROM service_correlations
-        WHERE json_extract(request_data, '$.channel_id') = ?
+        WHERE {json_channel_id} = {ph}
         AND (
-            json_extract(tags, '$.user_role') IN ('ADMIN', 'AUTHORITY', 'SYSTEM_ADMIN')
-            OR json_extract(tags, '$.is_admin') = 1
-            OR json_extract(tags, '$.auth.role') IN ('ADMIN', 'AUTHORITY', 'SYSTEM_ADMIN')
+            {json_user_role} IN ('ADMIN', 'AUTHORITY', 'SYSTEM_ADMIN')
+            OR {json_is_admin} = 1
+            OR {json_auth_role} IN ('ADMIN', 'AUTHORITY', 'SYSTEM_ADMIN')
         )
         LIMIT 1
     """

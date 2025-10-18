@@ -16,10 +16,21 @@ from ciris_engine.schemas.persistence.tables import TASKS_TABLE_V1 as tasks_tabl
 from ciris_engine.schemas.persistence.tables import THOUGHTS_TABLE_V1 as thoughts_table_v1
 from ciris_engine.schemas.persistence.tables import WA_CERT_TABLE_V1 as wa_cert_table_v1
 
+from .dialect import init_dialect
 from .migration_runner import run_migrations
 from .retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_MAX_RETRIES, is_retryable_error
 
 logger = logging.getLogger(__name__)
+
+# Try to import psycopg2 for PostgreSQL support
+try:
+    import psycopg2
+    import psycopg2.extras
+
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    logger.debug("psycopg2 not available - PostgreSQL support disabled")
 
 
 # Custom datetime adapter and converter for SQLite
@@ -139,36 +150,61 @@ class RetryConnection:
 
 def get_db_connection(
     db_path: Optional[str] = None, busy_timeout: Optional[int] = None, enable_retry: bool = True
-) -> Union[sqlite3.Connection, RetryConnection]:
-    """Establishes a connection to the SQLite database with foreign key support.
+) -> Union[sqlite3.Connection, RetryConnection, Any]:
+    """Establishes a connection to the database (SQLite or PostgreSQL).
+
+    Supports both SQLite and PostgreSQL backends via connection string detection.
+    Connection string format:
+    - SQLite: "sqlite://path/to/db.db" or just "path/to/db.db"
+    - PostgreSQL: "postgresql://user:pass@host:port/dbname"
 
     Args:
-        db_path: Optional path to database file
-        busy_timeout: Optional busy timeout in milliseconds (e.g., 5000 for 5 seconds)
-        enable_retry: Enable automatic retry for write operations (default: True)
+        db_path: Optional database connection string (defaults to SQLite data/ciris.db)
+        busy_timeout: Optional busy timeout in milliseconds (SQLite only)
+        enable_retry: Enable automatic retry for write operations (SQLite only)
 
     Returns:
-        SQLite connection with row factory and foreign keys enabled.
-        By default, returns a RetryConnection that automatically retries write operations.
+        Database connection:
+        - SQLite: RetryConnection wrapper (if enable_retry=True) or raw Connection
+        - PostgreSQL: psycopg2 connection with dict cursor factory
     """
-    # Ensure adapters are registered before creating connection
-    _ensure_adapters_registered()
-
+    # Default to SQLite for backward compatibility
     if db_path is None:
         db_path = get_sqlite_db_full_path()
+
+    # Initialize dialect adapter based on connection string
+    adapter = init_dialect(db_path)
+
+    # PostgreSQL connection
+    if adapter.is_postgresql():
+        if not POSTGRES_AVAILABLE:
+            raise RuntimeError(
+                "PostgreSQL connection requested but psycopg2 not installed. "
+                "Install with: pip install psycopg2-binary"
+            )
+
+        conn = psycopg2.connect(adapter.db_url)
+        # Use dict cursor for compatibility with SQLite Row factory
+        conn.cursor_factory = psycopg2.extras.RealDictCursor
+        return conn
+
+    # SQLite connection (default)
+    _ensure_adapters_registered()
+
     conn = sqlite3.connect(db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
 
-    # Enable WAL mode for better concurrency
-    conn.execute("PRAGMA journal_mode=WAL;")
+    # Apply SQLite PRAGMA directives
+    pragma_statements = [
+        "PRAGMA foreign_keys = ON;",
+        "PRAGMA journal_mode=WAL;",
+        f"PRAGMA busy_timeout = {busy_timeout if busy_timeout is not None else 5000};",
+    ]
 
-    # Set busy timeout if specified (also used as a fallback)
-    if busy_timeout is not None:
-        conn.execute(f"PRAGMA busy_timeout = {busy_timeout};")
-    else:
-        # Default 5 second busy timeout as a fallback
-        conn.execute("PRAGMA busy_timeout = 5000;")
+    for pragma in pragma_statements:
+        result = adapter.pragma(pragma)
+        if result:  # Only execute if dialect returns a statement
+            conn.execute(result)
 
     # Return wrapped connection with retry logic by default
     if enable_retry:

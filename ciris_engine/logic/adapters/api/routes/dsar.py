@@ -189,9 +189,7 @@ async def _handle_delete_request(
         )
 
         # Use structured logging to avoid log injection
-        logger.info(
-            "Decay protocol initiated via DSAR", extra={"user_id": user_identifier, "ticket_id": ticket_id}
-        )
+        logger.info("Decay protocol initiated via DSAR", extra={"user_id": user_identifier, "ticket_id": ticket_id})
         return decay_status
     except ConsentNotFoundError:
         # User has no consent record - that's fine for DSAR
@@ -243,7 +241,7 @@ def _build_response_message(
         )
     else:
         # Manual processing for non-automated requests
-        timeline = '3 days' if urgent else '14 days'
+        timeline = "3 days" if urgent else "14 days"
         message += (
             f"We will process your request within {timeline} "
             f"during the pilot phase. You will receive updates at {contact_email}."

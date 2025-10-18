@@ -436,6 +436,97 @@ async def cleanup_expired(
     }
 
 
+# DSAR helper functions to reduce cognitive complexity
+async def _get_consent_export_data(manager: ConsentService, user_id: str) -> Optional[JSONDict]:
+    """Extract consent data for DSAR export.
+
+    Args:
+        manager: Consent service manager
+        user_id: User ID
+
+    Returns:
+        Consent data dictionary or None if not found
+    """
+    try:
+        consent = await manager.get_consent(user_id)
+        return {
+            "user_id": user_id,
+            "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
+            "categories": [c.value if hasattr(c, "value") else str(c) for c in consent.categories],
+            "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
+            "expires_at": (
+                consent.expires_at.isoformat()
+                if hasattr(consent, "expires_at") and consent.expires_at
+                else None
+            ),
+            "last_modified": (consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None),
+        }
+    except ConsentNotFoundError:
+        return None
+
+
+async def _get_impact_export_data(manager: ConsentService, user_id: str) -> Optional[JSONDict]:
+    """Extract impact data for DSAR export.
+
+    Args:
+        manager: Consent service manager
+        user_id: User ID
+
+    Returns:
+        Impact data dictionary or None if not found
+    """
+    try:
+        impact = await manager.get_impact_report(user_id)
+        return {
+            "total_interactions": impact.total_interactions,
+            "patterns_contributed": impact.patterns_contributed,
+            "users_helped": impact.users_helped,
+            "categories_active": [c.value if hasattr(c, "value") else str(c) for c in impact.categories_active],
+            "impact_score": impact.impact_score,
+            "example_contributions": impact.example_contributions,
+        }
+    except ConsentNotFoundError:
+        return None
+
+
+async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[JSONDict]:
+    """Extract audit trail data for DSAR export.
+
+    Args:
+        manager: Consent service manager
+        user_id: User ID
+
+    Returns:
+        List of audit entry dictionaries (empty list if error)
+    """
+    try:
+        audit_entries = await manager.get_audit_trail(user_id, limit=1000)
+        return [
+            {
+                "entry_id": entry.entry_id,
+                "user_id": entry.user_id,
+                "timestamp": entry.timestamp.isoformat(),
+                "previous_stream": (
+                    entry.previous_stream.value
+                    if hasattr(entry.previous_stream, "value")
+                    else str(entry.previous_stream)
+                ),
+                "new_stream": (
+                    entry.new_stream.value if hasattr(entry.new_stream, "value") else str(entry.new_stream)
+                ),
+                "previous_categories": [
+                    c.value if hasattr(c, "value") else str(c) for c in entry.previous_categories
+                ],
+                "new_categories": [c.value if hasattr(c, "value") else str(c) for c in entry.new_categories],
+                "initiated_by": entry.initiated_by,
+                "reason": entry.reason,
+            }
+            for entry in audit_entries
+        ]
+    except Exception:
+        return []
+
+
 # DSAR (Data Subject Access Request) endpoints
 @router.post("/dsar/initiate", response_model=JSONDict)
 async def initiate_dsar(
@@ -455,76 +546,22 @@ async def initiate_dsar(
     user_id = auth.user_id
 
     try:
-        # Build the export data based on request type
+        # Build the export data based on request type using helper functions
         export_data: JSONDict = {}
 
         if request_type in ["full", "consent_only"]:
-            # Get consent data
-            try:
-                consent = await manager.get_consent(user_id)
-                export_data["consent"] = {
-                    "user_id": user_id,
-                    "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
-                    "categories": [c.value if hasattr(c, "value") else str(c) for c in consent.categories],
-                    "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
-                    "expires_at": (
-                        consent.expires_at.isoformat()
-                        if hasattr(consent, "expires_at") and consent.expires_at
-                        else None
-                    ),
-                    "last_modified": (consent.last_modified.isoformat() if hasattr(consent, "last_modified") else None),
-                }
-            except ConsentNotFoundError:
-                export_data["consent"] = None
+            export_data["consent"] = await _get_consent_export_data(manager, user_id)
 
         if request_type in ["full", "impact_only"]:
-            # Get impact data
-            try:
-                impact = await manager.get_impact_report(user_id)
-                export_data["impact"] = {
-                    "total_interactions": impact.total_interactions,
-                    "patterns_contributed": impact.patterns_contributed,
-                    "users_helped": impact.users_helped,
-                    "categories_active": [c.value if hasattr(c, "value") else str(c) for c in impact.categories_active],
-                    "impact_score": impact.impact_score,
-                    "example_contributions": impact.example_contributions,
-                }
-            except ConsentNotFoundError:
-                export_data["impact"] = None
+            export_data["impact"] = await _get_impact_export_data(manager, user_id)
 
         if request_type in ["full", "audit_only"]:
-            # Get audit trail
-            try:
-                audit_entries = await manager.get_audit_trail(user_id, limit=1000)
-                export_data["audit_trail"] = [
-                    {
-                        "entry_id": entry.entry_id,
-                        "user_id": entry.user_id,
-                        "timestamp": entry.timestamp.isoformat(),
-                        "previous_stream": (
-                            entry.previous_stream.value
-                            if hasattr(entry.previous_stream, "value")
-                            else str(entry.previous_stream)
-                        ),
-                        "new_stream": (
-                            entry.new_stream.value if hasattr(entry.new_stream, "value") else str(entry.new_stream)
-                        ),
-                        "previous_categories": [
-                            c.value if hasattr(c, "value") else str(c) for c in entry.previous_categories
-                        ],
-                        "new_categories": [c.value if hasattr(c, "value") else str(c) for c in entry.new_categories],
-                        "initiated_by": entry.initiated_by,
-                        "reason": entry.reason,
-                    }
-                    for entry in audit_entries
-                ]
-            except Exception:
-                export_data["audit_trail"] = []
+            export_data["audit_trail"] = await _get_audit_export_data(manager, user_id)
 
-        # Generate a request ID for tracking
-        from datetime import datetime
+        # Generate a request ID for tracking (using timezone-aware datetime)
+        from datetime import datetime, timezone
 
-        request_id = f"dsar_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        request_id = f"dsar_{user_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
         return {
             "request_id": request_id,

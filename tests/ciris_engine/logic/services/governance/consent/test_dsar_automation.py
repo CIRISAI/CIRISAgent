@@ -4,8 +4,9 @@ Tests for DSARAutomationService helper methods.
 Focuses on testing the newly extracted helper methods for SonarCloud fixes.
 """
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
@@ -150,9 +151,7 @@ class TestDSARAutomationHelpers:
         summary = {"channel_123": 10}
 
         # Execute
-        count = dsar_automation_service._process_participant(
-            participant_id, participant_data, user_id, attrs, summary
-        )
+        count = dsar_automation_service._process_participant(participant_id, participant_data, user_id, attrs, summary)
 
         # Assert
         assert count == 25
@@ -168,9 +167,7 @@ class TestDSARAutomationHelpers:
         summary = {"channel_123": 10}
 
         # Execute
-        count = dsar_automation_service._process_participant(
-            participant_id, participant_data, user_id, attrs, summary
-        )
+        count = dsar_automation_service._process_participant(participant_id, participant_data, user_id, attrs, summary)
 
         # Assert
         assert count == 0
@@ -186,9 +183,7 @@ class TestDSARAutomationHelpers:
         summary = {}
 
         # Execute
-        count = dsar_automation_service._process_participant(
-            participant_id, participant_data, user_id, attrs, summary
-        )
+        count = dsar_automation_service._process_participant(participant_id, participant_data, user_id, attrs, summary)
 
         # Assert
         assert count == 0
@@ -239,9 +234,7 @@ class TestDSARAutomationHelpers:
         # Assert
         assert total == 0
 
-    def test_process_conversation_summary_with_multiple_participants(
-        self, dsar_automation_service, mock_time_service
-    ):
+    def test_process_conversation_summary_with_multiple_participants(self, dsar_automation_service, mock_time_service):
         """Test _process_conversation_summary handles multiple participants correctly."""
         # Setup
         node = Mock()

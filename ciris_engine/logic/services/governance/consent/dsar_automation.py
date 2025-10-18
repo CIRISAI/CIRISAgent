@@ -14,7 +14,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -363,36 +363,37 @@ class DSARAutomationService:
         )
         return deletion_status
 
-    def _extract_attributes(self, conv_summary: object) -> dict:
+    def _extract_attributes(self, conv_summary: Any) -> Dict[str, Any]:
         """Extract attributes from conversation summary node."""
         if isinstance(conv_summary.attributes, dict):
-            return conv_summary.attributes
-        return conv_summary.attributes.model_dump()
+            return conv_summary.attributes  # Flex pattern - graph integration  # noqa: PGH003
+        return conv_summary.attributes.model_dump()  # type: ignore[no-any-return]
 
-    def _get_channel_id(self, attrs: dict) -> str:
+    def _get_channel_id(self, attrs: Dict[str, Any]) -> str:
         """Extract channel ID from attributes."""
         channel_id_raw = attrs.get("channel_id", "unknown")
         return str(channel_id_raw) if channel_id_raw else "unknown"
 
-    def _get_current_count(self, summary: dict, channel_id: str) -> int:
+    def _get_current_count(self, summary: Dict[str, Any], channel_id: str) -> int:
         """Get current interaction count for channel, handling type conversion."""
         current_count = summary.get(channel_id, 0)
         return int(current_count) if isinstance(current_count, (int, float)) else 0
 
     def _process_participant(
-        self, participant_id: str, participant_data: dict, user_id: str, attrs: dict, summary: dict
+        self, participant_id: str, participant_data: Dict[str, Any], user_id: str, attrs: Dict[str, Any], summary: Dict[str, Any]
     ) -> int:
         """Process a single participant's data and update summary."""
         if participant_id != user_id or not isinstance(participant_data, dict):
             return 0
 
-        message_count = participant_data.get("message_count", 0)
+        message_count_raw = participant_data.get("message_count", 0)
+        message_count = int(message_count_raw) if isinstance(message_count_raw, (int, float)) else 0
         channel_id = self._get_channel_id(attrs)
         current_count = self._get_current_count(summary, channel_id)
         summary[channel_id] = current_count + message_count
         return message_count
 
-    def _process_conversation_summary(self, conv_summary: object, user_id: str, summary: dict) -> int:
+    def _process_conversation_summary(self, conv_summary: Any, user_id: str, summary: Dict[str, Any]) -> int:
         """Process a single conversation summary node."""
         if not conv_summary.attributes:
             return 0

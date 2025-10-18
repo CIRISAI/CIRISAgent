@@ -4,30 +4,22 @@ Tests for PartnershipManager helper methods.
 Focuses on testing the newly extracted helper methods for SonarCloud fixes.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
+
+import pytest
 
 from ciris_engine.logic.services.governance.consent.partnership import PartnershipManager
-from ciris_engine.schemas.consent.core import (
-    ConsentCategory,
-    ConsentRequest,
-    ConsentStatus,
-    ConsentStream,
-)
+from ciris_engine.schemas.consent.core import ConsentCategory, ConsentRequest, ConsentStatus, ConsentStream
 
 
 class TestPartnershipManagerHelpers:
     """Test partnership manager helper methods."""
 
-    def test_create_pending_status_with_previous_status(
-        self, partnership_manager, sample_permanent_consent
-    ):
+    def test_create_pending_status_with_previous_status(self, partnership_manager, sample_permanent_consent):
         """Test _create_pending_status preserves previous consent details."""
         # Execute
-        pending = partnership_manager._create_pending_status(
-            sample_permanent_consent.user_id, sample_permanent_consent
-        )
+        pending = partnership_manager._create_pending_status(sample_permanent_consent.user_id, sample_permanent_consent)
 
         # Assert
         assert pending.user_id == sample_permanent_consent.user_id
@@ -76,9 +68,7 @@ class TestPartnershipManagerHelpers:
         assert pending.last_modified == mock_time_service.now()
         assert pending.last_modified != old_consent.last_modified
 
-    def test_store_pending_partnership(
-        self, partnership_manager, mock_time_service, sample_partnership_request
-    ):
+    def test_store_pending_partnership(self, partnership_manager, mock_time_service, sample_partnership_request):
         """Test _store_pending_partnership stores correct data structure."""
         # Setup
         task_id = "task_123"
@@ -103,9 +93,7 @@ class TestPartnershipManagerHelpers:
         assert "request" in pending
         assert isinstance(pending["request"], dict)
 
-    def test_store_pending_partnership_with_no_channel(
-        self, partnership_manager, sample_partnership_request
-    ):
+    def test_store_pending_partnership_with_no_channel(self, partnership_manager, sample_partnership_request):
         """Test _store_pending_partnership handles missing channel_id."""
         # Setup
         request = ConsentRequest(
@@ -133,7 +121,7 @@ class TestPartnershipManagerHelpers:
         # Execute with mocked database interaction
         from unittest.mock import patch
 
-        with patch('ciris_engine.logic.utils.consent.partnership_utils.persistence.add_task'):
+        with patch("ciris_engine.logic.utils.consent.partnership_utils.persistence.add_task"):
             task = partnership_manager._create_partnership_task(user_id, categories, reason, channel_id)
 
             # Assert
@@ -147,9 +135,7 @@ class TestPartnershipManagerHelpers:
 
         # Execute & Assert
         with pytest.raises(ValueError, match="TimeService required"):
-            manager._create_partnership_task(
-                "user_001", [ConsentCategory.PREFERENCE], "reason", "channel"
-            )
+            manager._create_partnership_task("user_001", [ConsentCategory.PREFERENCE], "reason", "channel")
 
     def test_get_request_counts(self, partnership_manager):
         """Test get_request_counts returns correct tuple."""
@@ -217,9 +203,7 @@ class TestPartnershipManagerHelpers:
         assert result is None
         assert partnership_manager._partnership_approvals == 0
 
-    def test_finalize_partnership_approval_task_mismatch(
-        self, partnership_manager, pending_partnership_data
-    ):
+    def test_finalize_partnership_approval_task_mismatch(self, partnership_manager, pending_partnership_data):
         """Test finalize_partnership_approval returns None for task ID mismatch."""
         # Setup
         partnership_manager._pending_partnerships = pending_partnership_data.copy()
@@ -263,9 +247,7 @@ class TestPartnershipManagerHelpers:
         assert pending_list[0]["aging_status"] == "critical"
         assert pending_list[0]["age_hours"] > 336  # > 14 days
 
-    def test_list_pending_partnerships_sorted_by_age(
-        self, partnership_manager, mock_time_service
-    ):
+    def test_list_pending_partnerships_sorted_by_age(self, partnership_manager, mock_time_service):
         """Test list_pending_partnerships sorts by age (oldest first)."""
         # Setup: create partnerships with different ages
         now = mock_time_service.now()

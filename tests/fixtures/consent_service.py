@@ -7,7 +7,7 @@ including decay protocol, partnership management, DSAR automation, and AIR.
 
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, Mock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -644,7 +644,12 @@ def sample_decay_counters():
 def sample_operational_counters():
     """Create sample operational counters for metrics testing."""
     return OperationalCounters(
-        consent_checks=500, consent_grants=100, consent_revokes=25, expired_cleanups=10, tool_executions=200, tool_failures=5
+        consent_checks=500,
+        consent_grants=100,
+        consent_revokes=25,
+        expired_cleanups=10,
+        tool_executions=200,
+        tool_failures=5,
     )
 
 

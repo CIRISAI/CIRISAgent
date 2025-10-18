@@ -4,8 +4,9 @@ Tests for DecayProtocolManager helper methods.
 Focuses on testing the newly extracted helper methods for SonarCloud fixes.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from ciris_engine.logic.services.governance.consent.decay import DecayProtocolManager
 from ciris_engine.schemas.consent.core import ConsentDecayStatus
@@ -26,9 +27,7 @@ class TestDecayProtocolHelpers:
         # Assert
         assert phase == "severing_identity"
 
-    def test_determine_decay_phase_anonymizing_patterns(
-        self, decay_protocol_manager, sample_decay_identity_severed
-    ):
+    def test_determine_decay_phase_anonymizing_patterns(self, decay_protocol_manager, sample_decay_identity_severed):
         """Test _determine_decay_phase returns 'anonymizing_patterns' when identity severed."""
         # Execute
         phase = decay_protocol_manager._determine_decay_phase(sample_decay_identity_severed)
@@ -44,9 +43,7 @@ class TestDecayProtocolHelpers:
         # Assert
         assert phase == "complete"
 
-    def test_determine_decay_phase_integration_in_get_decay_progress(
-        self, decay_protocol_manager, sample_decay_status
-    ):
+    def test_determine_decay_phase_integration_in_get_decay_progress(self, decay_protocol_manager, sample_decay_status):
         """Test _determine_decay_phase is correctly used in get_decay_progress."""
         # Setup: add decay to active decays
         decay_protocol_manager._active_decays[sample_decay_status.user_id] = sample_decay_status
@@ -60,14 +57,10 @@ class TestDecayProtocolHelpers:
         assert progress["identity_severed"] is False
         assert progress["patterns_anonymized"] is False
 
-    def test_get_decay_progress_with_identity_severed(
-        self, decay_protocol_manager, sample_decay_identity_severed
-    ):
+    def test_get_decay_progress_with_identity_severed(self, decay_protocol_manager, sample_decay_identity_severed):
         """Test get_decay_progress returns correct phase after identity severance."""
         # Setup
-        decay_protocol_manager._active_decays[sample_decay_identity_severed.user_id] = (
-            sample_decay_identity_severed
-        )
+        decay_protocol_manager._active_decays[sample_decay_identity_severed.user_id] = sample_decay_identity_severed
 
         # Execute
         progress = decay_protocol_manager.get_decay_progress(sample_decay_identity_severed.user_id)
@@ -187,15 +180,11 @@ class TestDecayProtocolHelpers:
         # Assert
         assert status is None
 
-    def test_get_active_decays(
-        self, decay_protocol_manager, sample_decay_status, sample_decay_identity_severed
-    ):
+    def test_get_active_decays(self, decay_protocol_manager, sample_decay_status, sample_decay_identity_severed):
         """Test get_active_decays returns all active decays."""
         # Setup
         decay_protocol_manager._active_decays[sample_decay_status.user_id] = sample_decay_status
-        decay_protocol_manager._active_decays[sample_decay_identity_severed.user_id] = (
-            sample_decay_identity_severed
-        )
+        decay_protocol_manager._active_decays[sample_decay_identity_severed.user_id] = sample_decay_identity_severed
 
         # Execute
         active_decays = decay_protocol_manager.get_active_decays()

@@ -4,8 +4,9 @@ Tests for ConsentMetricsCollector.
 Focuses on testing metrics collection methods with new schema-based parameter grouping.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from ciris_engine.logic.services.governance.consent.metrics import ConsentMetricsCollector
 from ciris_engine.schemas.consent.core import (
@@ -60,9 +61,7 @@ class TestMetricsCollector:
         # Should be close to 100% (allowing for rounding)
         assert abs(total_percent - 100.0) < 1.0
 
-    def test_collect_stream_distribution_calculates_average_age(
-        self, metrics_collector, mock_time_service
-    ):
+    def test_collect_stream_distribution_calculates_average_age(self, metrics_collector, mock_time_service):
         """Test collect_stream_distribution calculates average age correctly."""
         # Setup: create consents with known ages
         now = mock_time_service.now()

@@ -4,9 +4,10 @@ Tests for ConsentService helper methods.
 Focuses on testing the newly extracted helper methods for SonarCloud fixes.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
+
+import pytest
 
 from ciris_engine.logic.services.governance.consent.service import ConsentNotFoundError
 from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, ConsentStream
@@ -15,9 +16,7 @@ from ciris_engine.schemas.consent.core import ConsentCategory, ConsentStatus, Co
 class TestConsentServiceHelpers:
     """Test consent service helper methods."""
 
-    def test_check_cached_expiry_with_valid_temporary(
-        self, consent_service_with_mocks, sample_temporary_consent
-    ):
+    def test_check_cached_expiry_with_valid_temporary(self, consent_service_with_mocks, sample_temporary_consent):
         """Test _check_cached_expiry allows valid temporary consent."""
         # Setup: consent expires in future
         assert sample_temporary_consent.expires_at is not None
@@ -25,20 +24,14 @@ class TestConsentServiceHelpers:
 
         # Execute & Assert: should not raise
         try:
-            consent_service_with_mocks._check_cached_expiry(
-                sample_temporary_consent.user_id, sample_temporary_consent
-            )
+            consent_service_with_mocks._check_cached_expiry(sample_temporary_consent.user_id, sample_temporary_consent)
         except ConsentNotFoundError:
             pytest.fail("_check_cached_expiry raised ConsentNotFoundError for valid consent")
 
-    def test_check_cached_expiry_with_expired_temporary(
-        self, consent_service_with_mocks, expired_temporary_consent
-    ):
+    def test_check_cached_expiry_with_expired_temporary(self, consent_service_with_mocks, expired_temporary_consent):
         """Test _check_cached_expiry raises for expired temporary consent."""
         # Setup: add to cache
-        consent_service_with_mocks._consent_cache[expired_temporary_consent.user_id] = (
-            expired_temporary_consent
-        )
+        consent_service_with_mocks._consent_cache[expired_temporary_consent.user_id] = expired_temporary_consent
 
         # Execute & Assert: should raise and remove from cache
         with pytest.raises(ConsentNotFoundError, match="has expired"):
@@ -49,33 +42,23 @@ class TestConsentServiceHelpers:
         # Verify removed from cache
         assert expired_temporary_consent.user_id not in consent_service_with_mocks._consent_cache
 
-    def test_check_cached_expiry_with_permanent_consent(
-        self, consent_service_with_mocks, sample_permanent_consent
-    ):
+    def test_check_cached_expiry_with_permanent_consent(self, consent_service_with_mocks, sample_permanent_consent):
         """Test _check_cached_expiry allows permanent consent (no expiry)."""
         # Execute & Assert: should not raise
         try:
-            consent_service_with_mocks._check_cached_expiry(
-                sample_permanent_consent.user_id, sample_permanent_consent
-            )
+            consent_service_with_mocks._check_cached_expiry(sample_permanent_consent.user_id, sample_permanent_consent)
         except ConsentNotFoundError:
             pytest.fail("_check_cached_expiry raised ConsentNotFoundError for permanent consent")
 
-    def test_check_cached_expiry_with_decaying_consent(
-        self, consent_service_with_mocks, sample_decaying_consent
-    ):
+    def test_check_cached_expiry_with_decaying_consent(self, consent_service_with_mocks, sample_decaying_consent):
         """Test _check_cached_expiry allows decaying consent with future expiry."""
         # Execute & Assert: should not raise
         try:
-            consent_service_with_mocks._check_cached_expiry(
-                sample_decaying_consent.user_id, sample_decaying_consent
-            )
+            consent_service_with_mocks._check_cached_expiry(sample_decaying_consent.user_id, sample_decaying_consent)
         except ConsentNotFoundError:
             pytest.fail("_check_cached_expiry raised ConsentNotFoundError for valid decaying consent")
 
-    def test_reconstruct_consent_from_node_with_dict_attributes(
-        self, consent_service_with_mocks, mock_time_service
-    ):
+    def test_reconstruct_consent_from_node_with_dict_attributes(self, consent_service_with_mocks, mock_time_service):
         """Test _reconstruct_consent_from_node handles dict attributes."""
         # Setup
         user_id = "reconstruct_user_001"
@@ -131,9 +114,7 @@ class TestConsentServiceHelpers:
         assert status.expires_at is None  # Permanent
         mock_attrs.model_dump.assert_called_once()
 
-    def test_reconstruct_consent_from_node_with_missing_expires_at(
-        self, consent_service_with_mocks, mock_time_service
-    ):
+    def test_reconstruct_consent_from_node_with_missing_expires_at(self, consent_service_with_mocks, mock_time_service):
         """Test _reconstruct_consent_from_node handles missing expires_at."""
         # Setup
         user_id = "reconstruct_user_003"
@@ -155,9 +136,7 @@ class TestConsentServiceHelpers:
         # Assert
         assert status.expires_at is None
 
-    def test_reconstruct_consent_from_node_with_defaults(
-        self, consent_service_with_mocks, mock_time_service
-    ):
+    def test_reconstruct_consent_from_node_with_defaults(self, consent_service_with_mocks, mock_time_service):
         """Test _reconstruct_consent_from_node uses defaults for missing fields."""
         # Setup
         user_id = "reconstruct_user_004"
@@ -200,17 +179,13 @@ class TestConsentServiceHelpers:
     async def test_load_consent_from_graph_not_found(self, consent_service_with_mocks):
         """Test _load_consent_from_graph raises when node not found."""
         # Setup: mock get_graph_node to return None
-        with patch(
-            "ciris_engine.logic.services.governance.consent.service.get_graph_node", return_value=None
-        ):
+        with patch("ciris_engine.logic.services.governance.consent.service.get_graph_node", return_value=None):
             # Execute & Assert
             with pytest.raises(ConsentNotFoundError, match="No consent found"):
                 await consent_service_with_mocks._load_consent_from_graph("nonexistent_user")
 
     @pytest.mark.asyncio
-    async def test_load_consent_from_graph_expired(
-        self, consent_service_with_mocks, sample_consent_node_expired
-    ):
+    async def test_load_consent_from_graph_expired(self, consent_service_with_mocks, sample_consent_node_expired):
         """Test _load_consent_from_graph raises for expired consent."""
         # Setup: mock get_graph_node to return expired node
         with patch(

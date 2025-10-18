@@ -163,9 +163,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
             granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
             expires_at=(
-                datetime.fromisoformat(expires_str)
-                if (expires_str := get_str_optional(attrs, "expires_at"))
-                else None
+                datetime.fromisoformat(expires_str) if (expires_str := get_str_optional(attrs, "expires_at")) else None
             ),
             last_modified=datetime.fromisoformat(
                 get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())
@@ -891,7 +889,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             metadata=None,
         )
 
-    def _extract_air_metrics(self, air_metrics: dict) -> Dict[str, float]:
+    def _extract_air_metrics(self, air_metrics: Dict[str, Any]) -> Dict[str, float]:
         """Extract and safely cast AIR metrics."""
         return {
             "consent_air_total_interactions": (
@@ -901,17 +899,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 float(val) if isinstance((val := air_metrics.get("reminders_sent", 0)), (int, float)) else 0.0
             ),
             "consent_air_reminder_rate_percent": (
-                float(val)
-                if isinstance((val := air_metrics.get("reminder_rate_percent", 0.0)), (int, float))
-                else 0.0
+                float(val) if isinstance((val := air_metrics.get("reminder_rate_percent", 0.0)), (int, float)) else 0.0
             ),
             "consent_air_active_sessions": (
                 float(val) if isinstance((val := air_metrics.get("active_sessions", 0)), (int, float)) else 0.0
             ),
             "consent_air_time_triggered": (
-                float(val)
-                if isinstance((val := air_metrics.get("time_triggered_reminders", 0)), (int, float))
-                else 0.0
+                float(val) if isinstance((val := air_metrics.get("time_triggered_reminders", 0)), (int, float)) else 0.0
             ),
             "consent_air_message_triggered": (
                 float(val)
@@ -969,7 +963,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         metrics.update(air_metrics)
 
         # Service health
-        metrics["consent_service_uptime_seconds"] = self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
+        metrics["consent_service_uptime_seconds"] = (
+            self._calculate_uptime() if hasattr(self, "_calculate_uptime") else 0.0
+        )
 
         return metrics
 

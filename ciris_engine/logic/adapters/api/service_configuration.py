@@ -49,7 +49,11 @@ class ApiServiceConfiguration:
     # 7 Graph Services - Data persistence and tracking
     GRAPH_SERVICES = [
         ServiceMapping("memory_service", description="Graph-based memory storage and retrieval"),
-        ServiceMapping("consent_service", app_state_name="consent_manager", description="Consent, data retention, and DSAR automation"),
+        ServiceMapping(
+            "consent_service",
+            app_state_name="consent_manager",
+            description="Consent, data retention, and DSAR automation",
+        ),
         ServiceMapping("config_service", description="Configuration management"),
         ServiceMapping("telemetry_service", description="Telemetry data collection and storage"),
         ServiceMapping("audit_service", description="Audit trail and compliance logging"),

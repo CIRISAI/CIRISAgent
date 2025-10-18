@@ -165,7 +165,9 @@ class DSARDeletionStatus(BaseModel):
     ticket_id: str = Field(..., description="DSAR ticket ID")
     user_id: str = Field(..., description="User being deleted")
     decay_started: datetime = Field(..., description="When deletion began")
-    current_phase: str = Field(..., description="Current decay phase (identity_severed, patterns_anonymizing, complete)")
+    current_phase: str = Field(
+        ..., description="Current decay phase (identity_severed, patterns_anonymizing, complete)"
+    )
     completion_percentage: float = Field(..., ge=0.0, le=100.0, description="Progress toward completion")
     estimated_completion: datetime = Field(..., description="Estimated completion date (90 days from start)")
     milestones_completed: List[str] = Field(..., description="Completed decay milestones")

@@ -33,9 +33,7 @@ class ConsentMetricsCollector:
         """Initialize metrics collector."""
         pass
 
-    def collect_stream_distribution(
-        self, consent_cache: Dict[str, "ConsentStatus"], now: datetime
-    ) -> Dict[str, float]:
+    def collect_stream_distribution(self, consent_cache: Dict[str, "ConsentStatus"], now: datetime) -> Dict[str, float]:
         """
         Calculate stream distribution metrics from consent cache.
 

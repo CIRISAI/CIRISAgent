@@ -923,7 +923,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         avg_age_days = (total_age_seconds / consent_count / 86400.0) if consent_count > 0 else 0.0
 
         # Get partnership metrics from manager
-        partnership_requests, partnership_approvals, partnership_rejections = self._partnership_manager.get_request_counts()
+        partnership_requests, partnership_approvals, partnership_rejections = (
+            self._partnership_manager.get_request_counts()
+        )
         partnership_success_rate = 0.0
         if partnership_requests > 0:
             partnership_success_rate = (partnership_approvals / partnership_requests) * 100.0
@@ -971,9 +973,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 ),
                 # AIR (Artificial Interaction Reminder) metrics with safe type casting
                 "consent_air_total_interactions": (
-                    float(val)
-                    if isinstance((val := air_metrics.get("total_interactions", 0)), (int, float))
-                    else 0.0
+                    float(val) if isinstance((val := air_metrics.get("total_interactions", 0)), (int, float)) else 0.0
                 ),
                 "consent_air_reminders_sent": (
                     float(val) if isinstance((val := air_metrics.get("reminders_sent", 0)), (int, float)) else 0.0

@@ -400,7 +400,9 @@ class DSARAutomationService:
                                 channel_id_raw = attrs.get("channel_id", "unknown")
                                 channel_id_str = str(channel_id_raw) if channel_id_raw else "unknown"
                                 current_count = summary.get(channel_id_str, 0)
-                                summary[channel_id_str] = (int(current_count) if isinstance(current_count, (int, float)) else 0) + message_count
+                                summary[channel_id_str] = (
+                                    int(current_count) if isinstance(current_count, (int, float)) else 0
+                                ) + message_count
 
             summary["total"] = total_interactions
             logger.debug(f"Interaction summary for {user_id}: {total_interactions} total interactions")

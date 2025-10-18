@@ -98,7 +98,9 @@ async def submit_dsar(
 
     # Instant completion for automated requests
     is_automated = request.request_type in ["access", "export"]
-    estimated_completion = submitted_at if is_automated else submitted_at + timedelta(days=14 if not request.urgent else 3)
+    estimated_completion = (
+        submitted_at if is_automated else submitted_at + timedelta(days=14 if not request.urgent else 3)
+    )
 
     # Get services from app state
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
@@ -118,9 +120,7 @@ async def submit_dsar(
         time_service = TimeService()
         memory_bus = getattr(req.app.state, "memory_bus", None)
         dsar_automation = DSARAutomationService(
-            time_service=time_service,
-            consent_service=consent_manager,
-            memory_bus=memory_bus
+            time_service=time_service, consent_service=consent_manager, memory_bus=memory_bus
         )
 
     # Handle ACCESS requests with automation
@@ -128,12 +128,12 @@ async def submit_dsar(
     if request.request_type == "access" and request.user_identifier:
         try:
             import logging
+
             logger = logging.getLogger(__name__)
 
             # Use automation service for instant response
             access_package = await dsar_automation.handle_access_request(
-                user_id=request.user_identifier,
-                request_id=ticket_id
+                user_id=request.user_identifier, request_id=ticket_id
             )
             logger.info(f"DSAR access request {ticket_id} completed instantly via automation")
 
@@ -143,6 +143,7 @@ async def submit_dsar(
         except Exception as e:
             # Log but don't fail - fall back to manual processing
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not automate access request {ticket_id}: {e}")
 
@@ -151,6 +152,7 @@ async def submit_dsar(
     if request.request_type == "export" and request.user_identifier:
         try:
             import logging
+
             logger = logging.getLogger(__name__)
 
             # Default to JSON export (could be made configurable)
@@ -158,9 +160,7 @@ async def submit_dsar(
 
             # Use automation service for instant export
             export_package = await dsar_automation.handle_export_request(
-                user_id=request.user_identifier,
-                export_format=export_format,
-                request_id=ticket_id
+                user_id=request.user_identifier, export_format=export_format, request_id=ticket_id
             )
             logger.info(f"DSAR export request {ticket_id} completed instantly via automation ({export_format})")
 
@@ -170,6 +170,7 @@ async def submit_dsar(
         except Exception as e:
             # Log but don't fail - fall back to manual processing
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Could not automate export request {ticket_id}: {e}")
 
@@ -266,7 +267,11 @@ async def submit_dsar(
     response_data = DSARResponse(
         ticket_id=ticket_id,
         status=request_status,
-        estimated_completion=estimated_completion.strftime("%Y-%m-%d %H:%M:%S") if is_automated else estimated_completion.strftime("%Y-%m-%d"),
+        estimated_completion=(
+            estimated_completion.strftime("%Y-%m-%d %H:%M:%S")
+            if is_automated
+            else estimated_completion.strftime("%Y-%m-%d")
+        ),
         contact_email=request.email,
         message=message,
     )
@@ -477,17 +482,12 @@ async def get_deletion_status(
         time_service = TimeService()
         memory_bus = getattr(req.app.state, "memory_bus", None)
         dsar_automation = DSARAutomationService(
-            time_service=time_service,
-            consent_service=consent_manager,
-            memory_bus=memory_bus
+            time_service=time_service, consent_service=consent_manager, memory_bus=memory_bus
         )
 
     # Get deletion status from automation service
     try:
-        deletion_status = await dsar_automation.get_deletion_status(
-            user_id=user_identifier,
-            ticket_id=ticket_id
-        )
+        deletion_status = await dsar_automation.get_deletion_status(user_id=user_identifier, ticket_id=ticket_id)
 
         if not deletion_status:
             return StandardResponse(
@@ -516,6 +516,7 @@ async def get_deletion_status(
 
     except Exception as e:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Error retrieving deletion status for {ticket_id}: {e}")
 

@@ -97,6 +97,7 @@ def mock_partnership_manager():
 
     # Manual methods are async - need AsyncMock
     from unittest.mock import AsyncMock
+
     manager.manual_approve = AsyncMock(return_value=mock_outcome)
     manager.manual_reject = AsyncMock(return_value=mock_outcome)
     manager.manual_defer = AsyncMock(return_value=mock_outcome)
@@ -200,6 +201,7 @@ class TestPartnershipEndpoints:
 
         # Update mock outcome for rejection
         from unittest.mock import AsyncMock
+
         mock_outcome = PartnershipOutcome(
             user_id="discord_123456",
             task_id="TASK-001",
@@ -235,6 +237,7 @@ class TestPartnershipEndpoints:
 
         # Update mock outcome for deferral
         from unittest.mock import AsyncMock
+
         mock_outcome = PartnershipOutcome(
             user_id="discord_123456",
             task_id="TASK-001",
@@ -270,6 +273,7 @@ class TestPartnershipEndpoints:
 
         # Mock ValueError for non-existent partnership
         from unittest.mock import AsyncMock
+
         mock_partnership_manager.manual_approve = AsyncMock(side_effect=ValueError("No pending partnership request"))
 
         # Mock consent service and partnership manager

@@ -82,9 +82,7 @@ class ArtificialInteractionReminder:
             return datetime.now(timezone.utc)
         return self._time_service.now()
 
-    def track_interaction(
-        self, user_id: str, channel_id: str, channel_type: Optional[str] = None
-    ) -> Optional[str]:
+    def track_interaction(self, user_id: str, channel_id: str, channel_type: Optional[str] = None) -> Optional[str]:
         """
         Track user interaction and check if reminder needed.
 
@@ -193,9 +191,7 @@ class ArtificialInteractionReminder:
             return "cli"
         return "unknown"
 
-    def _generate_reminder(
-        self, session: InteractionSession, time_triggered: bool, message_triggered: bool
-    ) -> str:
+    def _generate_reminder(self, session: InteractionSession, time_triggered: bool, message_triggered: bool) -> str:
         """
         Generate parasocial attachment prevention reminder.
 

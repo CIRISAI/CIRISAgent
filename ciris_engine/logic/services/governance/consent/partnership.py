@@ -267,7 +267,9 @@ class PartnershipManager:
             )
 
         # Sort by age (oldest first) - cast to float for type safety
-        pending_list.sort(key=lambda x: float(x["age_hours"]) if isinstance(x["age_hours"], (int, float)) else 0.0, reverse=True)
+        pending_list.sort(
+            key=lambda x: float(x["age_hours"]) if isinstance(x["age_hours"], (int, float)) else 0.0, reverse=True
+        )
 
         return pending_list
 
@@ -292,7 +294,9 @@ class PartnershipManager:
         pending_list = self.list_pending_partnerships()
         avg_pending_hours = 0.0
         if pending_list:
-            total_hours = sum(float(p["age_hours"]) if isinstance(p["age_hours"], (int, float)) else 0.0 for p in pending_list)
+            total_hours = sum(
+                float(p["age_hours"]) if isinstance(p["age_hours"], (int, float)) else 0.0 for p in pending_list
+            )
             avg_pending_hours = total_hours / len(pending_list)
 
         return {
@@ -320,7 +324,9 @@ class PartnershipManager:
         """
         return (self._partnership_requests, self._partnership_approvals, self._partnership_rejections)
 
-    async def manual_approve(self, user_id: str, admin_username: str, notes: Optional[str] = None) -> PartnershipOutcome:
+    async def manual_approve(
+        self, user_id: str, admin_username: str, notes: Optional[str] = None
+    ) -> PartnershipOutcome:
         """
         Manually approve a partnership request (admin action).
 
@@ -652,7 +658,9 @@ class PartnershipManager:
                     self._partnership_history[user_id] = []
                 self._partnership_history[user_id].append(outcome)
 
-                logger.warning(f"Auto-rejecting partnership for {user_id}: pending for {age.days} days (max: {max_age_days})")
+                logger.warning(
+                    f"Auto-rejecting partnership for {user_id}: pending for {age.days} days (max: {max_age_days})"
+                )
 
         # Remove aged requests
         for user_id in aged_users:

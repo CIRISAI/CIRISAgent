@@ -117,7 +117,7 @@ class QARunner:
                 self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
-        sdk_modules = [QAModule.CONSENT, QAModule.BILLING, QAModule.BILLING_INTEGRATION]
+        sdk_modules = [QAModule.CONSENT, QAModule.DSAR, QAModule.PARTNERSHIP, QAModule.BILLING, QAModule.BILLING_INTEGRATION]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 
@@ -592,7 +592,7 @@ class QARunner:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
-        from .modules import BillingTests, ConsentTests
+        from .modules import BillingTests, ConsentTests, DSARTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
 
         all_passed = True
@@ -600,6 +600,8 @@ class QARunner:
         # Map modules to test classes
         module_map = {
             QAModule.CONSENT: ConsentTests,
+            QAModule.DSAR: DSARTests,
+            QAModule.PARTNERSHIP: PartnershipTests,
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
         }

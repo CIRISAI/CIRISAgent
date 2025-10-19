@@ -9,7 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, Union, cast
+from typing import Any, Dict, Generic, List, Optional, Protocol, TypeVar, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -17,6 +17,9 @@ from ciris_engine.schemas.types import JSONDict
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
 logger = logging.getLogger(__name__)
+
+# Generic type variable for service providers
+T_Service = TypeVar("T_Service")
 
 
 class Priority(Enum):
@@ -37,12 +40,12 @@ class SelectionStrategy(Enum):
 
 
 @dataclass
-class ServiceProvider:
+class ServiceProvider(Generic[T_Service]):
     """Represents a registered service provider with metadata"""
 
     name: str
     priority: Priority
-    instance: Any
+    instance: T_Service
     capabilities: List[str]
     circuit_breaker: Optional[CircuitBreaker] = None
     metadata: JSONDict = field(default_factory=dict)  # ServiceMetadata.model_dump() result
@@ -68,7 +71,9 @@ class ServiceRegistry:
 
     def __init__(self, required_services: Optional[List[ServiceType]] = None) -> None:
         # Only global services now - no handler-specific registration
-        self._services: Dict[ServiceType, List[ServiceProvider]] = {}
+        # Note: Using Any here because we store multiple service types in one dict
+        # Individual access methods will return properly typed results
+        self._services: Dict[ServiceType, List[ServiceProvider[Any]]] = {}
         self._shutdown_mode: bool = False  # Flag to skip health checks during shutdown
         self._circuit_breakers: Dict[str, CircuitBreaker] = {}
         self._rr_state: Dict[str, int] = {}
@@ -91,7 +96,7 @@ class ServiceRegistry:
     def register_service(
         self,
         service_type: ServiceType,
-        provider: Any,
+        provider: T_Service,
         priority: Priority = Priority.NORMAL,
         capabilities: Optional[List[str]] = None,
         circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
@@ -141,7 +146,7 @@ class ServiceRegistry:
         circuit_breaker = CircuitBreaker(f"{service_type}_{provider_name}", cb_config)
         self._circuit_breakers[provider_name] = circuit_breaker
 
-        sp = ServiceProvider(
+        sp: ServiceProvider[Any] = ServiceProvider(
             name=provider_name,
             priority=priority,
             instance=provider,
@@ -213,11 +218,11 @@ class ServiceRegistry:
         return None
 
     async def _get_service_from_providers(
-        self, providers: List[ServiceProvider], required_capabilities: Optional[List[str]] = None
+        self, providers: List[ServiceProvider[Any]], required_capabilities: Optional[List[str]] = None
     ) -> Optional[Any]:
         """Get service from a list of providers with health checking and priority groups."""
 
-        grouped: Dict[int, List[ServiceProvider]] = {}
+        grouped: Dict[int, List[ServiceProvider[Any]]] = {}
         for p in providers:
             grouped.setdefault(p.priority_group, []).append(p)
 
@@ -248,7 +253,7 @@ class ServiceRegistry:
 
     async def _validate_provider(
         self,
-        provider: ServiceProvider,
+        provider: ServiceProvider[Any],
         required_capabilities: Optional[List[str]] = None,
     ) -> Optional[Any]:
         """Validate provider availability and return instance if usable."""

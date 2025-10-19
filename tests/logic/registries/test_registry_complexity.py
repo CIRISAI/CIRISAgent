@@ -219,23 +219,20 @@ class TestLLMServiceMixingValidation:
 
         assert len(registry._services[ServiceType.LLM]) == 2
 
-    def test_prevent_multiple_real_services(self) -> None:
-        """Test that multiple real services cannot be registered (current behavior)"""
+    def test_allow_multiple_real_services_for_failover(self) -> None:
+        """Test that multiple real services CAN be registered for failover/fallback"""
         registry = ServiceRegistry()
 
-        # The current implementation prevents registering multiple LLM services of the same type
-        # Whether this is intentional or a bug, we preserve the behavior during refactoring
+        # Multiple real LLM services are allowed for failover scenarios
         real1 = RealLLMService("real1")
         real2 = RealLLMService("real2")
 
-        registry.register_service(ServiceType.LLM, real1)
+        provider1 = registry.register_service(ServiceType.LLM, real1, priority=Priority.NORMAL)
+        provider2 = registry.register_service(ServiceType.LLM, real2, priority=Priority.LOW)
 
-        # Second real service should be blocked
-        with pytest.raises(RuntimeError) as exc_info:
-            registry.register_service(ServiceType.LLM, real2)
-
-        assert "SECURITY VIOLATION" in str(exc_info.value)
-        assert len(registry._services[ServiceType.LLM]) == 1
+        # Both should be registered successfully
+        assert len(registry._services[ServiceType.LLM]) == 2
+        assert provider1 != provider2
 
     def test_mock_detection_via_metadata(self) -> None:
         """Test mock detection via metadata field"""

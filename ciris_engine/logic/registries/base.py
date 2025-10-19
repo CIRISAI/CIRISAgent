@@ -117,38 +117,89 @@ class ServiceRegistry:
         Returns:
             str: Unique provider name for later reference
         """
+        # Initialize service type list if needed
         if service_type not in self._services:
             self._services[service_type] = []
 
         provider_name = f"{provider.__class__.__name__}_{id(provider)}"
 
-        # CRITICAL SAFETY CHECK: Prevent mixing mock and real LLM services
+        # Validate LLM service mixing (extracted to helper)
         if service_type == ServiceType.LLM:
-            existing_providers = self._services[service_type]
-            is_mock = "Mock" in provider.__class__.__name__ or (metadata and metadata.get("provider") == "mock")
+            self._validate_llm_service_mixing(provider, provider_name, metadata)
 
-            for existing in existing_providers:
-                existing_is_mock = "Mock" in existing.name or (
-                    existing.metadata and existing.metadata.get("provider") == "mock"
-                )
+        # Create service provider
+        sp = self._create_service_provider(
+            service_type,
+            provider_name,
+            provider,
+            priority,
+            capabilities,
+            circuit_breaker_config,
+            metadata,
+            priority_group,
+            strategy,
+        )
 
-                if is_mock != existing_is_mock:
-                    error_msg = (
-                        f"SECURITY VIOLATION: Attempting to register {'mock' if is_mock else 'real'} "
-                        f"LLM service when {'mock' if existing_is_mock else 'real'} service already exists! "
-                        f"Existing: {existing.name}, New: {provider_name}"
-                    )
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
+        # Register and track
+        self._register_and_sort(service_type, sp, provider_name, priority, capabilities)
 
+        return provider_name
+
+    def _validate_llm_service_mixing(
+        self, provider: Any, provider_name: str, metadata: Optional[JSONDict]
+    ) -> None:
+        """Validate that mock and real LLM services are not mixed."""
+        existing_providers = self._services[ServiceType.LLM]
+        is_mock = self._is_mock_service(provider, metadata)
+
+        for existing in existing_providers:
+            existing_is_mock = self._is_mock_service_provider(existing)
+            if is_mock != existing_is_mock:
+                error_msg = self._build_llm_mixing_error(is_mock, existing_is_mock, existing.name, provider_name)
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+
+    def _is_mock_service(self, provider: Any, metadata: Optional[JSONDict]) -> bool:
+        """Check if a service is a mock service."""
+        return "Mock" in provider.__class__.__name__ or (metadata is not None and metadata.get("provider") == "mock")
+
+    def _is_mock_service_provider(self, provider: ServiceProvider[Any]) -> bool:
+        """Check if a service provider wraps a mock service."""
+        has_mock_in_name = "Mock" in provider.name
+        has_mock_metadata = provider.metadata.get("provider") == "mock" if provider.metadata else False
+        return has_mock_in_name or has_mock_metadata
+
+    def _build_llm_mixing_error(
+        self, is_mock: bool, existing_is_mock: bool, existing_name: str, provider_name: str
+    ) -> str:
+        """Build error message for LLM service mixing."""
+        return (
+            f"SECURITY VIOLATION: Attempting to register {'mock' if is_mock else 'real'} "
+            f"LLM service when {'mock' if existing_is_mock else 'real'} service already exists! "
+            f"Existing: {existing_name}, New: {provider_name}"
+        )
+
+    def _create_service_provider[T_Service](
+        self,
+        service_type: ServiceType,
+        name: str,
+        instance: T_Service,
+        priority: Priority,
+        capabilities: Optional[List[str]],
+        circuit_breaker_config: Optional[CircuitBreakerConfig],
+        metadata: Optional[JSONDict],
+        priority_group: int,
+        strategy: SelectionStrategy,
+    ) -> ServiceProvider[Any]:
+        """Create a service provider with circuit breaker."""
         cb_config = circuit_breaker_config or CircuitBreakerConfig()
-        circuit_breaker = CircuitBreaker(f"{service_type}_{provider_name}", cb_config)
-        self._circuit_breakers[provider_name] = circuit_breaker
+        circuit_breaker = CircuitBreaker(f"{service_type}_{name}", cb_config)
+        self._circuit_breakers[name] = circuit_breaker
 
-        sp: ServiceProvider[Any] = ServiceProvider(
-            name=provider_name,
+        return ServiceProvider(
+            name=name,
             priority=priority,
-            instance=provider,
+            instance=instance,
             capabilities=capabilities or [],
             circuit_breaker=circuit_breaker,
             metadata=metadata or {},
@@ -156,18 +207,23 @@ class ServiceRegistry:
             strategy=strategy,
         )
 
+    def _register_and_sort(
+        self,
+        service_type: ServiceType,
+        sp: ServiceProvider[Any],
+        provider_name: str,
+        priority: Priority,
+        capabilities: Optional[List[str]],
+    ) -> None:
+        """Register service provider and track metrics."""
         self._services[service_type].append(sp)
         self._services[service_type].sort(key=lambda x: x.priority.value)
-
-        # Track registration metric
         self._registrations_total += 1
 
         logger.info(
             f"Registered {service_type} service '{provider_name}' "
             f"with priority {priority.name} and capabilities {capabilities}"
         )
-
-        return provider_name
 
     # register_global removed - all services are global now, use register_service()
 

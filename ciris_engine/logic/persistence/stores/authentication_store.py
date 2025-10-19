@@ -48,13 +48,17 @@ def _row_to_wa(row_dict: Dict[str, Any]) -> WACertificate:
     custom_perms_raw = row_dict.get("custom_permissions_json")
     custom_permissions_json = None
     if custom_perms_raw:
-        custom_permissions_json = custom_perms_raw if isinstance(custom_perms_raw, str) else json.dumps(custom_perms_raw)
+        custom_permissions_json = (
+            custom_perms_raw if isinstance(custom_perms_raw, str) else json.dumps(custom_perms_raw)
+        )
 
     # Handle adapter_metadata_json - same issue with PostgreSQL JSONB
     adapter_metadata_raw = row_dict.get("adapter_metadata_json")
     adapter_metadata_json = None
     if adapter_metadata_raw:
-        adapter_metadata_json = adapter_metadata_raw if isinstance(adapter_metadata_raw, str) else json.dumps(adapter_metadata_raw)
+        adapter_metadata_json = (
+            adapter_metadata_raw if isinstance(adapter_metadata_raw, str) else json.dumps(adapter_metadata_raw)
+        )
 
     wa_dict = {
         "wa_id": row_dict["wa_id"],
@@ -119,11 +123,13 @@ def init_auth_database(db_path: str) -> None:
 
         if adapter.is_postgresql():
             # PostgreSQL: Query information_schema
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'wa_cert'
-            """)
+            """
+            )
             existing_columns = {row[0] if isinstance(row, tuple) else row["column_name"] for row in cursor.fetchall()}
         else:
             # SQLite: Use PRAGMA
@@ -225,9 +231,11 @@ def get_wa_by_id(wa_id: str, db_path: str) -> Optional[WACertificate]:
 
         if row:
             # Convert row to dict
-            row_dict = dict(row) if hasattr(row, 'keys') else {
-                column[0]: row[i] for i, column in enumerate(cursor.description)
-            }
+            row_dict = (
+                dict(row)
+                if hasattr(row, "keys")
+                else {column[0]: row[i] for i, column in enumerate(cursor.description)}
+            )
             return _row_to_wa(row_dict)
         return None
 
@@ -249,9 +257,11 @@ def get_wa_by_kid(jwt_kid: str, db_path: str) -> Optional[WACertificate]:
         cursor.close()
 
         if row:
-            row_dict = dict(row) if hasattr(row, 'keys') else {
-                column[0]: row[i] for i, column in enumerate(cursor.description)
-            }
+            row_dict = (
+                dict(row)
+                if hasattr(row, "keys")
+                else {column[0]: row[i] for i, column in enumerate(cursor.description)}
+            )
             return _row_to_wa(row_dict)
         return None
 
@@ -276,18 +286,22 @@ def get_wa_by_oauth(provider: str, external_id: str, db_path: str) -> Optional[W
         row = cursor.fetchone()
 
         if row:
-            row_dict = dict(row) if hasattr(row, 'keys') else {
-                column[0]: row[i] for i, column in enumerate(cursor.description)
-            }
+            row_dict = (
+                dict(row)
+                if hasattr(row, "keys")
+                else {column[0]: row[i] for i, column in enumerate(cursor.description)}
+            )
             cursor.close()
             return _row_to_wa(row_dict)
 
         # Fallback: search linked identities stored in JSON
         cursor.execute("SELECT * FROM wa_cert WHERE oauth_links_json IS NOT NULL AND active = 1")
         for link_row in cursor.fetchall():
-            link_row_dict = dict(link_row) if hasattr(link_row, 'keys') else {
-                column[0]: link_row[i] for i, column in enumerate(cursor.description)
-            }
+            link_row_dict = (
+                dict(link_row)
+                if hasattr(link_row, "keys")
+                else {column[0]: link_row[i] for i, column in enumerate(cursor.description)}
+            )
             wa = _row_to_wa(link_row_dict)
             for link in wa.oauth_links:
                 if link.provider == provider and link.external_id == external_id:
@@ -315,9 +329,11 @@ def get_wa_by_adapter(adapter_id: str, db_path: str) -> Optional[WACertificate]:
         cursor.close()
 
         if row:
-            row_dict = dict(row) if hasattr(row, 'keys') else {
-                column[0]: row[i] for i, column in enumerate(cursor.description)
-            }
+            row_dict = (
+                dict(row)
+                if hasattr(row, "keys")
+                else {column[0]: row[i] for i, column in enumerate(cursor.description)}
+            )
             return _row_to_wa(row_dict)
         return None
 
@@ -377,9 +393,11 @@ def list_wa_certificates(active_only: bool, db_path: str) -> List[WACertificate]
 
         result = []
         for row in rows:
-            row_dict = dict(row) if hasattr(row, 'keys') else {
-                column[0]: row[i] for i, column in enumerate(cursor.description)
-            }
+            row_dict = (
+                dict(row)
+                if hasattr(row, "keys")
+                else {column[0]: row[i] for i, column in enumerate(cursor.description)}
+            )
             result.append(_row_to_wa(row_dict))
 
         return result
@@ -394,12 +412,7 @@ def get_certificate_counts(db_path: str) -> Dict[str, int]:
     Returns:
         Dictionary with certificate counts
     """
-    counts = {
-        "total": 0,
-        "active": 0,
-        "revoked": 0,
-        "by_role": {}
-    }
+    counts = {"total": 0, "active": 0, "revoked": 0, "by_role": {}}
 
     try:
         with get_db_connection(db_path=db_path) as conn:

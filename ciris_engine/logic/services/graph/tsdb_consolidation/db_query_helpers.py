@@ -54,6 +54,7 @@ def query_summaries_in_period(
         raise ValueError(ERR_PERIOD_ORDER)
 
     from ciris_engine.logic.persistence.db.dialect import get_adapter
+
     adapter = get_adapter()
 
     # Query summaries with specified consolidation level
@@ -162,6 +163,7 @@ def query_expired_summaries(cursor: Cursor, cutoff_date: datetime) -> List[Tuple
         raise ValueError("cutoff_date must be timezone-aware")
 
     from ciris_engine.logic.persistence.db.dialect import get_adapter
+
     adapter = get_adapter()
 
     # PostgreSQL: Use JSONB operator, SQLite: Use json_extract()
@@ -211,13 +213,11 @@ def update_summary_consolidation_level(cursor: Cursor, node_id: str, new_level: 
         raise ValueError("new_level cannot be empty")
 
     from ciris_engine.logic.persistence.db.dialect import get_adapter
+
     adapter = get_adapter()
 
     # Get current attributes
-    cursor.execute(
-        "SELECT attributes_json FROM graph_nodes WHERE node_id = ?",
-        (node_id,)
-    )
+    cursor.execute("SELECT attributes_json FROM graph_nodes WHERE node_id = ?", (node_id,))
     row = cursor.fetchone()
 
     if not row:
@@ -271,6 +271,7 @@ def count_nodes_in_period(cursor: Cursor, node_type: str, period_start: datetime
         raise ValueError(ERR_PERIOD_ORDER)
 
     from ciris_engine.logic.persistence.db.dialect import get_adapter
+
     adapter = get_adapter()
 
     # PostgreSQL: Use direct TIMESTAMP comparison

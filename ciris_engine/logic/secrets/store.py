@@ -185,10 +185,21 @@ class SecretsStore:
                 query = builder.insert(
                     table="secrets",
                     columns=[
-                        "secret_uuid", "encrypted_value", "encryption_key_ref", "salt", "nonce",
-                        "description", "sensitivity_level", "detected_pattern", "context_hint",
-                        "created_at", "last_accessed", "access_count", "source_message_id",
-                        "auto_decapsulate_for_actions", "manual_access_only"
+                        "secret_uuid",
+                        "encrypted_value",
+                        "encryption_key_ref",
+                        "salt",
+                        "nonce",
+                        "description",
+                        "sensitivity_level",
+                        "detected_pattern",
+                        "context_hint",
+                        "created_at",
+                        "last_accessed",
+                        "access_count",
+                        "source_message_id",
+                        "auto_decapsulate_for_actions",
+                        "manual_access_only",
                     ],
                     conflict_resolution=ConflictResolution.REPLACE,
                     conflict_columns=["secret_uuid"],
@@ -421,9 +432,17 @@ class SecretsStore:
                     context_hint=context_hint,
                     sensitivity=sensitivity,
                     detected_pattern=detected_pattern,
-                    auto_decapsulate_actions=auto_decapsulate_actions_str.split(",") if auto_decapsulate_actions_str else [],
-                    created_at=datetime.fromisoformat(created_at_str) if isinstance(created_at_str, str) else created_at_str,
-                    last_accessed=datetime.fromisoformat(last_accessed_str) if last_accessed_str and isinstance(last_accessed_str, str) else last_accessed_str,
+                    auto_decapsulate_actions=(
+                        auto_decapsulate_actions_str.split(",") if auto_decapsulate_actions_str else []
+                    ),
+                    created_at=(
+                        datetime.fromisoformat(created_at_str) if isinstance(created_at_str, str) else created_at_str
+                    ),
+                    last_accessed=(
+                        datetime.fromisoformat(last_accessed_str)
+                        if last_accessed_str and isinstance(last_accessed_str, str)
+                        else last_accessed_str
+                    ),
                 )
                 secrets.append(secret_ref)
 

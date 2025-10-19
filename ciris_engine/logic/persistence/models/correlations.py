@@ -686,7 +686,9 @@ def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
     # Parse response_data - handle PostgreSQL JSONB vs SQLite TEXT
     response_data_raw = row["response_data"]
     if response_data_raw:
-        response_data_parsed = response_data_raw if isinstance(response_data_raw, dict) else json.loads(response_data_raw)
+        response_data_parsed = (
+            response_data_raw if isinstance(response_data_raw, dict) else json.loads(response_data_raw)
+        )
     else:
         response_data_parsed = None
 

@@ -402,7 +402,11 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         # Log which database type we're initializing
         if adapter.is_postgresql():
             # Mask password in connection string for logging
-            safe_url = adapter.db_url.split('@')[0].rsplit(':', 1)[0] + ':***@' + adapter.db_url.split('@')[1] if '@' in adapter.db_url else adapter.db_url
+            safe_url = (
+                adapter.db_url.split("@")[0].rsplit(":", 1)[0] + ":***@" + adapter.db_url.split("@")[1]
+                if "@" in adapter.db_url
+                else adapter.db_url
+            )
             logger.info(f"Initializing PostgreSQL database: {safe_url}")
             tables_module = postgres_tables
         else:

@@ -128,10 +128,7 @@ class TestInsertNodeIfNotExists:
             attrs = json.loads(row["attributes_json"])
             assert attrs["version"] == 1  # Original value
 
-    @pytest.mark.skipif(
-        not Path("/tmp/.postgres_available").exists(),
-        reason="PostgreSQL not available"
-    )
+    @pytest.mark.skipif(not Path("/tmp/.postgres_available").exists(), reason="PostgreSQL not available")
     def test_insert_new_node_postgresql(self, postgres_db):
         """Test inserting a new node in PostgreSQL."""
         result = insert_node_if_not_exists(
@@ -156,7 +153,11 @@ class TestInsertNodeIfNotExists:
 
             assert row is not None
             # PostgreSQL returns JSONB as dict
-            attrs = row["attributes_json"] if isinstance(row["attributes_json"], dict) else json.loads(row["attributes_json"])
+            attrs = (
+                row["attributes_json"]
+                if isinstance(row["attributes_json"], dict)
+                else json.loads(row["attributes_json"])
+            )
             assert attrs["pg_key"] == "pg_value"
 
 
@@ -179,9 +180,7 @@ class TestBatchInsertNodesIfNotExist:
         # Verify all nodes were created
         with get_db_connection(db_path=temp_db) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM graph_nodes WHERE node_id LIKE 'batch_node_%'"
-            )
+            cursor.execute("SELECT COUNT(*) as count FROM graph_nodes WHERE node_id LIKE 'batch_node_%'")
             assert cursor.fetchone()["count"] == 3
 
     def test_batch_insert_with_duplicates_sqlite(self, temp_db):
@@ -207,9 +206,7 @@ class TestBatchInsertNodesIfNotExist:
         # Verify total count is 3 (not 4)
         with get_db_connection(db_path=temp_db) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM graph_nodes WHERE node_id LIKE 'dup_node_%'"
-            )
+            cursor.execute("SELECT COUNT(*) as count FROM graph_nodes WHERE node_id LIKE 'dup_node_%'")
             assert cursor.fetchone()["count"] == 3
 
 
@@ -219,12 +216,8 @@ class TestInsertEdgeIfNotExists:
     def test_insert_new_edge_sqlite(self, temp_db):
         """Test inserting a new edge in SQLite."""
         # First create nodes
-        insert_node_if_not_exists(
-            node_id="source_1", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
-        insert_node_if_not_exists(
-            node_id="target_1", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
+        insert_node_if_not_exists(node_id="source_1", scope="local", node_type="test", attributes={}, db_path=temp_db)
+        insert_node_if_not_exists(node_id="target_1", scope="local", node_type="test", attributes={}, db_path=temp_db)
 
         # Insert edge
         result = insert_edge_if_not_exists(
@@ -259,12 +252,8 @@ class TestInsertEdgeIfNotExists:
     def test_insert_duplicate_edge_ignored_sqlite(self, temp_db):
         """Test inserting duplicate edge is ignored in SQLite."""
         # Create nodes
-        insert_node_if_not_exists(
-            node_id="source_2", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
-        insert_node_if_not_exists(
-            node_id="target_2", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
+        insert_node_if_not_exists(node_id="source_2", scope="local", node_type="test", attributes={}, db_path=temp_db)
+        insert_node_if_not_exists(node_id="target_2", scope="local", node_type="test", attributes={}, db_path=temp_db)
 
         # Insert edge first time
         result1 = insert_edge_if_not_exists(
@@ -337,20 +326,14 @@ class TestBatchInsertEdgesIfNotExist:
         # Verify all edges were created
         with get_db_connection(db_path=temp_db) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM graph_edges WHERE edge_id LIKE 'batch_edge_%'"
-            )
+            cursor.execute("SELECT COUNT(*) as count FROM graph_edges WHERE edge_id LIKE 'batch_edge_%'")
             assert cursor.fetchone()["count"] == 3
 
     def test_batch_insert_edges_with_duplicates_sqlite(self, temp_db):
         """Test batch insert edges with duplicates in SQLite."""
         # Create nodes
-        insert_node_if_not_exists(
-            node_id="dup_source", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
-        insert_node_if_not_exists(
-            node_id="dup_target", scope="local", node_type="test", attributes={}, db_path=temp_db
-        )
+        insert_node_if_not_exists(node_id="dup_source", scope="local", node_type="test", attributes={}, db_path=temp_db)
+        insert_node_if_not_exists(node_id="dup_target", scope="local", node_type="test", attributes={}, db_path=temp_db)
 
         now = datetime.now(timezone.utc).isoformat()
 
@@ -372,9 +355,7 @@ class TestBatchInsertEdgesIfNotExist:
         # Verify total count is 2 (not 3)
         with get_db_connection(db_path=temp_db) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM graph_edges WHERE edge_id LIKE 'dup_edge_%'"
-            )
+            cursor.execute("SELECT COUNT(*) as count FROM graph_edges WHERE edge_id LIKE 'dup_edge_%'")
             assert cursor.fetchone()["count"] == 2
 
 

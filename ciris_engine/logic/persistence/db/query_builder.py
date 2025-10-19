@@ -191,7 +191,16 @@ class QueryBuilder:
         """
         query = self.insert(
             table="graph_nodes",
-            columns=["node_id", "scope", "node_type", "attributes_json", "version", "updated_by", "updated_at", "created_at"],
+            columns=[
+                "node_id",
+                "scope",
+                "node_type",
+                "attributes_json",
+                "version",
+                "updated_by",
+                "updated_at",
+                "created_at",
+            ],
             conflict_resolution=ConflictResolution.IGNORE,
             conflict_columns=["node_id", "scope"],  # PRIMARY KEY
         )
@@ -207,7 +216,16 @@ class QueryBuilder:
         """
         query = self.insert(
             table="graph_edges",
-            columns=["edge_id", "source_node_id", "target_node_id", "scope", "relationship", "weight", "attributes_json", "created_at"],
+            columns=[
+                "edge_id",
+                "source_node_id",
+                "target_node_id",
+                "scope",
+                "relationship",
+                "weight",
+                "attributes_json",
+                "created_at",
+            ],
             conflict_resolution=ConflictResolution.IGNORE,
             conflict_columns=["edge_id"],  # PRIMARY KEY
         )

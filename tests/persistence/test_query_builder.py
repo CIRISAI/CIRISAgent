@@ -7,12 +7,7 @@ Tests dialect-aware SQL generation for SQLite and PostgreSQL.
 import pytest
 
 from ciris_engine.logic.persistence.db.dialect import Dialect, DialectAdapter
-from ciris_engine.logic.persistence.db.query_builder import (
-    ConflictResolution,
-    InsertQuery,
-    QueryBuilder,
-    SelectQuery,
-)
+from ciris_engine.logic.persistence.db.query_builder import ConflictResolution, InsertQuery, QueryBuilder, SelectQuery
 
 
 class TestInsertQuery:
@@ -233,7 +228,9 @@ class TestQueryBuilder:
         sql = builder.insert_ignore_edge()
 
         assert "INSERT OR IGNORE INTO graph_edges" in sql
-        assert "(edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at)" in sql
+        assert (
+            "(edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at)" in sql
+        )
         assert "VALUES (?, ?, ?, ?, ?, ?, ?, ?)" in sql
 
     def test_insert_ignore_edge_postgresql(self):
@@ -244,7 +241,9 @@ class TestQueryBuilder:
 
         assert "INSERT INTO graph_edges" in sql
         assert "ON CONFLICT (edge_id) DO NOTHING" in sql
-        assert "(edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at)" in sql
+        assert (
+            "(edge_id, source_node_id, target_node_id, scope, relationship, weight, attributes_json, created_at)" in sql
+        )
 
     def test_builder_uses_adapter_dialect(self):
         """Test that builder respects adapter dialect."""

@@ -117,7 +117,16 @@ def batch_insert_nodes_if_not_exist(
 
     # Convert dict attributes to JSON strings
     nodes_with_json = [
-        (node_id, scope, node_type, json.dumps(attrs) if isinstance(attrs, dict) else attrs, version, updated_by, updated_at, created_at)
+        (
+            node_id,
+            scope,
+            node_type,
+            json.dumps(attrs) if isinstance(attrs, dict) else attrs,
+            version,
+            updated_by,
+            updated_at,
+            created_at,
+        )
         for node_id, scope, node_type, attrs, version, updated_by, updated_at, created_at in nodes
     ]
 
@@ -263,11 +272,20 @@ def upsert_node(
     """
     adapter = get_adapter()
     builder = adapter.get_query_builder()
-    
+
     # Build UPSERT query
     query = builder.insert(
         table="graph_nodes",
-        columns=["node_id", "scope", "node_type", "attributes_json", "version", "updated_by", "updated_at", "created_at"],
+        columns=[
+            "node_id",
+            "scope",
+            "node_type",
+            "attributes_json",
+            "version",
+            "updated_by",
+            "updated_at",
+            "created_at",
+        ],
         conflict_resolution=ConflictResolution.REPLACE,
         conflict_columns=["node_id", "scope"],
     )

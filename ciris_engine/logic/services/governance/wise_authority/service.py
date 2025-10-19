@@ -71,13 +71,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
         logger.info(f"Consolidated WA Service initialized with DB: {self.db_path}")
 
+    def _get_placeholder(self) -> str:
+        """Get the appropriate parameter placeholder for the current dialect."""
+        return get_adapter().placeholder()
+
     def _get_context_json_like_clause(self) -> str:
         """Get the appropriate LIKE clause for context_json based on dialect."""
         adapter = get_adapter()
+        placeholder = self._get_placeholder()
         if adapter.is_postgresql():
-            return "context_json::text LIKE ?"
+            return f"context_json::text LIKE {placeholder}"
         else:
-            return "context_json LIKE ?"
+            return f"context_json LIKE {placeholder}"
 
     async def _on_start(self) -> None:
         """Custom startup logic for WA service."""
@@ -266,10 +271,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             cursor = conn.cursor()
 
             # Get existing task to preserve context
+            placeholder = self._get_placeholder()
             cursor.execute(
-                """
+                f"""
                 SELECT context_json, priority FROM tasks
-                WHERE task_id = ?
+                WHERE task_id = {placeholder}
             """,
                 (deferral.task_id,),
             )
@@ -300,12 +306,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             # Update task status to deferred
             cursor.execute(
-                """
+                f"""
                 UPDATE tasks
                 SET status = 'deferred',
-                    context_json = ?,
-                    updated_at = ?
-                WHERE task_id = ?
+                    context_json = {placeholder},
+                    updated_at = {placeholder}
+                WHERE task_id = {placeholder}
             """,
                 (json.dumps(existing_context), self._now().isoformat(), deferral.task_id),
             )
@@ -451,10 +457,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     return False
 
             # Get existing context
+            placeholder = self._get_placeholder()
             cursor.execute(
-                """
+                f"""
                 SELECT context_json FROM tasks
-                WHERE task_id = ? AND status = 'deferred'
+                WHERE task_id = {placeholder} AND status = 'deferred'
             """,
                 (task_id,),
             )
@@ -490,12 +497,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             # Update task status to pending so it will be picked up
             cursor.execute(
-                """
+                f"""
                 UPDATE tasks
                 SET status = 'pending',
-                    context_json = ?,
-                    updated_at = ?
-                WHERE task_id = ?
+                    context_json = {placeholder},
+                    updated_at = {placeholder}
+                WHERE task_id = {placeholder}
             """,
                 (json.dumps(context), self._now().isoformat(), task_id),
             )

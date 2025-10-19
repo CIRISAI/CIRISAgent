@@ -55,7 +55,7 @@ class QueryBuilder:
         if adapter.is_postgresql():
             # PostgreSQL: Use JSONB operators
             # Convert $.created_by to ->> 'created_by'
-            field = json_path.replace('$.', '')
+            field = json_path.replace("$.", "")
             return f"attributes_json->>'{field}'"
         else:
             # SQLite: Use json_extract function
@@ -190,7 +190,7 @@ class QueryBuilder:
 
         # 1. Direct creator: created_by field IN (...)
         placeholders_created_by = ",".join("?" * len(user_filter_ids))
-        created_by_clause = QueryBuilder._get_json_extract_clause('$.created_by')
+        created_by_clause = QueryBuilder._get_json_extract_clause("$.created_by")
         or_conditions.append(f"{created_by_clause} IN ({placeholders_created_by})")
         params.extend(user_filter_ids)
 

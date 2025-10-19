@@ -68,7 +68,7 @@ class ServiceInitializer:
         self.audit_service: Optional[AuditService] = None
         # Removed audit_sink_manager - audit is consolidated
         self.adaptive_filter_service: Optional[AdaptiveFilterService] = None
-        self.core_tool_service: Optional[Any] = None  # SecretsToolService
+        self.secrets_tool_service: Optional[Any] = None  # SecretsToolService
         self.maintenance_service: Optional[DatabaseMaintenanceService] = None
         self.incident_management_service: Optional[Any] = None  # Will be IncidentManagementService
         self.tsdb_consolidation_service: Optional[Any] = None  # Will be TSDBConsolidationService
@@ -277,10 +277,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Create and register SecretsToolService
         from ciris_engine.logic.services.tools import SecretsToolService
 
-        self.core_tool_service = SecretsToolService(
+        self.secrets_tool_service = SecretsToolService(
             secrets_service=self.secrets_service, time_service=self.time_service
         )
-        await self.core_tool_service.start()
+        await self.secrets_tool_service.start()
         self._services_started_count += 1
         logger.info("SecretsToolService created and started")
 
@@ -1062,10 +1062,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Transaction orchestrator is single-instance - NO ServiceRegistry needed
 
         # Register SecretsToolService for core secrets tools
-        if self.core_tool_service:
+        if self.secrets_tool_service:
             self.service_registry.register_service(
                 service_type=ServiceType.TOOL,
-                provider=self.core_tool_service,
+                provider=self.secrets_tool_service,
                 priority=Priority.HIGH,
                 capabilities=[
                     "execute_tool",

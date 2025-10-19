@@ -203,8 +203,8 @@ class CIRISRuntime:
         return self.service_initializer.config_service if self.service_initializer else None
 
     @property
-    def core_tool_service(self) -> Optional[ToolServiceProtocol]:
-        return self.service_initializer.core_tool_service if self.service_initializer else None
+    def secrets_tool_service(self) -> Optional[ToolServiceProtocol]:
+        return self.service_initializer.secrets_tool_service if self.service_initializer else None
 
     @property
     def time_service(self) -> Optional[TimeServiceProtocol]:

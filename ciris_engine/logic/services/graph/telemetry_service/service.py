@@ -561,7 +561,7 @@ class TelemetryAggregator:
             "runtime_control": "runtime_control_service",
             "task_scheduler": "task_scheduler",
             # Tool services
-            "secrets_tool": "core_tool_service",
+            "secrets_tool": "secrets_tool_service",
         }
 
         attr_name = runtime_attrs.get(service_name)

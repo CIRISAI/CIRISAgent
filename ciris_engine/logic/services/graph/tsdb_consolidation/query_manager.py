@@ -59,6 +59,7 @@ class QueryManager:
 
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             adapter = get_adapter()
 
             # Direct database query for efficiency
@@ -172,6 +173,7 @@ class QueryManager:
 
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             adapter = get_adapter()
 
             with get_db_connection(db_path=self._db_path) as conn:
@@ -278,6 +280,7 @@ class QueryManager:
 
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             adapter = get_adapter()
 
             with get_db_connection(db_path=self._db_path) as conn:
@@ -422,6 +425,7 @@ class QueryManager:
 
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             adapter = get_adapter()
 
             with get_db_connection(db_path=self._db_path) as conn:
@@ -564,6 +568,7 @@ class QueryManager:
 
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             adapter = get_adapter()
 
             # Query the database directly to check for ANY tsdb_summary nodes for this period

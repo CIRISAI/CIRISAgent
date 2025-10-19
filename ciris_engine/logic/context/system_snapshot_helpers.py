@@ -704,7 +704,7 @@ async def _collect_service_health(
             "runtime_control_service",
             "task_scheduler",
             # Tool Services (1)
-            "core_tool_service",  # secrets tool
+            "secrets_tool_service",  # secrets tool
         ]
 
         for service_name in core_services:

@@ -1748,7 +1748,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 ("runtime_control_service", "runtime", "RuntimeControlService"),
                 ("task_scheduler", "runtime", "TaskSchedulerService"),
                 # Tool Services (1)
-                ("core_tool_service", "tool", "SecretsToolService"),
+                ("secrets_tool_service", "tool", "SecretsToolService"),
             ]
 
             # Check each direct service

@@ -836,7 +836,9 @@ class EdgeManager:
                                     edge_id=edge_id_back,
                                     source_node_id=next_summary_id,
                                     target_node_id=summary.id,
-                                    scope=summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope),
+                                    scope=(
+                                        summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope)
+                                    ),
                                     relationship="TEMPORAL_PREV",
                                     weight=1.0,
                                     attributes={"direction": "backward", "context": "Previous period in sequence"},

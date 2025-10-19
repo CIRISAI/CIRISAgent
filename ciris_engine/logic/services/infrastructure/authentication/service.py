@@ -1442,9 +1442,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             counts = authentication_store.get_certificate_counts(self.db_path)
             cert_count = counts.get("active", 0)
             revoked_count = counts.get("revoked", 0)
-            role_counts = counts.get("by_role", {
-                "OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0
-            })
+            role_counts = counts.get("by_role", {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0})
         except Exception as e:
             logger.warning(
                 f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"

@@ -341,7 +341,7 @@ def _get_direct_service_references(runtime: Any) -> List[Any]:
         getattr(runtime.service_initializer, "runtime_control_service", None),
         getattr(runtime.service_initializer, "self_observation_service", None),
         getattr(runtime.service_initializer, "visibility_service", None),
-        getattr(runtime.service_initializer, "core_tool_service", None),
+        getattr(runtime.service_initializer, "secrets_tool_service", None),
         getattr(runtime.service_initializer, "wa_auth_system", None),
         getattr(runtime.service_initializer, "initialization_service", None),
         getattr(runtime.service_initializer, "shutdown_service", None),

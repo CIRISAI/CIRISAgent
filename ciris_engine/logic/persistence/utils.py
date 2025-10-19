@@ -74,6 +74,7 @@ def map_row_to_task(row: Any) -> Task:
     # Handle PostgreSQL TIMESTAMP vs SQLite TEXT for datetime columns
     # PostgreSQL TIMESTAMP returns datetime objects, SQLite TEXT returns ISO strings
     from datetime import datetime, timezone
+
     for dt_field in ["created_at", "updated_at", "signed_at"]:
         if dt_field in row_dict and row_dict[dt_field]:
             if isinstance(row_dict[dt_field], datetime):
@@ -166,6 +167,7 @@ def map_row_to_thought(row: Any) -> Thought:
     # Handle PostgreSQL TIMESTAMP vs SQLite TEXT for datetime columns
     # PostgreSQL TIMESTAMP returns datetime objects, SQLite TEXT returns ISO strings
     from datetime import datetime, timezone
+
     for dt_field in ["created_at", "updated_at"]:
         if dt_field in row_dict and row_dict[dt_field]:
             if isinstance(row_dict[dt_field], datetime):

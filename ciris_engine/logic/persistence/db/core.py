@@ -97,7 +97,7 @@ class PostgreSQLCursorWrapper:
         """Fetch all rows."""
         return self._cursor.fetchall()
 
-    def fetchmany(self, size: int = None) -> Any:
+    def fetchmany(self, size: Optional[int] = None) -> Any:
         """Fetch many rows."""
         if size is None:
             return self._cursor.fetchmany()

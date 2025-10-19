@@ -4,7 +4,12 @@ This module contains the persistence components of the CIRIS engine, providing r
 
 ## Overview
 
-The persistence layer is built on SQLite and provides several key subsystems:
+The persistence layer supports both **SQLite** (development/small deployments) and **PostgreSQL** (production/scale) through a lightweight dialect adapter. The database backend is determined by the `CIRIS_DB_URL` environment variable:
+
+- **SQLite**: `sqlite:///path/to/db.db` or just `path/to/db.db` (default)
+- **PostgreSQL**: `postgresql://user:password@host:port/dbname`
+
+The persistence layer provides several key subsystems:
 
 ### 1. Graph Memory System
 The graph memory system stores knowledge as nodes and edges with different scopes:
@@ -100,6 +105,46 @@ Different memory scopes provide appropriate access control:
 - LOCAL scope for transient agent data
 - IDENTITY scope for core agent configuration (WA-protected)
 - Shared scopes for collaborative knowledge
+
+## Database Dialect Support
+
+The persistence layer uses a **DialectAdapter** to support both SQLite and PostgreSQL with minimal code changes:
+
+### Dialect Adapter Features
+- **Automatic Detection**: Database type determined from `CIRIS_DB_URL` connection string
+- **SQL Translation**: Converts SQLite-specific syntax to PostgreSQL equivalents:
+  - `INSERT OR REPLACE` → `INSERT ... ON CONFLICT ... DO UPDATE`
+  - `INSERT OR IGNORE` → `INSERT ... ON CONFLICT DO NOTHING`
+  - `json_extract()` → JSONB operators (`->`, `->>`)
+  - `?` placeholders → `%s` placeholders
+- **Backward Compatible**: Defaults to SQLite for existing deployments
+- **Zero Runtime Overhead**: Translation happens at query build time
+
+### Using PostgreSQL
+
+To use PostgreSQL instead of SQLite, set the `CIRIS_DB_URL` environment variable:
+
+```bash
+export CIRIS_DB_URL='postgresql://user:password@localhost:5432/ciris_db'
+python main.py --adapter api
+```
+
+The dialect adapter automatically:
+1. Detects PostgreSQL from the connection string
+2. Initializes the database schema if needed
+3. Translates all SQL queries to PostgreSQL syntax
+4. Uses psycopg2 connection pooling
+
+### Testing Both Dialects
+
+```bash
+# Test with SQLite (default)
+python -m tools.qa_runner
+
+# Test with PostgreSQL
+export CIRIS_DB_URL='postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db'
+python -m tools.qa_runner
+```
 
 ## Database Migrations
 

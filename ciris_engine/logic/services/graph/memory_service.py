@@ -212,27 +212,33 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         Uses format_agent_identity() to convert raw graph node data into
         human-readable text with shutdown history.
         """
+        import asyncio
+
         from ciris_engine.logic.formatters.identity import format_agent_identity
 
-        with get_db_connection(db_path=self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
-            )
-            rows = cursor.fetchall()
+        def _query_identity() -> str:
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
+                )
+                rows = cursor.fetchall()
 
-            # If we have identity nodes, format the first one
-            # (typically there's only one identity node per agent)
-            if rows:
-                # Handle PostgreSQL JSONB vs SQLite TEXT
-                attrs_json = rows[0]["attributes_json"]
-                if attrs_json:
-                    attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
-                else:
-                    attrs = {}
-                return format_agent_identity(attrs)
+                # If we have identity nodes, format the first one
+                # (typically there's only one identity node per agent)
+                if rows:
+                    # Handle PostgreSQL JSONB vs SQLite TEXT
+                    attrs_json = rows[0]["attributes_json"]
+                    if attrs_json:
+                        attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
+                    else:
+                        attrs = {}
+                    return format_agent_identity(attrs)
 
-            return ""
+                return ""
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _query_identity)
 
     async def _process_secrets_for_memorize(self, node: GraphNode) -> GraphNode:
         """Process secrets in node attributes during memorization."""
@@ -815,19 +821,25 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""
+        import asyncio
+
         # Check if service is started
         if not hasattr(self, "_started") or not self._started:
             return False
 
-        try:
-            # Try a simple database operation
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM graph_nodes")
-                cursor.fetchone()
-            return True
-        except Exception:
-            return False
+        def _check_database() -> bool:
+            try:
+                # Try a simple database operation
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM graph_nodes")
+                    cursor.fetchone()
+                return True
+            except Exception:
+                return False
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _check_database)
 
     async def store_in_graph(self, node: Union[GraphNode, GraphNodeConvertible]) -> str:
         """Store a node in the graph."""

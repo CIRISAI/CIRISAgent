@@ -124,7 +124,7 @@ class BaseGraphService(BaseService):
             query: MemoryQuery with filters and options
 
         Returns:
-            List of matching GraphNodes
+            List of matching GraphNodes (empty list on error or no results)
         """
         if not self._memory_bus:
             self._logger.warning(f"{self.service_name}: Memory bus not available for query")
@@ -133,21 +133,9 @@ class BaseGraphService(BaseService):
         self._track_request()
 
         try:
-            result = await self._memory_bus.recall(query)
-
-            # Handle different result types
-            if hasattr(result, "status") and hasattr(result, "data"):
-                # It's a MemoryOpResult
-                if result.status == MemoryOpStatus.OK and result.data:
-                    if isinstance(result.data, list):
-                        return result.data
-                    else:
-                        return [result.data]
-            elif isinstance(result, list):
-                # Direct list of nodes
-                return result
-
-            return []
+            # MemoryBus.recall now returns List[GraphNode] directly
+            nodes = await self._memory_bus.recall(query)
+            return nodes if nodes else []
 
         except Exception as e:
             self._track_error(e)

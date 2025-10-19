@@ -289,13 +289,13 @@ def generate_html_wrapper(svg: str, hours: int, layout: str, node_count: int, wi
 # ============================================================================
 
 
-@router.post("/store", response_model=SuccessResponse[MemoryOpResult])
+@router.post("/store", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
 async def store_memory(
     request: Request,
     body: StoreRequest,
     auth: AuthContext = Depends(require_admin),
     memory_service: Any = Depends(get_memory_service),
-) -> SuccessResponse[MemoryOpResult]:
+) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Store typed nodes in memory (MEMORIZE).
 
@@ -393,13 +393,13 @@ async def query_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{node_id}", response_model=SuccessResponse[MemoryOpResult])
+@router.delete("/{node_id}", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
 async def forget_memory(
     request: Request,
     node_id: str = Path(..., description="Node ID to forget"),
     auth: AuthContext = Depends(require_admin),
     memory_service: Any = Depends(get_memory_service),
-) -> SuccessResponse[MemoryOpResult]:
+) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Forget a specific memory node (FORGET).
 

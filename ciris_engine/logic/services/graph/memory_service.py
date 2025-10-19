@@ -68,7 +68,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         self.secrets_service = secrets_service  # Must be provided, not created here
         self._start_time: Optional[datetime] = None
 
-    async def memorize(self, node: GraphNode) -> MemoryOpResult:
+    async def memorize(self, node: GraphNode) -> "MemoryOpResult[GraphNode]":
         """Store a node with automatic secrets detection and processing."""
         self._track_request()
         try:
@@ -81,10 +81,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 persistence.add_graph_node(processed_node, db_path=self.db_path, time_service=self._time_service)
             else:
                 raise RuntimeError("TimeService is required for adding graph nodes")
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=processed_node)
         except Exception as e:
             logger.exception("Error storing node %s: %s", node.id, e)
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def recall(self, recall_query: MemoryQuery) -> List[GraphNode]:
         """Recall nodes from memory based on query."""
@@ -186,7 +186,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return processed_node
 
-    async def forget(self, node: GraphNode) -> MemoryOpResult:
+    async def forget(self, node: GraphNode) -> "MemoryOpResult[GraphNode]":
         """Forget a node and clean up any associated secrets."""
         self._track_request()
         try:
@@ -200,10 +200,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             from ciris_engine.logic.persistence.models import graph as persistence
 
             persistence.delete_graph_node(node.id, node.scope, db_path=self.db_path)
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=node)
         except Exception as e:
             logger.exception("Error forgetting node %s: %s", node.id, e)
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def export_identity_context(self) -> str:
         """
@@ -499,7 +499,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def memorize_metric(
         self, metric_name: str, value: float, tags: Optional[Dict[str, str]] = None, scope: str = "local"
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Convenience method to memorize a metric as a graph node.
 
@@ -551,9 +551,9 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         except Exception as e:
             logger.exception(f"Error memorizing metric {metric_name}: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
-    async def create_edge(self, edge: GraphEdge) -> MemoryOpResult:
+    async def create_edge(self, edge: GraphEdge) -> "MemoryOpResult[GraphEdge]":
         """Create an edge between two nodes in the memory graph."""
         self._track_request()
         try:
@@ -562,10 +562,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             edge_id = add_graph_edge(edge, db_path=self.db_path)
             logger.info(f"Created edge {edge_id}: {edge.source} -{edge.relationship}-> {edge.target}")
 
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphEdge](status=MemoryOpStatus.OK, data=edge)
         except Exception as e:
             logger.exception(f"Error creating edge: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphEdge](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def get_node_edges(self, node_id: str, scope: GraphScope) -> List[GraphEdge]:
         """Get all edges connected to a node."""
@@ -580,7 +580,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def memorize_log(
         self, log_message: str, log_level: str = "INFO", tags: Optional[Dict[str, str]] = None, scope: str = "local"
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Convenience method to memorize a log entry as both a graph node and TSDB correlation.
         """
@@ -659,7 +659,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         except Exception as e:
             logger.exception(f"Error memorizing log entry: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     # ============================================================================
     # GRAPH PROTOCOL METHODS

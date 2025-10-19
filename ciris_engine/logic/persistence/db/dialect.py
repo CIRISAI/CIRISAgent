@@ -6,8 +6,11 @@ backends with a single connection string configuration.
 """
 
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
 
 
 class Dialect(str, Enum):

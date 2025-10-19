@@ -1442,7 +1442,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             counts = authentication_store.get_certificate_counts(self.db_path)
             cert_count = counts.get("active", 0)
             revoked_count = counts.get("revoked", 0)
-            role_counts = counts.get("by_role", {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0})
+            # Extract by_role dict with type assertion
+            role_counts_raw: Union[int, Dict[str, int]] = counts.get("by_role", {})
+            role_counts: Dict[str, int] = role_counts_raw if isinstance(role_counts_raw, dict) else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
         except Exception as e:
             logger.warning(
                 f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"
@@ -1464,11 +1466,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         custom_metrics = {
             "active_certificates": float(cert_count),
             "revoked_certificates": float(revoked_count),
-            "observer_certificates": float(role_counts["OBSERVER"]),
-            "user_certificates": float(role_counts["USER"]),
-            "admin_certificates": float(role_counts["ADMIN"]),
-            "authority_certificates": float(role_counts["AUTHORITY"]),
-            "root_certificates": float(role_counts["ROOT"]),
+            "observer_certificates": float(role_counts.get("OBSERVER", 0)),
+            "user_certificates": float(role_counts.get("USER", 0)),
+            "admin_certificates": float(role_counts.get("ADMIN", 0)),
+            "authority_certificates": float(role_counts.get("AUTHORITY", 0)),
+            "root_certificates": float(role_counts.get("ROOT", 0)),
             "auth_contexts_cached": float(auth_context_cached),
             "channel_tokens_cached": float(channel_tokens_cached),
             "total_tokens_cached": float(auth_context_cached + channel_tokens_cached),

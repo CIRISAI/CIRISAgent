@@ -283,10 +283,22 @@ async def get_average_thought_depth(
             """
             cursor.execute(sql, (window_start.isoformat(),))
             result = cursor.fetchone()
-            if result and result["avg_depth"] is not None:
-                return float(result["avg_depth"])
-            else:
-                raise NoThoughtDataError("No thought data available in the last 24 hours")
+
+            # Handle both dict (PostgreSQL RealDictCursor/SQLite Row) and tuple results
+            if result:
+                if isinstance(result, dict):
+                    avg_depth = result.get("avg_depth")
+                elif hasattr(result, "keys"):
+                    # SQLite Row or dict-like object
+                    avg_depth = result["avg_depth"]
+                else:
+                    # Tuple result - first column is avg_depth
+                    avg_depth = result[0] if result else None
+
+                if avg_depth is not None:
+                    return float(avg_depth)
+
+            raise NoThoughtDataError("No thought data available in the last 24 hours")
 
     except NoThoughtDataError:
         raise  # Re-raise as-is

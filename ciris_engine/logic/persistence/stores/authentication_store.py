@@ -412,7 +412,9 @@ def get_certificate_counts(db_path: str) -> Dict[str, int]:
     Returns:
         Dictionary with certificate counts
     """
-    counts = {"total": 0, "active": 0, "revoked": 0, "by_role": {}}
+    from typing import cast
+
+    counts: Dict[str, Any] = {"total": 0, "active": 0, "revoked": 0, "by_role": cast(Dict[str, int], {})}
 
     try:
         with get_db_connection(db_path=db_path) as conn:

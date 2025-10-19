@@ -6,6 +6,8 @@ from typing import Any, Union
 logger = logging.getLogger(__name__)
 
 MIGRATIONS_BASE_DIR = Path(__file__).resolve().parent.parent / "migrations"
+# For backward compatibility with tests - points to SQLite migrations
+MIGRATIONS_DIR = MIGRATIONS_BASE_DIR / "sqlite"
 
 
 def _ensure_tracking_table(conn: Union[sqlite3.Connection, Any]) -> None:
@@ -58,7 +60,7 @@ def run_migrations(db_path: str | None = None) -> None:
         migrations_dir = MIGRATIONS_BASE_DIR / "sqlite"
 
     with get_db_connection(db_path) as conn:
-        _ensure_tracking_table(conn)  # type: ignore[arg-type]
+        _ensure_tracking_table(conn)
         conn.commit()
 
         migration_files = sorted(migrations_dir.glob("*.sql"))

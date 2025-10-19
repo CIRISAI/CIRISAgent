@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import time
+import types
 from datetime import datetime
 from typing import Any, Optional, Union
 
@@ -108,7 +109,7 @@ class PostgreSQLCursorWrapper:
         self._cursor.close()
 
     @property
-    def rowcount(self) -> int:
+    def rowcount(self) -> Any:
         """Get row count."""
         return self._cursor.rowcount
 
@@ -400,6 +401,7 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         adapter = init_dialect(db_path)
 
         # Log which database type we're initializing
+        tables_module: types.ModuleType
         if adapter.is_postgresql():
             # Mask password in connection string for logging
             safe_url = (

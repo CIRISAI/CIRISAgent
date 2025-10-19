@@ -32,15 +32,23 @@ class TestServiceInitializer:
 
         # Add database attribute for db_paths functions
         mock_database = Mock()
+        # CRITICAL: These must be actual Path/string objects, not Mocks
+        # The service initializer does string operations like .startswith() and .rsplit()
         mock_database.main_db = Path(temp_data_dir) / "test.db"
         mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
         mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        mock_database.database_url = None  # SQLite mode, not PostgreSQL
         config.database = mock_database
 
         # Add security attribute with secrets_key_path
         mock_security = Mock()
         mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
         config.security = mock_security
+
+        # Add graph attribute for TSDB configuration
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24  # Default retention
+        config.graph = mock_graph
 
         # Add model_dump method that returns a dict for config migration
         config.model_dump = Mock(

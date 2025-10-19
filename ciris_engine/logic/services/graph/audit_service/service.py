@@ -128,8 +128,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         # Hash chain configuration
         self.enable_hash_chain = enable_hash_chain
         # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
+        self.db_path: Union[str, Path]
         if db_path.startswith(("postgresql://", "postgres://")):
-            self.db_path = db_path  # type: ignore
+            self.db_path = db_path
         else:
             self.db_path = Path(db_path)
         self.key_path = Path(key_path)

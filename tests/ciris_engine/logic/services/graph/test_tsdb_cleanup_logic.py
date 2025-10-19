@@ -135,9 +135,11 @@ class TestRawDataCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_tsdb_data_nodes(self, tsdb_service, mock_db_connection):
         """Test that TSDB data nodes are cleaned up after consolidation."""
-        # Need to patch sqlite3.connect because _cleanup_old_data creates its own connection
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        # Patch get_db_connection to return our mock connection
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 # Create old TSDB data nodes (30+ hours ago to ensure period_end is older than 24 hours)
@@ -177,8 +179,10 @@ class TestRawDataCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_validates_counts(self, tsdb_service, mock_db_connection):
         """Test that cleanup validates claimed vs actual counts."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
@@ -221,8 +225,10 @@ class TestAuditNodeCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_audit_graph_nodes_only(self, tsdb_service, mock_db_connection):
         """Test that only graph audit nodes are cleaned, not audit_log table."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
@@ -294,8 +300,10 @@ class TestCorrelationCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_service_correlations(self, tsdb_service, mock_db_connection):
         """Test that service correlations are cleaned up."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
@@ -346,8 +354,10 @@ class TestCleanupEdgeCases:
     @pytest.mark.asyncio
     async def test_no_cleanup_within_retention(self, tsdb_service, mock_db_connection):
         """Test that data within retention period is not cleaned up."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 # Create recent data (only 12 hours ago)
@@ -385,8 +395,10 @@ class TestCleanupEdgeCases:
     @pytest.mark.asyncio
     async def test_cleanup_handles_missing_attributes(self, tsdb_service, mock_db_connection):
         """Test cleanup handles summaries with missing attributes gracefully."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
@@ -429,8 +441,10 @@ class TestCleanupEdgeCases:
     @pytest.mark.asyncio
     async def test_cleanup_with_zero_count_summary(self, tsdb_service, mock_db_connection):
         """Test that summaries with zero count don't cause deletion."""
-        with patch("sqlite3.connect", return_value=mock_db_connection):
-            with patch("ciris_engine.logic.config.get_sqlite_db_full_path", return_value=":memory:"):
+        def get_test_connection(db_path=None, **kwargs):
+            return mock_db_connection
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
                 cursor = mock_db_connection.cursor()
 
                 old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago

@@ -106,9 +106,7 @@ class TypedServiceRegistry(ServiceRegistry):
             handler=handler, service_type=self._service_type, required_capabilities=required_capabilities
         )
 
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List[object]:
+    def get_all(self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None) -> List[object]:
         """
         Get multiple services with type safety.
 

@@ -180,7 +180,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection(db_path=self._db_path) as conn:
+            with get_db_connection(db_path=self._db_path):
                 edge_data = []
 
                 # Create edges between each pair of summaries
@@ -338,7 +338,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection(db_path=self._db_path) as conn:
+            with get_db_connection(db_path=self._db_path):
                 edge_data = []
 
                 # Create edges from each summary to each concept
@@ -650,7 +650,7 @@ class EdgeManager:
         )
         existing_nodes.add(node_id)
 
-    def _create_missing_nodes(self, cursor: Any, missing_nodes: set[str], existing_nodes: set[str]) -> None:
+    def _create_missing_nodes(self, missing_nodes: set[str], existing_nodes: set[str]) -> None:
         """Create missing nodes if they are channels."""
         if not missing_nodes:
             return
@@ -753,7 +753,7 @@ class EdgeManager:
 
                 # Create missing nodes (channels only)
                 missing_nodes = node_ids_to_check - existing_nodes
-                self._create_missing_nodes(cursor, missing_nodes, existing_nodes)
+                self._create_missing_nodes(missing_nodes, existing_nodes)
 
                 # Build edge data for insertion
                 edge_data = self._build_edge_data(normalized_edges, existing_nodes)

@@ -212,10 +212,6 @@ def update_summary_consolidation_level(cursor: Cursor, node_id: str, new_level: 
     if not new_level:
         raise ValueError("new_level cannot be empty")
 
-    from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-    adapter = get_adapter()
-
     # Get current attributes
     cursor.execute("SELECT attributes_json FROM graph_nodes WHERE node_id = ?", (node_id,))
     row = cursor.fetchone()

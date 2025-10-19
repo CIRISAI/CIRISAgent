@@ -61,7 +61,7 @@ def mask_password_in_url(db_url: str) -> str:
         URL with password replaced by ****
 
     Examples:
-        postgresql://user:secret@host/db -> postgresql://user:****@host/db
+        postgresql://user:PASSWORD@host/db -> postgresql://user:****@host/db
         sqlite:///path/to/db.sqlite -> sqlite:///path/to/db.sqlite
     """
     if "://" in db_url and "@" in db_url:

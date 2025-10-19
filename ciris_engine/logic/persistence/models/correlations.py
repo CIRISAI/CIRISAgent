@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# JSON path constants for database queries
+JSON_PATH_CHANNEL_ID = "$.channel_id"
+
 
 def _parse_response_data(
     response_data_json: Optional[JSONDict], timestamp: Optional[datetime] = None
@@ -285,7 +288,7 @@ def get_correlations_by_channel(
     """Get correlations for a specific channel (for message history)."""
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
+    json_channel_id = adapter.json_extract("request_data", JSON_PATH_CHANNEL_ID)
 
     sql = f"""
         SELECT * FROM service_correlations
@@ -467,7 +470,7 @@ def get_active_channels_by_adapter(
     # Query recent correlations for speak/observe actions
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
+    json_channel_id = adapter.json_extract("request_data", JSON_PATH_CHANNEL_ID)
 
     sql = f"""
         SELECT
@@ -590,7 +593,7 @@ def get_channel_last_activity(
     # Check recent correlations
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
+    json_channel_id = adapter.json_extract("request_data", JSON_PATH_CHANNEL_ID)
 
     sql = f"""
         SELECT MAX(timestamp) as last_activity
@@ -777,7 +780,7 @@ def is_admin_channel(channel_id: str, db_path: Optional[str] = None) -> bool:
     # Check for admin role in correlation tags
     adapter = get_adapter()
     ph = adapter.placeholder()
-    json_channel_id = adapter.json_extract("request_data", "$.channel_id")
+    json_channel_id = adapter.json_extract("request_data", JSON_PATH_CHANNEL_ID)
     json_user_role = adapter.json_extract("tags", "$.user_role")
     json_is_admin = adapter.json_extract("tags", "$.is_admin")
     json_auth_role = adapter.json_extract("tags", "$.auth.role")

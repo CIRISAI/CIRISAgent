@@ -16,7 +16,7 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, Node
 logger = logging.getLogger(__name__)
 
 
-def build_nodes_in_period_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, tuple]:
+def build_nodes_in_period_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, Tuple[str, str]]:
     """Build SQL query for fetching nodes created in a time period.
 
     Args:
@@ -52,7 +52,7 @@ def build_nodes_in_period_query(adapter: Any, period_start: str, period_end: str
     return sql, params
 
 
-def build_tsdb_data_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, tuple]:
+def build_tsdb_data_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, Tuple[str, str, str, str]]:
     """Build SQL query for fetching TSDB data nodes.
 
     Queries TSDB_DATA nodes updated or created in the period.
@@ -133,7 +133,7 @@ def build_service_correlations_query(
     return query, params
 
 
-def build_tasks_in_period_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, tuple]:
+def build_tasks_in_period_query(adapter: Any, period_start: str, period_end: str) -> Tuple[str, Tuple[str, str]]:
     """Build SQL query for tasks in a time period.
 
     Args:
@@ -169,7 +169,7 @@ def build_tasks_in_period_query(adapter: Any, period_start: str, period_end: str
     return sql, params
 
 
-def build_oldest_unconsolidated_query(adapter: Any, scope: str = "local") -> Tuple[str, tuple]:
+def build_oldest_unconsolidated_query(adapter: Any, scope: str = "local") -> Tuple[str, Tuple[str]]:
     """Build query to find oldest unconsolidated TSDB data.
 
     Args:
@@ -243,7 +243,10 @@ def parse_json_string_field(value: Any, field_name: str = "field") -> Dict[str, 
         if not value.strip():
             return {}
         try:
-            return json.loads(value)
+            result = json.loads(value)
+            if isinstance(result, dict):
+                return result
+            return {}
         except json.JSONDecodeError as e:
             logger.debug(f"Failed to parse {field_name}: {e}")
             return {}
@@ -251,19 +254,25 @@ def parse_json_string_field(value: Any, field_name: str = "field") -> Dict[str, 
     return {}
 
 
-def parse_graph_node_row(row: Dict[str, Any], node_type: Optional[NodeType] = None) -> GraphNode:
+def parse_graph_node_row(row: Any, node_type: Optional[NodeType] = None) -> GraphNode:
     """Parse database row into GraphNode object.
 
     Args:
-        row: Database row dictionary
+        row: Database row (dict-like object from SQLite or PostgreSQL)
         node_type: Node type override (if not in row)
 
     Returns:
         GraphNode instance
     """
+    # Convert to dict to handle both sqlite3.Row and PostgreSQL dict-like objects
+    if hasattr(row, "keys"):
+        row_dict = dict(row)
+    else:
+        row_dict = row
+
     # Parse node type if not provided
     if node_type is None:
-        node_type_str = row.get("node_type", "agent")
+        node_type_str = row_dict.get("node_type", "agent")
         try:
             node_type = NodeType(node_type_str)
         except ValueError:
@@ -271,51 +280,57 @@ def parse_graph_node_row(row: Dict[str, Any], node_type: Optional[NodeType] = No
             node_type = NodeType.AGENT
 
     # Parse JSON attributes
-    attributes = parse_json_field(row.get("attributes_json", {}))
+    attributes = parse_json_field(row_dict.get("attributes_json", {}))
 
     # Parse datetime fields
-    updated_at = parse_datetime_field(row.get("updated_at"))
+    updated_at = parse_datetime_field(row_dict.get("updated_at"))
 
     # Parse scope
-    scope_value = row.get("scope", "local")
+    scope_value = row_dict.get("scope", "local")
     scope = GraphScope(scope_value) if scope_value else GraphScope.LOCAL
 
     return GraphNode(
-        id=row["node_id"],
+        id=row_dict["node_id"],
         type=node_type,
         scope=scope,
         attributes=attributes,
-        version=row.get("version", 1),
-        updated_by=row.get("updated_by", "system"),
+        version=row_dict.get("version", 1),
+        updated_by=row_dict.get("updated_by", "system"),
         updated_at=updated_at,
     )
 
 
-def parse_correlation_row(row: Dict[str, Any]) -> Dict[str, Any]:
+def parse_correlation_row(row: Any) -> Dict[str, Any]:
     """Parse service correlation row from database.
 
     Args:
-        row: Database row dictionary
+        row: Database row (dict-like object from SQLite or PostgreSQL)
 
     Returns:
         Dictionary with parsed fields ready for TSDBDataConverter
     """
+    # Convert to dict to handle both sqlite3.Row and PostgreSQL dict-like objects
+    if hasattr(row, "keys"):
+        row_dict = dict(row)
+    else:
+        row_dict = row
+
     # Parse timestamp
-    ts = parse_datetime_field(row.get("timestamp"))
+    ts = parse_datetime_field(row_dict.get("timestamp"))
 
     # Parse JSON fields
-    request_data = parse_json_string_field(row.get("request_data"), "request_data")
-    response_data = parse_json_string_field(row.get("response_data"), "response_data")
-    tags = parse_json_string_field(row.get("tags"), "tags")
+    request_data = parse_json_string_field(row_dict.get("request_data"), "request_data")
+    response_data = parse_json_string_field(row_dict.get("response_data"), "response_data")
+    tags = parse_json_string_field(row_dict.get("tags"), "tags")
 
     return {
-        "correlation_id": row["correlation_id"],
-        "correlation_type": row["correlation_type"],
-        "service_type": row.get("service_type"),
-        "action_type": row.get("action_type"),
-        "trace_id": row.get("trace_id"),
-        "span_id": row.get("span_id"),
-        "parent_span_id": row.get("parent_span_id"),
+        "correlation_id": row_dict["correlation_id"],
+        "correlation_type": row_dict["correlation_type"],
+        "service_type": row_dict.get("service_type"),
+        "action_type": row_dict.get("action_type"),
+        "trace_id": row_dict.get("trace_id"),
+        "span_id": row_dict.get("span_id"),
+        "parent_span_id": row_dict.get("parent_span_id"),
         "timestamp": ts,
         "request_data": request_data,
         "response_data": response_data,

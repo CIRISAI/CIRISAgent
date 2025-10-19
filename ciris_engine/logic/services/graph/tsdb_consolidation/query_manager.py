@@ -52,95 +52,28 @@ class QueryManager:
         Returns:
             Dictionary mapping node types to TSDBNodeQueryResult objects
         """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
+            build_nodes_in_period_query,
+            parse_graph_node_row,
+        )
+
         nodes_by_type = defaultdict(list)
 
-        # Note: We don't actually need memory bus for direct DB queries
-        # This method queries the database directly
-
         try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
             adapter = get_adapter()
 
-            # Direct database query for efficiency
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                # Query all LOCAL nodes CREATED in this period
-                # CRITICAL: Only local nodes can have edges within the same scope
-                # We want nodes CREATED during the period, not just updated
-                # PostgreSQL: created_at is TIMESTAMP, compare directly
-                # SQLite: created_at is TEXT, use datetime() function
-                if adapter.is_postgresql():
-                    sql = f"""
-                        SELECT node_id, node_type, scope, attributes_json,
-                               version, updated_by, updated_at, created_at
-                        FROM graph_nodes
-                        WHERE scope = 'local'
-                          AND created_at >= {adapter.placeholder()}
-                          AND created_at < {adapter.placeholder()}
-                        ORDER BY node_type, created_at
-                    """
-                else:
-                    sql = f"""
-                        SELECT node_id, node_type, scope, attributes_json,
-                               version, updated_by, updated_at, created_at
-                        FROM graph_nodes
-                        WHERE scope = 'local'
-                          AND datetime(created_at) >= datetime({adapter.placeholder()})
-                          AND datetime(created_at) < datetime({adapter.placeholder()})
-                        ORDER BY node_type, created_at
-                    """
+                # Build and execute query using helper
+                sql, params = build_nodes_in_period_query(adapter, period_start.isoformat(), period_end.isoformat())
+                cursor.execute(sql, params)
 
-                cursor.execute(sql, (period_start.isoformat(), period_end.isoformat()))
-
+                # Parse rows using helper
                 for row in cursor.fetchall():
-                    # Parse node type
+                    node = parse_graph_node_row(row)
                     node_type_str = row["node_type"]
-                    try:
-                        node_type = NodeType(node_type_str)
-                    except ValueError:
-                        # For unknown types, use AGENT as fallback
-                        node_type = NodeType.AGENT
-
-                    # Parse attributes JSON
-                    # Handle PostgreSQL JSONB vs SQLite TEXT
-                    import json
-
-                    attributes = {}
-                    if row["attributes_json"]:
-                        try:
-                            # PostgreSQL returns dict, SQLite returns string
-                            if isinstance(row["attributes_json"], dict):
-                                attributes = row["attributes_json"]
-                            else:
-                                attributes = json.loads(row["attributes_json"])
-                        except (json.JSONDecodeError, TypeError) as e:
-                            logger.warning(f"Failed to parse attributes for node {row['node_id']}: {e}")
-
-                    # Handle PostgreSQL datetime vs SQLite string for updated_at
-                    updated_at = row["updated_at"]
-                    if updated_at:
-                        if isinstance(updated_at, datetime):
-                            # PostgreSQL returns datetime object
-                            updated_at = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
-                        else:
-                            # SQLite returns string
-                            updated_at = datetime.fromisoformat(updated_at.replace("Z", UTC_TIMEZONE_SUFFIX))
-                    else:
-                        updated_at = None
-
-                    # Create GraphNode
-                    node = GraphNode(
-                        id=row["node_id"],
-                        type=node_type,
-                        scope=GraphScope(row["scope"]) if row["scope"] else GraphScope.LOCAL,
-                        attributes=attributes,
-                        version=row["version"],
-                        updated_by=row["updated_by"],
-                        updated_at=updated_at,
-                    )
-
                     nodes_by_type[node_type_str].append(node)
 
                 logger.info(
@@ -153,7 +86,6 @@ class QueryManager:
         # Convert to TSDBNodeQueryResult for each node type
         result: Dict[str, TSDBNodeQueryResult] = {}
         for node_type, nodes in nodes_by_type.items():
-            # Use string key for type safety
             result[node_type] = TSDBNodeQueryResult(nodes=nodes, period_start=period_start, period_end=period_end)
 
         return result
@@ -169,87 +101,27 @@ class QueryManager:
         Returns:
             TSDBNodeQueryResult containing TSDB_DATA nodes
         """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
+            build_tsdb_data_query,
+            parse_graph_node_row,
+        )
+
         nodes = []
 
         try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
             adapter = get_adapter()
 
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                # Query TSDB_DATA nodes
-                # PostgreSQL: TIMESTAMP columns, compare directly
-                # SQLite: TEXT columns, use datetime() function
-                if adapter.is_postgresql():
-                    sql = f"""
-                        SELECT node_id, scope, attributes_json, version,
-                               updated_by, updated_at, created_at
-                        FROM graph_nodes
-                        WHERE node_type = 'tsdb_data'
-                          AND ((updated_at >= {adapter.placeholder()} AND updated_at < {adapter.placeholder()})
-                               OR (updated_at IS NULL AND created_at >= {adapter.placeholder()} AND created_at < {adapter.placeholder()}))
-                        ORDER BY updated_at
-                    """
-                else:
-                    sql = f"""
-                        SELECT node_id, scope, attributes_json, version,
-                               updated_by, updated_at, created_at
-                        FROM graph_nodes
-                        WHERE node_type = 'tsdb_data'
-                          AND ((datetime(updated_at) >= datetime({adapter.placeholder()}) AND datetime(updated_at) < datetime({adapter.placeholder()}))
-                               OR (updated_at IS NULL AND datetime(created_at) >= datetime({adapter.placeholder()}) AND datetime(created_at) < datetime({adapter.placeholder()})))
-                        ORDER BY updated_at
-                    """
+                # Build and execute query using helper
+                sql, params = build_tsdb_data_query(adapter, period_start.isoformat(), period_end.isoformat())
+                cursor.execute(sql, params)
 
-                cursor.execute(
-                    sql,
-                    (
-                        period_start.isoformat(),
-                        period_end.isoformat(),
-                        period_start.isoformat(),
-                        period_end.isoformat(),
-                    ),
-                )
-
+                # Parse rows using helper
                 for row in cursor.fetchall():
-                    # Parse attributes JSON
-                    # Handle PostgreSQL JSONB vs SQLite TEXT
-                    import json
-
-                    attributes = {}
-                    if row["attributes_json"]:
-                        try:
-                            # PostgreSQL returns dict, SQLite returns string
-                            if isinstance(row["attributes_json"], dict):
-                                attributes = row["attributes_json"]
-                            else:
-                                attributes = json.loads(row["attributes_json"])
-                        except (json.JSONDecodeError, TypeError) as e:
-                            logger.warning(f"Failed to parse attributes for node {row['node_id']}: {e}")
-
-                    # Handle PostgreSQL datetime vs SQLite string for updated_at
-                    updated_at = row["updated_at"]
-                    if updated_at:
-                        if isinstance(updated_at, datetime):
-                            # PostgreSQL returns datetime object
-                            updated_at = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
-                        else:
-                            # SQLite returns string
-                            updated_at = datetime.fromisoformat(updated_at.replace("Z", UTC_TIMEZONE_SUFFIX))
-                    else:
-                        updated_at = None
-
-                    node = GraphNode(
-                        id=row["node_id"],
-                        type=NodeType.TSDB_DATA,
-                        scope=GraphScope(row["scope"]) if row["scope"] else GraphScope.LOCAL,
-                        attributes=attributes,
-                        version=row["version"],
-                        updated_by=row["updated_by"],
-                        updated_at=updated_at,
-                    )
+                    node = parse_graph_node_row(row, node_type=NodeType.TSDB_DATA)
                     nodes.append(node)
 
                 logger.info(f"Found {len(nodes)} TSDB_DATA nodes for period {period_start}")
@@ -273,111 +145,35 @@ class QueryManager:
         Returns:
             ServiceCorrelationQueryResult with typed correlation data
         """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import (
+            build_service_correlations_query,
+            parse_correlation_row,
+        )
+
         service_interactions: List[ServiceInteractionData] = []
         metric_correlations: List[MetricCorrelationData] = []
         trace_spans: List[TraceSpanData] = []
         task_correlations: List[TaskCorrelationData] = []
 
         try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
             adapter = get_adapter()
 
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
-                # Build query
-                # PostgreSQL: TIMESTAMP column, compare directly
-                # SQLite: TEXT column, use datetime() function
-                if adapter.is_postgresql():
-                    query = f"""
-                        SELECT correlation_id, correlation_type, service_type, action_type,
-                               trace_id, span_id, parent_span_id,
-                               timestamp, request_data, response_data, tags
-                        FROM service_correlations
-                        WHERE timestamp >= {adapter.placeholder()} AND timestamp < {adapter.placeholder()}
-                    """
-                else:
-                    query = f"""
-                        SELECT correlation_id, correlation_type, service_type, action_type,
-                               trace_id, span_id, parent_span_id,
-                               timestamp, request_data, response_data, tags
-                        FROM service_correlations
-                        WHERE datetime(timestamp) >= datetime({adapter.placeholder()}) AND datetime(timestamp) < datetime({adapter.placeholder()})
-                    """
-
-                params = [period_start.isoformat(), period_end.isoformat()]
-
-                if correlation_types:
-                    placeholders = ",".join([adapter.placeholder()] * len(correlation_types))
-                    query += f" AND correlation_type IN ({placeholders})"
-                    params.extend(correlation_types)
-
-                query += " ORDER BY timestamp"
-
+                # Build and execute query using helper
+                query, params = build_service_correlations_query(
+                    adapter, period_start.isoformat(), period_end.isoformat(), correlation_types
+                )
                 cursor.execute(query, params)
 
+                # Parse rows using helper
                 for row in cursor.fetchall():
-                    # Parse timestamp - handle PostgreSQL datetime vs SQLite string
-                    ts_value = row["timestamp"]
-                    if ts_value:
-                        if isinstance(ts_value, datetime):
-                            # PostgreSQL returns datetime object
-                            ts = ts_value if ts_value.tzinfo else ts_value.replace(tzinfo=timezone.utc)
-                        else:
-                            # SQLite returns string
-                            ts = datetime.fromisoformat(ts_value.replace("Z", UTC_TIMEZONE_SUFFIX))
-                    else:
-                        ts = None
-
-                    # Parse JSON fields
-                    request_data = row["request_data"]
-                    if request_data and isinstance(request_data, str):
-                        try:
-                            request_data = json.loads(request_data)
-                        except Exception:
-                            request_data = {}
-                    elif request_data is None:
-                        request_data = {}
-
-                    response_data = row["response_data"]
-                    if isinstance(response_data, str) and response_data.strip():
-                        try:
-                            response_data = json.loads(response_data)
-                        except Exception as e:
-                            logger.debug(f"Failed to parse response_data: {e}")
-                            response_data = {}
-                    else:
-                        response_data = {}
-
-                    tags = row["tags"]
-                    if isinstance(tags, str) and tags.strip():
-                        try:
-                            tags = json.loads(tags)
-                        except Exception as e:
-                            logger.debug(f"Failed to parse tags: {e}")
-                            tags = {}
-                    else:
-                        tags = {}
-
-                    # Create raw correlation dict for converter
-                    raw_correlation = {
-                        "correlation_id": row["correlation_id"],
-                        "correlation_type": row["correlation_type"],
-                        "service_type": row["service_type"],
-                        "action_type": row["action_type"],
-                        "trace_id": row["trace_id"],
-                        "span_id": row["span_id"],
-                        "parent_span_id": row["parent_span_id"],
-                        "timestamp": ts,
-                        "request_data": request_data,
-                        "response_data": response_data,
-                        "tags": tags,
-                    }
-
-                    # Convert to typed models based on correlation type
+                    raw_correlation = parse_correlation_row(row)
                     correlation_type = row["correlation_type"]
 
+                    # Convert to typed models based on correlation type
                     if correlation_type == "service_interaction":
                         converted_interaction = TSDBDataConverter.convert_service_interaction(raw_correlation)
                         if converted_interaction:
@@ -390,9 +186,6 @@ class QueryManager:
                         converted_trace = TSDBDataConverter.convert_trace_span(raw_correlation)
                         if converted_trace:
                             trace_spans.append(converted_trace)
-                    elif correlation_type == "task_correlation":
-                        # For task correlations, we'll query the tasks separately
-                        pass
 
                 total = len(service_interactions) + len(metric_correlations) + len(trace_spans) + len(task_correlations)
                 logger.info(f"Found {total} correlations for period {period_start}")

@@ -18,20 +18,22 @@ class TestParseOAuthLinks:
 
     def test_parse_oauth_links_valid_json(self):
         """Test parsing valid OAuth links JSON."""
-        oauth_json = json.dumps([
-            {
-                "provider": "google",
-                "external_id": "123456",
-                "email": "user@example.com",
-                "linked_at": "2025-01-01T12:00:00Z",
-            },
-            {
-                "provider": "github",
-                "external_id": "github_user_id",
-                "username": "testuser",
-                "linked_at": "2025-01-02T12:00:00Z",
-            },
-        ])
+        oauth_json = json.dumps(
+            [
+                {
+                    "provider": "google",
+                    "external_id": "123456",
+                    "email": "user@example.com",
+                    "linked_at": "2025-01-01T12:00:00Z",
+                },
+                {
+                    "provider": "github",
+                    "external_id": "github_user_id",
+                    "username": "testuser",
+                    "linked_at": "2025-01-02T12:00:00Z",
+                },
+            ]
+        )
 
         result = parse_oauth_links(oauth_json)
 
@@ -59,22 +61,24 @@ class TestParseOAuthLinks:
 
     def test_parse_oauth_links_invalid_schema(self):
         """Test invalid OAuth link schema is skipped with warning."""
-        oauth_json = json.dumps([
-            {
-                "provider": "google",
-                "external_id": "123456",
-                "linked_at": "2025-01-01T12:00:00Z",
-            },
-            {
-                # Missing required fields
-                "provider": "github",
-            },
-            {
-                "provider": "microsoft",
-                "external_id": "ms_id",
-                "linked_at": "2025-01-03T12:00:00Z",
-            },
-        ])
+        oauth_json = json.dumps(
+            [
+                {
+                    "provider": "google",
+                    "external_id": "123456",
+                    "linked_at": "2025-01-01T12:00:00Z",
+                },
+                {
+                    # Missing required fields
+                    "provider": "github",
+                },
+                {
+                    "provider": "microsoft",
+                    "external_id": "ms_id",
+                    "linked_at": "2025-01-03T12:00:00Z",
+                },
+            ]
+        )
 
         with patch("ciris_engine.logic.persistence.stores.auth_helpers.logger") as mock_logger:
             result = parse_oauth_links(oauth_json)
@@ -93,14 +97,16 @@ class TestParseOAuthLinks:
 
     def test_parse_oauth_links_single_link(self):
         """Test parsing single OAuth link."""
-        oauth_json = json.dumps([
-            {
-                "provider": "google",
-                "external_id": "google_id",
-                "email": "test@example.com",
-                "linked_at": "2025-01-01T00:00:00Z",
-            }
-        ])
+        oauth_json = json.dumps(
+            [
+                {
+                    "provider": "google",
+                    "external_id": "google_id",
+                    "email": "test@example.com",
+                    "linked_at": "2025-01-01T00:00:00Z",
+                }
+            ]
+        )
 
         result = parse_oauth_links(oauth_json)
 
@@ -178,13 +184,15 @@ class TestBuildWACertificateDict:
             "api_key_hash": "api_hash",
             "oauth_provider": "google",
             "oauth_external_id": "google_123",
-            "oauth_links_json": json.dumps([
-                {
-                    "provider": "github",
-                    "external_id": "github_id",
-                    "linked_at": "2025-01-01T00:00:00Z",
-                }
-            ]),
+            "oauth_links_json": json.dumps(
+                [
+                    {
+                        "provider": "github",
+                        "external_id": "github_id",
+                        "linked_at": "2025-01-01T00:00:00Z",
+                    }
+                ]
+            ),
             "auto_minted": 1,
             "veilid_id": "veilid_123",
             "parent_wa_id": "parent_wa",

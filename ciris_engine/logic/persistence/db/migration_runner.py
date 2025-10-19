@@ -50,6 +50,7 @@ def run_migrations(db_path: str | None = None) -> None:
     """
     from .core import get_db_connection
     from .dialect import get_adapter
+    from .execution_helpers import get_applied_migrations, get_pending_migrations, record_migration, split_sql_statements
 
     adapter = get_adapter()
 
@@ -59,45 +60,43 @@ def run_migrations(db_path: str | None = None) -> None:
     else:
         migrations_dir = MIGRATIONS_BASE_DIR / "sqlite"
 
+    if not migrations_dir.exists():
+        logger.info(f"No migrations directory found at {migrations_dir}")
+        return
+
     with get_db_connection(db_path) as conn:
         _ensure_tracking_table(conn)
         conn.commit()
 
-        migration_files = sorted(migrations_dir.glob("*.sql"))
-        for file in migration_files:
-            name = file.name
+        # Get migrations that haven't been applied yet
+        # Note: schema_migrations uses 'filename' column, not 'migration_name'
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM schema_migrations")
+        applied = {row["filename"] if hasattr(row, "keys") else row[0] for row in cursor.fetchall()}
+        pending = get_pending_migrations(migrations_dir, applied)
 
-            # Check if migration already applied
-            if adapter.is_postgresql():
-                cursor = conn.cursor()
-                cursor.execute(
-                    f"SELECT 1 FROM schema_migrations WHERE filename = {adapter.placeholder()}",
-                    (name,),
-                )
-                already_applied = cursor.fetchone() is not None
-                cursor.close()
-            else:
-                cur = conn.execute("SELECT 1 FROM schema_migrations WHERE filename = ?", (name,))
-                already_applied = cur.fetchone() is not None
+        if not pending:
+            logger.info("No pending migrations")
+            return
 
-            if already_applied:
-                continue
+        logger.info(f"Running {len(pending)} pending migrations")
 
+        for migration_file in pending:
+            name = migration_file.name
             logger.info(f"Applying migration {name}")
-            sql = file.read_text()
+            sql = migration_file.read_text()
+
             try:
-                # PostgreSQL doesn't support executescript
+                statements = split_sql_statements(sql)
+                # Filter out SQL comments
+                statements = [s for s in statements if s and not s.startswith("--")]
+
                 if adapter.is_postgresql():
                     cursor = conn.cursor()
-                    statements = [s.strip() for s in sql.split(";") if s.strip()]
-                    # Filter out SQL comments and empty lines
-                    statements = [s for s in statements if s and not s.startswith("--") and s.strip()]
-
-                    # Execute non-empty statements with individual commits for DDL
+                    # Execute each statement with individual commits for PostgreSQL DDL
+                    # This ensures ALTER TABLE changes are visible to subsequent CREATE INDEX
                     for statement in statements:
                         cursor.execute(statement)
-                        # Commit after each DDL statement for PostgreSQL
-                        # This ensures ALTER TABLE changes are visible to subsequent CREATE INDEX
                         conn.commit()
 
                     # Mark migration as applied

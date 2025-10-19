@@ -808,9 +808,10 @@ class TSDBConsolidationService(BaseGraphService):
 
     def _find_oldest_unconsolidated_period(self) -> Optional[datetime]:
         """Find the oldest data that needs consolidation."""
-        try:
-            from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import parse_datetime_field
 
+        try:
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
@@ -825,12 +826,9 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    oldest = row["oldest"]
-                    # Handle PostgreSQL datetime vs SQLite string
-                    if isinstance(oldest, datetime):
-                        return oldest if oldest.tzinfo else oldest.replace(tzinfo=timezone.utc)
-                    else:
-                        return datetime.fromisoformat(oldest.replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest_tsdb = parse_datetime_field(row["oldest"])
+                    if oldest_tsdb:
+                        return oldest_tsdb
 
                 # Check for oldest correlation
                 cursor.execute(
@@ -842,12 +840,9 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    oldest = row["oldest"]
-                    # Handle PostgreSQL datetime vs SQLite string
-                    if isinstance(oldest, datetime):
-                        return oldest if oldest.tzinfo else oldest.replace(tzinfo=timezone.utc)
-                    else:
-                        return datetime.fromisoformat(oldest.replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest_correlation = parse_datetime_field(row["oldest"])
+                    if oldest_correlation:
+                        return oldest_correlation
 
         except Exception as e:
             logger.error(f"Failed to find oldest data: {e}")

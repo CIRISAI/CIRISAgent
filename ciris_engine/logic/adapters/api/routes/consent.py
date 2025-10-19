@@ -122,7 +122,9 @@ def get_consent_manager(request: Request) -> ConsentService:
     return manager
 
 
-def _build_consent_record(consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None) -> ConsentRecordResponse:
+def _build_consent_record(
+    consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
+) -> ConsentRecordResponse:
     """
     Build consent record response - eliminates duplication.
 

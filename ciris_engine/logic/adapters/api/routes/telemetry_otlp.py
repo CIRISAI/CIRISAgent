@@ -6,6 +6,11 @@ OpenTelemetry collectors and backends. Supports all three signals:
 - Metrics
 - Traces
 - Logs
+
+SERIALIZATION BOUNDARY: This module uses JSONDict appropriately as it converts
+between internal CIRIS telemetry formats and the external OTLP JSON protocol.
+The input is untyped telemetry data from various sources, and the output must
+conform to the OTLP JSON specification (https://opentelemetry.io/docs/specs/otlp/).
 """
 
 import hashlib

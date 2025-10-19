@@ -50,7 +50,7 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
         with get_db_connection(db_path=db_path) as conn:
             # First check if node exists and get its current attributes
             cursor = conn.cursor()
-            logger.debug(f"DEBUG add_graph_node: Executing SELECT to check if node exists")
+            logger.debug("DEBUG add_graph_node: Executing SELECT to check if node exists")
             cursor.execute(
                 "SELECT attributes_json FROM graph_nodes WHERE node_id = ? AND scope = ?", (node.id, node.scope.value)
             )
@@ -113,7 +113,7 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
             cursor.execute(sql, params)
             logger.info(f"DEBUG add_graph_node: cursor.rowcount = {cursor.rowcount}")
             conn.commit()
-            logger.info(f"DEBUG add_graph_node: Committed successfully")
+            logger.info("DEBUG add_graph_node: Committed successfully")
 
             # If we just created a new USER node, ensure TEMPORARY consent exists
             if not existing_row and node.type == NodeType.USER:
@@ -167,7 +167,7 @@ def get_graph_node(node_id: str, scope: GraphScope, db_path: Optional[str] = Non
     try:
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
-            logger.debug(f"DEBUG get_graph_node: Executing SELECT")
+            logger.debug("DEBUG get_graph_node: Executing SELECT")
             cursor.execute(sql, (node_id, scope.value))
             row = cursor.fetchone()
             logger.info(f"DEBUG get_graph_node: row = {row}")

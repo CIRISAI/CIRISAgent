@@ -825,7 +825,12 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    return datetime.fromisoformat(row["oldest"].replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest = row["oldest"]
+                    # Handle PostgreSQL datetime vs SQLite string
+                    if isinstance(oldest, datetime):
+                        return oldest if oldest.tzinfo else oldest.replace(tzinfo=timezone.utc)
+                    else:
+                        return datetime.fromisoformat(oldest.replace("Z", UTC_TIMEZONE_SUFFIX))
 
                 # Check for oldest correlation
                 cursor.execute(
@@ -837,7 +842,12 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    return datetime.fromisoformat(row["oldest"].replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest = row["oldest"]
+                    # Handle PostgreSQL datetime vs SQLite string
+                    if isinstance(oldest, datetime):
+                        return oldest if oldest.tzinfo else oldest.replace(tzinfo=timezone.utc)
+                    else:
+                        return datetime.fromisoformat(oldest.replace("Z", UTC_TIMEZONE_SUFFIX))
 
         except Exception as e:
             logger.error(f"Failed to find oldest data: {e}")
@@ -853,9 +863,7 @@ class TSDBConsolidationService(BaseGraphService):
         Only graph node representations are cleaned up.
         """
         try:
-            import sqlite3
-
-            from ciris_engine.logic.config import get_sqlite_db_full_path
+            from ciris_engine.logic.persistence.db.core import get_db_connection
             from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import (
                 cleanup_audit_summary,
                 cleanup_trace_summary,
@@ -868,9 +876,8 @@ class TSDBConsolidationService(BaseGraphService):
 
             logger.info("Starting cleanup of consolidated graph data (audit_log untouched)")
 
-            # Connect to database
-            db_path = self.db_path or get_sqlite_db_full_path()
-            conn = sqlite3.connect(db_path)
+            # Connect to database using get_db_connection (supports both SQLite and PostgreSQL)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Find all summaries older than retention period

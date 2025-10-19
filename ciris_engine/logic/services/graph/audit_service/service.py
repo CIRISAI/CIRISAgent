@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
+from ciris_engine.logic.persistence.db.dialect import get_adapter
+from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.types import JSONDict
 
@@ -1233,14 +1235,22 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             """
             )
 
+            # Use dialect-aware query builder for UPSERT
+            adapter = get_adapter()
+            builder = adapter.get_query_builder()
+
+            query = builder.insert(
+                table="audit_export",
+                columns=["entry_id", "timestamp", "entity_id", "event_type", "actor", "outcome", "details"],
+                conflict_resolution=ConflictResolution.REPLACE,
+                conflict_columns=["entry_id"],
+            )
+            sql = query.to_sql(adapter)
+
             # Insert entries
             for entry in entries:
                 cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO audit_export
-                    (entry_id, timestamp, entity_id, event_type, actor, outcome, details)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+                    sql,
                     (
                         entry.entry_id,
                         entry.timestamp.isoformat(),

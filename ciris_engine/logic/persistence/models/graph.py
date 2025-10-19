@@ -43,7 +43,9 @@ class DateTimeEncoder(json.JSONEncoder):
 
 def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: Optional[str] = None) -> str:
     """Insert or update a graph node, merging attributes if it exists."""
-    logger.info(f"DEBUG add_graph_node: node_id={node.id!r}, scope={node.scope.value!r}, type={node.type.value!r}, db_path={db_path!r}")
+    logger.info(
+        f"DEBUG add_graph_node: node_id={node.id!r}, scope={node.scope.value!r}, type={node.type.value!r}, db_path={db_path!r}"
+    )
     try:
         with get_db_connection(db_path=db_path) as conn:
             # First check if node exists and get its current attributes
@@ -105,7 +107,9 @@ def add_graph_node(node: GraphNode, time_service: TimeServiceProtocol, db_path: 
                 }
                 logger.debug("Inserting new graph node %s", node.id)
 
-            logger.info(f"DEBUG add_graph_node: Executing {'UPDATE' if existing_row else 'INSERT'} with params: {params}")
+            logger.info(
+                f"DEBUG add_graph_node: Executing {'UPDATE' if existing_row else 'INSERT'} with params: {params}"
+            )
             cursor.execute(sql, params)
             logger.info(f"DEBUG add_graph_node: cursor.rowcount = {cursor.rowcount}")
             conn.commit()

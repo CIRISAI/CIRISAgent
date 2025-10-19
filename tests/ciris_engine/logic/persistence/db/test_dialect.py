@@ -111,7 +111,7 @@ class TestDialectAdapter:
         adapter = DialectAdapter("postgresql://localhost/db")
         result = adapter.json_extract("data", "$.field")
 
-        assert result == "data->>>'field'"
+        assert result == "data->>'field'"
 
     def test_postgresql_json_extract_nested(self):
         """Test PostgreSQL JSONB operator for nested path."""
@@ -119,7 +119,7 @@ class TestDialectAdapter:
         result = adapter.json_extract("data", "$.parent.child")
 
         # Should use -> for intermediate, ->> for final
-        assert result == "data->'parent'->>>'child'"
+        assert result == "data->'parent'->>'child'"
 
     def test_postgresql_json_extract_empty_path(self):
         """Test PostgreSQL JSON extract with empty path."""
@@ -133,7 +133,7 @@ class TestDialectAdapter:
         adapter = DialectAdapter("postgresql://localhost/db")
         result = adapter.json_extract("data", "$.field")
 
-        assert "->>>'field'" in result
+        assert "->>'field'" in result
 
     def test_sqlite_pragma_passthrough(self):
         """Test SQLite PRAGMA statements pass through."""
@@ -254,7 +254,7 @@ class TestEdgeCases:
 
         # Should have multiple -> operators
         assert result.count("->") >= 3
-        assert "->>>" in result  # Final element extracted as text
+        assert "->>" in result  # Final element extracted as text
 
     def test_sqlite3_scheme_variant(self):
         """Test sqlite3:// URL scheme."""

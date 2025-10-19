@@ -75,9 +75,7 @@ def run_migrations(db_path: str | None = None) -> None:
                 already_applied = cursor.fetchone() is not None
                 cursor.close()
             else:
-                cur = conn.execute(
-                    "SELECT 1 FROM schema_migrations WHERE filename = ?", (name,)
-                )
+                cur = conn.execute("SELECT 1 FROM schema_migrations WHERE filename = ?", (name,))
                 already_applied = cur.fetchone() is not None
 
             if already_applied:
@@ -91,11 +89,7 @@ def run_migrations(db_path: str | None = None) -> None:
                     cursor = conn.cursor()
                     statements = [s.strip() for s in sql.split(";") if s.strip()]
                     # Filter out SQL comments and empty lines
-                    statements = [
-                        s
-                        for s in statements
-                        if s and not s.startswith("--") and s.strip()
-                    ]
+                    statements = [s for s in statements if s and not s.startswith("--") and s.strip()]
 
                     # Execute non-empty statements with individual commits for DDL
                     for statement in statements:
@@ -113,9 +107,7 @@ def run_migrations(db_path: str | None = None) -> None:
                     conn.commit()
                 else:
                     conn.executescript(sql)
-                    conn.execute(
-                        "INSERT INTO schema_migrations (filename) VALUES (?)", (name,)
-                    )
+                    conn.execute("INSERT INTO schema_migrations (filename) VALUES (?)", (name,))
                     conn.commit()
 
                 logger.info(f"Migration {name} applied successfully")

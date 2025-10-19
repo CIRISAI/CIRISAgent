@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
 
@@ -26,12 +27,39 @@ class QueryBuilder:
     SQL_SELECT_NODES = "SELECT node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at"
     SQL_FROM_NODES = "FROM graph_nodes"
     SQL_WHERE_TIME_RANGE = "WHERE updated_at >= ? AND updated_at < ?"
-    SQL_EXCLUDE_METRICS = "AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%')"
+    SQL_EXCLUDE_METRICS = "AND NOT (node_type = 'tsdb_data' AND node_id LIKE 'metric_%%')"
     SQL_WHERE_SCOPE = "AND scope = ?"
     SQL_WHERE_NODE_TYPE = "AND node_type = ?"
-    SQL_WHERE_ATTR_LIKE = "attributes_json LIKE ?"
     SQL_ORDER_BY = "ORDER BY updated_at DESC"
     SQL_LIMIT = "LIMIT ?"
+
+    @staticmethod
+    def _get_attr_like_clause() -> str:
+        """Get the appropriate LIKE clause for attributes based on dialect."""
+        adapter = get_adapter()
+        if adapter.is_postgresql():
+            # PostgreSQL: Cast JSONB to TEXT for LIKE queries
+            return "attributes_json::text LIKE ?"
+        else:
+            # SQLite: Direct LIKE on JSON text
+            return "attributes_json LIKE ?"
+
+    @staticmethod
+    def _get_json_extract_clause(json_path: str) -> str:
+        """Get the appropriate JSON extraction clause based on dialect.
+
+        Args:
+            json_path: JSON path like '$.created_by' or '$.user_list'
+        """
+        adapter = get_adapter()
+        if adapter.is_postgresql():
+            # PostgreSQL: Use JSONB operators
+            # Convert $.created_by to ->> 'created_by'
+            field = json_path.replace('$.', '')
+            return f"attributes_json->>'{field}'"
+        else:
+            # SQLite: Use json_extract function
+            return f"json_extract(attributes_json, '{json_path}')"
 
     @staticmethod
     def build_timeline_query(
@@ -125,12 +153,12 @@ class QueryBuilder:
             params.append(until.isoformat())
 
         if query:
-            query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
+            query_parts.append(f"AND {QueryBuilder._get_attr_like_clause()}")
             params.append(f"%{query}%")
 
         if tags:
             for tag in tags:
-                query_parts.append(f"AND {QueryBuilder.SQL_WHERE_ATTR_LIKE}")
+                query_parts.append(f"AND {QueryBuilder._get_attr_like_clause()}")
                 params.append(f'%"{tag}"%')
 
         # SECURITY LAYER 1: SQL-level user filtering
@@ -149,9 +177,8 @@ class QueryBuilder:
         Add SQL-level user filtering to query (SECURITY LAYER 1).
 
         Filters nodes by checking if ANY of the user_filter_ids appear in:
-        - json_extract(attributes_json, '$.created_by')
-        - json_extract(attributes_json, '$.user_list') (as JSON array)
-        - attributes_json LIKE patterns for task_summaries and conversations
+        - attributes_json->>'created_by' (PostgreSQL) or json_extract(attributes_json, '$.created_by') (SQLite)
+        - attributes_json LIKE patterns for user_list, task_summaries, and conversations
 
         This is a comprehensive OR-based filter that matches the Layer 2 logic.
         """
@@ -161,27 +188,30 @@ class QueryBuilder:
         # Build OR conditions for user attribution
         or_conditions = []
 
-        # 1. Direct creator: json_extract(attributes_json, '$.created_by') IN (...)
+        # 1. Direct creator: created_by field IN (...)
         placeholders_created_by = ",".join("?" * len(user_filter_ids))
-        or_conditions.append(f"json_extract(attributes_json, '$.created_by') IN ({placeholders_created_by})")
+        created_by_clause = QueryBuilder._get_json_extract_clause('$.created_by')
+        or_conditions.append(f"{created_by_clause} IN ({placeholders_created_by})")
         params.extend(user_filter_ids)
+
+        # Get the LIKE clause for the current dialect
+        attr_like_clause = QueryBuilder._get_attr_like_clause()
 
         # 2. User list participants: Check if user_id appears in user_list JSON array
         # For each user_id, check if attributes_json contains it in user_list
         for user_id in user_filter_ids:
-            # SQLite: Check if user_id is in the user_list array
-            # Using LIKE is safe here as we're checking JSON array membership
-            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            # Using LIKE to check JSON array membership
+            or_conditions.append(attr_like_clause)
             params.append(f'%"user_list"%{user_id}%')
 
         # 3. Task summaries: Check if user_id appears in task_summaries
         for user_id in user_filter_ids:
-            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            or_conditions.append(attr_like_clause)
             params.append(f'%"task_summaries"%"user_id"%{user_id}%')
 
         # 4. Conversations: Check if user_id appears as author_id in conversations
         for user_id in user_filter_ids:
-            or_conditions.append(QueryBuilder.SQL_WHERE_ATTR_LIKE)
+            or_conditions.append(attr_like_clause)
             params.append(f'%"author_id"%{user_id}%')
 
         # Combine all conditions with OR
@@ -193,15 +223,24 @@ class AttributeParser:
     """Parses JSON attributes from database rows."""
 
     @staticmethod
-    def parse_attributes(attributes_json: Optional[str], node_id: str) -> JSONDict:
-        """Parse JSON attributes with error handling."""
+    def parse_attributes(attributes_json: Any, node_id: str) -> JSONDict:
+        """Parse JSON attributes with error handling.
+
+        Args:
+            attributes_json: Either a dict (PostgreSQL JSONB) or string (SQLite JSON text)
+            node_id: Node ID for error reporting
+        """
         if not attributes_json:
             return {}
+
+        # PostgreSQL returns dict, SQLite returns string
+        if isinstance(attributes_json, dict):
+            return attributes_json
 
         try:
             result: JSONDict = json.loads(attributes_json)
             return result
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse attributes for node {node_id}")
             return {}
 
@@ -238,20 +277,47 @@ class GraphNodeBuilder:
     """Builds GraphNode objects from database rows."""
 
     @staticmethod
-    def build_from_row(row: Tuple[Any, ...]) -> Optional[GraphNode]:
-        """Build a GraphNode from a database row."""
+    def build_from_row(row: Any) -> Optional[GraphNode]:
+        """Build a GraphNode from a database row.
+
+        Args:
+            row: Database row - either tuple (SQLite) or dict-like (PostgreSQL RealDictCursor)
+        """
         try:
+            # Handle both tuple (SQLite) and dict-like (PostgreSQL) rows
+            # Access by index for tuples, by key for dicts
+            if isinstance(row, dict):
+                # PostgreSQL RealDictCursor returns dict-like rows
+                node_id = row["node_id"]
+                scope = row["scope"]
+                node_type = row["node_type"]
+                attributes_json = row["attributes_json"]
+                version = row["version"]
+                updated_by = row["updated_by"]
+                updated_at_raw = row["updated_at"]
+                created_at_raw = row.get("created_at")
+            else:
+                # SQLite Row objects support index access
+                node_id = row[0]
+                scope = row[1]
+                node_type = row[2]
+                attributes_json = row[3]
+                version = row[4]
+                updated_by = row[5]
+                updated_at_raw = row[6]
+                created_at_raw = row[7] if len(row) > 7 else None
+
             # Parse attributes JSON
-            attributes_dict = AttributeParser.parse_attributes(row[3], row[0])
+            attributes_dict = AttributeParser.parse_attributes(attributes_json, node_id)
 
             # Parse timestamps
-            updated_at = DateTimeParser.parse_datetime(row[6])
-            created_at = DateTimeParser.parse_datetime(row[7]) if row[7] else None
+            updated_at = DateTimeParser.parse_datetime(updated_at_raw)
+            created_at = DateTimeParser.parse_datetime(created_at_raw) if created_at_raw else None
 
             # Create typed GraphNodeAttributes
             # Extract known fields and pass the rest as tags if present
             tags = attributes_dict.pop("tags", [])
-            created_by = attributes_dict.pop("created_by", row[5] if row[5] else "system")
+            created_by = attributes_dict.pop("created_by", updated_by if updated_by else "system")
 
             # Build proper GraphNodeAttributes
             typed_attributes = GraphNodeAttributes(
@@ -263,12 +329,12 @@ class GraphNodeBuilder:
 
             # Create GraphNode with typed attributes
             return GraphNode(
-                id=row[0],  # node_id
-                scope=row[1],  # scope
-                type=row[2],  # node_type
+                id=node_id,
+                scope=scope,
+                type=node_type,
                 attributes=typed_attributes,
-                version=row[4] if row[4] else 1,  # version
-                updated_by=row[5] if row[5] else "system",  # updated_by
+                version=version if version else 1,
+                updated_by=updated_by if updated_by else "system",
                 updated_at=updated_at,
             )
         except Exception as e:
@@ -276,7 +342,7 @@ class GraphNodeBuilder:
             return None
 
     @staticmethod
-    def build_from_rows(rows: List[Tuple[Any, ...]]) -> List[GraphNode]:
+    def build_from_rows(rows: List[Any]) -> List[GraphNode]:
         """Build multiple GraphNodes from database rows."""
         nodes = []
         for row in rows:

@@ -13,8 +13,10 @@ Example:
 """
 
 import sys
+
 import psycopg2
 from psycopg2 import sql
+
 
 def create_databases(main_db, db_user, superuser, superuser_password, host="localhost", port=5432):
     """Create derivative databases for CIRIS."""
@@ -30,30 +32,22 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
 
     # Connect to postgres database as superuser
     try:
-        conn = psycopg2.connect(
-            host=host,
-            port=port,
-            user=superuser,
-            password=superuser_password,
-            database="postgres"
-        )
+        conn = psycopg2.connect(host=host, port=port, user=superuser, password=superuser_password, database="postgres")
         conn.autocommit = True
         cursor = conn.cursor()
 
         print("✓ Connected to PostgreSQL")
 
         # Check if databases exist
-        cursor.execute("SELECT datname FROM pg_database WHERE datname IN (%s, %s, %s)",
-                      (main_db, secrets_db, auth_db))
+        cursor.execute("SELECT datname FROM pg_database WHERE datname IN (%s, %s, %s)", (main_db, secrets_db, auth_db))
         existing = {row[0] for row in cursor.fetchall()}
 
         # Create main database if needed
         if main_db not in existing:
             print(f"Creating main database: {main_db}")
-            cursor.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(
-                sql.Identifier(main_db),
-                sql.Identifier(db_user)
-            ))
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(main_db), sql.Identifier(db_user))
+            )
             print(f"✓ Created {main_db}")
         else:
             print(f"✓ Main database {main_db} already exists")
@@ -61,10 +55,9 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
         # Create secrets database
         if secrets_db not in existing:
             print(f"Creating secrets database: {secrets_db}")
-            cursor.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(
-                sql.Identifier(secrets_db),
-                sql.Identifier(db_user)
-            ))
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(secrets_db), sql.Identifier(db_user))
+            )
             print(f"✓ Created {secrets_db}")
         else:
             print(f"✓ Secrets database {secrets_db} already exists")
@@ -72,10 +65,9 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
         # Create auth database
         if auth_db not in existing:
             print(f"Creating auth database: {auth_db}")
-            cursor.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(
-                sql.Identifier(auth_db),
-                sql.Identifier(db_user)
-            ))
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(auth_db), sql.Identifier(db_user))
+            )
             print(f"✓ Created {auth_db}")
         else:
             print(f"✓ Auth database {auth_db} already exists")
@@ -94,6 +86,7 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
     except psycopg2.Error as e:
         print(f"✗ Error: {e}")
         return False
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
+from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
 
@@ -176,16 +178,26 @@ class SecretsStore:
                     manual_access_only=False,
                 )
 
+                # Use dialect-aware query builder for UPSERT
+                adapter = get_adapter()
+                builder = adapter.get_query_builder()
+
+                query = builder.insert(
+                    table="secrets",
+                    columns=[
+                        "secret_uuid", "encrypted_value", "encryption_key_ref", "salt", "nonce",
+                        "description", "sensitivity_level", "detected_pattern", "context_hint",
+                        "created_at", "last_accessed", "access_count", "source_message_id",
+                        "auto_decapsulate_for_actions", "manual_access_only"
+                    ],
+                    conflict_resolution=ConflictResolution.REPLACE,
+                    conflict_columns=["secret_uuid"],
+                )
+                sql = query.to_sql(adapter)
+
                 with get_db_connection(str(self.db_path)) as conn:
                     conn.execute(
-                        """
-                        INSERT OR REPLACE INTO secrets (
-                            secret_uuid, encrypted_value, encryption_key_ref, salt, nonce,
-                            description, sensitivity_level, detected_pattern, context_hint,
-                            created_at, last_accessed, access_count, source_message_id,
-                            auto_decapsulate_for_actions, manual_access_only
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                        sql,
                         (
                             secret_record.secret_uuid,
                             secret_record.encrypted_value,
@@ -381,15 +393,37 @@ class SecretsStore:
 
             secrets = []
             for row in rows:
+                # Handle both tuple (SQLite) and dict (PostgreSQL) rows
+                if isinstance(row, dict):
+                    # PostgreSQL RealDictCursor returns dict-like rows
+                    uuid = row["secret_uuid"]
+                    description = row["description"]
+                    context_hint = row["context_hint"]
+                    sensitivity = row["sensitivity_level"]
+                    detected_pattern = row["detected_pattern"]
+                    auto_decapsulate_actions_str = row["auto_decapsulate_for_actions"]
+                    created_at_str = row["created_at"]
+                    last_accessed_str = row["last_accessed"]
+                else:
+                    # SQLite Row objects support index access
+                    uuid = row[0]
+                    description = row[1]
+                    context_hint = row[2]
+                    sensitivity = row[3]
+                    detected_pattern = row[4]
+                    auto_decapsulate_actions_str = row[5]
+                    created_at_str = row[6]
+                    last_accessed_str = row[7]
+
                 secret_ref = SecretReference(
-                    uuid=row[0],
-                    description=row[1],
-                    context_hint=row[2],
-                    sensitivity=row[3],
-                    detected_pattern=row[4],
-                    auto_decapsulate_actions=row[5].split(",") if row[5] else [],
-                    created_at=datetime.fromisoformat(row[6]),
-                    last_accessed=datetime.fromisoformat(row[7]) if row[7] else None,
+                    uuid=uuid,
+                    description=description,
+                    context_hint=context_hint,
+                    sensitivity=sensitivity,
+                    detected_pattern=detected_pattern,
+                    auto_decapsulate_actions=auto_decapsulate_actions_str.split(",") if auto_decapsulate_actions_str else [],
+                    created_at=datetime.fromisoformat(created_at_str) if isinstance(created_at_str, str) else created_at_str,
+                    last_accessed=datetime.fromisoformat(last_accessed_str) if last_accessed_str and isinstance(last_accessed_str, str) else last_accessed_str,
                 )
                 secrets.append(secret_ref)
 

@@ -132,12 +132,39 @@ DO UPDATE SET {updates}
         for i, part in enumerate(path_parts):
             if i == len(path_parts) - 1:
                 # Last element: extract as text
-                expr = f"{expr}->>>'{part}'"
+                expr = f"{expr}->>'{part}'"
             else:
                 # Intermediate: keep as JSONB
                 expr = f"{expr}->'{part}'"
 
         return expr
+
+    def insert_or_ignore(self, table: str, columns: list[str], conflict_columns: Optional[list[str]] = None) -> str:
+        """Generate INSERT OR IGNORE statement for the target dialect.
+
+        Args:
+            table: Table name
+            columns: Column names to insert
+            conflict_columns: Columns that define uniqueness (required for PostgreSQL)
+
+        Returns:
+            Dialect-specific INSERT OR IGNORE SQL statement
+        """
+        placeholders = ", ".join(["?"] * len(columns))
+        columns_str = ", ".join(columns)
+
+        if self.dialect == Dialect.SQLITE:
+            # SQLite: INSERT OR IGNORE
+            return f"INSERT OR IGNORE INTO {table} ({columns_str}) VALUES ({placeholders})"
+
+        # PostgreSQL: INSERT ... ON CONFLICT DO NOTHING
+        # Requires conflict columns to be specified
+        if not conflict_columns:
+            # If no conflict columns specified, use all columns
+            conflict_columns = columns
+
+        conflict_str = ", ".join(conflict_columns)
+        return f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders}) ON CONFLICT ({conflict_str}) DO NOTHING"
 
     def pragma(self, statement: str) -> Optional[str]:
         """Handle PRAGMA statements (SQLite-specific).
@@ -179,9 +206,42 @@ DO UPDATE SET {updates}
         translated = sql.replace("?", "%s")
         if "?" in sql:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.debug(f"DEBUG translate_placeholders: {sql[:100]}... -> {translated[:100]}...")
         return translated
+
+    def get_query_builder(self) -> "QueryBuilder":
+        """Get a query builder for this dialect.
+
+        Returns:
+            QueryBuilder instance configured for this dialect
+        """
+        from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
+
+        return QueryBuilder(self)
+
+    def insert_ignore_node_sql(self) -> str:
+        """Get INSERT OR IGNORE SQL for graph_nodes.
+
+        Handles dialect-specific conflict resolution for the graph_nodes table.
+        Uses PRIMARY KEY constraint (node_id, scope).
+
+        Returns:
+            SQL string with ? placeholders (will be translated by cursor wrapper)
+        """
+        return self.get_query_builder().insert_ignore_node()
+
+    def insert_ignore_edge_sql(self) -> str:
+        """Get INSERT OR IGNORE SQL for graph_edges.
+
+        Handles dialect-specific conflict resolution for the graph_edges table.
+        Uses PRIMARY KEY constraint (edge_id).
+
+        Returns:
+            SQL string with ? placeholders (will be translated by cursor wrapper)
+        """
+        return self.get_query_builder().insert_ignore_edge()
 
 
 # Global adapter instance

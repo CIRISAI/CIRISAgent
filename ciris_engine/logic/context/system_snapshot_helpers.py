@@ -988,18 +988,30 @@ def _extract_users_from_correlation_history(task: Optional[Task], user_ids: Set[
         return
 
     try:
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
         with persistence.get_db_connection() as conn:
             cursor = conn.cursor()
-            # Query for all messages in this correlation
-            cursor.execute(
+
+            # Build dialect-specific SQL
+            if adapter.is_postgresql():
+                sql = """
+                    SELECT DISTINCT tags->>'user_id' as user_id
+                    FROM service_correlations
+                    WHERE correlation_id = %s
+                    AND tags->>'user_id' IS NOT NULL
                 """
-                SELECT DISTINCT json_extract(tags, '$.user_id') as user_id
-                FROM service_correlations
-                WHERE correlation_id = ?
-                AND json_extract(tags, '$.user_id') IS NOT NULL
-                """,
-                (task.context.correlation_id,),
-            )
+            else:
+                sql = """
+                    SELECT DISTINCT json_extract(tags, '$.user_id') as user_id
+                    FROM service_correlations
+                    WHERE correlation_id = ?
+                    AND json_extract(tags, '$.user_id') IS NOT NULL
+                """
+
+            cursor.execute(sql, (task.context.correlation_id,))
             correlation_users = cursor.fetchall()
             for row in correlation_users:
                 if row["user_id"]:
@@ -1430,28 +1442,51 @@ async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List
     """Collect recent messages from this user in other channels."""
     recent_messages = []
     try:
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
         # Query service correlations for user's recent messages
         with persistence.get_db_connection() as conn:
             cursor = conn.cursor()
-            # Look for handler actions from this user in other channels
-            cursor.execute(
+
+            # Build dialect-specific SQL
+            if adapter.is_postgresql():
+                # PostgreSQL: Cast JSONB to text for LIKE operator
+                sql = """
+                    SELECT
+                        c.correlation_id,
+                        c.handler_name,
+                        c.request_data,
+                        c.created_at,
+                        c.tags
+                    FROM service_correlations c
+                    WHERE
+                        c.tags::text LIKE %s
+                        AND c.tags::text NOT LIKE %s
+                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
+                    ORDER BY c.created_at DESC
+                    LIMIT 3
                 """
-                SELECT
-                    c.correlation_id,
-                    c.handler_name,
-                    c.request_data,
-                    c.created_at,
-                    c.tags
-                FROM service_correlations c
-                WHERE
-                    c.tags LIKE ?
-                    AND c.tags NOT LIKE ?
-                    AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                ORDER BY c.created_at DESC
-                LIMIT 3
-            """,
-                (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'),
-            )
+            else:
+                # SQLite: tags is TEXT, LIKE works directly
+                sql = """
+                    SELECT
+                        c.correlation_id,
+                        c.handler_name,
+                        c.request_data,
+                        c.created_at,
+                        c.tags
+                    FROM service_correlations c
+                    WHERE
+                        c.tags LIKE ?
+                        AND c.tags NOT LIKE ?
+                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
+                    ORDER BY c.created_at DESC
+                    LIMIT 3
+                """
+
+            cursor.execute(sql, (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'))
 
             for row in cursor.fetchall():
                 try:

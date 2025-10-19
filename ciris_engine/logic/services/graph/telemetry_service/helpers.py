@@ -268,20 +268,23 @@ async def get_average_thought_depth(
         if not db_path:
             raise ThoughtDepthQueryError("Memory service has no db_path attribute")
 
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
             # Use window_start parameter for consistent timing with other telemetry calculations
-            cursor.execute(
-                """
+            # Use dialect-appropriate placeholder
+            sql = f"""
                 SELECT AVG(thought_depth) as avg_depth
                 FROM thoughts
-                WHERE created_at >= ?
-            """,
-                (window_start.isoformat(),),
-            )
+                WHERE created_at >= {adapter.placeholder()}
+            """
+            cursor.execute(sql, (window_start.isoformat(),))
             result = cursor.fetchone()
-            if result and result[0] is not None:
-                return float(result[0])
+            if result and result["avg_depth"] is not None:
+                return float(result["avg_depth"])
             else:
                 raise NoThoughtDataError("No thought data available in the last 24 hours")
 

@@ -676,8 +676,26 @@ def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
         except (ValueError, AttributeError):
             timestamp = None
 
-    # Parse request_data
-    request_data_json = json.loads(row["request_data"]) if row["request_data"] else {}
+    # Parse request_data - handle PostgreSQL JSONB vs SQLite TEXT
+    request_data_raw = row["request_data"]
+    if request_data_raw:
+        request_data_json = request_data_raw if isinstance(request_data_raw, dict) else json.loads(request_data_raw)
+    else:
+        request_data_json = {}
+
+    # Parse response_data - handle PostgreSQL JSONB vs SQLite TEXT
+    response_data_raw = row["response_data"]
+    if response_data_raw:
+        response_data_parsed = response_data_raw if isinstance(response_data_raw, dict) else json.loads(response_data_raw)
+    else:
+        response_data_parsed = None
+
+    # Parse tags - handle PostgreSQL JSONB vs SQLite TEXT
+    tags_raw = row["tags"]
+    if tags_raw:
+        tags_parsed = tags_raw if isinstance(tags_raw, dict) else json.loads(tags_raw)
+    else:
+        tags_parsed = {}
 
     # Map 'success' to 'completed' for backwards compatibility
     status_value = row["status"]
@@ -691,15 +709,13 @@ def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
         "handler_name": row["handler_name"],
         "action_type": row["action_type"],
         "request_data": request_data_json if request_data_json else None,
-        "response_data": _parse_response_data(
-            json.loads(row["response_data"]) if row["response_data"] else None, timestamp
-        ),
+        "response_data": _parse_response_data(response_data_parsed, timestamp),
         "status": ServiceCorrelationStatus(status_value),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "correlation_type": CorrelationType(row["correlation_type"] or "service_interaction"),
         "timestamp": timestamp or datetime.now(timezone.utc),
-        "tags": json.loads(row["tags"]) if row["tags"] else {},
+        "tags": tags_parsed,
         "retention_policy": row["retention_policy"] or "raw",
     }
 

@@ -578,8 +578,20 @@ class CIRISRuntime:
 
     async def _init_database(self) -> None:
         """Initialize database and run migrations."""
-        # Pass the db path from our config - MUST pass the config!
-        db_path = persistence.get_sqlite_db_full_path(self.essential_config)
+        # Use environment-based database URL if set, otherwise use SQLite path from config
+        # This allows PostgreSQL support via CIRIS_DB_URL environment variable
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+        if adapter.is_postgresql():
+            # PostgreSQL: Use None to trigger environment-based connection
+            db_path = None
+            logger.info("Using PostgreSQL database from environment (CIRIS_DB_URL)")
+        else:
+            # SQLite: Use direct path from essential_config to avoid config service dependency
+            db_path = str(self.essential_config.database.main_db)
+            logger.info(f"Using SQLite database: {db_path}")
+
         persistence.initialize_database(db_path)
         persistence.run_migrations(db_path)
 
@@ -593,8 +605,9 @@ class CIRISRuntime:
         try:
             from ciris_engine.logic.persistence.db.dialect import get_adapter
 
-            # Check core tables exist - pass the correct db path!
-            db_path = persistence.get_sqlite_db_full_path(self.essential_config)
+            adapter = get_adapter()
+            # Use environment-based connection for PostgreSQL, direct path for SQLite
+            db_path = None if adapter.is_postgresql() else str(self.essential_config.database.main_db)
             conn = persistence.get_db_connection(db_path)
             cursor = conn.cursor()
 
@@ -609,9 +622,7 @@ class CIRISRuntime:
                         (table,),
                     )
                 else:
-                    cursor.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
-                    )
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
 
                 if not cursor.fetchone():
                     raise RuntimeError(f"Required table '{table}' missing from database")

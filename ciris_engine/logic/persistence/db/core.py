@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Any, Optional, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
 from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
+from ciris_engine.schemas.persistence.sqlite import tables as sqlite_tables
 
 from .dialect import init_dialect
 from .migration_runner import run_migrations
@@ -74,7 +74,7 @@ class PostgreSQLCursorWrapper:
         # If using named parameters (dict), convert :name to %(name)s
         if parameters and isinstance(parameters, dict):
             # Replace :param_name with %(param_name)s
-            translated_sql = re.sub(r':(\w+)', r'%(\1)s', sql)
+            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
         else:
             # Using positional parameters, convert ? to %s
             translated_sql = sql.replace("?", "%s")
@@ -149,7 +149,7 @@ class PostgreSQLConnectionWrapper:
         # Translate placeholders based on parameter type
         if parameters and isinstance(parameters, dict):
             # Named parameters: :name -> %(name)s
-            translated_sql = re.sub(r':(\w+)', r'%(\1)s', sql)
+            translated_sql = re.sub(r":(\w+)", r"%(\1)s", sql)
         else:
             # Positional parameters: ? -> %s
             translated_sql = sql.replace("?", "%s")
@@ -399,10 +399,14 @@ def initialize_database(db_path: Optional[str] = None) -> None:
 
         adapter = init_dialect(db_path)
 
-        # Select appropriate table schemas for the dialect
+        # Log which database type we're initializing
         if adapter.is_postgresql():
+            # Mask password in connection string for logging
+            safe_url = adapter.db_url.split('@')[0].rsplit(':', 1)[0] + ':***@' + adapter.db_url.split('@')[1] if '@' in adapter.db_url else adapter.db_url
+            logger.info(f"Initializing PostgreSQL database: {safe_url}")
             tables_module = postgres_tables
         else:
+            logger.info(f"Initializing SQLite database: {db_path}")
             tables_module = sqlite_tables
 
         with get_db_connection(db_path) as conn:

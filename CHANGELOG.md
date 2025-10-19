@@ -71,8 +71,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Better IDE auto-completion and type inference
     - Compile-time type checking catches errors early
     - 99.2% QA test pass rate maintained (127/128 tests)
+- **PostgreSQL Runtime Support** - Added psycopg2-binary dependency for production deployments
+  - Added `psycopg2-binary>=2.9.0,<3.0.0` to requirements.txt
+  - Fixes container crashes when agents try to connect to PostgreSQL databases
+  - Enables production PostgreSQL deployments without dependency errors
 
 ### Fixed
+- **Mypy Strict Type Checking** - Resolved CI-blocking mypy errors with proper type hints
+  - Fixed `typed_registries.py`: Refactored to use `Generic[T]` with composition instead of inheritance to avoid Liskov substitution violations
+  - Fixed `CircuitBreakerConfig` import from correct module (`circuit_breaker.py`)
+  - Added `@overload` signatures to `jsondict_helpers.py` for `dict[str, object]` compatibility (SQL query results)
+  - Added type annotations to `STREAM_METADATA` and `CATEGORY_METADATA` in consent.py
+  - Result: Zero mypy errors across 576 source files, CI build passes
 - **CRITICAL: PostgreSQL URL Parsing** - Fixed production blocker preventing PostgreSQL deployments with special characters in passwords
   - **Issue**: Python's `urlparse()` cannot handle passwords containing `@`, `{`, `}`, `[`, `]` characters
   - **Impact**: Scout Agent 1.4.1 failed to start with error "Invalid IPv6 URL during Memory Service initialization"

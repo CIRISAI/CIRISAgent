@@ -1,6 +1,5 @@
 """Unit tests for ThoughtProcessor."""
 
-import os
 from datetime import datetime, timezone
 from typing import Generator
 from unittest.mock import AsyncMock, Mock, patch
@@ -238,9 +237,7 @@ class TestThoughtProcessor:
         return processor
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        os.environ.get("CI") == "true", reason="Timeout issues in CI environment - TODO: fix async race condition"
-    )
+    @pytest.mark.flaky(reruns=2, reruns_delay=1)
     async def test_process_thought(self, thought_processor: ThoughtProcessor, mock_persistence: Mock) -> None:
         """Test processing a thought."""
         import logging

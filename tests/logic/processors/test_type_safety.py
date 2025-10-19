@@ -3,12 +3,14 @@
 Note: This test will be enhanced after protocol definitions are merged.
 Currently validates that mock objects can be created and passed to ThoughtProcessor.
 """
+
 import pytest
+
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from tests.fixtures.processor_mocks import (
-    MockDMAOrchestrator,
-    MockContextBuilder,
     MockConscienceRegistry,
+    MockContextBuilder,
+    MockDMAOrchestrator,
 )
 
 

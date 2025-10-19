@@ -3,10 +3,12 @@
 Note: These mocks will be enhanced after the protocol definitions
 from 1.4.2-processor-protocols are merged.
 """
+
 from typing import Any, Optional
+
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
-from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.processors.context import ProcessorContext
+from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.runtime.models import Thought
 
 

@@ -289,3 +289,103 @@ class OperationalCounters(BaseModel):
     expired_cleanups: int = Field(..., ge=0, description="Cleanup operations")
     tool_executions: int = Field(..., ge=0, description="Tool executions")
     tool_failures: int = Field(..., ge=0, description="Tool failures")
+
+
+# API Response Schemas
+
+
+class ConsentStatusResponse(BaseModel):
+    """Response for consent status endpoint."""
+
+    has_consent: bool = Field(..., description="Whether consent exists")
+    user_id: str = Field(..., description="User identifier")
+    stream: Optional[str] = Field(None, description="Current consent stream")
+    granted_at: Optional[str] = Field(None, description="When consent was granted (ISO format)")
+    expires_at: Optional[str] = Field(None, description="When consent expires (ISO format)")
+    message: Optional[str] = Field(None, description="Additional message if no consent")
+
+
+class ConsentRecordResponse(BaseModel):
+    """Individual consent record for query responses."""
+
+    id: str = Field(..., description="Consent record ID")
+    user_id: str = Field(..., description="User identifier")
+    status: str = Field(..., description="Consent status (ACTIVE/REVOKED/etc)")
+    scope: str = Field(..., description="Consent scope")
+    purpose: str = Field(..., description="Purpose of consent")
+    granted_at: Optional[str] = Field(None, description="When granted (ISO format)")
+    expires_at: Optional[str] = Field(None, description="When expires (ISO format)")
+    metadata: dict[str, object] = Field(default_factory=dict, description="Additional metadata")
+
+
+class ConsentQueryResponse(BaseModel):
+    """Response for consent query endpoint."""
+
+    consents: list[ConsentRecordResponse] = Field(..., description="List of consent records")
+    total: int = Field(..., ge=0, description="Total number of records")
+
+
+class StreamMetadata(BaseModel):
+    """Metadata for a consent stream."""
+
+    name: str = Field(..., description="Display name")
+    description: str = Field(..., description="Stream description")
+    duration_days: Optional[int] = Field(None, description="Duration in days (None = indefinite)")
+    auto_forget: bool = Field(default=False, description="Whether stream auto-forgets")
+    learning_enabled: bool = Field(default=False, description="Whether learning is enabled")
+    identity_removed: bool = Field(default=False, description="Whether identity is removed")
+    requires_categories: bool = Field(default=False, description="Whether categories are required")
+
+
+class ConsentStreamsResponse(BaseModel):
+    """Response for consent streams endpoint."""
+
+    streams: dict[str, StreamMetadata] = Field(..., description="Available consent streams")
+    default: str = Field(..., description="Default stream value")
+
+
+class CategoryMetadata(BaseModel):
+    """Metadata for a consent category."""
+
+    name: str = Field(..., description="Display name")
+    description: str = Field(..., description="Category description")
+
+
+class ConsentCategoriesResponse(BaseModel):
+    """Response for consent categories endpoint."""
+
+    categories: dict[str, CategoryMetadata] = Field(..., description="Available consent categories")
+
+
+class PartnershipStatusResponse(BaseModel):
+    """Response for partnership status check."""
+
+    current_stream: str = Field(..., description="Current consent stream")
+    partnership_status: str = Field(..., description="Partnership request status")
+    message: str = Field(..., description="Status message")
+
+
+class ConsentCleanupResponse(BaseModel):
+    """Response for consent cleanup operation."""
+
+    cleaned: int = Field(..., ge=0, description="Number of records cleaned")
+    message: str = Field(..., description="Cleanup result message")
+
+
+class DSARInitiateResponse(BaseModel):
+    """Response for DSAR initiation."""
+
+    request_id: str = Field(..., description="DSAR request identifier")
+    user_id: str = Field(..., description="User identifier")
+    request_type: str = Field(..., description="Type of DSAR request")
+    status: str = Field(..., description="Request status")
+    export_data: dict[str, object] = Field(..., description="Exported data")
+
+
+class DSARStatusResponse(BaseModel):
+    """Response for DSAR status check."""
+
+    request_id: str = Field(..., description="DSAR request identifier")
+    user_id: str = Field(..., description="User identifier")
+    status: str = Field(..., description="Request status")
+    message: str = Field(..., description="Status message")

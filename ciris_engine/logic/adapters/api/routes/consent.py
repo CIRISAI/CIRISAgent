@@ -13,15 +13,25 @@ from fastapi.responses import JSONResponse
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService, ConsentValidationError
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
+    CategoryMetadata,
     ConsentAuditEntry,
+    ConsentCategoriesResponse,
     ConsentCategory,
+    ConsentCleanupResponse,
     ConsentDecayStatus,
     ConsentImpactReport,
+    ConsentQueryResponse,
+    ConsentRecordResponse,
     ConsentRequest,
     ConsentStatus,
+    ConsentStatusResponse,
     ConsentStream,
+    ConsentStreamsResponse,
+    DSARInitiateResponse,
+    DSARStatusResponse,
+    PartnershipStatusResponse,
+    StreamMetadata,
 )
-from ciris_engine.schemas.types import JSONDict
 
 from ..dependencies.auth import AuthContext, get_auth_context, require_observer
 
@@ -112,9 +122,11 @@ def get_consent_manager(request: Request) -> ConsentService:
     return manager
 
 
-def _build_consent_dict(consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None) -> JSONDict:
+def _build_consent_record(
+    consent_status: ConsentStatus, user_id: str, status_filter: Optional[str] = None
+) -> ConsentRecordResponse:
     """
-    Build consent dictionary - eliminates duplication.
+    Build consent record response - eliminates duplication.
 
     Args:
         consent_status: The consent status object
@@ -122,7 +134,7 @@ def _build_consent_dict(consent_status: ConsentStatus, user_id: str, status_filt
         status_filter: Optional status filter (ACTIVE/REVOKED/etc)
 
     Returns:
-        Consent dictionary
+        Consent record response
     """
     # TEMPORARY and PARTNERED are the active streams
     is_active = consent_status.stream in [ConsentStream.TEMPORARY, ConsentStream.PARTNERED]
@@ -133,23 +145,23 @@ def _build_consent_dict(consent_status: ConsentStatus, user_id: str, status_filt
     else:
         status = "ACTIVE" if is_active else "REVOKED"
 
-    return {
-        "id": f"consent_{user_id}",
-        "user_id": user_id,
-        "status": status,
-        "scope": "general",
-        "purpose": "Agent interaction and data processing",
-        "granted_at": (consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None),
-        "expires_at": consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
-        "metadata": {},
-    }
+    return ConsentRecordResponse(
+        id=f"consent_{user_id}",
+        user_id=user_id,
+        status=status,
+        scope="general",
+        purpose="Agent interaction and data processing",
+        granted_at=consent_status.timestamp.isoformat() if hasattr(consent_status, "timestamp") else None,
+        expires_at=consent_status.expiry.isoformat() if hasattr(consent_status, "expiry") else None,
+        metadata={},
+    )
 
 
-@router.get("/status")
+@router.get("/status", response_model=ConsentStatusResponse)
 async def get_consent_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> JSONDict:
+) -> ConsentStatusResponse:
     """
     Get current consent status for authenticated user.
 
@@ -158,31 +170,31 @@ async def get_consent_status(
     user_id = auth.user_id  # Use user_id from auth context
     try:
         consent = await manager.get_consent(user_id)
-        return {
-            "has_consent": True,
-            "user_id": user_id,
-            "stream": consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
-            "granted_at": consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
-            "expires_at": (
+        return ConsentStatusResponse(
+            has_consent=True,
+            user_id=user_id,
+            stream=consent.stream.value if hasattr(consent.stream, "value") else str(consent.stream),
+            granted_at=consent.granted_at.isoformat() if hasattr(consent, "granted_at") else None,
+            expires_at=(
                 consent.expires_at.isoformat() if hasattr(consent, "expires_at") and consent.expires_at else None
             ),
-        }
+        )
     except ConsentNotFoundError:
         # No consent exists yet - user hasn't interacted
-        return {
-            "has_consent": False,
-            "user_id": user_id,
-            "message": "No consent record found. Consent will be created on first interaction.",
-        }
+        return ConsentStatusResponse(
+            has_consent=False,
+            user_id=user_id,
+            message="No consent record found. Consent will be created on first interaction.",
+        )
 
 
-@router.get("/query")
+@router.get("/query", response_model=ConsentQueryResponse)
 async def query_consents(
     status: Optional[str] = None,
     user_id: Optional[str] = None,
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> JSONDict:
+) -> ConsentQueryResponse:
     """
     Query consent records with optional filters.
 
@@ -211,13 +223,13 @@ async def query_consents(
         if status == "ACTIVE" and not is_active:
             consents = []
         else:
-            consent_dict = _build_consent_dict(consent_status, user_id, status)
-            consents = [consent_dict]
+            consent_record = _build_consent_record(consent_status, user_id, status)
+            consents = [consent_record]
     except Exception:
         # No consent found
         consents = []
 
-    return {"consents": consents, "total": len(consents)}
+    return ConsentQueryResponse(consents=consents, total=len(consents))
 
 
 @router.post("/grant", response_model=ConsentStatus)
@@ -359,36 +371,51 @@ async def get_audit_trail(
         )
 
 
-@router.get("/streams", response_model=JSONDict)
-async def get_consent_streams() -> JSONDict:
+@router.get("/streams", response_model=ConsentStreamsResponse)
+async def get_consent_streams() -> ConsentStreamsResponse:
     """
     Get available consent streams and their descriptions.
     """
-    # Convert enum keys to strings for JSONDict compatibility
-    streams_dict = {str(k.value): v for k, v in STREAM_METADATA.items()}
-    return {
-        "streams": streams_dict,
-        "default": ConsentStream.TEMPORARY.value,
+    # Convert metadata to typed models
+    streams_dict = {
+        str(k.value): StreamMetadata(
+            name=v["name"],
+            description=v["description"],
+            duration_days=v.get("duration_days"),
+            auto_forget=v.get("auto_forget", False),
+            learning_enabled=v.get("learning_enabled", False),
+            identity_removed=v.get("identity_removed", False),
+            requires_categories=v.get("requires_categories", False),
+        )
+        for k, v in STREAM_METADATA.items()
     }
+    return ConsentStreamsResponse(
+        streams=streams_dict,
+        default=ConsentStream.TEMPORARY.value,
+    )
 
 
-@router.get("/categories", response_model=JSONDict)
-async def get_consent_categories() -> JSONDict:
+@router.get("/categories", response_model=ConsentCategoriesResponse)
+async def get_consent_categories() -> ConsentCategoriesResponse:
     """
     Get available consent categories for PARTNERED stream.
     """
-    # Convert enum keys to strings for JSONDict compatibility
-    categories_dict = {str(k.value): v for k, v in CATEGORY_METADATA.items()}
-    return {
-        "categories": categories_dict,
+    # Convert metadata to typed models
+    categories_dict = {
+        str(k.value): CategoryMetadata(
+            name=v["name"],
+            description=v["description"],
+        )
+        for k, v in CATEGORY_METADATA.items()
     }
+    return ConsentCategoriesResponse(categories=categories_dict)
 
 
-@router.get("/partnership/status", response_model=JSONDict)
+@router.get("/partnership/status", response_model=PartnershipStatusResponse)
 async def check_partnership_status(
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> JSONDict:
+) -> PartnershipStatusResponse:
     """
     Check status of pending partnership request.
 
@@ -406,38 +433,39 @@ async def check_partnership_status(
     except ConsentNotFoundError:
         current_stream = ConsentStream.TEMPORARY
 
-    # Convert enum to string for JSONDict compatibility
-    response: JSONDict = {
-        "current_stream": current_stream.value if hasattr(current_stream, "value") else str(current_stream),
-        "partnership_status": status or "none",
-    }
+    # Convert enum to string
+    stream_value = current_stream.value if hasattr(current_stream, "value") else str(current_stream)
 
     # Use the message lookup to eliminate duplicate if/elif chains
     message_key = status if status in PARTNERSHIP_MESSAGES else "none"
-    response["message"] = PARTNERSHIP_MESSAGES[message_key]
+    message = PARTNERSHIP_MESSAGES[message_key]
 
-    return response
+    return PartnershipStatusResponse(
+        current_stream=stream_value,
+        partnership_status=status or "none",
+        message=message,
+    )
 
 
-@router.post("/cleanup", response_model=JSONDict)
+@router.post("/cleanup", response_model=ConsentCleanupResponse)
 async def cleanup_expired(
     _auth: AuthContext = Depends(require_observer),
     manager: ConsentService = Depends(get_consent_manager),
-) -> JSONDict:
+) -> ConsentCleanupResponse:
     """
     Clean up expired TEMPORARY consents (admin only).
 
     HARD DELETE after 14 days - NO GRACE PERIOD.
     """
     count = await manager.cleanup_expired()
-    return {
-        "cleaned": count,
-        "message": f"Cleaned up {count} expired consent records",
-    }
+    return ConsentCleanupResponse(
+        cleaned=count,
+        message=f"Cleaned up {count} expired consent records",
+    )
 
 
 # DSAR helper functions to reduce cognitive complexity
-async def _get_consent_export_data(manager: ConsentService, user_id: str) -> Optional[JSONDict]:
+async def _get_consent_export_data(manager: ConsentService, user_id: str) -> Optional[dict[str, object]]:
     """Extract consent data for DSAR export.
 
     Args:
@@ -463,7 +491,7 @@ async def _get_consent_export_data(manager: ConsentService, user_id: str) -> Opt
         return None
 
 
-async def _get_impact_export_data(manager: ConsentService, user_id: str) -> Optional[JSONDict]:
+async def _get_impact_export_data(manager: ConsentService, user_id: str) -> Optional[dict[str, object]]:
     """Extract impact data for DSAR export.
 
     Args:
@@ -487,7 +515,7 @@ async def _get_impact_export_data(manager: ConsentService, user_id: str) -> Opti
         return None
 
 
-async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[JSONDict]:
+async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[dict[str, object]]:
     """Extract audit trail data for DSAR export.
 
     Args:
@@ -522,12 +550,12 @@ async def _get_audit_export_data(manager: ConsentService, user_id: str) -> list[
 
 
 # DSAR (Data Subject Access Request) endpoints
-@router.post("/dsar/initiate", response_model=JSONDict)
+@router.post("/dsar/initiate", response_model=DSARInitiateResponse)
 async def initiate_dsar(
     request_type: str = "full",
     auth: AuthContext = Depends(get_auth_context),
     manager: ConsentService = Depends(get_consent_manager),
-) -> JSONDict:
+) -> DSARInitiateResponse:
     """
     Initiate automated DSAR (Data Subject Access Request).
 
@@ -541,7 +569,7 @@ async def initiate_dsar(
 
     try:
         # Build the export data based on request type using helper functions
-        export_data: JSONDict = {}
+        export_data: dict[str, object] = {}
 
         if request_type in ["full", "consent_only"]:
             export_data["consent"] = await _get_consent_export_data(manager, user_id)
@@ -557,13 +585,13 @@ async def initiate_dsar(
 
         request_id = f"dsar_{user_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
-        return {
-            "request_id": request_id,
-            "user_id": user_id,
-            "request_type": request_type,
-            "status": "completed",
-            "export_data": export_data,
-        }
+        return DSARInitiateResponse(
+            request_id=request_id,
+            user_id=user_id,
+            request_type=request_type,
+            status="completed",
+            export_data=export_data,
+        )
 
     except Exception as e:
         logger.error(f"Error generating DSAR for {user_id}: {e}", exc_info=True)
@@ -573,11 +601,11 @@ async def initiate_dsar(
         )
 
 
-@router.get("/dsar/status/{request_id}", response_model=JSONDict)
+@router.get("/dsar/status/{request_id}", response_model=DSARStatusResponse)
 async def get_dsar_status(
     request_id: str,
     auth: AuthContext = Depends(get_auth_context),
-) -> JSONDict:
+) -> DSARStatusResponse:
     """
     Get status of a DSAR request.
 
@@ -601,9 +629,9 @@ async def get_dsar_status(
             detail="Cannot access another user's DSAR request",
         )
 
-    return {
-        "request_id": request_id,
-        "user_id": auth.user_id,
-        "status": "completed",
-        "message": "DSAR request completed - data is immediately available",
-    }
+    return DSARStatusResponse(
+        request_id=request_id,
+        user_id=auth.user_id,
+        status="completed",
+        message="DSAR request completed - data is immediately available",
+    )

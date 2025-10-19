@@ -25,7 +25,6 @@ from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph.audit import AuditQuery, VerificationReport
 from ciris_engine.schemas.services.nodes import AuditEntry
-from ciris_engine.schemas.types import JSONDict
 
 from ..constants import DESC_END_TIME, DESC_RESULTS_OFFSET, DESC_START_TIME, ERROR_AUDIT_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import AuthContext, require_admin, require_observer
@@ -147,7 +146,7 @@ def _sync_query_sqlite_audit(
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[JSONDict]:  # NOQA - SQLite row_factory returns JSONDict by design
+) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - SQLite row_factory returns dicts
     """Query SQLite audit database directly (synchronous version)."""
     if not Path(db_path).exists():
         return []
@@ -184,15 +183,15 @@ async def _query_sqlite_audit(
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[JSONDict]:  # NOQA - SQLite database query results are JSONDict by design
+) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - SQLite database query results
     """Query SQLite audit database directly using async thread pool."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset)
 
 
 def _parse_jsonl_entry_timestamp(
-    entry: JSONDict,
-) -> Optional[datetime]:  # NOQA - JSONL entries are JSONDict by design
+    entry: dict[str, object],
+) -> Optional[datetime]:  # SERIALIZATION BOUNDARY - JSONL raw entries
     """Parse timestamp from JSONL entry."""
     entry_time_str = get_str_optional(entry, "timestamp") or get_str_optional(entry, "event_timestamp")
     if entry_time_str:
@@ -204,10 +203,10 @@ def _parse_jsonl_entry_timestamp(
 
 
 def _entry_matches_time_filter(
-    entry: JSONDict,
+    entry: dict[str, object],
     start_time: Optional[datetime],
-    end_time: Optional[datetime],  # NOQA - JSONL entries are JSONDict by design
-) -> bool:
+    end_time: Optional[datetime],
+) -> bool:  # SERIALIZATION BOUNDARY - JSONL raw entries
     """Check if entry matches time filter criteria."""
     if not (start_time or end_time):
         return True
@@ -230,7 +229,7 @@ def _sync_query_jsonl_audit(
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[JSONDict]:  # NOQA - JSONL entries are JSONDict by design
+) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - JSONL entries
     """Query JSONL audit file directly (synchronous version)."""
     if not Path(jsonl_path).exists():
         return []
@@ -260,7 +259,7 @@ async def _query_jsonl_audit(
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> List[JSONDict]:  # NOQA - JSONL entries are JSONDict by design
+) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - JSONL entries
     """Query JSONL audit file directly using async thread pool."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
@@ -277,8 +276,8 @@ def _process_graph_entries(merged: Dict[str, _MergedAuditEntry], graph_entries: 
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, _MergedAuditEntry], sqlite_entries: List[JSONDict]
-) -> None:  # NOQA - SQLite query results are JSONDict by design
+    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]]
+) -> None:  # SERIALIZATION BOUNDARY - SQLite query results
     """Process SQLite entries and add them to merged results."""
     for sqlite_entry in sqlite_entries:
         event_timestamp = get_str(sqlite_entry, "event_timestamp", "")
@@ -311,8 +310,8 @@ def _process_sqlite_entries(
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, _MergedAuditEntry], jsonl_entries: List[JSONDict]
-) -> None:  # NOQA - JSONL entries are JSONDict by design
+    merged: Dict[str, _MergedAuditEntry], jsonl_entries: list[dict[str, object]]
+) -> None:  # SERIALIZATION BOUNDARY - JSONL raw entries
     """Process JSONL entries and add them to merged results."""
     for jsonl_entry in jsonl_entries:
         timestamp_str = get_str(jsonl_entry, "timestamp", "")
@@ -351,9 +350,9 @@ def _process_jsonl_entries(
 
 async def _merge_audit_sources(
     graph_entries: List[AuditEntry],
-    sqlite_entries: List[JSONDict],
-    jsonl_entries: List[JSONDict],  # NOQA - Raw database results are JSONDict by design
-) -> List[AuditEntryResponse]:
+    sqlite_entries: list[dict[str, object]],
+    jsonl_entries: list[dict[str, object]],
+) -> List[AuditEntryResponse]:  # SERIALIZATION BOUNDARY - Raw database results
     """Merge audit entries from all sources and track storage locations."""
     merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
 

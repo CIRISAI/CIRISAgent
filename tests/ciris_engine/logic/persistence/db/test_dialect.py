@@ -7,7 +7,13 @@ with both SQLite and PostgreSQL backends.
 
 import pytest
 
-from ciris_engine.logic.persistence.db.dialect import Dialect, DialectAdapter, get_adapter, init_dialect, parse_postgres_url
+from ciris_engine.logic.persistence.db.dialect import (
+    Dialect,
+    DialectAdapter,
+    get_adapter,
+    init_dialect,
+    parse_postgres_url,
+)
 
 
 class TestDialectAdapter:

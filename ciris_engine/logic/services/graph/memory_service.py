@@ -17,7 +17,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 from ciris_engine.schemas.secrets.service import DecapsulationContext
-from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, TelemetryNodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, LogNodeAttributes, TelemetryNodeAttributes
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
@@ -164,8 +164,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
-        # Process attributes - convert to proper schema
-        processed_attrs: AnyNodeAttributes | GraphNodeAttributes | JSONDict = {}
+        # Process attributes - always returns dict for compatibility
+        processed_attrs: JSONDict = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -601,23 +601,22 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             node_id = f"log_{log_level}_{int(now.timestamp())}"
 
             # Create typed attributes with log-specific data
-            # JSONDict is a type alias for dict, so create dict directly
-            attrs_dict: JSONDict = {
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-                "created_by": "memory_service",
-                "tags": ["log", log_level.lower()],
-                "log_message": log_message,
-                "log_level": log_level,
-                "log_tags": tags or {},
-                "retention_policy": "raw",
-            }
+            log_attrs = LogNodeAttributes(
+                created_at=now,
+                updated_at=now,
+                created_by="memory_service",
+                tags=["log", log_level.lower()],
+                log_message=log_message,
+                log_level=log_level,
+                log_tags=tags or {},
+                retention_policy="raw",
+            )
 
             node = GraphNode(
                 id=node_id,
                 type=NodeType.TSDB_DATA,
                 scope=GraphScope(scope),
-                attributes=attrs_dict,
+                attributes=log_attrs,  # Pass typed Pydantic model directly
                 updated_by="memory_service",
                 updated_at=now,
             )

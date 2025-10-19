@@ -43,6 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.2] - 2025-10-19
 
 ### Fixed
+- **CRITICAL: PostgreSQL URL Parsing** - Fixed production blocker preventing PostgreSQL deployments with special characters in passwords
+  - **Issue**: Python's `urlparse()` cannot handle passwords containing `@`, `{`, `}`, `[`, `]` characters
+  - **Impact**: Scout Agent 1.4.1 failed to start with error "Invalid IPv6 URL during Memory Service initialization"
+  - **Solution**: Created custom `parse_postgres_url()` function using regex-based parsing
+    - Handles passwords with multiple `@` symbols by finding the LAST `@` as the host delimiter
+    - Supports URL-encoded passwords (e.g., `%40` → `@`)
+    - Falls back to standard `urlparse()` for backward compatibility
+  - **Testing**: Added 21 comprehensive unit tests covering all edge cases
+  - **Files Modified**: `ciris_engine/logic/persistence/db/dialect.py`, `tests/ciris_engine/logic/persistence/db/test_dialect.py`
+  - **Validation**: All 52 dialect tests pass, no regressions introduced
+
 - **Test Suite Remediation** - Systematic cleanup of skipped tests using parallel agentic development
   - **4-Agent Parallel Strategy**: Used git worktrees for concurrent remediation across 4 specialized agents
   - **Core Tests (Agent 1)**: Fixed async race condition in `test_thought_processor.py`

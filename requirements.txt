@@ -1,6 +1,6 @@
 # CIRIS Agent Requirements - Runtime Dependencies Only
 # Last updated: 2025-01-08
-# Python >= 3.10 required
+# Python >= 3.12 required (for PEP 695 type parameter syntax)
 
 # Core Dependencies
 pydantic>=2.7.0,<3.0.0

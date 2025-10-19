@@ -23,7 +23,7 @@ Usage:
     service = await memory_registry.get("memory")  # Returns Optional[MemoryServiceProtocol]
 """
 
-from typing import TYPE_CHECKING, Generic, List, Optional, TypeVar, cast
+from typing import TYPE_CHECKING, List, Optional, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -40,11 +40,7 @@ if TYPE_CHECKING:
     from ciris_engine.protocols.services.runtime.tool import ToolServiceProtocol
 
 
-# TypeVar for generic service type
-T_Service = TypeVar("T_Service")
-
-
-class TypedServiceRegistry(Generic[T_Service]):
+class TypedServiceRegistry[T_Service]:
     """
     Base class for typed service registries using Generic[T].
 

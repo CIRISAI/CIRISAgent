@@ -9,7 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, Protocol, TypeVar, Union, cast
+from typing import Any, Dict, List, Optional, Protocol, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -17,9 +17,6 @@ from ciris_engine.schemas.types import JSONDict
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
 logger = logging.getLogger(__name__)
-
-# Generic type variable for service providers
-T_Service = TypeVar("T_Service")
 
 
 class Priority(Enum):
@@ -40,7 +37,7 @@ class SelectionStrategy(Enum):
 
 
 @dataclass
-class ServiceProvider(Generic[T_Service]):
+class ServiceProvider[T_Service]:
     """Represents a registered service provider with metadata"""
 
     name: str
@@ -93,7 +90,9 @@ class ServiceRegistry:
         self._registrations_total = 0
         self._deregistrations_total = 0
 
-    def register_service(
+    def register_service[
+        T_Service
+    ](
         self,
         service_type: ServiceType,
         provider: T_Service,

@@ -53,6 +53,7 @@ class BaseBus(ABC, Generic[ServiceT]):
         # Processing state
         self._running = False
         self._process_task: Optional[asyncio.Task[None]] = None
+        self._shutdown_event = asyncio.Event()
 
         # Metrics
         self._processed_count = 0
@@ -73,38 +74,54 @@ class BaseBus(ABC, Generic[ServiceT]):
     async def stop(self) -> None:
         """Stop the bus processing loop"""
         self._running = False
+        self._shutdown_event.set()
         if self._process_task:
-            self._process_task.cancel()
             try:
-                await self._process_task
-            except asyncio.CancelledError:
-                # Expected when we cancel the task, don't re-raise
-                pass  # NOSONAR - Intentionally not re-raising in stop() method
+                await asyncio.wait_for(self._process_task, timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning(f"{self.__class__.__name__} shutdown timeout, cancelling")
+                self._process_task.cancel()
+                try:
+                    await self._process_task
+                except asyncio.CancelledError:
+                    pass  # NOSONAR - Intentionally not re-raising in stop() method
         logger.info(f"{self.__class__.__name__} stopped")
 
     async def _process_loop(self) -> None:
-        """Main processing loop"""
+        """Main processing loop - event-driven, no busy-looping"""
         while self._running:
             try:
-                # Get next message with timeout
-                message = await asyncio.wait_for(self._queue.get(), timeout=0.1)
+                # Wait indefinitely for messages or shutdown
+                get_task = asyncio.create_task(self._queue.get())
+                shutdown_task = asyncio.create_task(self._shutdown_event.wait())
 
-                # Process it
-                try:
-                    await self._process_message(message)
-                    self._processed_count += 1
-                except Exception as e:
-                    logger.error(f"Error processing message in {self.__class__.__name__}: {e}", exc_info=True)
-                    self._failed_count += 1
-                    await self._handle_failed_message(message, e)
+                done, pending = await asyncio.wait(
+                    {get_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
+                )
 
-            except asyncio.TimeoutError:
-                continue
+                # Cancel pending tasks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+                # Check if shutdown was triggered
+                if shutdown_task in done:
+                    break
+
+                # Process the message
+                message = await get_task
+                await self._process_message(message)
+                self._processed_count += 1
+
             except asyncio.CancelledError:
                 # Re-raise to allow proper cancellation
                 raise
             except Exception as e:
-                logger.error(f"Unexpected error in {self.__class__.__name__} loop: {e}")
+                logger.error(f"Error processing message in {self.__class__.__name__}: {e}", exc_info=True)
+                self._failed_count += 1
 
     @abstractmethod
     async def _process_message(self, message: BusMessage) -> None:

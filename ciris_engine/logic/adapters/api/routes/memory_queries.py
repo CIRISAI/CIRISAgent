@@ -132,12 +132,17 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
             yesterday = now - timedelta(days=1)
 
             from ciris_engine.logic.persistence.db.dialect import get_adapter
+
             placeholder = get_adapter().placeholder()
 
-            cursor.execute(f"SELECT COUNT(*) FROM graph_nodes WHERE updated_at >= {placeholder}", (yesterday.isoformat(),))
+            cursor.execute(
+                f"SELECT COUNT(*) FROM graph_nodes WHERE updated_at >= {placeholder}", (yesterday.isoformat(),)
+            )
             recent_activity["nodes_24h"] = cursor.fetchone()[0]
 
-            cursor.execute(f"SELECT COUNT(*) FROM graph_edges WHERE created_at >= {placeholder}", (yesterday.isoformat(),))
+            cursor.execute(
+                f"SELECT COUNT(*) FROM graph_edges WHERE created_at >= {placeholder}", (yesterday.isoformat(),)
+            )
             recent_activity["edges_24h"] = cursor.fetchone()[0]
 
             # Storage size

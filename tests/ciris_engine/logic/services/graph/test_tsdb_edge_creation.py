@@ -923,9 +923,7 @@ class TestDailyConsolidationEdgeCreation:
         """Test getting previous daily summary ID."""
         with patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             # Ensure both mocks return the same mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
@@ -965,9 +963,7 @@ class TestDailyConsolidationEdgeCreation:
         """Test getting previous regular (6-hour) summary ID."""
         with patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             # Ensure both mocks return the same mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
@@ -1003,9 +999,7 @@ class TestDailyConsolidationEdgeCreation:
         """Test creating temporal edges when previous daily summary exists."""
         with patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             # Ensure both mocks return the same mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
@@ -1082,9 +1076,7 @@ class TestDailyConsolidationEdgeCreation:
         """Test creating temporal edges for the first daily summary (no previous)."""
         with patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             # Ensure both mocks return the same mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
@@ -1138,14 +1130,14 @@ class TestDailyConsolidationEdgeCreation:
 class TestDailyConsolidationService:
     """Test the daily consolidation service edge creation logic."""
 
-    def test_create_daily_summary_edges_correct_id_parsing(self, mock_memory_bus, mock_time_service, mock_db_connection):
+    def test_create_daily_summary_edges_correct_id_parsing(
+        self, mock_memory_bus, mock_time_service, mock_db_connection
+    ):
         """Test that daily summary edge creation correctly parses node IDs."""
         # Patch BEFORE creating the service so the edge manager uses the mock_db_connection
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection") as mock_get_conn, patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_edge_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_edge_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection
             mock_edge_conn.return_value.__enter__.return_value = mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
@@ -1250,9 +1242,7 @@ class TestDailyConsolidationService:
         """Test the edge validation logic that ensures all daily summaries have temporal edges."""
         with patch(
             "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
-        ) as mock_get_conn, patch(
-            "ciris_engine.logic.persistence.db.operations.get_db_connection"
-        ) as mock_ops_conn:
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
             # Ensure both mocks return the same mock_db_connection
             mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
             mock_get_conn.return_value.__enter__.return_value = mock_db_connection

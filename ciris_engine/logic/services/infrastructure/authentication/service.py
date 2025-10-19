@@ -1444,7 +1444,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             revoked_count = counts.get("revoked", 0)
             # Extract by_role dict with type assertion
             role_counts_raw: Union[int, Dict[str, int]] = counts.get("by_role", {})
-            role_counts: Dict[str, int] = role_counts_raw if isinstance(role_counts_raw, dict) else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            role_counts: Dict[str, int] = (
+                role_counts_raw
+                if isinstance(role_counts_raw, dict)
+                else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            )
         except Exception as e:
             logger.warning(
                 f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"

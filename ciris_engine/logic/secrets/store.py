@@ -51,6 +51,7 @@ class SecretsStore:
         self.time_service = time_service
         # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
         from typing import Union
+
         self.db_path: Union[str, Path]
         if db_path.startswith(("postgresql://", "postgres://")):
             self.db_path = db_path

@@ -135,88 +135,90 @@ class TestRawDataCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_tsdb_data_nodes(self, tsdb_service, mock_db_connection):
         """Test that TSDB data nodes are cleaned up after consolidation."""
+
         # Patch get_db_connection to return our mock connection
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                # Create old TSDB data nodes (30+ hours ago to ensure period_end is older than 24 hours)
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            # Create old TSDB data nodes (30+ hours ago to ensure period_end is older than 24 hours)
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Insert 100 TSDB data nodes
-                for i in range(100):
-                    node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
-                    cursor.execute(
-                        """
+            # Insert 100 TSDB data nodes
+            for i in range(100):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        node_data,
-                    )
+                    node_data,
+                )
 
-                # Create a summary that claims to have consolidated these nodes
-                summary_data = create_summary_node(old_time, "tsdb_summary", 100)
-                cursor.execute(
-                    """
+            # Create a summary that claims to have consolidated these nodes
+            summary_data = create_summary_node(old_time, "tsdb_summary", 100)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                # The cleanup should have deleted exactly 100 nodes
-                assert deleted == 100
+            # The cleanup should have deleted exactly 100 nodes
+            assert deleted == 100
 
     @pytest.mark.asyncio
     async def test_cleanup_validates_counts(self, tsdb_service, mock_db_connection):
         """Test that cleanup validates claimed vs actual counts."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Insert only 50 nodes but summary claims 100
-                for i in range(50):
-                    node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
-                    cursor.execute(
-                        """
+            # Insert only 50 nodes but summary claims 100
+            for i in range(50):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        node_data,
-                    )
+                    node_data,
+                )
 
-                # Summary claims 100 nodes
-                summary_data = create_summary_node(old_time, "tsdb_summary", 100)
-                cursor.execute(
-                    """
+            # Summary claims 100 nodes
+            summary_data = create_summary_node(old_time, "tsdb_summary", 100)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                # Should not delete anything due to count mismatch
-                assert deleted == 0
+            # Should not delete anything due to count mismatch
+            assert deleted == 0
 
 
 class TestAuditNodeCleanup:
@@ -225,73 +227,74 @@ class TestAuditNodeCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_audit_graph_nodes_only(self, tsdb_service, mock_db_connection):
         """Test that only graph audit nodes are cleaned, not audit_log table."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Insert audit entries in both tables
-                for i in range(50):
-                    timestamp = old_time + timedelta(minutes=i)
+            # Insert audit entries in both tables
+            for i in range(50):
+                timestamp = old_time + timedelta(minutes=i)
 
-                    # Graph node
-                    cursor.execute(
-                        """
+                # Graph node
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        (
-                            f"audit_entry_{i}",
-                            "audit_entry",
-                            "local",
-                            json.dumps({"action": "test", "sequence": i}),
-                            timestamp.isoformat(),
-                        ),
-                    )
+                    (
+                        f"audit_entry_{i}",
+                        "audit_entry",
+                        "local",
+                        json.dumps({"action": "test", "sequence": i}),
+                        timestamp.isoformat(),
+                    ),
+                )
 
-                    # Audit log entry (permanent)
-                    cursor.execute(
-                        """
+                # Audit log entry (permanent)
+                cursor.execute(
+                    """
                         INSERT INTO audit_log
                         (sequence_number, entry_id, action, actor, target, details,
                          created_at, entry_hash, previous_hash, signature)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                        (
-                            i,
-                            f"audit_{i}",
-                            "test_action",
-                            "test_actor",
-                            "test_target",
-                            "test details",
-                            timestamp.isoformat(),
-                            f"hash_{i}",
-                            f"hash_{i-1}" if i > 0 else "genesis",
-                            f"sig_{i}",
-                        ),
-                    )
+                    (
+                        i,
+                        f"audit_{i}",
+                        "test_action",
+                        "test_actor",
+                        "test_target",
+                        "test details",
+                        timestamp.isoformat(),
+                        f"hash_{i}",
+                        f"hash_{i-1}" if i > 0 else "genesis",
+                        f"sig_{i}",
+                    ),
+                )
 
-                # Create summary
-                summary_data = create_summary_node(old_time, "audit_summary", 50)
-                cursor.execute(
-                    """
+            # Create summary
+            summary_data = create_summary_node(old_time, "audit_summary", 50)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                assert deleted == 50  # Only graph nodes deleted
+            assert deleted == 50  # Only graph nodes deleted
 
 
 class TestCorrelationCleanup:
@@ -300,52 +303,53 @@ class TestCorrelationCleanup:
     @pytest.mark.asyncio
     async def test_cleanup_service_correlations(self, tsdb_service, mock_db_connection):
         """Test that service correlations are cleaned up."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Insert service correlations
-                for i in range(75):
-                    timestamp = old_time + timedelta(minutes=i)
-                    cursor.execute(
-                        """
+            # Insert service correlations
+            for i in range(75):
+                timestamp = old_time + timedelta(minutes=i)
+                cursor.execute(
+                    """
                         INSERT INTO service_correlations
                         (correlation_id, trace_id, span_id, service_name,
                          operation_name, correlation_type, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                        (
-                            f"corr_{i}",
-                            f"trace_{i//10}",
-                            f"span_{i}",
-                            "test_service",
-                            "test_operation",
-                            "trace_span",
-                            timestamp.isoformat(),
-                        ),
-                    )
+                    (
+                        f"corr_{i}",
+                        f"trace_{i//10}",
+                        f"span_{i}",
+                        "test_service",
+                        "test_operation",
+                        "trace_span",
+                        timestamp.isoformat(),
+                    ),
+                )
 
-                # Create trace summary
-                summary_data = create_summary_node(old_time, "trace_summary", 75)
-                cursor.execute(
-                    """
+            # Create trace summary
+            summary_data = create_summary_node(old_time, "trace_summary", 75)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                assert deleted == 75
+            assert deleted == 75
 
 
 class TestCleanupEdgeCases:
@@ -354,128 +358,131 @@ class TestCleanupEdgeCases:
     @pytest.mark.asyncio
     async def test_no_cleanup_within_retention(self, tsdb_service, mock_db_connection):
         """Test that data within retention period is not cleaned up."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                # Create recent data (only 12 hours ago)
-                recent_time = datetime(2025, 7, 15, 0, 0, 0, tzinfo=timezone.utc)
+            # Create recent data (only 12 hours ago)
+            recent_time = datetime(2025, 7, 15, 0, 0, 0, tzinfo=timezone.utc)
 
-                for i in range(50):
-                    node_data = create_tsdb_data_node(recent_time + timedelta(minutes=i))
-                    cursor.execute(
-                        """
+            for i in range(50):
+                node_data = create_tsdb_data_node(recent_time + timedelta(minutes=i))
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        node_data,
-                    )
+                    node_data,
+                )
 
-                summary_data = create_summary_node(recent_time, "tsdb_summary", 50)
-                cursor.execute(
-                    """
+            summary_data = create_summary_node(recent_time, "tsdb_summary", 50)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                # Nothing should be deleted (within 24 hour retention)
-                assert deleted == 0
+            # Nothing should be deleted (within 24 hour retention)
+            assert deleted == 0
 
     @pytest.mark.asyncio
     async def test_cleanup_handles_missing_attributes(self, tsdb_service, mock_db_connection):
         """Test cleanup handles summaries with missing attributes gracefully."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Create summary with missing period attributes
-                cursor.execute(
-                    """
+            # Create summary with missing period attributes
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    (
-                        "bad_summary",
-                        "tsdb_summary",
-                        "local",
-                        json.dumps({"consolidation_level": "basic"}),  # Missing period_start/end
-                        old_time.isoformat(),
-                    ),
-                )
+                (
+                    "bad_summary",
+                    "tsdb_summary",
+                    "local",
+                    json.dumps({"consolidation_level": "basic"}),  # Missing period_start/end
+                    old_time.isoformat(),
+                ),
+            )
 
-                # Create some nodes that won't be cleaned due to bad summary
-                for i in range(10):
-                    node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
-                    cursor.execute(
-                        """
+            # Create some nodes that won't be cleaned due to bad summary
+            for i in range(10):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        node_data,
-                    )
+                    node_data,
+                )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup - should handle gracefully
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup - should handle gracefully
+            deleted = tsdb_service._cleanup_old_data()
 
-                assert deleted == 0  # Nothing deleted due to bad summary
+            assert deleted == 0  # Nothing deleted due to bad summary
 
     @pytest.mark.asyncio
     async def test_cleanup_with_zero_count_summary(self, tsdb_service, mock_db_connection):
         """Test that summaries with zero count don't cause deletion."""
+
         def get_test_connection(db_path=None, **kwargs):
             return mock_db_connection
 
         with patch("ciris_engine.logic.persistence.db.core.get_db_connection", side_effect=get_test_connection):
-                cursor = mock_db_connection.cursor()
+            cursor = mock_db_connection.cursor()
 
-                old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
 
-                # Create summary with 0 source count
-                summary_data = create_summary_node(old_time, "tsdb_summary", 0)
-                cursor.execute(
-                    """
+            # Create summary with 0 source count
+            summary_data = create_summary_node(old_time, "tsdb_summary", 0)
+            cursor.execute(
+                """
                     INSERT INTO graph_nodes
                     (node_id, node_type, scope, attributes_json, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    summary_data,
-                )
+                summary_data,
+            )
 
-                # Create some nodes that shouldn't be deleted
-                for i in range(10):
-                    node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
-                    cursor.execute(
-                        """
+            # Create some nodes that shouldn't be deleted
+            for i in range(10):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                cursor.execute(
+                    """
                         INSERT INTO graph_nodes
                         (node_id, node_type, scope, attributes_json, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
-                        node_data,
-                    )
+                    node_data,
+                )
 
-                mock_db_connection.commit()
+            mock_db_connection.commit()
 
-                # Run cleanup
-                deleted = tsdb_service._cleanup_old_data()
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
 
-                # Nothing deleted (count mismatch: 0 != 10)
-                assert deleted == 0
+            # Nothing deleted (count mismatch: 0 != 10)
+            assert deleted == 0

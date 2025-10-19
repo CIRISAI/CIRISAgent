@@ -119,7 +119,9 @@ class TypedServiceRegistry(Generic[T_Service]):
         )
         return cast(Optional[T_Service], result)
 
-    def get_all(self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None) -> List[T_Service]:
+    def get_all(
+        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
+    ) -> List[T_Service]:
         """
         Get multiple services with type safety.
 

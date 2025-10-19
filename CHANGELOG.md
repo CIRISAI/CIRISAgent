@@ -49,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added lock_id to all log messages for debugging distributed locking issues
   - **Impact**: Better debugging for PostgreSQL consolidation lock failures, clearer error messages
   - **Files Modified**: `ciris_engine/logic/services/graph/tsdb_consolidation/query_manager.py:378-422, 444-476`
+- **SonarCloud Code Quality Improvements** - Addressed fixable code smells while documenting Python 3.12 constraints
+  - **Fixed**:
+    - Replaced duplicated string literals with constants in `consent/core.py` (USER_ID_DESC, CURRENT_STREAM_DESC)
+    - Modernized Union type hints to use `|` syntax in `jsondict_helpers.py` (5 occurrences)
+  - **Cannot Fix (Python 3.10+ requirement)**:
+    - Type parameter syntax issues require Python 3.12+ (PEP 695)
+    - CIRIS supports Python >= 3.10, cannot use new `class MyClass[T]:` syntax yet
+    - Documented reasoning in `/tmp/sonarcloud_python312_issues.md`
+  - **Impact**: Improved code maintainability, clearer SonarCloud quality gate expectations
+  - **Files Modified**: `ciris_engine/schemas/consent/core.py`, `ciris_engine/logic/utils/jsondict_helpers.py`
 
 ## [1.4.2] - 2025-10-19
 

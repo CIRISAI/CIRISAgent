@@ -20,7 +20,7 @@ def get_str(data: JSONDict, key: str, default: str = "") -> str: ...
 def get_str(data: dict[str, object], key: str, default: str = "") -> str: ...
 
 
-def get_str(data: Union[JSONDict, dict[str, object]], key: str, default: str = "") -> str:
+def get_str(data: JSONDict | dict[str, object], key: str, default: str = "") -> str:
     """
     Get a string value from JSONDict with type narrowing.
 
@@ -46,7 +46,7 @@ def get_str_optional(data: JSONDict, key: str) -> Optional[str]: ...
 def get_str_optional(data: dict[str, object], key: str) -> Optional[str]: ...
 
 
-def get_str_optional(data: Union[JSONDict, dict[str, object]], key: str) -> Optional[str]:
+def get_str_optional(data: JSONDict | dict[str, object], key: str) -> Optional[str]:
     """
     Get an optional string value from JSONDict.
 

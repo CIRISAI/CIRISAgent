@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Common field descriptions
 REQUEST_ID_DESC = "Unique request identifier"
+USER_ID_DESC = "User identifier"
+CURRENT_STREAM_DESC = "Current consent stream"
 
 
 class ConsentStream(str, Enum):
@@ -42,8 +44,8 @@ class ConsentCategory(str, Enum):
 class ConsentStatus(BaseModel):
     """User's consent configuration - NO DEFAULTS, FAIL FAST."""
 
-    user_id: str = Field(..., description="User identifier")
-    stream: ConsentStream = Field(..., description="Current consent stream")
+    user_id: str = Field(..., description=USER_ID_DESC)
+    stream: ConsentStream = Field(..., description=CURRENT_STREAM_DESC)
     categories: List[ConsentCategory] = Field(..., description="What they consented to")
     granted_at: datetime = Field(..., description="When consent was granted")
     expires_at: Optional[datetime] = Field(None, description="When TEMPORARY expires")
@@ -298,8 +300,8 @@ class ConsentStatusResponse(BaseModel):
     """Response for consent status endpoint."""
 
     has_consent: bool = Field(..., description="Whether consent exists")
-    user_id: str = Field(..., description="User identifier")
-    stream: Optional[str] = Field(None, description="Current consent stream")
+    user_id: str = Field(..., description=USER_ID_DESC)
+    stream: Optional[str] = Field(None, description=CURRENT_STREAM_DESC)
     granted_at: Optional[str] = Field(None, description="When consent was granted (ISO format)")
     expires_at: Optional[str] = Field(None, description="When consent expires (ISO format)")
     message: Optional[str] = Field(None, description="Additional message if no consent")
@@ -309,7 +311,7 @@ class ConsentRecordResponse(BaseModel):
     """Individual consent record for query responses."""
 
     id: str = Field(..., description="Consent record ID")
-    user_id: str = Field(..., description="User identifier")
+    user_id: str = Field(..., description=USER_ID_DESC)
     status: str = Field(..., description="Consent status (ACTIVE/REVOKED/etc)")
     scope: str = Field(..., description="Consent scope")
     purpose: str = Field(..., description="Purpose of consent")
@@ -360,7 +362,7 @@ class ConsentCategoriesResponse(BaseModel):
 class PartnershipStatusResponse(BaseModel):
     """Response for partnership status check."""
 
-    current_stream: str = Field(..., description="Current consent stream")
+    current_stream: str = Field(..., description=CURRENT_STREAM_DESC)
     partnership_status: str = Field(..., description="Partnership request status")
     message: str = Field(..., description="Status message")
 
@@ -376,7 +378,7 @@ class DSARInitiateResponse(BaseModel):
     """Response for DSAR initiation."""
 
     request_id: str = Field(..., description="DSAR request identifier")
-    user_id: str = Field(..., description="User identifier")
+    user_id: str = Field(..., description=USER_ID_DESC)
     request_type: str = Field(..., description="Type of DSAR request")
     status: str = Field(..., description="Request status")
     export_data: dict[str, object] = Field(..., description="Exported data")
@@ -386,6 +388,6 @@ class DSARStatusResponse(BaseModel):
     """Response for DSAR status check."""
 
     request_id: str = Field(..., description="DSAR request identifier")
-    user_id: str = Field(..., description="User identifier")
+    user_id: str = Field(..., description=USER_ID_DESC)
     status: str = Field(..., description="Request status")
     message: str = Field(..., description="Status message")

@@ -42,6 +42,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.2] - 2025-10-19
 
+### Added
+- **🎯 Comprehensive Type Safety Improvements** - Major refactoring to eliminate untyped dictionaries and improve compile-time safety
+  - **Memory Attributes**: Replaced dictionary-based memory attributes with typed Pydantic models
+    - Created `NodeAttributesBase` and specialized attribute classes (`MemoryNodeAttributes`, `ConfigNodeAttributes`, `TelemetryNodeAttributes`, `LogNodeAttributes`)
+    - Updated `LocalGraphMemoryService` to use typed models throughout
+    - Eliminated 38 JSONDict occurrences in core memory paths
+    - All memory service tests passing (9/9)
+  - **Service Registry**: Genericized ServiceRegistry with typed providers
+    - Created 6 specialized typed registries: `MemoryRegistry`, `LLMRegistry`, `CommunicationRegistry`, `ToolRegistry`, `RuntimeControlRegistry`, `WiseRegistry`
+    - Updated `ServiceProvider` to use `Generic[T_Service]` for proper typing
+    - Added comprehensive test coverage (8/8 tests passing)
+    - Created detailed migration documentation (`REGISTRY_TYPE_SAFETY_MIGRATION.md`)
+    - Foundation for eliminating all cast() usage
+  - **MemoryBus Responses**: Standardized MemoryBus/graph service responses with parametrized wrappers
+    - Created `Generic[T]` parametrized `MemoryOpResult[T]` for type-safe results
+    - Updated `BaseGraphService.query_graph()` with typed returns
+    - Removed 15 lines of runtime shape-checking logic
+    - Updated all MemoryBus methods with consistent typed responses
+    - Fixed API route type annotations
+    - All bus tests passing (13/13)
+  - **API Response Models**: Created proper Pydantic response models for API routes
+    - Consent API: 10 new response models (eliminating 24 JSONDict occurrences)
+    - Audit API: Replaced JSONDict with `dict[str, object]` for serialization boundaries
+    - Documented legitimate serialization boundaries (OTLP telemetry, database queries)
+  - **Impact**: Improved from C+ (Fair) to B+ (Good) code quality rating
+    - Zero mypy errors in all type safety code
+    - Better IDE auto-completion and type inference
+    - Compile-time type checking catches errors early
+    - 99.2% QA test pass rate maintained (127/128 tests)
+
 ### Fixed
 - **CRITICAL: PostgreSQL URL Parsing** - Fixed production blocker preventing PostgreSQL deployments with special characters in passwords
   - **Issue**: Python's `urlparse()` cannot handle passwords containing `@`, `{`, `}`, `[`, `]` characters

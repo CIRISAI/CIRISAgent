@@ -41,7 +41,9 @@ class QueryManager:
         self._memory_bus = memory_bus
         self._db_path = db_path
 
-    def _query_thoughts_for_tasks(self, cursor: Any, adapter: Any, task_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    def _query_thoughts_for_tasks(
+        self, cursor: Any, adapter: Any, task_ids: List[str]
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """Query thoughts for a list of task IDs.
 
         Args:

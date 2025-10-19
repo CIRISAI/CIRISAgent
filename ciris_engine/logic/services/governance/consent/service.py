@@ -727,7 +727,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Update cache
         self._consent_cache[user_id] = partnered_status
 
-        return status
+        # Return "partnered" to indicate successful finalization (different from "accepted")
+        return "partnered"
 
     async def _get_example_contributions(self, user_id: str) -> List[str]:
         """Get example contributions from the graph."""

@@ -78,7 +78,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
     async def memorize(
         self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Memorize a node.
 
@@ -86,6 +86,9 @@ class MemoryBus(BaseBus[MemoryService]):
             node: The graph node to memorize
             handler_name: Name of the handler making this request (for debugging only)
             metadata: Optional metadata for the operation
+
+        Returns:
+            MemoryOpResult[GraphNode] with the stored node in data field
 
         This is always synchronous as handlers need the result.
         """
@@ -95,22 +98,22 @@ class MemoryBus(BaseBus[MemoryService]):
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult(
+            return MemoryOpResult[GraphNode](
                 status=MemoryOpStatus.FAILED,
                 reason="No memory service available",
-                data=node.model_dump() if hasattr(node, "model_dump") else None,
+                data=None,
             )
 
         try:
             result = await service.memorize(node)
             # Increment operation counter on success
             self._operation_count += 1
-            # Protocol guarantees MemoryOpResult return
+            # Protocol guarantees MemoryOpResult[GraphNode] return
             return result
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to memorize node: {e}", exc_info=True)
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def recall(
         self, recall_query: MemoryQuery, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
@@ -143,7 +146,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
     async def forget(
         self, node: GraphNode, handler_name: Optional[str] = None, metadata: Optional[JSONDict] = None
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Forget a node.
 
@@ -152,28 +155,31 @@ class MemoryBus(BaseBus[MemoryService]):
             handler_name: Name of the handler making this request (for debugging only)
             metadata: Optional metadata for the operation
 
+        Returns:
+            MemoryOpResult[GraphNode] with the forgotten node in data field
+
         This is always synchronous as handlers need the result.
         """
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["forget"])
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult(
+            return MemoryOpResult[GraphNode](
                 status=MemoryOpStatus.FAILED,
                 reason="No memory service available",
-                data=node.model_dump() if hasattr(node, "model_dump") else None,
+                data=None,
             )
 
         try:
             result = await service.forget(node)
             # Increment operation counter on success
             self._operation_count += 1
-            # Protocol guarantees MemoryOpResult return
+            # Protocol guarantees MemoryOpResult[GraphNode] return
             return result
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to forget node: {e}", exc_info=True)
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def search_memories(
         self, query: str, scope: str = "default", limit: int = 10, handler_name: Optional[str] = None
@@ -308,15 +314,20 @@ class MemoryBus(BaseBus[MemoryService]):
         tags: Optional[Dict[str, str]] = None,
         scope: str = "local",
         handler_name: Optional[str] = None,
-    ) -> MemoryOpResult:
-        """Memorize a metric as both graph node and TSDB correlation."""
+    ) -> "MemoryOpResult[GraphNode]":
+        """
+        Memorize a metric as both graph node and TSDB correlation.
+
+        Returns:
+            MemoryOpResult[GraphNode] with the metric node in data field
+        """
         service = await self.get_service(
             handler_name=handler_name or "unknown", required_capabilities=["memorize_metric"]
         )
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason="No memory service available")
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason="No memory service available")
 
         try:
             result = await service.memorize_metric(metric_name, value, tags, scope)
@@ -326,7 +337,7 @@ class MemoryBus(BaseBus[MemoryService]):
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to memorize metric: {e}", exc_info=True)
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def memorize_log(
         self,
@@ -335,13 +346,18 @@ class MemoryBus(BaseBus[MemoryService]):
         tags: Optional[Dict[str, str]] = None,
         scope: str = "local",
         handler_name: Optional[str] = None,
-    ) -> MemoryOpResult:
-        """Memorize a log entry as both graph node and TSDB correlation."""
+    ) -> "MemoryOpResult[GraphNode]":
+        """
+        Memorize a log entry as both graph node and TSDB correlation.
+
+        Returns:
+            MemoryOpResult[GraphNode] with the log node in data field
+        """
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["memorize_log"])
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason="No memory service available")
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason="No memory service available")
 
         try:
             result = await service.memorize_log(log_message, log_level, tags, scope)
@@ -351,7 +367,7 @@ class MemoryBus(BaseBus[MemoryService]):
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to memorize log: {e}", exc_info=True)
-            return MemoryOpResult(status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def export_identity_context(self, handler_name: Optional[str] = None) -> str:
         """Export identity nodes as string representation."""

@@ -6,10 +6,10 @@ These specialized registries eliminate the need for cast() calls and provide
 proper type inference throughout the codebase.
 
 Architecture:
-- Each registry is specialized for ONE service protocol type
-- Type safety is enforced at compile time via Generic[T_Service]
+- Each registry is specialized for ONE service protocol type using Generic[T]
+- Type safety is enforced at compile time via TypeVar
 - All service lookups return properly typed instances
-- Zero cast() calls needed at usage sites
+- Zero cast() calls or type: ignore needed at usage sites
 
 Usage:
     # Create specialized registry
@@ -23,12 +23,13 @@ Usage:
     service = await memory_registry.get("memory")  # Returns Optional[MemoryServiceProtocol]
 """
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Generic, List, Optional, TypeVar, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
 
-from .base import CircuitBreakerConfig, Priority, SelectionStrategy, ServiceRegistry
+from .base import Priority, SelectionStrategy, ServiceRegistry
+from .circuit_breaker import CircuitBreakerConfig
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
@@ -39,22 +40,33 @@ if TYPE_CHECKING:
     from ciris_engine.protocols.services.runtime.tool import ToolServiceProtocol
 
 
-class TypedServiceRegistry(ServiceRegistry):
+# TypeVar for generic service type
+T_Service = TypeVar("T_Service")
+
+
+class TypedServiceRegistry(Generic[T_Service]):
     """
-    Base class for typed service registries.
+    Base class for typed service registries using Generic[T].
 
     Provides type-safe wrappers around ServiceRegistry for a specific service type.
-    Each specialized registry inherits from this and sets its service_type and protocol.
+    Uses composition instead of inheritance to avoid Liskov substitution issues.
     """
 
-    # Override in subclasses
-    _service_type: ServiceType
-    _protocol_type: type
+    def __init__(self, service_type: ServiceType, registry: Optional[ServiceRegistry] = None) -> None:
+        """
+        Initialize typed registry.
+
+        Args:
+            service_type: The service type this registry manages
+            registry: Optional existing ServiceRegistry instance (creates new if None)
+        """
+        self._service_type = service_type
+        self._registry = registry if registry is not None else ServiceRegistry()
 
     def register(
         self,
         name: str,
-        provider: object,  # Will be validated against _protocol_type by subclasses
+        provider: T_Service,
         priority: Priority = Priority.NORMAL,
         capabilities: Optional[List[str]] = None,
         circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
@@ -78,7 +90,7 @@ class TypedServiceRegistry(ServiceRegistry):
         Returns:
             str: Unique provider name for later reference
         """
-        return self.register_service(
+        return self._registry.register_service(
             service_type=self._service_type,
             provider=provider,
             priority=priority,
@@ -91,7 +103,7 @@ class TypedServiceRegistry(ServiceRegistry):
 
     async def get(
         self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional[object]:
+    ) -> Optional[T_Service]:
         """
         Get the best available service with type safety.
 
@@ -102,11 +114,12 @@ class TypedServiceRegistry(ServiceRegistry):
         Returns:
             Service instance matching protocol type, or None if unavailable
         """
-        return await self.get_service(
+        result = await self._registry.get_service(
             handler=handler, service_type=self._service_type, required_capabilities=required_capabilities
         )
+        return cast(Optional[T_Service], result)
 
-    def get_all(self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None) -> List[object]:
+    def get_all(self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None) -> List[T_Service]:
         """
         Get multiple services with type safety.
 
@@ -117,223 +130,54 @@ class TypedServiceRegistry(ServiceRegistry):
         Returns:
             List of service instances matching protocol type
         """
-        return self.get_services(
+        result = self._registry.get_services(
             service_type=self._service_type, required_capabilities=required_capabilities, limit=limit
         )
+        return cast(List[T_Service], result)
 
 
-class MemoryRegistry(TypedServiceRegistry):
-    """Type-safe registry for memory services."""
+if TYPE_CHECKING:
+    # Type aliases for concrete registries (provides better IDE support)
+    MemoryRegistry = TypedServiceRegistry["MemoryServiceProtocol"]
+    LLMRegistry = TypedServiceRegistry["LLMServiceProtocol"]
+    CommunicationRegistry = TypedServiceRegistry["CommunicationServiceProtocol"]
+    ToolRegistry = TypedServiceRegistry["ToolServiceProtocol"]
+    RuntimeControlRegistry = TypedServiceRegistry["RuntimeControlServiceProtocol"]
+    WiseRegistry = TypedServiceRegistry["WiseAuthorityServiceProtocol"]
+else:
+    # Runtime: Create concrete class wrappers for convenience
+    class MemoryRegistry(TypedServiceRegistry["MemoryServiceProtocol"]):
+        """Type-safe registry for memory services."""
 
-    _service_type = ServiceType.MEMORY
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.MEMORY, registry)
 
-    def register(
-        self,
-        name: str,
-        provider: "MemoryServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register a memory service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
+    class LLMRegistry(TypedServiceRegistry["LLMServiceProtocol"]):
+        """Type-safe registry for LLM services."""
 
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["MemoryServiceProtocol"]:
-        """Get memory service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        # The cast here is safe because ServiceRegistry validates the type at registration
-        return result  # type: ignore[return-value]
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.LLM, registry)
 
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["MemoryServiceProtocol"]:
-        """Get multiple memory services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
+    class CommunicationRegistry(TypedServiceRegistry["CommunicationServiceProtocol"]):
+        """Type-safe registry for communication services (adapter-provided)."""
 
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.COMMUNICATION, registry)
 
-class LLMRegistry(TypedServiceRegistry):
-    """Type-safe registry for LLM services."""
+    class ToolRegistry(TypedServiceRegistry["ToolServiceProtocol"]):
+        """Type-safe registry for tool services (adapter-provided)."""
 
-    _service_type = ServiceType.LLM
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.TOOL, registry)
 
-    def register(
-        self,
-        name: str,
-        provider: "LLMServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register an LLM service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
+    class RuntimeControlRegistry(TypedServiceRegistry["RuntimeControlServiceProtocol"]):
+        """Type-safe registry for runtime control services (adapter-provided)."""
 
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["LLMServiceProtocol"]:
-        """Get LLM service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        return result  # type: ignore[return-value]
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.RUNTIME_CONTROL, registry)
 
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["LLMServiceProtocol"]:
-        """Get multiple LLM services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
+    class WiseRegistry(TypedServiceRegistry["WiseAuthorityServiceProtocol"]):
+        """Type-safe registry for wise authority services."""
 
-
-class CommunicationRegistry(TypedServiceRegistry):
-    """Type-safe registry for communication services (adapter-provided)."""
-
-    _service_type = ServiceType.COMMUNICATION
-
-    def register(
-        self,
-        name: str,
-        provider: "CommunicationServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register a communication service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
-
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["CommunicationServiceProtocol"]:
-        """Get communication service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        return result  # type: ignore[return-value]
-
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["CommunicationServiceProtocol"]:
-        """Get multiple communication services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
-
-
-class ToolRegistry(TypedServiceRegistry):
-    """Type-safe registry for tool services (adapter-provided)."""
-
-    _service_type = ServiceType.TOOL
-
-    def register(
-        self,
-        name: str,
-        provider: "ToolServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register a tool service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
-
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["ToolServiceProtocol"]:
-        """Get tool service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        return result  # type: ignore[return-value]
-
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["ToolServiceProtocol"]:
-        """Get multiple tool services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
-
-
-class RuntimeControlRegistry(TypedServiceRegistry):
-    """Type-safe registry for runtime control services (adapter-provided)."""
-
-    _service_type = ServiceType.RUNTIME_CONTROL
-
-    def register(
-        self,
-        name: str,
-        provider: "RuntimeControlServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register a runtime control service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
-
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["RuntimeControlServiceProtocol"]:
-        """Get runtime control service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        return result  # type: ignore[return-value]
-
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["RuntimeControlServiceProtocol"]:
-        """Get multiple runtime control services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
-
-
-class WiseRegistry(TypedServiceRegistry):
-    """Type-safe registry for wise authority services."""
-
-    _service_type = ServiceType.WISE_AUTHORITY
-
-    def register(
-        self,
-        name: str,
-        provider: "WiseAuthorityServiceProtocol",
-        priority: Priority = Priority.NORMAL,
-        capabilities: Optional[List[str]] = None,
-        circuit_breaker_config: Optional[CircuitBreakerConfig] = None,
-        metadata: Optional[JSONDict] = None,
-        priority_group: int = 0,
-        strategy: SelectionStrategy = SelectionStrategy.FALLBACK,
-    ) -> str:
-        """Register a wise authority service with full type safety."""
-        return super().register(
-            name, provider, priority, capabilities, circuit_breaker_config, metadata, priority_group, strategy
-        )
-
-    async def get(
-        self, handler: str = "default", required_capabilities: Optional[List[str]] = None
-    ) -> Optional["WiseAuthorityServiceProtocol"]:
-        """Get wise authority service with proper return type."""
-        result = await super().get(handler, required_capabilities)
-        return result  # type: ignore[return-value]
-
-    def get_all(
-        self, required_capabilities: Optional[List[str]] = None, limit: Optional[int] = None
-    ) -> List["WiseAuthorityServiceProtocol"]:
-        """Get multiple wise authority services with proper return type."""
-        result = super().get_all(required_capabilities, limit)
-        return result  # type: ignore[return-value]
+        def __init__(self, registry: Optional[ServiceRegistry] = None) -> None:
+            super().__init__(ServiceType.WISE_AUTHORITY, registry)

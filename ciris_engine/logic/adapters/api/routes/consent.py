@@ -48,7 +48,7 @@ router = APIRouter(
 )
 
 # Stream metadata definitions - eliminate duplication
-STREAM_METADATA = {
+STREAM_METADATA: Dict[ConsentStream, Dict[str, Any]] = {
     ConsentStream.TEMPORARY: {
         "name": "Temporary",
         "description": "We forget about you in 14 days unless you say otherwise",
@@ -75,7 +75,7 @@ STREAM_METADATA = {
 }
 
 # Category metadata definitions - eliminate duplication
-CATEGORY_METADATA = {
+CATEGORY_METADATA: Dict[ConsentCategory, Dict[str, str]] = {
     ConsentCategory.INTERACTION: {
         "name": "Interaction",
         "description": "Learn from our conversations",

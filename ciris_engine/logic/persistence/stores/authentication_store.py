@@ -25,65 +25,9 @@ def _row_to_wa(row_dict: Dict[str, Any]) -> WACertificate:
     Returns:
         WACertificate instance
     """
-    oauth_links_json = row_dict.get("oauth_links_json")
-    oauth_links: List[OAuthIdentityLink] = []
-    if oauth_links_json:
-        try:
-            # Type narrow: json.loads expects str
-            if isinstance(oauth_links_json, str):
-                raw_links = json.loads(oauth_links_json)
-                for link in raw_links:
-                    try:
-                        oauth_links.append(OAuthIdentityLink(**link))
-                    except Exception as exc:
-                        logger.warning("Invalid OAuth link entry skipped: %s", exc)
-        except json.JSONDecodeError:
-            logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
+    from ciris_engine.logic.persistence.stores.auth_helpers import build_wa_certificate_dict
 
-    # Handle scopes_json - PostgreSQL JSONB returns parsed object, SQLite returns string
-    scopes_json_raw = row_dict["scopes_json"]
-    scopes_json = scopes_json_raw if isinstance(scopes_json_raw, str) else json.dumps(scopes_json_raw)
-
-    # Handle custom_permissions_json - same issue with PostgreSQL JSONB
-    custom_perms_raw = row_dict.get("custom_permissions_json")
-    custom_permissions_json = None
-    if custom_perms_raw:
-        custom_permissions_json = (
-            custom_perms_raw if isinstance(custom_perms_raw, str) else json.dumps(custom_perms_raw)
-        )
-
-    # Handle adapter_metadata_json - same issue with PostgreSQL JSONB
-    adapter_metadata_raw = row_dict.get("adapter_metadata_json")
-    adapter_metadata_json = None
-    if adapter_metadata_raw:
-        adapter_metadata_json = (
-            adapter_metadata_raw if isinstance(adapter_metadata_raw, str) else json.dumps(adapter_metadata_raw)
-        )
-
-    wa_dict = {
-        "wa_id": row_dict["wa_id"],
-        "name": row_dict["name"],
-        "role": row_dict["role"],
-        "pubkey": row_dict["pubkey"],
-        "jwt_kid": row_dict["jwt_kid"],
-        "password_hash": row_dict.get("password_hash"),
-        "api_key_hash": row_dict.get("api_key_hash"),
-        "oauth_provider": row_dict.get("oauth_provider"),
-        "oauth_external_id": row_dict.get("oauth_external_id"),
-        "oauth_links": oauth_links,
-        "auto_minted": bool(row_dict.get("auto_minted", 0)),
-        "veilid_id": row_dict.get("veilid_id"),
-        "parent_wa_id": row_dict.get("parent_wa_id"),
-        "parent_signature": row_dict.get("parent_signature"),
-        "scopes_json": scopes_json,
-        "custom_permissions_json": custom_permissions_json,
-        "adapter_id": row_dict.get("adapter_id"),
-        "adapter_name": row_dict.get("adapter_name"),
-        "adapter_metadata_json": adapter_metadata_json,
-        "created_at": row_dict["created"],
-        "last_auth": row_dict.get("last_login"),
-    }
-
+    wa_dict = build_wa_certificate_dict(row_dict)
     return WACertificate(**wa_dict)
 
 

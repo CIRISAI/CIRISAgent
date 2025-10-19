@@ -391,6 +391,12 @@ def initialize_database(db_path: Optional[str] = None) -> None:
     Note: Each deployment uses either SQLite or PostgreSQL exclusively.
     No migration between database backends is supported.
     """
+    from ciris_engine.logic.persistence.db.execution_helpers import (
+        execute_sql_statements,
+        mask_password_in_url,
+        split_sql_statements,
+    )
+
     try:
         # Determine if we're using PostgreSQL or SQLite
         if db_path is None:
@@ -401,12 +407,7 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         # Log which database type we're initializing
         tables_module: types.ModuleType
         if adapter.is_postgresql():
-            # Mask password in connection string for logging
-            safe_url = (
-                adapter.db_url.split("@")[0].rsplit(":", 1)[0] + ":***@" + adapter.db_url.split("@")[1]
-                if "@" in adapter.db_url
-                else adapter.db_url
-            )
+            safe_url = mask_password_in_url(adapter.db_url)
             logger.info(f"Initializing PostgreSQL database: {safe_url}")
             tables_module = postgres_tables
         else:
@@ -427,19 +428,9 @@ def initialize_database(db_path: Optional[str] = None) -> None:
                 tables_module.WA_CERT_TABLE_V1,
             ]
 
-            # PostgreSQL doesn't support executescript, execute statements individually
-            if adapter.is_postgresql():
-                cursor = conn.cursor()
-                for table_sql in base_tables:
-                    # Split SQL script into individual statements
-                    statements = [s.strip() for s in table_sql.split(";") if s.strip()]
-                    for statement in statements:
-                        cursor.execute(statement)
-                cursor.close()
-            else:
-                # SQLite supports executescript
-                for table_sql in base_tables:
-                    conn.executescript(table_sql)
+            for table_sql in base_tables:
+                statements = split_sql_statements(table_sql)
+                execute_sql_statements(conn, statements, adapter)
 
             conn.commit()
 

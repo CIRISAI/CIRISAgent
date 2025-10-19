@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONValue
 
 
-class JSONDict(BaseModel):
+class NodeAttributesBase(BaseModel):
     """
     Base schema for all graph node attributes.
 
@@ -47,7 +47,7 @@ class JSONDict(BaseModel):
     )
 
 
-class MemoryNodeAttributes(JSONDict):
+class MemoryNodeAttributes(NodeAttributesBase):
     """
     Specific attributes for memory nodes.
 
@@ -87,7 +87,7 @@ class MemoryNodeAttributes(JSONDict):
     model_config = ConfigDict(extra="forbid")
 
 
-class ConfigNodeAttributes(JSONDict):
+class ConfigNodeAttributes(NodeAttributesBase):
     """
     Specific attributes for configuration nodes.
 
@@ -130,7 +130,7 @@ class ConfigNodeAttributes(JSONDict):
     model_config = ConfigDict(extra="forbid")
 
 
-class TelemetryNodeAttributes(JSONDict):
+class TelemetryNodeAttributes(NodeAttributesBase):
     """
     Specific attributes for telemetry nodes.
 
@@ -182,8 +182,28 @@ class TelemetryNodeAttributes(JSONDict):
     model_config = ConfigDict(extra="forbid")
 
 
+class LogNodeAttributes(NodeAttributesBase):
+    """
+    Specific attributes for log entry nodes.
+
+    Used by the memory service for storing log entries as TSDB_DATA nodes.
+    """
+
+    # Log content
+    log_message: str = Field(..., description="The log message content")
+    log_level: str = Field(..., description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+
+    # Log metadata
+    log_tags: Dict[str, str] = Field(default_factory=dict, description="Additional tags for the log entry")
+    retention_policy: str = Field("raw", description="Retention policy for this log")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # Type unions for flexibility
-AnyNodeAttributes = Union[JSONDict, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes]
+AnyNodeAttributes = Union[
+    NodeAttributesBase, MemoryNodeAttributes, ConfigNodeAttributes, TelemetryNodeAttributes, LogNodeAttributes
+]
 
 
 def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_by: str) -> AnyNodeAttributes:
@@ -210,23 +230,25 @@ def create_node_attributes(node_type: str, data: Dict[str, JSONValue], created_b
         "memory": MemoryNodeAttributes,
         "config": ConfigNodeAttributes,
         "telemetry": TelemetryNodeAttributes,
+        "log": LogNodeAttributes,
     }
 
     # Get the appropriate class
     attr_class = type_map.get(node_type)
     if not attr_class:
         # Fall back to base attributes for unknown types
-        return JSONDict(**data)
+        return NodeAttributesBase(**data)
 
     # Type is inferred correctly from the typed dictionary
     return attr_class(**data)
 
 
 __all__ = [
-    "JSONDict",
+    "NodeAttributesBase",
     "MemoryNodeAttributes",
     "ConfigNodeAttributes",
     "TelemetryNodeAttributes",
+    "LogNodeAttributes",
     "AnyNodeAttributes",
     "create_node_attributes",
 ]

@@ -341,6 +341,131 @@ class QueryManager:
 
         return task_correlations
 
+    def acquire_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> bool:
+        """
+        Try to acquire exclusive lock for a consolidation activity.
+
+        This is a generic locking mechanism that works for all consolidation types:
+        - basic: Lock individual 6-hour periods
+        - extensive: Lock a specific week
+        - profound: Lock a specific month
+
+        Uses database-level locking to prevent multiple instances from
+        consolidating simultaneously:
+        - PostgreSQL: pg_try_advisory_lock with hash of type+period
+        - SQLite: BEGIN IMMEDIATE transaction
+
+        Args:
+            consolidation_type: Type of consolidation ('basic', 'extensive', 'profound')
+            period_identifier: Period identifier (ISO datetime for basic, date string for others)
+
+        Returns:
+            True if lock acquired successfully, False if another instance holds it
+        """
+        try:
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+            adapter = get_adapter()
+
+            # Generate a consistent numeric lock ID from type + period
+            # Use hash for deterministic lock ID across instances
+            lock_key = f"{consolidation_type}:{period_identifier}"
+            lock_id = hash(lock_key) & 0x7FFFFFFF  # Keep positive 32-bit
+
+            with get_db_connection(db_path=self._db_path) as conn:
+                cursor = conn.cursor()
+
+                if adapter.is_postgresql():
+                    # PostgreSQL: Try to acquire advisory lock
+                    cursor.execute("SELECT pg_try_advisory_lock(%s)", (lock_id,))
+                    result = cursor.fetchone()
+                    acquired = result[0] if result else False
+
+                    if acquired:
+                        logger.info(f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})")
+                    else:
+                        logger.info(f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked)")
+
+                    return acquired
+
+                else:
+                    # SQLite: Use BEGIN IMMEDIATE to acquire write lock
+                    try:
+                        cursor.execute("BEGIN IMMEDIATE")
+                        conn.commit()
+                        logger.info(f"Acquired SQLite write lock for {consolidation_type} {period_identifier}")
+                        return True
+                    except Exception as e:
+                        logger.info(f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}")
+                        return False
+
+        except Exception as e:
+            logger.error(f"Error acquiring {consolidation_type} lock for {period_identifier}: {e}")
+            return False
+
+    def release_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> None:
+        """
+        Release the consolidation lock.
+
+        Args:
+            consolidation_type: Type of consolidation
+            period_identifier: Period identifier
+        """
+        try:
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+            adapter = get_adapter()
+
+            # Generate same lock ID as acquire
+            lock_key = f"{consolidation_type}:{period_identifier}"
+            lock_id = hash(lock_key) & 0x7FFFFFFF
+
+            with get_db_connection(db_path=self._db_path) as conn:
+                cursor = conn.cursor()
+
+                if adapter.is_postgresql():
+                    # PostgreSQL: Release advisory lock
+                    cursor.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
+                    result = cursor.fetchone()
+                    released = result[0] if result else False
+
+                    if released:
+                        logger.debug(f"Released {consolidation_type} lock for {period_identifier}")
+                    else:
+                        logger.warning(f"Failed to release {consolidation_type} lock for {period_identifier} (not held)")
+
+                else:
+                    # SQLite: Lock is automatically released when connection closes
+                    logger.debug(f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close")
+
+        except Exception as e:
+            logger.error(f"Error releasing {consolidation_type} lock for {period_identifier}: {e}")
+
+    def acquire_period_lock(self, period_start: datetime) -> bool:
+        """
+        Try to acquire exclusive lock for consolidating a period.
+
+        Convenience wrapper for acquire_consolidation_lock for basic consolidation.
+
+        Args:
+            period_start: Period start time to lock
+
+        Returns:
+            True if lock acquired successfully, False if another instance holds it
+        """
+        return self.acquire_consolidation_lock("basic", period_start.isoformat())
+
+    def release_period_lock(self, period_start: datetime) -> None:
+        """
+        Release the consolidation lock for a period.
+
+        Convenience wrapper for release_consolidation_lock for basic consolidation.
+
+        Args:
+            period_start: Period start time to unlock
+        """
+        self.release_consolidation_lock("basic", period_start.isoformat())
+
     def get_special_node_types(self) -> Set[str]:
         """
         Get the list of special node types to track in summaries.

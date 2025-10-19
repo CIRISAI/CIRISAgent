@@ -382,9 +382,13 @@ class QueryManager:
                     acquired = result[0] if result else False
 
                     if acquired:
-                        logger.info(f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})")
+                        logger.info(
+                            f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})"
+                        )
                     else:
-                        logger.info(f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked)")
+                        logger.info(
+                            f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked)"
+                        )
 
                     return acquired
 
@@ -396,7 +400,9 @@ class QueryManager:
                         logger.info(f"Acquired SQLite write lock for {consolidation_type} {period_identifier}")
                         return True
                     except Exception as e:
-                        logger.info(f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}")
+                        logger.info(
+                            f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}"
+                        )
                         return False
 
         except Exception as e:
@@ -432,11 +438,15 @@ class QueryManager:
                     if released:
                         logger.debug(f"Released {consolidation_type} lock for {period_identifier}")
                     else:
-                        logger.warning(f"Failed to release {consolidation_type} lock for {period_identifier} (not held)")
+                        logger.warning(
+                            f"Failed to release {consolidation_type} lock for {period_identifier} (not held)"
+                        )
 
                 else:
                     # SQLite: Lock is automatically released when connection closes
-                    logger.debug(f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close")
+                    logger.debug(
+                        f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close"
+                    )
 
         except Exception as e:
             logger.error(f"Error releasing {consolidation_type} lock for {period_identifier}: {e}")

@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Migrations Test**: Exported MIGRATIONS_DIR constant for backward compatibility (1 test)
   - **Impact**: All 33 previously failing tests now pass, mypy shows no errors in 569 source files
   - **Files Modified**: `helpers.py`, `test_tsdb_edge_creation.py`, `test_tsdb_cleanup_logic.py`, `test_service_initializer.py`, `test_tsdb_consolidation_all_types.py`, `migration_runner.py`
+- **PostgreSQL Advisory Lock Error Handling** - Fixed lock acquisition error reporting in TSDB consolidator
+  - **Issue**: Lock acquisition failures logged as `"Error acquiring basic lock for 2025-10-18T12:00:00+00:00: 0"` instead of meaningful error messages
+  - **Root Cause**: PostgreSQL `pg_try_advisory_lock()` returns integer (0/1) not boolean, and missing null result checks
+  - **Solution**:
+    - Added explicit `result` validation before accessing `result[0]`
+    - Added `bool()` conversion for PostgreSQL integer/boolean driver compatibility
+    - Enhanced error logging with exception type names and full stack traces via `exc_info=True`
+    - Added lock_id to all log messages for debugging distributed locking issues
+  - **Impact**: Better debugging for PostgreSQL consolidation lock failures, clearer error messages
+  - **Files Modified**: `ciris_engine/logic/services/graph/tsdb_consolidation/query_manager.py:378-422, 444-476`
 
 ## [1.4.2] - 2025-10-19
 

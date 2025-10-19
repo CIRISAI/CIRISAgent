@@ -181,8 +181,6 @@ class EdgeManager:
 
         try:
             with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
                 edge_data = []
 
                 # Create edges between each pair of summaries
@@ -341,8 +339,6 @@ class EdgeManager:
 
         try:
             with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
                 edge_data = []
 
                 # Create edges from each summary to each concept
@@ -626,7 +622,7 @@ class EdgeManager:
 
         return normalized_edges, node_ids_to_check
 
-    def _create_missing_channel_node(self, cursor: Any, node_id: str, existing_nodes: set[str]) -> None:
+    def _create_missing_channel_node(self, node_id: str, existing_nodes: set[str]) -> None:
         """Create a missing channel node in the database."""
         logger.info(f"Creating missing channel node: {node_id}")
 
@@ -663,7 +659,7 @@ class EdgeManager:
 
         for node_id in missing_nodes:
             if node_id.startswith("channel_"):
-                self._create_missing_channel_node(cursor, node_id, existing_nodes)
+                self._create_missing_channel_node(node_id, existing_nodes)
             else:
                 logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
 

@@ -179,22 +179,14 @@ def build_oldest_unconsolidated_query(adapter: Any, scope: str = "local") -> Tup
     Returns:
         Tuple of (sql_query, parameters)
     """
-    if adapter.is_postgresql():
-        sql = f"""
-            SELECT MIN(updated_at) as oldest
-            FROM graph_nodes
-            WHERE node_type = 'tsdb_data'
-              AND scope = {adapter.placeholder()}
-              AND updated_at IS NOT NULL
-        """
-    else:
-        sql = f"""
-            SELECT MIN(updated_at) as oldest
-            FROM graph_nodes
-            WHERE node_type = 'tsdb_data'
-              AND scope = {adapter.placeholder()}
-              AND updated_at IS NOT NULL
-        """
+    # Both PostgreSQL and SQLite use the same query since updated_at is handled consistently
+    sql = f"""
+        SELECT MIN(updated_at) as oldest
+        FROM graph_nodes
+        WHERE node_type = 'tsdb_data'
+          AND scope = {adapter.placeholder()}
+          AND updated_at IS NOT NULL
+    """
 
     params = (scope,)
     return sql, params

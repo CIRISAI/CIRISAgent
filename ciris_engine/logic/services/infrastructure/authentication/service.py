@@ -1443,7 +1443,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             cert_count = counts.get("active", 0)
             revoked_count = counts.get("revoked", 0)
             # Extract by_role dict with type assertion
-            role_counts_raw: Union[int, Dict[str, int]] = counts.get("by_role", {})
+            role_counts_raw: int | Dict[str, int] = counts.get("by_role", {})
             role_counts: Dict[str, int] = (
                 role_counts_raw
                 if isinstance(role_counts_raw, dict)

@@ -8,7 +8,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -40,6 +40,48 @@ class QueryManager:
         """
         self._memory_bus = memory_bus
         self._db_path = db_path
+
+    def _query_thoughts_for_tasks(self, cursor: Any, adapter: Any, task_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Query thoughts for a list of task IDs.
+
+        Args:
+            cursor: Database cursor
+            adapter: Database adapter for placeholders
+            task_ids: List of task IDs to query
+
+        Returns:
+            Dict mapping task_id to list of thought dictionaries
+        """
+        placeholders = ",".join([adapter.placeholder()] * len(task_ids))
+        cursor.execute(
+            f"""
+            SELECT source_task_id, thought_id, thought_type, status,
+                   created_at, final_action_json
+            FROM thoughts
+            WHERE source_task_id IN ({placeholders})
+            ORDER BY created_at
+        """,
+            task_ids,
+        )
+
+        thoughts_by_task = defaultdict(list)
+        for row in cursor.fetchall():
+            # Handle PostgreSQL datetime vs SQLite string
+            created_at = row["created_at"]
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+
+            thoughts_by_task[row["source_task_id"]].append(
+                {
+                    "thought_id": row["thought_id"],
+                    "thought_type": row["thought_type"],
+                    "status": row["status"],
+                    "created_at": created_at,
+                    "final_action": row["final_action_json"],
+                }
+            )
+
+        return thoughts_by_task
 
     def query_all_nodes_in_period(self, period_start: datetime, period_end: datetime) -> Dict[str, TSDBNodeQueryResult]:
         """
@@ -279,36 +321,7 @@ class QueryManager:
                 # Also get thoughts for these tasks
                 if raw_tasks:
                     task_ids = [t["task_id"] for t in raw_tasks]
-                    placeholders = ",".join([adapter.placeholder()] * len(task_ids))
-
-                    cursor.execute(
-                        f"""
-                        SELECT source_task_id, thought_id, thought_type, status,
-                               created_at, final_action_json
-                        FROM thoughts
-                        WHERE source_task_id IN ({placeholders})
-                        ORDER BY created_at
-                    """,
-                        task_ids,
-                    )
-
-                    # Group thoughts by task
-                    thoughts_by_task = defaultdict(list)
-                    for row in cursor.fetchall():
-                        # Handle PostgreSQL datetime vs SQLite string
-                        created_at = row["created_at"]
-                        if isinstance(created_at, datetime):
-                            created_at = created_at.isoformat()
-
-                        thoughts_by_task[row["source_task_id"]].append(
-                            {
-                                "thought_id": row["thought_id"],
-                                "thought_type": row["thought_type"],
-                                "status": row["status"],
-                                "created_at": created_at,
-                                "final_action": row["final_action_json"],
-                            }
-                        )
+                    thoughts_by_task = self._query_thoughts_for_tasks(cursor, adapter, task_ids)
 
                     # Add thoughts to tasks and convert to typed models
                     for task in raw_tasks:

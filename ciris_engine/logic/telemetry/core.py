@@ -43,7 +43,7 @@ class BasicTelemetryCollector(BaseService):
         if not self._time_service:
             self._time_service = TimeService()
         self.start_time = self._time_service.now()
-        self._store_task: Optional[asyncio.Task[Any]] = None
+        self._pending_stores: set[asyncio.Task[Any]] = set()
         # Note: _started is now provided by BaseService
 
     async def start(self) -> None:
@@ -51,8 +51,25 @@ class BasicTelemetryCollector(BaseService):
         logger.info("Telemetry service started")
 
     async def stop(self) -> None:
+        """Stop the service and ensure all metrics are persisted."""
         await super().stop()
+
+        if self._pending_stores:
+            logger.info(f"Waiting for {len(self._pending_stores)} pending metric storage tasks...")
+            try:
+                await asyncio.wait_for(asyncio.gather(*self._pending_stores, return_exceptions=True), timeout=30.0)
+                logger.info("All metric storage tasks completed")
+            except asyncio.TimeoutError:
+                logger.warning("Timed out waiting for metric storage - some metrics may be lost")
+
         logger.info("Telemetry service stopped")
+
+    async def is_healthy(self) -> bool:
+        """Check if service is healthy."""
+        if len(self._pending_stores) > 100:
+            logger.warning(f"Telemetry backlog: {len(self._pending_stores)} pending tasks")
+            return False
+        return await super().is_healthy()
 
     async def record_metric(  # NOSONAR: Async for future compatibility with async backends
         self,
@@ -129,7 +146,9 @@ class BasicTelemetryCollector(BaseService):
             )
 
             # Store asynchronously without blocking metric recording
-            self._store_task = asyncio.create_task(self._store_metric_correlation(metric_correlation))
+            task = asyncio.create_task(self._store_metric_correlation(metric_correlation))
+            self._pending_stores.add(task)
+            task.add_done_callback(lambda t: self._pending_stores.discard(t))
         except Exception as e:
             logger.error(f"Failed to create metric correlation: {e}")
 

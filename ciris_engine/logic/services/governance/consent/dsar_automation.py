@@ -358,8 +358,11 @@ class DSARAutomationService:
         )
 
         logger.info(
-            f"Deletion status for {user_id} (ticket {ticket_id}): "
-            f"{deletion_status.completion_percentage:.1f}% complete, phase: {current_phase}"
+            "Deletion status for %s (ticket %s): %.1f%% complete, phase: %s",
+            user_id,
+            ticket_id,
+            deletion_status.completion_percentage,
+            current_phase,
         )
         return deletion_status
 

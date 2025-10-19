@@ -50,7 +50,12 @@ def run_migrations(db_path: str | None = None) -> None:
     """
     from .core import get_db_connection
     from .dialect import get_adapter
-    from .execution_helpers import get_applied_migrations, get_pending_migrations, record_migration, split_sql_statements
+    from .execution_helpers import (
+        get_applied_migrations,
+        get_pending_migrations,
+        record_migration,
+        split_sql_statements,
+    )
 
     adapter = get_adapter()
 

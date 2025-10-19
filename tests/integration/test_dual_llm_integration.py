@@ -94,7 +94,9 @@ async def test_dual_llm_service_real_initialization(mock_llm_bus):
 
         # With mock LLM, we expect at least one provider after module loading
         if modules_to_load and llm_providers:
-            assert len(llm_providers) >= 1, f"Expected at least 1 LLM provider with mock_llm module, got {len(llm_providers)}"
+            assert (
+                len(llm_providers) >= 1
+            ), f"Expected at least 1 LLM provider with mock_llm module, got {len(llm_providers)}"
 
             # Verify providers have basic properties
             providers_info = []

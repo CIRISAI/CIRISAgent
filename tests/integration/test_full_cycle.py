@@ -79,9 +79,7 @@ async def test_full_thought_cycle(mock_external_dependencies):
     essential_config = EssentialConfig()
 
     # Create runtime - this should work with mocked dependencies
-    runtime = CIRISRuntime(
-        adapter_types=["cli"], essential_config=essential_config, startup_channel_id="test_channel"
-    )
+    runtime = CIRISRuntime(adapter_types=["cli"], essential_config=essential_config, startup_channel_id="test_channel")
 
     # Verify runtime object was created
     assert runtime is not None, "Runtime should be created"

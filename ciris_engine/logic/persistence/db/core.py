@@ -70,8 +70,6 @@ class PostgreSQLCursorWrapper:
         """
         import re
 
-        translated_sql = sql
-
         # If using named parameters (dict), convert :name to %(name)s
         if parameters and isinstance(parameters, dict):
             # Replace :param_name with %(param_name)s
@@ -156,7 +154,7 @@ class PostgreSQLConnectionWrapper:
             translated_sql = sql.replace("?", "%s")
 
         cursor = self._conn.cursor()
-        logger.info(f"DEBUG PostgreSQLConnectionWrapper.execute: Placeholder translation")
+        logger.info("DEBUG PostgreSQLConnectionWrapper.execute: Placeholder translation")
         logger.info(f"DEBUG   original: {sql[:150]}...")
         logger.info(f"DEBUG   translated: {translated_sql[:150]}...")
         logger.info(f"DEBUG   param type: {type(parameters).__name__}, value: {parameters}")
@@ -448,6 +446,6 @@ def initialize_database(db_path: Optional[str] = None) -> None:
         run_migrations(db_path)
 
         logger.info(f"Database initialized at {db_path or get_sqlite_db_full_path()}")
-    except (sqlite3.Error, Exception) as e:
+    except Exception as e:
         logger.exception(f"Database error during initialization: {e}")
         raise

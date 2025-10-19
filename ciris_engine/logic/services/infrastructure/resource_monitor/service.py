@@ -144,7 +144,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
                 disk_usage = psutil.disk_usage(self.db_path)
                 self.snapshot.disk_free_mb = disk_usage.free // 1024 // 1024
                 self.snapshot.disk_used_mb = disk_usage.used // 1024 // 1024
-            except (OSError, FileNotFoundError):
+            except OSError:
                 # db_path may not be a valid filesystem path (e.g., connection string)
                 self.snapshot.disk_free_mb = 0
                 self.snapshot.disk_used_mb = 0

@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 3765c99a468c
-Build Time: 2025-10-19T18:17:54.489733
+Code Hash: 8414d162449a
+Build Time: 2025-10-19T18:15:33.587620
 Git Commit: 4e2b58d1d861f2d9a6a9127dcd40206b77880645
-Git Branch: fix/async-db-io
+Git Branch: fix/secrets-warnings
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

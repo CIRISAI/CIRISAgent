@@ -256,6 +256,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Process for secrets detection and replacement
         # SecretsService requires source_message_id
         if not self.secrets_service:
+            logger.warning(
+                f"Secrets service unavailable for memorize operation on node {node.id}. "
+                f"Secrets will NOT be encrypted. This may expose sensitive data."
+            )
             return node
         processed_text, secret_refs = await self.secrets_service.process_incoming_text(
             attributes_str, source_message_id=f"memorize_{node.id}"
@@ -310,6 +314,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             _attributes_str = json.dumps(attributes_dict, cls=DateTimeEncoder)
 
             if not self.secrets_service:
+                logger.warning(
+                    f"Secrets service unavailable for recall operation. "
+                    f"Secrets will NOT be decrypted for action_type={action_type}. "
+                    f"This may prevent proper secret handling."
+                )
                 return attributes_dict
             decapsulated_attributes = await self.secrets_service.decapsulate_secrets_in_parameters(
                 action_type=action_type,

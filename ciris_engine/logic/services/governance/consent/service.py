@@ -157,14 +157,16 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         """Reconstruct ConsentStatus from graph node."""
         attrs = node.attributes if isinstance(node.attributes, dict) else node.attributes.model_dump()
 
+        # Extract expires_at separately to avoid walrus operator in argument list
+        expires_str = get_str_optional(attrs, "expires_at")
+        expires_at = datetime.fromisoformat(expires_str) if expires_str else None
+
         return ConsentStatus(
             user_id=user_id,
             stream=ConsentStream(get_str(attrs, "stream", "temporary")),
             categories=[ConsentCategory(c) for c in get_list(attrs, "categories", [])],
             granted_at=datetime.fromisoformat(get_str(attrs, "granted_at", datetime.now(timezone.utc).isoformat())),
-            expires_at=(
-                datetime.fromisoformat(expires_str) if (expires_str := get_str_optional(attrs, "expires_at")) else None
-            ),
+            expires_at=expires_at,
             last_modified=datetime.fromisoformat(
                 get_str(attrs, "last_modified", datetime.now(timezone.utc).isoformat())
             ),
@@ -659,65 +661,71 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Check status via partnership manager
         status = await self._partnership_manager.check_partnership_status(user_id)
 
-        # If accepted, finalize the partnership
-        if status == "accepted":
-            # Get task_id from pending partnerships
-            pending_list = self._partnership_manager.list_pending_partnerships()
-            task_id = None
-            for pending in pending_list:
-                if pending.get("user_id") == user_id:
-                    task_id = pending.get("task_id")
-                    break
+        # If not accepted, return the status as-is
+        if status != "accepted":
+            return status
 
-            if not task_id:
-                logger.warning(f"Partnership accepted for {user_id} but no task_id found")
-                return status
+        # Partnership was accepted - finalize it
+        # Get task_id from pending partnerships
+        pending_list = self._partnership_manager.list_pending_partnerships()
+        task_id = None
+        for pending in pending_list:
+            if pending.get("user_id") == user_id:
+                task_id = pending.get("task_id")
+                break
 
-            # Finalize via partnership manager
-            partnership_data = self._partnership_manager.finalize_partnership_approval(user_id, str(task_id))
+        if not task_id:
+            logger.warning(f"Partnership accepted for {user_id} but no task_id found")
+            return status
 
-            if partnership_data:
-                # Create and persist PARTNERED consent status
-                now = self._now()
-                categories = partnership_data.get("categories", [])
+        # Finalize via partnership manager
+        partnership_data = self._partnership_manager.finalize_partnership_approval(user_id, str(task_id))
 
-                partnered_status = ConsentStatus(
-                    user_id=user_id,
-                    stream=ConsentStream.PARTNERED,
-                    categories=categories,
-                    granted_at=now,
-                    expires_at=None,  # PARTNERED doesn't expire
-                    last_modified=now,
-                    impact_score=0.0,
-                    attribution_count=0,
-                )
+        if not partnership_data:
+            logger.warning(f"Partnership finalization failed for {user_id}")
+            return status
 
-                # Store in graph
-                node = GraphNode(
-                    id=f"consent/{user_id}",
-                    type=NodeType.CONSENT,
-                    scope=GraphScope.LOCAL,
-                    attributes={
-                        "stream": partnered_status.stream,
-                        "categories": list(partnered_status.categories),
-                        "granted_at": partnered_status.granted_at.isoformat(),
-                        "expires_at": None,
-                        "last_modified": partnered_status.last_modified.isoformat(),
-                        "impact_score": partnered_status.impact_score,
-                        "attribution_count": partnered_status.attribution_count,
-                        "partnership_approved": True,
-                        "approval_task_id": task_id,
-                    },
-                    updated_by="consent_manager",
-                    updated_at=now,
-                )
+        # Create and persist PARTNERED consent status
+        now = self._now()
+        categories = partnership_data.get("categories", [])
 
-                if self._time_service is None:
-                    raise ValueError("TimeService required for finalizing partnership")
-                add_graph_node(node, self._time_service, self._db_path)
+        partnered_status = ConsentStatus(
+            user_id=user_id,
+            stream=ConsentStream.PARTNERED,
+            categories=categories,
+            granted_at=now,
+            expires_at=None,  # PARTNERED doesn't expire
+            last_modified=now,
+            impact_score=0.0,
+            attribution_count=0,
+        )
 
-                # Update cache
-                self._consent_cache[user_id] = partnered_status
+        # Store in graph
+        node = GraphNode(
+            id=f"consent/{user_id}",
+            type=NodeType.CONSENT,
+            scope=GraphScope.LOCAL,
+            attributes={
+                "stream": partnered_status.stream,
+                "categories": list(partnered_status.categories),
+                "granted_at": partnered_status.granted_at.isoformat(),
+                "expires_at": None,
+                "last_modified": partnered_status.last_modified.isoformat(),
+                "impact_score": partnered_status.impact_score,
+                "attribution_count": partnered_status.attribution_count,
+                "partnership_approved": True,
+                "approval_task_id": task_id,
+            },
+            updated_by="consent_manager",
+            updated_at=now,
+        )
+
+        if self._time_service is None:
+            raise ValueError("TimeService required for finalizing partnership")
+        add_graph_node(node, self._time_service, self._db_path)
+
+        # Update cache
+        self._consent_cache[user_id] = partnered_status
 
         return status
 

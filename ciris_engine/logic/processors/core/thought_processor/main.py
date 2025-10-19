@@ -18,6 +18,7 @@ from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.processors.core import (
@@ -595,8 +596,11 @@ class ThoughtProcessor(
                 ),
             )
 
-        # NOQA: Runtime state passed to conscience checks contains non-JSON-serializable objects (Thought instances)
-        context: Dict[str, Any] = {"thought": thought, "dma_results": dma_results_dict}
+        # Create typed context for conscience checks
+        context = ConscienceCheckContext(
+            thought=thought,
+            dma_results=dma_results_dict,  # extra="allow" accepts additional fields
+        )
         conscience_result = await self._run_conscience_checks(action_result, context)
 
         if is_conscience_retry and not conscience_result.overridden:
@@ -627,7 +631,7 @@ class ThoughtProcessor(
         return action_result.selected_action in exempt_actions
 
     async def _run_conscience_checks(
-        self, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
+        self, action_result: ActionSelectionDMAResult, context: ConscienceCheckContext
     ) -> ConscienceCheckInternalResult:
         """Run all conscience checks and return the results."""
         final_action = action_result
@@ -669,7 +673,7 @@ class ThoughtProcessor(
         )
 
     async def _check_single_conscience(
-        self, entry: Any, action_result: ActionSelectionDMAResult, context: Dict[str, Any]
+        self, entry: Any, action_result: ActionSelectionDMAResult, context: ConscienceCheckContext
     ) -> SingleConscienceCheckResult:
         """Check a single conscience and handle errors."""
         conscience = entry.conscience

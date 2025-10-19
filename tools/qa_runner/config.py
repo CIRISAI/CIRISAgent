@@ -22,6 +22,8 @@ class QAModule(Enum):
     TASKS = "tasks"
     GUIDANCE = "guidance"
     CONSENT = "consent"
+    DSAR = "dsar"  # DSAR automation testing
+    PARTNERSHIP = "partnership"  # Partnership bilateral consent testing
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
@@ -145,6 +147,12 @@ class QAConfig:
         elif module == QAModule.CONSENT:
             # Consent tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.DSAR:
+            # DSAR tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.PARTNERSHIP:
+            # Partnership tests use SDK client
+            return []  # Will be handled separately by runner
         elif module == QAModule.BILLING:
             # Billing tests use SDK client
             return []  # Will be handled separately by runner
@@ -228,6 +236,8 @@ class QAConfig:
                 QAModule.TASKS,
                 QAModule.GUIDANCE,
                 QAModule.CONSENT,
+                QAModule.DSAR,
+                QAModule.PARTNERSHIP,
                 QAModule.BILLING,
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules

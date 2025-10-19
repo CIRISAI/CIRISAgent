@@ -11,6 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.persistence.db.operations import (
+    batch_insert_edges_if_not_exist,
+    insert_edge_if_not_exists,
+    insert_node_if_not_exists,
+)
 from ciris_engine.logic.utils.jsondict_helpers import get_float
 from ciris_engine.schemas.services.graph.consolidation import ParticipantData
 from ciris_engine.schemas.services.graph.edge_types import EdgeSpecification
@@ -98,30 +103,19 @@ class EdgeManager:
                             channel_type = parts[1] if len(parts) > 1 else "unknown"
                             channel_name = parts[2] if len(parts) > 2 else node_id
 
-                            cursor.execute(
-                                """
-                                INSERT OR IGNORE INTO graph_nodes
-                                (node_id, scope, node_type, attributes_json,
-                                 version, updated_by, updated_at, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                                (
-                                    node_id,
-                                    "local",
-                                    "channel",
-                                    json.dumps(
-                                        {
-                                            "channel_id": node_id,
-                                            "channel_type": channel_type,
-                                            "channel_name": channel_name,
-                                            "created_by": "tsdb_consolidation",
-                                        }
-                                    ),
-                                    1,
-                                    "tsdb_consolidation",
-                                    datetime.now(timezone.utc).isoformat(),
-                                    datetime.now(timezone.utc).isoformat(),
-                                ),
+                            insert_node_if_not_exists(
+                                node_id=node_id,
+                                scope="local",
+                                node_type="channel",
+                                attributes={
+                                    "channel_id": node_id,
+                                    "channel_type": channel_type,
+                                    "channel_name": channel_name,
+                                    "created_by": "tsdb_consolidation",
+                                },
+                                version=1,
+                                updated_by="tsdb_consolidation",
+                                db_path=self._db_path,
                             )
 
                 # Batch insert edges
@@ -143,19 +137,8 @@ class EdgeManager:
                         )
                     )
 
-                # Insert edges with INSERT OR IGNORE to avoid duplicates
-                cursor.executemany(
-                    """
-                    INSERT OR IGNORE INTO graph_edges
-                    (edge_id, source_node_id, target_node_id, scope,
-                     relationship, weight, attributes_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    edge_data,
-                )
-
-                edges_created = cursor.rowcount
-                conn.commit()
+                # Insert edges using operations layer
+                edges_created = batch_insert_edges_if_not_exist(edge_data, db_path=self._db_path)
 
                 logger.info(f"Created {edges_created} edges from {summary_node.id} to target nodes")
 
@@ -197,9 +180,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
+            with get_db_connection(db_path=self._db_path):
                 edge_data = []
 
                 # Create edges between each pair of summaries
@@ -226,19 +207,7 @@ class EdgeManager:
                         )
 
                 if edge_data:
-                    cursor.executemany(
-                        """
-                        INSERT OR IGNORE INTO graph_edges
-                        (edge_id, source_node_id, target_node_id, scope,
-                         relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        edge_data,
-                    )
-
-                    edges_created = cursor.rowcount
-                    conn.commit()
-
+                    edges_created = batch_insert_edges_if_not_exist(edge_data, db_path=self._db_path)
                     logger.info(f"Created {edges_created} cross-summary edges for period {period_start}")
 
         except Exception as e:
@@ -269,23 +238,15 @@ class EdgeManager:
 
                 # Step 1: Create TEMPORAL_NEXT from current to itself (marking as latest)
                 edge_id_self = f"edge_{uuid4().hex[:8]}"
-                cursor.execute(
-                    """
-                    INSERT OR IGNORE INTO graph_edges
-                    (edge_id, source_node_id, target_node_id, scope,
-                     relationship, weight, attributes_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        edge_id_self,
-                        current_summary.id,
-                        current_summary.id,  # Points to itself
-                        current_summary.scope.value if hasattr(current_summary.scope, "value") else "local",
-                        "TEMPORAL_NEXT",
-                        1.0,
-                        json.dumps({"is_latest": True, "context": "Current latest summary"}),
-                        datetime.now(timezone.utc).isoformat(),
-                    ),
+                insert_edge_if_not_exists(
+                    edge_id=edge_id_self,
+                    source_node_id=current_summary.id,
+                    target_node_id=current_summary.id,  # Points to itself
+                    scope=current_summary.scope.value if hasattr(current_summary.scope, "value") else "local",
+                    relationship="TEMPORAL_NEXT",
+                    weight=1.0,
+                    attributes={"is_latest": True, "context": "Current latest summary"},
+                    db_path=self._db_path,
                 )
                 edges_created += 1
 
@@ -377,9 +338,7 @@ class EdgeManager:
         edges_created = 0
 
         try:
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
+            with get_db_connection(db_path=self._db_path):
                 edge_data = []
 
                 # Create edges from each summary to each concept
@@ -400,19 +359,7 @@ class EdgeManager:
                         )
 
                 if edge_data:
-                    cursor.executemany(
-                        """
-                        INSERT OR IGNORE INTO graph_edges
-                        (edge_id, source_node_id, target_node_id, scope,
-                         relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        edge_data,
-                    )
-
-                    edges_created = cursor.rowcount
-                    conn.commit()
-
+                    edges_created = batch_insert_edges_if_not_exist(edge_data, db_path=self._db_path)
                     logger.info(f"Created {edges_created} concept edges for period {period_label}")
 
         except Exception as e:
@@ -541,23 +488,14 @@ class EdgeManager:
                             "channels": participant.channels,
                         }
 
-                        cursor.execute(
-                            """
-                            INSERT OR IGNORE INTO graph_nodes
-                            (node_id, scope, node_type, attributes_json,
-                             version, updated_by, updated_at, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                            (
-                                user_node_id,
-                                "local",
-                                "user",
-                                json.dumps(user_attributes),
-                                1,
-                                "tsdb_consolidation",
-                                datetime.now(timezone.utc).isoformat(),
-                                datetime.now(timezone.utc).isoformat(),
-                            ),
+                        insert_node_if_not_exists(
+                            node_id=user_node_id,
+                            scope="local",
+                            node_type="user",
+                            attributes=user_attributes,
+                            version=1,
+                            updated_by="tsdb_consolidation",
+                            db_path=self._db_path,
                         )
                         user_exists = True
 
@@ -595,19 +533,7 @@ class EdgeManager:
                         logger.debug(f"User node not found for user_id: {user_id}")
 
                 if edge_data:
-                    cursor.executemany(
-                        """
-                        INSERT OR IGNORE INTO graph_edges
-                        (edge_id, source_node_id, target_node_id, scope,
-                         relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        edge_data,
-                    )
-
-                    edges_created = cursor.rowcount
-                    conn.commit()
-
+                    edges_created = batch_insert_edges_if_not_exist(edge_data, db_path=self._db_path)
                     logger.info(f"Created {edges_created} user participation edges for {conversation_summary.id}")
 
         except Exception as e:
@@ -696,7 +622,7 @@ class EdgeManager:
 
         return normalized_edges, node_ids_to_check
 
-    def _create_missing_channel_node(self, cursor: Any, node_id: str, existing_nodes: set[str]) -> None:
+    def _create_missing_channel_node(self, node_id: str, existing_nodes: set[str]) -> None:
         """Create a missing channel node in the database."""
         logger.info(f"Creating missing channel node: {node_id}")
 
@@ -713,27 +639,18 @@ class EdgeManager:
             "first_seen": datetime.now(timezone.utc).isoformat(),
         }
 
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO graph_nodes
-            (node_id, scope, node_type, attributes_json,
-             version, updated_by, updated_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                node_id,
-                "local",
-                "channel",
-                json.dumps(channel_attributes),
-                1,
-                "tsdb_consolidation",
-                datetime.now(timezone.utc).isoformat(),
-                datetime.now(timezone.utc).isoformat(),
-            ),
+        insert_node_if_not_exists(
+            node_id=node_id,
+            scope="local",
+            node_type="channel",
+            attributes=channel_attributes,
+            version=1,
+            updated_by="tsdb_consolidation",
+            db_path=self._db_path,
         )
         existing_nodes.add(node_id)
 
-    def _create_missing_nodes(self, cursor: Any, missing_nodes: set[str], existing_nodes: set[str]) -> None:
+    def _create_missing_nodes(self, missing_nodes: set[str], existing_nodes: set[str]) -> None:
         """Create missing nodes if they are channels."""
         if not missing_nodes:
             return
@@ -742,7 +659,7 @@ class EdgeManager:
 
         for node_id in missing_nodes:
             if node_id.startswith("channel_"):
-                self._create_missing_channel_node(cursor, node_id, existing_nodes)
+                self._create_missing_channel_node(node_id, existing_nodes)
             else:
                 logger.warning(f"Cannot auto-create node of unknown type: {node_id}")
 
@@ -836,25 +753,13 @@ class EdgeManager:
 
                 # Create missing nodes (channels only)
                 missing_nodes = node_ids_to_check - existing_nodes
-                self._create_missing_nodes(cursor, missing_nodes, existing_nodes)
+                self._create_missing_nodes(missing_nodes, existing_nodes)
 
                 # Build edge data for insertion
                 edge_data = self._build_edge_data(normalized_edges, existing_nodes)
 
                 if edge_data:
-                    cursor.executemany(
-                        """
-                        INSERT OR IGNORE INTO graph_edges
-                        (edge_id, source_node_id, target_node_id, scope,
-                         relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        edge_data,
-                    )
-
-                    edges_created = cursor.rowcount
-                    conn.commit()
-
+                    edges_created = batch_insert_edges_if_not_exist(edge_data, db_path=self._db_path)
                     logger.info(f"Created {edges_created} edges from batch")
 
         except Exception as e:
@@ -907,50 +812,36 @@ class EdgeManager:
                         if cursor.fetchone():
                             # Create edge from current to next
                             edge_id = f"edge_{uuid4().hex[:8]}"
-                            cursor.execute(
-                                """
-                                INSERT OR IGNORE INTO graph_edges
-                                (edge_id, source_node_id, target_node_id, scope,
-                                 relationship, weight, attributes_json, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                                (
-                                    edge_id,
-                                    summary.id,
-                                    next_summary_id,
-                                    summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope),
-                                    "TEMPORAL_NEXT",
-                                    1.0,
-                                    json.dumps({"direction": "forward", "context": "Next period in sequence"}),
-                                    datetime.now(timezone.utc).isoformat(),
-                                ),
+                            created = insert_edge_if_not_exists(
+                                edge_id=edge_id,
+                                source_node_id=summary.id,
+                                target_node_id=next_summary_id,
+                                scope=summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope),
+                                relationship="TEMPORAL_NEXT",
+                                weight=1.0,
+                                attributes={"direction": "forward", "context": "Next period in sequence"},
+                                db_path=self._db_path,
                             )
 
-                            if cursor.rowcount > 0:
+                            if created:
                                 edges_created += 1
 
                                 # Also create backward edge from next to current
                                 edge_id_back = f"edge_{uuid4().hex[:8]}"
-                                cursor.execute(
-                                    """
-                                    INSERT OR IGNORE INTO graph_edges
-                                    (edge_id, source_node_id, target_node_id, scope,
-                                     relationship, weight, attributes_json, created_at)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                    (
-                                        edge_id_back,
-                                        next_summary_id,
-                                        summary.id,
-                                        summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope),
-                                        "TEMPORAL_PREV",
-                                        1.0,
-                                        json.dumps({"direction": "backward", "context": "Previous period in sequence"}),
-                                        datetime.now(timezone.utc).isoformat(),
+                                created_back = insert_edge_if_not_exists(
+                                    edge_id=edge_id_back,
+                                    source_node_id=next_summary_id,
+                                    target_node_id=summary.id,
+                                    scope=(
+                                        summary.scope.value if hasattr(summary.scope, "value") else str(summary.scope)
                                     ),
+                                    relationship="TEMPORAL_PREV",
+                                    weight=1.0,
+                                    attributes={"direction": "backward", "context": "Previous period in sequence"},
+                                    db_path=self._db_path,
                                 )
 
-                                if cursor.rowcount > 0:
+                                if created_back:
                                     edges_created += 1
 
                 conn.commit()

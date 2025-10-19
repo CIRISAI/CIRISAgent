@@ -53,19 +53,40 @@ def query_summaries_in_period(
     if period_start >= period_end:
         raise ValueError(ERR_PERIOD_ORDER)
 
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
     # Query summaries with specified consolidation level
-    cursor.execute(
+    # PostgreSQL: Use JSONB operators and direct TIMESTAMP comparison
+    # SQLite: Use json_extract() and datetime() function
+    if adapter.is_postgresql():
+        sql = """
+            SELECT node_id, attributes_json,
+                   attributes_json->>'period_start' as period_start
+            FROM graph_nodes
+            WHERE node_type = ?
+              AND created_at >= ?
+              AND created_at <= ?
+              AND (attributes_json->>'consolidation_level' IS NULL
+                   OR attributes_json->>'consolidation_level' = ?)
+            ORDER BY attributes_json->>'period_start'
         """
-        SELECT node_id, attributes_json,
-               json_extract(attributes_json, '$.period_start') as period_start
-        FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
-          AND (json_extract(attributes_json, '$.consolidation_level') IS NULL
-               OR json_extract(attributes_json, '$.consolidation_level') = ?)
-        ORDER BY period_start
-    """,
+    else:
+        sql = """
+            SELECT node_id, attributes_json,
+                   json_extract(attributes_json, '$.period_start') as period_start
+            FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) <= datetime(?)
+              AND (json_extract(attributes_json, '$.consolidation_level') IS NULL
+                   OR json_extract(attributes_json, '$.consolidation_level') = ?)
+            ORDER BY period_start
+        """
+
+    cursor.execute(
+        sql,
         (summary_type, period_start.isoformat(), period_end.isoformat(), consolidation_level),
     )
 
@@ -141,16 +162,31 @@ def query_expired_summaries(cursor: Cursor, cutoff_date: datetime) -> List[Tuple
     if cutoff_date.tzinfo is None:
         raise ValueError("cutoff_date must be timezone-aware")
 
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # PostgreSQL: Use JSONB operator, SQLite: Use json_extract()
+    # Compare as text (ISO format strings) to avoid casting issues
+    # PostgreSQL: Escape % in LIKE pattern by doubling it (%%_summary)
+    if adapter.is_postgresql():
+        sql = """
+            SELECT node_id, node_type, attributes_json
+            FROM graph_nodes
+            WHERE node_type LIKE '%%_summary'
+              AND attributes_json->>'period_end' < ?
+            ORDER BY attributes_json->>'period_end'
         """
-        SELECT node_id, node_type, attributes_json
-        FROM graph_nodes
-        WHERE node_type LIKE '%_summary'
-          AND json_extract(attributes_json, '$.period_end') < ?
-        ORDER BY json_extract(attributes_json, '$.period_end')
-    """,
-        (cutoff_date.isoformat(),),
-    )
+    else:
+        sql = """
+            SELECT node_id, node_type, attributes_json
+            FROM graph_nodes
+            WHERE node_type LIKE '%_summary'
+              AND json_extract(attributes_json, '$.period_end') < ?
+            ORDER BY json_extract(attributes_json, '$.period_end')
+        """
+
+    cursor.execute(sql, (cutoff_date.isoformat(),))
 
     return cursor.fetchall()
 
@@ -186,7 +222,12 @@ def update_summary_consolidation_level(cursor: Cursor, node_id: str, new_level: 
     # Parse, update, and save
     import json
 
-    attrs = json.loads(row[0]) if row[0] else {}
+    # Handle PostgreSQL JSONB vs SQLite TEXT
+    if isinstance(row[0], dict):
+        attrs = row[0]  # PostgreSQL
+    else:
+        attrs = json.loads(row[0]) if row[0] else {}  # SQLite
+
     attrs["consolidation_level"] = new_level
 
     cursor.execute(
@@ -225,13 +266,29 @@ def count_nodes_in_period(cursor: Cursor, node_type: str, period_start: datetime
     if period_start >= period_end:
         raise ValueError(ERR_PERIOD_ORDER)
 
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # PostgreSQL: Use direct TIMESTAMP comparison
+    # SQLite: Use datetime() function
+    if adapter.is_postgresql():
+        sql = """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = ?
+              AND created_at >= ?
+              AND created_at <= ?
         """
-        SELECT COUNT(*) FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
-    """,
+    else:
+        sql = """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) <= datetime(?)
+        """
+
+    cursor.execute(
+        sql,
         (node_type, period_start.isoformat(), period_end.isoformat()),
     )
 

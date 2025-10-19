@@ -274,25 +274,90 @@ interface AuditTrail {
 - Initiated By
 - Reason
 
-### 6. Data Deletion Request (`/consent/delete`)
+### 6. Data Download Page (`/consent/download`)
+
+**New Feature**: GDPR-compliant data export
+
+```typescript
+interface DataDownloadPage {
+  exportOptions: {
+    full: { label: 'Complete Data Export', description: 'All consent data, impact metrics, and audit history' };
+    consent_only: { label: 'Consent Data Only', description: 'Current consent status and categories' };
+    impact_only: { label: 'Impact Metrics', description: 'Your contribution statistics' };
+    audit_only: { label: 'Audit Trail', description: 'Complete consent change history' };
+  };
+
+  onInitiateExport: (requestType: string) => Promise<DSARExportResponse>;
+  onDownloadJSON: (exportData: object) => void;
+}
+```
+
+**Visual Layout**:
+```
+┌─────────────────────────────────────────────────┐
+│ Download Your Data                         [?] │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│ Choose what data to download:                  │
+│                                                 │
+│ ○ Complete Data Export (Recommended)           │
+│   All consent data, impact metrics, and        │
+│   complete audit history                       │
+│                                                 │
+│ ○ Consent Data Only                            │
+│   Your current consent status and categories   │
+│                                                 │
+│ ○ Impact Metrics                               │
+│   Your contribution statistics                 │
+│                                                 │
+│ ○ Audit Trail                                  │
+│   Complete consent change history              │
+│                                                 │
+│               [Download Data]                   │
+│                                                 │
+└─────────────────────────────────────────────────┘
+```
+
+**Post-Download UI**:
+```
+✅ Data Export Complete!
+
+Request ID: dsar_wa-2025-08-25-391F3E_20251018022901
+Status: Completed
+
+Your data has been exported and downloaded as:
+ciris-data-export-dsar_wa-2025-08-25-391F3E_20251018022901.json
+
+This file contains:
+✓ Consent status and categories
+✓ Impact metrics (1,234 interactions, 456 patterns)
+✓ Complete audit trail (12 entries)
+
+[View Export] [Download Again] [Close]
+```
+
+### 7. Data Deletion Request (`/consent/delete`)
 
 ```typescript
 interface DeletionRequest {
   currentStream: ConsentStream;
   dataCategories: DataCategory[];
 
+  // Add data download option before deletion
+  onDownloadDataFirst: () => Promise<void>;
   onSelectDeleteAll: () => void;
   onSelectCategories: (categories: DataCategory[]) => void;
-  onConfirmDeletion: () => Promise<DSARTicket>;
+  onConfirmDeletion: () => Promise<ConsentDecayStatus>;
 }
 ```
 
-**Deletion Flow**:
-1. Warning about decay protocol
-2. Category selection
-3. Confirmation with consequences
-4. DSAR ticket creation
-5. Show decay timeline (90 days)
+**Updated Deletion Flow**:
+1. **Offer data download first** (GDPR best practice)
+2. Warning about decay protocol
+3. Category selection
+4. Confirmation with consequences
+5. Initiate decay protocol
+6. Show decay timeline (90 days)
 
 ---
 
@@ -468,37 +533,126 @@ const useAuditTrail = (limit: number = 100) => {
 };
 ```
 
-### 7. DSAR Integration
+### 7. DSAR Export & Deletion
+
+#### 7.1 DSAR Export (Data Download)
 
 ```typescript
-// POST /v1/dsr (for deletion requests)
-interface DSARRequest {
-  request_type: 'delete';
-  email: string;
-  user_identifier: string;
-  details?: string;
-  urgent: boolean;
+// POST /v1/consent/dsar/initiate
+interface DSARExportRequest {
+  request_type: 'full' | 'consent_only' | 'impact_only' | 'audit_only';
 }
 
-// Deletion triggers decay protocol automatically
-const requestDeletion = async (email: string, userId: string) => {
-  const response = await fetch('/v1/dsr', {
+interface DSARExportResponse {
+  request_id: string;           // Format: dsar_{user_id}_{timestamp}
+  user_id: string;
+  request_type: string;
+  status: 'completed';
+  export_data: {
+    consent?: {
+      user_id: string;
+      stream: string;
+      categories: string[];
+      granted_at: string;
+      expires_at?: string;
+      last_modified: string;
+    };
+    impact?: {
+      total_interactions: number;
+      patterns_contributed: number;
+      users_helped: number;
+      categories_active: string[];
+      impact_score: number;
+      example_contributions: string[];
+    };
+    audit_trail?: Array<{
+      entry_id: string;
+      user_id: string;
+      timestamp: string;
+      previous_stream: string;
+      new_stream: string;
+      previous_categories: string[];
+      new_categories: string[];
+      initiated_by: string;
+      reason?: string;
+    }>;
+  };
+}
+
+// Usage: Download user data
+const downloadMyData = async (requestType: string = 'full') => {
+  const response = await fetch('/v1/consent/dsar/initiate', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({
-      request_type: 'delete',
-      email,
-      user_identifier: userId,
-      details: 'User requested data deletion via consent UI',
-      urgent: false
-    })
+    body: JSON.stringify({ request_type: requestType })
   });
 
-  const ticket = await response.json();
-  return ticket.data.ticket_id;
+  const dsarData = await response.json();
+
+  // Show export data to user or download as JSON
+  const blob = new Blob([JSON.stringify(dsarData.export_data, null, 2)], {
+    type: 'application/json'
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ciris-data-export-${dsarData.request_id}.json`;
+  a.click();
+
+  return dsarData.request_id;
+};
+```
+
+#### 7.2 DSAR Status Tracking
+
+```typescript
+// GET /v1/consent/dsar/status/{request_id}
+interface DSARStatusResponse {
+  request_id: string;
+  user_id: string;
+  status: 'completed';
+  message: string;
+}
+
+const checkDSARStatus = async (requestId: string) => {
+  const response = await fetch(`/v1/consent/dsar/status/${requestId}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  return await response.json();
+};
+```
+
+#### 7.3 Data Deletion
+
+```typescript
+// POST /v1/consent/revoke (triggers decay protocol)
+const requestDeletion = async (reason: string = 'User requested deletion') => {
+  const response = await fetch('/v1/consent/revoke', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ reason })
+  });
+
+  const decay = await response.json();
+
+  // Show decay timeline: 90-day gradual anonymization
+  showDecayTimeline({
+    user_id: decay.user_id,
+    decay_started: decay.decay_started,
+    decay_complete_at: decay.decay_complete_at,
+    identity_severed: decay.identity_severed,
+    patterns_anonymized: decay.patterns_anonymized,
+    safety_patterns_retained: decay.safety_patterns_retained
+  });
+
+  return decay;
 };
 ```
 

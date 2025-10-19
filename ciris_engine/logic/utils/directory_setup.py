@@ -66,12 +66,17 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     to detect if another process is already using the database.
 
     Args:
-        db_path: Path to the SQLite database file
+        db_path: Path to the SQLite database file or PostgreSQL connection string
         fail_fast: If True, exit immediately on access conflict (default True)
 
     Raises:
         DatabaseAccessError: If database is already in use by another agent
     """
+    # Skip exclusive access check for PostgreSQL (connection string starts with "postgresql://")
+    if db_path.startswith(("postgresql://", "postgres://")):
+        print(f"✓ Skipping exclusive access check for PostgreSQL: {db_path}")
+        return
+
     db_path_obj = Path(db_path)
 
     # Create database parent directory if needed
@@ -246,7 +251,11 @@ def setup_application_directories(
     if check_database_access:
         if essential_config:
             # Use the provided config directly
-            main_db_path = str(Path(essential_config.database.main_db).resolve())
+            # Prefer database_url (for PostgreSQL), fallback to main_db path (for SQLite)
+            if essential_config.database.database_url:
+                main_db_path = essential_config.database.database_url
+            else:
+                main_db_path = str(Path(essential_config.database.main_db).resolve())
             ensure_database_exclusive_access(main_db_path, fail_fast)
         else:
             # Try to get config from service registry

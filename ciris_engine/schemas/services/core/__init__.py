@@ -58,7 +58,7 @@ class ServiceContainer(BaseModel):
     adaptive_filter_service: Optional[Any] = Field(None, description="Adaptive content filtering")
     agent_config_service: Optional[Any] = Field(None, description="Agent configuration management")
     transaction_orchestrator: Optional[Any] = Field(None, description="Transaction coordination")
-    core_tool_service: Optional[Any] = Field(None, description="Core tool capabilities")
+    secrets_tool_service: Optional[Any] = Field(None, description="Secrets tool capabilities")
     maintenance_service: Optional[Any] = Field(None, description="System maintenance service")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -77,7 +77,7 @@ class ServiceContainer(BaseModel):
             "adaptive_filter": [self.adaptive_filter_service] if self.adaptive_filter_service else [],
             "agent_config": [self.agent_config_service] if self.agent_config_service else [],
             "transaction": [self.transaction_orchestrator] if self.transaction_orchestrator else [],
-            "core_tool": [self.core_tool_service] if self.core_tool_service else [],
+            "secrets_tool": [self.secrets_tool_service] if self.secrets_tool_service else [],
             "maintenance": [self.maintenance_service] if self.maintenance_service else [],
         }
         result = service_map.get(service_type, [])

@@ -14,9 +14,12 @@ def map_row_to_task(row: Any) -> Task:
     # Get agent_occurrence_id from row (defaults to "default" for backwards compatibility)
     agent_occurrence_id = row_dict.get("agent_occurrence_id", "default")
 
+    # Handle PostgreSQL JSONB vs SQLite TEXT for JSON columns
+    # PostgreSQL JSONB returns parsed Python objects, SQLite TEXT returns JSON strings
     if row_dict.get("context_json"):
         try:
-            ctx_data = json.loads(row_dict["context_json"])
+            ctx_json = row_dict["context_json"]
+            ctx_data = ctx_json if isinstance(ctx_json, dict) else json.loads(ctx_json)
             if isinstance(ctx_data, dict):
                 # Extract only the fields that TaskContext expects
                 # This makes us resilient to schema changes
@@ -55,7 +58,8 @@ def map_row_to_task(row: Any) -> Task:
         )
     if row_dict.get("outcome_json"):
         try:
-            outcome_data = json.loads(row_dict["outcome_json"])
+            outcome_json = row_dict["outcome_json"]
+            outcome_data = outcome_json if isinstance(outcome_json, dict) else json.loads(outcome_json)
             # Only set outcome if it's a non-empty dict with required fields
             if isinstance(outcome_data, dict) and outcome_data:
                 row_dict["outcome"] = TaskOutcome.model_validate(outcome_data)
@@ -66,6 +70,19 @@ def map_row_to_task(row: Any) -> Task:
             row_dict["outcome"] = None
     else:
         row_dict["outcome"] = None
+
+    # Handle PostgreSQL TIMESTAMP vs SQLite TEXT for datetime columns
+    # PostgreSQL TIMESTAMP returns datetime objects, SQLite TEXT returns ISO strings
+    from datetime import datetime, timezone
+
+    for dt_field in ["created_at", "updated_at", "signed_at"]:
+        if dt_field in row_dict and row_dict[dt_field]:
+            if isinstance(row_dict[dt_field], datetime):
+                # Ensure timezone-aware datetime (assume UTC if naive)
+                dt = row_dict[dt_field]
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                row_dict[dt_field] = dt.isoformat()
 
     # Remove database-specific columns that aren't in the Task schema
     for k in ["context_json", "outcome_json", "retry_count"]:
@@ -87,9 +104,12 @@ def map_row_to_thought(row: Any) -> Thought:
     # Get agent_occurrence_id from row (defaults to "default" for backwards compatibility)
     agent_occurrence_id = row_dict.get("agent_occurrence_id", "default")
 
+    # Handle PostgreSQL JSONB vs SQLite TEXT for JSON columns
+    # PostgreSQL JSONB returns parsed Python objects, SQLite TEXT returns JSON strings
     if row_dict.get("context_json"):
         try:
-            ctx_data = json.loads(row_dict["context_json"])
+            ctx_json = row_dict["context_json"]
+            ctx_data = ctx_json if isinstance(ctx_json, dict) else json.loads(ctx_json)
             if isinstance(ctx_data, dict) and ctx_data:  # Check if dict is not empty
                 # Extract only the fields that ThoughtContext expects
                 # This makes us resilient to schema changes
@@ -122,7 +142,8 @@ def map_row_to_thought(row: Any) -> Thought:
         row_dict["context"] = None
     if row_dict.get("ponder_notes_json"):
         try:
-            row_dict["ponder_notes"] = json.loads(row_dict["ponder_notes_json"])
+            ponder_json = row_dict["ponder_notes_json"]
+            row_dict["ponder_notes"] = ponder_json if isinstance(ponder_json, list) else json.loads(ponder_json)
         except Exception:
             logger.warning(f"Failed to decode ponder_notes_json for thought {row_dict.get('thought_id')}")
             row_dict["ponder_notes"] = None
@@ -130,7 +151,8 @@ def map_row_to_thought(row: Any) -> Thought:
         row_dict["ponder_notes"] = None
     if row_dict.get("final_action_json"):
         try:
-            action_data = json.loads(row_dict["final_action_json"])
+            action_json = row_dict["final_action_json"]
+            action_data = action_json if isinstance(action_json, dict) else json.loads(action_json)
             # Only set final_action if it's a non-empty dict with required fields
             if isinstance(action_data, dict) and action_data:
                 row_dict["final_action"] = FinalAction.model_validate(action_data)
@@ -141,6 +163,20 @@ def map_row_to_thought(row: Any) -> Thought:
             row_dict["final_action"] = None
     else:
         row_dict["final_action"] = None
+
+    # Handle PostgreSQL TIMESTAMP vs SQLite TEXT for datetime columns
+    # PostgreSQL TIMESTAMP returns datetime objects, SQLite TEXT returns ISO strings
+    from datetime import datetime, timezone
+
+    for dt_field in ["created_at", "updated_at"]:
+        if dt_field in row_dict and row_dict[dt_field]:
+            if isinstance(row_dict[dt_field], datetime):
+                # Ensure timezone-aware datetime (assume UTC if naive)
+                dt = row_dict[dt_field]
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                row_dict[dt_field] = dt.isoformat()
+
     for k in ["context_json", "ponder_notes_json", "final_action_json"]:
         if k in row_dict:
             del row_dict[k]

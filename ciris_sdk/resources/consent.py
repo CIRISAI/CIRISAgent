@@ -238,3 +238,378 @@ class ConsentResource:
         if result.consents:
             return result.consents[0]
         return None
+
+    # ========== NEW CONSENT API METHODS (Consensual Evolution Protocol v0.2) ==========
+
+    async def get_status(self) -> Dict[str, Any]:
+        """
+        Get current consent status for authenticated user.
+
+        Returns:
+            Dictionary with consent status including has_consent, stream, granted_at, expires_at
+
+        Example:
+            status = await client.consent.get_status()
+            if status["has_consent"]:
+                print(f"Stream: {status['stream']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/status")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def query_consents(
+        self,
+        status: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Query consent records with optional filters.
+
+        Args:
+            status: Filter by status (ACTIVE, REVOKED, EXPIRED)
+            user_id: Filter by user ID (admin only)
+
+        Returns:
+            Dictionary with consents list and total count
+
+        Example:
+            result = await client.consent.query_consents()
+            print(f"Found {result['total']} consents")
+        """
+        params = {}
+        if status:
+            params["status"] = status
+        if user_id:
+            params["user_id"] = user_id
+
+        result = await self._transport.request("GET", "/v1/consent/query", params=params)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def grant_consent(
+        self,
+        stream: str,
+        categories: Optional[List[str]] = None,
+        reason: Optional[str] = None,
+    ) -> Any:
+        """
+        Grant or update consent with specified stream and categories.
+
+        Streams:
+        - temporary: 14-day auto-forget (default)
+        - partnered: Explicit consent for mutual growth (requires approval)
+        - anonymous: Statistics only, no identity
+
+        Args:
+            stream: Consent stream (temporary, partnered, anonymous)
+            categories: List of consent categories (required for partnered)
+            reason: Reason for granting consent
+
+        Returns:
+            ConsentStatus-like object with stream, categories, etc.
+
+        Example:
+            result = await client.consent.grant_consent(
+                stream="temporary",
+                categories=["interaction"],
+                reason="Testing consent"
+            )
+        """
+        payload = {
+            "user_id": "placeholder",  # Will be overridden by auth context on server
+            "stream": stream,
+            "categories": categories or [],
+            "reason": reason,
+        }
+
+        result = await self._transport.request("POST", "/v1/consent/grant", json=payload)
+
+        # Convert dict to object-like for easier access
+        if isinstance(result, dict):
+
+            class ConsentResult:
+                def __init__(self, data: Dict[str, Any]):
+                    for key, value in data.items():
+                        setattr(self, key, value)
+
+            return ConsentResult(result)
+
+        return result
+
+    async def revoke_consent(self, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Revoke consent and start decay protocol.
+
+        - Immediate identity severance
+        - 90-day pattern decay
+        - Safety patterns may be retained (anonymized)
+
+        Args:
+            reason: Optional reason for revoking consent
+
+        Returns:
+            ConsentDecayStatus object
+
+        Example:
+            result = await client.consent.revoke_consent(reason="User requested deletion")
+        """
+        params = {}
+        if reason:
+            params["reason"] = reason
+
+        result = await self._transport.request("POST", "/v1/consent/revoke", params=params)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_impact_report(self) -> Dict[str, Any]:
+        """
+        Get impact report showing contribution to collective learning.
+
+        Shows:
+        - Patterns contributed
+        - Users helped
+        - Impact score
+        - Example contributions (anonymized)
+
+        Returns:
+            ConsentImpactReport object
+
+        Example:
+            report = await client.consent.get_impact_report()
+            print(f"Impact score: {report['impact_score']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/impact")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_audit_trail(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get consent change history - IMMUTABLE AUDIT TRAIL.
+
+        Args:
+            limit: Maximum number of audit entries to return
+
+        Returns:
+            List of ConsentAuditEntry objects
+
+        Example:
+            audit = await client.consent.get_audit_trail(limit=50)
+            for entry in audit:
+                print(f"{entry['timestamp']}: {entry['action']}")
+        """
+        params = {"limit": limit}
+        result = await self._transport.request("GET", "/v1/consent/audit", params=params)
+        assert isinstance(result, list), "Expected list response from transport"
+        return result
+
+    async def get_streams(self) -> Dict[str, Any]:
+        """
+        Get available consent streams and their descriptions.
+
+        Returns:
+            Dictionary with streams and default stream
+
+        Example:
+            streams = await client.consent.get_streams()
+            print(f"Available streams: {list(streams['streams'].keys())}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/streams")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_categories(self) -> Dict[str, Any]:
+        """
+        Get available consent categories for PARTNERED stream.
+
+        Returns:
+            Dictionary with categories
+
+        Example:
+            categories = await client.consent.get_categories()
+            print(f"Available categories: {list(categories['categories'].keys())}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/categories")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_partnership_status(self) -> Dict[str, Any]:
+        """
+        Check status of pending partnership request.
+
+        Returns current status and any pending partnership request outcome.
+
+        Returns:
+            Dictionary with current_stream, partnership_status, and message
+
+        Example:
+            status = await client.consent.get_partnership_status()
+            print(f"Partnership status: {status['partnership_status']}")
+        """
+        result = await self._transport.request("GET", "/v1/consent/partnership/status")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def cleanup_expired(self) -> Dict[str, Any]:
+        """
+        Clean up expired TEMPORARY consents (admin only).
+
+        HARD DELETE after 14 days - NO GRACE PERIOD.
+
+        Returns:
+            Dictionary with cleaned count and message
+
+        Example:
+            result = await client.consent.cleanup_expired()
+            print(f"Cleaned {result['cleaned']} expired consents")
+        """
+        result = await self._transport.request("POST", "/v1/consent/cleanup")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    # ========== DSAR AUTOMATION METHODS ==========
+
+    async def initiate_dsar(self, request_type: str = "full") -> Dict[str, Any]:
+        """
+        Initiate automated DSAR (Data Subject Access Request).
+
+        Generates comprehensive data export including:
+        - Consent history and current status
+        - Interaction summaries
+        - Preferences and settings
+        - Impact metrics and contributions
+        - Partnership and decay status
+
+        Args:
+            request_type: Type of DSAR request (full, consent_only, interactions_only)
+
+        Returns:
+            Dictionary with request_id, status, and export_data
+
+        Example:
+            result = await client.consent.initiate_dsar(request_type="full")
+            print(f"DSAR request ID: {result['request_id']}")
+        """
+        payload = {"request_type": request_type}
+        result = await self._transport.request("POST", "/v1/consent/dsar/initiate", json=payload)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def get_dsar_status(self, request_id: str) -> Dict[str, Any]:
+        """
+        Get status of pending DSAR request.
+
+        Args:
+            request_id: ID of the DSAR request to check
+
+        Returns:
+            Dictionary with request status and completion details
+
+        Example:
+            status = await client.consent.get_dsar_status(request_id="dsar_123")
+            if status["status"] == "completed":
+                print(f"Export ready: {status['export_url']}")
+        """
+        result = await self._transport.request("GET", f"/v1/consent/dsar/status/{request_id}")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    # ========== PARTNERSHIP MANAGEMENT METHODS ==========
+
+    async def get_partnership_options(self) -> Dict[str, Any]:
+        """
+        Get available partnership categories and requirements.
+
+        Returns information about what partnership entails:
+        - Required consent categories
+        - Approval process description
+        - Benefits and responsibilities
+        - Example use cases
+
+        Returns:
+            Dictionary with partnership options and requirements
+
+        Example:
+            options = await client.consent.get_partnership_options()
+            print(f"Required categories: {options['required_categories']}")
+        """
+        result = await self._transport.request("GET", "/v1/partnership/options")
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def accept_partnership(self, task_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Accept a pending partnership request (agent-side).
+
+        This method is used by the agent to approve a user's partnership request.
+        The partnership request is tracked as a task in the task system.
+
+        Args:
+            task_id: ID of the partnership approval task
+            reason: Optional reason for accepting the partnership
+
+        Returns:
+            Dictionary with acceptance confirmation and updated consent status
+
+        Example:
+            result = await client.consent.accept_partnership(
+                task_id="task_123",
+                reason="User demonstrated commitment to mutual growth"
+            )
+            print(f"Partnership approved: {result['user_id']}")
+        """
+        payload = {"task_id": task_id, "decision": "accept", "reason": reason}
+        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def reject_partnership(self, task_id: str, reason: str) -> Dict[str, Any]:
+        """
+        Reject a pending partnership request (agent-side).
+
+        This method is used by the agent to decline a user's partnership request.
+        A reason must be provided to help the user understand the decision.
+
+        Args:
+            task_id: ID of the partnership approval task
+            reason: Reason for rejecting the partnership (required)
+
+        Returns:
+            Dictionary with rejection confirmation and message to user
+
+        Example:
+            result = await client.consent.reject_partnership(
+                task_id="task_123",
+                reason="More interaction history needed before partnership"
+            )
+            print(f"Partnership rejected: {result['message']}")
+        """
+        payload = {"task_id": task_id, "decision": "reject", "reason": reason}
+        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result
+
+    async def defer_partnership(self, task_id: str, reason: str) -> Dict[str, Any]:
+        """
+        Defer a pending partnership request for more information (agent-side).
+
+        This method is used by the agent to request more context before deciding.
+        The partnership request remains pending, allowing for further interaction.
+
+        Args:
+            task_id: ID of the partnership approval task
+            reason: What additional information is needed (required)
+
+        Returns:
+            Dictionary with deferral confirmation and next steps
+
+        Example:
+            result = await client.consent.defer_partnership(
+                task_id="task_123",
+                reason="Would like to understand your goals for the partnership better"
+            )
+            print(f"Partnership deferred: {result['message']}")
+        """
+        payload = {"task_id": task_id, "decision": "defer", "reason": reason}
+        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
+        assert isinstance(result, dict), "Expected dict response from transport"
+        return result

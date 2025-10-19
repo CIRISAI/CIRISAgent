@@ -53,6 +53,10 @@ def get_sqlite_db_full_path(config: Optional[EssentialConfig] = None) -> str:
                 f"Cannot access config service: {e}. " "The system must be properly initialized with configuration."
             )
 
+    # Prefer database_url if set (supports PostgreSQL), otherwise use main_db path
+    if config.database.database_url:
+        return config.database.database_url
+
     db_path = Path(config.database.main_db)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     return str(db_path.resolve())

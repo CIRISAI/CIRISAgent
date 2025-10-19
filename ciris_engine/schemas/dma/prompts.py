@@ -107,7 +107,7 @@ class PromptCollection(BaseModel):
         Returns a flattened dictionary containing all prompt strings,
         agent variations, and custom prompts.
         """
-        result: Dict[str, Any] = {}
+        result: JSONDict = {}
 
         # Add all non-None string fields
         for field_name in self.model_fields:

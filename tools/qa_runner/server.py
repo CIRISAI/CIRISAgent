@@ -46,6 +46,11 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        # Pass through CIRIS_DB_URL if set (for PostgreSQL testing)
+        if "CIRIS_DB_URL" in os.environ:
+            env["CIRIS_DB_URL"] = os.environ["CIRIS_DB_URL"]
+            self.console.print(f"[dim]Using database: {os.environ['CIRIS_DB_URL'].split('@')[0]}@...[/dim]")
+
         # Set billing configuration from QAConfig if enabled
         if self.config.billing_enabled:
             env["CIRIS_BILLING_ENABLED"] = "true"

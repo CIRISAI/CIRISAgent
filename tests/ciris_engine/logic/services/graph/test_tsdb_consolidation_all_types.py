@@ -128,7 +128,7 @@ def consolidation_service(mock_memory_bus, mock_time_service):
     import sqlite3
     import tempfile
 
-    from ciris_engine.schemas.persistence.tables import (
+    from ciris_engine.schemas.persistence.sqlite.tables import (
         GRAPH_EDGES_TABLE_V1,
         GRAPH_NODES_TABLE_V1,
         SERVICE_CORRELATIONS_TABLE_V1,

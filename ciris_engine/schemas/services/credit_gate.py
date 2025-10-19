@@ -15,6 +15,8 @@ class CreditAccount(BaseModel):
     account_id: str = Field(..., description="Identifier scoped to the provider")
     authority_id: Optional[str] = Field(None, description="Optional governance or Wise Authority identifier")
     tenant_id: Optional[str] = Field(None, description="Tenant/group identifier when deploying multi-tenant")
+    customer_email: Optional[str] = Field(None, description="Customer email from OAuth login")
+    marketing_opt_in: Optional[bool] = Field(None, description="Marketing opt-in preference from OAuth login")
 
     def cache_key(self) -> str:
         """Return deterministic cache key for memoized decisions."""

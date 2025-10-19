@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from ciris_engine.logic.config import get_sqlite_db_full_path
+from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
@@ -68,6 +70,19 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         # All deferrals and guidance are persisted in the database
 
         logger.info(f"Consolidated WA Service initialized with DB: {self.db_path}")
+
+    def _get_placeholder(self) -> str:
+        """Get the appropriate parameter placeholder for the current dialect."""
+        return get_adapter().placeholder()
+
+    def _get_context_json_like_clause(self) -> str:
+        """Get the appropriate LIKE clause for context_json based on dialect."""
+        adapter = get_adapter()
+        placeholder = self._get_placeholder()
+        if adapter.is_postgresql():
+            return f"context_json::text LIKE {placeholder}"
+        else:
+            return f"context_json LIKE {placeholder}"
 
     async def _on_start(self) -> None:
         """Custom startup logic for WA service."""
@@ -251,16 +266,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             deferral_id = f"defer_{deferral.task_id}_{timestamp}"
 
             import json
-            import sqlite3
 
-            conn = sqlite3.connect(self.db_path)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Get existing task to preserve context
+            placeholder = self._get_placeholder()
             cursor.execute(
-                """
+                f"""
                 SELECT context_json, priority FROM tasks
-                WHERE task_id = ?
+                WHERE task_id = {placeholder}
             """,
                 (deferral.task_id,),
             )
@@ -291,12 +306,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             # Update task status to deferred
             cursor.execute(
-                """
+                f"""
                 UPDATE tasks
                 SET status = 'deferred',
-                    context_json = ?,
-                    updated_at = ?
-                WHERE task_id = ?
+                    context_json = {placeholder},
+                    updated_at = {placeholder}
+                WHERE task_id = {placeholder}
             """,
                 (json.dumps(existing_context), self._now().isoformat(), deferral.task_id),
             )
@@ -313,13 +328,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:
         """Get pending deferrals from the tasks table."""
-        import sqlite3
-
         result = []
 
         try:
             # Query deferred tasks from database
-            conn = sqlite3.connect(self.db_path)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Get all deferred tasks with their deferral data
@@ -391,10 +404,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     async def resolve_deferral(self, deferral_id: str, response: DeferralResponse) -> bool:
         """Resolve a deferral by updating task status and adding resolution to context."""
-        import sqlite3
-
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Extract task_id from deferral_id
@@ -426,12 +437,13 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     task_id = deferral_id[6:]  # Remove 'defer_' prefix
             else:
                 # Try to find by deferral_id in context
+                like_clause = self._get_context_json_like_clause()
                 cursor.execute(
-                    """
+                    f"""
                     SELECT task_id, context_json
                     FROM tasks
                     WHERE status = 'deferred'
-                    AND context_json LIKE ?
+                    AND {like_clause}
                 """,
                     (f'%"deferral_id":"{deferral_id}"%',),
                 )
@@ -445,10 +457,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     return False
 
             # Get existing context
+            placeholder = self._get_placeholder()
             cursor.execute(
-                """
+                f"""
                 SELECT context_json FROM tasks
-                WHERE task_id = ? AND status = 'deferred'
+                WHERE task_id = {placeholder} AND status = 'deferred'
             """,
                 (task_id,),
             )
@@ -484,12 +497,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             # Update task status to pending so it will be picked up
             cursor.execute(
-                """
+                f"""
                 UPDATE tasks
                 SET status = 'pending',
-                    context_json = ?,
-                    updated_at = ?
-                WHERE task_id = ?
+                    context_json = {placeholder},
+                    updated_at = {placeholder}
+                WHERE task_id = {placeholder}
             """,
                 (json.dumps(context), self._now().isoformat(), task_id),
             )
@@ -616,9 +629,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         resolved_deferrals_count = 0
 
         try:
-            import sqlite3
-
-            conn = sqlite3.connect(self.db_path)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Count pending deferrals (deferred tasks)
@@ -631,11 +642,13 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             pending_deferrals_count = cursor.fetchone()[0]
 
             # Count resolved deferrals (tasks with resolution in context)
+            like_clause = self._get_context_json_like_clause()
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM tasks
-                WHERE context_json LIKE '%"resolution":%'
-            """
+                WHERE {like_clause}
+            """,
+                ('%"resolution":%',),
             )
             resolved_deferrals_count = cursor.fetchone()[0]
 
@@ -679,26 +692,28 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         resolved_deferrals_count = 0
 
         try:
-            import sqlite3
-
-            conn = sqlite3.connect(self.db_path)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
+
+            like_clause = self._get_context_json_like_clause()
 
             # Count total deferrals - tasks that have or had deferral context
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM tasks
-                WHERE context_json LIKE '%"deferral":%'
-            """
+                WHERE {like_clause}
+            """,
+                ('%"deferral":%',),
             )
             total_deferrals_count = cursor.fetchone()[0]
 
             # Count resolved deferrals (tasks with resolution in context)
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*) FROM tasks
-                WHERE context_json LIKE '%"resolution":%'
-            """
+                WHERE {like_clause}
+            """,
+                ('%"resolution":%',),
             )
             resolved_deferrals_count = cursor.fetchone()[0]
 

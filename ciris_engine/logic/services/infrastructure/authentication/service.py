@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import secrets
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
@@ -23,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
@@ -279,28 +279,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def _init_database(self) -> None:
         """Initialize database tables if needed."""
-        # Import the table definition
-        from ciris_engine.schemas.persistence.tables import WA_CERT_TABLE_V1
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.executescript(WA_CERT_TABLE_V1)
-
-            # Backfill newer columns when running against existing databases
-            cursor = conn.execute("PRAGMA table_info(wa_cert)")
-            existing_columns = {row[1] for row in cursor.fetchall()}
-            column_migrations = {
-                "custom_permissions_json": "ALTER TABLE wa_cert ADD COLUMN custom_permissions_json TEXT",
-                "adapter_name": "ALTER TABLE wa_cert ADD COLUMN adapter_name TEXT",
-                "adapter_metadata_json": "ALTER TABLE wa_cert ADD COLUMN adapter_metadata_json TEXT",
-                "oauth_links_json": "ALTER TABLE wa_cert ADD COLUMN oauth_links_json TEXT",
-            }
-
-            for column_name, ddl in column_migrations.items():
-                if column_name not in existing_columns:
-                    conn.execute(ddl)
-
-            conn.commit()
+        authentication_store.init_auth_database(self.db_path)
 
     def _row_to_wa(self, row_dict: JSONDict) -> WACertificate:
         """Convert a SQLite row dictionary to a WACertificate instance."""
@@ -350,58 +329,19 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def get_wa(self, wa_id: str) -> Optional[WACertificate]:
         """Get WA certificate by ID."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT * FROM wa_cert WHERE wa_id = ? AND active = 1", (wa_id,))
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_wa(dict(row))
-            return None
+        return authentication_store.get_wa_by_id(wa_id, self.db_path)
 
     async def _get_wa_by_kid(self, jwt_kid: str) -> Optional[WACertificate]:
         """Get WA certificate by JWT key ID."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT * FROM wa_cert WHERE jwt_kid = ? AND active = 1", (jwt_kid,))
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_wa(dict(row))
-            return None
+        return authentication_store.get_wa_by_kid(jwt_kid, self.db_path)
 
     async def get_wa_by_oauth(self, provider: str, external_id: str) -> Optional[WACertificate]:
         """Get WA certificate by OAuth identity."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                "SELECT * FROM wa_cert WHERE oauth_provider = ? AND oauth_external_id = ? AND active = 1",
-                (provider, external_id),
-            )
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_wa(dict(row))
-
-            # Fallback: search linked identities stored in JSON
-            cursor = conn.execute("SELECT * FROM wa_cert WHERE oauth_links_json IS NOT NULL AND active = 1")
-            for link_row in cursor.fetchall():
-                wa = self._row_to_wa(dict(link_row))
-                for link in wa.oauth_links:
-                    if link.provider == provider and link.external_id == external_id:
-                        return wa
-            return None
+        return authentication_store.get_wa_by_oauth(provider, external_id, self.db_path)
 
     async def _get_wa_by_adapter(self, adapter_id: str) -> Optional[WACertificate]:
         """Get WA certificate by adapter ID."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute("SELECT * FROM wa_cert WHERE adapter_id = ? AND active = 1", (adapter_id,))
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_wa(dict(row))
-            return None
+        return authentication_store.get_wa_by_adapter(adapter_id, self.db_path)
 
     async def link_oauth_identity(
         self,
@@ -500,54 +440,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
         """Store a WA certificate in the database."""
-        with sqlite3.connect(self.db_path) as conn:
-            # Convert WA to dict for insertion
-            wa_dict = wa.model_dump()
-
-            # Map schema fields to database fields
-            db_dict = {
-                "wa_id": wa_dict["wa_id"],
-                "name": wa_dict["name"],
-                "role": wa_dict["role"],
-                "pubkey": wa_dict["pubkey"],
-                "jwt_kid": wa_dict["jwt_kid"],
-                "password_hash": wa_dict.get("password_hash"),
-                "api_key_hash": wa_dict.get("api_key_hash"),
-                "oauth_provider": wa_dict.get("oauth_provider"),
-                "oauth_external_id": wa_dict.get("oauth_external_id"),
-                "veilid_id": wa_dict.get("veilid_id"),
-                "oauth_links_json": (
-                    json.dumps([link.model_dump(mode="json") for link in wa_dict.get("oauth_links", [])])
-                    if wa_dict.get("oauth_links")
-                    else None
-                ),
-                "auto_minted": int(wa_dict.get("auto_minted", False)),
-                "parent_wa_id": wa_dict.get("parent_wa_id"),
-                "parent_signature": wa_dict.get("parent_signature"),
-                "scopes_json": wa_dict["scopes_json"],
-                "custom_permissions_json": wa_dict.get("custom_permissions_json"),
-                "adapter_id": wa_dict.get("adapter_id"),
-                "adapter_name": wa_dict.get("adapter_name"),
-                "adapter_metadata_json": wa_dict.get("adapter_metadata_json"),
-                "token_type": wa_dict.get("token_type", "standard"),
-                "created": (
-                    wa_dict["created_at"].isoformat()
-                    if isinstance(wa_dict["created_at"], datetime)
-                    else wa_dict["created_at"]
-                ),
-                "last_login": (
-                    wa_dict["last_auth"].isoformat()
-                    if wa_dict.get("last_auth") and isinstance(wa_dict["last_auth"], datetime)
-                    else wa_dict.get("last_auth")
-                ),
-                "active": 1,  # New WAs are active by default
-            }
-
-            columns = ", ".join(db_dict.keys())
-            placeholders = ", ".join(["?" for _ in db_dict])
-
-            conn.execute(f"INSERT INTO wa_cert ({columns}) VALUES ({placeholders})", list(db_dict.values()))
-            conn.commit()
+        authentication_store.store_wa_certificate(wa, self.db_path)
 
     async def _create_adapter_observer(self, adapter_id: str, name: str) -> WACertificate:
         """Create or reactivate adapter observer WA."""
@@ -598,17 +491,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not kwargs:
             return await self.get_wa(wa_id)
 
-        # Handle datetime fields
-        for key, value in kwargs.items():
-            if isinstance(value, datetime):
-                kwargs[key] = value.isoformat()
-
-        set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
-        values = list(kwargs.values()) + [wa_id]
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(f"UPDATE wa_cert SET {set_clause} WHERE wa_id = ?", values)
-            conn.commit()
+        # Update via store
+        authentication_store.update_wa_certificate(wa_id, kwargs, self.db_path)
 
         # Return updated WA
         return await self.get_wa(wa_id)
@@ -639,22 +523,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def _list_all_was(self, active_only: bool = True) -> List[WACertificate]:
         """List all WA certificates."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-
-            if active_only:
-                query = "SELECT * FROM wa_cert WHERE active = 1 ORDER BY created DESC"
-            else:
-                query = "SELECT * FROM wa_cert ORDER BY created DESC"
-
-            cursor = conn.execute(query)
-            rows = cursor.fetchall()
-
-            result = []
-            for row in rows:
-                result.append(self._row_to_wa(dict(row)))
-
-            return result
+        return authentication_store.list_wa_certificates(active_only, self.db_path)
 
     async def update_last_login(self, wa_id: str) -> None:
         """Update last login timestamp."""
@@ -1569,30 +1438,24 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         from ciris_engine.schemas.services.core import ServiceStatus
 
         # Count certificates by type
-        cert_count = 0
-        role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
-        revoked_count = 0
-
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Active certificates
-                cursor = conn.execute("SELECT COUNT(*) FROM wa_cert WHERE active = 1")
-                cert_count = cursor.fetchone()[0]
-
-                # Count by role
-                cursor = conn.execute("SELECT role, COUNT(*) FROM wa_cert WHERE active = 1 GROUP BY role")
-                for role, count in cursor.fetchall():
-                    if role in role_counts:
-                        role_counts[role] = count
-
-                # Revoked certificates
-                cursor = conn.execute("SELECT COUNT(*) FROM wa_cert WHERE active = 0")
-                revoked_count = cursor.fetchone()[0]
-
+            counts = authentication_store.get_certificate_counts(self.db_path)
+            cert_count = counts.get("active", 0)
+            revoked_count = counts.get("revoked", 0)
+            # Extract by_role dict with type assertion
+            role_counts_raw: int | Dict[str, int] = counts.get("by_role", {})
+            role_counts: Dict[str, int] = (
+                role_counts_raw
+                if isinstance(role_counts_raw, dict)
+                else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            )
         except Exception as e:
             logger.warning(
                 f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"
             )
+            cert_count = 0
+            role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            revoked_count = 0
 
         current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         uptime_seconds = 0.0
@@ -1607,11 +1470,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         custom_metrics = {
             "active_certificates": float(cert_count),
             "revoked_certificates": float(revoked_count),
-            "observer_certificates": float(role_counts["OBSERVER"]),
-            "user_certificates": float(role_counts["USER"]),
-            "admin_certificates": float(role_counts["ADMIN"]),
-            "authority_certificates": float(role_counts["AUTHORITY"]),
-            "root_certificates": float(role_counts["ROOT"]),
+            "observer_certificates": float(role_counts.get("OBSERVER", 0)),
+            "user_certificates": float(role_counts.get("USER", 0)),
+            "admin_certificates": float(role_counts.get("ADMIN", 0)),
+            "authority_certificates": float(role_counts.get("AUTHORITY", 0)),
+            "root_certificates": float(role_counts.get("ROOT", 0)),
             "auth_contexts_cached": float(auth_context_cached),
             "channel_tokens_cached": float(channel_tokens_cached),
             "total_tokens_cached": float(auth_context_cached + channel_tokens_cached),
@@ -1706,13 +1569,5 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not self._started:
             return False
 
-        # Check database connection
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("SELECT 1")
-            return True
-        except Exception as e:
-            logger.warning(
-                f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"
-            )
-            return False
+        # Check database connection via store
+        return authentication_store.check_database_health(self.db_path)

@@ -56,7 +56,14 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Initialize BaseGraphService - LocalGraphMemoryService doesn't use memory_bus
         super().__init__(memory_bus=None, time_service=time_service)
 
+        import logging
+
+        logger_temp = logging.getLogger(__name__)
+        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - received db_path: {db_path!r}")
+
         self.db_path = db_path or get_sqlite_db_full_path()
+        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - self.db_path set to: {self.db_path!r}")
+
         initialize_database(db_path=self.db_path)
         self.secrets_service = secrets_service  # Must be provided, not created here
         self._start_time: Optional[datetime] = None
@@ -217,7 +224,12 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             # If we have identity nodes, format the first one
             # (typically there's only one identity node per agent)
             if rows:
-                attrs = json.loads(rows[0]["attributes_json"]) if rows[0]["attributes_json"] else {}
+                # Handle PostgreSQL JSONB vs SQLite TEXT
+                attrs_json = rows[0]["attributes_json"]
+                if attrs_json:
+                    attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
+                else:
+                    attrs = {}
                 return format_agent_identity(attrs)
 
             return ""
@@ -379,33 +391,52 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             loop = asyncio.get_event_loop()
 
             def _query_tsdb_nodes() -> List[Any]:
+                from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+                adapter = get_adapter()
                 with get_db_connection(db_path=self.db_path) as conn:
                     cursor = conn.cursor()
 
                     # Query for TSDB_DATA nodes in the time range
                     # ORDER BY DESC to get most recent metrics first
-                    cursor.execute(
+                    # PostgreSQL: created_at is already TIMESTAMP, no conversion needed
+                    # SQLite: created_at is TEXT, use datetime() for comparison
+                    if adapter.is_postgresql():
+                        sql = """
+                            SELECT node_id, attributes_json, created_at
+                            FROM graph_nodes
+                            WHERE node_type = 'tsdb_data'
+                              AND scope = ?
+                              AND created_at >= ?
+                              AND created_at <= ?
+                            ORDER BY created_at DESC
+                            LIMIT 1000
                         """
-                        SELECT node_id, attributes_json, created_at
-                        FROM graph_nodes
-                        WHERE node_type = 'tsdb_data'
-                          AND scope = ?
-                          AND datetime(created_at) >= datetime(?)
-                          AND datetime(created_at) <= datetime(?)
-                        ORDER BY created_at DESC
-                        LIMIT 1000
-                    """,
-                        (scope, start_time.isoformat(), end_time.isoformat()),
-                    )
+                    else:
+                        sql = """
+                            SELECT node_id, attributes_json, created_at
+                            FROM graph_nodes
+                            WHERE node_type = 'tsdb_data'
+                              AND scope = ?
+                              AND datetime(created_at) >= datetime(?)
+                              AND datetime(created_at) <= datetime(?)
+                            ORDER BY created_at DESC
+                            LIMIT 1000
+                        """
 
+                    cursor.execute(sql, (scope, start_time.isoformat(), end_time.isoformat()))
                     return cursor.fetchall()
 
             rows = await loop.run_in_executor(None, _query_tsdb_nodes)
 
             for row in rows:
                 try:
-                    # Parse attributes
-                    attrs = json.loads(row["attributes_json"]) if row["attributes_json"] else {}
+                    # Parse attributes - handle PostgreSQL JSONB vs SQLite TEXT
+                    attrs_json = row["attributes_json"]
+                    if attrs_json:
+                        attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
+                    else:
+                        attrs = {}
 
                     # Extract metric data
                     metric_name = attrs.get("metric_name")

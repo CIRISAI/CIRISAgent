@@ -38,6 +38,12 @@ class ConfigBootstrap:
         """Apply environment variable overrides to config data."""
         from typing import cast
 
+        # Database URL (overrides main_db path if set)
+        db_url = get_env_var("CIRIS_DB_URL")
+        if db_url:
+            db_section = cast(JSONDict, config_data.setdefault("database", {}))
+            db_section["database_url"] = db_url
+
         # Database paths
         db_path = get_env_var("CIRIS_DB_PATH")
         if db_path:

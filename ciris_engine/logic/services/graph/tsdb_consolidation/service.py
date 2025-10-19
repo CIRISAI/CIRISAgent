@@ -7,6 +7,7 @@ into permanent summary records with proper edge connections.
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
@@ -106,8 +107,6 @@ class TSDBConsolidationService(BaseGraphService):
 
         # Task management
         self._consolidation_task: Optional[asyncio.Task[None]] = None
-        self._extensive_task: Optional[asyncio.Task[None]] = None
-        self._profound_task: Optional[asyncio.Task[None]] = None
         self._running = False
 
         # Track last successful consolidation
@@ -168,10 +167,8 @@ class TSDBConsolidationService(BaseGraphService):
         # Consolidate any missed windows before starting the regular loop
         await self._consolidate_missed_windows()
 
-        # Start all consolidation loops
+        # Start single consolidation loop that handles basic → extensive → profound sequentially
         self._consolidation_task = asyncio.create_task(self._consolidation_loop())
-        self._extensive_task = asyncio.create_task(self._extensive_consolidation_loop())
-        self._profound_task = asyncio.create_task(self._profound_consolidation_loop())
         logger.info(
             f"TSDBConsolidationService started - Basic: {self._basic_interval}, Extensive: {self._extensive_interval}, Profound: {self._profound_interval}"
         )
@@ -199,22 +196,21 @@ class TSDBConsolidationService(BaseGraphService):
         # Note: Final consolidation should be run explicitly by runtime BEFORE
         # stopping services, not during stop() to avoid dependency issues
 
-        # Cancel all tasks
-        tasks_to_cancel = [self._consolidation_task, self._extensive_task, self._profound_task]
-
-        for task in tasks_to_cancel:
-            if task and not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass  # NOSONAR - Expected when stopping the service in stop()
-
         await super().stop()
         logger.info("TSDBConsolidationService stopped")
 
     async def _consolidation_loop(self) -> None:
-        """Main consolidation loop that runs every 6 hours."""
+        """
+        Main consolidation loop that runs every 6 hours.
+
+        The occurrence that wins the lock becomes "the consolidator" and runs:
+        1. Basic consolidation (always)
+        2. Extensive consolidation (if it's Monday)
+        3. Profound consolidation (if it's the 1st of the month)
+
+        This ensures only ONE occurrence handles all consolidation types sequentially,
+        preventing race conditions between consolidation levels.
+        """
         while self._running:
             try:
                 # Calculate next run time
@@ -226,7 +222,29 @@ class TSDBConsolidationService(BaseGraphService):
                     await asyncio.sleep(wait_seconds)
 
                 if self._running:
-                    await self._run_consolidation()
+                    # Add random delay (30-600s) to prevent thundering herd
+                    # when multiple instances start simultaneously
+                    jitter_seconds = random.randint(30, 600)
+                    logger.info(f"Adding random jitter delay of {jitter_seconds}s to prevent race conditions")
+                    await asyncio.sleep(jitter_seconds)
+
+                    if self._running:
+                        # Run basic consolidation
+                        # The occurrence that wins the lock becomes "the consolidator" for this run
+                        await self._run_consolidation()
+
+                        # If we're the consolidator, check if we should run extensive/profound
+                        now = self._now()
+
+                        # Check if it's Monday (0 = Monday) for extensive consolidation
+                        if now.weekday() == 0:
+                            logger.info("It's Monday - running extensive consolidation")
+                            await self._run_extensive_consolidation()
+
+                        # Check if it's the 1st of the month for profound consolidation
+                        if now.day == 1:
+                            logger.info("It's the 1st of the month - running profound consolidation")
+                            self._run_profound_consolidation()
 
             except asyncio.CancelledError:
                 logger.debug("Consolidation loop cancelled")
@@ -234,96 +252,6 @@ class TSDBConsolidationService(BaseGraphService):
             except Exception as e:
                 logger.error(f"Consolidation loop error: {e}", exc_info=True)
                 await asyncio.sleep(300)  # 5 minutes
-
-    async def _extensive_consolidation_loop(self) -> None:
-        """Extensive consolidation loop that runs weekly on Mondays."""
-        # Wait one hour before starting extensive consolidation
-        await asyncio.sleep(3600)
-
-        while self._running:
-            try:
-                # Calculate next Monday at 00:00 UTC
-                next_run = self._get_next_weekly_monday()
-                wait_seconds = (next_run - self._now()).total_seconds()
-
-                if wait_seconds > 0:
-                    logger.info(
-                        f"Next extensive consolidation on Monday {next_run.date()} at 00:00 UTC ({wait_seconds:.0f}s)"
-                    )
-                    await asyncio.sleep(wait_seconds)
-
-                if self._running:
-                    await self._run_extensive_consolidation()
-
-                    # CRITICAL: After running, we must ensure we wait until the NEXT Monday
-                    # Otherwise we'll run again immediately if we're still in the same time window
-                    next_run = self._get_next_weekly_monday()
-                    # Force calculation to be at least 1 day in the future
-                    min_next_run = self._now() + timedelta(days=1)
-                    if next_run <= min_next_run:
-                        # If next Monday is too close, add a week
-                        next_run = next_run + timedelta(days=7)
-
-                    wait_seconds = (next_run - self._now()).total_seconds()
-                    if wait_seconds > 0:
-                        logger.info(
-                            f"Extensive consolidation complete. Next run on Monday {next_run.date()} at 00:00 UTC ({wait_seconds:.0f}s)"
-                        )
-                        await asyncio.sleep(wait_seconds)
-
-            except asyncio.CancelledError:
-                logger.debug("Extensive consolidation loop cancelled")
-                raise
-            except Exception as e:
-                logger.error(f"Extensive consolidation error: {e}", exc_info=True)
-                await asyncio.sleep(3600)  # 1 hour
-
-    async def _profound_consolidation_loop(self) -> None:
-        """Profound consolidation loop that runs monthly on the 1st."""
-        # Wait two hours before starting profound consolidation
-        await asyncio.sleep(7200)
-
-        while self._running:
-            try:
-                # Calculate next 1st of month at 00:00 UTC
-                next_run = self._get_next_month_start()
-                wait_seconds = (next_run - self._now()).total_seconds()
-
-                if wait_seconds > 0:
-                    logger.info(
-                        f"Next profound consolidation on {next_run.strftime('%Y-%m-01')} at 00:00 UTC ({wait_seconds:.0f}s)"
-                    )
-                    await asyncio.sleep(wait_seconds)
-
-                if self._running:
-                    self._run_profound_consolidation()
-
-                    # CRITICAL: After running, we must ensure we wait until the NEXT month
-                    # Otherwise we'll run again immediately if we're still in the same time window
-                    next_run = self._get_next_month_start()
-                    # Force calculation to be at least 1 day in the future
-                    min_next_run = self._now() + timedelta(days=1)
-                    if next_run <= min_next_run:
-                        # If next month start is too close, add a month
-                        # Move to next month
-                        if next_run.month == 12:
-                            next_run = next_run.replace(year=next_run.year + 1, month=1)
-                        else:
-                            next_run = next_run.replace(month=next_run.month + 1)
-
-                    wait_seconds = (next_run - self._now()).total_seconds()
-                    if wait_seconds > 0:
-                        logger.info(
-                            f"Profound consolidation complete. Next run on {next_run.strftime('%Y-%m-01')} at 00:00 UTC ({wait_seconds:.0f}s)"
-                        )
-                        await asyncio.sleep(wait_seconds)
-
-            except asyncio.CancelledError:
-                logger.debug("Profound consolidation loop cancelled")
-                raise
-            except Exception as e:
-                logger.error(f"Profound consolidation error: {e}", exc_info=True)
-                await asyncio.sleep(3600)  # 1 hour
 
     async def _run_consolidation(self) -> None:
         """Run a single consolidation cycle."""
@@ -358,25 +286,40 @@ class TSDBConsolidationService(BaseGraphService):
             while current_start < cutoff_time and periods_consolidated < max_periods:
                 current_end = current_start + self._consolidation_interval
 
-                # Check if already consolidated
-                if not self._query_manager.check_period_consolidated(current_start):
-                    period_start_time = self._now()
-                    logger.info(f"Consolidating period: {current_start.isoformat()} to {current_end.isoformat()}")
+                # Try to acquire lock for this period to prevent duplicate consolidation
+                lock_acquired = self._query_manager.acquire_period_lock(current_start)
 
-                    # Count records in this period before consolidation
-                    period_records = len(self._query_manager.query_all_nodes_in_period(current_start, current_end))
-                    total_records_processed += period_records
+                if not lock_acquired:
+                    logger.info(f"Period {current_start.isoformat()} is locked by another instance, skipping")
+                    current_start = current_end
+                    continue
 
-                    summaries = await self._consolidate_period(current_start, current_end)
-                    if summaries:
-                        total_summaries_created += len(summaries)
-                        period_duration = (self._now() - period_start_time).total_seconds()
-                        logger.info(
-                            f"  ✓ Created {len(summaries)} summaries from {period_records} records in {period_duration:.2f}s"
-                        )
-                        periods_consolidated += 1
+                try:
+                    # Check if already consolidated (double-check after acquiring lock)
+                    if not self._query_manager.check_period_consolidated(current_start):
+                        period_start_time = self._now()
+                        logger.info(f"Consolidating period: {current_start.isoformat()} to {current_end.isoformat()}")
+
+                        # Count records in this period before consolidation
+                        period_records = len(self._query_manager.query_all_nodes_in_period(current_start, current_end))
+                        total_records_processed += period_records
+
+                        summaries = await self._consolidate_period(current_start, current_end)
+                        if summaries:
+                            total_summaries_created += len(summaries)
+                            period_duration = (self._now() - period_start_time).total_seconds()
+                            logger.info(
+                                f"  ✓ Created {len(summaries)} summaries from {period_records} records in {period_duration:.2f}s"
+                            )
+                            periods_consolidated += 1
+                        else:
+                            logger.info("  - No summaries created for period (no data)")
                     else:
-                        logger.info("  - No summaries created for period (no data)")
+                        logger.info(f"Period {current_start.isoformat()} already consolidated by another instance")
+
+                finally:
+                    # Always release the lock
+                    self._query_manager.release_period_lock(current_start)
 
                 current_start = current_end
 
@@ -808,9 +751,10 @@ class TSDBConsolidationService(BaseGraphService):
 
     def _find_oldest_unconsolidated_period(self) -> Optional[datetime]:
         """Find the oldest data that needs consolidation."""
-        try:
-            from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.services.graph.tsdb_consolidation.sql_builders import parse_datetime_field
 
+        try:
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
 
@@ -825,7 +769,9 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    return datetime.fromisoformat(row["oldest"].replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest_tsdb = parse_datetime_field(row["oldest"])
+                    if oldest_tsdb:
+                        return oldest_tsdb
 
                 # Check for oldest correlation
                 cursor.execute(
@@ -837,7 +783,9 @@ class TSDBConsolidationService(BaseGraphService):
                 row = cursor.fetchone()
 
                 if row and row["oldest"]:
-                    return datetime.fromisoformat(row["oldest"].replace("Z", UTC_TIMEZONE_SUFFIX))
+                    oldest_correlation = parse_datetime_field(row["oldest"])
+                    if oldest_correlation:
+                        return oldest_correlation
 
         except Exception as e:
             logger.error(f"Failed to find oldest data: {e}")
@@ -853,9 +801,7 @@ class TSDBConsolidationService(BaseGraphService):
         Only graph node representations are cleaned up.
         """
         try:
-            import sqlite3
-
-            from ciris_engine.logic.config import get_sqlite_db_full_path
+            from ciris_engine.logic.persistence.db.core import get_db_connection
             from ciris_engine.logic.services.graph.tsdb_consolidation.cleanup_helpers import (
                 cleanup_audit_summary,
                 cleanup_trace_summary,
@@ -868,9 +814,8 @@ class TSDBConsolidationService(BaseGraphService):
 
             logger.info("Starting cleanup of consolidated graph data (audit_log untouched)")
 
-            # Connect to database
-            db_path = self.db_path or get_sqlite_db_full_path()
-            conn = sqlite3.connect(db_path)
+            # Connect to database using get_db_connection (supports both SQLite and PostgreSQL)
+            conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
             # Find all summaries older than retention period
@@ -912,8 +857,6 @@ class TSDBConsolidationService(BaseGraphService):
             self._running
             and self._memory_bus is not None
             and (self._consolidation_task is None or not self._consolidation_task.done())
-            and (self._extensive_task is None or not self._extensive_task.done())
-            and (self._profound_task is None or not self._profound_task.done())
         )
 
     def get_capabilities(self) -> ServiceCapabilities:
@@ -957,11 +900,9 @@ class TSDBConsolidationService(BaseGraphService):
                 "last_profound_consolidation": (
                     self._last_profound_consolidation.timestamp() if self._last_profound_consolidation else 0.0
                 ),
-                "basic_task_running": (
+                "consolidation_task_running": (
                     1.0 if (self._consolidation_task and not self._consolidation_task.done()) else 0.0
                 ),
-                "extensive_task_running": 1.0 if (self._extensive_task and not self._extensive_task.done()) else 0.0,
-                "profound_task_running": 1.0 if (self._profound_task and not self._profound_task.done()) else 0.0,
             },
             last_error=None,
             last_health_check=current_time,

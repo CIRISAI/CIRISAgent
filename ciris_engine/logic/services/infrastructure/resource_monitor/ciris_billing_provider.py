@@ -251,9 +251,20 @@ class CIRISBillingProvider(CreditGateProtocol):
             payload["wa_id"] = account.authority_id
         if account.tenant_id:
             payload["tenant_id"] = account.tenant_id
+
+        # Add customer_email and marketing_opt_in from CreditAccount
+        if account.customer_email:
+            payload["customer_email"] = account.customer_email
+        if account.marketing_opt_in is not None:
+            payload["marketing_opt_in"] = account.marketing_opt_in
+
         if context:
             # Extract billing-specific fields from metadata
             CIRISBillingProvider._extract_context_fields(context, payload)
+
+            # Add user_role from context
+            if context.user_role:
+                payload["user_role"] = context.user_role
 
             # Only include remaining context fields
             context_dict = {}
@@ -298,9 +309,19 @@ class CIRISBillingProvider(CreditGateProtocol):
         if request.description:
             payload["description"] = request.description
 
+        # Add customer_email and marketing_opt_in from CreditAccount
+        if account.customer_email:
+            payload["customer_email"] = account.customer_email
+        if account.marketing_opt_in is not None:
+            payload["marketing_opt_in"] = account.marketing_opt_in
+
         # Extract billing-specific fields from context metadata (same as check_credit)
         if context:
             CIRISBillingProvider._extract_context_fields(context, payload)
+
+            # Add user_role from context
+            if context.user_role:
+                payload["user_role"] = context.user_role
 
         # Include request metadata (excluding billing fields that are now top-level)
         if request.metadata:

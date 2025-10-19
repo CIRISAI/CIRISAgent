@@ -7,11 +7,13 @@ and comprehensive access auditing.
 
 import asyncio
 import logging
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
+from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
+from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretRecord, SecretReference
 
@@ -47,7 +49,12 @@ class SecretsStore:
             max_accesses_per_hour: Hourly access limit
         """
         self.time_service = time_service
-        self.db_path = Path(db_path)
+        # For PostgreSQL, keep connection string as-is; for SQLite, ensure Path object
+        self.db_path: str | Path
+        if db_path.startswith(("postgresql://", "postgres://")):
+            self.db_path = db_path
+        else:
+            self.db_path = Path(db_path)
         self.encryption = SecretsEncryption(master_key)
         self.max_accesses_per_minute = max_accesses_per_minute
         self.max_accesses_per_hour = max_accesses_per_hour
@@ -76,20 +83,26 @@ class SecretsStore:
             return ["tool", "speak", "memorize"]  # Most actions allowed
 
     def _init_database(self) -> None:
-        """Initialize SQLite database with required tables."""
-        # Ensure directory exists
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        """Initialize database with required tables."""
+        # Ensure directory exists (only for SQLite file paths)
+        if isinstance(self.db_path, Path):
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with sqlite3.connect(self.db_path) as conn:
+        # Detect database type - PostgreSQL uses BYTEA instead of BLOB
+        db_path_str = str(self.db_path)
+        is_postgres = db_path_str.startswith(("postgresql://", "postgres://"))
+        blob_type = "BYTEA" if is_postgres else "BLOB"
+
+        with get_db_connection(str(self.db_path)) as conn:
             # Secrets table
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS secrets (
                     secret_uuid TEXT PRIMARY KEY,
-                    encrypted_value BLOB NOT NULL,
+                    encrypted_value {blob_type} NOT NULL,
                     encryption_key_ref TEXT NOT NULL,
-                    salt BLOB NOT NULL,
-                    nonce BLOB NOT NULL,
+                    salt {blob_type} NOT NULL,
+                    nonce {blob_type} NOT NULL,
                     description TEXT NOT NULL,
                     sensitivity_level TEXT NOT NULL,
                     detected_pattern TEXT NOT NULL,
@@ -166,16 +179,37 @@ class SecretsStore:
                     manual_access_only=False,
                 )
 
-                with sqlite3.connect(self.db_path) as conn:
+                # Use dialect-aware query builder for UPSERT
+                adapter = get_adapter()
+                builder = adapter.get_query_builder()
+
+                query = builder.insert(
+                    table="secrets",
+                    columns=[
+                        "secret_uuid",
+                        "encrypted_value",
+                        "encryption_key_ref",
+                        "salt",
+                        "nonce",
+                        "description",
+                        "sensitivity_level",
+                        "detected_pattern",
+                        "context_hint",
+                        "created_at",
+                        "last_accessed",
+                        "access_count",
+                        "source_message_id",
+                        "auto_decapsulate_for_actions",
+                        "manual_access_only",
+                    ],
+                    conflict_resolution=ConflictResolution.REPLACE,
+                    conflict_columns=["secret_uuid"],
+                )
+                sql = query.to_sql(adapter)
+
+                with get_db_connection(str(self.db_path)) as conn:
                     conn.execute(
-                        """
-                        INSERT OR REPLACE INTO secrets (
-                            secret_uuid, encrypted_value, encryption_key_ref, salt, nonce,
-                            description, sensitivity_level, detected_pattern, context_hint,
-                            created_at, last_accessed, access_count, source_message_id,
-                            auto_decapsulate_for_actions, manual_access_only
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                        sql,
                         (
                             secret_record.secret_uuid,
                             secret_record.encrypted_value,
@@ -223,7 +257,7 @@ class SecretsStore:
                 return None
 
             try:
-                with sqlite3.connect(self.db_path) as conn:
+                with get_db_connection(str(self.db_path)) as conn:
                     cursor = conn.execute(
                         """
                         SELECT * FROM secrets WHERE secret_uuid = ?
@@ -309,12 +343,25 @@ class SecretsStore:
         """
         async with self._lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
+                with get_db_connection(str(self.db_path)) as conn:
+                    # Check if secret exists first
+                    cursor = conn.execute("SELECT secret_uuid FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
+                    exists = cursor.fetchone() is not None
+
+                    if not exists:
+                        logger.warning(f"Secret {secret_uuid} does not exist")
+                        return False
+
+                    # Log deletion BEFORE deleting (so foreign key constraint is satisfied)
+                    await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", True)
+
+                    # Delete access log entries first to avoid foreign key constraint violation
+                    conn.execute("DELETE FROM secret_access_log WHERE secret_uuid = ?", (secret_uuid,))
+
+                    # Now delete the secret itself
                     cursor = conn.execute("DELETE FROM secrets WHERE secret_uuid = ?", (secret_uuid,))
                     deleted = cursor.rowcount > 0
                     conn.commit()
-
-                await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", deleted)
 
                 if deleted:
                     logger.info(f"Deleted secret {secret_uuid}")
@@ -322,7 +369,7 @@ class SecretsStore:
 
             except Exception as e:  # pragma: no cover - error path
                 logger.error(f"Failed to delete secret {secret_uuid}: {type(e).__name__}")
-                await self._log_access(secret_uuid, "DELETE", "system", "Secret deletion", False, str(e))
+                # Don't try to log access here - secret may already be deleted
                 return False
 
     async def list_secrets(
@@ -352,21 +399,51 @@ class SecretsStore:
 
             query += " ORDER BY created_at DESC"
 
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
 
             secrets = []
             for row in rows:
+                # Handle both tuple (SQLite) and dict (PostgreSQL) rows
+                if isinstance(row, dict):
+                    # PostgreSQL RealDictCursor returns dict-like rows
+                    uuid = row["secret_uuid"]
+                    description = row["description"]
+                    context_hint = row["context_hint"]
+                    sensitivity = row["sensitivity_level"]
+                    detected_pattern = row["detected_pattern"]
+                    auto_decapsulate_actions_str = row["auto_decapsulate_for_actions"]
+                    created_at_str = row["created_at"]
+                    last_accessed_str = row["last_accessed"]
+                else:
+                    # SQLite Row objects support index access
+                    uuid = row[0]
+                    description = row[1]
+                    context_hint = row[2]
+                    sensitivity = row[3]
+                    detected_pattern = row[4]
+                    auto_decapsulate_actions_str = row[5]
+                    created_at_str = row[6]
+                    last_accessed_str = row[7]
+
                 secret_ref = SecretReference(
-                    uuid=row[0],
-                    description=row[1],
-                    context_hint=row[2],
-                    sensitivity=row[3],
-                    detected_pattern=row[4],
-                    auto_decapsulate_actions=row[5].split(",") if row[5] else [],
-                    created_at=datetime.fromisoformat(row[6]),
-                    last_accessed=datetime.fromisoformat(row[7]) if row[7] else None,
+                    uuid=uuid,
+                    description=description,
+                    context_hint=context_hint,
+                    sensitivity=sensitivity,
+                    detected_pattern=detected_pattern,
+                    auto_decapsulate_actions=(
+                        auto_decapsulate_actions_str.split(",") if auto_decapsulate_actions_str else []
+                    ),
+                    created_at=(
+                        datetime.fromisoformat(created_at_str) if isinstance(created_at_str, str) else created_at_str
+                    ),
+                    last_accessed=(
+                        datetime.fromisoformat(last_accessed_str)
+                        if last_accessed_str and isinstance(last_accessed_str, str)
+                        else last_accessed_str
+                    ),
                 )
                 secrets.append(secret_ref)
 
@@ -436,7 +513,7 @@ class SecretsStore:
                 failure_reason=failure_reason,
             )
 
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 conn.execute(
                     """
                     INSERT INTO secret_access_log (
@@ -491,7 +568,7 @@ class SecretsStore:
         """Get access logs for auditing."""
         logs = []
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 if secret_uuid:
                     cursor = conn.execute(
                         """
@@ -532,7 +609,7 @@ class SecretsStore:
         """Re-encrypt all stored secrets with a new key."""
         try:
             # Get all secrets
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 cursor = conn.execute("SELECT secret_uuid, encrypted_value, salt, nonce FROM secrets")
                 secrets = cursor.fetchall()
 
@@ -560,7 +637,7 @@ class SecretsStore:
                     return False
 
             # Update all secrets in database
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(str(self.db_path)) as conn:
                 conn.executemany(
                     """
                     UPDATE secrets

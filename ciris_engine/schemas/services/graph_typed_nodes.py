@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Typ
 from pydantic import BaseModel
 
 from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.services.graph_core import NodeType
@@ -45,7 +46,7 @@ class TypedGraphNode(GraphNode, ABC):
         Should handle deserialization of extra fields from attributes.
         """
 
-    def _serialize_extra_fields(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    def _serialize_extra_fields(self, exclude_fields: Optional[List[str]] = None) -> JSONDict:
         """
         Helper to serialize only the extra fields (not in GraphNode base).
 
@@ -63,7 +64,7 @@ class TypedGraphNode(GraphNode, ABC):
             base_fields.update(exclude_fields)
 
         # Get all fields from this model
-        extra_data: Dict[str, Any] = {}
+        extra_data: JSONDict = {}
         for field_name, field_value in self.model_dump().items():
             if field_name not in base_fields and field_value is not None:
                 # Handle special types

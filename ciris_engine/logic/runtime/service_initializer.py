@@ -65,13 +65,10 @@ class ServiceInitializer:
         self.wa_auth_system: Optional[WiseAuthorityService] = None
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
-        self.audit_services: List[Any] = []
         self.audit_service: Optional[AuditService] = None
         # Removed audit_sink_manager - audit is consolidated
         self.adaptive_filter_service: Optional[AdaptiveFilterService] = None
-        self.agent_config_service: Optional[Any] = None  # Optional[AgentConfigService]
-        self.transaction_orchestrator: Optional[Any] = None  # Optional[MultiServiceTransactionOrchestrator]
-        self.core_tool_service: Optional[Any] = None  # SecretsToolService
+        self.secrets_tool_service: Optional[Any] = None  # SecretsToolService
         self.maintenance_service: Optional[DatabaseMaintenanceService] = None
         self.incident_management_service: Optional[Any] = None  # Will be IncidentManagementService
         self.tsdb_consolidation_service: Optional[Any] = None  # Will be TSDBConsolidationService
@@ -258,7 +255,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.info("Created .ciris_keys/README.md")
 
         db_path = get_sqlite_db_full_path(self.essential_config)
-        secrets_db_path = db_path.replace(".db", "_secrets.db")
+        # For PostgreSQL, use separate database; for SQLite, use separate file
+        if db_path.startswith(("postgresql://", "postgres://")):
+            # PostgreSQL - use separate database (append _secrets to database name)
+            # postgresql://user:pass@host:port/dbname -> postgresql://user:pass@host:port/dbname_secrets
+            secrets_db_path = db_path.rsplit("/", 1)[0] + "/" + db_path.rsplit("/", 1)[1] + "_secrets"
+        else:
+            # SQLite - use separate file
+            secrets_db_path = db_path.replace(".db", "_secrets.db")
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
@@ -273,10 +277,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Create and register SecretsToolService
         from ciris_engine.logic.services.tools import SecretsToolService
 
-        self.core_tool_service = SecretsToolService(
+        self.secrets_tool_service = SecretsToolService(
             secrets_service=self.secrets_service, time_service=self.time_service
         )
-        await self.core_tool_service.start()
+        await self.secrets_tool_service.start()
         self._services_started_count += 1
         logger.info("SecretsToolService created and started")
 
@@ -388,7 +392,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
             raise RuntimeError("ConfigAccessor must be initialized before AuthenticationService")
         # Use the same directory as main database, but different file
         main_db_path = get_sqlite_db_full_path(self.essential_config)
-        auth_db_path = main_db_path.replace(".db", "_auth.db")
+        # For PostgreSQL, use separate database; for SQLite, use separate file
+        if main_db_path.startswith(("postgresql://", "postgres://")):
+            auth_db_path = main_db_path.rsplit("/", 1)[0] + "/" + main_db_path.rsplit("/", 1)[1] + "_auth"
+        else:
+            auth_db_path = main_db_path.replace(".db", "_auth.db")
         self.auth_service = AuthenticationService(
             db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )
@@ -398,7 +406,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Initialize WA authentication system with TimeService and AuthService
         # Use the main database path - WiseAuthority needs access to tasks table
-        main_db_path = get_sqlite_db_full_path(self.essential_config)
+        # Reuse main_db_path from above (already handles PostgreSQL vs SQLite)
         self.wa_auth_system = WiseAuthorityService(
             time_service=self.time_service, auth_service=self.auth_service, db_path=main_db_path
         )
@@ -705,14 +713,15 @@ This directory contains critical cryptographic keys for the CIRIS system.
         from ciris_engine.logic.services.governance.consent import ConsentService
 
         assert self.time_service is not None
+        assert self.bus_manager is not None
         self.consent_service = ConsentService(
             time_service=self.time_service,
-            memory_bus=None,  # Will use direct persistence
+            memory_bus=self.bus_manager.memory,  # Use memory bus for impact reporting and audit trail
             db_path=get_sqlite_db_full_path(self.essential_config),
         )
         await self.consent_service.start()
         self._services_started_count += 1
-        logger.info("ConsentService initialized - managing user consent and decay protocol")
+        logger.info("ConsentService initialized - managing user consent, decay protocol, and DSAR automation")
 
         # Initialize runtime control service
         from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
@@ -856,9 +865,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info(f"Secondary LLM service initialized: {model_name}")
 
     async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
-        """Initialize all three required audit services."""
-        self.audit_services = []
+        """Initialize the consolidated audit service with three storage backends.
 
+        The single GraphAuditService writes to three places:
+        1. SQLite hash chain database (cryptographic integrity)
+        2. Graph memory via MemoryBus (primary storage, searchable)
+        3. File export (optional, for compliance)
+        """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")
 
@@ -891,11 +904,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             graph_audit._set_service_registry(self.service_registry)
         await graph_audit.start()
         self._services_started_count += 1
-        self.audit_services.append(graph_audit)
+        self.audit_service = graph_audit
         logger.info("Consolidated GraphAuditService started")
-
-        # Keep reference to primary audit service for compatibility
-        self.audit_service = self.audit_services[0]
 
         # Update BusManager with the initialized audit service
         if self.bus_manager is not None:
@@ -944,9 +954,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     logger.error(f"Critical service {type(service).__name__} not initialized")
                     return False
 
-            # Verify audit services
-            if not self.audit_services or len(self.audit_services) == 0:
-                logger.error("No audit services found")
+            # Verify audit service
+            if not self.audit_service:
+                logger.error("Audit service not initialized")
                 return False
 
             logger.info("✓ All core services verified")
@@ -1052,10 +1062,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Transaction orchestrator is single-instance - NO ServiceRegistry needed
 
         # Register SecretsToolService for core secrets tools
-        if self.core_tool_service:
+        if self.secrets_tool_service:
             self.service_registry.register_service(
                 service_type=ServiceType.TOOL,
-                provider=self.core_tool_service,
+                provider=self.secrets_tool_service,
                 priority=Priority.HIGH,
                 capabilities=[
                     "execute_tool",

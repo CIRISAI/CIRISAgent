@@ -17,6 +17,12 @@ class DatabaseConfig(BaseModel):
     main_db: Path = Field(Path("data/ciris_engine.db"), description="Main SQLite database for persistence")
     secrets_db: Path = Field(Path("data/secrets.db"), description="Encrypted secrets storage database")
     audit_db: Path = Field(Path("data/ciris_audit.db"), description="Audit trail database with signatures")
+    database_url: Optional[str] = Field(
+        None,
+        description="Database connection string. If set, overrides main_db path. "
+        "Format: 'sqlite://path/to/db' or 'postgresql://user:pass@host:port/dbname'. "
+        "Defaults to SQLite at main_db path for backward compatibility.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -134,6 +140,11 @@ class EssentialConfig(BaseModel):
         env_occurrence_id = os.getenv("AGENT_OCCURRENCE_ID")
         if env_occurrence_id:
             self.agent_occurrence_id = env_occurrence_id
+
+        # Load database URL from environment (supports PostgreSQL with credentials)
+        env_db_url = os.getenv("CIRIS_DB_URL")
+        if env_db_url:
+            self.database.database_url = env_db_url
 
 
 class CIRISNodeConfig(BaseModel):

@@ -668,12 +668,8 @@ async def get_otlp_telemetry(
             return await _export_otlp_metrics(request.app.state.telemetry_service)
         elif signal == "traces":
             return await _export_otlp_traces(request.app.state.visibility_service, limit)
-        elif signal == "logs":
+        else:  # signal == "logs" - already validated above
             return await _export_otlp_logs(limit, start_time, end_time)
-        else:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid signal type: {signal}. Must be one of: metrics, traces, logs"
-            )
 
     except HTTPException:
         raise

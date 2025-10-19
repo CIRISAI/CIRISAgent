@@ -36,18 +36,24 @@ class ApiServiceConfiguration:
     3. Adapter-specific services that will be created
 
     Based on the official service list from CLAUDE.md:
-    - Graph Services (6): memory, config, telemetry, audit, incident_management, tsdb_consolidation
-    - Infrastructure Services (7): time, shutdown, initialization, authentication, resource_monitor, database_maintenance, secrets
+    - Graph Services (7): memory, consent, config, telemetry, audit, incident_management, tsdb_consolidation
+    - Infrastructure Services (4): authentication, resource_monitor, database_maintenance, secrets
+    - Lifecycle Services (4): time, shutdown, initialization, task_scheduler
     - Governance Services (4): wise_authority, adaptive_filter, visibility, self_observation
-    - Runtime Services (3): llm, runtime_control, task_scheduler
+    - Runtime Services (2): llm, runtime_control
     - Tool Services (1): secrets_tool
     """
 
-    # ========== THE 21 CORE CIRIS SERVICES ==========
+    # ========== THE 22 CORE CIRIS SERVICES ==========
 
-    # 6 Graph Services - Data persistence and tracking
+    # 7 Graph Services - Data persistence and tracking
     GRAPH_SERVICES = [
         ServiceMapping("memory_service", description="Graph-based memory storage and retrieval"),
+        ServiceMapping(
+            "consent_service",
+            app_state_name="consent_manager",
+            description="Consent, data retention, and DSAR automation",
+        ),
         ServiceMapping("config_service", description="Configuration management"),
         ServiceMapping("telemetry_service", description="Telemetry data collection and storage"),
         ServiceMapping("audit_service", description="Audit trail and compliance logging"),
@@ -55,11 +61,8 @@ class ApiServiceConfiguration:
         ServiceMapping("tsdb_consolidation_service", description="Time-series data consolidation"),
     ]
 
-    # 7 Infrastructure Services - System operations
+    # 4 Infrastructure Services - System operations
     INFRASTRUCTURE_SERVICES = [
-        ServiceMapping("time_service", description="Centralized time management"),
-        ServiceMapping("shutdown_service", description="Graceful shutdown coordination"),
-        ServiceMapping("initialization_service", description="Service initialization management"),
         ServiceMapping(
             "authentication_service",
             special_handler="_handle_auth_service",
@@ -68,6 +71,14 @@ class ApiServiceConfiguration:
         ServiceMapping("resource_monitor", app_state_name="resource_monitor", description="System resource monitoring"),
         ServiceMapping("database_maintenance_service", description="Database maintenance operations"),
         ServiceMapping("secrets_service", description="Secrets and credential management"),
+    ]
+
+    # 4 Lifecycle Services - Service lifecycle management
+    LIFECYCLE_SERVICES = [
+        ServiceMapping("time_service", description="Centralized time management"),
+        ServiceMapping("shutdown_service", description="Graceful shutdown coordination"),
+        ServiceMapping("initialization_service", description="Service initialization management"),
+        ServiceMapping("task_scheduler", description="Task scheduling and execution"),
     ]
 
     # 4 Governance Services - System oversight and adaptation
@@ -80,7 +91,7 @@ class ApiServiceConfiguration:
         ServiceMapping("self_observation_service", description="Self-monitoring and adaptation"),
     ]
 
-    # 3 Runtime Services - Execution and processing
+    # 2 Runtime Services - Execution and processing
     RUNTIME_SERVICES = [
         ServiceMapping("llm_service", description="Language model integration"),
         ServiceMapping(
@@ -88,7 +99,6 @@ class ApiServiceConfiguration:
             app_state_name="main_runtime_control_service",
             description="Main runtime control from agent",
         ),
-        ServiceMapping("task_scheduler", description="Task scheduling and execution"),
     ]
 
     # 1 Tool Service - Specialized operations
@@ -114,6 +124,7 @@ class ApiServiceConfiguration:
         all_mappings = (
             cls.GRAPH_SERVICES
             + cls.INFRASTRUCTURE_SERVICES
+            + cls.LIFECYCLE_SERVICES
             + cls.GOVERNANCE_SERVICES
             + cls.RUNTIME_SERVICES
             + cls.TOOL_SERVICES

@@ -42,13 +42,62 @@ def execute_sql_statements(conn: Any, sql_statements: List[str], adapter: Any) -
 def split_sql_statements(table_sql: str) -> List[str]:
     """Split multi-statement SQL into individual statements.
 
+    Handles PostgreSQL dollar-quoted blocks (DO $$ ... END $$;) correctly
+    by not splitting on semicolons inside these blocks.
+
     Args:
         table_sql: SQL string potentially containing multiple statements
 
     Returns:
         List of individual SQL statements (stripped, non-empty)
     """
-    return [s.strip() for s in table_sql.split(";") if s.strip()]
+    # Quick check: if no $$ and no newlines, use simple split
+    if "$$" not in table_sql:
+        return [s.strip() for s in table_sql.split(";") if s.strip()]
+
+    statements = []
+    current_statement = []
+    in_dollar_quote = False
+
+    lines = table_sql.split("\n")
+    for line in lines:
+        stripped = line.strip()
+
+        # Detect dollar-quoted block start/end
+        if "$$" in line:
+            # Count $$ occurrences to handle multiple on same line
+            dollar_count = line.count("$$")
+            if not in_dollar_quote:
+                # Starting a dollar-quoted block
+                in_dollar_quote = True
+                # If even number of $$, we also exit on same line
+                if dollar_count % 2 == 0:
+                    in_dollar_quote = False
+            else:
+                # Already in dollar quote, this closes it
+                in_dollar_quote = False
+                # If even number of $$, we enter again
+                if dollar_count % 2 == 0:
+                    in_dollar_quote = True
+
+        current_statement.append(line)
+
+        # Split on semicolon only if not in dollar-quoted block
+        if ";" in line and not in_dollar_quote:
+            # Check if semicolon is at the end (statement terminator)
+            if stripped.endswith(";"):
+                statement = "\n".join(current_statement).strip()
+                if statement:
+                    statements.append(statement)
+                current_statement = []
+
+    # Add any remaining statement
+    if current_statement:
+        statement = "\n".join(current_statement).strip()
+        if statement:
+            statements.append(statement)
+
+    return statements
 
 
 def mask_password_in_url(db_url: str) -> str:

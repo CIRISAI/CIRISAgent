@@ -29,7 +29,10 @@ class TestModifyDatabaseNameInURL:
         """Test that URL-encoded password is preserved."""
         url = "postgresql://ciris_user:%7D7gCg%40%7DPnH5UXp%5D%7B@10.2.96.6:16751/ciris_db?sslmode=require"
         result = _modify_database_name_in_url(url, "_secrets")
-        assert result == "postgresql://ciris_user:%7D7gCg%40%7DPnH5UXp%5D%7B@10.2.96.6:16751/ciris_db_secrets?sslmode=require"
+        assert (
+            result
+            == "postgresql://ciris_user:%7D7gCg%40%7DPnH5UXp%5D%7B@10.2.96.6:16751/ciris_db_secrets?sslmode=require"
+        )
 
     def test_url_with_multiple_params(self) -> None:
         """Test that multiple query parameters are preserved."""
@@ -79,9 +82,7 @@ class TestGetSecretsDBFullPathPostgreSQL:
         from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig
 
         config = EssentialConfig(
-            database=DatabaseConfig(
-                database_url="postgresql://user:pass@localhost:5432/ciris_db?sslmode=require"
-            )
+            database=DatabaseConfig(database_url="postgresql://user:pass@localhost:5432/ciris_db?sslmode=require")
         )
 
         result = get_secrets_db_full_path(config)
@@ -97,9 +98,7 @@ class TestGetAuditDBFullPathPostgreSQL:
         from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig
 
         config = EssentialConfig(
-            database=DatabaseConfig(
-                database_url="postgresql://user:pass@localhost:5432/ciris_db?sslmode=require"
-            )
+            database=DatabaseConfig(database_url="postgresql://user:pass@localhost:5432/ciris_db?sslmode=require")
         )
 
         result = get_audit_db_full_path(config)

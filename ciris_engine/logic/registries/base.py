@@ -145,9 +145,7 @@ class ServiceRegistry:
 
         return provider_name
 
-    def _validate_llm_service_mixing(
-        self, provider: Any, provider_name: str, metadata: Optional[JSONDict]
-    ) -> None:
+    def _validate_llm_service_mixing(self, provider: Any, provider_name: str, metadata: Optional[JSONDict]) -> None:
         """Validate that mock and real LLM services are not mixed."""
         existing_providers = self._services[ServiceType.LLM]
         is_mock = self._is_mock_service(provider, metadata)
@@ -179,7 +177,9 @@ class ServiceRegistry:
             f"Existing: {existing_name}, New: {provider_name}"
         )
 
-    def _create_service_provider[T_Service](
+    def _create_service_provider[
+        T_Service
+    ](
         self,
         service_type: ServiceType,
         name: str,

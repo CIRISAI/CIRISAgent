@@ -28,7 +28,7 @@ def _modify_database_name_in_url(base_url: str, suffix: str) -> str:
     parsed = urlparse(base_url)
 
     # Extract database name from path (remove leading /)
-    db_name = parsed.path.lstrip('/')
+    db_name = parsed.path.lstrip("/")
 
     # Add suffix to database name
     new_db_name = f"{db_name}{suffix}"
@@ -37,14 +37,16 @@ def _modify_database_name_in_url(base_url: str, suffix: str) -> str:
     new_path = f"/{new_db_name}"
 
     # Reconstruct URL with new path, preserving all other components
-    return urlunparse((
-        parsed.scheme,      # scheme (postgresql)
-        parsed.netloc,      # netloc (user:pass@host:port)
-        new_path,           # path (/db_secrets)
-        parsed.params,      # params (empty for PostgreSQL URLs)
-        parsed.query,       # query (sslmode=require)
-        parsed.fragment     # fragment (empty for PostgreSQL URLs)
-    ))
+    return urlunparse(
+        (
+            parsed.scheme,  # scheme (postgresql)
+            parsed.netloc,  # netloc (user:pass@host:port)
+            new_path,  # path (/db_secrets)
+            parsed.params,  # params (empty for PostgreSQL URLs)
+            parsed.query,  # query (sslmode=require)
+            parsed.fragment,  # fragment (empty for PostgreSQL URLs)
+        )
+    )
 
 
 def get_sqlite_db_full_path(config: Optional[EssentialConfig] = None) -> str:

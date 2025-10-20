@@ -147,6 +147,57 @@ class TestSplitSQLStatements:
         assert "CREATE TABLE test" in result[0]
         assert "INSERT INTO test" in result[1]
 
+    def test_split_postgresql_dollar_quoted_block(self):
+        """Test PostgreSQL DO $$ ... END $$; blocks are not split internally."""
+        sql = """
+            ALTER TABLE tasks ADD COLUMN test TEXT;
+
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'scheduled_tasks') THEN
+                    ALTER TABLE scheduled_tasks ADD COLUMN test TEXT;
+                END IF;
+            END $$;
+
+            CREATE INDEX idx_test ON tasks(test);
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 3 statements: ALTER TABLE, DO block, CREATE INDEX
+        assert len(result) == 3
+        assert "ALTER TABLE tasks" in result[0]
+        assert "DO $$" in result[1]
+        assert "END $$;" in result[1]
+        assert "CREATE INDEX" in result[2]
+        # Verify DO block is intact with internal semicolons
+        assert "END IF;" in result[1]
+
+    def test_split_postgresql_multiple_dollar_blocks(self):
+        """Test multiple PostgreSQL DO $$ blocks in same migration."""
+        sql = """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'table1') THEN
+                    ALTER TABLE table1 ADD COLUMN col1 TEXT;
+                END IF;
+            END $$;
+
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'table2') THEN
+                    ALTER TABLE table2 ADD COLUMN col2 TEXT;
+                END IF;
+            END $$;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 2 separate DO blocks
+        assert len(result) == 2
+        assert "table1" in result[0]
+        assert "table2" in result[1]
+        assert "END IF;" in result[0]
+        assert "END IF;" in result[1]
+
 
 class TestMaskPasswordInURL:
     """Tests for mask_password_in_url()."""

@@ -198,6 +198,85 @@ class TestSplitSQLStatements:
         assert "END IF;" in result[0]
         assert "END IF;" in result[1]
 
+    def test_split_postgresql_tagged_dollar_quotes(self):
+        """Test PostgreSQL tagged dollar quotes ($func$, $BODY$, etc.)."""
+        sql = """
+            CREATE FUNCTION test_func() RETURNS void AS $func$
+            BEGIN
+                INSERT INTO test VALUES (1);
+                UPDATE test SET value = 2;
+            END;
+            $func$ LANGUAGE plpgsql;
+
+            CREATE FUNCTION another_func() RETURNS void AS $BODY$
+            DECLARE
+                v_count INTEGER;
+            BEGIN
+                SELECT COUNT(*) INTO v_count FROM users;
+            END;
+            $BODY$ LANGUAGE plpgsql;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 2 separate function definitions
+        assert len(result) == 2
+        assert "test_func" in result[0]
+        assert "$func$" in result[0]
+        assert "INSERT INTO test" in result[0]
+        assert "UPDATE test" in result[0]
+        assert "another_func" in result[1]
+        assert "$BODY$" in result[1]
+        assert "v_count" in result[1]
+
+    def test_split_postgresql_mixed_dollar_quotes(self):
+        """Test mixing simple $$ and tagged $identifier$ quotes."""
+        sql = """
+            DO $$
+            BEGIN
+                EXECUTE 'SELECT 1;';
+            END $$;
+
+            CREATE FUNCTION get_count() RETURNS INTEGER AS $body$
+            BEGIN
+                RETURN (SELECT COUNT(*) FROM items);
+            END;
+            $body$ LANGUAGE plpgsql;
+
+            ALTER TABLE items ADD COLUMN status TEXT;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 3 statements: DO block, function, ALTER TABLE
+        assert len(result) == 3
+        assert "DO $$" in result[0]
+        assert "EXECUTE" in result[0]
+        assert "CREATE FUNCTION" in result[1]
+        assert "$body$" in result[1]
+        assert "ALTER TABLE" in result[2]
+
+    def test_split_postgresql_nested_semicolons_in_tagged_quotes(self):
+        """Test that semicolons inside tagged dollar quotes are preserved."""
+        sql = """
+            CREATE FUNCTION complex_func() RETURNS void AS $function$
+            DECLARE
+                rec RECORD;
+            BEGIN
+                FOR rec IN SELECT * FROM users LOOP
+                    INSERT INTO log (user_id) VALUES (rec.id);
+                    UPDATE stats SET count = count + 1;
+                END LOOP;
+            END;
+            $function$ LANGUAGE plpgsql;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 1 statement with all internal semicolons preserved
+        assert len(result) == 1
+        assert "INSERT INTO log" in result[0]
+        assert "UPDATE stats" in result[0]
+        assert "END LOOP;" in result[0]
+        assert "$function$" in result[0]
+
 
 class TestMaskPasswordInURL:
     """Tests for mask_password_in_url()."""

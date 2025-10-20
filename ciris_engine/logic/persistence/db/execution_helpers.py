@@ -42,8 +42,8 @@ def execute_sql_statements(conn: Any, sql_statements: List[str], adapter: Any) -
 def split_sql_statements(table_sql: str) -> List[str]:
     """Split multi-statement SQL into individual statements.
 
-    Handles PostgreSQL dollar-quoted blocks (DO $$ ... END $$;) correctly
-    by not splitting on semicolons inside these blocks.
+    Handles PostgreSQL dollar-quoted blocks correctly, including both
+    simple ($$) and tagged ($identifier$) dollar quotes.
 
     Args:
         table_sql: SQL string potentially containing multiple statements
@@ -51,34 +51,39 @@ def split_sql_statements(table_sql: str) -> List[str]:
     Returns:
         List of individual SQL statements (stripped, non-empty)
     """
-    # Quick check: if no $$ and no newlines, use simple split
-    if "$$" not in table_sql:
+    import re
+
+    # Quick check: if no dollar quotes, use simple split
+    if "$" not in table_sql:
         return [s.strip() for s in table_sql.split(";") if s.strip()]
 
     statements = []
     current_statement = []
     in_dollar_quote = False
+    current_tag = None
+
+    # Regex to match dollar quote tags: $$ or $identifier$
+    # Matches: $$, $func$, $BODY$, $tag123$, etc.
+    dollar_quote_pattern = re.compile(r'\$([a-zA-Z_][a-zA-Z0-9_]*)?\$')
 
     lines = table_sql.split("\n")
     for line in lines:
         stripped = line.strip()
 
-        # Detect dollar-quoted block start/end
-        if "$$" in line:
-            # Count $$ occurrences to handle multiple on same line
-            dollar_count = line.count("$$")
+        # Find all dollar quotes in this line
+        matches = list(dollar_quote_pattern.finditer(line))
+
+        for match in matches:
+            tag = match.group(0)  # Full match like $$ or $func$
+
             if not in_dollar_quote:
-                # Starting a dollar-quoted block
+                # Starting a new dollar-quoted block
                 in_dollar_quote = True
-                # If even number of $$, we also exit on same line
-                if dollar_count % 2 == 0:
-                    in_dollar_quote = False
-            else:
-                # Already in dollar quote, this closes it
+                current_tag = tag
+            elif tag == current_tag:
+                # Found matching closing tag
                 in_dollar_quote = False
-                # If even number of $$, we enter again
-                if dollar_count % 2 == 0:
-                    in_dollar_quote = True
+                current_tag = None
 
         current_statement.append(line)
 

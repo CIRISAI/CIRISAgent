@@ -60,6 +60,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Improved code maintainability, clearer SonarCloud quality gate expectations
   - **Files Modified**: `ciris_engine/schemas/consent/core.py`, `ciris_engine/logic/utils/jsondict_helpers.py`
 
+## [1.4.3] - 2025-10-20
+
+### Fixed
+- **CRITICAL: PostgreSQL Migration System** - Fixed two critical bugs preventing PostgreSQL migrations from running
+  - **Bug #1: SQL Statement Splitting** (`execution_helpers.py`)
+    - **Issue**: Naive semicolon splitting broke PostgreSQL `DO $$ ... END $$;` blocks
+    - **Symptom**: `syntax error at or near "IF" LINE 1: END IF` during migration 004
+    - **Solution**: Enhanced `split_sql_statements()` to track dollar-quote state and avoid splitting inside PL/pgSQL blocks
+    - **Impact**: PostgreSQL DO blocks now parse correctly, enabling conditional DDL statements
+  - **Bug #2: Comment Filtering** (`migration_runner.py`)
+    - **Issue**: Overly aggressive filter removed any statement starting with `--`, even if it contained SQL
+    - **Symptom**: `column "agent_occurrence_id" does not exist` because ALTER TABLE statement was filtered out
+    - **Solution**: Changed filter to only remove statements that are ENTIRELY comments (all non-empty lines start with `--`)
+    - **Impact**: Statements with leading comments are preserved, migration 004 now applies correctly
+  - **Production Validation**: Tested on live PostgreSQL deployment (scout-remote-test-dahrb9)
+    - All 4 migrations applied successfully
+    - All columns and indexes created correctly
+    - Agent running healthy with PostgreSQL backend
+  - **Files Modified**:
+    - `ciris_engine/logic/persistence/db/execution_helpers.py` - Enhanced SQL splitting
+    - `ciris_engine/logic/persistence/db/migration_runner.py` - Fixed comment filtering
+    - `tests/logic/persistence/db/test_execution_helpers.py` - Added comprehensive tests for PostgreSQL DO blocks
+- **PostgreSQL Query Parameter Preservation** - Fixed URL transformation that dropped query parameters
+  - **Issue**: Creating derivative database URLs (e.g., `_secrets`) dropped `sslmode` and other query parameters
+  - **Solution**: Preserve query string when constructing derivative URLs in `db_paths.py`
+  - **Impact**: PostgreSQL connections now maintain SSL settings and other connection parameters
+  - **Files Modified**: `ciris_engine/logic/config/db_paths.py`, `tests/ciris_engine/logic/config/test_db_paths_postgresql.py`
+
+### Changed
+- **PostgreSQL Migration Idempotency** - Enhanced migration 003 for safe re-runs
+  - Added `IF NOT EXISTS` clause to ALTER TABLE ADD COLUMN statements in PostgreSQL migration 003
+  - Aligns with migration 004 which already uses IF NOT EXISTS
+  - Prevents failures if migration is marked as applied but columns weren't actually added
+  - Note: SQLite does not support IF NOT EXISTS for ALTER TABLE ADD COLUMN
+  - **Files Modified**: `ciris_engine/logic/persistence/migrations/postgres/003_add_task_update_tracking.sql`
+
+### Quality
+- **Test Coverage**: All quality gates passing
+  - ✅ mypy: Success (576 source files, zero errors)
+  - ✅ pytest: 5,575 passed, 70 skipped (100% pass rate)
+  - ✅ QA Runner (SQLite): 127/128 tests (99.2% - 1 known H3ERE streaming issue)
+  - ✅ QA Runner (PostgreSQL): Production deployment verified on real managed database
+- **Production Verification**: Scout agent running successfully with PostgreSQL backend
+  - Container status: Up and healthy
+  - All migrations applied without errors
+  - Database schema validated with all expected columns and indexes
+
 ## [1.4.2] - 2025-10-19
 
 ### Added

@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2025-10-20
+
 ### Fixed
+- **CRITICAL: Message History Timestamps on PostgreSQL** - Fixed incorrect timestamps in message history when using PostgreSQL
+  - **Issue**: Message timestamps showed query time instead of original send time on PostgreSQL deployments
+  - **Root Cause**: PostgreSQL returns `TIMESTAMP` columns as Python `datetime` objects, but code expected strings
+  - **Symptom**: `_row_to_service_correlation()` tried to call `datetime.fromisoformat()` on datetime objects, causing TypeError
+  - **Fallback Bug**: When parsing failed, `_parse_response_data()` fell back to `datetime.now()` - current time instead of message time
+  - **Solution**: Added type checking to handle both PostgreSQL (datetime objects) and SQLite (strings) correctly
+  - **Impact**: Message history now shows accurate timestamps on both SQLite and PostgreSQL deployments
+  - **Files Modified**: `ciris_engine/logic/persistence/models/correlations.py:670-685`
+  - **Testing**: All 52 correlation tests pass, mypy clean
+
+### Fixed (Unreleased - Pending)
 - **PostgreSQL Compatibility Test Fixes** - Fixed 33 test failures after PostgreSQL migration
   - **Telemetry Helpers**: Added tuple/dict compatibility for PostgreSQL RealDictCursor results
   - **TSDB Edge Creation Tests**: Fixed database mock injection strategy (16 tests)

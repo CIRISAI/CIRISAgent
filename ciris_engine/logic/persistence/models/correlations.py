@@ -667,16 +667,21 @@ def _row_to_service_correlation(row: Any) -> ServiceCorrelation:
     Returns:
         ServiceCorrelation object
     """
-    # Parse timestamp if present
+    # Parse timestamp if present - handle both PostgreSQL (datetime) and SQLite (string)
     timestamp = None
     if row["timestamp"]:
         try:
-            # Handle both 'Z' and '+00:00' formats
-            timestamp_str = row["timestamp"]
-            if timestamp_str.endswith("Z"):
-                timestamp_str = timestamp_str[:-1] + UTC_TIMEZONE_SUFFIX
-            timestamp = datetime.fromisoformat(timestamp_str)
-        except (ValueError, AttributeError):
+            timestamp_value = row["timestamp"]
+            # PostgreSQL returns datetime objects directly
+            if isinstance(timestamp_value, datetime):
+                timestamp = timestamp_value
+            # SQLite returns strings - parse them
+            elif isinstance(timestamp_value, str):
+                # Handle both 'Z' and '+00:00' formats
+                if timestamp_value.endswith("Z"):
+                    timestamp_value = timestamp_value[:-1] + UTC_TIMEZONE_SUFFIX
+                timestamp = datetime.fromisoformat(timestamp_value)
+        except (ValueError, AttributeError, TypeError):
             timestamp = None
 
     # Parse request_data - handle PostgreSQL JSONB vs SQLite TEXT

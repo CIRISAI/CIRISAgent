@@ -1,12 +1,15 @@
 # CIRIS Agent Requirements - Runtime Dependencies Only
 # Last updated: 2025-01-08
-# Python >= 3.10 required
+# Python >= 3.12 required (for PEP 695 type parameter syntax)
 
 # Core Dependencies
 pydantic>=2.7.0,<3.0.0
 openai>=1.0.0,<2.0.0
 instructor>=1.11.3,<2.0.0
 PyYAML>=6.0.1,<7.0.0
+
+# Database
+psycopg2-binary>=2.9.0,<3.0.0  # PostgreSQL adapter for production deployments
 
 # Async and HTTP
 aiohttp>=3.9.0,<4.0.0

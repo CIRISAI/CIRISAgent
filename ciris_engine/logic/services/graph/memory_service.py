@@ -17,7 +17,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 from ciris_engine.schemas.secrets.service import DecapsulationContext
-from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, TelemetryNodeAttributes
+from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes, LogNodeAttributes, TelemetryNodeAttributes
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
@@ -68,7 +68,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         self.secrets_service = secrets_service  # Must be provided, not created here
         self._start_time: Optional[datetime] = None
 
-    async def memorize(self, node: GraphNode) -> MemoryOpResult:
+    async def memorize(self, node: GraphNode) -> "MemoryOpResult[GraphNode]":
         """Store a node with automatic secrets detection and processing."""
         self._track_request()
         try:
@@ -81,10 +81,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 persistence.add_graph_node(processed_node, db_path=self.db_path, time_service=self._time_service)
             else:
                 raise RuntimeError("TimeService is required for adding graph nodes")
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=processed_node)
         except Exception as e:
             logger.exception("Error storing node %s: %s", node.id, e)
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def recall(self, recall_query: MemoryQuery) -> List[GraphNode]:
         """Recall nodes from memory based on query."""
@@ -164,8 +164,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def _process_node_for_recall(self, node: GraphNode, include_edges: bool) -> GraphNode:
         """Process a single node for recall, handling secrets and edges."""
-        # Process attributes - convert to proper schema
-        processed_attrs: AnyNodeAttributes | GraphNodeAttributes | JSONDict = {}
+        # Process attributes - always returns dict for compatibility
+        processed_attrs: JSONDict = {}
         if node.attributes:
             processed_attrs = await self._process_secrets_for_recall(node.attributes, "recall")
 
@@ -186,7 +186,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         return processed_node
 
-    async def forget(self, node: GraphNode) -> MemoryOpResult:
+    async def forget(self, node: GraphNode) -> "MemoryOpResult[GraphNode]":
         """Forget a node and clean up any associated secrets."""
         self._track_request()
         try:
@@ -200,10 +200,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             from ciris_engine.logic.persistence.models import graph as persistence
 
             persistence.delete_graph_node(node.id, node.scope, db_path=self.db_path)
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=node)
         except Exception as e:
             logger.exception("Error forgetting node %s: %s", node.id, e)
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def export_identity_context(self) -> str:
         """
@@ -212,27 +212,33 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         Uses format_agent_identity() to convert raw graph node data into
         human-readable text with shutdown history.
         """
+        import asyncio
+
         from ciris_engine.logic.formatters.identity import format_agent_identity
 
-        with get_db_connection(db_path=self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
-            )
-            rows = cursor.fetchall()
+        def _query_identity() -> str:
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT node_id, attributes_json FROM graph_nodes WHERE scope = ?", (GraphScope.IDENTITY.value,)
+                )
+                rows = cursor.fetchall()
 
-            # If we have identity nodes, format the first one
-            # (typically there's only one identity node per agent)
-            if rows:
-                # Handle PostgreSQL JSONB vs SQLite TEXT
-                attrs_json = rows[0]["attributes_json"]
-                if attrs_json:
-                    attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
-                else:
-                    attrs = {}
-                return format_agent_identity(attrs)
+                # If we have identity nodes, format the first one
+                # (typically there's only one identity node per agent)
+                if rows:
+                    # Handle PostgreSQL JSONB vs SQLite TEXT
+                    attrs_json = rows[0]["attributes_json"]
+                    if attrs_json:
+                        attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
+                    else:
+                        attrs = {}
+                    return format_agent_identity(attrs)
 
-            return ""
+                return ""
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _query_identity)
 
     async def _process_secrets_for_memorize(self, node: GraphNode) -> GraphNode:
         """Process secrets in node attributes during memorization."""
@@ -250,6 +256,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         # Process for secrets detection and replacement
         # SecretsService requires source_message_id
         if not self.secrets_service:
+            logger.warning(
+                f"Secrets service unavailable for memorize operation on node {node.id}. "
+                f"Secrets will NOT be encrypted. This may expose sensitive data."
+            )
             return node
         processed_text, secret_refs = await self.secrets_service.process_incoming_text(
             attributes_str, source_message_id=f"memorize_{node.id}"
@@ -304,6 +314,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             _attributes_str = json.dumps(attributes_dict, cls=DateTimeEncoder)
 
             if not self.secrets_service:
+                logger.warning(
+                    f"Secrets service unavailable for recall operation. "
+                    f"Secrets will NOT be decrypted for action_type={action_type}. "
+                    f"This may prevent proper secret handling."
+                )
                 return attributes_dict
             decapsulated_attributes = await self.secrets_service.decapsulate_secrets_in_parameters(
                 action_type=action_type,
@@ -499,7 +514,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def memorize_metric(
         self, metric_name: str, value: float, tags: Optional[Dict[str, str]] = None, scope: str = "local"
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Convenience method to memorize a metric as a graph node.
 
@@ -551,9 +566,9 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         except Exception as e:
             logger.exception(f"Error memorizing metric {metric_name}: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
-    async def create_edge(self, edge: GraphEdge) -> MemoryOpResult:
+    async def create_edge(self, edge: GraphEdge) -> "MemoryOpResult[GraphEdge]":
         """Create an edge between two nodes in the memory graph."""
         self._track_request()
         try:
@@ -562,10 +577,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             edge_id = add_graph_edge(edge, db_path=self.db_path)
             logger.info(f"Created edge {edge_id}: {edge.source} -{edge.relationship}-> {edge.target}")
 
-            return MemoryOpResult(status=MemoryOpStatus.OK)
+            return MemoryOpResult[GraphEdge](status=MemoryOpStatus.OK, data=edge)
         except Exception as e:
             logger.exception(f"Error creating edge: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphEdge](status=MemoryOpStatus.DENIED, error=str(e))
 
     async def get_node_edges(self, node_id: str, scope: GraphScope) -> List[GraphEdge]:
         """Get all edges connected to a node."""
@@ -580,7 +595,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def memorize_log(
         self, log_message: str, log_level: str = "INFO", tags: Optional[Dict[str, str]] = None, scope: str = "local"
-    ) -> MemoryOpResult:
+    ) -> "MemoryOpResult[GraphNode]":
         """
         Convenience method to memorize a log entry as both a graph node and TSDB correlation.
         """
@@ -601,23 +616,22 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             node_id = f"log_{log_level}_{int(now.timestamp())}"
 
             # Create typed attributes with log-specific data
-            # JSONDict is a type alias for dict, so create dict directly
-            attrs_dict: JSONDict = {
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-                "created_by": "memory_service",
-                "tags": ["log", log_level.lower()],
-                "log_message": log_message,
-                "log_level": log_level,
-                "log_tags": tags or {},
-                "retention_policy": "raw",
-            }
+            log_attrs = LogNodeAttributes(
+                created_at=now,
+                updated_at=now,
+                created_by="memory_service",
+                tags=["log", log_level.lower()],
+                log_message=log_message,
+                log_level=log_level,
+                log_tags=tags or {},
+                retention_policy="raw",
+            )
 
             node = GraphNode(
                 id=node_id,
                 type=NodeType.TSDB_DATA,
                 scope=GraphScope(scope),
-                attributes=attrs_dict,
+                attributes=log_attrs,  # Pass typed Pydantic model directly
                 updated_by="memory_service",
                 updated_at=now,
             )
@@ -660,7 +674,7 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
         except Exception as e:
             logger.exception(f"Error memorizing log entry: {e}")
-            return MemoryOpResult(status=MemoryOpStatus.DENIED, error=str(e))
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.DENIED, error=str(e))
 
     # ============================================================================
     # GRAPH PROTOCOL METHODS
@@ -816,19 +830,25 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy."""
+        import asyncio
+
         # Check if service is started
         if not hasattr(self, "_started") or not self._started:
             return False
 
-        try:
-            # Try a simple database operation
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM graph_nodes")
-                cursor.fetchone()
-            return True
-        except Exception:
-            return False
+        def _check_database() -> bool:
+            try:
+                # Try a simple database operation
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM graph_nodes")
+                    cursor.fetchone()
+                return True
+            except Exception:
+                return False
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _check_database)
 
     async def store_in_graph(self, node: Union[GraphNode, GraphNodeConvertible]) -> str:
         """Store a node in the graph."""

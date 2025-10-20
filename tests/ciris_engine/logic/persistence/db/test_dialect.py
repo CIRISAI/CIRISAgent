@@ -7,7 +7,13 @@ with both SQLite and PostgreSQL backends.
 
 import pytest
 
-from ciris_engine.logic.persistence.db.dialect import Dialect, DialectAdapter, get_adapter, init_dialect
+from ciris_engine.logic.persistence.db.dialect import (
+    Dialect,
+    DialectAdapter,
+    get_adapter,
+    init_dialect,
+    parse_postgres_url,
+)
 
 
 class TestDialectAdapter:
@@ -260,3 +266,201 @@ class TestEdgeCases:
         """Test sqlite3:// URL scheme."""
         adapter = DialectAdapter("sqlite3://path/to/db")
         assert adapter.dialect == Dialect.SQLITE
+
+
+class TestPostgreSQLURLParsing:
+    """Test PostgreSQL URL parsing with special characters in passwords.
+
+    Critical for production deployments where passwords may contain special characters
+    that break standard urlparse() functionality.
+    """
+
+    def test_parse_postgres_url_simple(self):
+        """Test parsing simple PostgreSQL URL."""
+        url = "postgresql://user:password@localhost:5432/dbname"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgresql"
+        assert user == "user"
+        assert password == "password"
+        assert host == "localhost"
+        assert port == 5432
+        assert database == "dbname"
+        assert params == ""
+
+    def test_parse_postgres_url_with_at_symbol(self):
+        """Test parsing PostgreSQL URL with @ in password."""
+        # Simulates production case with special chars including @
+        url = "postgresql://testuser:p@ss@w0rd@192.168.1.100:5432/testdb"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgresql"
+        assert user == "testuser"
+        assert password == "p@ss@w0rd"
+        assert host == "192.168.1.100"
+        assert port == 5432
+        assert database == "testdb"
+
+    def test_parse_postgres_url_with_url_encoded_password(self):
+        """Test parsing PostgreSQL URL with URL-encoded password."""
+        # URL-encoded version: p@ss{w}rd[123] → p%40ss%7Bw%7Drd%5B123%5D
+        url = "postgresql://user:p%40ss%7Bw%7Drd%5B123%5D@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgresql"
+        assert user == "user"
+        # Should URL-decode the password
+        assert password == "p@ss{w}rd[123]"
+        assert host == "localhost"
+        assert port == 5432
+        assert database == "db"
+
+    def test_parse_postgres_url_with_query_params(self):
+        """Test parsing PostgreSQL URL with query parameters."""
+        url = "postgresql://user:pass@localhost:5432/db?sslmode=require&connect_timeout=10"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgresql"
+        assert database == "db"
+        assert params == "?sslmode=require&connect_timeout=10"
+
+    def test_parse_postgres_url_short_scheme(self):
+        """Test parsing with 'postgres' (not 'postgresql') scheme."""
+        url = "postgres://user:pass@host:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgres"
+        assert user == "user"
+        assert host == "host"
+
+    def test_parse_postgres_url_special_chars_in_username(self):
+        """Test parsing URL with special characters in username."""
+        url = "postgresql://user-name_123:password@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert user == "user-name_123"
+
+    def test_parse_postgres_url_brackets_in_password(self):
+        """Test parsing URL with brackets in password (IPv6-like chars)."""
+        url = "postgresql://user:pass[word]:value@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert password == "pass[word]:value"
+
+    def test_parse_postgres_url_curly_braces_in_password(self):
+        """Test parsing URL with curly braces in password."""
+        url = "postgresql://user:p{a}s{s}@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert password == "p{a}s{s}"
+
+    def test_parse_postgres_url_percent_in_password(self):
+        """Test parsing URL with percent sign in password."""
+        url = "postgresql://user:pass%word@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert password == "pass%word"
+
+    def test_parse_postgres_url_invalid_format(self):
+        """Test parsing invalid PostgreSQL URL raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid PostgreSQL URL format"):
+            parse_postgres_url("invalid://url")
+
+    def test_parse_postgres_url_missing_port(self):
+        """Test parsing URL without port raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid PostgreSQL URL format"):
+            parse_postgres_url("postgresql://user:pass@localhost/db")
+
+    def test_parse_postgres_url_missing_database(self):
+        """Test parsing URL without database raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid PostgreSQL URL format"):
+            parse_postgres_url("postgresql://user:pass@localhost:5432")
+
+    def test_dialect_adapter_with_special_char_password(self):
+        """Test DialectAdapter initialization with special character password."""
+        # Simulates real-world case with special chars
+        url = "postgresql://dbuser:p@ss{w}rd[123]@192.168.1.50:5432/myapp?sslmode=require"
+        adapter = DialectAdapter(url)
+
+        assert adapter.dialect == Dialect.POSTGRESQL
+        assert adapter.is_postgresql()
+        assert adapter.db_url == url
+        assert adapter.db_path == ""  # PostgreSQL doesn't use file paths
+
+    def test_dialect_adapter_with_url_encoded_password(self):
+        """Test DialectAdapter with URL-encoded special characters."""
+        url = "postgresql://user:p%40ss%7Bw%7Drd%5B123%5D@localhost:5432/db"
+        adapter = DialectAdapter(url)
+
+        assert adapter.dialect == Dialect.POSTGRESQL
+        assert adapter.is_postgresql()
+
+    def test_dialect_adapter_fallback_on_parse_error(self):
+        """Test DialectAdapter falls back gracefully on parse errors."""
+        # Create a PostgreSQL URL that our custom parser can't handle
+        # but standard urlparse might (edge case)
+        url = "postgresql://user@localhost:5432/db"  # No password
+        adapter = DialectAdapter(url)
+
+        # Should still detect as PostgreSQL
+        assert adapter.dialect == Dialect.POSTGRESQL
+
+    def test_multiple_at_symbols_in_password(self):
+        """Test password with multiple @ symbols."""
+        url = "postgresql://user:p@ss@w@rd@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        # Our regex captures everything between first : and last @
+        assert "@" in password
+        assert host == "localhost"
+
+    def test_colon_in_password(self):
+        """Test password with colon character."""
+        url = "postgresql://user:pass:word:123@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        # Password should include colons
+        assert password == "pass:word:123"
+
+    def test_slash_in_database_name(self):
+        """Test database name without slashes (valid case)."""
+        url = "postgresql://user:pass@localhost:5432/my_database"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert database == "my_database"
+
+    def test_ip_address_host(self):
+        """Test with IP address as host."""
+        url = "postgresql://user:pass@10.20.30.40:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert host == "10.20.30.40"
+        assert port == 5432
+
+    def test_empty_password(self):
+        """Test URL with empty password."""
+        url = "postgresql://user:@localhost:5432/db"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert user == "user"
+        assert password == ""
+        assert host == "localhost"
+
+    def test_complex_production_url(self):
+        """Test complex production URL with all special characters."""
+        # Combines multiple edge cases: @, {, }, [, ] in password
+        url = "postgresql://appuser:p@ss{w}rd[v2]@10.0.1.100:5432/appdb?sslmode=require"
+        scheme, user, password, port, host, database, params = parse_postgres_url(url)
+
+        assert scheme == "postgresql"
+        assert user == "appuser"
+        assert password == "p@ss{w}rd[v2]"
+        assert host == "10.0.1.100"
+        assert port == 5432
+        assert database == "appdb"
+        assert params == "?sslmode=require"
+
+        # Verify adapter can use this URL
+        adapter = DialectAdapter(url)
+        assert adapter.is_postgresql()
+        assert adapter.placeholder() == "%s"

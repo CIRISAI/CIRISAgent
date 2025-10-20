@@ -7,7 +7,7 @@ backends with a single connection string configuration.
 
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 if TYPE_CHECKING:
     from ciris_engine.logic.persistence.db.query_builder import QueryBuilder
@@ -18,6 +18,58 @@ class Dialect(str, Enum):
 
     SQLITE = "sqlite"
     POSTGRESQL = "postgresql"
+
+
+def parse_postgres_url(url: str) -> tuple[str, str, str, int, str, str, str]:
+    """Parse PostgreSQL URL handling special characters in password.
+
+    Handles passwords with special characters (@, }, ], {, etc.) that break urlparse.
+
+    Args:
+        url: PostgreSQL connection string
+
+    Returns:
+        Tuple of (scheme, username, password, port, host, database, params)
+
+    Raises:
+        ValueError: If URL format is invalid
+    """
+    import re
+
+    # Pattern: postgresql://username:password@host:port/database?params
+    # Password may contain special chars INCLUDING @, so we need to parse carefully
+    # The password is everything after the first : and before the LAST @
+    # Use non-greedy match for scheme/user, greedy for password (can contain @ or be empty)
+    pattern = r"^(postgres(?:ql)?):\/\/([^:]+):(.*)@([^:\/\?]+):(\d+)\/([^?]+)(\?.*)?$"
+    match = re.match(pattern, url)
+
+    if not match:
+        raise ValueError(f"Invalid PostgreSQL URL format: {url}")
+
+    scheme, username, password_and_host, host, port, database, params = match.groups()
+
+    # Now we need to split password from host at the LAST @
+    # Find the last @ that's followed by host:port pattern
+    # The host part should not contain @ (it's the part after the last @)
+    last_at_idx = password_and_host.rfind("@")
+    if last_at_idx == -1:
+        # No @ found - this means password_and_host is just the password (empty host captured)
+        password = password_and_host
+    else:
+        # Split at the last @
+        password = password_and_host[:last_at_idx]
+        # The part after @ should match our captured host
+        rest = password_and_host[last_at_idx + 1 :]
+        if rest != host:
+            # Host mismatch - means our regex didn't capture correctly
+            # Fall back to treating everything as password
+            password = password_and_host
+
+    # URL-decode the password component (handles %XX encoding)
+    password = unquote(password) if password else ""
+    params = params or ""
+
+    return scheme, username, password, int(port), host, database, params
 
 
 class DialectAdapter:
@@ -40,23 +92,40 @@ class DialectAdapter:
         Args:
             connection_string: Database URL (sqlite://path or postgresql://...)
         """
-        parsed = urlparse(connection_string)
+        # Quick check for PostgreSQL scheme
+        if connection_string.startswith(("postgresql://", "postgres://")):
+            # Use robust parser that handles special characters in passwords
+            try:
+                _scheme, _user, _password, _port, _host, _database, _params = parse_postgres_url(connection_string)
+                self.dialect = Dialect.POSTGRESQL
+                self.db_url = connection_string
+                self.db_path = ""  # Empty string for PostgreSQL (not a file path)
+            except ValueError as e:
+                # Fall back to urlparse if custom parser fails
+                import logging
 
-        # Detect dialect from URL scheme
-        if parsed.scheme in ("sqlite", "sqlite3", ""):
-            self.dialect = Dialect.SQLITE
-            # For SQLite, store the path (with or without leading //)
-            self.db_path = parsed.path or connection_string
-            self.db_url = connection_string
-        elif parsed.scheme in ("postgresql", "postgres"):
-            self.dialect = Dialect.POSTGRESQL
-            self.db_url = connection_string
-            self.db_path = ""  # Empty string for PostgreSQL (not a file path)
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to parse PostgreSQL URL with custom parser: {e}")
+                logger.warning("Falling back to standard urlparse - may fail with special chars in password")
+
+                parsed = urlparse(connection_string)
+                self.dialect = Dialect.POSTGRESQL
+                self.db_url = connection_string
+                self.db_path = ""
         else:
-            # Default to SQLite for backward compatibility
-            self.dialect = Dialect.SQLITE
-            self.db_path = connection_string
-            self.db_url = connection_string
+            # Use standard urlparse for SQLite and other schemes
+            parsed = urlparse(connection_string)
+
+            if parsed.scheme in ("sqlite", "sqlite3", ""):
+                self.dialect = Dialect.SQLITE
+                # For SQLite, store the path (with or without leading //)
+                self.db_path = parsed.path or connection_string
+                self.db_url = connection_string
+            else:
+                # Default to SQLite for backward compatibility
+                self.dialect = Dialect.SQLITE
+                self.db_path = connection_string
+                self.db_url = connection_string
 
     def upsert(
         self,

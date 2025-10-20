@@ -379,12 +379,25 @@ class QueryManager:
                     # PostgreSQL: Try to acquire advisory lock
                     cursor.execute("SELECT pg_try_advisory_lock(%s)", (lock_id,))
                     result = cursor.fetchone()
-                    acquired = result[0] if result else False
+
+                    if not result:
+                        logger.error(
+                            f"Failed to acquire {consolidation_type} lock for {period_identifier}: "
+                            f"pg_try_advisory_lock returned no result (lock_id={lock_id})"
+                        )
+                        return False
+
+                    # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
+                    acquired = bool(result[0])
 
                     if acquired:
-                        logger.info(f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})")
+                        logger.info(
+                            f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})"
+                        )
                     else:
-                        logger.info(f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked)")
+                        logger.info(
+                            f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked, lock_id={lock_id})"
+                        )
 
                     return acquired
 
@@ -396,11 +409,16 @@ class QueryManager:
                         logger.info(f"Acquired SQLite write lock for {consolidation_type} {period_identifier}")
                         return True
                     except Exception as e:
-                        logger.info(f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}")
+                        logger.info(
+                            f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}"
+                        )
                         return False
 
         except Exception as e:
-            logger.error(f"Error acquiring {consolidation_type} lock for {period_identifier}: {e}")
+            logger.error(
+                f"Error acquiring {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
             return False
 
     def release_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> None:
@@ -427,19 +445,35 @@ class QueryManager:
                     # PostgreSQL: Release advisory lock
                     cursor.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
                     result = cursor.fetchone()
-                    released = result[0] if result else False
+
+                    if not result:
+                        logger.warning(
+                            f"Failed to release {consolidation_type} lock for {period_identifier}: "
+                            f"pg_advisory_unlock returned no result (lock_id={lock_id})"
+                        )
+                        return
+
+                    # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
+                    released = bool(result[0])
 
                     if released:
-                        logger.debug(f"Released {consolidation_type} lock for {period_identifier}")
+                        logger.debug(f"Released {consolidation_type} lock for {period_identifier} (lock_id={lock_id})")
                     else:
-                        logger.warning(f"Failed to release {consolidation_type} lock for {period_identifier} (not held)")
+                        logger.warning(
+                            f"Failed to release {consolidation_type} lock for {period_identifier} (not held, lock_id={lock_id})"
+                        )
 
                 else:
                     # SQLite: Lock is automatically released when connection closes
-                    logger.debug(f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close")
+                    logger.debug(
+                        f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close"
+                    )
 
         except Exception as e:
-            logger.error(f"Error releasing {consolidation_type} lock for {period_identifier}: {e}")
+            logger.error(
+                f"Error releasing {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
 
     def acquire_period_lock(self, period_start: datetime) -> bool:
         """

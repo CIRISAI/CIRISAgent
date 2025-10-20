@@ -5,14 +5,22 @@ These helpers provide type narrowing for MyPy when working with JSONDict/JSONVal
 Use these instead of direct dict access when you need to narrow union types.
 """
 
-from typing import Any, Dict, List, Optional, TypeVar, Union, cast
+from typing import Any, Dict, List, Optional, TypeVar, Union, cast, overload
 
 from ciris_engine.schemas.types import JSONDict, JSONValue
 
 T = TypeVar("T")
 
 
-def get_str(data: JSONDict, key: str, default: str = "") -> str:
+@overload
+def get_str(data: JSONDict, key: str, default: str = "") -> str: ...
+
+
+@overload
+def get_str(data: dict[str, object], key: str, default: str = "") -> str: ...
+
+
+def get_str(data: JSONDict | dict[str, object], key: str, default: str = "") -> str:
     """
     Get a string value from JSONDict with type narrowing.
 
@@ -30,7 +38,15 @@ def get_str(data: JSONDict, key: str, default: str = "") -> str:
     return default
 
 
-def get_str_optional(data: JSONDict, key: str) -> Optional[str]:
+@overload
+def get_str_optional(data: JSONDict, key: str) -> Optional[str]: ...
+
+
+@overload
+def get_str_optional(data: dict[str, object], key: str) -> Optional[str]: ...
+
+
+def get_str_optional(data: JSONDict | dict[str, object], key: str) -> Optional[str]:
     """
     Get an optional string value from JSONDict.
 

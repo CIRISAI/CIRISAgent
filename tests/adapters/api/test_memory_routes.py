@@ -93,9 +93,9 @@ class TestStoreMemory:
 
     def test_store_memory_success(self, client, app, sample_node, auth_context):
         """Test successful memory storage."""
-        # Setup mock response
+        # Setup mock response - data should be GraphNode, not dict
         app.state.memory_service.memorize.return_value = MemoryOpResult(
-            status=MemoryOpStatus.OK, reason="Memory stored successfully", data={"node_id": sample_node.id}
+            status=MemoryOpStatus.OK, reason="Memory stored successfully", data=sample_node
         )
 
         # Mock auth dependency - need to override the dependency directly
@@ -116,7 +116,8 @@ class TestStoreMemory:
         assert "metadata" in data
         # The MemoryOpResult is in data["data"]
         assert data["data"]["status"] == "ok"
-        assert data["data"]["data"]["node_id"] == sample_node.id
+        # data field now contains GraphNode, not dict
+        assert data["data"]["data"]["id"] == sample_node.id
 
     def test_store_memory_no_service(self, client, app, sample_node, auth_context):
         """Test when memory service is not available."""
@@ -285,7 +286,7 @@ class TestForgetMemory:
         # The forget endpoint first recalls the node, then forgets it
         app.state.memory_service.recall_node.return_value = sample_node
         app.state.memory_service.forget.return_value = MemoryOpResult(
-            status=MemoryOpStatus.OK, reason="Memory forgotten", data={"node_id": "test_node_1"}
+            status=MemoryOpStatus.OK, reason="Memory forgotten", data=sample_node
         )
 
         app.dependency_overrides[require_admin] = lambda: auth_context
@@ -300,8 +301,10 @@ class TestForgetMemory:
     def test_forget_memory_not_found(self, client, app, auth_context):
         """Test forgetting a non-existent node."""
         # The memory service returns an error status for non-existent nodes
+        # Create a minimal node for the error case
+        error_node = GraphNode(id="nonexistent", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={})
         app.state.memory_service.forget.return_value = MemoryOpResult(
-            status=MemoryOpStatus.ERROR, reason="Node not found", data={"node_id": "nonexistent"}
+            status=MemoryOpStatus.ERROR, reason="Node not found", data=error_node
         )
 
         app.dependency_overrides[require_admin] = lambda: auth_context

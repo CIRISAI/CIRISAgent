@@ -4,6 +4,7 @@ Memory operation schemas for CIRIS Trinity Architecture.
 All memory operations are typed - no Dict[str, Any].
 """
 
+from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional
 
@@ -56,15 +57,39 @@ class MemoryOpAction(str, Enum):
     FORGET = "forget"
 
 
-class MemoryOpResult(BaseModel):
-    """Result of a memory operation."""
+class MemoryOpResult[T](BaseModel):
+    """
+    Parametrized result of a memory operation.
+
+    Type parameter T specifies the data type returned by the operation:
+    - MemoryOpResult[GraphNode] for single node operations (memorize, forget)
+    - MemoryOpResult[List[GraphNode]] for multi-node operations (recall, search)
+    - MemoryOpResult[None] for operations with no data return
+    """
 
     status: MemoryOpStatus
     reason: Optional[str] = None
-    data: Optional[Any] = None  # Will be typed based on operation
+    data: Optional[T] = None
     error: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="forbid")
+
+    @property
+    def nodes(self) -> List[GraphNode]:
+        """
+        Backward compatibility property - return data as list of nodes.
+
+        This allows existing code using result.nodes to continue working
+        while we transition to typed result.data access.
+        """
+        if self.data is None:
+            return []
+        if isinstance(self.data, list):
+            return self.data
+        # Single node - wrap in list (T is GraphNode at runtime)
+        return [self.data]  # type: ignore[list-item]
 
 
 class MemoryQuery(BaseModel):

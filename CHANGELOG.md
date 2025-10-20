@@ -7,28 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **🤝 Bilateral Partnership Decisions** - New endpoint for equal-agency partnership consent
-  - Added `POST /v1/partnership/decide` - Accept/reject/defer partnership requests
-  - **Bilateral Flow**: Either party (agent OR user) can initiate partnership requests
-    - Agent-initiated: Via `upgrade_relationship` tool → User decides via SDK/API
-    - User-initiated: Via `grant_consent(stream="partnered")` → Agent evaluates via task system
-  - **Equal Moral Agency**: Both parties have equal autonomy to accept, reject, or defer
-  - **No Bypass Patterns**: Genuine bilateral consent required, no admin override
-  - **SDK Support**: Fixes previously broken `accept_partnership()`, `reject_partnership()`, `defer_partnership()` methods
-  - **Request Body**: `{task_id, decision: "accept"|"reject"|"defer", reason?}`
-  - **Permissions**: Users can only decide on their own partnership requests (or admin)
-  - **Updated Documentation**: Partnership endpoints now clearly explain bilateral consent philosophy
-
-### Removed
-- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
-  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
-  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
-  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
-  - **Rationale**: Partnership decisions are made through bilateral consent between agent and user with equal moral agency. Manual admin overrides undermine this autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
-  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
-  - **Migration**: Replaced with bilateral `POST /v1/partnership/decide` endpoint for genuine two-way consent
-
 ### Fixed
 - **PostgreSQL Compatibility Test Fixes** - Fixed 33 test failures after PostgreSQL migration
   - **Telemetry Helpers**: Added tuple/dict compatibility for PostgreSQL RealDictCursor results
@@ -142,6 +120,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `psycopg2-binary>=2.9.0,<3.0.0` to requirements.txt
   - Fixes container crashes when agents try to connect to PostgreSQL databases
   - Enables production PostgreSQL deployments without dependency errors
+- **🤝 Bilateral Partnership Decisions** - New endpoint for equal-agency partnership consent
+  - Added `POST /v1/partnership/decide` - Accept/reject/defer partnership requests
+  - **Bilateral Flow**: Either party (agent OR user) can initiate partnership requests
+    - Agent-initiated: Via `upgrade_relationship` tool → User decides via SDK/API
+    - User-initiated: Via `grant_consent(stream="partnered")` → Agent evaluates via task system
+  - **Equal Moral Agency**: Both parties have equal autonomy to accept, reject, or defer
+  - **No Bypass Patterns**: Genuine bilateral consent required, no admin override
+  - **SDK Support**: Fixes previously broken `accept_partnership()`, `reject_partnership()`, `defer_partnership()` methods
+  - **Request Body**: `{task_id, decision: "accept"|"reject"|"defer", reason?}`
+  - **Permissions**: Users can only decide on their own partnership requests (or admin)
+  - **Updated Documentation**: Partnership endpoints now clearly explain bilateral consent philosophy
+
+### Removed
+- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
+  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
+  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
+  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
+  - **Rationale**: Partnership decisions are made through bilateral consent between agent and user with equal moral agency. Manual admin overrides undermine this autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
+  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
+  - **Migration**: Replaced with bilateral `POST /v1/partnership/decide` endpoint for genuine two-way consent
 
 ### Fixed
 - **Mypy Strict Type Checking** - Resolved CI-blocking mypy errors with proper type hints

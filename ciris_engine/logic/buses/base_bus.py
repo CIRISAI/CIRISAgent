@@ -105,7 +105,7 @@ class BaseBus(ABC, Generic[ServiceT]):
                     try:
                         await task
                     except asyncio.CancelledError:
-                        pass
+                        pass  # NOSONAR - Intentionally suppressing cancellation of pending tasks during cleanup
 
                 # Check if shutdown was triggered
                 if shutdown_task in done:

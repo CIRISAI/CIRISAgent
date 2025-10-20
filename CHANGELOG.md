@@ -41,6 +41,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.3] - 2025-10-20
 
 ### Fixed
+- **Code Quality: Reduced Cognitive Complexity** - Refactored database helper functions to improve maintainability
+  - **Issue**: SonarCloud reported cognitive complexity violations in migration code
+  - **Changes**:
+    - `split_sql_statements()`: Reduced complexity from 21 to 8 by extracting helper functions
+      - `_update_dollar_quote_state()`: Manages dollar quote state transitions
+      - `_should_finalize_statement()`: Determines statement termination logic
+      - `_finalize_statement()`: Handles statement finalization
+    - `run_migrations()`: Reduced complexity from 23 to 5 by extracting helper functions
+      - `_is_all_comments()`: Checks if statement contains only SQL comments
+      - `_filter_comment_only_statements()`: Filters out comment-only statements
+      - `_get_applied_migration_names()`: Retrieves applied migrations from database
+      - `_execute_postgresql_migration()`: Handles PostgreSQL-specific migration execution
+      - `_execute_sqlite_migration()`: Handles SQLite-specific migration execution
+      - `_apply_migration()`: Applies a single migration file
+    - Fixed regex pattern: Changed `[a-zA-Z0-9_]` to concise `\w` syntax
+  - **Impact**: Improved code readability, maintainability, and test coverage
+  - **Testing**: Added 17 new unit tests for helper functions (5,595 total tests pass)
+  - **Files Modified**: `ciris_engine/logic/persistence/db/execution_helpers.py`, `ciris_engine/logic/persistence/db/migration_runner.py`
+  - **Files Added**: `tests/logic/persistence/db/test_migration_runner_helpers.py`
 - **CRITICAL: SSE Streaming PostgreSQL Compatibility** - Fixed observer user SSE event filtering on PostgreSQL deployments
   - **Issue**: Observer users not receiving SSE events on PostgreSQL-backed agents (e.g., scout-remote)
   - **Root Cause**: `system_extensions.py` used `sqlite3.connect()` directly instead of database abstraction layer

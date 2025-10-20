@@ -429,6 +429,67 @@ class TestGetPendingMigrations:
         assert result[2].name == "003_add_indexes.sql"
 
 
+class TestHelperFunctions:
+    """Tests for internal helper functions."""
+
+    def test_update_dollar_quote_state_opening(self):
+        """Test opening a dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$$", False, None)
+        assert in_quote is True
+        assert tag == "$$"
+
+    def test_update_dollar_quote_state_closing(self):
+        """Test closing a dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$$", True, "$$")
+        assert in_quote is False
+        assert tag is None
+
+    def test_update_dollar_quote_state_mismatched_tag(self):
+        """Test encountering different tag while in dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$func$", True, "$$")
+        assert in_quote is True
+        assert tag == "$$"
+
+    def test_should_finalize_statement_with_semicolon(self):
+        """Test should finalize when semicolon at end and not in dollar quote."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("CREATE TABLE test;", False) is True
+
+    def test_should_finalize_statement_in_dollar_quote(self):
+        """Test should not finalize when in dollar quote."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("INSERT INTO test;", True) is False
+
+    def test_should_finalize_statement_no_semicolon_at_end(self):
+        """Test should not finalize when semicolon not at end."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("SELECT * FROM test; WHERE id = 1", False) is False
+
+    def test_finalize_statement_with_content(self):
+        """Test finalizing statement with content."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _finalize_statement
+
+        result = _finalize_statement(["  CREATE TABLE test  ", "  (id INTEGER)  "])
+        # Note: _finalize_statement joins with \n and strips outer whitespace only
+        assert result == "CREATE TABLE test  \n  (id INTEGER)"
+
+    def test_finalize_statement_empty(self):
+        """Test finalizing empty statement."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _finalize_statement
+
+        result = _finalize_statement(["  ", ""])
+        assert result is None
+
+
 class TestRecordMigration:
     """Tests for record_migration()."""
 

@@ -27,9 +27,11 @@ def _get_config_from_registry() -> Optional[EssentialConfig]:
         if config_services:
             config_service = config_services[0]
             if hasattr(config_service, "essential_config"):
-                return config_service.essential_config
+                config: Optional[EssentialConfig] = getattr(config_service, "essential_config", None)
+                return config
             elif hasattr(config_service, "_config"):
-                return config_service._config
+                config = getattr(config_service, "_config", None)
+                return config
 
         return None
     except (ImportError, AttributeError):

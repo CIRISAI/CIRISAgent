@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.3] - 2025-10-20
 
 ### Fixed
+- **CRITICAL: SSE Streaming PostgreSQL Compatibility** - Fixed observer user SSE event filtering on PostgreSQL deployments
+  - **Issue**: Observer users not receiving SSE events on PostgreSQL-backed agents (e.g., scout-remote)
+  - **Root Cause**: `system_extensions.py` used `sqlite3.connect()` directly instead of database abstraction layer
+  - **Symptom**: `sqlite3.OperationalError: unable to open database file` when fetching OAuth links for SSE filtering
+  - **Solution**:
+    - Replaced `sqlite3.connect()` with `get_db_connection()` in `_get_user_allowed_channel_ids()` and `_batch_fetch_task_channel_ids()`
+    - Added proper cursor handling for both SQLite Row (tuple) and PostgreSQL RealDictRow (dict) types
+    - Used database adapter to select correct placeholder (`%s` for PostgreSQL, `?` for SQLite)
+  - **Impact**: SSE streaming now works correctly on both SQLite and PostgreSQL deployments, observer users receive all events
+  - **Files Modified**: `ciris_engine/logic/adapters/api/routes/system_extensions.py:632-703`
+  - **Testing**: QA streaming tests pass 100% with both SQLite and PostgreSQL
 - **CRITICAL: PostgreSQL Migration System** - Fixed two critical bugs preventing PostgreSQL migrations from running
   - **Bug #1: SQL Statement Splitting** (`execution_helpers.py`)
     - **Issue**: Naive semicolon splitting broke PostgreSQL `DO $$ ... END $$;` blocks

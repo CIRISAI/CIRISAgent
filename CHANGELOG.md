@@ -57,9 +57,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - All columns and indexes created correctly
     - Agent running healthy with PostgreSQL backend
   - **Files Modified**:
-    - `ciris_engine/logic/persistence/db/execution_helpers.py` - Enhanced SQL splitting
+    - `ciris_engine/logic/persistence/db/execution_helpers.py` - Enhanced SQL splitting with regex-based dollar quote detection
     - `ciris_engine/logic/persistence/db/migration_runner.py` - Fixed comment filtering
-    - `tests/logic/persistence/db/test_execution_helpers.py` - Added comprehensive tests for PostgreSQL DO blocks
+    - `tests/logic/persistence/db/test_execution_helpers.py` - Added comprehensive tests for PostgreSQL DO blocks and tagged dollar quotes
+  - **CRITICAL Follow-up: Tagged Dollar Quote Support**
+    - **Issue**: Initial fix only detected `$$` but PostgreSQL also supports tagged dollar quotes like `$func$`, `$BODY$`, `$tag$`
+    - **Impact**: Function definitions and migrations using tagged quotes would still fail with syntax errors
+    - **Solution**: Use regex pattern `$([a-zA-Z_][a-zA-Z0-9_]*)?$` to detect all dollar quote variants
+    - **Examples Now Handled**: `CREATE FUNCTION ... AS $func$ ... $func$`, `DO $body$ ... $body$`, mixed `$$` and `$identifier$`
+    - **Tests Added**: 4 new tests covering tagged quotes, mixed quotes, and nested semicolons
 - **PostgreSQL Query Parameter Preservation** - Fixed URL transformation that dropped query parameters
   - **Issue**: Creating derivative database URLs (e.g., `_secrets`) dropped `sslmode` and other query parameters
   - **Solution**: Preserve query string when constructing derivative URLs in `db_paths.py`

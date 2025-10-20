@@ -4,10 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ciris_engine.logic.persistence.db.migration_runner import (
-    _filter_comment_only_statements,
-    _is_all_comments,
-)
+from ciris_engine.logic.persistence.db.migration_runner import _filter_comment_only_statements, _is_all_comments
 
 
 class TestIsAllComments:

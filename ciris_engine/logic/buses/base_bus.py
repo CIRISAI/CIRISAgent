@@ -95,9 +95,7 @@ class BaseBus(ABC, Generic[ServiceT]):
                 get_task = asyncio.create_task(self._queue.get())
                 shutdown_task = asyncio.create_task(self._shutdown_event.wait())
 
-                done, pending = await asyncio.wait(
-                    {get_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED
-                )
+                done, pending = await asyncio.wait({get_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED)
 
                 # Cancel pending tasks
                 for task in pending:

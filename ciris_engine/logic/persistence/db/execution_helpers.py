@@ -39,8 +39,59 @@ def execute_sql_statements(conn: Any, sql_statements: List[str], adapter: Any) -
         conn.executescript(combined_sql)
 
 
+def _update_dollar_quote_state(
+    tag: str, in_dollar_quote: bool, current_tag: Optional[str]
+) -> tuple[bool, Optional[str]]:
+    """Update dollar quote tracking state based on matched tag.
+
+    Args:
+        tag: Matched dollar quote tag (e.g., "$$", "$func$")
+        in_dollar_quote: Current state - inside dollar-quoted block?
+        current_tag: Current opening tag we're tracking
+
+    Returns:
+        Tuple of (new_in_dollar_quote, new_current_tag)
+    """
+    if not in_dollar_quote:
+        # Starting a new dollar-quoted block
+        return True, tag
+    elif tag == current_tag:
+        # Found matching closing tag
+        return False, None
+    return in_dollar_quote, current_tag
+
+
+def _should_finalize_statement(line: str, in_dollar_quote: bool) -> bool:
+    """Check if line terminates a statement (semicolon at end, not in dollar quote).
+
+    Args:
+        line: SQL line to check
+        in_dollar_quote: Whether we're currently inside a dollar-quoted block
+
+    Returns:
+        True if this line terminates a statement
+    """
+    return ";" in line and not in_dollar_quote and line.strip().endswith(";")
+
+
+def _finalize_statement(current_statement: List[str]) -> Optional[str]:
+    """Finalize current statement by joining and stripping.
+
+    Args:
+        current_statement: List of lines making up the statement
+
+    Returns:
+        Finalized statement string, or None if empty
+    """
+    statement = "\n".join(current_statement).strip()
+    return statement if statement else None
+
+
 def split_sql_statements(table_sql: str) -> List[str]:
     """Split multi-statement SQL into individual statements.
+
+    Handles PostgreSQL dollar-quoted blocks correctly, including both
+    simple ($$) and tagged ($identifier$) dollar quotes.
 
     Args:
         table_sql: SQL string potentially containing multiple statements
@@ -48,7 +99,44 @@ def split_sql_statements(table_sql: str) -> List[str]:
     Returns:
         List of individual SQL statements (stripped, non-empty)
     """
-    return [s.strip() for s in table_sql.split(";") if s.strip()]
+    import re
+
+    # Quick check: if no dollar quotes, use simple split
+    if "$" not in table_sql:
+        return [s.strip() for s in table_sql.split(";") if s.strip()]
+
+    statements: List[str] = []
+    current_statement: List[str] = []
+    in_dollar_quote = False
+    current_tag: Optional[str] = None
+
+    # Regex to match dollar quote tags: $$ or $identifier$
+    # Matches: $$, $func$, $BODY$, $tag123$, etc.
+    dollar_quote_pattern = re.compile(r"\$([a-zA-Z_]\w*)?\$")
+
+    lines = table_sql.split("\n")
+    for line in lines:
+        # Find all dollar quotes in this line and update state
+        matches = list(dollar_quote_pattern.finditer(line))
+        for match in matches:
+            tag = match.group(0)  # Full match like $$ or $func$
+            in_dollar_quote, current_tag = _update_dollar_quote_state(tag, in_dollar_quote, current_tag)
+
+        current_statement.append(line)
+
+        # Split on semicolon only if not in dollar-quoted block
+        if _should_finalize_statement(line, in_dollar_quote):
+            statement = _finalize_statement(current_statement)
+            if statement:
+                statements.append(statement)
+            current_statement = []
+
+    # Add any remaining statement
+    statement = _finalize_statement(current_statement)
+    if statement:
+        statements.append(statement)
+
+    return statements
 
 
 def mask_password_in_url(db_url: str) -> str:

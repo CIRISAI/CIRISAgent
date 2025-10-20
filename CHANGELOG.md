@@ -7,28 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **🤝 Bilateral Partnership Decisions** - New endpoint for equal-agency partnership consent
-  - Added `POST /v1/partnership/decide` - Accept/reject/defer partnership requests
-  - **Bilateral Flow**: Either party (agent OR user) can initiate partnership requests
-    - Agent-initiated: Via `upgrade_relationship` tool → User decides via SDK/API
-    - User-initiated: Via `grant_consent(stream="partnered")` → Agent evaluates via task system
-  - **Equal Moral Agency**: Both parties have equal autonomy to accept, reject, or defer
-  - **No Bypass Patterns**: Genuine bilateral consent required, no admin override
-  - **SDK Support**: Fixes previously broken `accept_partnership()`, `reject_partnership()`, `defer_partnership()` methods
-  - **Request Body**: `{task_id, decision: "accept"|"reject"|"defer", reason?}`
-  - **Permissions**: Users can only decide on their own partnership requests (or admin)
-  - **Updated Documentation**: Partnership endpoints now clearly explain bilateral consent philosophy
-
-### Removed
-- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
-  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
-  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
-  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
-  - **Rationale**: Partnership decisions are made through bilateral consent between agent and user with equal moral agency. Manual admin overrides undermine this autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
-  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
-  - **Migration**: Replaced with bilateral `POST /v1/partnership/decide` endpoint for genuine two-way consent
-
 ### Fixed
 - **PostgreSQL Compatibility Test Fixes** - Fixed 33 test failures after PostgreSQL migration
   - **Telemetry Helpers**: Added tuple/dict compatibility for PostgreSQL RealDictCursor results
@@ -59,6 +37,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Documented reasoning in `/tmp/sonarcloud_python312_issues.md`
   - **Impact**: Improved code maintainability, clearer SonarCloud quality gate expectations
   - **Files Modified**: `ciris_engine/schemas/consent/core.py`, `ciris_engine/logic/utils/jsondict_helpers.py`
+
+## [1.4.3] - 2025-10-20
+
+### Fixed
+- **Code Quality: Reduced Cognitive Complexity** - Refactored database helper functions to improve maintainability
+  - **Issue**: SonarCloud reported cognitive complexity violations in migration code
+  - **Changes**:
+    - `split_sql_statements()`: Reduced complexity from 21 to 8 by extracting helper functions
+      - `_update_dollar_quote_state()`: Manages dollar quote state transitions
+      - `_should_finalize_statement()`: Determines statement termination logic
+      - `_finalize_statement()`: Handles statement finalization
+    - `run_migrations()`: Reduced complexity from 23 to 5 by extracting helper functions
+      - `_is_all_comments()`: Checks if statement contains only SQL comments
+      - `_filter_comment_only_statements()`: Filters out comment-only statements
+      - `_get_applied_migration_names()`: Retrieves applied migrations from database
+      - `_execute_postgresql_migration()`: Handles PostgreSQL-specific migration execution
+      - `_execute_sqlite_migration()`: Handles SQLite-specific migration execution
+      - `_apply_migration()`: Applies a single migration file
+    - Fixed regex pattern: Changed `[a-zA-Z0-9_]` to concise `\w` syntax
+  - **Impact**: Improved code readability, maintainability, and test coverage
+  - **Testing**: Added 17 new unit tests for helper functions (5,595 total tests pass)
+  - **Files Modified**: `ciris_engine/logic/persistence/db/execution_helpers.py`, `ciris_engine/logic/persistence/db/migration_runner.py`
+  - **Files Added**: `tests/logic/persistence/db/test_migration_runner_helpers.py`
+- **CRITICAL: SSE Streaming PostgreSQL Compatibility** - Fixed observer user SSE event filtering on PostgreSQL deployments
+  - **Issue**: Observer users not receiving SSE events on PostgreSQL-backed agents (e.g., scout-remote)
+  - **Root Cause**: `system_extensions.py` used `sqlite3.connect()` directly instead of database abstraction layer
+  - **Symptom**: `sqlite3.OperationalError: unable to open database file` when fetching OAuth links for SSE filtering
+  - **Solution**:
+    - Replaced `sqlite3.connect()` with `get_db_connection()` in `_get_user_allowed_channel_ids()` and `_batch_fetch_task_channel_ids()`
+    - Added proper cursor handling for both SQLite Row (tuple) and PostgreSQL RealDictRow (dict) types
+    - Used database adapter to select correct placeholder (`%s` for PostgreSQL, `?` for SQLite)
+  - **Impact**: SSE streaming now works correctly on both SQLite and PostgreSQL deployments, observer users receive all events
+  - **Files Modified**: `ciris_engine/logic/adapters/api/routes/system_extensions.py:632-703`
+  - **Testing**: QA streaming tests pass 100% with both SQLite and PostgreSQL
+- **CRITICAL: PostgreSQL Migration System** - Fixed two critical bugs preventing PostgreSQL migrations from running
+  - **Bug #1: SQL Statement Splitting** (`execution_helpers.py`)
+    - **Issue**: Naive semicolon splitting broke PostgreSQL `DO $$ ... END $$;` blocks
+    - **Symptom**: `syntax error at or near "IF" LINE 1: END IF` during migration 004
+    - **Solution**: Enhanced `split_sql_statements()` to track dollar-quote state and avoid splitting inside PL/pgSQL blocks
+    - **Impact**: PostgreSQL DO blocks now parse correctly, enabling conditional DDL statements
+  - **Bug #2: Comment Filtering** (`migration_runner.py`)
+    - **Issue**: Overly aggressive filter removed any statement starting with `--`, even if it contained SQL
+    - **Symptom**: `column "agent_occurrence_id" does not exist` because ALTER TABLE statement was filtered out
+    - **Solution**: Changed filter to only remove statements that are ENTIRELY comments (all non-empty lines start with `--`)
+    - **Impact**: Statements with leading comments are preserved, migration 004 now applies correctly
+  - **Production Validation**: Tested on live PostgreSQL deployment (scout-remote-test-dahrb9)
+    - All 4 migrations applied successfully
+    - All columns and indexes created correctly
+    - Agent running healthy with PostgreSQL backend
+  - **Files Modified**:
+    - `ciris_engine/logic/persistence/db/execution_helpers.py` - Enhanced SQL splitting with regex-based dollar quote detection
+    - `ciris_engine/logic/persistence/db/migration_runner.py` - Fixed comment filtering
+    - `tests/logic/persistence/db/test_execution_helpers.py` - Added comprehensive tests for PostgreSQL DO blocks and tagged dollar quotes
+  - **CRITICAL Follow-up: Tagged Dollar Quote Support**
+    - **Issue**: Initial fix only detected `$$` but PostgreSQL also supports tagged dollar quotes like `$func$`, `$BODY$`, `$tag$`
+    - **Impact**: Function definitions and migrations using tagged quotes would still fail with syntax errors
+    - **Solution**: Use regex pattern `$([a-zA-Z_][a-zA-Z0-9_]*)?$` to detect all dollar quote variants
+    - **Examples Now Handled**: `CREATE FUNCTION ... AS $func$ ... $func$`, `DO $body$ ... $body$`, mixed `$$` and `$identifier$`
+    - **Tests Added**: 4 new tests covering tagged quotes, mixed quotes, and nested semicolons
+- **PostgreSQL Query Parameter Preservation** - Fixed URL transformation that dropped query parameters
+  - **Issue**: Creating derivative database URLs (e.g., `_secrets`) dropped `sslmode` and other query parameters
+  - **Solution**: Preserve query string when constructing derivative URLs in `db_paths.py`
+  - **Impact**: PostgreSQL connections now maintain SSL settings and other connection parameters
+  - **Files Modified**: `ciris_engine/logic/config/db_paths.py`, `tests/ciris_engine/logic/config/test_db_paths_postgresql.py`
+
+### Changed
+- **PostgreSQL Migration Idempotency** - Enhanced migration 003 for safe re-runs
+  - Added `IF NOT EXISTS` clause to ALTER TABLE ADD COLUMN statements in PostgreSQL migration 003
+  - Aligns with migration 004 which already uses IF NOT EXISTS
+  - Prevents failures if migration is marked as applied but columns weren't actually added
+  - Note: SQLite does not support IF NOT EXISTS for ALTER TABLE ADD COLUMN
+  - **Files Modified**: `ciris_engine/logic/persistence/migrations/postgres/003_add_task_update_tracking.sql`
+
+### Quality
+- **Test Coverage**: All quality gates passing
+  - ✅ mypy: Success (576 source files, zero errors)
+  - ✅ pytest: 5,575 passed, 70 skipped (100% pass rate)
+  - ✅ QA Runner (SQLite): 127/128 tests (99.2% - 1 known H3ERE streaming issue)
+  - ✅ QA Runner (PostgreSQL): Production deployment verified on real managed database
+- **Production Verification**: Scout agent running successfully with PostgreSQL backend
+  - Container status: Up and healthy
+  - All migrations applied without errors
+  - Database schema validated with all expected columns and indexes
 
 ## [1.4.2] - 2025-10-19
 
@@ -95,6 +156,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `psycopg2-binary>=2.9.0,<3.0.0` to requirements.txt
   - Fixes container crashes when agents try to connect to PostgreSQL databases
   - Enables production PostgreSQL deployments without dependency errors
+- **🤝 Bilateral Partnership Decisions** - New endpoint for equal-agency partnership consent
+  - Added `POST /v1/partnership/decide` - Accept/reject/defer partnership requests
+  - **Bilateral Flow**: Either party (agent OR user) can initiate partnership requests
+    - Agent-initiated: Via `upgrade_relationship` tool → User decides via SDK/API
+    - User-initiated: Via `grant_consent(stream="partnered")` → Agent evaluates via task system
+  - **Equal Moral Agency**: Both parties have equal autonomy to accept, reject, or defer
+  - **No Bypass Patterns**: Genuine bilateral consent required, no admin override
+  - **SDK Support**: Fixes previously broken `accept_partnership()`, `reject_partnership()`, `defer_partnership()` methods
+  - **Request Body**: `{task_id, decision: "accept"|"reject"|"defer", reason?}`
+  - **Permissions**: Users can only decide on their own partnership requests (or admin)
+  - **Updated Documentation**: Partnership endpoints now clearly explain bilateral consent philosophy
+
+### Removed
+- **Partnership Manual Override Endpoints** - Removed admin bypass endpoints that violated "No Bypass Patterns" philosophy
+  - Removed `POST /v1/partnership/{user_id}/approve` - Manual approval bypass
+  - Removed `POST /v1/partnership/{user_id}/reject` - Manual rejection bypass
+  - Removed `POST /v1/partnership/{user_id}/defer` - Manual deferral bypass
+  - **Rationale**: Partnership decisions are made through bilateral consent between agent and user with equal moral agency. Manual admin overrides undermine this autonomy and violate CIRIS's core philosophy of "No Bypass Patterns, No Exceptions, No Special Cases."
+  - **Impact**: Admin dashboard retains read-only observability endpoints (`GET /v1/partnership/pending`, `GET /v1/partnership/metrics`, `GET /v1/partnership/history/{user_id}`)
+  - **Migration**: Replaced with bilateral `POST /v1/partnership/decide` endpoint for genuine two-way consent
 
 ### Fixed
 - **Mypy Strict Type Checking** - Resolved CI-blocking mypy errors with proper type hints

@@ -147,6 +147,136 @@ class TestSplitSQLStatements:
         assert "CREATE TABLE test" in result[0]
         assert "INSERT INTO test" in result[1]
 
+    def test_split_postgresql_dollar_quoted_block(self):
+        """Test PostgreSQL DO $$ ... END $$; blocks are not split internally."""
+        sql = """
+            ALTER TABLE tasks ADD COLUMN test TEXT;
+
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'scheduled_tasks') THEN
+                    ALTER TABLE scheduled_tasks ADD COLUMN test TEXT;
+                END IF;
+            END $$;
+
+            CREATE INDEX idx_test ON tasks(test);
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 3 statements: ALTER TABLE, DO block, CREATE INDEX
+        assert len(result) == 3
+        assert "ALTER TABLE tasks" in result[0]
+        assert "DO $$" in result[1]
+        assert "END $$;" in result[1]
+        assert "CREATE INDEX" in result[2]
+        # Verify DO block is intact with internal semicolons
+        assert "END IF;" in result[1]
+
+    def test_split_postgresql_multiple_dollar_blocks(self):
+        """Test multiple PostgreSQL DO $$ blocks in same migration."""
+        sql = """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'table1') THEN
+                    ALTER TABLE table1 ADD COLUMN col1 TEXT;
+                END IF;
+            END $$;
+
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'table2') THEN
+                    ALTER TABLE table2 ADD COLUMN col2 TEXT;
+                END IF;
+            END $$;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 2 separate DO blocks
+        assert len(result) == 2
+        assert "table1" in result[0]
+        assert "table2" in result[1]
+        assert "END IF;" in result[0]
+        assert "END IF;" in result[1]
+
+    def test_split_postgresql_tagged_dollar_quotes(self):
+        """Test PostgreSQL tagged dollar quotes ($func$, $BODY$, etc.)."""
+        sql = """
+            CREATE FUNCTION test_func() RETURNS void AS $func$
+            BEGIN
+                INSERT INTO test VALUES (1);
+                UPDATE test SET value = 2;
+            END;
+            $func$ LANGUAGE plpgsql;
+
+            CREATE FUNCTION another_func() RETURNS void AS $BODY$
+            DECLARE
+                v_count INTEGER;
+            BEGIN
+                SELECT COUNT(*) INTO v_count FROM users;
+            END;
+            $BODY$ LANGUAGE plpgsql;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 2 separate function definitions
+        assert len(result) == 2
+        assert "test_func" in result[0]
+        assert "$func$" in result[0]
+        assert "INSERT INTO test" in result[0]
+        assert "UPDATE test" in result[0]
+        assert "another_func" in result[1]
+        assert "$BODY$" in result[1]
+        assert "v_count" in result[1]
+
+    def test_split_postgresql_mixed_dollar_quotes(self):
+        """Test mixing simple $$ and tagged $identifier$ quotes."""
+        sql = """
+            DO $$
+            BEGIN
+                EXECUTE 'SELECT 1;';
+            END $$;
+
+            CREATE FUNCTION get_count() RETURNS INTEGER AS $body$
+            BEGIN
+                RETURN (SELECT COUNT(*) FROM items);
+            END;
+            $body$ LANGUAGE plpgsql;
+
+            ALTER TABLE items ADD COLUMN status TEXT;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 3 statements: DO block, function, ALTER TABLE
+        assert len(result) == 3
+        assert "DO $$" in result[0]
+        assert "EXECUTE" in result[0]
+        assert "CREATE FUNCTION" in result[1]
+        assert "$body$" in result[1]
+        assert "ALTER TABLE" in result[2]
+
+    def test_split_postgresql_nested_semicolons_in_tagged_quotes(self):
+        """Test that semicolons inside tagged dollar quotes are preserved."""
+        sql = """
+            CREATE FUNCTION complex_func() RETURNS void AS $function$
+            DECLARE
+                rec RECORD;
+            BEGIN
+                FOR rec IN SELECT * FROM users LOOP
+                    INSERT INTO log (user_id) VALUES (rec.id);
+                    UPDATE stats SET count = count + 1;
+                END LOOP;
+            END;
+            $function$ LANGUAGE plpgsql;
+        """
+        result = split_sql_statements(sql)
+
+        # Should be 1 statement with all internal semicolons preserved
+        assert len(result) == 1
+        assert "INSERT INTO log" in result[0]
+        assert "UPDATE stats" in result[0]
+        assert "END LOOP;" in result[0]
+        assert "$function$" in result[0]
+
 
 class TestMaskPasswordInURL:
     """Tests for mask_password_in_url()."""
@@ -297,6 +427,67 @@ class TestGetPendingMigrations:
         assert result[0].name == "001_initial.sql"
         assert result[1].name == "002_add_users.sql"
         assert result[2].name == "003_add_indexes.sql"
+
+
+class TestHelperFunctions:
+    """Tests for internal helper functions."""
+
+    def test_update_dollar_quote_state_opening(self):
+        """Test opening a dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$$", False, None)
+        assert in_quote is True
+        assert tag == "$$"
+
+    def test_update_dollar_quote_state_closing(self):
+        """Test closing a dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$$", True, "$$")
+        assert in_quote is False
+        assert tag is None
+
+    def test_update_dollar_quote_state_mismatched_tag(self):
+        """Test encountering different tag while in dollar-quoted block."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _update_dollar_quote_state
+
+        in_quote, tag = _update_dollar_quote_state("$func$", True, "$$")
+        assert in_quote is True
+        assert tag == "$$"
+
+    def test_should_finalize_statement_with_semicolon(self):
+        """Test should finalize when semicolon at end and not in dollar quote."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("CREATE TABLE test;", False) is True
+
+    def test_should_finalize_statement_in_dollar_quote(self):
+        """Test should not finalize when in dollar quote."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("INSERT INTO test;", True) is False
+
+    def test_should_finalize_statement_no_semicolon_at_end(self):
+        """Test should not finalize when semicolon not at end."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _should_finalize_statement
+
+        assert _should_finalize_statement("SELECT * FROM test; WHERE id = 1", False) is False
+
+    def test_finalize_statement_with_content(self):
+        """Test finalizing statement with content."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _finalize_statement
+
+        result = _finalize_statement(["  CREATE TABLE test  ", "  (id INTEGER)  "])
+        # Note: _finalize_statement joins with \n and strips outer whitespace only
+        assert result == "CREATE TABLE test  \n  (id INTEGER)"
+
+    def test_finalize_statement_empty(self):
+        """Test finalizing empty statement."""
+        from ciris_engine.logic.persistence.db.execution_helpers import _finalize_statement
+
+        result = _finalize_statement(["  ", ""])
+        assert result is None
 
 
 class TestRecordMigration:

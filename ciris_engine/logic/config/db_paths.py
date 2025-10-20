@@ -11,6 +11,31 @@ from urllib.parse import urlparse, urlunparse
 from ciris_engine.schemas.config.essential import EssentialConfig
 
 
+def _get_config_from_registry() -> Optional[EssentialConfig]:
+    """Get EssentialConfig from the service registry.
+
+    Returns:
+        EssentialConfig instance or None if not available
+    """
+    try:
+        from ciris_engine.logic.registries.base import ServiceRegistry
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        registry = ServiceRegistry()
+        config_services = registry.get_services_by_type(ServiceType.CONFIG)
+
+        if config_services:
+            config_service = config_services[0]
+            if hasattr(config_service, "essential_config"):
+                return config_service.essential_config
+            elif hasattr(config_service, "_config"):
+                return config_service._config
+
+        return None
+    except (ImportError, AttributeError):
+        return None
+
+
 def _modify_database_name_in_url(base_url: str, suffix: str) -> str:
     """Modify the database name in a PostgreSQL URL while preserving query parameters.
 
@@ -116,26 +141,9 @@ def get_secrets_db_full_path(config: Optional[EssentialConfig] = None) -> str:
         Full path to the secrets database file or modified PostgreSQL URL
     """
     if config is None:
-        # Try to get config from the service registry
-        try:
-            from ciris_engine.logic.registries.base import ServiceRegistry
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            registry = ServiceRegistry()
-            config_services = registry.get_services_by_type(ServiceType.CONFIG)
-
-            if config_services:
-                config_service = config_services[0]
-                if hasattr(config_service, "essential_config"):
-                    config = config_service.essential_config
-                elif hasattr(config_service, "_config"):
-                    config = config_service._config
-
-            if config is None:
-                # For secrets db, we can fall back to defaults as it's less critical
-                config = EssentialConfig()
-        except (ImportError, AttributeError):
-            # Fall back to defaults for secrets db
+        config = _get_config_from_registry()
+        if config is None:
+            # For secrets db, we can fall back to defaults as it's less critical
             config = EssentialConfig()
 
     # If using PostgreSQL (database_url is set), modify the database name
@@ -163,26 +171,9 @@ def get_audit_db_full_path(config: Optional[EssentialConfig] = None) -> str:
         Full path to the audit database file or modified PostgreSQL URL
     """
     if config is None:
-        # Try to get config from the service registry
-        try:
-            from ciris_engine.logic.registries.base import ServiceRegistry
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            registry = ServiceRegistry()
-            config_services = registry.get_services_by_type(ServiceType.CONFIG)
-
-            if config_services:
-                config_service = config_services[0]
-                if hasattr(config_service, "essential_config"):
-                    config = config_service.essential_config
-                elif hasattr(config_service, "_config"):
-                    config = config_service._config
-
-            if config is None:
-                # For audit db, we can fall back to defaults as it's less critical
-                config = EssentialConfig()
-        except (ImportError, AttributeError):
-            # Fall back to defaults for audit db
+        config = _get_config_from_registry()
+        if config is None:
+            # For audit db, we can fall back to defaults as it's less critical
             config = EssentialConfig()
 
     # If using PostgreSQL (database_url is set), modify the database name

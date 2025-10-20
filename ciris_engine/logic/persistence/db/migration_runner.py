@@ -93,6 +93,7 @@ def run_migrations(db_path: str | None = None) -> None:
 
             try:
                 statements = split_sql_statements(sql)
+
                 # Filter out statements that are ONLY comments (all lines start with --)
                 def is_all_comments(stmt: str) -> bool:
                     """Check if a statement contains only SQL comments."""

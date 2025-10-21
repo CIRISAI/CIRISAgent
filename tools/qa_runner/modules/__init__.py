@@ -8,6 +8,7 @@ from .consent_tests import ConsentTests
 from .dsar_tests import DSARTests
 from .filter_tests import FilterTestModule
 from .handler_tests import HandlerTestModule
+from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
 from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
@@ -22,4 +23,5 @@ __all__ = [
     "BillingTests",
     "FilterTestModule",
     "MultiOccurrenceTestModule",
+    "MessageIDDebugTests",
 ]

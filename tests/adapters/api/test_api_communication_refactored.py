@@ -284,7 +284,7 @@ class TestCreateObserveMessage:
         message = api_communication_service._create_observe_message(sample_observe_correlation)
 
         assert isinstance(message, FetchedMessage)
-        assert message.message_id == "observe-corr-456"
+        assert message.message_id == "msg-456"  # Now uses original message_id from parameters
         assert message.author_id == "user123"
         assert message.author_name == "Test User"
         assert message.content == "Hello CIRIS!"

@@ -27,6 +27,7 @@ class QAModule(Enum):
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
+    MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
 
     # Handler modules
     HANDLERS = "handlers"
@@ -161,6 +162,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.MULTI_OCCURRENCE:
             return MultiOccurrenceTestModule.get_all_multi_occurrence_tests()
+        elif module == QAModule.MESSAGE_ID_DEBUG:
+            # Message ID debug tests use SDK client
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:

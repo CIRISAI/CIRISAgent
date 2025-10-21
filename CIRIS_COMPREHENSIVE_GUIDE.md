@@ -13,16 +13,19 @@
 4. [Architecture Overview](#architecture-overview)
 5. [Security & Anti-Spoofing](#security--anti-spoofing)
 6. [Service Architecture](#service-architecture)
-7. [API v1.0 Complete Reference](#api-v10-complete-reference)
-8. [Agent Creation Ceremony](#agent-creation-ceremony)
-9. [Development Tools](#development-tools)
-10. [Production Deployment](#production-deployment)
-11. [Debugging Guidelines](#debugging-guidelines)
-12. [Local Development](#local-development)
-13. [Testing Framework](#testing-framework)
-14. [Critical Commands](#critical-commands)
-15. [Important URLs](#important-urls)
-16. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
+7. [Billing & Credits](#billing--credits)
+8. [Privacy Safeguards & Transparency](#privacy-safeguards--transparency)
+9. [API v1.0 Complete Reference](#api-v10-complete-reference)
+10. [Agent Creation Ceremony](#agent-creation-ceremony)
+11. [Development Tools](#development-tools)
+12. [Production Deployment](#production-deployment)
+13. [Scout GUI - User Interface](#scout-gui---user-interface)
+14. [Debugging Guidelines](#debugging-guidelines)
+15. [Local Development](#local-development)
+16. [Testing Framework](#testing-framework)
+17. [Critical Commands](#critical-commands)
+18. [Important URLs](#important-urls)
+19. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
 
 ---
 
@@ -84,6 +87,8 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 6. **Human Attributable Agent Creation**: Full stewardship implementation
 7. **Privacy Safeguards**: 14-day retention, DSAR compliance, transparency feed
 8. **Stop Conditions**: Clear red lines, sunset triggers, "when we pause" policy
+9. **Billing & Credits**: Simple credit system ($5 = 20 interactions, 3 free with Google OAuth)
+10. **Consent Management**: Three-stream model (TEMPORARY, PARTNERED, ANONYMOUS)
 
 ### OAuth Configuration
 - **OAuth Callback**: `https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback`
@@ -250,6 +255,64 @@ Services NEVER create other services. All creation happens in ServiceInitializer
 
 ---
 
+## Billing & Credits
+
+### Credit Model
+
+CIRIS uses a simple, transparent credit-based system for agent interactions:
+
+**What is a "Credit"?**
+- **1 credit = 1 interaction session**
+- Each interaction allows **up to 7 processing rounds**
+- Does NOT guarantee a response (agent may DEFER, REJECT, or OBSERVE)
+- Consumed when user sends a message to the agent
+
+**Pricing**:
+- **$5.00 = 20 credits (20 interactions)**
+- **Price per interaction**: $0.25
+- **Free trial**: 3 free interactions for Google OAuth users
+
+**How Credits Work**:
+1. User authenticates via Google OAuth → receives 3 free credits
+2. User sends message to agent → 1 credit consumed
+3. Agent processes up to 7 rounds (H3ERE pipeline stages)
+4. Agent may respond, defer, reject, or observe
+5. Credit consumed regardless of outcome
+6. When credits exhausted → purchase required
+
+**Checking Credit Balance**:
+```bash
+# Via API
+GET /v1/api/billing/credits
+Authorization: Bearer <token>
+
+# Response shows:
+{
+  "has_credit": true,
+  "credits_remaining": 17,
+  "free_uses_remaining": 0,
+  "total_uses": 3,
+  "purchase_required": false
+}
+```
+
+**Purchase Flow**:
+1. `POST /v1/api/billing/purchase/initiate` - Get Stripe payment intent
+2. User completes Stripe payment (card details via Stripe Elements)
+3. `GET /v1/api/billing/purchase/status/{payment_id}` - Poll for completion
+4. Credits automatically added to account
+
+**Important Notes**:
+- Credits never expire
+- No subscription or recurring charges
+- Pay only for what you use
+- Full refund within 7 days if unused
+- DSAR requests allow credit balance export
+
+See `docs/BILLING_API.md` for complete API documentation.
+
+---
+
 ## Privacy Safeguards & Transparency
 
 ### Data Retention Policy
@@ -259,11 +322,59 @@ Services NEVER create other services. All creation happens in ServiceInitializer
 - **Incident Reports**: 90 days for safety
 - **System Metrics**: Aggregated indefinitely (no personal data)
 
+### Consent Management
+
+CIRIS implements a **three-stream consent model** for ethical data handling:
+
+#### 1. TEMPORARY (Default)
+- **Auto-applied**: All new users start here
+- **Duration**: 14-day auto-expiry, renewed on interaction
+- **Data Categories**: ESSENTIAL only (user ID, session, context)
+- **Retention**: Full deletion after 14 days of inactivity
+- **Use Case**: Casual interactions, trial usage
+
+#### 2. PARTNERED
+- **Requires**: Bilateral consent (user request + agent approval)
+- **Duration**: Persistent (no auto-expiry)
+- **Data Categories**: ESSENTIAL + BEHAVIORAL + IMPROVEMENT
+- **Retention**: Maintained for relationship duration
+- **Use Case**: Long-term collaboration, personalized experience
+- **Process**:
+  1. User requests partnership via `/v1/consent/partnership/request`
+  2. Agent reviews via H3ERE task processing
+  3. Agent accepts (TASK_COMPLETE), rejects (REJECT), or defers (DEFER)
+  4. User notified of decision
+
+#### 3. ANONYMOUS
+- **Duration**: Indefinite
+- **Data Categories**: STATISTICAL only (aggregated, no PII)
+- **Retention**: Aggregated statistics only
+- **Use Case**: Minimal data footprint, privacy-focused users
+
+**Consent Categories**:
+- **ESSENTIAL**: User ID, session management, communication context
+- **BEHAVIORAL**: Interaction patterns, preferences, response styles
+- **IMPROVEMENT**: Error patterns, feature usage, performance metrics
+- **STATISTICAL**: Anonymized aggregate data, usage trends
+
+**User Controls**:
+- `GET /v1/consent/status` - Check current consent stream
+- `POST /v1/consent/stream` - Change consent stream (upgrade or downgrade)
+- `POST /v1/consent/partnership/request` - Request partnership upgrade
+- `DELETE /v1/consent/partnership/{partner_id}` - Revoke partnership (unilateral)
+
+**Downgrade Rights**:
+- Users can downgrade at any time (unilateral)
+- PARTNERED → TEMPORARY: Immediate, data retention reset to 14 days
+- PARTNERED → ANONYMOUS: Immediate, PII anonymized
+- TEMPORARY → ANONYMOUS: Immediate
+
 ### DSAR Compliance (`/v1/dsr`)
 - Submit data requests (access, delete, export, correct)
 - Track requests with ticket ID
 - 14-day response time (3 days for urgent)
 - Admin management endpoints
+- **Export includes**: Message history, consent status, credit balance, audit trail
 
 ### Public Transparency Feed (`/v1/transparency`)
 - **No authentication required** - Public access
@@ -271,6 +382,32 @@ Services NEVER create other services. All creation happens in ServiceInitializer
 - Action breakdown (SPEAK, DEFER, REJECT, OBSERVE)
 - Safety metrics (harmful requests blocked, rate limits)
 - System health metrics
+
+### OAuth & Authentication
+
+**Google OAuth Integration**:
+- **Callback URL**: `https://agents.ciris.ai/v1/auth/oauth/{agent_id}/google/callback`
+- **Free Trial**: 3 free interactions upon first OAuth login
+- **Auto-provisioning**: User account created on first OAuth login
+- **Domain Restrictions**: Configurable per agent (optional)
+- **Token Expiry**: JWT tokens expire after 24 hours (configurable)
+
+**Authentication Methods**:
+1. **Google OAuth** (recommended for users)
+   - One-click sign-in
+   - No password management
+   - 3 free interactions included
+   - Secure token-based access
+
+2. **Username/Password** (admin/development)
+   - Default credentials: `admin/ciris_admin_password` (development only)
+   - JWT token after login
+   - Token refresh endpoint available
+
+3. **Service Tokens** (agent-to-agent, CI/CD)
+   - Format: `Authorization: Bearer service:TOKEN_VALUE`
+   - Used for deployment automation
+   - Manager-level access for agent orchestration
 
 ### Stop Conditions
 
@@ -684,6 +821,304 @@ curl https://agents.ciris.ai/v1/transparency/feed
 - **No staged containers**: Clean swaps only
 - **Graceful shutdown**: Agents process as task
 - **Agent autonomy**: Can defer/reject updates
+
+---
+
+## Scout GUI - User Interface
+
+### Overview
+
+Scout GUI is the Next.js TypeScript web interface for interacting with CIRIS agents. It provides a modern, responsive interface for chat, account management, billing, and system administration.
+
+**Access**:
+- **Production**: https://agents.ciris.ai/
+- **Local Development**: http://localhost:3000
+
+### Main Application Routes
+
+#### `/` and `/interact` - Primary Chat Interface
+**Purpose**: Real-time conversation with CIRIS agents
+
+**Features**:
+- Live chat with agent responses
+- **Real-time reasoning visualization** via SSE (Server-Sent Events)
+- Task and thought timeline display
+- Environmental impact tracking (carbon, water, tokens)
+- Basic and Detailed view modes
+- Message history with correlation tracking
+
+**User Flow**:
+1. User sends message
+2. GUI displays SSE events in real-time:
+   - DMA results
+   - Snapshot and context
+   - Thought generation
+   - Conscience evaluation
+   - Action execution
+3. Agent response appears in chat
+4. Environmental metrics update
+
+#### `/dashboard` - System Overview
+Quick access to:
+- Recent conversations
+- System health status
+- Credit balance
+- Key features
+
+### Account Management Routes
+
+#### `/account` - Account Hub
+Central location for account-related settings
+
+#### `/account/settings` - Profile Settings
+- User preferences
+- Display options
+- Notification settings
+
+#### `/account/api-keys` - API Key Management
+- Create API keys for programmatic access
+- View existing keys
+- Revoke keys
+- Copy keys to clipboard
+
+**Use Case**: Generate keys for SDK usage or external integrations
+
+#### `/account/privacy` - Privacy Controls
+- Data privacy preferences
+- Export your data (DSAR)
+- Request data deletion
+- View retention policies
+
+#### `/account/consent` - Consent Management
+- Review current consent stream (TEMPORARY, PARTNERED, ANONYMOUS)
+- Request partnership upgrade
+- Downgrade consent level
+- View data categories collected
+
+### Billing & Usage
+
+#### `/billing` - Billing Dashboard
+**Features**:
+- **Current credit balance** (free + purchased)
+- **Usage statistics** (total interactions, remaining credits)
+- **Purchase credits** via Stripe integration
+- Billing history
+- Usage tracking over time
+
+**Purchase Flow**:
+1. Click "Purchase Credits" button
+2. Stripe payment modal appears
+3. Enter card details (secured by Stripe Elements)
+4. Confirm payment
+5. Credits automatically added to account
+6. Balance updates in real-time
+
+**Pricing Display**:
+- Shows: "$5.00 for 20 interactions"
+- Price per interaction: $0.25
+- Credits never expire
+
+### Memory & Knowledge
+
+#### `/memory` - Memory Graph Visualization
+**Features**:
+- Interactive force-directed graph of agent's memory
+- Node types: User, Message, Thought, Action, Observation
+- Relationship visualization
+- Search and filter capabilities
+- Zoom and pan controls
+
+**Use Cases**:
+- Understand what the agent remembers
+- Explore conversation relationships
+- Debug memory issues
+- Export memory data
+
+### Privacy & Consent Routes
+
+#### `/consent` - Global Consent Management
+- Review all consent preferences
+- Manage data usage permissions
+- Marketing preferences
+- Research participation opt-in/out
+
+### Authentication Routes
+
+#### `/login` - Login Page
+**Options**:
+1. **Google OAuth** (recommended)
+   - One-click sign-in
+   - 3 free interactions included
+   - No password management
+
+2. **Username/Password**
+   - For admin/development use
+   - Default dev credentials: `admin/ciris_admin_password`
+
+#### OAuth Flow
+1. User clicks "Sign in with Google"
+2. Redirects to `/oauth/[agent]/google/callback`
+3. OAuth completion at `/oauth-complete.html`
+4. Token stored in localStorage
+5. Redirect to `/interact`
+
+### System & Administration Routes (Admin Only)
+
+#### `/system` - System Health Monitoring
+- Overall system status
+- Service health (22 core services + adapters)
+- Resource usage (CPU, memory, disk)
+- Uptime statistics
+
+#### `/services` - Service Health Dashboard
+- Individual service status
+- Health check results
+- Circuit breaker states
+- Service dependencies
+
+#### `/status-dashboard` - Comprehensive Status
+- All 22 core services
+- Adapter services status
+- Bus health (6 message buses)
+- Processing queue status
+
+#### `/runtime` - Runtime Control
+- Pause/resume processing
+- Single-step mode
+- Queue inspection
+- State management
+
+#### `/audit` - Audit Trail Viewer
+- View all audit events
+- Hash chain verification
+- Filter by user, action, timestamp
+- Export audit logs
+- Signature verification
+
+#### `/config` - Configuration Management
+- View system configuration
+- Update config values (admin only)
+- Agent-specific settings
+
+#### `/logs` - System Logs
+- Real-time log viewer
+- Filter by severity (INFO, WARNING, ERROR, CRITICAL)
+- Search log messages
+- Download logs
+
+#### `/users` - User Management (Admin)
+- List all users
+- Create new users
+- Update user roles
+- Delete users
+- View user activity
+
+### Tools & Utilities
+
+#### `/tools` - Agent Tools Management
+- View available tools
+- Enable/disable tools
+- Tool configuration
+- Tool usage statistics
+
+#### `/comms` - Communication Channels
+- Manage Discord integration
+- API adapter configuration
+- Channel settings
+
+### Documentation & Testing (Dev/Staging)
+
+#### `/docs` - API Documentation
+- Interactive API docs (Swagger/OpenAPI)
+- Endpoint reference
+- Request/response examples
+
+#### `/api-demo` - API Testing
+- Test API endpoints interactively
+- View request/response
+- Save favorite queries
+
+#### `/test-auth` - Authentication Testing
+- Test OAuth flows
+- Token validation
+- Session management
+
+### Route Categories
+
+**Public Routes** (no auth required):
+- `/login`
+- `/oauth/**`
+- `/api/version`
+
+**Protected Routes** (auth required):
+- `/` (interact)
+- `/account/**`
+- `/billing`
+- `/memory`
+- `/consent`
+- `/dashboard`
+
+**Admin Routes** (admin role required):
+- `/users`, `/system`, `/services`, `/audit`, `/config`, `/logs`, `/runtime`, `/status-dashboard`
+
+### User Guidance - Common Tasks
+
+**For End Users:**
+
+1. **First-time setup**:
+   - Go to `/login`
+   - Click "Sign in with Google" (gets 3 free interactions)
+   - Accept consent at `/account/consent`
+   - Start chatting at `/interact`
+
+2. **Check credit balance**:
+   - Navigate to `/billing`
+   - View "Credits Remaining"
+
+3. **Purchase more credits**:
+   - Go to `/billing`
+   - Click "Purchase Credits"
+   - Complete Stripe payment ($5 = 20 interactions)
+
+4. **Manage privacy**:
+   - Visit `/account/privacy`
+   - Request data export (DSAR)
+   - Request data deletion
+
+5. **Upgrade to partnered relationship**:
+   - Go to `/account/consent`
+   - Click "Request Partnership"
+   - Agent will review and approve/reject
+
+**For Admins:**
+
+1. **Check system health**:
+   - Visit `/status-dashboard`
+   - View all 22 services + adapters
+   - Check for errors
+
+2. **Review audit trail**:
+   - Go to `/audit`
+   - Filter by user or time range
+   - Verify hash chain integrity
+
+3. **Manage users**:
+   - Navigate to `/users`
+   - Create/update/delete accounts
+   - Assign roles
+
+4. **Monitor logs**:
+   - Visit `/logs`
+   - Filter by severity
+   - Search for errors
+
+### Mobile Responsiveness
+
+All routes are mobile-friendly, with particular optimization for:
+- `/interact` - Touch-optimized chat
+- `/account` - Mobile account management
+- `/billing` - Mobile payment flow
+- `/login` - Mobile-friendly OAuth
 
 ---
 

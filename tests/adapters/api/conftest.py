@@ -146,16 +146,16 @@ def expected_fetched_messages(mock_time_service):
     timestamp = mock_time_service.now().isoformat()
 
     return [
-        # User message (observe)
+        # User message (observe) - now uses original message_id from parameters
         FetchedMessage(
-            message_id="observe-corr-456",
+            message_id="msg-456",
             author_id="user123",
             author_name="Test User",
             content="Hello CIRIS!",
             timestamp=timestamp,
             is_bot=False,
         ),
-        # Agent message (speak)
+        # Agent message (speak) - uses correlation_id (no message_id in params)
         FetchedMessage(
             message_id="speak-corr-123",
             author_id="ciris",

@@ -201,7 +201,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         params = self._extract_parameters(correlation.request_data)
 
         return FetchedMessage(
-            message_id=correlation.correlation_id,
+            message_id=params.get("message_id", correlation.correlation_id),
             author_id=params.get("author_id", "unknown"),
             author_name=params.get("author_name", "User"),
             content=params.get("content", ""),

@@ -123,6 +123,7 @@ class QARunner:
             QAModule.PARTNERSHIP,
             QAModule.BILLING,
             QAModule.BILLING_INTEGRATION,
+            QAModule.MESSAGE_ID_DEBUG,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -598,7 +599,7 @@ class QARunner:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
-        from .modules import BillingTests, ConsentTests, DSARTests, PartnershipTests
+        from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
 
         all_passed = True
@@ -610,6 +611,7 @@ class QARunner:
             QAModule.PARTNERSHIP: PartnershipTests,
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
+            QAModule.MESSAGE_ID_DEBUG: MessageIDDebugTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

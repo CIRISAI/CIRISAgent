@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2025-10-21
+
+### Fixed
+- **Message ID Correlation Bug** - Fixed message_id mismatch between /agent/message and /agent/history
+  - **Issue**: POST /v1/agent/message returned one message_id, but GET /v1/agent/history showed different ID
+  - **Root Cause**: _create_observe_message() was using correlation.correlation_id instead of original message_id
+  - **Solution**: Changed line 204 to use params.get("message_id", correlation.correlation_id)
+  - **Testing**: Added message_id_debug_test.py QA module
+  - **Files Modified**: ciris_engine/logic/adapters/api/api_communication.py:204
+
+### Changed
+- **Comprehensive Guide Updates** - Enhanced user guidance with billing, consent, and GUI navigation
+  - **Billing & Credits Section**: Added detailed credit model documentation
+    - 1 credit = 1 interaction (up to 7 processing rounds)
+    - $5.00 = 20 interactions ($0.25 per interaction)
+    - 3 free interactions for Google OAuth users
+    - Purchase flow via Stripe with polling
+    - Credits never expire, no subscriptions
+  - **Consent Management**: Documented three-stream consent model
+    - TEMPORARY (default): 14-day auto-expiry, ESSENTIAL data only
+    - PARTNERED: Bilateral consent, persistent, ESSENTIAL + BEHAVIORAL + IMPROVEMENT data
+    - ANONYMOUS: Statistical data only, no PII
+    - User controls for upgrade/downgrade with API endpoints
+  - **OAuth & Authentication**: Added Google OAuth details
+    - Callback URL format: `https://agents.ciris.ai/v1/auth/oauth/{agent_id}/google/callback`
+    - 3 free interactions upon first OAuth login
+    - Auto-provisioning of user accounts
+  - **Scout GUI Routes**: Complete navigation guide for web interface
+    - Main routes: `/`, `/interact`, `/dashboard`
+    - Account management: `/account/**` (settings, API keys, privacy, consent)
+    - Billing: `/billing` with Stripe integration
+    - Memory visualization: `/memory` with graph explorer
+    - Admin routes: `/system`, `/services`, `/audit`, `/config`, `/logs`, `/runtime`, `/users`
+    - User guidance for common tasks (first-time setup, purchasing credits, managing privacy)
+  - **DSAR Compliance**: Enhanced privacy documentation with export details
+  - **Files Modified**: `CIRIS_COMPREHENSIVE_GUIDE.md`
+
 ## [1.4.4] - 2025-10-20
 
 ### Fixed

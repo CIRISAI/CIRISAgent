@@ -36,6 +36,9 @@ Examples:
   # Run in parallel with JSON output
   python -m tools.qa_runner --parallel --json --report-dir ./reports
 
+  # Run tests against both SQLite and PostgreSQL backends in parallel
+  python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-backends
+
 Available modules:
   auth            - Authentication endpoints
   telemetry       - Telemetry and metrics
@@ -73,6 +76,31 @@ Available modules:
     parser.add_argument("--no-mock-llm", action="store_true", help="Don't use mock LLM (requires real LLM)")
     parser.add_argument(
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
+    )
+
+    # Database backend configuration
+    parser.add_argument(
+        "--database-backends",
+        nargs="+",
+        choices=["sqlite", "postgres"],
+        default=None,
+        help="Database backends to test (default: sqlite only). Specify multiple for sequential multi-backend testing.",
+    )
+    parser.add_argument(
+        "--postgres-url",
+        default="postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db",
+        help="PostgreSQL connection URL (default: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db)",
+    )
+    parser.add_argument(
+        "--postgres-port",
+        type=int,
+        default=8001,
+        help="Port for PostgreSQL backend server (default: 8001, SQLite uses --port)",
+    )
+    parser.add_argument(
+        "--parallel-backends",
+        action="store_true",
+        help="Run database backend tests in parallel (requires --database-backends with 2+ backends)",
     )
 
     # Authentication
@@ -129,6 +157,10 @@ def main():
         auto_start_server=not args.no_auto_start,
         mock_llm=not args.no_mock_llm,
         adapter=args.adapter,
+        database_backends=args.database_backends,
+        postgres_url=args.postgres_url,
+        postgres_port=args.postgres_port,
+        parallel_backends=args.parallel_backends,
     )
 
     # Create and run runner

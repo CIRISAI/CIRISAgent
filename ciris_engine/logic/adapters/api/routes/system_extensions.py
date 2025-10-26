@@ -852,6 +852,10 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
             stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
             reasoning_event_stream.subscribe(stream_queue)
 
+            logger.debug(
+                f" SSE stream connected - user_id={auth.user_id}, role={user_role}, can_see_all={can_see_all}, allowed_channel_ids={allowed_channel_ids}"
+            )
+
             try:
                 # Send initial connection event
                 yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
@@ -862,11 +866,16 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                         # Wait for step results with timeout to send keepalive
                         step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
 
+                        logger.debug(
+                            f" SSE received update from queue - events_count={len(step_update.get('events', []))}, can_see_all={can_see_all}"
+                        )
+
                         # SECURITY: Filter events for OBSERVER users
                         # ADMIN+ users bypass filtering and see all events
                         if not can_see_all:
                             events = step_update.get("events", [])
                             if not events:
+                                logger.debug(" SSE no events in update, skipping")
                                 continue
 
                             # Batch lookup uncached task IDs
@@ -905,8 +914,10 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                             # Replace events with filtered list
                             if filtered_events:
                                 step_update = {"events": filtered_events}
+                                logger.debug(f" SSE sending {len(filtered_events)} events to client")
                             else:
                                 # No events for this user, skip this update silently
+                                logger.debug(" SSE all events filtered out, skipping update")
                                 continue
 
                         # Stream the step update

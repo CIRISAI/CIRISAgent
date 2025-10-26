@@ -156,4 +156,17 @@ class ComprehensiveSingleStepTestModule:
                 requires_auth=True,
                 description="Verify system returned to normal active state",
             ),
+            # CRITICAL: Cleanup - Force resume even if previous tests failed
+            # This prevents the system from being left in a paused state
+            # which would cause subsequent streaming tests to fail
+            QATestCase(
+                name="CLEANUP: Force Resume Processor",
+                module=QAModule.SYSTEM,
+                endpoint="/v1/system/runtime/resume",
+                method="POST",
+                payload={},
+                expected_status=200,
+                requires_auth=True,
+                description="Emergency cleanup: ensure processor is always resumed",
+            ),
         ]

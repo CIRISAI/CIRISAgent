@@ -270,6 +270,16 @@ class CIRISRuntime:
         return self.service_initializer.maintenance_service if self.service_initializer else None
 
     @property
+    def database_maintenance_service(self) -> Optional[DatabaseMaintenanceServiceProtocol]:
+        """Alias for maintenance_service - used by API adapter service injection.
+
+        The API adapter's service configuration expects 'database_maintenance_service'
+        while the internal runtime property is named 'maintenance_service'. This alias
+        maintains backward compatibility and ensures all 22 core services are accessible.
+        """
+        return self.maintenance_service
+
+    @property
     def shutdown_service(self) -> Optional[ShutdownServiceProtocol]:
         """Access to shutdown service."""
         return self.service_initializer.shutdown_service if self.service_initializer else None
@@ -490,6 +500,15 @@ class CIRISRuntime:
         # Start adapters and wait for critical services
         init_manager.register_step(
             phase=InitializationPhase.SERVICES, name="Start Adapters", handler=self._start_adapters, critical=True
+        )
+
+        # Register adapter services immediately after adapters start
+        # This ensures communication and other adapter services are available before components build
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Register Adapter Services",
+            handler=self._register_adapter_services,
+            critical=True,
         )
 
         # Initialize maintenance service and perform cleanup BEFORE components
@@ -1085,12 +1104,12 @@ class CIRISRuntime:
 
         if not self.service_registry:
             raise RuntimeError("Service registry not initialized")
-        logger.info(f"[AUDIT DEBUG] self.service_initializer exists: {self.service_initializer is not None}")
+        logger.debug(f"[AUDIT self.service_initializer exists: {self.service_initializer is not None}")
         if self.service_initializer:
-            logger.info(f"[AUDIT DEBUG] service_initializer.audit_service: {self.service_initializer.audit_service}")
-        logger.info(f"[AUDIT DEBUG] Creating BusManager with audit_service={self.audit_service}")
-        logger.info(f"[AUDIT DEBUG] self.audit_service type: {type(self.audit_service)}")
-        logger.info(f"[AUDIT DEBUG] self.audit_service is None: {self.audit_service is None}")
+            logger.debug(f"[AUDIT service_initializer.audit_service: {self.service_initializer.audit_service}")
+        logger.debug(f"[AUDIT Creating BusManager with audit_service={self.audit_service}")
+        logger.debug(f"[AUDIT self.audit_service type: {type(self.audit_service)}")
+        logger.debug(f"[AUDIT self.audit_service is None: {self.audit_service is None}")
 
         assert self.service_registry is not None
         # BusManager requires TimeServiceProtocol, not Optional[TimeService]

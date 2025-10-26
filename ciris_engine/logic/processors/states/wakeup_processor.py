@@ -67,6 +67,98 @@ class WakeupProcessor(BaseProcessor):
             ),
         ]
 
+    def _validate_task_state(self, task: Task) -> Tuple[bool, str]:
+        """Validate task state and return status information.
+
+        Args:
+            task: Task to validate
+
+        Returns:
+            Tuple of (is_valid, status_message) where is_valid indicates
+            if the task exists and is ACTIVE.
+        """
+        current_task = persistence.get_task_by_id(task.task_id)
+        if not current_task:
+            return False, "missing"
+        if current_task.status != TaskStatus.ACTIVE:
+            return False, current_task.status.value
+        return True, "active"
+
+    def _get_task_thoughts_summary(self, task_id: str) -> Dict[str, Any]:
+        """Get summary of thought statuses for a task.
+
+        Args:
+            task_id: ID of task to get thoughts for
+
+        Returns:
+            Dict with counts of thoughts by status
+        """
+        thoughts = persistence.get_thoughts_by_task_id(task_id)
+        return {
+            "total": len(thoughts),
+            "pending": sum(1 for t in thoughts if t.status == ThoughtStatus.PENDING),
+            "processing": sum(1 for t in thoughts if t.status == ThoughtStatus.PROCESSING),
+            "completed": sum(1 for t in thoughts if t.status == ThoughtStatus.COMPLETED),
+            "thoughts": thoughts,
+        }
+
+    def _build_step_status(self, step_task: Task, step_number: int) -> Dict[str, Any]:
+        """Build status dictionary for a single wakeup step.
+
+        Args:
+            step_task: The task for this step
+            step_number: The step number (1-indexed)
+
+        Returns:
+            Dict with step status information
+        """
+        current_task = persistence.get_task_by_id(step_task.task_id)
+        status = "missing" if not current_task else current_task.status.value
+        step_type = step_task.task_id.split("_")[0] if "_" in step_task.task_id else "unknown"
+
+        return {
+            "step": step_number,
+            "task_id": step_task.task_id,
+            "status": status,
+            "type": step_type,
+        }
+
+    def _needs_new_thought(self, existing_thoughts: List[Any], current_task: Optional[Task]) -> bool:
+        """Determine if a new thought should be created for a task.
+
+        Args:
+            existing_thoughts: List of existing thoughts for the task
+            current_task: The current task state, or None if task doesn't exist
+
+        Returns:
+            True if a new thought should be created
+        """
+        # Don't create if task doesn't exist or isn't active
+        if not current_task or current_task.status != TaskStatus.ACTIVE:
+            return False
+
+        # Don't create if no existing thoughts - this should create
+        if not existing_thoughts:
+            return True
+
+        # Don't create if there are pending or processing thoughts
+        if any(t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING] for t in existing_thoughts):
+            return False
+
+        # If task is active and has thoughts but none are pending/processing, create new
+        return current_task.status == TaskStatus.ACTIVE
+
+    def _collect_steps_status(self) -> List[Dict[str, Any]]:
+        """Collect status information for all wakeup steps.
+
+        Returns:
+            List of status dicts for each step
+        """
+        return [
+            self._build_step_status(task, i + 1)
+            for i, task in enumerate(self.wakeup_tasks[1:])
+        ]
+
     def __init__(
         self,
         *args: Any,
@@ -150,67 +242,49 @@ class WakeupProcessor(BaseProcessor):
 
                 logger.debug(f"Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation")
                 for i, step_task in enumerate(self.wakeup_tasks[1:]):
-                    current_task = persistence.get_task_by_id(step_task.task_id)
+                    # Use helper to validate task state
+                    is_valid, status_str = self._validate_task_state(step_task)
                     logger.debug(
-                        f"Step {i+1}: task_id={step_task.task_id}, status={current_task.status if current_task else 'missing'}"
+                        f"Step {i+1}: task_id={step_task.task_id}, status={status_str}"
                     )
 
-                    if not current_task or current_task.status != TaskStatus.ACTIVE:
-                        logger.debug(
-                            f"Skipping step {i+1} - not ACTIVE (status: {current_task.status if current_task else 'missing'})"
-                        )
+                    if not is_valid:
+                        logger.debug(f"Skipping step {i+1} - not ACTIVE (status: {status_str})")
                         continue
 
-                    existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
-                    logger.debug(f"Step {i+1} has {len(existing_thoughts)} existing thoughts")
+                    # Use helper to get thought summary
+                    thought_summary = self._get_task_thoughts_summary(step_task.task_id)
+                    existing_thoughts = thought_summary["thoughts"]
+                    logger.debug(f"Step {i+1} has {thought_summary['total']} existing thoughts")
+                    logger.debug(f"Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}")
 
-                    thought_statuses = [t.status.value for t in existing_thoughts] if existing_thoughts else []
-                    logger.debug(f"Step {i+1} thought statuses: {thought_statuses}")
-
-                    pending_thoughts = [t for t in existing_thoughts if t.status == ThoughtStatus.PENDING]
-                    if pending_thoughts:
+                    if thought_summary["pending"] > 0:
                         logger.debug(
-                            f"Step {i+1} has {len(pending_thoughts)} PENDING thoughts - they will be processed"
+                            f"Step {i+1} has {thought_summary['pending']} PENDING thoughts - they will be processed"
                         )
                         processed_any = True
                         continue
 
-                    processing_thoughts = [t for t in existing_thoughts if t.status == ThoughtStatus.PROCESSING]
-                    if processing_thoughts:
+                    if thought_summary["processing"] > 0:
                         logger.debug(
-                            f"Step {i+1} has {len(processing_thoughts)} PROCESSING thoughts - waiting for completion"
+                            f"Step {i+1} has {thought_summary['processing']} PROCESSING thoughts - waiting for completion"
                         )
                         continue
 
-                    if existing_thoughts and current_task.status == TaskStatus.ACTIVE:
+                    # Use helper to determine if new thought is needed
+                    current_task = persistence.get_task_by_id(step_task.task_id)
+                    if self._needs_new_thought(existing_thoughts, current_task):
                         logger.debug(
-                            f"Step {i+1} has {len(existing_thoughts)} existing thoughts but task is ACTIVE - creating new thought"
+                            f"Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
                         )
                         thought, processing_context = self._create_step_thought(step_task, round_number)
-                        logger.debug(f"Created new thought {thought.thought_id} for active step {i+1}")
-                        processed_any = True
-                    elif not existing_thoughts:
-                        logger.debug(f"Creating thought for step {i+1} (no existing thoughts)")
-                        thought, processing_context = self._create_step_thought(step_task, round_number)
-                        logger.debug(f"Created thought {thought.thought_id} for wakeup step {i+1}")
+                        logger.debug(f"Created new thought {thought.thought_id} for step {i+1}")
                         processed_any = True
                     else:
-                        logger.debug(f"Step {i+1} has existing thoughts and task not active, skipping")
+                        logger.debug(f"Step {i+1} does not need new thought, skipping")
 
-                steps_status: List[Any] = []
-                for i, step_task in enumerate(self.wakeup_tasks[1:]):
-                    current_task = persistence.get_task_by_id(step_task.task_id)
-                    status = "missing"
-                    if current_task:
-                        status = current_task.status.value
-                    steps_status.append(
-                        {
-                            "step": i + 1,
-                            "task_id": step_task.task_id,
-                            "status": status,
-                            "type": step_task.task_id.split("_")[0] if "_" in step_task.task_id else "unknown",
-                        }
-                    )
+                # Use helper to collect steps status
+                steps_status = self._collect_steps_status()
 
                 all_complete = all(s["status"] == "completed" for s in steps_status)
 

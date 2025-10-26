@@ -340,9 +340,9 @@ class TestActionSelectionPDMA:
                 )
 
                 assert result.selected_action == HandlerActionType.OBSERVE
-                # Verify warning was logged
-                mock_logger.warning.assert_called_with(
-                    "OBSERVE ACTION DEBUG: run_action_selection_pdma returning OBSERVE action successfully"
+                # Verify debug was logged
+                mock_logger.debug.assert_called_with(
+                    "OBSERVE ACTION: run_action_selection_pdma returning OBSERVE action successfully"
                 )
 
 

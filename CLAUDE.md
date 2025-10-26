@@ -359,6 +359,12 @@ python -m tools.qa_runner api_full      # Complete API test suite (24 tests)
 
 # Full verbose output for debugging
 python -m tools.qa_runner <module> --verbose
+
+# Multi-backend testing (sequential by default)
+python -m tools.qa_runner auth --database-backends sqlite postgres
+
+# Parallel backend testing (run SQLite and PostgreSQL simultaneously)
+python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-backends
 ```
 
 **QA Runner Features:**
@@ -368,6 +374,7 @@ python -m tools.qa_runner <module> --verbose
 - 🧪 **Comprehensive Coverage** - Authentication, API endpoints, streaming, filtering
 - 🔍 **Detailed Reporting** - Success rates, duration, failure analysis
 - 🚀 **Production Ready** - Validates all critical system functionality
+- 🔄 **Multi-Backend Support** - Test against SQLite and PostgreSQL (sequential or parallel)
 
 **IMPORTANT - Server Lifecycle:**
 - QA runner automatically starts and stops the API server

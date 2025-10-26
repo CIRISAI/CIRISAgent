@@ -31,7 +31,7 @@ class IncidentCaptureHandler(logging.Handler):
         if not time_service:
             raise RuntimeError("CRITICAL: TimeService is required for IncidentCaptureHandler")
         self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)  # parents=True for subdirectories
         self._time_service = time_service
 
         self._graph_audit_service = graph_audit_service

@@ -122,14 +122,9 @@ class UpdatedStatusConscience(ConscienceInterface):
         except Exception as e:
             logger.error(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
 
-        # Store the observation in the thought's payload for access during next processing round
-        if hasattr(thought, "payload") and isinstance(thought.payload, dict):
-            thought.payload["CIRIS_OBSERVATION_UPDATED_STATUS"] = updated_content
-            logger.info(f"Added CIRIS_OBSERVATION_UPDATED_STATUS to thought {thought.thought_id} payload")
-        elif hasattr(thought, "payload"):
-            logger.warning(f"Thought {thought.thought_id} has payload but it's not a dict: {type(thought.payload)}")
-        else:
-            logger.warning(f"Thought {thought.thought_id} has no payload attribute")
+        # Note: The observation is stored in ConscienceCheckResult.CIRIS_OBSERVATION_UPDATED_STATUS
+        # (top-level field below) so it can be accessed by downstream processing without modifying
+        # the immutable Thought object. The Thought schema does not have a 'payload' field.
 
         # Create PONDER questions with contextual information
         questions = [

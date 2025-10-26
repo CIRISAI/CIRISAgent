@@ -19,9 +19,15 @@ from .config import QAConfig
 class APIServerManager:
     """Manages the API server lifecycle for testing."""
 
-    def __init__(self, config: QAConfig):
-        """Initialize server manager."""
+    def __init__(self, config: QAConfig, database_backend: str = "sqlite"):
+        """Initialize server manager.
+
+        Args:
+            config: QA runner configuration
+            database_backend: Database backend to use ("sqlite" or "postgres")
+        """
         self.config = config
+        self.database_backend = database_backend
         self.console = Console()
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
@@ -46,10 +52,18 @@ class APIServerManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
-        # Pass through CIRIS_DB_URL if set (for PostgreSQL testing)
-        if "CIRIS_DB_URL" in os.environ:
-            env["CIRIS_DB_URL"] = os.environ["CIRIS_DB_URL"]
-            self.console.print(f"[dim]Using database: {os.environ['CIRIS_DB_URL'].split('@')[0]}@...[/dim]")
+        # Set backend-specific log directory to avoid symlink collisions
+        log_dir = f"logs/{self.database_backend}"
+        env["CIRIS_LOG_DIR"] = log_dir
+        self.console.print(f"[dim]Log directory: {log_dir}[/dim]")
+
+        # Set database URL based on backend
+        if self.database_backend == "postgres":
+            env["CIRIS_DB_URL"] = self.config.postgres_url
+            self.console.print(f"[dim]Using PostgreSQL: {self.config.postgres_url.split('@')[0]}@...[/dim]")
+        else:
+            # SQLite is the default, no need to set CIRIS_DB_URL
+            self.console.print(f"[dim]Using SQLite (default)[/dim]")
 
         # Set billing configuration from QAConfig if enabled
         if self.config.billing_enabled:
@@ -76,7 +90,9 @@ class APIServerManager:
         # Start server process
         try:
             # Open log file to capture console output (includes early startup logs)
-            console_log = open("/tmp/qa_runner_console_output.txt", "w")
+            # Use backend-specific console log to avoid conflicts in parallel mode
+            console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+            console_log = open(console_log_path, "w")
             self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
             self.pid = self.process.pid
             self._console_log_file = console_log  # Store reference to close later

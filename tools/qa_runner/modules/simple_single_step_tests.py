@@ -64,4 +64,15 @@ class SimpleSingleStepTestModule:
                 requires_auth=True,
                 description="Test single step fails gracefully when processor is active",
             ),
+            # CRITICAL: Cleanup - Force resume even if previous tests failed
+            QATestCase(
+                name="CLEANUP: Force Resume Processor",
+                module=QAModule.SYSTEM,
+                endpoint="/v1/system/runtime/resume",
+                method="POST",
+                payload={},
+                expected_status=200,
+                requires_auth=True,
+                description="Emergency cleanup: ensure processor is always resumed",
+            ),
         ]

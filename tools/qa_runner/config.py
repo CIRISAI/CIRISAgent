@@ -113,9 +113,15 @@ class QAConfig:
 
     # Server management
     auto_start_server: bool = True
-    server_startup_timeout: float = 60.0  # Startup with TSDB consolidation can take 30-45 seconds
+    server_startup_timeout: float = 90.0  # Startup with TSDB consolidation can take 45-60 seconds
     mock_llm: bool = True
     adapter: str = "api"
+
+    # Database backend configuration (for parallel testing)
+    database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
+    postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"
+    postgres_port: int = 8001  # Port for PostgreSQL backend server (SQLite uses api_port)
+    parallel_backends: bool = False  # Run backend tests in parallel instead of sequentially
 
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""

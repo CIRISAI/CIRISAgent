@@ -203,7 +203,7 @@ class BaseProcessor(ABC):
         Common action dispatch logic.
         Returns True if dispatch succeeded.
         """
-        logger.info(f"[DISPATCH DEBUG] dispatch_action called for thought {thought.thought_id}")
+        logger.debug(f"[DISPATCH dispatch_action called for thought {thought.thought_id}")
         try:
             from ciris_engine.schemas.runtime.contexts import DispatchContext
 

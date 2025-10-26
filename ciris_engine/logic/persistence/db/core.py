@@ -154,17 +154,17 @@ class PostgreSQLConnectionWrapper:
             translated_sql = sql.replace("?", "%s")
 
         cursor = self._conn.cursor()
-        logger.info("DEBUG PostgreSQLConnectionWrapper.execute: Placeholder translation")
-        logger.info(f"DEBUG   original: {sql[:150]}...")
-        logger.info(f"DEBUG   translated: {translated_sql[:150]}...")
-        logger.info(f"DEBUG   param type: {type(parameters).__name__}, value: {parameters}")
+        logger.debug("PostgreSQLConnectionWrapper.execute: Placeholder translation")
+        logger.debug(f"  original: {sql[:150]}...")
+        logger.debug(f"  translated: {translated_sql[:150]}...")
+        logger.debug(f"  param type: {type(parameters).__name__}, value: {parameters}")
 
         if parameters:
             cursor.execute(translated_sql, parameters)
         else:
             cursor.execute(translated_sql)
 
-        logger.info(f"DEBUG PostgreSQLConnectionWrapper.execute: SUCCESS, rowcount={cursor.rowcount}")
+        logger.debug(f"PostgreSQLConnectionWrapper.execute: SUCCESS, rowcount={cursor.rowcount}")
         return cursor
 
     def executemany(self, sql: str, seq_of_parameters: Any) -> Any:

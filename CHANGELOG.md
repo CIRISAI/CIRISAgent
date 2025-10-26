@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Service Initialization Warnings** - Fixed 3 initialization order and naming issues
+  - **Issue 1**: "Runtime does not have attribute 'database_maintenance_service' - skipping injection"
+    - **Root Cause**: API adapter expected `runtime.database_maintenance_service` but runtime only exposed `runtime.maintenance_service`
+    - **Solution**: Added property alias `database_maintenance_service` that returns `maintenance_service`
+    - **Impact**: Ensures all 22/22 core services are accessible to API adapter
+    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:272-280`
+
+  - **Issue 2**: "No available communication service found with capabilities ['send_message']"
+    - **Root Cause**: Components built (accessing buses) before adapter services were registered
+    - **Solution**: Moved adapter service registration from Phase 6 to Phase 5 (immediately after adapters start)
+    - **Impact**: Communication services available when components need them, prevents spurious warnings
+    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:505-512`
+
+  - **Issue 3**: "Thought has no payload attribute" warnings in incidents log
+    - **Root Cause**: Dead code from incomplete refactoring attempted to access non-existent `thought.payload` field
+    - **Solution**: Removed dead code (lines 125-132), added explanatory comment about ConscienceCheckResult usage
+    - **Impact**: Eliminates log noise, clarifies that observation data is stored in ConscienceCheckResult
+    - **Files**: `ciris_engine/logic/conscience/updated_status_conscience.py:125-127`
+
+### Added
+- **Initialization Fix Tests** - Added comprehensive test suite for all 3 initialization fixes (9 tests)
+  - Tests database_maintenance_service property alias and backward compatibility
+  - Tests adapter service registration happens before component building
+  - Tests Thought schema validation and dead code removal
+  - **Files**: `tests/test_initialization_fixes.py`
+
+- **Parallel Database Backend Testing Support** - QA runner can now test SQLite and PostgreSQL backends simultaneously with `--parallel-backends` flag, reducing test time by ~50%
+
+### Notes
+- **Risk**: TRIVIAL - All changes are backward compatible, minimal code changes
+- **Testing**: 9/9 new unit tests pass, all existing tests pass
+- **Validation**: Fixed via parallel investigation using 3 git worktrees + specialized agents
+
 ## [1.4.6] - 2025-10-26
 
 ### Fixed

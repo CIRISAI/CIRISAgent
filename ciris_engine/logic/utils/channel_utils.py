@@ -38,6 +38,8 @@ def create_channel_context(
             channel_type = "api"
         elif channel_id_str.startswith("discord_"):
             channel_type = "discord"
+        elif channel_id_str.startswith("reddit:"):
+            channel_type = "reddit"
         elif channel_id_str.isdigit() and len(channel_id_str) >= 17:  # Discord IDs are 17-19 digits
             channel_type = "discord"
         else:

@@ -178,6 +178,12 @@ class CommunicationBus(BaseBus[CommunicationService]):
                         service = svc
                         logger.debug(f"Sync routing to CLI adapter for channel {resolved_channel_id}")
                         break
+            elif resolved_channel_id.startswith("reddit:"):
+                for svc in all_services:
+                    if "Reddit" in type(svc).__name__:
+                        service = svc
+                        logger.debug(f"Sync routing to Reddit adapter for channel {resolved_channel_id}")
+                        break
 
         # Fallback to original logic
         if not service:
@@ -202,7 +208,18 @@ class CommunicationBus(BaseBus[CommunicationService]):
 
         This is always synchronous as we need the result.
         """
-        service = await self.get_service(handler_name=handler_name, required_capabilities=["fetch_messages"])
+        service = None
+        all_services = self.service_registry.get_services_by_type(ServiceType.COMMUNICATION)
+
+        if channel_id.startswith("reddit:"):
+            for svc in all_services:
+                if "Reddit" in type(svc).__name__:
+                    service = svc
+                    logger.debug(f"Routing fetch to Reddit adapter for channel {channel_id}")
+                    break
+
+        if not service:
+            service = await self.get_service(handler_name=handler_name, required_capabilities=["fetch_messages"])
 
         if not service:
             logger.error(f"No communication service available for {handler_name}")
@@ -288,6 +305,12 @@ class CommunicationBus(BaseBus[CommunicationService]):
                     if "CLI" in type(svc).__name__:
                         service = svc
                         logger.debug(f"Routing to CLI adapter for channel {resolved_channel_id}")
+                        break
+            elif resolved_channel_id.startswith("reddit:"):
+                for svc in all_services:
+                    if "Reddit" in type(svc).__name__:
+                        service = svc
+                        logger.debug(f"Routing to Reddit adapter for channel {resolved_channel_id}")
                         break
 
         # Fallback to original logic if no specific routing found

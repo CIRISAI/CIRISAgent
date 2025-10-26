@@ -23,6 +23,9 @@ from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
 
+# Channel prefix constants for adapter routing
+REDDIT_CHANNEL_PREFIX = "reddit:"
+
 
 @dataclass
 class SendMessageRequest(BusMessage):
@@ -178,7 +181,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
                         service = svc
                         logger.debug(f"Sync routing to CLI adapter for channel {resolved_channel_id}")
                         break
-            elif resolved_channel_id.startswith("reddit:"):
+            elif resolved_channel_id.startswith(REDDIT_CHANNEL_PREFIX):
                 for svc in all_services:
                     if "Reddit" in type(svc).__name__:
                         service = svc
@@ -202,6 +205,24 @@ class CommunicationBus(BaseBus[CommunicationService]):
             logger.error(f"Failed to send message: {e}", exc_info=True)
             return False
 
+    def _convert_to_fetched_message(self, msg: Any) -> Optional[FetchedMessage]:
+        """Convert a message object to FetchedMessage format."""
+        # Handle already-converted FetchedMessage objects
+        if isinstance(msg, FetchedMessage):
+            return msg
+
+        # Handle dict objects
+        if isinstance(msg, dict):
+            return FetchedMessage(**msg)
+
+        # Try to convert other message types to dict first
+        try:
+            msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
+            return FetchedMessage(**msg_dict)
+        except Exception as e:
+            logger.warning(f"Skipping message of type {type(msg)}: {e}")
+            return None
+
     async def fetch_messages(self, channel_id: str, limit: int, handler_name: str) -> List[FetchedMessage]:
         """
         Fetch messages from a channel.
@@ -211,7 +232,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
         service = None
         all_services = self.service_registry.get_services_by_type(ServiceType.COMMUNICATION)
 
-        if channel_id.startswith("reddit:"):
+        if channel_id.startswith(REDDIT_CHANNEL_PREFIX):
             for svc in all_services:
                 if "Reddit" in type(svc).__name__:
                     service = svc
@@ -230,22 +251,11 @@ class CommunicationBus(BaseBus[CommunicationService]):
             if not messages:
                 return []
 
-            # Convert messages to FetchedMessage objects
-            fetched_messages = []
-            for msg in messages:
-                # Handle both dict and FetchedMessage objects from adapters
-                if isinstance(msg, FetchedMessage):
-                    fetched_messages.append(msg)
-                elif isinstance(msg, dict):
-                    fetched_messages.append(FetchedMessage(**msg))
-                else:
-                    # Try to convert other message types to dict first
-                    try:
-                        msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
-                        fetched_messages.append(FetchedMessage(**msg_dict))
-                    except Exception as e:
-                        logger.warning(f"Skipping message of type {type(msg)}: {e}")
-                        continue
+            # Convert messages to FetchedMessage objects using helper method
+            fetched_messages = [
+                converted for msg in messages
+                if (converted := self._convert_to_fetched_message(msg)) is not None
+            ]
 
             # Track messages received
             self._messages_received += len(fetched_messages)
@@ -306,7 +316,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
                         service = svc
                         logger.debug(f"Routing to CLI adapter for channel {resolved_channel_id}")
                         break
-            elif resolved_channel_id.startswith("reddit:"):
+            elif resolved_channel_id.startswith(REDDIT_CHANNEL_PREFIX):
                 for svc in all_services:
                     if "Reddit" in type(svc).__name__:
                         service = svc

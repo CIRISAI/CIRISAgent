@@ -875,7 +875,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                         if not can_see_all:
                             events = step_update.get("events", [])
                             if not events:
-                                logger.debug(f" SSE no events in update, skipping")
+                                logger.debug(" SSE no events in update, skipping")
                                 continue
 
                             # Batch lookup uncached task IDs
@@ -917,7 +917,7 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
                                 logger.debug(f" SSE sending {len(filtered_events)} events to client")
                             else:
                                 # No events for this user, skip this update silently
-                                logger.debug(f" SSE all events filtered out, skipping update")
+                                logger.debug(" SSE all events filtered out, skipping update")
                                 continue
 
                         # Stream the step update

@@ -988,8 +988,25 @@ class RedditToolService(RedditServiceBase, RedditToolProtocol):
 
         parsed = urlparse(permalink)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if len(path_parts) >= 3 and path_parts[0].lower() == "r":
-            return path_parts[2]
+
+        if not path_parts:
+            return None
+
+        lowered_parts = [part.lower() for part in path_parts]
+
+        # Canonical reddit URLs follow /r/<sub>/comments/<id>/slug
+        if "comments" in lowered_parts:
+            idx = lowered_parts.index("comments")
+            if idx + 1 < len(path_parts):
+                return path_parts[idx + 1]
+
+        # Shortlinks use redd.it/<id> or /comments/<id>
+        if lowered_parts[0] == "comments" and len(path_parts) > 1:
+            return path_parts[1]
+
+        # redd.it shortlinks surface the id as the only path component
+        if len(path_parts) == 1:
+            return path_parts[0]
         return None
 
 

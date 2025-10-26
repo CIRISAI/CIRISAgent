@@ -388,7 +388,8 @@ class QueryManager:
                         return False
 
                     # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
-                    acquired = bool(result[0])
+                    # Use dict-style access because RealDictCursor returns dict-like objects
+                    acquired = bool(result["pg_try_advisory_lock"])
 
                     if acquired:
                         logger.info(
@@ -454,7 +455,8 @@ class QueryManager:
                         return
 
                     # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
-                    released = bool(result[0])
+                    # Use dict-style access because RealDictCursor returns dict-like objects
+                    released = bool(result["pg_advisory_unlock"])
 
                     if released:
                         logger.debug(f"Released {consolidation_type} lock for {period_identifier} (lock_id={lock_id})")

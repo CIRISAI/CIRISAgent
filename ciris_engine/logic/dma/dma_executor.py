@@ -498,7 +498,7 @@ async def run_action_selection_pdma(
         if hasattr(result, "selected_action"):
             logger.debug(f"run_action_selection_pdma: Selected action: {result.selected_action}")
             if result.selected_action == HandlerActionType.OBSERVE:
-                logger.warning("OBSERVE ACTION DEBUG: run_action_selection_pdma returning OBSERVE action successfully")
+                logger.debug("OBSERVE ACTION: run_action_selection_pdma returning OBSERVE action successfully")
 
         # Update correlation with success
         if time_service:

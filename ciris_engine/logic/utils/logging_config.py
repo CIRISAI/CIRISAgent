@@ -40,6 +40,11 @@ def setup_basic_logging(
 
     from ciris_engine.logic.config.env_utils import get_env_var
 
+    # Allow log directory override via environment variable (for parallel backend testing)
+    env_log_dir = get_env_var("CIRIS_LOG_DIR")
+    if env_log_dir:
+        log_dir = env_log_dir
+
     env_level = get_env_var("LOG_LEVEL")
     if env_level:
         level_from_env = logging.getLevelName(env_level.upper())
@@ -64,7 +69,7 @@ def setup_basic_logging(
 
     if log_to_file:
         log_path = Path(log_dir)
-        log_path.mkdir(exist_ok=True)
+        log_path.mkdir(parents=True, exist_ok=True)  # parents=True for subdirectories
 
         if not time_service:
             raise RuntimeError("CRITICAL: TimeService is required for logging setup")

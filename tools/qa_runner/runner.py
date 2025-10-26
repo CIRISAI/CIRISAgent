@@ -31,18 +31,73 @@ class QARunner:
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
-        self.server_manager = APIServerManager(self.config)
+
+        # Determine database backends to test
+        if self.config.database_backends is None:
+            self.database_backends = ["sqlite"]  # Default to SQLite only
+        else:
+            self.database_backends = self.config.database_backends
+
+        # Create server managers for each backend
+        self.server_managers: Dict[str, APIServerManager] = {}
+        for backend in self.database_backends:
+            port = self.config.api_port if backend == "sqlite" else self.config.postgres_port
+            # Create a copy of config with the right port
+            backend_config = QAConfig(
+                base_url=f"http://localhost:{port}",
+                api_port=port,
+                admin_username=self.config.admin_username,
+                admin_password=self.config.admin_password,
+                oauth_test_user_id=self.config.oauth_test_user_id,
+                oauth_test_email=self.config.oauth_test_email,
+                oauth_test_provider=self.config.oauth_test_provider,
+                oauth_test_external_id=self.config.oauth_test_external_id,
+                billing_enabled=self.config.billing_enabled,
+                billing_api_key=self.config.billing_api_key,
+                billing_api_url=self.config.billing_api_url,
+                parallel_tests=self.config.parallel_tests,
+                max_workers=self.config.max_workers,
+                timeout=self.config.timeout,
+                retry_count=self.config.retry_count,
+                retry_delay=self.config.retry_delay,
+                verbose=self.config.verbose,
+                json_output=self.config.json_output,
+                html_report=self.config.html_report,
+                report_dir=self.config.report_dir,
+                auto_start_server=self.config.auto_start_server,
+                server_startup_timeout=self.config.server_startup_timeout,
+                mock_llm=self.config.mock_llm,
+                adapter=self.config.adapter,
+                database_backends=None,  # Don't pass this recursively
+                postgres_url=self.config.postgres_url,
+                postgres_port=self.config.postgres_port,
+            )
+            self.server_managers[backend] = APIServerManager(backend_config, database_backend=backend)
+
+        # For backward compatibility, keep a reference to the first server manager
+        self.server_manager = self.server_managers[self.database_backends[0]]
+
         self.results: Dict[str, Dict] = {}
         self._startup_incidents_position = 0
         self._filter_helper: Optional[FilterTestHelper] = None
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
+        # If testing multiple backends, run them sequentially or in parallel
+        if len(self.database_backends) > 1:
+            if self.config.parallel_backends:
+                return self._run_parallel_backends(modules)
+            else:
+                return self._run_multiple_backends(modules)
+
+        # Single backend execution (original flow)
         start_time = time.time()
 
         self.console.print(
             Panel.fit(
-                "[bold cyan]CIRIS QA Test Runner[/bold cyan]\n" f"Modules: {', '.join(m.value for m in modules)}",
+                "[bold cyan]CIRIS QA Test Runner[/bold cyan]\n"
+                f"Database: {self.database_backends[0]}\n"
+                f"Modules: {', '.join(m.value for m in modules)}",
                 title="🧪 Starting QA Tests",
             )
         )
@@ -1328,3 +1383,183 @@ class QARunner:
             self.console.print("\n[bold green]✅ All tests passed![/bold green]")
         else:
             self.console.print(f"\n[bold red]❌ {summary['failed']} test(s) failed[/bold red]")
+
+    def _run_multiple_backends(self, modules: List[QAModule]) -> bool:
+        """Run QA tests against multiple database backends sequentially."""
+        start_time = time.time()
+
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]CIRIS QA Test Runner - Multi-Backend Mode[/bold cyan]\n"
+                f"Backends: {', '.join(self.database_backends)}\n"
+                f"Modules: {', '.join(m.value for m in modules)}",
+                title="🧪 Starting Multi-Backend QA Tests",
+            )
+        )
+
+        backend_results = {}
+        all_success = True
+
+        # Run tests for each backend sequentially
+        for backend in self.database_backends:
+            self.console.print(f"\n{'=' * 80}")
+            self.console.print(f"[bold cyan]🔄 Testing {backend.upper()} Backend[/bold cyan]")
+            self.console.print(f"{'=' * 80}\n")
+
+            # Create a new runner instance for this backend with the correct server manager
+            # Use the backend's server manager config which has the correct port
+            backend_config = self.server_managers[backend].config
+            backend_runner = QARunner(backend_config)
+            backend_runner.database_backends = [backend]
+            backend_runner.server_manager = self.server_managers[backend]
+            backend_runner.server_managers = {backend: self.server_managers[backend]}
+
+            # Run tests for this backend
+            success = backend_runner.run(modules)
+            backend_results[backend] = {
+                "success": success,
+                "results": backend_runner.results,
+            }
+
+            if not success:
+                all_success = False
+
+        # Print combined summary
+        elapsed = time.time() - start_time
+        self.console.print(f"\n\n{'=' * 80}")
+        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print(f"{'=' * 80}\n")
+
+        # Create comparison table
+        table = Table(title="Backend Comparison")
+        table.add_column("Backend", style="cyan")
+        table.add_column("Status", style="bold")
+        table.add_column("Passed", style="green")
+        table.add_column("Failed", style="red")
+        table.add_column("Total", style="white")
+
+        for backend, data in backend_results.items():
+            results = data["results"]
+            passed = sum(1 for r in results.values() if r.get("success", False))
+            failed = len(results) - passed
+            total = len(results)
+            status = "✅" if data["success"] else "❌"
+
+            table.add_row(backend.upper(), status, str(passed), str(failed), str(total))
+
+        self.console.print(table)
+
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s[/dim]")
+
+        # Print log locations for each backend
+        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        for backend in self.database_backends:
+            self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
+            self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
+
+        if all_success:
+            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
+        else:
+            failed_backends = [b for b, d in backend_results.items() if not d["success"]]
+            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+
+        return all_success
+
+    def _run_parallel_backends(self, modules: List[QAModule]) -> bool:
+        """Run QA tests against multiple database backends in parallel."""
+        start_time = time.time()
+
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode[/bold cyan]\n"
+                f"Backends: {', '.join(self.database_backends)}\n"
+                f"Modules: {', '.join(m.value for m in modules)}",
+                title="🧪 Starting Parallel Backend QA Tests",
+            )
+        )
+
+        backend_results = {}
+
+        # Run tests for each backend in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(self.database_backends)) as executor:
+            futures = {}
+
+            for backend in self.database_backends:
+                self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests...[/cyan]")
+
+                # Create a new runner instance for this backend with the correct server manager
+                backend_config = self.server_managers[backend].config
+                backend_runner = QARunner(backend_config)
+                backend_runner.database_backends = [backend]
+                backend_runner.server_manager = self.server_managers[backend]
+                backend_runner.server_managers = {backend: self.server_managers[backend]}
+
+                # Submit backend test execution to thread pool
+                future = executor.submit(backend_runner.run, modules)
+                futures[backend] = (future, backend_runner)
+
+            # Wait for all backends to complete
+            self.console.print("\n[cyan]⏳ Waiting for all backend tests to complete...[/cyan]\n")
+
+            for backend, (future, backend_runner) in futures.items():
+                try:
+                    success = future.result(timeout=self.config.timeout * 2)  # Allow extra time for parallel execution
+                    backend_results[backend] = {
+                        "success": success,
+                        "results": backend_runner.results,
+                    }
+
+                    status_icon = "✅" if success else "❌"
+                    self.console.print(f"{status_icon} {backend.upper()} backend tests completed")
+
+                except Exception as e:
+                    self.console.print(f"[red]❌ {backend.upper()} backend tests failed with error: {e}[/red]")
+                    backend_results[backend] = {
+                        "success": False,
+                        "results": {},
+                        "error": str(e),
+                    }
+
+        # Determine overall success
+        all_success = all(data["success"] for data in backend_results.values())
+
+        # Print combined summary
+        elapsed = time.time() - start_time
+        self.console.print(f"\n\n{'=' * 80}")
+        self.console.print("[bold cyan]📊 PARALLEL BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print(f"{'=' * 80}\n")
+
+        # Create comparison table
+        table = Table(title="Backend Comparison")
+        table.add_column("Backend", style="cyan")
+        table.add_column("Status", style="bold")
+        table.add_column("Passed", style="green")
+        table.add_column("Failed", style="red")
+        table.add_column("Total", style="white")
+
+        for backend, data in backend_results.items():
+            results = data.get("results", {})
+            passed = sum(1 for r in results.values() if r.get("success", False))
+            failed = len(results) - passed
+            total = len(results)
+            status = "✅" if data["success"] else "❌"
+
+            table.add_row(backend.upper(), status, str(passed), str(failed), str(total))
+
+        self.console.print(table)
+
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel execution)[/dim]")
+
+        # Print log locations for each backend
+        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        for backend in self.database_backends:
+            self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
+            self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
+
+        if all_success:
+            self.console.print("\n[bold green]✅ All backends passed all tests in parallel![/bold green]")
+        else:
+            failed_backends = [b for b, d in backend_results.items() if not d["success"]]
+            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+
+        return all_success

@@ -7,6 +7,7 @@ ONLY those 6 events are emitted (no extras from the 11 step points).
 """
 
 import json
+import logging
 import threading
 import time
 from datetime import datetime
@@ -15,6 +16,8 @@ from typing import Any, Dict, List, Optional, Set
 import requests
 
 from ..config import QAConfig, QAModule, QATestCase
+
+logger = logging.getLogger(__name__)
 
 
 class StreamingVerificationModule:
@@ -70,15 +73,18 @@ class StreamingVerificationModule:
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
 
+                logger.debug("SSE client connecting to reasoning-stream endpoint")
                 response = requests.get(
                     f"{base_url}/v1/system/runtime/reasoning-stream", headers=headers, stream=True, timeout=5
                 )
 
                 if response.status_code != 200:
+                    logger.debug(f"SSE client connection failed with status {response.status_code}")
                     errors.append(f"Stream connection failed: {response.status_code}")
                     stream_error.set()
                     return
 
+                logger.debug("SSE client connected successfully, starting to listen for events")
                 stream_connected.set()
 
                 # Parse SSE stream
@@ -95,6 +101,7 @@ class StreamingVerificationModule:
 
                             # Extract events from stream update
                             events = data.get("events", [])
+                            logger.debug(f"SSE client received {len(events)} events from stream")
 
                             for event in events:
                                 event_type = event.get("event_type")
@@ -102,6 +109,10 @@ class StreamingVerificationModule:
                                 if not event_type:
                                     errors.append("Event missing event_type field")
                                     continue
+
+                                logger.debug(
+                                    f"SSE client processing event - type={event_type}, task_id={event.get('task_id')}"
+                                )
 
                                 # Track this event type
                                 received_events.add(event_type)
@@ -287,7 +298,7 @@ class StreamingVerificationModule:
                                             errors.append(f"🐛 EMPTY LIST: {issue_msg}")
                                             # Print the FULL event to debug why user_profiles is empty
                                             print("\n" + "=" * 80)
-                                            print("🐛 DEBUG: FULL EVENT WITH EMPTY user_profiles")
+                                            logger.debug("FULL EVENT WITH EMPTY user_profiles")
                                             print("=" * 80)
                                             print(json.dumps(event, indent=2, default=str))
                                             print("=" * 80 + "\n")
@@ -756,7 +767,7 @@ class StreamingVerificationModule:
         # Wait a bit for events to stream
         time.sleep(1)
 
-        # Ensure system is in runningstate before triggering test message
+        # Ensure system is in running state before triggering test message
         # (Runtime control tests may have left system paused/stepped)
         try:
             state_response = requests.get(
@@ -780,8 +791,34 @@ class StreamingVerificationModule:
         except Exception as e:
             errors.append(f"Failed to check/resume system state: {e}")
 
+        # Wait for task queue to drain before submitting test message
+        # (Previous tests may have left tasks in the queue that need to complete first)
+        try:
+            drain_timeout = 30  # Wait up to 30 seconds for queue to drain
+            drain_elapsed = 0
+            drain_check_interval = 0.5
+            while drain_elapsed < drain_timeout:
+                queue_response = requests.get(
+                    f"{base_url}/v1/system/runtime/queue",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=5,
+                )
+                if queue_response.status_code == 200:
+                    queue_data = queue_response.json().get("data", {})
+                    queue_size = queue_data.get("queue_size", 0)
+                    if queue_size == 0:
+                        break  # Queue is empty, ready to submit test message
+                time.sleep(drain_check_interval)
+                drain_elapsed += drain_check_interval
+            # If queue didn't drain, log it but continue (don't fail the test)
+            if drain_elapsed >= drain_timeout:
+                errors.append(f"Queue did not drain within {drain_timeout}s (may affect test timing)")
+        except Exception as e:
+            errors.append(f"Failed to check queue drain status: {e}")
+
         # Trigger a task to generate events using new async message endpoint
         try:
+            logger.debug("Submitting test message to /v1/agent/message")
             response = requests.post(
                 f"{base_url}/v1/agent/message",
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
@@ -791,6 +828,11 @@ class StreamingVerificationModule:
             # Validate the response schema
             if response.status_code == 200:
                 data = response.json().get("data", {})
+                task_id = data.get("task_id")
+                channel_id = data.get("channel_id")
+                logger.debug(
+                    f"Test message submitted - task_id={task_id}, channel_id={channel_id}, accepted={data.get('accepted')}"
+                )
                 # Validate MessageSubmissionResponse schema
                 required_fields = ["message_id", "task_id", "channel_id", "submitted_at", "accepted"]
                 for field in required_fields:

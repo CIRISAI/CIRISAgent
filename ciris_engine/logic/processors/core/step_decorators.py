@@ -1028,13 +1028,13 @@ async def _broadcast_reasoning_event(
 
         # Broadcast the event if we created one
         if event:
-            logger.debug(f"[BROADCAST DEBUG] About to broadcast {event.event_type}")
-            await reasoning_event_stream.broadcast_reasoning_event(event)
             logger.debug(
-                f"[BROADCAST DEBUG] Broadcasted {event.event_type} reasoning event for thought {step_data.thought_id}"
+                f" Broadcasting reasoning event - type={event.event_type}, task_id={step_data.task_id}, thought_id={step_data.thought_id}"
             )
+            await reasoning_event_stream.broadcast_reasoning_event(event)
+            logger.debug(f" Broadcast complete - type={event.event_type}, task_id={step_data.task_id}")
         else:
-            logger.debug(f"[BROADCAST DEBUG] No event created for step {step.value}")
+            logger.debug(f" No event created for step {step.value}, task_id={step_data.task_id}")
 
     except Exception as e:
         logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")

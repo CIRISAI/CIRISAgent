@@ -3,7 +3,7 @@ import sqlite3
 import time
 import types
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
@@ -383,6 +383,64 @@ def get_graph_edges_table_schema_sql() -> str:
 
 def get_service_correlations_table_schema_sql() -> str:
     return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
+
+
+def get_connection_diagnostics(db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Get diagnostic information about database connections.
+
+    Useful for debugging connection issues in production, especially PostgreSQL.
+
+    Args:
+        db_path: Optional database connection string
+
+    Returns:
+        Dictionary with connection diagnostic information
+    """
+    if db_path is None:
+        db_path = get_sqlite_db_full_path()
+
+    adapter = init_dialect(db_path)
+    diagnostics: Dict[str, Any] = {
+        "dialect": adapter.dialect.value,
+        "connection_string": adapter.db_url if adapter.is_postgresql() else adapter.db_path,
+        "is_postgresql": adapter.is_postgresql(),
+        "is_sqlite": adapter.is_sqlite(),
+    }
+
+    # Try to get active connection count for PostgreSQL
+    if adapter.is_postgresql():
+        try:
+            with get_db_connection(db_path=db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT count(*) as connection_count
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                    """
+                )
+                result = cursor.fetchone()
+                if result:
+                    diagnostics["active_connections"] = (
+                        result[0] if isinstance(result, tuple) else result["connection_count"]
+                    )
+                cursor.close()
+        except Exception as e:
+            diagnostics["connection_error"] = str(e)
+            logger.warning(f"Failed to get PostgreSQL connection diagnostics: {e}")
+
+    # Test basic connectivity
+    try:
+        with get_db_connection(db_path=db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+            diagnostics["connectivity"] = "OK"
+    except Exception as e:
+        diagnostics["connectivity"] = f"FAILED: {e}"
+        logger.error(f"Database connectivity test failed for {db_path}: {e}")
+
+    return diagnostics
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:

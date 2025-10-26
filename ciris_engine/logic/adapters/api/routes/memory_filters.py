@@ -36,25 +36,39 @@ async def get_user_allowed_ids(auth_service: Any, user_id: str) -> Set[str]:
     allowed_ids = {user_id}
 
     try:
-        import sqlite3
+        from ciris_engine.logic.persistence.db import get_db_connection
 
-        # Use db_path with direct sqlite3 connection (AuthenticationService uses sync sqlite3)
+        # Use db_path with get_db_connection() for proper SQLite/PostgreSQL support
+        # CRITICAL: auth_service.db_path may be a PostgreSQL URL, not a file path!
+        # sqlite3.connect() cannot handle PostgreSQL URLs, causing "unable to open database file"
         db_path = auth_service.db_path
         query = """
             SELECT oauth_provider, oauth_external_id
             FROM wa_cert
             WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
         """
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.execute(query, (user_id,))
+        with get_db_connection(db_path=db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (user_id,))
             rows = cursor.fetchall()
+            cursor.close()
+
             for row in rows:
-                oauth_provider, oauth_external_id = row
+                # Handle both tuple and dict rows (PostgreSQL uses RealDictCursor)
+                if isinstance(row, dict):
+                    oauth_provider = row["oauth_provider"]
+                    oauth_external_id = row["oauth_external_id"]
+                else:
+                    oauth_provider, oauth_external_id = row
+
                 # Add both provider:id and bare id format
                 allowed_ids.add(f"{oauth_provider}:{oauth_external_id}")
                 allowed_ids.add(oauth_external_id)
     except Exception as e:
-        logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error fetching OAuth links for user {user_id} from database {getattr(auth_service, 'db_path', 'unknown')}: {e}",
+            exc_info=True,
+        )
 
     return allowed_ids
 

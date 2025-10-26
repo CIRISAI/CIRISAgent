@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Files**: `ciris_engine/logic/conscience/updated_status_conscience.py:125-127`
 
 ### Added
+- **Reddit Adapter** - Complete Reddit integration for r/ciris subreddit monitoring and interaction
+  - Tool service for posting, commenting, removals, user context lookups
+  - Communication service with channel routing (`reddit:r/ciris:post/abc123`)
+  - Observer for passive monitoring of submissions and comments
+  - Anti-spoofing channel validation and reddit-prefixed routing
+  - Defaults to r/ciris subreddit with lower priority than API adapter
+  - **Files**: `ciris_modular_services/reddit/*`, `ciris_engine/logic/buses/communication_bus.py`, `ciris_engine/logic/utils/channel_utils.py`
+
 - **Initialization Fix Tests** - Added comprehensive test suite for all 3 initialization fixes (9 tests)
   - Tests database_maintenance_service property alias and backward compatibility
   - Tests adapter service registration happens before component building

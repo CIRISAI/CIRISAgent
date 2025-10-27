@@ -222,10 +222,10 @@ class ShutdownProcessor(BaseProcessor):
         that decision. Otherwise, tries to claim the shared shutdown task.
         """
         from ciris_engine.logic.persistence.models.tasks import (
-            add_system_task,
             get_latest_shared_task,
             is_shared_task_completed,
             try_claim_shared_task,
+            update_task_context_and_signing,
         )
 
         shutdown_manager = get_shutdown_manager()
@@ -345,8 +345,40 @@ class ShutdownProcessor(BaseProcessor):
             "Making decision on behalf of all occurrences."
         )
 
-        # We claimed it - update our reference and activate
+        # We claimed it - attach context, sign, and activate
         self.shutdown_task = claimed_task
+        shutdown_context = TaskContext(
+            channel_id=channel_id,
+            user_id="system",
+            correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
+            parent_task_id=None,
+            agent_occurrence_id=self.agent_occurrence_id,
+        )
+        claimed_task.context = shutdown_context
+
+        if self.auth_service:
+            try:
+                system_wa_id = await self.auth_service.get_system_wa_id()
+                if system_wa_id:
+                    signature, signed_at = await self.auth_service.sign_task(claimed_task, system_wa_id)
+                    claimed_task.signed_by = system_wa_id
+                    claimed_task.signature = signature
+                    claimed_task.signed_at = signed_at
+                else:
+                    logger.warning("No system WA available to sign shared shutdown task")
+            except Exception as signing_error:
+                logger.error(f"Failed to sign shared shutdown task: {signing_error}")
+
+        update_task_context_and_signing(
+            task_id=claimed_task.task_id,
+            occurrence_id=claimed_task.agent_occurrence_id,
+            context=shutdown_context,
+            time_service=self._time_service,
+            signed_by=claimed_task.signed_by,
+            signature=claimed_task.signature,
+            signed_at=claimed_task.signed_at,
+        )
+
         persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 

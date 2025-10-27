@@ -48,6 +48,58 @@ CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Grat
 - **Philosophy**: No Untyped Dicts, No Bypass Patterns, No Exceptions
 - **Target**: 4GB RAM, offline-capable deployment
 
+## Multi-Occurrence Deployment Support
+
+CIRIS supports running multiple runtime occurrences of the same agent against a shared database for horizontal scaling.
+
+### Key Concepts
+
+- **Occurrence**: A single runtime instance of an agent (process/container)
+- **Shared Tasks**: Agent-level tasks using `agent_occurrence_id="__shared__"` that coordinate across occurrences
+- **Atomic Claiming**: Race-free task claiming using deterministic IDs + `INSERT OR IGNORE`
+
+### Configuration
+
+```bash
+# Set occurrence ID (defaults to "default")
+export AGENT_OCCURRENCE_ID="occurrence-1"
+
+# Set total occurrence count for discovery
+export AGENT_OCCURRENCE_COUNT="9"
+```
+
+### Architecture
+
+**Single Decision-Maker Pattern:**
+- Wakeup/shutdown decisions made by ONE occurrence
+- Decision applies to ALL occurrences
+- Other occurrences skip or monitor the shared decision
+
+**Implementation:**
+- `try_claim_shared_task()` - Atomic task claiming
+- `is_shared_task_completed()` - Check if another occurrence decided
+- `get_latest_shared_task()` - Retrieve shared decision
+- Deterministic task IDs: `WAKEUP_SHARED_20251027`, `SHUTDOWN_SHARED_20251027`
+
+### Key Files
+
+- **Shared Task Functions**: `ciris_engine/logic/persistence/models/tasks.py`
+- **Occurrence Utils**: `ciris_engine/logic/utils/occurrence_utils.py`
+- **Wakeup Coordination**: `ciris_engine/logic/processors/states/wakeup_processor.py`
+- **Shutdown Coordination**: `ciris_engine/logic/processors/states/shutdown_processor.py`
+
+### Testing Multi-Occurrence
+
+```python
+# Unit tests with race simulation
+pytest tests/ciris_engine/logic/persistence/test_shared_tasks.py
+
+# Occurrence discovery tests
+pytest tests/ciris_engine/logic/utils/test_occurrence_utils.py
+```
+
+**Important**: Configuration already in `EssentialConfig.agent_occurrence_id` (line 129)
+
 ## Core Philosophy: Type Safety First
 
 🚧 **PROGRESS: Minimizing `Dict[str, Any]` usage in production code**

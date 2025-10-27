@@ -208,8 +208,17 @@ class ShutdownProcessor(BaseProcessor):
             return ShutdownResult(status="error", message=str(e), errors=1, duration_seconds=0.0)
 
     async def _create_shutdown_task(self) -> None:
-        """Create the shutdown task."""
-        from ciris_engine.logic.persistence.models.tasks import add_system_task
+        """Create the shutdown task with multi-occurrence coordination.
+
+        Checks if another occurrence already decided on shutdown. If so, uses
+        that decision. Otherwise, tries to claim the shared shutdown task.
+        """
+        from ciris_engine.logic.persistence.models.tasks import (
+            add_system_task,
+            get_latest_shared_task,
+            is_shared_task_completed,
+            try_claim_shared_task,
+        )
 
         shutdown_manager = get_shutdown_manager()
         reason = shutdown_manager.get_shutdown_reason() or "Graceful shutdown requested"
@@ -242,10 +251,21 @@ class ShutdownProcessor(BaseProcessor):
             else:
                 logger.warning("Emergency shutdown requested without requester ID")
 
+        # Check if shutdown already decided by another occurrence
+        if is_shared_task_completed("shutdown", within_hours=1):
+            # Another occurrence already completed shutdown decision
+            existing_task = get_latest_shared_task("shutdown", within_hours=1)
+            if existing_task:
+                logger.info(
+                    f"Shutdown already decided by another occurrence (task {existing_task.task_id}). "
+                    "Using that decision for this occurrence."
+                )
+                self.shutdown_task = existing_task
+                return
+
         now_iso = self._time_service.now().isoformat()
 
-        # Create task context with shutdown details and proper channel context
-        # Get channel ID from runtime if available
+        # Get channel ID from runtime or communication bus
         channel_id = None
         if self.runtime and hasattr(self.runtime, "startup_channel_id"):
             channel_id = self.runtime.startup_channel_id
@@ -273,13 +293,17 @@ class ShutdownProcessor(BaseProcessor):
                 channel_id = ""
                 logger.warning("No channel ID available for shutdown task, using empty string for adapter routing")
 
-        # Create proper TaskContext for the shutdown task
-        context = TaskContext(
-            channel_id=channel_id,
-            user_id="system",
-            correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
-            parent_task_id=None,
+        # Build shutdown description with multi-occurrence context
+        base_description = f"{'EMERGENCY' if is_emergency else 'System'} shutdown requested: {reason}"
+
+        multi_occurrence_note = (
+            "\n\nMULTI-OCCURRENCE CONTEXT:\n"
+            "You are processing this shutdown request on behalf of ALL runtime occurrences of this agent. "
+            "Your decision (accept or reject) will apply to the entire agent system. "
+            "All occurrences will follow this decision, ensuring unified agent response."
         )
+
+        description = base_description + multi_occurrence_note
 
         # Store shutdown context in runtime for system snapshot
         if self.runtime:
@@ -292,19 +316,34 @@ class ShutdownProcessor(BaseProcessor):
                 agreement_context=None,
             )
 
-        self.shutdown_task = Task(
-            task_id=f"shutdown_{uuid.uuid4().hex[:8]}",
+        # Try to claim the shared shutdown task
+        claimed_task, was_created = try_claim_shared_task(
+            task_type="shutdown",
             channel_id=channel_id,
-            description=f"{'EMERGENCY' if is_emergency else 'System'} shutdown requested: {reason}",
-            priority=10,  # Maximum priority (was 100, but max is 10)
-            status=TaskStatus.ACTIVE,  # Set as ACTIVE to prevent orphan deletion
-            created_at=now_iso,
-            updated_at=now_iso,
-            context=context,
-            parent_task_id=None,  # Root-level task
+            description=description,
+            priority=10,  # Maximum priority
+            time_service=self._time_service,
         )
 
-        await add_system_task(self.shutdown_task, auth_service=self.auth_service)
+        if not was_created:
+            # Another occurrence claimed it
+            logger.info(
+                f"Another occurrence claimed shutdown task {claimed_task.task_id}. "
+                "This occurrence will monitor the decision."
+            )
+            self.shutdown_task = claimed_task
+            return
+
+        logger.info(
+            f"This occurrence claimed shared shutdown task {claimed_task.task_id}. "
+            "Making decision on behalf of all occurrences."
+        )
+
+        # We claimed it - update our reference and activate
+        self.shutdown_task = claimed_task
+        persistence.update_task_status(
+            self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service
+        )
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 
     def _extract_rejection_reason(self, action: Any) -> str:

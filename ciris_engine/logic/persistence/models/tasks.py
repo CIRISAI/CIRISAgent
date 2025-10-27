@@ -381,3 +381,202 @@ def set_task_updated_info_flag(
     except Exception as e:
         logger.exception(f"Failed to set updated_info_available flag for task {task_id}: {e}")
         return False
+
+
+# ==================== Multi-Occurrence Shared Task Functions ====================
+
+
+def try_claim_shared_task(
+    task_type: str,
+    channel_id: str,
+    description: str,
+    priority: int,
+    time_service: TimeServiceProtocol,
+    db_path: Optional[str] = None,
+) -> tuple[Task, bool]:
+    """Atomically create or retrieve a shared agent-level task.
+
+    Uses deterministic task_id based on date to prevent race conditions when
+    multiple occurrences try to create the same shared task simultaneously.
+
+    The task is created with agent_occurrence_id="__shared__" to make it visible
+    to all occurrences of the agent.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        channel_id: Channel where task originated
+        description: Task description
+        priority: Task priority (0-10)
+        time_service: Time service for timestamps
+        db_path: Optional database path
+
+    Returns:
+        Tuple of (Task, was_created) where was_created=True if this call created
+        the task, False if it already existed.
+
+    Example:
+        >>> task, created = try_claim_shared_task("wakeup", "system", "Identity affirmation", 10, time_service)
+        >>> if created:
+        ...     print("This occurrence will process wakeup")
+        ... else:
+        ...     print("Another occurrence already claimed wakeup")
+    """
+    from datetime import datetime, timezone
+
+    # Create deterministic task ID based on type and date
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    task_id = f"{task_type.upper()}_SHARED_{date_str}"
+
+    # First, check if task already exists
+    existing = get_task_by_id(task_id, "__shared__", db_path)
+    if existing:
+        logger.info(f"Shared task {task_id} already exists, returning existing task")
+        return (existing, False)
+
+    # Try to create the task with INSERT OR IGNORE for race safety
+    now = time_service.now_iso()
+    sql = """
+        INSERT OR IGNORE INTO tasks
+        (task_id, channel_id, agent_occurrence_id, description, status, priority,
+         created_at, updated_at, parent_task_id, context_json, outcome_json,
+         signed_by, signature, signed_at, updated_info_available, updated_info_content)
+        VALUES (?, ?, '__shared__', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL)
+    """
+    params = (
+        task_id,
+        channel_id,
+        description,
+        TaskStatus.PENDING.value,
+        priority,
+        now,
+        now,
+    )
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                # We successfully created the task
+                logger.info(f"Successfully claimed shared task {task_id}")
+                created_task = get_task_by_id(task_id, "__shared__", db_path)
+                if created_task:
+                    return (created_task, True)
+                else:
+                    # This shouldn't happen, but handle gracefully
+                    logger.error(f"Created shared task {task_id} but couldn't retrieve it")
+                    raise RuntimeError(f"Failed to retrieve newly created shared task {task_id}")
+            else:
+                # INSERT OR IGNORE returned 0 rows - another occurrence created it between our check and insert
+                logger.info(f"Another occurrence claimed shared task {task_id} during race")
+                existing = get_task_by_id(task_id, "__shared__", db_path)
+                if existing:
+                    return (existing, False)
+                else:
+                    # This shouldn't happen, but handle gracefully
+                    logger.error(f"INSERT OR IGNORE for {task_id} returned 0 rows but task doesn't exist")
+                    raise RuntimeError(f"Shared task {task_id} creation race condition failed")
+
+    except Exception as e:
+        logger.exception(f"Failed to claim shared task {task_id}: {e}")
+        raise
+
+
+def get_shared_task_status(
+    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
+) -> Optional[TaskStatus]:
+    """Get the status of the most recent shared task of a given type.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        TaskStatus enum if task found, None if no recent task exists
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    cutoff_iso = cutoff_time.isoformat()
+
+    sql = """
+        SELECT status FROM tasks
+        WHERE agent_occurrence_id = '__shared__'
+          AND task_id LIKE ?
+          AND created_at > ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    pattern = f"{task_type.upper()}_SHARED_%"
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (pattern, cutoff_iso))
+            row = cursor.fetchone()
+            if row:
+                return TaskStatus(row["status"])
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get shared task status for {task_type}: {e}")
+        return None
+
+
+def is_shared_task_completed(
+    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
+) -> bool:
+    """Check if a shared task of the given type has been completed recently.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        True if a completed task exists, False otherwise
+    """
+    status = get_shared_task_status(task_type, within_hours, db_path)
+    return status == TaskStatus.COMPLETED if status else False
+
+
+def get_latest_shared_task(
+    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
+) -> Optional[Task]:
+    """Get the most recent shared task of a given type.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        Task object if found, None otherwise
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    cutoff_iso = cutoff_time.isoformat()
+
+    sql = """
+        SELECT * FROM tasks
+        WHERE agent_occurrence_id = '__shared__'
+          AND task_id LIKE ?
+          AND created_at > ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    pattern = f"{task_type.upper()}_SHARED_%"
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (pattern, cutoff_iso))
+            row = cursor.fetchone()
+            if row:
+                return map_row_to_task(row)
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get latest shared task for {task_type}: {e}")
+        return None

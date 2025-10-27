@@ -211,16 +211,22 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     async def test_create_shutdown_task_normal(
         self,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
+        sample_task,
     ):
         """Test creating a normal (non-emergency) shutdown task"""
-        # Mock add_task to return task_id
-        mock_add_task.return_value = "shutdown_test_123"
+        # Mock shared task not completed yet
+        mock_is_completed.return_value = False
+
+        # Mock claiming the shared task
+        mock_try_claim.return_value = (sample_task, True)
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test shutdown"
@@ -232,22 +238,39 @@ class TestTaskCreation:
 
         # Verify
         assert shutdown_processor.shutdown_task is not None
-        assert "shutdown_" in shutdown_processor.shutdown_task.task_id
-        assert "Test shutdown" in shutdown_processor.shutdown_task.description
+        assert shutdown_processor.shutdown_task == sample_task
         assert shutdown_processor.shutdown_task.priority == 10
+
+        # Verify try_claim was called
+        mock_try_claim.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     async def test_create_shutdown_task_emergency_with_root_auth(
         self,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
+        sample_task,
     ):
         """Test creating emergency shutdown with ROOT authorization"""
-        # Mock add_task to return task_id
-        mock_add_task.return_value = "shutdown_emergency_123"
+        # Mock shared task not completed
+        mock_is_completed.return_value = False
+
+        # Mock claiming shared task
+        emergency_task = Task(
+            task_id="shutdown_emergency_123",
+            channel_id="test_channel",
+            description="EMERGENCY shutdown requested: Emergency shutdown",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+        )
+        mock_try_claim.return_value = (emergency_task, True)
 
         # Setup
         shutdown_manager = Mock()
@@ -268,23 +291,36 @@ class TestTaskCreation:
 
         # Verify
         assert shutdown_processor.shutdown_task is not None
-        assert "EMERGENCY" in shutdown_processor.shutdown_task.description
         assert shutdown_processor.runtime.current_shutdown_context is not None
         assert shutdown_processor.runtime.current_shutdown_context.is_terminal is True
         assert shutdown_processor.runtime.current_shutdown_context.allow_deferral is False
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     async def test_create_shutdown_task_emergency_with_authority_auth(
         self,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test creating emergency shutdown with AUTHORITY authorization"""
-        # Mock add_task to return task_id
-        mock_add_task.return_value = "shutdown_emergency_authority_123"
+        # Mock shared task not completed
+        mock_is_completed.return_value = False
+
+        # Mock claiming shared task
+        emergency_task = Task(
+            task_id="shutdown_emergency_authority_123",
+            channel_id="test_channel",
+            description="EMERGENCY shutdown requested: Emergency shutdown",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+        )
+        mock_try_claim.return_value = (emergency_task, True)
 
         # Setup
         shutdown_manager = Mock()
@@ -356,16 +392,18 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     async def test_create_shutdown_task_with_channel_from_comm_bus(
         self,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
         """Test getting channel ID from communication bus when not on runtime"""
-        # Mock add_task to return task_id
-        mock_add_task.return_value = "shutdown_comm_bus_123"
+        # Mock shared task not completed
+        mock_is_completed.return_value = False
 
         # Setup
         shutdown_processor.runtime.startup_channel_id = None
@@ -375,6 +413,18 @@ class TestTaskCreation:
         mock_comm_bus.get_default_channel = AsyncMock(return_value="comm_channel_456")
         # Update the communication_bus in the ProcessorServices object
         shutdown_processor.services.communication_bus = mock_comm_bus
+
+        # Mock claiming shared task with correct channel
+        task_with_channel = Task(
+            task_id="shutdown_comm_bus_123",
+            channel_id="comm_channel_456",
+            description="System shutdown requested: Test",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+        )
+        mock_try_claim.return_value = (task_with_channel, True)
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -452,12 +502,14 @@ class TestShutdownProcessing:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     async def test_process_activates_pending_task(
         self,
         mock_persistence,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
         sample_task,
@@ -467,8 +519,9 @@ class TestShutdownProcessing:
         sample_task.status = TaskStatus.PENDING
         shutdown_processor.shutdown_task = None
 
-        # Mock add_task for task creation
-        mock_add_task.return_value = "shutdown_test_123"
+        # Mock shared task functions
+        mock_is_completed.return_value = False
+        mock_try_claim.return_value = (sample_task, True)
 
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -485,25 +538,28 @@ class TestShutdownProcessing:
         # Execute
         result = await shutdown_processor.process(round_number=1)
 
-        # Verify
-        mock_persistence.update_task_status.assert_called_once()
+        # Verify - called twice: once in _create_shutdown_task with "__shared__", once in _ensure_task_activated with "default"
+        assert mock_persistence.update_task_status.call_count >= 1
         assert result.shutdown_ready is False  # Still in progress
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    @patch("ciris_engine.logic.persistence.models.tasks.add_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
     async def test_process_generates_seed_thought(
         self,
         mock_persistence,
-        mock_add_task,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
         sample_task,
     ):
         """Test that seed thought is generated for ACTIVE task with no thoughts"""
-        # Mock add_task for task creation
-        mock_add_task.return_value = "shutdown_test_123"
+        # Mock shared task functions
+        mock_is_completed.return_value = False
+        mock_try_claim.return_value = (sample_task, True)
 
         # Setup
         sample_task.status = TaskStatus.ACTIVE

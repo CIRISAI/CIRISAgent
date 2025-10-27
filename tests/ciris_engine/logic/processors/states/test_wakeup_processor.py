@@ -49,14 +49,37 @@ class TestWakeupProcessorInitialization:
 class TestWakeupProcessorTaskManagement:
     """Test task creation and management in WakeupProcessor."""
 
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
     @patch("ciris_engine.logic.persistence.models.tasks.add_system_task")
     @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_create_wakeup_tasks_creates_sequence(
-        self, mock_persistence, mock_identity, mock_add_task, wakeup_processor
+        self, mock_persistence, mock_identity, mock_add_task, mock_try_claim, mock_is_completed, wakeup_processor
     ):
         """Test that _create_wakeup_tasks creates a wakeup sequence."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task
+
+        # Mock shared task not completed
+        mock_is_completed.return_value = False
+
+        # Create a mock root task
+        root_task = Task(
+            task_id="WAKEUP_SHARED_20251027",
+            channel_id="test_channel_123",
+            description="Wakeup ritual (shared across all occurrences)",
+            status=TaskStatus.PENDING,
+            priority=10,
+            created_at="2024-01-01T12:00:00Z",
+            updated_at="2024-01-01T12:00:00Z",
+            agent_occurrence_id="__shared__",
+        )
+
+        # Mock claiming the shared task
+        mock_try_claim.return_value = (root_task, True)
+
         # Mock identity with attributes
         identity_mock = Mock()
         identity_mock.agent_name = "TestAgent"
@@ -65,23 +88,8 @@ class TestWakeupProcessorTaskManagement:
         mock_identity.return_value = identity_mock
 
         # Mock add_system_task to return tasks
-        def create_task(description=None, channel_id=None, task_id=None, task_obj=None, **kwargs):
-            from ciris_engine.schemas.runtime.enums import TaskStatus
-            from ciris_engine.schemas.runtime.models import Task
-
-            # Handle both task object and description string
-            if task_obj:
-                return task_obj
-
-            return Task(
-                task_id=task_id or f"TASK_{len(wakeup_processor.wakeup_tasks)}",
-                channel_id=channel_id or "test_channel",
-                description=str(description) if description else "Test task",
-                status=TaskStatus.ACTIVE,
-                priority=1,
-                created_at="2024-01-01T12:00:00Z",
-                updated_at="2024-01-01T12:00:00Z",
-            )
+        def create_task(task_obj=None, **kwargs):
+            return task_obj if task_obj else None
 
         mock_add_task.side_effect = create_task
 
@@ -89,8 +97,8 @@ class TestWakeupProcessorTaskManagement:
 
         assert len(wakeup_processor.wakeup_tasks) > 0
         # First task should be the root task
-        root_task = wakeup_processor.wakeup_tasks[0]
-        assert "WAKEUP" in root_task.task_id or "wakeup" in root_task.description.lower()
+        root_task_result = wakeup_processor.wakeup_tasks[0]
+        assert "WAKEUP" in root_task_result.task_id
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     def test_check_all_steps_complete_returns_true_when_all_completed(
@@ -189,11 +197,37 @@ class TestWakeupProcessorThoughtCreation:
 class TestWakeupProcessorNonBlocking:
     """Test non-blocking wakeup processing."""
 
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.add_system_task")
     @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
-    async def test_process_wakeup_non_blocking_creates_tasks(self, mock_persistence, mock_identity, wakeup_processor):
+    async def test_process_wakeup_non_blocking_creates_tasks(
+        self, mock_persistence, mock_identity, mock_add_task, mock_try_claim, mock_is_completed, wakeup_processor
+    ):
         """Test that non-blocking mode creates wakeup tasks."""
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task
+
+        # Mock shared task not completed
+        mock_is_completed.return_value = False
+
+        # Create a mock root task
+        root_task = Task(
+            task_id="WAKEUP_SHARED_20251027",
+            channel_id="test_channel_123",
+            description="Wakeup ritual (shared across all occurrences)",
+            status=TaskStatus.PENDING,
+            priority=10,
+            created_at="2024-01-01T12:00:00Z",
+            updated_at="2024-01-01T12:00:00Z",
+            agent_occurrence_id="__shared__",
+        )
+
+        # Mock claiming the shared task
+        mock_try_claim.return_value = (root_task, True)
+
         identity_mock = Mock()
         identity_mock.agent_name = "TestAgent"
         identity_mock.agent_role = "TestRole"
@@ -202,6 +236,7 @@ class TestWakeupProcessorNonBlocking:
 
         mock_persistence.create_task = Mock(side_effect=lambda t: t)
         mock_persistence.get_task_by_id = Mock(return_value=None)
+        mock_add_task.side_effect = lambda task_obj=None, **kwargs: task_obj
 
         result = await wakeup_processor._process_wakeup(round_number=1, non_blocking=True)
 

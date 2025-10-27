@@ -391,11 +391,28 @@ class WakeupProcessor(BaseProcessor):
         return completed
 
     async def _create_wakeup_tasks(self) -> None:
-        """Always create new wakeup sequence tasks for each run, regardless of previous completions."""
+        """Create wakeup sequence tasks with multi-occurrence coordination.
+
+        Checks if another occurrence already completed wakeup. If so, skips
+        wakeup and marks this occurrence as joining the active pool.
+        """
         from typing import cast
 
         from ciris_engine.logic.buses.communication_bus import CommunicationBus
-        from ciris_engine.logic.persistence.models.tasks import add_system_task
+        from ciris_engine.logic.persistence.models.tasks import (
+            add_system_task,
+            is_shared_task_completed,
+            try_claim_shared_task,
+        )
+
+        # Check if wakeup already completed by another occurrence
+        if is_shared_task_completed("wakeup", within_hours=24):
+            logger.info(
+                "Wakeup already completed by another occurrence within the last 24 hours. "
+                "This occurrence is joining the active pool."
+            )
+            self.wakeup_complete = True
+            return
 
         now_iso = self.time_service.now().isoformat()
 
@@ -427,39 +444,68 @@ class WakeupProcessor(BaseProcessor):
 
         logger.info(f"Using default channel for wakeup: {default_channel}")
 
-        # Create proper TaskContext with the resolved channel_id
-        from ciris_engine.schemas.runtime.models import TaskContext as ModelTaskContext
-
-        task_context = ModelTaskContext(
+        # Try to claim the shared wakeup task
+        root_task, was_created = try_claim_shared_task(
+            task_type="wakeup",
             channel_id=default_channel,
-            user_id="system",
-            correlation_id=f"wakeup_{uuid.uuid4().hex[:8]}",
-            parent_task_id=None,
+            description="Wakeup ritual (shared across all occurrences)",
+            priority=10,
+            time_service=self.time_service,
         )
 
-        root_task = Task(
-            task_id="WAKEUP_ROOT",
-            channel_id=default_channel,
-            description="Wakeup ritual",
-            status=TaskStatus.ACTIVE,
-            priority=1,
-            created_at=now_iso,
-            updated_at=now_iso,
-            context=task_context,
+        if not was_created:
+            # Another occurrence claimed the wakeup task
+            logger.info(
+                f"Another occurrence claimed wakeup task {root_task.task_id}. "
+                "This occurrence will wait for wakeup completion."
+            )
+            # We'll use the existing shared task as our root
+            self.wakeup_tasks = [root_task]
+            # Don't create step tasks - we'll just monitor the shared task
+            return
+
+        logger.info(
+            f"This occurrence claimed shared wakeup task {root_task.task_id}. "
+            "Processing wakeup ritual on behalf of all occurrences."
         )
-        if not persistence.task_exists(root_task.task_id):
-            await add_system_task(root_task, auth_service=self.auth_service)
-        else:
-            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
+
+        # We claimed it - activate the root task
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
         self.wakeup_tasks = [root_task]
+
+        # Create step tasks as child tasks of the shared root
         wakeup_sequence = self._get_wakeup_sequence()
-        for step_type, content in wakeup_sequence:
+
+        # Get occurrence ID for context
+        occurrence_id = getattr(self, "occurrence_id", "default")
+
+        # Add multi-occurrence context to first step
+        enhanced_sequence = []
+        for i, (step_type, content) in enumerate(wakeup_sequence):
+            if i == 0:
+                # Enhance first step with multi-occurrence context
+                multi_occurrence_note = (
+                    "\n\nMULTI-OCCURRENCE CONTEXT:\n"
+                    f"You are processing this wakeup ritual on behalf of ALL runtime occurrences of this agent. "
+                    f"Your affirmation will confirm identity for the entire agent system. "
+                    f"This decision applies to all occurrences, ensuring consistent agent identity across "
+                    f"all runtime instances."
+                )
+                enhanced_content = content + multi_occurrence_note
+                enhanced_sequence.append((step_type, enhanced_content))
+            else:
+                enhanced_sequence.append((step_type, content))
+
+        for step_type, content in enhanced_sequence:
             # Create task with proper context using the default channel
+            from ciris_engine.schemas.runtime.models import TaskContext as ModelTaskContext
+
             step_context = ModelTaskContext(
                 channel_id=default_channel,
                 user_id="system",
                 correlation_id=f"wakeup_{step_type}_{uuid.uuid4().hex[:8]}",
                 parent_task_id=root_task.task_id,
+                agent_occurrence_id=occurrence_id,  # Mark which occurrence created this step
             )
 
             step_task = Task(
@@ -472,6 +518,7 @@ class WakeupProcessor(BaseProcessor):
                 updated_at=now_iso,
                 parent_task_id=root_task.task_id,
                 context=step_context,
+                agent_occurrence_id=occurrence_id,  # Step tasks belong to this occurrence
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)
@@ -639,11 +686,19 @@ class WakeupProcessor(BaseProcessor):
 
     def _mark_root_task_complete(self) -> None:
         """Mark the root wakeup task as complete."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.COMPLETED, "default", self.time_service)
+        if self.wakeup_tasks:
+            root_task = self.wakeup_tasks[0]
+            occurrence_id = root_task.agent_occurrence_id
+            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id, self.time_service)
+            logger.info(f"Marked shared wakeup task {root_task.task_id} as COMPLETED")
 
     def _mark_root_task_failed(self) -> None:
         """Mark the root wakeup task as failed."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.FAILED, "default", self.time_service)
+        if self.wakeup_tasks:
+            root_task = self.wakeup_tasks[0]
+            occurrence_id = root_task.agent_occurrence_id
+            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+            logger.error(f"Marked shared wakeup task {root_task.task_id} as FAILED")
 
     def is_wakeup_complete(self) -> bool:
         """Check if wakeup sequence is complete."""

@@ -436,9 +436,7 @@ class TSDBConsolidationService(BaseGraphService):
         except Exception as e:
             logger.error(f"Failed to consolidate missed windows: {e}", exc_info=True)
 
-    def _query_period_data(
-        self, period_start: datetime, period_end: datetime
-    ) -> Tuple[
+    def _query_period_data(self, period_start: datetime, period_end: datetime) -> Tuple[
         Dict[str, TSDBNodeQueryResult],
         ServiceCorrelationQueryResult,
         List[TaskCorrelationData],

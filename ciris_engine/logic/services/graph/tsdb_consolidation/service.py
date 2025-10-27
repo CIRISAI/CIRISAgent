@@ -1255,6 +1255,56 @@ class TSDBConsolidationService(BaseGraphService):
         """Get the service type."""
         return ServiceType.TELEMETRY
 
+    def _should_anonymize_node(self, node: GraphNode, period_end: datetime) -> bool:
+        """Check if a node should be anonymized due to consent expiry."""
+        if not hasattr(node, "consent_stream") or not hasattr(node, "expires_at"):
+            return False
+
+        if node.consent_stream != ConsentStream.TEMPORARY or not node.expires_at:
+            return False
+
+        return period_end > node.expires_at
+
+    def _generate_anonymized_id(self, original_id: str, consent_stream: ConsentStream) -> str:
+        """Generate anonymized ID based on hash of original ID."""
+        import hashlib
+
+        id_hash = hashlib.sha256(original_id.encode()).hexdigest()[:8]
+
+        if consent_stream == ConsentStream.TEMPORARY:
+            return f"temporary_user_{id_hash}"
+        else:
+            return f"anonymous_user_{id_hash}"
+
+    def _remove_pii_from_attributes(self, node: GraphNode, period_end: datetime) -> None:
+        """Remove PII fields from node attributes and add anonymization metadata."""
+        if not hasattr(node, "attributes") or not isinstance(node.attributes, dict):
+            return
+
+        # Remove PII fields
+        pii_fields = ["email", "name", "phone", "address", "ip_address"]
+        for field in pii_fields:
+            if field in node.attributes:
+                del node.attributes[field]
+
+        # Add anonymization metadata
+        node.attributes["anonymized_at"] = period_end.isoformat()
+        node.attributes["original_stream"] = node.consent_stream
+
+    async def _update_anonymized_node(self, node: GraphNode, old_id: str) -> None:
+        """Update anonymized node in memory bus."""
+        if not self._memory_bus:
+            return
+
+        try:
+            status = await self._memory_bus.memorize(node, handler_name="tsdb_consolidation")
+            if status.status == MemoryOpStatus.SUCCESS:
+                logger.info(f"Successfully anonymized node {old_id}")
+            else:
+                logger.warning(f"Failed to update anonymized node: {status.reason}")
+        except Exception as e:
+            logger.error(f"Error updating anonymized node: {e}")
+
     async def _handle_consent_expiry(self, nodes_by_type: Dict[str, TSDBNodeQueryResult], period_end: datetime) -> None:
         """
         Handle consent expiry by anonymizing expired TEMPORARY nodes.
@@ -1275,53 +1325,23 @@ class TSDBConsolidationService(BaseGraphService):
         ).nodes
 
         for node in user_nodes:
-            # Check if node has consent_stream and expires_at
-            if hasattr(node, "consent_stream") and hasattr(node, "expires_at"):
-                # Check if TEMPORARY and expired
-                if node.consent_stream == ConsentStream.TEMPORARY and node.expires_at:
-                    if period_end > node.expires_at:
-                        # Node has expired - anonymize it
-                        old_id = node.id
+            if not self._should_anonymize_node(node, period_end):
+                continue
 
-                        # Generate anonymized ID based on hash of original ID
-                        import hashlib
+            # Node has expired - anonymize it
+            old_id = node.id
+            new_id = self._generate_anonymized_id(old_id, node.consent_stream)
 
-                        id_hash = hashlib.sha256(old_id.encode()).hexdigest()[:8]
+            logger.info(f"Anonymizing expired node: {old_id} -> {new_id}")
 
-                        # Rename based on stream type
-                        if node.consent_stream == ConsentStream.TEMPORARY:
-                            new_id = f"temporary_user_{id_hash}"
-                        else:
-                            new_id = f"anonymous_user_{id_hash}"
+            # Update the node ID
+            node.id = new_id
 
-                        logger.info(f"Anonymizing expired node: {old_id} -> {new_id}")
+            # Clear any PII from attributes
+            self._remove_pii_from_attributes(node, period_end)
 
-                        # Update the node ID
-                        node.id = new_id
-
-                        # Clear any PII from attributes if present
-                        if hasattr(node, "attributes") and isinstance(node.attributes, dict):
-                            # Remove PII fields
-                            pii_fields = ["email", "name", "phone", "address", "ip_address"]
-                            for field in pii_fields:
-                                if field in node.attributes:
-                                    del node.attributes[field]
-
-                            # Add anonymization metadata
-                            node.attributes["anonymized_at"] = period_end.isoformat()
-                            node.attributes["original_stream"] = node.consent_stream
-
-                        # Update in memory bus if available
-                        if self._memory_bus:
-                            try:
-                                # Update the node in the graph using memorize
-                                status = await self._memory_bus.memorize(node, handler_name="tsdb_consolidation")
-                                if status.status == MemoryOpStatus.SUCCESS:
-                                    logger.info(f"Successfully anonymized node {old_id}")
-                                else:
-                                    logger.warning(f"Failed to update anonymized node: {status.reason}")
-                            except Exception as e:
-                                logger.error(f"Error updating anonymized node: {e}")
+            # Update in memory bus
+            await self._update_anonymized_node(node, old_id)
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service can handle."""

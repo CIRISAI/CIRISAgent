@@ -1475,7 +1475,7 @@ class TSDBConsolidationService(BaseGraphService):
                         logger.info(
                             f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
                         )
-                    return
+                        return
 
                     logger.info(f"Found {total_daily_summaries} daily summaries to compress")
 
@@ -1491,7 +1491,7 @@ class TSDBConsolidationService(BaseGraphService):
                     # Check if compression is needed
                     if not compressor.needs_compression(summary_attrs_list, days_in_period):
                         logger.info("Daily summaries already meet storage target, skipping compression")
-                    return
+                        return
 
                     # Compress summaries using helper
                     compressed_count, total_reduction = compress_and_update_summaries(

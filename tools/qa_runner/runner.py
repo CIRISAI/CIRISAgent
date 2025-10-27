@@ -203,6 +203,31 @@ class QARunner:
             else:
                 success = self._run_sequential(all_tests)
 
+        # Run TRUE multi-occurrence integration test if requested
+        if QAModule.MULTI_OCCURRENCE in modules:
+            from .modules.multi_occurrence_tests import MultiOccurrenceTestModule
+
+            self.console.print("\n" + "=" * 80)
+            self.console.print("[bold cyan]🔄 RUNNING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
+            self.console.print("=" * 80)
+
+            # This test spawns 2 separate runtimes and tests coordination
+            mo_result = MultiOccurrenceTestModule.run_true_multi_occurrence_integration_test(self)
+
+            # Store result
+            self.results["multi_occurrence::integration_test"] = {
+                "success": mo_result["success"],
+                "details": mo_result.get("details", {}),
+                "errors": mo_result.get("errors", []),
+                "duration": 0.0,
+            }
+
+            if not mo_result["success"]:
+                success = False
+                self.console.print(f"[red]❌ Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]")
+            else:
+                self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
+
         # Run SDK-based tests
         if sdk_test_modules:
             sdk_success = self._run_sdk_modules(sdk_test_modules)
@@ -1568,3 +1593,151 @@ class QARunner:
             self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
 
         return all_success
+
+    def spawn_multi_occurrence_servers(
+        self, occurrence_ids: List[str], base_port: int = 9000
+    ) -> Dict[str, "APIServerManager"]:
+        """Spawn multiple API server instances with unique occurrence IDs.
+
+        Args:
+            occurrence_ids: List of occurrence IDs to spawn (e.g., ["occ1", "occ2"])
+            base_port: Base port number (each occurrence gets base_port + index)
+
+        Returns:
+            Dictionary mapping occurrence_id -> APIServerManager
+        """
+        occurrence_managers = {}
+
+        for idx, occ_id in enumerate(occurrence_ids):
+            port = base_port + idx
+
+            # Create config for this occurrence
+            occ_config = QAConfig(
+                base_url=f"http://localhost:{port}",
+                api_port=port,
+                admin_username=self.config.admin_username,
+                admin_password=self.config.admin_password,
+                timeout=self.config.timeout,
+                server_startup_timeout=self.config.server_startup_timeout,
+                mock_llm=self.config.mock_llm,
+                postgres_url=self.config.postgres_url,  # All share same DB
+            )
+
+            # Create server manager with occurrence-specific settings
+            manager = APIServerManager(occ_config, database_backend="postgres")
+            # Store occurrence ID for later use
+            manager._occurrence_id = occ_id
+
+            occurrence_managers[occ_id] = manager
+
+        return occurrence_managers
+
+    def start_occurrence(self, occurrence_id: str, manager: "APIServerManager") -> bool:
+        """Start a single occurrence with unique ID and log directory.
+
+        Args:
+            occurrence_id: Unique occurrence identifier
+            manager: APIServerManager instance
+
+        Returns:
+            True if started successfully
+        """
+        import os
+
+        # Customize environment for this occurrence
+        old_env = os.environ.copy()
+        os.environ["CIRIS_OCCURRENCE_ID"] = occurrence_id
+        os.environ["CIRIS_LOG_DIR"] = f"logs/occurrence_{occurrence_id}"
+
+        try:
+            success = manager.start()
+            return success
+        finally:
+            # Restore environment
+            os.environ.clear()
+            os.environ.update(old_env)
+
+    def query_shared_tasks_db(self) -> List[Dict]:
+        """Query shared tasks directly from PostgreSQL database.
+
+        Returns:
+            List of shared task dictionaries
+        """
+        from urllib.parse import urlparse
+
+        import psycopg2
+
+        # Parse postgres URL
+        parsed = urlparse(self.config.postgres_url)
+
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=parsed.password,
+        )
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT task_id, agent_occurrence_id, description, status, created_at
+            FROM tasks
+            WHERE agent_occurrence_id = '__shared__'
+            ORDER BY created_at DESC
+        """
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "task_id": row[0],
+                    "occurrence_id": row[1],
+                    "description": row[2],
+                    "status": row[3],
+                    "created_at": row[4],
+                }
+            )
+
+        cursor.close()
+        conn.close()
+        return results
+
+    def query_thoughts_by_occurrence_db(self) -> Dict[str, int]:
+        """Query thought counts grouped by occurrence from PostgreSQL.
+
+        Returns:
+            Dictionary mapping occurrence_id -> thought count
+        """
+        from urllib.parse import urlparse
+
+        import psycopg2
+
+        # Parse postgres URL
+        parsed = urlparse(self.config.postgres_url)
+
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=parsed.password,
+        )
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT agent_occurrence_id, COUNT(*) as count
+            FROM thoughts
+            GROUP BY agent_occurrence_id
+        """
+        )
+
+        results = {}
+        for row in cursor.fetchall():
+            results[row[0]] = row[1]
+
+        cursor.close()
+        conn.close()
+        return results

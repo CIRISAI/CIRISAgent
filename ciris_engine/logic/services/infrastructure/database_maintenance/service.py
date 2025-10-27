@@ -133,7 +133,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             if task.task_id.startswith("shutdown_") and task.parent_task_id is None:
                 pass  # Shutdown tasks are valid root tasks
             elif task.parent_task_id:
-                parent_task = get_task_by_id(task.parent_task_id)
+                # CRITICAL: Pass task's own occurrence_id to find parent in same namespace
+                # This prevents shared tasks from being marked as orphans in multi-occurrence setups
+                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id)
                 if not parent_task or parent_task.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
                     is_orphan = True
             elif task.parent_task_id is None:
@@ -158,7 +160,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         thought_ids_to_delete_orphan: List[Any] = []
 
         for thought in all_potentially_orphaned_thoughts:
-            source_task = get_task_by_id(thought.source_task_id)
+            # CRITICAL: Pass thought's own occurrence_id to find task in same namespace
+            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id)
             if not source_task or source_task.status != TaskStatus.ACTIVE:
                 logger.info(
                     f"Orphaned thought found: {thought.thought_id} (Task: {thought.source_task_id} not found or not active). Marking for deletion."

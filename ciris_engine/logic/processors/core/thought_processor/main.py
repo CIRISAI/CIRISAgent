@@ -527,7 +527,7 @@ class ThoughtProcessor(
     def _get_profile_name(self, thought: Thought) -> str:
         """Extract profile name from thought context or use default."""
         profile_name = None
-        if hasattr(thought, "context") and thought.context:
+        if thought and hasattr(thought, "context") and thought.context:
             context = thought.context
             if hasattr(context, "agent_profile_name"):
                 profile_name = context.agent_profile_name
@@ -540,7 +540,9 @@ class ThoughtProcessor(
             profile_name = self.app_config.default_profile
         if not profile_name:
             profile_name = "default"
-        logger.debug(f"Determined profile name '{profile_name}' for thought {thought.thought_id}")
+        # CRITICAL: Defensive logging - thought can be None in some error paths
+        thought_id = thought.thought_id if thought else "unknown"
+        logger.debug(f"Determined profile name '{profile_name}' for thought {thought_id}")
         return profile_name
 
     def _describe_action(self, action_result: Any) -> str:

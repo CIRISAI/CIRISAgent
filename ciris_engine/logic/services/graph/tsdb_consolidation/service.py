@@ -9,7 +9,7 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -436,6 +436,116 @@ class TSDBConsolidationService(BaseGraphService):
         except Exception as e:
             logger.error(f"Failed to consolidate missed windows: {e}", exc_info=True)
 
+    def _query_period_data(
+        self, period_start: datetime, period_end: datetime
+    ) -> Tuple[
+        Dict[str, TSDBNodeQueryResult],
+        "ServiceCorrelationQueryResult",
+        List[TaskCorrelationData],
+    ]:
+        """Query all data for a consolidation period."""
+        nodes_by_type = self._query_manager.query_all_nodes_in_period(period_start, period_end)
+        correlations = self._query_manager.query_service_correlations(period_start, period_end)
+        tasks = self._query_manager.query_tasks_in_period(period_start, period_end)
+        return nodes_by_type, correlations, tasks
+
+    async def _create_metric_summary(
+        self,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: "ServiceCorrelationQueryResult",
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create metrics summary from TSDB nodes and correlations."""
+        tsdb_nodes = nodes_by_type.get(
+            "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
+        ).nodes
+        metric_correlations = correlations.metric_correlations
+
+        converted_correlations["metric_datapoint"] = list(metric_correlations)
+
+        if tsdb_nodes or metric_correlations:
+            return await self._metrics_consolidator.consolidate(
+                period_start, period_end, period_label, tsdb_nodes, metric_correlations
+            )
+        return None
+
+    async def _create_task_summary(
+        self,
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+    ) -> Optional[GraphNode]:
+        """Create task summary from task correlations."""
+        if tasks:
+            return await self._task_consolidator.consolidate(period_start, period_end, period_label, tasks)
+        return None
+
+    async def _create_conversation_summary(
+        self,
+        correlations: "ServiceCorrelationQueryResult",
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create conversation summary with user participation edges."""
+        service_interactions = correlations.service_interactions
+        if not service_interactions:
+            return None
+
+        converted_correlations["service_interaction"] = list(service_interactions)
+
+        conversation_summary = await self._conversation_consolidator.consolidate(
+            period_start, period_end, period_label, service_interactions
+        )
+        if not conversation_summary:
+            return None
+
+        # Create user participation edges
+        participant_data = self._conversation_consolidator.get_participant_data(service_interactions)
+        if participant_data:
+            user_edges = self._edge_manager.create_user_participation_edges(
+                conversation_summary, participant_data, period_label
+            )
+            logger.info(f"Created {user_edges} user participation edges")
+
+        return conversation_summary
+
+    async def _create_trace_summary(
+        self,
+        correlations: "ServiceCorrelationQueryResult",
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create trace summary from trace spans."""
+        trace_spans = correlations.trace_spans
+        if not trace_spans:
+            return None
+
+        converted_correlations["trace_span"] = list(trace_spans)
+        return await self._trace_consolidator.consolidate(period_start, period_end, period_label, trace_spans)
+
+    async def _create_audit_summary(
+        self,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+    ) -> Optional[GraphNode]:
+        """Create audit summary from audit nodes."""
+        audit_nodes = nodes_by_type.get(
+            "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
+        ).nodes
+        if audit_nodes:
+            return await self._audit_consolidator.consolidate(period_start, period_end, period_label, audit_nodes)
+        return None
+
     async def _consolidate_period(self, period_start: datetime, period_end: datetime) -> List[GraphNode]:
         """
         Consolidate all data for a specific period.
@@ -457,103 +567,50 @@ class TSDBConsolidationService(BaseGraphService):
 
         # 1. Query ALL data for the period
         logger.info(f"Querying all data for period {period_label}")
-
-        # Get all graph nodes in the period
-        nodes_by_type = self._query_manager.query_all_nodes_in_period(period_start, period_end)
-
-        # Get all correlations in the period
-        correlations = self._query_manager.query_service_correlations(period_start, period_end)
-
-        # Get tasks completed in the period
-        tasks = self._query_manager.query_tasks_in_period(period_start, period_end)
+        nodes_by_type, correlations, tasks = self._query_period_data(period_start, period_end)
 
         # 1.5. Handle consent expiry - anonymize expired TEMPORARY nodes
         await self._handle_consent_expiry(nodes_by_type, period_end)
 
         # 2. Create summaries
-
-        # Store converted correlation objects for reuse in edge creation
         converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]] = (
             {}
         )
-        converted_tasks: List[TaskCorrelationData] = []  # Store converted tasks separately
 
-        # Metrics summary (TSDB data + correlations)
-        tsdb_nodes = nodes_by_type.get(
-            "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
-        ).nodes
-        metric_correlations = correlations.metric_correlations
+        # Create each summary type using helper methods
+        metric_summary = await self._create_metric_summary(
+            nodes_by_type, correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if metric_summary:
+            summaries_created.append(metric_summary)
 
-        converted_correlations["metric_datapoint"] = list(metric_correlations)
+        task_summary = await self._create_task_summary(tasks, period_start, period_end, period_label)
+        if task_summary:
+            summaries_created.append(task_summary)
 
-        if tsdb_nodes or metric_correlations:
-            metric_summary = await self._metrics_consolidator.consolidate(
-                period_start, period_end, period_label, tsdb_nodes, metric_correlations
-            )
-            if metric_summary:
-                summaries_created.append(metric_summary)
+        conversation_summary = await self._create_conversation_summary(
+            correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if conversation_summary:
+            summaries_created.append(conversation_summary)
 
-        # Task summary (tasks are already TaskCorrelationData objects)
-        if tasks:
-            # Store converted tasks for edge creation
-            converted_tasks = tasks
+        trace_summary = await self._create_trace_summary(
+            correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if trace_summary:
+            summaries_created.append(trace_summary)
 
-            task_summary = await self._task_consolidator.consolidate(period_start, period_end, period_label, tasks)
-            if task_summary:
-                summaries_created.append(task_summary)
-
-        # Memory consolidator doesn't create a summary, it only creates edges
-        # We'll call it later in _create_all_edges
-
-        # Conversation summary
-        service_interactions = correlations.service_interactions
-        if service_interactions:
-            converted_correlations["service_interaction"] = list(service_interactions)
-
-            if service_interactions:
-                conversation_summary = await self._conversation_consolidator.consolidate(
-                    period_start, period_end, period_label, service_interactions
-                )
-                if conversation_summary:
-                    summaries_created.append(conversation_summary)
-
-                    # Get participant data and create user edges
-                    participant_data = self._conversation_consolidator.get_participant_data(service_interactions)
-                    if participant_data:
-                        user_edges = self._edge_manager.create_user_participation_edges(
-                            conversation_summary, participant_data, period_label
-                        )
-                        logger.info(f"Created {user_edges} user participation edges")
-
-        # Trace summary
-        trace_spans = correlations.trace_spans
-        if trace_spans:
-            converted_correlations["trace_span"] = list(trace_spans)
-
-            trace_summary = await self._trace_consolidator.consolidate(
-                period_start, period_end, period_label, trace_spans
-            )
-            if trace_summary:
-                summaries_created.append(trace_summary)
-
-        # Audit summary
-        audit_nodes = nodes_by_type.get(
-            "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
-        ).nodes
-        if audit_nodes:
-            audit_summary = await self._audit_consolidator.consolidate(
-                period_start, period_end, period_label, audit_nodes
-            )
-            if audit_summary:
-                summaries_created.append(audit_summary)
+        audit_summary = await self._create_audit_summary(nodes_by_type, period_start, period_end, period_label)
+        if audit_summary:
+            summaries_created.append(audit_summary)
 
         # 3. Create edges
         if summaries_created:
             await self._create_all_edges(
                 summaries_created,
                 nodes_by_type,
-                converted_correlations,  # Use converted correlations instead of raw
-                converted_tasks,  # Use converted tasks instead of raw
+                converted_correlations,
+                tasks,  # Use tasks directly (already TaskCorrelationData objects)
                 period_start,
                 period_label,
             )

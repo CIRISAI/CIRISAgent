@@ -40,18 +40,38 @@ def query_basic_summaries_in_period(
         >>> all(len(s) == 3 for s in summaries)
         True
     """
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # PostgreSQL: Use JSONB operators, SQLite: Use json_extract()
+    if adapter.is_postgresql():
+        sql = """
+            SELECT node_id, attributes_json,
+                   attributes_json->>'period_start' as period_start
+            FROM graph_nodes
+            WHERE node_type = ?
+              AND created_at >= ?
+              AND created_at <= ?
+              AND (attributes_json->>'consolidation_level' IS NULL
+                   OR attributes_json->>'consolidation_level' = 'basic')
+            ORDER BY attributes_json->>'period_start'
         """
-        SELECT node_id, attributes_json,
-               json_extract(attributes_json, '$.period_start') as period_start
-        FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
-          AND (json_extract(attributes_json, '$.consolidation_level') IS NULL
-               OR json_extract(attributes_json, '$.consolidation_level') = 'basic')
-        ORDER BY period_start
-    """,
+    else:
+        sql = """
+            SELECT node_id, attributes_json,
+                   json_extract(attributes_json, '$.period_start') as period_start
+            FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) <= datetime(?)
+              AND (json_extract(attributes_json, '$.consolidation_level') IS NULL
+                   OR json_extract(attributes_json, '$.consolidation_level') = 'basic')
+            ORDER BY period_start
+        """
+
+    cursor.execute(
+        sql,
         (summary_type, period_start.isoformat(), period_end.isoformat()),
     )
 
@@ -214,19 +234,29 @@ def maintain_temporal_chain_to_daily(
         >>> edges_created in [0, 2]
         True
     """
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
     # Find last 6-hour summary before the daily summaries start
     last_6h_before = period_start - timedelta(hours=6)
     last_6h_id = f"tsdb_summary_{last_6h_before.strftime('%Y%m%d_%H')}"
 
-    # Check if it exists
-    cursor.execute(
+    # Check if it exists (PostgreSQL: JSONB operators, SQLite: json_extract)
+    if adapter.is_postgresql():
+        sql = """
+            SELECT node_id FROM graph_nodes
+            WHERE node_id = ? AND node_type = 'tsdb_summary'
+            AND attributes_json->>'consolidation_level' = 'basic'
         """
-        SELECT node_id FROM graph_nodes
-        WHERE node_id = ? AND node_type = 'tsdb_summary'
-        AND json_extract(attributes_json, '$.consolidation_level') = 'basic'
-    """,
-        (last_6h_id,),
-    )
+    else:
+        sql = """
+            SELECT node_id FROM graph_nodes
+            WHERE node_id = ? AND node_type = 'tsdb_summary'
+            AND json_extract(attributes_json, '$.consolidation_level') = 'basic'
+        """
+
+    cursor.execute(sql, (last_6h_id,))
 
     if not cursor.fetchone():
         return 0

@@ -924,18 +924,30 @@ class TSDBConsolidationService(BaseGraphService):
             # Query for existing TSDB summary for this exact period
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
 
+            adapter = get_adapter()
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
-            # Query for TSDB summaries with matching period
-            cursor.execute(
+            # Query for TSDB summaries with matching period (PostgreSQL: JSONB operators, SQLite: json_extract)
+            if adapter.is_postgresql():
+                sql = """
+                    SELECT COUNT(*) FROM graph_nodes
+                    WHERE node_type = ?
+                    AND attributes_json->>'period_start' = ?
+                    AND attributes_json->>'period_end' = ?
                 """
-                SELECT COUNT(*) FROM graph_nodes
-                WHERE node_type = ?
-                AND json_extract(attributes_json, '$.period_start') = ?
-                AND json_extract(attributes_json, '$.period_end') = ?
-            """,
+            else:
+                sql = """
+                    SELECT COUNT(*) FROM graph_nodes
+                    WHERE node_type = ?
+                    AND json_extract(attributes_json, '$.period_start') = ?
+                    AND json_extract(attributes_json, '$.period_end') = ?
+                """
+
+            cursor.execute(
+                sql,
                 (NodeType.TSDB_SUMMARY.value, period_start.isoformat(), period_end.isoformat()),
             )
 
@@ -1080,19 +1092,32 @@ class TSDBConsolidationService(BaseGraphService):
         try:
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
 
+            adapter = get_adapter()
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
-            # Query for TSDB summaries with matching period
-            cursor.execute(
+            # Query for TSDB summaries with matching period (PostgreSQL: JSONB operators, SQLite: json_extract)
+            if adapter.is_postgresql():
+                sql = """
+                    SELECT attributes_json FROM graph_nodes
+                    WHERE node_type = ?
+                    AND attributes_json->>'period_start' = ?
+                    AND attributes_json->>'period_end' = ?
+                    LIMIT 1
                 """
-                SELECT attributes_json FROM graph_nodes
-                WHERE node_type = ?
-                AND json_extract(attributes_json, '$.period_start') = ?
-                AND json_extract(attributes_json, '$.period_end') = ?
-                LIMIT 1
-            """,
+            else:
+                sql = """
+                    SELECT attributes_json FROM graph_nodes
+                    WHERE node_type = ?
+                    AND json_extract(attributes_json, '$.period_start') = ?
+                    AND json_extract(attributes_json, '$.period_end') = ?
+                    LIMIT 1
+                """
+
+            cursor.execute(
+                sql,
                 (NodeType.TSDB_SUMMARY.value, period_start.isoformat(), period_end.isoformat()),
             )
 
@@ -1249,94 +1274,107 @@ class TSDBConsolidationService(BaseGraphService):
             logger.info(f"Consolidating week: {week_start} to {week_end}")
             logger.info(f"Period: {period_start.isoformat()} to {period_end.isoformat()}")
 
-            # Process summaries
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
+            # Try to acquire lock for this week to prevent duplicate consolidation
+            week_identifier = week_start.isoformat()  # e.g., "2023-10-01"
+            lock_acquired = self._query_manager.acquire_consolidation_lock("extensive", week_identifier)
 
-                # Get all summary types to consolidate
-                summary_types = [
-                    "tsdb_summary",
-                    "audit_summary",
-                    "trace_summary",
-                    "conversation_summary",
-                    "task_summary",
-                ]
+            if not lock_acquired:
+                logger.info(f"Extensive consolidation for week {week_identifier} is locked by another instance, skipping")
+                return
 
-                for summary_type in summary_types:
-                    # Query basic summaries using helper
-                    summaries = query_basic_summaries_in_period(cursor, summary_type, period_start, period_end)
+            try:
+                # Process summaries
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
 
-                    if not summaries:
-                        logger.info(f"No {summary_type} summaries found for consolidation")
-                        continue
+                    # Get all summary types to consolidate
+                    summary_types = [
+                        "tsdb_summary",
+                        "audit_summary",
+                        "trace_summary",
+                        "conversation_summary",
+                        "task_summary",
+                    ]
 
-                    logger.info(f"Found {len(summaries)} {summary_type} summaries to consolidate")
-                    total_basic_summaries += len(summaries)
+                    for summary_type in summary_types:
+                        # Query basic summaries using helper
+                        summaries = query_basic_summaries_in_period(cursor, summary_type, period_start, period_end)
 
-                    # Group summaries by day using helper
-                    summaries_by_day = group_summaries_by_day(summaries)
-
-                    # Create daily summary for each day
-                    for day, day_summaries in summaries_by_day.items():
-                        if len(day_summaries) == 0:
+                        if not summaries:
+                            logger.info(f"No {summary_type} summaries found for consolidation")
                             continue
 
-                        # Convert date to datetime for helpers
-                        day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+                        logger.info(f"Found {len(summaries)} {summary_type} summaries to consolidate")
+                        total_basic_summaries += len(summaries)
 
-                        # Generate daily node ID
-                        daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
+                        # Group summaries by day using helper
+                        summaries_by_day = group_summaries_by_day(summaries)
 
-                        # Check if already exists using helper
-                        if check_daily_summary_exists(cursor, daily_node_id):
-                            logger.debug(f"Daily summary {daily_node_id} already exists, skipping")
-                            continue
+                        # Create daily summary for each day
+                        for day, day_summaries in summaries_by_day.items():
+                            if len(day_summaries) == 0:
+                                continue
 
-                        # Parse summary attributes using helper
-                        summary_attrs_list = parse_summary_attributes(day_summaries)
+                            # Convert date to datetime for helpers
+                            day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
 
-                        # Aggregate metrics, resources, and actions using helpers
-                        daily_metrics = aggregate_metric_stats(summary_attrs_list)
-                        daily_resources = aggregate_resource_usage(summary_attrs_list)
-                        daily_action_counts = aggregate_action_counts(summary_attrs_list)
+                            # Generate daily node ID
+                            daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
 
-                        # Create daily summary attributes using helper
-                        daily_attrs = create_daily_summary_attributes(
-                            summary_type,
-                            day_datetime,
-                            day_summaries,
-                            daily_metrics,
-                            daily_resources,
-                            daily_action_counts,
-                        )
+                            # Check if already exists using helper
+                            if check_daily_summary_exists(cursor, daily_node_id):
+                                logger.debug(f"Daily summary {daily_node_id} already exists, skipping")
+                                continue
 
-                        # Create daily summary node using helper
-                        daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
+                            # Parse summary attributes using helper
+                            summary_attrs_list = parse_summary_attributes(day_summaries)
 
-                        # Store in memory
-                        if self._memory_bus:
-                            result = await self._memory_bus.memorize(daily_summary, handler_name="tsdb_consolidation")
-                            if result.status == MemoryOpStatus.OK:
-                                daily_summaries_created += 1
-                                logger.info(
-                                    f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
-                                )
+                            # Aggregate metrics, resources, and actions using helpers
+                            daily_metrics = aggregate_metric_stats(summary_attrs_list)
+                            daily_resources = aggregate_resource_usage(summary_attrs_list)
+                            daily_action_counts = aggregate_action_counts(summary_attrs_list)
 
-                # Final summary
-                total_duration = (self._now() - consolidation_start).total_seconds()
-                logger.info(f"Extensive consolidation complete in {total_duration:.2f}s:")
-                logger.info(f"  - Basic summaries processed: {total_basic_summaries}")
-                logger.info(f"  - Daily summaries created: {daily_summaries_created}")
-                if total_basic_summaries > 0:
-                    compression_ratio = total_basic_summaries / max(daily_summaries_created, 1)
-                    logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
-                logger.info("=" * 60)
+                            # Create daily summary attributes using helper
+                            daily_attrs = create_daily_summary_attributes(
+                                summary_type,
+                                day_datetime,
+                                day_summaries,
+                                daily_metrics,
+                                daily_resources,
+                                daily_action_counts,
+                            )
 
-                # Maintain temporal chain using helper
-                if daily_summaries_created > 0:
-                    edges_created = maintain_temporal_chain_to_daily(cursor, period_start)
-                    if edges_created > 0:
-                        logger.info(f"Created {edges_created} temporal chain edges")
+                            # Create daily summary node using helper
+                            daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
+
+                            # Store in memory
+                            if self._memory_bus:
+                                result = await self._memory_bus.memorize(daily_summary, handler_name="tsdb_consolidation")
+                                if result.status == MemoryOpStatus.OK:
+                                    daily_summaries_created += 1
+                                    logger.info(
+                                        f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
+                                    )
+
+                    # Final summary
+                    total_duration = (self._now() - consolidation_start).total_seconds()
+                    logger.info(f"Extensive consolidation complete in {total_duration:.2f}s:")
+                    logger.info(f"  - Basic summaries processed: {total_basic_summaries}")
+                    logger.info(f"  - Daily summaries created: {daily_summaries_created}")
+                    if total_basic_summaries > 0:
+                        compression_ratio = total_basic_summaries / max(daily_summaries_created, 1)
+                        logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
+                    logger.info("=" * 60)
+
+                    # Maintain temporal chain using helper
+                    if daily_summaries_created > 0:
+                        edges_created = maintain_temporal_chain_to_daily(cursor, period_start)
+                        if edges_created > 0:
+                            logger.info(f"Created {edges_created} temporal chain edges")
+
+            finally:
+                # Release lock
+                self._query_manager.release_consolidation_lock("extensive", week_identifier)
 
         except Exception as e:
             logger.error(f"Extensive consolidation failed: {e}", exc_info=True)
@@ -1407,74 +1445,87 @@ class TSDBConsolidationService(BaseGraphService):
             # Calculate the previous month period using helper
             month_start, month_end = calculate_month_period(now)
 
-            # Initialize compressor
-            compressor = SummaryCompressor(self._profound_target_mb_per_day)
+            # Try to acquire lock for this month to prevent duplicate consolidation
+            month_identifier = month_start.strftime("%Y-%m")  # e.g., "2023-10"
+            lock_acquired = self._query_manager.acquire_consolidation_lock("profound", month_identifier)
 
-            # Query and process summaries
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
+            if not lock_acquired:
+                logger.info(f"Profound consolidation for month {month_identifier} is locked by another instance, skipping")
+                return
 
-                # Query all extensive summaries from the month using helper
-                summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
-                total_daily_summaries = len(summaries)
+            try:
+                # Initialize compressor
+                compressor = SummaryCompressor(self._profound_target_mb_per_day)
 
-                if len(summaries) < 7:  # Less than a week's worth
-                    logger.info(
+                # Query and process summaries
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    # Query all extensive summaries from the month using helper
+                    summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
+                    total_daily_summaries = len(summaries)
+
+                    if len(summaries) < 7:  # Less than a week's worth
+                        logger.info(
                         f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
                     )
                     return
 
-                logger.info(f"Found {total_daily_summaries} daily summaries to compress")
+                    logger.info(f"Found {total_daily_summaries} daily summaries to compress")
 
-                # Calculate current storage using helper
-                days_in_period = (month_end - month_start).days + 1
-                current_daily_mb, summary_attrs_list = calculate_storage_metrics(
+                    # Calculate current storage using helper
+                    days_in_period = (month_end - month_start).days + 1
+                    current_daily_mb, summary_attrs_list = calculate_storage_metrics(
                     cursor, month_start, month_end, compressor
-                )
-                storage_before_mb = float(current_daily_mb * days_in_period)
-                logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
-                logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
+                    )
+                    storage_before_mb = float(current_daily_mb * days_in_period)
+                    logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
+                    logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
 
-                # Check if compression is needed
-                if not compressor.needs_compression(summary_attrs_list, days_in_period):
-                    logger.info("Daily summaries already meet storage target, skipping compression")
+                    # Check if compression is needed
+                    if not compressor.needs_compression(summary_attrs_list, days_in_period):
+                        logger.info("Daily summaries already meet storage target, skipping compression")
                     return
 
-                # Compress summaries using helper
-                compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
-                summaries_compressed = compressed_count
+                    # Compress summaries using helper
+                    compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
+                    summaries_compressed = compressed_count
 
-                conn.commit()
+                    conn.commit()
 
-                # Calculate new storage using helper
-                new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
-                storage_after_mb = new_daily_mb * days_in_period
-                avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
+                    # Calculate new storage using helper
+                    new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
+                    storage_after_mb = new_daily_mb * days_in_period
+                    avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
 
-                # Final summary
-                total_duration = (self._now() - consolidation_start).total_seconds()
-                logger.info(f"Profound consolidation complete in {total_duration:.2f}s:")
-                logger.info(f"  - Daily summaries processed: {total_daily_summaries}")
-                logger.info(f"  - Summaries compressed: {summaries_compressed}")
-                logger.info(f"  - Average compression: {avg_reduction:.1%}")
-                logger.info(
-                    f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
-                )
-                logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
-                if storage_before_mb > 0:
+                    # Final summary
+                    total_duration = (self._now() - consolidation_start).total_seconds()
+                    logger.info(f"Profound consolidation complete in {total_duration:.2f}s:")
+                    logger.info(f"  - Daily summaries processed: {total_daily_summaries}")
+                    logger.info(f"  - Summaries compressed: {summaries_compressed}")
+                    logger.info(f"  - Average compression: {avg_reduction:.1%}")
                     logger.info(
+                    f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
+                    )
+                    logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
+                    if storage_before_mb > 0:
+                        logger.info(
                         f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
                     )
 
-                # Clean up old basic summaries using helper
-                cleanup_cutoff = now - timedelta(days=30)
-                deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
+                    # Clean up old basic summaries using helper
+                    cleanup_cutoff = now - timedelta(days=30)
+                    deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
 
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} old basic summaries")
-                    conn.commit()
+                    if deleted > 0:
+                        logger.info(f"Cleaned up {deleted} old basic summaries")
+                        conn.commit()
 
-            self._last_profound_consolidation = now
+                    self._last_profound_consolidation = now
+
+            finally:
+                # Release lock
+                self._query_manager.release_consolidation_lock("profound", month_identifier)
 
         except Exception as e:
             logger.error(f"Profound consolidation failed: {e}", exc_info=True)

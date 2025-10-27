@@ -649,32 +649,16 @@ class TSDBConsolidationService(BaseGraphService):
                 if created:
                     logger.debug(f"Created {created} temporal edges from {summary.id} to {previous_id}")
 
-    async def _create_all_edges(
+    def _create_consolidator_edges(
         self,
         summaries: List[GraphNode],
         nodes_by_type: Dict[str, TSDBNodeQueryResult],
         correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
-        tasks: List[TaskCorrelationData],  # Now contains typed task objects
+        tasks: List[TaskCorrelationData],
         period_start: datetime,
         period_label: str,
-    ) -> None:
-        """
-        Create all necessary edges for the summaries.
-
-        This includes:
-        1. Type-specific edges (e.g., TSDB->metrics, conversation->users)
-        2. Summary->ALL nodes edges (SUMMARIZES relationship)
-        3. Temporal edges to previous period
-        4. Cross-summary edges within same period
-
-        Args:
-            summaries: List of summary nodes created
-            nodes_by_type: All nodes in the period by type
-            correlations: All correlations in the period by type
-            tasks: All tasks in the period
-            period_start: Start of the period
-            period_label: Human-readable period label
-        """
+    ) -> int:
+        """Create type-specific edges from consolidators and memory edges."""
         all_edges = []
 
         # Collect edges from each consolidator based on summary type
@@ -683,7 +667,6 @@ class TSDBConsolidationService(BaseGraphService):
             all_edges.extend(edges)
 
         # Get memory edges (links from summaries to memory nodes)
-        # Convert TSDBNodeQueryResult back to dict format for memory consolidator
         nodes_by_type_dict = {node_type: result.nodes for node_type, result in nodes_by_type.items()}
         memory_edges = self._memory_consolidator.consolidate(
             period_start, period_start + self._consolidation_interval, period_label, nodes_by_type_dict, summaries
@@ -694,14 +677,18 @@ class TSDBConsolidationService(BaseGraphService):
         if all_edges:
             edges_created = self._edge_manager.create_edges(all_edges)
             logger.info(f"Created {edges_created} edges for period {period_label}")
+            return edges_created
+        return 0
 
-        # CRITICAL: Create edges from summaries to ALL nodes in the period
-        # This ensures every node gets at least one edge after consolidation
+    def _create_summarizes_edges(
+        self, summaries: List[GraphNode], nodes_by_type: Dict[str, TSDBNodeQueryResult], period_label: str
+    ) -> int:
+        """Create SUMMARIZES edges from primary summary to all nodes in period."""
+        # Collect all nodes in period (excluding temporary TSDB_DATA nodes)
         all_nodes_in_period = []
         logger.debug(f"Collecting nodes for SUMMARIZES edges. nodes_by_type keys: {list(nodes_by_type.keys())}")
 
         for node_type, result in nodes_by_type.items():
-            # Skip TSDB_DATA nodes as they're temporary and will be cleaned up
             if node_type != "tsdb_data":
                 node_count = len(result.nodes) if hasattr(result, "nodes") else 0
                 logger.debug(f"  {node_type}: {node_count} nodes")
@@ -712,27 +699,39 @@ class TSDBConsolidationService(BaseGraphService):
 
         logger.info(f"Total nodes collected for SUMMARIZES edges: {len(all_nodes_in_period)}")
 
-        if all_nodes_in_period:
-            # Create a primary summary (TSDB or first available) to link all nodes
-            primary_summary = next(
-                (s for s in summaries if s.type == NodeType.TSDB_SUMMARY), summaries[0] if summaries else None
-            )
+        if not all_nodes_in_period:
+            return 0
 
-            if primary_summary:
-                logger.info(f"Creating edges from {primary_summary.id} to {len(all_nodes_in_period)} nodes in period")
-                edges_created = self._edge_manager.create_summary_to_nodes_edges(
-                    primary_summary, all_nodes_in_period, "SUMMARIZES", f"Node active during {period_label}"
-                )
-                logger.info(f"Created {edges_created} SUMMARIZES edges for period {period_label}")
+        # Create a primary summary (TSDB or first available) to link all nodes
+        primary_summary = next(
+            (s for s in summaries if s.type == NodeType.TSDB_SUMMARY), summaries[0] if summaries else None
+        )
 
-        # Create cross-summary edges (same period relationships)
-        if len(summaries) > 1:
-            cross_edges = self._edge_manager.create_cross_summary_edges(summaries, period_start)
-            logger.info(f"Created {cross_edges} cross-summary edges for period {period_label}")
+        if not primary_summary:
+            return 0
 
-        # Create temporal edges to previous period summaries
+        logger.info(f"Creating edges from {primary_summary.id} to {len(all_nodes_in_period)} nodes in period")
+        edges_created = self._edge_manager.create_summary_to_nodes_edges(
+            primary_summary, all_nodes_in_period, "SUMMARIZES", f"Node active during {period_label}"
+        )
+        logger.info(f"Created {edges_created} SUMMARIZES edges for period {period_label}")
+        return edges_created
+
+    def _create_cross_summary_edges(self, summaries: List[GraphNode], period_start: datetime) -> int:
+        """Create edges between summaries in the same period."""
+        if len(summaries) <= 1:
+            return 0
+
+        cross_edges = self._edge_manager.create_cross_summary_edges(summaries, period_start)
+        logger.info(f"Created {cross_edges} cross-summary edges")
+        return cross_edges
+
+    def _create_temporal_edges(self, summaries: List[GraphNode], period_start: datetime) -> int:
+        """Create temporal edges to previous and next period summaries."""
+        total_created = 0
+
+        # Link to previous period summaries
         for summary in summaries:
-            # Extract summary type from ID
             summary_type = summary.id.split("_")[0] + "_" + summary.id.split("_")[1]
             previous_period = period_start - self._consolidation_interval
             previous_id = self._edge_manager.get_previous_summary_id(
@@ -743,11 +742,53 @@ class TSDBConsolidationService(BaseGraphService):
                 created = self._edge_manager.create_temporal_edges(summary, previous_id)
                 if created:
                     logger.debug(f"Created {created} temporal edges for {summary.id}")
+                    total_created += created
 
-        # Also check if there's a next period already consolidated and link to it
+        # Link to next period summaries
         edges_to_next = self._edge_manager.update_next_period_edges(period_start, summaries)
         if edges_to_next > 0:
             logger.info(f"Created {edges_to_next} edges to next period summaries")
+            total_created += edges_to_next
+
+        return total_created
+
+    async def _create_all_edges(
+        self,
+        summaries: List[GraphNode],
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+        period_label: str,
+    ) -> None:
+        """
+        Create all necessary edges for the summaries.
+
+        This orchestrates creation of:
+        1. Type-specific edges from consolidators
+        2. SUMMARIZES edges to all nodes in period
+        3. Cross-summary edges within same period
+        4. Temporal edges to previous/next periods
+
+        Args:
+            summaries: List of summary nodes created
+            nodes_by_type: All nodes in the period by type
+            correlations: All correlations in the period by type
+            tasks: All tasks in the period
+            period_start: Start of the period
+            period_label: Human-readable period label
+        """
+        # Create type-specific and memory edges
+        self._create_consolidator_edges(summaries, nodes_by_type, correlations, tasks, period_start, period_label)
+
+        # Create SUMMARIZES edges to all nodes
+        self._create_summarizes_edges(summaries, nodes_by_type, period_label)
+
+        # Create cross-summary edges
+        self._create_cross_summary_edges(summaries, period_start)
+
+        # Create temporal edges
+        self._create_temporal_edges(summaries, period_start)
 
     def _find_oldest_unconsolidated_period(self) -> Optional[datetime]:
         """Find the oldest data that needs consolidation."""

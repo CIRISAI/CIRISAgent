@@ -77,6 +77,11 @@ class QARunner:
         # For backward compatibility, keep a reference to the first server manager
         self.server_manager = self.server_managers[self.database_backends[0]]
 
+        # For single-backend runs, update self.config to use the backend-specific config
+        # This ensures all test execution uses the correct base_url/port
+        if len(self.database_backends) == 1:
+            self.config = self.server_manager.config
+
         self.results: Dict[str, Dict] = {}
         self._startup_incidents_position = 0
         self._filter_helper: Optional[FilterTestHelper] = None
@@ -449,10 +454,8 @@ class QARunner:
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
-            # Use server_manager's config which has the correct backend-specific base_url
-            base_url = self.server_manager.config.base_url
             response = requests.post(
-                f"{base_url}/v1/auth/login",
+                f"{self.config.base_url}/v1/auth/login",
                 json={"username": self.config.admin_username, "password": self.config.admin_password},
                 timeout=10,
             )
@@ -627,10 +630,8 @@ class QARunner:
         try:
             # Login as the OAuth test user using password authentication
             # This will create an API key in the auth service's in-memory store
-            # Use server_manager's config which has the correct backend-specific base_url
-            base_url = self.server_manager.config.base_url
             response = requests.post(
-                f"{base_url}/v1/auth/login",
+                f"{self.config.base_url}/v1/auth/login",
                 json={"username": "qa_oauth_user", "password": "qa_test_oauth_password_temp"},
                 timeout=10,
             )

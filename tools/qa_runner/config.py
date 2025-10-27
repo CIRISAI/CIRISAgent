@@ -113,7 +113,7 @@ class QAConfig:
 
     # Server management
     auto_start_server: bool = True
-    server_startup_timeout: float = 90.0  # Startup with TSDB consolidation can take 45-60 seconds
+    server_startup_timeout: float = 180.0  # Startup with TSDB consolidation can take 45-60 seconds (up to 3 min for PostgreSQL with weekly consolidation)
     mock_llm: bool = True
     adapter: str = "api"
 

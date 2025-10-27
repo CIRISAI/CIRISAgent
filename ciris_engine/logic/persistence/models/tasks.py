@@ -493,22 +493,37 @@ def try_claim_shared_task(
         return (existing, False)
 
     # Try to create the task with INSERT OR IGNORE for race safety
+    # Use dialect adapter for database compatibility
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
     now = time_service.now_iso()
-    sql = """
-        INSERT OR IGNORE INTO tasks
-        (task_id, channel_id, agent_occurrence_id, description, status, priority,
-         created_at, updated_at, parent_task_id, context_json, outcome_json,
-         signed_by, signature, signed_at, updated_info_available, updated_info_content)
-        VALUES (?, ?, '__shared__', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL)
-    """
+
+    columns = [
+        "task_id", "channel_id", "agent_occurrence_id", "description", "status", "priority",
+        "created_at", "updated_at", "parent_task_id", "context_json", "outcome_json",
+        "signed_by", "signature", "signed_at", "updated_info_available", "updated_info_content"
+    ]
+    conflict_columns = ["task_id", "agent_occurrence_id"]  # Primary key constraint
+
+    sql = adapter.insert_or_ignore("tasks", columns, conflict_columns)
     params = (
         task_id,
         channel_id,
+        "__shared__",
         description,
         TaskStatus.PENDING.value,
         priority,
         now,
         now,
+        None,  # parent_task_id
+        None,  # context_json
+        None,  # outcome_json
+        None,  # signed_by
+        None,  # signature
+        None,  # signed_at
+        0,     # updated_info_available
+        None,  # updated_info_content
     )
 
     try:

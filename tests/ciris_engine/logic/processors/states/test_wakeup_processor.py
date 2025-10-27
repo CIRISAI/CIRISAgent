@@ -109,7 +109,7 @@ class TestWakeupProcessorTaskManagement:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock all step tasks as completed
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             task = next((t for t in wakeup_task_sequence if t.task_id == task_id), None)
             if task:
                 completed_task = Mock()
@@ -130,7 +130,7 @@ class TestWakeupProcessorTaskManagement:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock first step as active, rest as completed
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             task = next((t for t in wakeup_task_sequence if t.task_id == task_id), None)
             if task and task == wakeup_task_sequence[1]:  # First step task
                 active_task = Mock()
@@ -153,7 +153,7 @@ class TestWakeupProcessorTaskManagement:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock 2 steps as completed, 1 as active
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             task = next((t for t in wakeup_task_sequence if t.task_id == task_id), None)
             if task and task in wakeup_task_sequence[1:3]:  # First 2 step tasks
                 completed_task = Mock()
@@ -256,7 +256,7 @@ class TestWakeupProcessorNonBlocking:
         mock_gen_id.return_value = "th_test_123"
 
         # Mock tasks as active with no thoughts
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             task = next((t for t in wakeup_task_sequence if t.task_id == task_id), None)
             if task:
                 active_task = Mock()
@@ -285,7 +285,7 @@ class TestWakeupProcessorNonBlocking:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock tasks as active with pending thoughts
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             active_task = Mock()
             active_task.status = TaskStatus.ACTIVE
             active_task.task_id = task_id
@@ -310,7 +310,7 @@ class TestWakeupProcessorNonBlocking:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock all step tasks as completed
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             completed_task = Mock()
             completed_task.status = TaskStatus.COMPLETED
             completed_task.task_id = task_id
@@ -336,7 +336,7 @@ class TestWakeupProcessorNonBlocking:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock first step as failed, rest as active
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             task = next((t for t in wakeup_task_sequence if t.task_id == task_id), None)
             if task and task == wakeup_task_sequence[1]:  # First step
                 failed_task = Mock()
@@ -397,7 +397,7 @@ class TestWakeupProcessorProcess:
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
         # Mock first step as failed
-        def get_task_mock(task_id):
+        def get_task_mock(task_id, occurrence_id="default"):
             if task_id == wakeup_task_sequence[1].task_id:
                 return failed_task
             return None

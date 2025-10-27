@@ -77,23 +77,24 @@ class WakeupProcessor(BaseProcessor):
             Tuple of (is_valid, status_message) where is_valid indicates
             if the task exists and is ACTIVE.
         """
-        current_task = persistence.get_task_by_id(task.task_id)
+        current_task = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
         if not current_task:
             return False, "missing"
         if current_task.status != TaskStatus.ACTIVE:
             return False, current_task.status.value
         return True, "active"
 
-    def _get_task_thoughts_summary(self, task_id: str) -> Dict[str, Any]:
+    def _get_task_thoughts_summary(self, task_id: str, occurrence_id: str) -> Dict[str, Any]:
         """Get summary of thought statuses for a task.
 
         Args:
             task_id: ID of task to get thoughts for
+            occurrence_id: Occurrence ID that owns the task
 
         Returns:
             Dict with counts of thoughts by status
         """
-        thoughts = persistence.get_thoughts_by_task_id(task_id)
+        thoughts = persistence.get_thoughts_by_task_id(task_id, occurrence_id)
         return {
             "total": len(thoughts),
             "pending": sum(1 for t in thoughts if t.status == ThoughtStatus.PENDING),
@@ -112,7 +113,7 @@ class WakeupProcessor(BaseProcessor):
         Returns:
             Dict with step status information
         """
-        current_task = persistence.get_task_by_id(step_task.task_id)
+        current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
         status = "missing" if not current_task else current_task.status.value
         step_type = step_task.task_id.split("_")[0] if "_" in step_task.task_id else "unknown"
 
@@ -248,7 +249,7 @@ class WakeupProcessor(BaseProcessor):
                         continue
 
                     # Use helper to get thought summary
-                    thought_summary = self._get_task_thoughts_summary(step_task.task_id)
+                    thought_summary = self._get_task_thoughts_summary(step_task.task_id, step_task.agent_occurrence_id)
                     existing_thoughts = thought_summary["thoughts"]
                     logger.debug(f"Step {i+1} has {thought_summary['total']} existing thoughts")
                     logger.debug(
@@ -269,7 +270,7 @@ class WakeupProcessor(BaseProcessor):
                         continue
 
                     # Use helper to determine if new thought is needed
-                    current_task = persistence.get_task_by_id(step_task.task_id)
+                    current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
                     if self._needs_new_thought(existing_thoughts, current_task):
                         logger.debug(
                             f"Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
@@ -339,12 +340,14 @@ class WakeupProcessor(BaseProcessor):
         _tasks: List[Any] = []
 
         for i, step_task in enumerate(self.wakeup_tasks[1:]):  # Skip root
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task:
                 continue
 
             if current_task.status == TaskStatus.ACTIVE:
-                existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+                existing_thoughts = persistence.get_thoughts_by_task_id(
+                    step_task.task_id, step_task.agent_occurrence_id
+                )
 
                 if any(t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING] for t in existing_thoughts):
                     logger.debug(f"Step {i+1} already has active thoughts, skipping")
@@ -358,7 +361,7 @@ class WakeupProcessor(BaseProcessor):
                 logger.debug(f"Queued step {i+1} for async processing")
 
         for step_task in self.wakeup_tasks[1:]:
-            thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+            thoughts = persistence.get_thoughts_by_task_id(step_task.task_id, step_task.agent_occurrence_id)
             for thought in thoughts:
                 if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
                     logger.debug(f"Found existing thought {thought.thought_id} for processing")
@@ -369,7 +372,7 @@ class WakeupProcessor(BaseProcessor):
             return False
 
         for step_task in self.wakeup_tasks[1:]:
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task or current_task.status != TaskStatus.COMPLETED:
                 logger.debug(
                     f"Step {step_task.task_id} not yet complete (status: {current_task.status if current_task else 'missing'})"
@@ -385,7 +388,7 @@ class WakeupProcessor(BaseProcessor):
             return 0
         completed = 0
         for step_task in self.wakeup_tasks[1:]:
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if current_task and current_task.status == TaskStatus.COMPLETED:
                 completed += 1
         return completed
@@ -530,10 +533,10 @@ class WakeupProcessor(BaseProcessor):
         for i, step_task in enumerate(step_tasks):
             step_type = step_task.task_id.split("_")[0] if "_" in step_task.task_id else "UNKNOWN"
             logger.debug(f"Processing wakeup step {i+1}/{len(step_tasks)}: {step_type}")
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task or current_task.status != TaskStatus.ACTIVE:
                 continue
-            existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+            existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id, step_task.agent_occurrence_id)
             if any(t.status in [ThoughtStatus.PROCESSING, ThoughtStatus.PENDING] for t in existing_thoughts):
                 logger.debug(
                     f"Skipping creation of new thought for step {step_type} (task_id={step_task.task_id}) because an active thought already exists."
@@ -545,7 +548,7 @@ class WakeupProcessor(BaseProcessor):
             result = await self._process_step_thought(thought, processing_context)
             if not result:
                 logger.error(f"Wakeup step {step_type} failed: no result")
-                self._mark_task_failed(step_task.task_id, "No result from processing")
+                self._mark_task_failed(step_task.task_id, "No result from processing", step_task.agent_occurrence_id)
                 return False
             selected_action = None
             if hasattr(result, "selected_action"):
@@ -557,7 +560,9 @@ class WakeupProcessor(BaseProcessor):
                 logger.error(
                     f"Wakeup step {step_type} failed: result object missing selected action attribute (result={result})"
                 )
-                self._mark_task_failed(step_task.task_id, "Result object missing selected action attribute")
+                self._mark_task_failed(
+                    step_task.task_id, "Result object missing selected action attribute", step_task.agent_occurrence_id
+                )
                 return False
 
             if selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]:
@@ -578,7 +583,11 @@ class WakeupProcessor(BaseProcessor):
                 self.metrics.items_processed += 1
             else:
                 logger.error(f"Wakeup step {step_type} failed: expected SPEAK or PONDER, got {selected_action}")
-                self._mark_task_failed(step_task.task_id, f"Expected SPEAK or PONDER action, got {selected_action}")
+                self._mark_task_failed(
+                    step_task.task_id,
+                    f"Expected SPEAK or PONDER action, got {selected_action}",
+                    step_task.agent_occurrence_id,
+                )
                 return False
         return True
 
@@ -662,7 +671,7 @@ class WakeupProcessor(BaseProcessor):
             await asyncio.sleep(poll_interval)
             waited += poll_interval
 
-            current_status = persistence.get_task_by_id(task.task_id)
+            current_status = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
             if not current_status:
                 logger.error(f"Task {task.task_id} disappeared while waiting")
                 return False
@@ -676,12 +685,12 @@ class WakeupProcessor(BaseProcessor):
             logger.debug(f"Waiting for task {task.task_id} completion... ({waited}s)")
 
         logger.error(f"Task {task.task_id} timed out after {max_wait}s")
-        self._mark_task_failed(task.task_id, "Timeout waiting for completion")
+        self._mark_task_failed(task.task_id, "Timeout waiting for completion", task.agent_occurrence_id)
         return False
 
-    def _mark_task_failed(self, task_id: str, reason: str) -> None:
+    def _mark_task_failed(self, task_id: str, reason: str, occurrence_id: str = "default") -> None:
         """Mark a task as failed."""
-        persistence.update_task_status(task_id, TaskStatus.FAILED, "default", self.time_service)
+        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
         logger.error(f"Task {task_id} marked as FAILED: {reason}")
 
     def _mark_root_task_complete(self) -> None:
@@ -727,7 +736,7 @@ class WakeupProcessor(BaseProcessor):
 
         if self.wakeup_tasks:
             for task in self.wakeup_tasks[1:]:  # Skip root task
-                status = persistence.get_task_by_id(task.task_id)
+                status = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
                 if status and status.status == TaskStatus.COMPLETED:
                     completed_steps += 1
 

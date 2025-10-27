@@ -31,9 +31,7 @@ def temp_db():
         os.unlink(db_path)
 
 
-def create_task_for_occurrence(
-    occurrence_id: str, db_path: str, minutes_ago: int = 0
-) -> None:
+def create_task_for_occurrence(occurrence_id: str, db_path: str, minutes_ago: int = 0) -> None:
     """Helper to create a task for a given occurrence."""
     now = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
     sql = """

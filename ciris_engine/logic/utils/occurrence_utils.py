@@ -52,9 +52,7 @@ def get_occurrence_count(db_path: Optional[str] = None) -> int:
     return 1
 
 
-def discover_active_occurrences(
-    within_minutes: int = 10, db_path: Optional[str] = None
-) -> List[str]:
+def discover_active_occurrences(within_minutes: int = 10, db_path: Optional[str] = None) -> List[str]:
     """Discover active occurrences based on recent database activity.
 
     Args:
@@ -64,8 +62,8 @@ def discover_active_occurrences(
     Returns:
         List of unique occurrence IDs with recent activity, sorted alphabetically
     """
-    from datetime import datetime, timedelta, timezone
     import sqlite3
+    from datetime import datetime, timedelta, timezone
 
     cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=within_minutes)
     cutoff_iso = cutoff_time.isoformat()

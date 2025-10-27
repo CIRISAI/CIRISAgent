@@ -524,9 +524,7 @@ def get_shared_task_status(
         return None
 
 
-def is_shared_task_completed(
-    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
-) -> bool:
+def is_shared_task_completed(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> bool:
     """Check if a shared task of the given type has been completed recently.
 
     Args:
@@ -541,9 +539,7 @@ def is_shared_task_completed(
     return status == TaskStatus.COMPLETED if status else False
 
 
-def get_latest_shared_task(
-    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
-) -> Optional[Task]:
+def get_latest_shared_task(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> Optional[Task]:
     """Get the most recent shared task of a given type.
 
     Args:

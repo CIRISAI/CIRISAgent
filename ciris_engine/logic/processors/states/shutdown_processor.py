@@ -102,7 +102,7 @@ class ShutdownProcessor(BaseProcessor):
             logger.error("Shutdown task is None after creation")
             return None
 
-        current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+        current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id)
         if not current_task:
             logger.error("Shutdown task disappeared!")
             return None
@@ -115,12 +115,16 @@ class ShutdownProcessor(BaseProcessor):
 
         # If task is pending, activate it
         if current_task.status == TaskStatus.PENDING:
-            persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
+            persistence.update_task_status(
+                self.shutdown_task.task_id, TaskStatus.ACTIVE, self.shutdown_task.agent_occurrence_id, self.time_service
+            )
             logger.info("Activated shutdown task")
 
         # Generate seed thought if needed
         if current_task.status == TaskStatus.ACTIVE:
-            existing_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+            existing_thoughts = persistence.get_thoughts_by_task_id(
+                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+            )
             if not existing_thoughts:
                 generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
                 logger.info(f"Generated {generated} seed thoughts for shutdown task")
@@ -181,7 +185,9 @@ class ShutdownProcessor(BaseProcessor):
 
             # Re-fetch task to check updated status
             assert self.shutdown_task is not None  # Already validated above
-            current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            current_task = persistence.get_task_by_id(
+                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+            )
             if not current_task:
                 logger.error("Current task is None after fetching")
                 return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
@@ -192,7 +198,9 @@ class ShutdownProcessor(BaseProcessor):
                 return result
 
             # Still processing - return status
-            thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+            thoughts = persistence.get_thoughts_by_task_id(
+                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+            )
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
             return ShutdownResult(
@@ -341,9 +349,7 @@ class ShutdownProcessor(BaseProcessor):
 
         # We claimed it - update our reference and activate
         self.shutdown_task = claimed_task
-        persistence.update_task_status(
-            self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service
-        )
+        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
         logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
 
     def _extract_rejection_reason(self, action: Any) -> str:
@@ -367,7 +373,7 @@ class ShutdownProcessor(BaseProcessor):
 
     def _check_failure_reason(self, task: Task) -> ShutdownResult:
         """Check why the task failed - could be REJECT or actual error."""
-        thoughts = persistence.get_thoughts_by_task_id(task.task_id)
+        thoughts = persistence.get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id)
         if not thoughts:
             return ShutdownResult(
                 status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
@@ -400,7 +406,9 @@ class ShutdownProcessor(BaseProcessor):
             return
 
         # Get pending thoughts for our shutdown task
-        thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+        thoughts = persistence.get_thoughts_by_task_id(
+            self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+        )
         pending_thoughts = [t for t in thoughts if t.status == ThoughtStatus.PENDING]
 
         if not pending_thoughts:
@@ -423,7 +431,7 @@ class ShutdownProcessor(BaseProcessor):
 
                 if result:
                     # Dispatch the action
-                    task = persistence.get_task_by_id(thought.source_task_id, self.agent_occurrence_id)
+                    task = persistence.get_task_by_id(thought.source_task_id, self.shutdown_task.agent_occurrence_id)
                     from ciris_engine.logic.utils.context_utils import build_dispatch_context
 
                     # Get action from final_action (result is ConscienceApplicationResult)

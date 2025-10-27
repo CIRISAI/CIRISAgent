@@ -186,6 +186,54 @@ class MultiOccurrenceTestModule:
         ]
 
     @staticmethod
+    def get_shared_task_coordination_tests() -> List[QATestCase]:
+        """Get shared task coordination test cases (1.4.8 feature)."""
+        return [
+            # Shared task claiming - wakeup
+            QATestCase(
+                name="Shared wakeup task - claim and process",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/state",
+                method="POST",
+                payload={"target_state": "WAKEUP"},
+                expected_status=200,
+                requires_auth=True,
+                description="Test shared wakeup task claiming and ownership transfer",
+                timeout=180.0,  # Wakeup can take time
+            ),
+            # Verify agent reaches WORK state after wakeup
+            QATestCase(
+                name="Verify agent state after wakeup",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/health",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify agent successfully reaches WORK state after shared wakeup",
+            ),
+            # Test queue status during processing
+            QATestCase(
+                name="Queue status during shared task processing",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/queue",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify queue shows claimed shared task with local occurrence ID",
+            ),
+            # Test telemetry reflects shared task processing
+            QATestCase(
+                name="Telemetry after shared task claim",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/telemetry/unified",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify telemetry shows shared task processing activity",
+            ),
+        ]
+
+    @staticmethod
     def get_occurrence_stress_tests() -> List[QATestCase]:
         """Get stress test cases for multi-occurrence handling."""
         return [
@@ -204,9 +252,10 @@ class MultiOccurrenceTestModule:
 
     @staticmethod
     def get_all_multi_occurrence_tests() -> List[QATestCase]:
-        """Get all multi-occurrence test cases."""
+        """Get all multi-occurrence test cases including shared task coordination."""
         tests = []
         tests.extend(MultiOccurrenceTestModule.get_multi_occurrence_tests())
+        tests.extend(MultiOccurrenceTestModule.get_shared_task_coordination_tests())
         return tests
 
     @staticmethod

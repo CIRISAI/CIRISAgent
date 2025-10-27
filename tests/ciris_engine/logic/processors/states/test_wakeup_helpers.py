@@ -19,7 +19,7 @@ class TestWakeupHelpers:
 
         assert is_valid is True
         assert status == "active"
-        mock_persistence.get_task_by_id.assert_called_once_with(sample_task.task_id)
+        mock_persistence.get_task_by_id.assert_called_once_with(sample_task.task_id, sample_task.agent_occurrence_id)
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     def test_validate_task_state_returns_false_for_missing(self, mock_persistence, wakeup_processor, sample_task):
@@ -57,7 +57,7 @@ class TestWakeupHelpers:
         ]
         mock_persistence.get_thoughts_by_task_id.return_value = thoughts
 
-        summary = wakeup_processor._get_task_thoughts_summary("test_task_123")
+        summary = wakeup_processor._get_task_thoughts_summary("test_task_123", "default")
 
         assert summary["total"] == 6
         assert summary["pending"] == 2

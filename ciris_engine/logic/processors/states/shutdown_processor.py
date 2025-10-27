@@ -379,8 +379,15 @@ class ShutdownProcessor(BaseProcessor):
             signed_at=claimed_task.signed_at,
         )
 
-        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
-        logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
+        # Transfer ownership from "__shared__" to this occurrence so seed thoughts are processable
+        claimed_task.agent_occurrence_id = self.agent_occurrence_id
+        persistence.update_task_status(
+            self.shutdown_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self._time_service
+        )
+        logger.info(
+            f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id} "
+            f"(claimed by {self.agent_occurrence_id})"
+        )
 
     def _extract_rejection_reason(self, action: Any) -> str:
         """Extract rejection reason from action parameters."""

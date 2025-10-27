@@ -513,15 +513,16 @@ class WakeupProcessor(BaseProcessor):
             "Processing wakeup ritual on behalf of all occurrences."
         )
 
-        # We claimed it - activate the root task
-        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
+        # Get occurrence ID for context
+        occurrence_id = getattr(self, "occurrence_id", "default")
+
+        # Transfer ownership from "__shared__" to this occurrence so seed thoughts are processable
+        root_task.agent_occurrence_id = occurrence_id
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, occurrence_id, self.time_service)
         self.wakeup_tasks = [root_task]
 
         # Create step tasks as child tasks of the shared root
         wakeup_sequence = self._get_wakeup_sequence()
-
-        # Get occurrence ID for context
-        occurrence_id = getattr(self, "occurrence_id", "default")
 
         # Add multi-occurrence context to first step
         enhanced_sequence = []

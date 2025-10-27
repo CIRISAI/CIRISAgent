@@ -388,6 +388,7 @@ class ShutdownProcessor(BaseProcessor):
             from_occurrence_id="__shared__",
             to_occurrence_id=self.agent_occurrence_id,
             time_service=self._time_service,
+            audit_service=self.audit_service,
         )
         claimed_task.agent_occurrence_id = self.agent_occurrence_id  # Update in-memory object too
         persistence.update_task_status(

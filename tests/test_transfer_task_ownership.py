@@ -34,7 +34,7 @@ class MockTimeService:
         return datetime.now(timezone.utc).isoformat()
 
 
-def test_transfer_task_ownership_success():
+def test_transfer_task_ownership_success(mock_audit_service):
     """Test successful transfer from __shared__ to specific occurrence."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_db:
         db_path = tmp_db.name
@@ -78,6 +78,7 @@ def test_transfer_task_ownership_success():
             from_occurrence_id="__shared__",
             to_occurrence_id="occurrence-123",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
 
@@ -102,7 +103,7 @@ def test_transfer_task_ownership_success():
             os.unlink(db_path)
 
 
-def test_transfer_task_ownership_enables_status_update():
+def test_transfer_task_ownership_enables_status_update(mock_audit_service):
     """Test that transfer enables subsequent status updates to work correctly.
 
     This is the critical bug fix test: without transfer, update_task_status
@@ -144,6 +145,7 @@ def test_transfer_task_ownership_enables_status_update():
             from_occurrence_id="__shared__",
             to_occurrence_id="occurrence-456",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
         assert transfer_result is True
@@ -171,7 +173,7 @@ def test_transfer_task_ownership_enables_status_update():
             os.unlink(db_path)
 
 
-def test_transfer_task_ownership_wrong_from_occurrence():
+def test_transfer_task_ownership_wrong_from_occurrence(mock_audit_service):
     """Test transfer fails when from_occurrence_id doesn't match database."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_db:
         db_path = tmp_db.name
@@ -209,6 +211,7 @@ def test_transfer_task_ownership_wrong_from_occurrence():
             from_occurrence_id="occurrence-wrong",  # Wrong!
             to_occurrence_id="occurrence-new",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
 
@@ -227,7 +230,7 @@ def test_transfer_task_ownership_wrong_from_occurrence():
             os.unlink(db_path)
 
 
-def test_transfer_task_ownership_nonexistent_task():
+def test_transfer_task_ownership_nonexistent_task(mock_audit_service):
     """Test transfer fails gracefully for nonexistent task."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_db:
         db_path = tmp_db.name
@@ -243,6 +246,7 @@ def test_transfer_task_ownership_nonexistent_task():
             from_occurrence_id="__shared__",
             to_occurrence_id="occurrence-789",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
 
@@ -256,7 +260,7 @@ def test_transfer_task_ownership_nonexistent_task():
             os.unlink(db_path)
 
 
-def test_transfer_task_ownership_multiple_times():
+def test_transfer_task_ownership_multiple_times(mock_audit_service):
     """Test that a task can be transferred multiple times (e.g., re-claiming)."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_db:
         db_path = tmp_db.name
@@ -294,6 +298,7 @@ def test_transfer_task_ownership_multiple_times():
             from_occurrence_id="__shared__",
             to_occurrence_id="occurrence-1",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
         assert result1 is True
@@ -309,6 +314,7 @@ def test_transfer_task_ownership_multiple_times():
             from_occurrence_id="occurrence-1",
             to_occurrence_id="occurrence-2",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
         assert result2 is True
@@ -329,7 +335,7 @@ def test_transfer_task_ownership_multiple_times():
             os.unlink(db_path)
 
 
-def test_transfer_preserves_all_task_data():
+def test_transfer_preserves_all_task_data(mock_audit_service):
     """Test that transfer only changes occurrence_id and preserves all other data."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_db:
         db_path = tmp_db.name
@@ -368,6 +374,7 @@ def test_transfer_preserves_all_task_data():
             from_occurrence_id="__shared__",
             to_occurrence_id="occurrence-preserve",
             time_service=time_service,
+            audit_service=mock_audit_service,
             db_path=db_path,
         )
 

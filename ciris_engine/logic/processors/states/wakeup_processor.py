@@ -524,6 +524,7 @@ class WakeupProcessor(BaseProcessor):
             from_occurrence_id="__shared__",
             to_occurrence_id=occurrence_id,
             time_service=self.time_service,
+            audit_service=self.audit_service,
         )
         root_task.agent_occurrence_id = occurrence_id  # Update in-memory object too
         persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, occurrence_id, self.time_service)

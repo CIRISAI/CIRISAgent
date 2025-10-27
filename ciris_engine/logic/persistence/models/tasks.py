@@ -121,6 +121,48 @@ def update_task_status(
         return False
 
 
+def transfer_task_ownership(
+    task_id: str,
+    from_occurrence_id: str,
+    to_occurrence_id: str,
+    time_service: TimeServiceProtocol,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Transfer task ownership from one occurrence to another.
+
+    This is used when claiming shared tasks to transfer ownership from '__shared__'
+    to the claiming occurrence so seed thoughts can be processed.
+
+    Args:
+        task_id: The task ID to transfer
+        from_occurrence_id: Current occurrence ID (typically '__shared__')
+        to_occurrence_id: New occurrence ID (the claiming occurrence)
+        time_service: Time service for timestamp
+        db_path: Optional database path
+
+    Returns:
+        True if transfer successful, False otherwise
+    """
+    sql = "UPDATE tasks SET agent_occurrence_id = ?, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
+    params = (to_occurrence_id, time_service.now_iso(), task_id, from_occurrence_id)
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(
+                    f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}"
+                )
+                return True
+            logger.warning(
+                f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer"
+            )
+            return False
+    except Exception as e:
+        logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
+        return False
+
+
 def update_task_context_and_signing(
     task_id: str,
     occurrence_id: str,

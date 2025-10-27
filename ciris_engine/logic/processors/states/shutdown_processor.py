@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
+from ciris_engine.logic.persistence.models.tasks import transfer_task_ownership
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
@@ -380,7 +381,14 @@ class ShutdownProcessor(BaseProcessor):
         )
 
         # Transfer ownership from "__shared__" to this occurrence so seed thoughts are processable
-        claimed_task.agent_occurrence_id = self.agent_occurrence_id
+        # CRITICAL: Must persist ownership transfer to database BEFORE updating status
+        transfer_task_ownership(
+            task_id=claimed_task.task_id,
+            from_occurrence_id="__shared__",
+            to_occurrence_id=self.agent_occurrence_id,
+            time_service=self._time_service,
+        )
+        claimed_task.agent_occurrence_id = self.agent_occurrence_id  # Update in-memory object too
         persistence.update_task_status(
             self.shutdown_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self._time_service
         )

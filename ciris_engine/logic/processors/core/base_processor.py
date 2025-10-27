@@ -144,40 +144,6 @@ class BaseProcessor(ABC):
             # Value is float from custom_gauges
             additional.custom_gauges[key] = float(value)
 
-    async def _log_ownership_transfer_audit(
-        self, task_id: str, from_occurrence: str, to_occurrence: str, outcome: str = "success"
-    ) -> None:
-        """Log task ownership transfer audit event.
-
-        This is called when a processor claims a shared task and transfers ownership
-        from '__shared__' to the local occurrence ID. Critical for multi-occurrence
-        coordination observability.
-        """
-        if not self.audit_service:
-            logger.warning("Cannot log ownership transfer audit: audit_service not available")
-            return
-
-        from ciris_engine.schemas.services.graph.audit import AuditEventData
-        import asyncio
-
-        audit_event = AuditEventData(
-            entity_id=task_id,
-            actor="system",
-            outcome=outcome,
-            severity="info",
-            action="task_ownership_transfer",
-            resource="task",
-            metadata={
-                "task_id": task_id,
-                "from_occurrence_id": from_occurrence,
-                "to_occurrence_id": to_occurrence,
-                "task_type": "shared_coordination",
-            },
-        )
-
-        # Fire and forget - don't block processor flow
-        _audit_task = asyncio.create_task(self.audit_service.log_event("task_ownership_transfer", audit_event))
-
     def _get_time_service(self) -> Any:
         """Get time service from either _time_service or time_service attribute."""
         return getattr(self, "_time_service", None) or getattr(self, "time_service", None)

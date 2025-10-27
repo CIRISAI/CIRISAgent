@@ -123,9 +123,12 @@ class ShutdownProcessor(BaseProcessor):
 
         # Generate seed thought if needed
         if current_task.status == TaskStatus.ACTIVE:
-            existing_thoughts = persistence.get_thoughts_by_task_id(
-                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
-            )
+            # Check for existing thoughts in BOTH __shared__ (before transfer) and local occurrence (after transfer)
+            # This handles both initial state and post-transfer state
+            shared_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, "__shared__")
+            local_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            existing_thoughts = shared_thoughts + local_thoughts
+
             if not existing_thoughts:
                 generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
                 logger.info(f"Generated {generated} seed thoughts for shutdown task")
@@ -137,9 +140,7 @@ class ShutdownProcessor(BaseProcessor):
                     from ciris_engine.logic.persistence.models.thoughts import transfer_thought_ownership
 
                     # Get the newly created thoughts
-                    new_thoughts = persistence.get_thoughts_by_task_id(
-                        self.shutdown_task.task_id, "__shared__"
-                    )
+                    new_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, "__shared__")
                     for thought in new_thoughts:
                         transfer_thought_ownership(
                             thought_id=thought.thought_id,
@@ -407,9 +408,7 @@ class ShutdownProcessor(BaseProcessor):
         )
 
         # Update task status in __shared__ namespace
-        persistence.update_task_status(
-            self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service
-        )
+        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
         logger.info(
             f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id} "
             f"(claimed by {self.agent_occurrence_id})"
@@ -475,9 +474,9 @@ class ShutdownProcessor(BaseProcessor):
             return
 
         # Get pending thoughts for our shutdown task
-        thoughts = persistence.get_thoughts_by_task_id(
-            self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
-        )
+        # CRITICAL: After transfer_thought_ownership(), thoughts are in the claiming occurrence
+        # Query using self.agent_occurrence_id, not self.shutdown_task.agent_occurrence_id (which is "__shared__")
+        thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
         pending_thoughts = [t for t in thoughts if t.status == ThoughtStatus.PENDING]
 
         if not pending_thoughts:

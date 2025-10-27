@@ -370,9 +370,10 @@ class ShutdownProcessor(BaseProcessor):
             except Exception as signing_error:
                 logger.error(f"Failed to sign shared shutdown task: {signing_error}")
 
+        # CRITICAL: Task is still owned by "__shared__" at this point
         update_task_context_and_signing(
             task_id=claimed_task.task_id,
-            occurrence_id=claimed_task.agent_occurrence_id,
+            occurrence_id="__shared__",  # Must use __shared__ since we haven't transferred yet
             context=shutdown_context,
             time_service=self._time_service,
             signed_by=claimed_task.signed_by,

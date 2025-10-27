@@ -236,9 +236,7 @@ class TestRegistryInfo:
 
     def test_registry_info_complex_structure(self):
         """Test RegistryInfo with complex nested structure."""
-        providers = [
-            ProviderInfo(name=f"provider{i}", priority="NORMAL", strategy="first") for i in range(3)
-        ]
+        providers = [ProviderInfo(name=f"provider{i}", priority="NORMAL", strategy="first") for i in range(3)]
 
         registry = RegistryInfo(
             handlers={

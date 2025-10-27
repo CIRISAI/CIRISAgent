@@ -102,7 +102,9 @@ class ServiceManifest(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Global capabilities list")
     dependencies: Optional[LegacyDependencies] = Field(None, description="Legacy dependencies format")
     configuration: Optional[Dict[str, ConfigurationParameter]] = Field(None, description="Configuration parameters")
-    exports: Optional[Dict[str, Union[str, List[str]]]] = Field(None, description="Exported components (string or list)")
+    exports: Optional[Dict[str, Union[str, List[str]]]] = Field(
+        None, description="Exported components (string or list)"
+    )
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
     prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")

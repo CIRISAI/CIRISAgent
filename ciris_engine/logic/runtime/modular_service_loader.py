@@ -119,7 +119,8 @@ class ModularServiceLoader:
                 service_class_path = manifest.services[0].class_path
             elif manifest.exports and "service_class" in manifest.exports:
                 # Legacy format support
-                service_class_path = manifest.exports["service_class"]
+                export_value = manifest.exports["service_class"]
+                service_class_path = export_value if isinstance(export_value, str) else export_value[0]
             else:
                 logger.error("No service class path found in manifest")
                 return None

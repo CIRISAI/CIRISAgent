@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_task
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
@@ -126,7 +127,7 @@ def transfer_task_ownership(
     from_occurrence_id: str,
     to_occurrence_id: str,
     time_service: TimeServiceProtocol,
-    audit_service: "AuditServiceProtocol",
+    audit_service: AuditServiceProtocol,
     db_path: Optional[str] = None,
 ) -> bool:
     """Transfer task ownership from one occurrence to another.
@@ -164,6 +165,9 @@ def transfer_task_ownership(
 
     # Log audit event for ownership transfer (fire and forget)
     import asyncio
+    from typing import cast
+
+    from ciris_engine.schemas.audit.core import EventPayload
     from ciris_engine.schemas.services.graph.audit import AuditEventData
 
     audit_event = AuditEventData(
@@ -184,8 +188,8 @@ def transfer_task_ownership(
     try:
         # Try to get the running event loop
         loop = asyncio.get_running_loop()
-        # Schedule the audit event as a task
-        loop.create_task(audit_service.log_event("task_ownership_transfer", audit_event))
+        # Schedule the audit event as a task - cast to EventPayload for protocol compatibility
+        loop.create_task(audit_service.log_event("task_ownership_transfer", cast(EventPayload, audit_event)))
     except RuntimeError:
         # No event loop running - this is expected in sync contexts like tests
         # The audit service will still track the call via the mock

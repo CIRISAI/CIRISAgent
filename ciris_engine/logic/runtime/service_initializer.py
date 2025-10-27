@@ -965,6 +965,70 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error(f"Core services verification failed: {e}")
             return False
 
+    def _find_service_manifest(self, service_name: str, discovered_services: List[Any]) -> Any:
+        """Find matching service manifest by normalized name.
+
+        Args:
+            service_name: Name to search for
+            discovered_services: List of discovered service manifests
+
+        Returns:
+            Matching manifest or None
+        """
+        search_name_normalized = service_name.lower().replace("_adapter", "")
+        for svc in discovered_services:
+            svc_name_normalized = svc.module.name.lower().replace("_adapter", "")
+            if svc_name_normalized == search_name_normalized:
+                return svc
+        return None
+
+    def _register_tool_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
+        """Register a TOOL service with ToolBus."""
+        if self.bus_manager and hasattr(self.bus_manager, "tool"):
+            logger.info(f"Registering {manifest.module.name} with ToolBus")
+            self.bus_manager.tool.register_service(service_instance, service_def.capabilities)
+
+    def _register_communication_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
+        """Register a COMMUNICATION service with CommunicationBus."""
+        if self.bus_manager and hasattr(self.bus_manager, "communication"):
+            logger.info(f"Registering {manifest.module.name} with CommunicationBus")
+            self.bus_manager.communication.register_service(service_instance, service_def.capabilities)
+
+    def _register_llm_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
+        """Register an LLM service with ServiceRegistry."""
+        if not self.service_registry:
+            return
+
+        logger.info(f"Registering {manifest.module.name} as LLM service")
+        from ciris_engine.logic.registries.base import Priority
+
+        priority_map = {
+            "CRITICAL": Priority.CRITICAL,
+            "HIGH": Priority.HIGH,
+            "NORMAL": Priority.NORMAL,
+            "LOW": Priority.LOW,
+        }
+        priority_value = (
+            service_def.priority.value if hasattr(service_def.priority, "value") else service_def.priority.name
+        )
+        priority = priority_map.get(priority_value, Priority.NORMAL)
+
+        self.service_registry.register_service(
+            service_type=ServiceType.LLM,
+            provider=service_instance,
+            priority=priority,
+            capabilities=service_def.capabilities,
+        )
+
+    def _register_modular_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
+        """Register a modular service with the appropriate bus/registry based on type."""
+        if service_def.type == ServiceType.TOOL:
+            self._register_tool_service(service_instance, manifest, service_def)
+        elif service_def.type == ServiceType.COMMUNICATION:
+            self._register_communication_service(service_instance, manifest, service_def)
+        elif service_def.type == ServiceType.LLM:
+            self._register_llm_service(service_instance, manifest, service_def)
+
     async def _load_modular_service(self, service_name: str) -> None:
         """Load a modular service and register its services with appropriate buses.
 
@@ -979,15 +1043,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         modular_loader = ModularServiceLoader()
         discovered_services = modular_loader.discover_services()
 
-        # Find matching service (case-insensitive, with or without _adapter suffix)
-        manifest = None
-        for svc in discovered_services:
-            svc_name_normalized = svc.module.name.lower().replace("_adapter", "")
-            search_name_normalized = service_name.lower().replace("_adapter", "")
-            if svc_name_normalized == search_name_normalized:
-                manifest = svc
-                break
-
+        manifest = self._find_service_manifest(service_name, discovered_services)
         if not manifest:
             raise ValueError(f"Modular service '{service_name}' not found")
 
@@ -1008,46 +1064,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
                 # Start the service before registration to initialize resources (HTTP clients, credentials, etc.)
                 if hasattr(service_instance, "start"):
-                    await service_instance.start()
+                    start_result = service_instance.start()
+                    # Handle both async and sync start methods
+                    if hasattr(start_result, "__await__"):
+                        await start_result
                     logger.info(f"Started modular service {manifest.module.name}")
 
                 # Register with appropriate bus based on service type
-                if service_def.type == ServiceType.TOOL and self.bus_manager and hasattr(self.bus_manager, "tool"):
-                    logger.info(f"Registering {manifest.module.name} with ToolBus")
-                    self.bus_manager.tool.register_service(service_instance, service_def.capabilities)
-
-                elif (
-                    service_def.type == ServiceType.COMMUNICATION
-                    and self.bus_manager
-                    and hasattr(self.bus_manager, "communication")
-                ):
-                    logger.info(f"Registering {manifest.module.name} with CommunicationBus")
-                    self.bus_manager.communication.register_service(service_instance, service_def.capabilities)
-
-                elif service_def.type == ServiceType.LLM and self.service_registry:
-                    logger.info(f"Registering {manifest.module.name} as LLM service")
-                    # Convert ServicePriority to Priority enum
-                    from ciris_engine.logic.registries.base import Priority
-
-                    priority_map = {
-                        "CRITICAL": Priority.CRITICAL,
-                        "HIGH": Priority.HIGH,
-                        "NORMAL": Priority.NORMAL,
-                        "LOW": Priority.LOW,
-                    }
-                    priority_value = (
-                        service_def.priority.value
-                        if hasattr(service_def.priority, "value")
-                        else service_def.priority.name
-                    )
-                    priority = priority_map.get(priority_value, Priority.NORMAL)
-
-                    self.service_registry.register_service(
-                        service_type=ServiceType.LLM,
-                        provider=service_instance,
-                        priority=priority,
-                        capabilities=service_def.capabilities,
-                    )
+                self._register_modular_service(service_instance, manifest, service_def)
 
                 logger.info(f"Successfully loaded and registered modular service: {manifest.module.name}")
                 self.loaded_modules.append(f"modular:{service_name}")

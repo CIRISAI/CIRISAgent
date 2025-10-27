@@ -29,7 +29,7 @@ from ciris_engine.schemas.services.graph.consolidation import (
     TraceSpanData,
     TSDBPeriodSummary,
 )
-from ciris_engine.schemas.services.graph.query_results import TSDBNodeQueryResult
+from ciris_engine.schemas.services.graph.query_results import ServiceCorrelationQueryResult, TSDBNodeQueryResult
 from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
@@ -440,7 +440,7 @@ class TSDBConsolidationService(BaseGraphService):
         self, period_start: datetime, period_end: datetime
     ) -> Tuple[
         Dict[str, TSDBNodeQueryResult],
-        "ServiceCorrelationQueryResult",
+        ServiceCorrelationQueryResult,
         List[TaskCorrelationData],
     ]:
         """Query all data for a consolidation period."""
@@ -452,7 +452,7 @@ class TSDBConsolidationService(BaseGraphService):
     async def _create_metric_summary(
         self,
         nodes_by_type: Dict[str, TSDBNodeQueryResult],
-        correlations: "ServiceCorrelationQueryResult",
+        correlations: ServiceCorrelationQueryResult,
         period_start: datetime,
         period_end: datetime,
         period_label: str,
@@ -486,7 +486,7 @@ class TSDBConsolidationService(BaseGraphService):
 
     async def _create_conversation_summary(
         self,
-        correlations: "ServiceCorrelationQueryResult",
+        correlations: ServiceCorrelationQueryResult,
         period_start: datetime,
         period_end: datetime,
         period_label: str,
@@ -517,7 +517,7 @@ class TSDBConsolidationService(BaseGraphService):
 
     async def _create_trace_summary(
         self,
-        correlations: "ServiceCorrelationQueryResult",
+        correlations: ServiceCorrelationQueryResult,
         period_start: datetime,
         period_end: datetime,
         period_label: str,

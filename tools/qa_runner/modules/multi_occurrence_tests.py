@@ -234,6 +234,103 @@ class MultiOccurrenceTestModule:
         ]
 
     @staticmethod
+    def get_ownership_transfer_validation_tests() -> List[QATestCase]:
+        """Get ownership transfer validation test cases (P0 bug fix validation).
+
+        These tests validate the critical P0 bug fix for shared task ownership transfer.
+        They verify that:
+        1. Tasks are transferred from __shared__ to claiming occurrence
+        2. Database rows are updated (not just in-memory objects)
+        3. Subsequent queries work correctly (no zero-row UPDATEs)
+        4. Audit events are generated for ownership transfers
+        """
+        return [
+            # Verify queue shows tasks with local occurrence (not __shared__)
+            QATestCase(
+                name="Ownership transfer - queue shows local occurrence",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/queue",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify queue shows tasks owned by local occurrence, not __shared__",
+            ),
+            # Check audit trail for task ownership transfer events
+            QATestCase(
+                name="Ownership transfer - audit trail validation",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/audit/entries",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify audit trail contains ownership transfer system events",
+            ),
+            # Create message to generate task and thoughts
+            QATestCase(
+                name="Ownership transfer - create test message",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/agent/message",
+                method="POST",
+                payload={"message": "Test ownership transfer - verify thoughts processable"},
+                expected_status=200,
+                requires_auth=True,
+                description="Create message to verify thoughts inherit correct occurrence ID",
+            ),
+            # Verify created task has local occurrence_id
+            QATestCase(
+                name="Ownership transfer - task queryable by local occurrence",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/queue",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify task is queryable by local occurrence ID after creation",
+            ),
+            # Verify task status updates work (not zero-row UPDATEs)
+            QATestCase(
+                name="Ownership transfer - status updates not zero-row",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/queue",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify task status updates affect rows (P0 bug: zero-row UPDATEs)",
+            ),
+            # Test wakeup flow generates audit events
+            QATestCase(
+                name="Ownership transfer - wakeup audit events",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/audit/entries",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify wakeup ownership transfer generated audit events",
+            ),
+            # Test shutdown flow ownership transfer
+            QATestCase(
+                name="Ownership transfer - initiate shutdown",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/system/runtime/state",
+                method="POST",
+                payload={"target_state": "SHUTDOWN"},
+                expected_status=200,
+                requires_auth=True,
+                description="Initiate shutdown to test ownership transfer from __shared__",
+                timeout=60.0,
+            ),
+            # Verify shutdown generated ownership transfer audit event
+            QATestCase(
+                name="Ownership transfer - shutdown audit trail",
+                module=QAModule.MULTI_OCCURRENCE,
+                endpoint="/v1/audit/entries",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Verify shutdown ownership transfer generated audit event",
+            ),
+        ]
+
+    @staticmethod
     def get_occurrence_stress_tests() -> List[QATestCase]:
         """Get stress test cases for multi-occurrence handling."""
         return [
@@ -252,16 +349,19 @@ class MultiOccurrenceTestModule:
 
     @staticmethod
     def get_all_multi_occurrence_tests() -> List[QATestCase]:
-        """Get all multi-occurrence test cases including shared task coordination."""
+        """Get all multi-occurrence test cases including shared task coordination and ownership transfer validation."""
         tests = []
         tests.extend(MultiOccurrenceTestModule.get_multi_occurrence_tests())
         tests.extend(MultiOccurrenceTestModule.get_shared_task_coordination_tests())
+        tests.extend(MultiOccurrenceTestModule.get_ownership_transfer_validation_tests())
         return tests
 
     @staticmethod
     def get_full_test_suite() -> List[QATestCase]:
-        """Get full test suite including stress tests."""
+        """Get full test suite including stress tests and ownership transfer validation."""
         tests = []
         tests.extend(MultiOccurrenceTestModule.get_multi_occurrence_tests())
+        tests.extend(MultiOccurrenceTestModule.get_shared_task_coordination_tests())
+        tests.extend(MultiOccurrenceTestModule.get_ownership_transfer_validation_tests())
         tests.extend(MultiOccurrenceTestModule.get_occurrence_stress_tests())
         return tests

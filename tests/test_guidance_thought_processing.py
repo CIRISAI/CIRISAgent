@@ -219,6 +219,7 @@ class TestGuidanceThoughtProcessing:
                     with patch.object(processor, "process_thought_item") as mock_process_thought:
                         # Setup mocks
                         processor.shutdown_task = shutdown_task
+                        processor.is_claiming_occurrence = True  # Simulate claiming occurrence
                         mock_get_task.return_value = shutdown_task
                         mock_get_thoughts.return_value = [guidance_thought]
                         mock_process_thought.return_value = MagicMock(selected_action="TASK_COMPLETE")

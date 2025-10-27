@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
-from ciris_engine.logic.persistence.models.tasks import transfer_task_ownership
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
@@ -517,17 +516,9 @@ class WakeupProcessor(BaseProcessor):
         # Get occurrence ID for context
         occurrence_id = getattr(self, "occurrence_id", "default")
 
-        # Transfer ownership from "__shared__" to this occurrence so seed thoughts are processable
-        # CRITICAL: Must persist ownership transfer to database BEFORE updating status
-        transfer_task_ownership(
-            task_id=root_task.task_id,
-            from_occurrence_id="__shared__",
-            to_occurrence_id=occurrence_id,
-            time_service=self.time_service,
-            audit_service=self.audit_service,
-        )
-        root_task.agent_occurrence_id = occurrence_id  # Update in-memory object too
-        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, occurrence_id, self.time_service)
+        # CRITICAL: Keep shared wakeup task in "__shared__" namespace for multi-occurrence coordination
+        # All occurrences need to be able to query this task to monitor completion
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
         self.wakeup_tasks = [root_task]
 
         # Create step tasks as child tasks of the shared root

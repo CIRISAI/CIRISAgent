@@ -5,11 +5,88 @@ from typing import Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_thought
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
+from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import ThoughtSummary
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
 
 logger = logging.getLogger(__name__)
+
+
+def transfer_thought_ownership(
+    thought_id: str,
+    from_occurrence_id: str,
+    to_occurrence_id: str,
+    time_service: TimeServiceProtocol,
+    audit_service: AuditServiceProtocol,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Transfer thought ownership from one occurrence to another.
+
+    This is used when claiming shared tasks to transfer ownership of seed thoughts
+    from '__shared__' to the claiming occurrence so they can be processed.
+
+    Args:
+        thought_id: ID of the thought to transfer
+        from_occurrence_id: Current owner (e.g., "__shared__")
+        to_occurrence_id: New owner (e.g., "occurrence-123")
+        time_service: Time service for timestamps
+        audit_service: Audit service for logging
+        db_path: Optional database path override
+
+    Returns:
+        True if transfer succeeded, False otherwise
+    """
+    sql = "UPDATE thoughts SET agent_occurrence_id = ?, updated_at = ? WHERE thought_id = ? AND agent_occurrence_id = ?"
+    params = (to_occurrence_id, time_service.now_iso(), thought_id, from_occurrence_id)
+
+    success = False
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(
+                    f"Transferred ownership of thought {thought_id} from {from_occurrence_id} to {to_occurrence_id}"
+                )
+                success = True
+            else:
+                logger.warning(
+                    f"Thought {thought_id} not found with occurrence {from_occurrence_id} for ownership transfer"
+                )
+    except Exception as e:
+        logger.exception(f"Failed to transfer thought ownership for {thought_id}: {e}")
+        success = False
+
+    # Log audit event for ownership transfer (fire and forget)
+    from typing import cast
+
+    from ciris_engine.schemas.audit.core import EventPayload
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+    audit_event = AuditEventData(
+        entity_id=thought_id,
+        actor="system",
+        outcome="success" if success else "failed",
+        severity="info",
+        action="thought_ownership_transfer",
+        resource="thought",
+        metadata={
+            "thought_id": thought_id,
+            "from_occurrence_id": from_occurrence_id,
+            "to_occurrence_id": to_occurrence_id,
+            "resource_type": "seed_thought",
+        },
+    )
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(audit_service.log_event("thought_ownership_transfer", cast(EventPayload, audit_event)))
+    except RuntimeError:
+        logger.debug("No event loop running, audit logging deferred")
+
+    return success
 
 
 def get_thoughts_by_status(

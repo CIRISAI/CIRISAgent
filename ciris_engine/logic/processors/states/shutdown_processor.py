@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
-from ciris_engine.logic.persistence.models.tasks import transfer_task_ownership
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
@@ -58,6 +57,7 @@ class ShutdownProcessor(BaseProcessor):
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
         self.shutdown_result: Optional[ShutdownResult] = None
+        self.is_claiming_occurrence = False  # Flag to track if this occurrence claimed the shared task
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -129,6 +129,28 @@ class ShutdownProcessor(BaseProcessor):
             if not existing_thoughts:
                 generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
                 logger.info(f"Generated {generated} seed thoughts for shutdown task")
+
+                # Transfer seed thought ownership from __shared__ to this occurrence
+                # CRITICAL: Thoughts created for shared tasks inherit __shared__ occurrence
+                # They must be transferred to the claiming occurrence to be processable
+                if generated > 0:
+                    from ciris_engine.logic.persistence.models.thoughts import transfer_thought_ownership
+
+                    # Get the newly created thoughts
+                    new_thoughts = persistence.get_thoughts_by_task_id(
+                        self.shutdown_task.task_id, "__shared__"
+                    )
+                    for thought in new_thoughts:
+                        transfer_thought_ownership(
+                            thought_id=thought.thought_id,
+                            from_occurrence_id="__shared__",
+                            to_occurrence_id=self.agent_occurrence_id,
+                            time_service=self.time_service,
+                            audit_service=self.audit_service,
+                        )
+                    logger.info(
+                        f"Transferred {len(new_thoughts)} seed thought(s) from __shared__ to {self.agent_occurrence_id}"
+                    )
 
     async def _handle_task_completion(self, current_task: Task) -> Optional[ShutdownResult]:
         """Handle completed or failed task status. Returns result if terminal, None if still processing."""
@@ -339,12 +361,14 @@ class ShutdownProcessor(BaseProcessor):
                 "This occurrence will monitor the decision."
             )
             self.shutdown_task = claimed_task
+            self.is_claiming_occurrence = False  # This is a monitoring occurrence
             return
 
         logger.info(
             f"This occurrence claimed shared shutdown task {claimed_task.task_id}. "
             "Making decision on behalf of all occurrences."
         )
+        self.is_claiming_occurrence = True  # This is the claiming occurrence
 
         # We claimed it - attach context, sign, and activate
         self.shutdown_task = claimed_task
@@ -370,10 +394,11 @@ class ShutdownProcessor(BaseProcessor):
             except Exception as signing_error:
                 logger.error(f"Failed to sign shared shutdown task: {signing_error}")
 
-        # CRITICAL: Task is still owned by "__shared__" at this point
+        # CRITICAL: Keep task in "__shared__" namespace for multi-occurrence coordination
+        # All occurrences need to be able to query this task to monitor the decision
         update_task_context_and_signing(
             task_id=claimed_task.task_id,
-            occurrence_id="__shared__",  # Must use __shared__ since we haven't transferred yet
+            occurrence_id="__shared__",  # Keep in __shared__ for coordination
             context=shutdown_context,
             time_service=self._time_service,
             signed_by=claimed_task.signed_by,
@@ -381,18 +406,9 @@ class ShutdownProcessor(BaseProcessor):
             signed_at=claimed_task.signed_at,
         )
 
-        # Transfer ownership from "__shared__" to this occurrence so seed thoughts are processable
-        # CRITICAL: Must persist ownership transfer to database BEFORE updating status
-        transfer_task_ownership(
-            task_id=claimed_task.task_id,
-            from_occurrence_id="__shared__",
-            to_occurrence_id=self.agent_occurrence_id,
-            time_service=self._time_service,
-            audit_service=self.audit_service,
-        )
-        claimed_task.agent_occurrence_id = self.agent_occurrence_id  # Update in-memory object too
+        # Update task status in __shared__ namespace
         persistence.update_task_status(
-            self.shutdown_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self._time_service
+            self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service
         )
         logger.info(
             f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id} "
@@ -450,6 +466,12 @@ class ShutdownProcessor(BaseProcessor):
         This enables graceful shutdown when not in the main processing loop.
         """
         if not self.shutdown_task:
+            return
+
+        # CRITICAL: Only the claiming occurrence should process thoughts
+        # Monitoring occurrences should only watch task status
+        if not self.is_claiming_occurrence:
+            logger.debug("Monitoring occurrence - skipping thought processing")
             return
 
         # Get pending thoughts for our shutdown task

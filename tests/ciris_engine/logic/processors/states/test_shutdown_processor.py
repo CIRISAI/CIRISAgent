@@ -636,6 +636,7 @@ class TestThoughtProcessing:
     ):
         """Test that processing returns early when no pending thoughts"""
         shutdown_processor.shutdown_task = sample_task
+        shutdown_processor.is_claiming_occurrence = True  # Simulate claiming occurrence
         mock_persistence.get_thoughts_by_task_id.return_value = []
 
         await shutdown_processor._process_shutdown_thoughts()
@@ -656,6 +657,7 @@ class TestThoughtProcessing:
         """Test that pending thoughts are processed"""
         # Setup
         shutdown_processor.shutdown_task = sample_task
+        shutdown_processor.is_claiming_occurrence = True  # Simulate claiming occurrence
         sample_thought.status = ThoughtStatus.PENDING
 
         mock_persistence.get_thoughts_by_task_id.return_value = [sample_thought]
@@ -690,6 +692,7 @@ class TestThoughtProcessing:
         """Test that thought processing errors are handled gracefully"""
         # Setup
         shutdown_processor.shutdown_task = sample_task
+        shutdown_processor.is_claiming_occurrence = True  # Simulate claiming occurrence
         sample_thought.status = ThoughtStatus.PENDING
 
         mock_persistence.get_thoughts_by_task_id.return_value = [sample_thought]

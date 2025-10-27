@@ -13,12 +13,7 @@ from pydantic import BaseModel, ValidationError
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.adapters.tools import (
-    ToolExecutionResult,
-    ToolExecutionStatus,
-    ToolInfo,
-    ToolParameterSchema,
-)
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 from ciris_engine.schemas.services.core import ServiceCapabilities
@@ -35,9 +30,9 @@ from .schemas import (
     RedditPostResult,
     RedditRemovalResult,
     RedditRemoveContentRequest,
+    RedditSubmissionSummary,
     RedditSubmitCommentRequest,
     RedditSubmitPostRequest,
-    RedditSubmissionSummary,
     RedditTimelineEntry,
     RedditTimelineResponse,
     RedditToken,
@@ -237,7 +232,9 @@ class RedditAPIClient:
         about_payload = await self._request_json("GET", f"/user/{request.username}/about")
         about_data = self._expect_dict(about_payload.get("data"), context="user_about.data")
 
-        account_created = datetime.fromtimestamp(float(self._get_str(about_data, "created_utc", default="0")), tz=timezone.utc)
+        account_created = datetime.fromtimestamp(
+            float(self._get_str(about_data, "created_utc", default="0")), tz=timezone.utc
+        )
         context = RedditUserContext(
             username=self._get_str(about_data, "name"),
             user_id=self._get_str(about_data, "id"),
@@ -279,7 +276,9 @@ class RedditAPIClient:
             payload["spoiler"] = "true"
 
         response = await self._request("POST", "/api/submit", data=payload)
-        result = await self._parse_submission_response(response, subreddit=subreddit, title=request.title, body=request.body)
+        result = await self._parse_submission_response(
+            response, subreddit=subreddit, title=request.title, body=request.body
+        )
         if not result:
             raise RuntimeError("Submission failed")
         return result.submission
@@ -313,7 +312,9 @@ class RedditAPIClient:
         metadata = await self._fetch_item_metadata(fullname)
         if not metadata:
             raise RuntimeError("Submission not found")
-        return await self._build_submission_summary(metadata, include_comments=include_comments, comment_limit=comment_limit)
+        return await self._build_submission_summary(
+            metadata, include_comments=include_comments, comment_limit=comment_limit
+        )
 
     async def fetch_subreddit_new(self, subreddit: str, *, limit: int) -> List[RedditTimelineEntry]:
         return await self._fetch_listing(f"/r/{subreddit}/new", limit=limit, entry_type="submission")
@@ -422,7 +423,9 @@ class RedditAPIClient:
             author=self._get_str(comment_data, "author"),
             subreddit=subreddit,
             permalink=permalink,
-            created_at=datetime.fromtimestamp(float(self._get_str(comment_data, "created_utc", default="0")), tz=timezone.utc),
+            created_at=datetime.fromtimestamp(
+                float(self._get_str(comment_data, "created_utc", default="0")), tz=timezone.utc
+            ),
             score=int(float(self._get_str(comment_data, "score", default="0"))),
             channel_reference=_build_channel_reference(subreddit, submission_id, comment_id),
         )
@@ -550,7 +553,9 @@ class RedditAPIClient:
             author=self._get_str(comment_data, "author"),
             subreddit=subreddit,
             permalink=permalink,
-            created_at=datetime.fromtimestamp(float(self._get_str(comment_data, "created_utc", default="0")), tz=timezone.utc),
+            created_at=datetime.fromtimestamp(
+                float(self._get_str(comment_data, "created_utc", default="0")), tz=timezone.utc
+            ),
             score=int(float(self._get_str(comment_data, "score", default="0"))),
             channel_reference=_build_channel_reference(subreddit, submission_id, comment_id),
         )

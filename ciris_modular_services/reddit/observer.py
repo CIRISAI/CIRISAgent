@@ -12,13 +12,8 @@ from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
+from .schemas import RedditChannelReference, RedditChannelType, RedditCredentials, RedditMessage
 from .service import RedditAPIClient
-from .schemas import (
-    RedditChannelReference,
-    RedditChannelType,
-    RedditCredentials,
-    RedditMessage,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -164,4 +159,3 @@ class RedditObserver(BaseObserver[RedditMessage]):
             setattr(msg, "permalink_url", msg.permalink)
 
         return msg
-

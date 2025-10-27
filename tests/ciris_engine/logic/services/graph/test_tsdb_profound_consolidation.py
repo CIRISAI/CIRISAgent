@@ -33,7 +33,7 @@ def mock_time_service():
 @pytest.fixture
 def tsdb_service(mock_memory_bus, mock_time_service):
     """Create TSDB service with custom target MB/day."""
-    service = TSDBConsolidationService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    service = TSDBConsolidationService(memory_bus=mock_memory_bus, time_service=mock_time_service, db_path=":memory:")
     # Set a very low target to force compression
     service._profound_target_mb_per_day = 0.000001  # 1 byte/day
     return service

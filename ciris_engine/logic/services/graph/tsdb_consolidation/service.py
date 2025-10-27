@@ -9,7 +9,7 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ from ciris_engine.schemas.services.graph.consolidation import (
     TraceSpanData,
     TSDBPeriodSummary,
 )
-from ciris_engine.schemas.services.graph.query_results import TSDBNodeQueryResult
+from ciris_engine.schemas.services.graph.query_results import ServiceCorrelationQueryResult, TSDBNodeQueryResult
 from ciris_engine.schemas.services.graph.tsdb_models import SummaryAttributes
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
@@ -436,6 +436,116 @@ class TSDBConsolidationService(BaseGraphService):
         except Exception as e:
             logger.error(f"Failed to consolidate missed windows: {e}", exc_info=True)
 
+    def _query_period_data(
+        self, period_start: datetime, period_end: datetime
+    ) -> Tuple[
+        Dict[str, TSDBNodeQueryResult],
+        ServiceCorrelationQueryResult,
+        List[TaskCorrelationData],
+    ]:
+        """Query all data for a consolidation period."""
+        nodes_by_type = self._query_manager.query_all_nodes_in_period(period_start, period_end)
+        correlations = self._query_manager.query_service_correlations(period_start, period_end)
+        tasks = self._query_manager.query_tasks_in_period(period_start, period_end)
+        return nodes_by_type, correlations, tasks
+
+    async def _create_metric_summary(
+        self,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: ServiceCorrelationQueryResult,
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create metrics summary from TSDB nodes and correlations."""
+        tsdb_nodes = nodes_by_type.get(
+            "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
+        ).nodes
+        metric_correlations = correlations.metric_correlations
+
+        converted_correlations["metric_datapoint"] = list(metric_correlations)
+
+        if tsdb_nodes or metric_correlations:
+            return await self._metrics_consolidator.consolidate(
+                period_start, period_end, period_label, tsdb_nodes, metric_correlations
+            )
+        return None
+
+    async def _create_task_summary(
+        self,
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+    ) -> Optional[GraphNode]:
+        """Create task summary from task correlations."""
+        if tasks:
+            return await self._task_consolidator.consolidate(period_start, period_end, period_label, tasks)
+        return None
+
+    async def _create_conversation_summary(
+        self,
+        correlations: ServiceCorrelationQueryResult,
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create conversation summary with user participation edges."""
+        service_interactions = correlations.service_interactions
+        if not service_interactions:
+            return None
+
+        converted_correlations["service_interaction"] = list(service_interactions)
+
+        conversation_summary = await self._conversation_consolidator.consolidate(
+            period_start, period_end, period_label, service_interactions
+        )
+        if not conversation_summary:
+            return None
+
+        # Create user participation edges
+        participant_data = self._conversation_consolidator.get_participant_data(service_interactions)
+        if participant_data:
+            user_edges = self._edge_manager.create_user_participation_edges(
+                conversation_summary, participant_data, period_label
+            )
+            logger.info(f"Created {user_edges} user participation edges")
+
+        return conversation_summary
+
+    async def _create_trace_summary(
+        self,
+        correlations: ServiceCorrelationQueryResult,
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+    ) -> Optional[GraphNode]:
+        """Create trace summary from trace spans."""
+        trace_spans = correlations.trace_spans
+        if not trace_spans:
+            return None
+
+        converted_correlations["trace_span"] = list(trace_spans)
+        return await self._trace_consolidator.consolidate(period_start, period_end, period_label, trace_spans)
+
+    async def _create_audit_summary(
+        self,
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+    ) -> Optional[GraphNode]:
+        """Create audit summary from audit nodes."""
+        audit_nodes = nodes_by_type.get(
+            "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
+        ).nodes
+        if audit_nodes:
+            return await self._audit_consolidator.consolidate(period_start, period_end, period_label, audit_nodes)
+        return None
+
     async def _consolidate_period(self, period_start: datetime, period_end: datetime) -> List[GraphNode]:
         """
         Consolidate all data for a specific period.
@@ -457,103 +567,50 @@ class TSDBConsolidationService(BaseGraphService):
 
         # 1. Query ALL data for the period
         logger.info(f"Querying all data for period {period_label}")
-
-        # Get all graph nodes in the period
-        nodes_by_type = self._query_manager.query_all_nodes_in_period(period_start, period_end)
-
-        # Get all correlations in the period
-        correlations = self._query_manager.query_service_correlations(period_start, period_end)
-
-        # Get tasks completed in the period
-        tasks = self._query_manager.query_tasks_in_period(period_start, period_end)
+        nodes_by_type, correlations, tasks = self._query_period_data(period_start, period_end)
 
         # 1.5. Handle consent expiry - anonymize expired TEMPORARY nodes
         await self._handle_consent_expiry(nodes_by_type, period_end)
 
         # 2. Create summaries
-
-        # Store converted correlation objects for reuse in edge creation
         converted_correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]] = (
             {}
         )
-        converted_tasks: List[TaskCorrelationData] = []  # Store converted tasks separately
 
-        # Metrics summary (TSDB data + correlations)
-        tsdb_nodes = nodes_by_type.get(
-            "tsdb_data", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
-        ).nodes
-        metric_correlations = correlations.metric_correlations
+        # Create each summary type using helper methods
+        metric_summary = await self._create_metric_summary(
+            nodes_by_type, correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if metric_summary:
+            summaries_created.append(metric_summary)
 
-        converted_correlations["metric_datapoint"] = list(metric_correlations)
+        task_summary = await self._create_task_summary(tasks, period_start, period_end, period_label)
+        if task_summary:
+            summaries_created.append(task_summary)
 
-        if tsdb_nodes or metric_correlations:
-            metric_summary = await self._metrics_consolidator.consolidate(
-                period_start, period_end, period_label, tsdb_nodes, metric_correlations
-            )
-            if metric_summary:
-                summaries_created.append(metric_summary)
+        conversation_summary = await self._create_conversation_summary(
+            correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if conversation_summary:
+            summaries_created.append(conversation_summary)
 
-        # Task summary (tasks are already TaskCorrelationData objects)
-        if tasks:
-            # Store converted tasks for edge creation
-            converted_tasks = tasks
+        trace_summary = await self._create_trace_summary(
+            correlations, period_start, period_end, period_label, converted_correlations
+        )
+        if trace_summary:
+            summaries_created.append(trace_summary)
 
-            task_summary = await self._task_consolidator.consolidate(period_start, period_end, period_label, tasks)
-            if task_summary:
-                summaries_created.append(task_summary)
-
-        # Memory consolidator doesn't create a summary, it only creates edges
-        # We'll call it later in _create_all_edges
-
-        # Conversation summary
-        service_interactions = correlations.service_interactions
-        if service_interactions:
-            converted_correlations["service_interaction"] = list(service_interactions)
-
-            if service_interactions:
-                conversation_summary = await self._conversation_consolidator.consolidate(
-                    period_start, period_end, period_label, service_interactions
-                )
-                if conversation_summary:
-                    summaries_created.append(conversation_summary)
-
-                    # Get participant data and create user edges
-                    participant_data = self._conversation_consolidator.get_participant_data(service_interactions)
-                    if participant_data:
-                        user_edges = self._edge_manager.create_user_participation_edges(
-                            conversation_summary, participant_data, period_label
-                        )
-                        logger.info(f"Created {user_edges} user participation edges")
-
-        # Trace summary
-        trace_spans = correlations.trace_spans
-        if trace_spans:
-            converted_correlations["trace_span"] = list(trace_spans)
-
-            trace_summary = await self._trace_consolidator.consolidate(
-                period_start, period_end, period_label, trace_spans
-            )
-            if trace_summary:
-                summaries_created.append(trace_summary)
-
-        # Audit summary
-        audit_nodes = nodes_by_type.get(
-            "audit_entry", TSDBNodeQueryResult(nodes=[], period_start=period_start, period_end=period_end)
-        ).nodes
-        if audit_nodes:
-            audit_summary = await self._audit_consolidator.consolidate(
-                period_start, period_end, period_label, audit_nodes
-            )
-            if audit_summary:
-                summaries_created.append(audit_summary)
+        audit_summary = await self._create_audit_summary(nodes_by_type, period_start, period_end, period_label)
+        if audit_summary:
+            summaries_created.append(audit_summary)
 
         # 3. Create edges
         if summaries_created:
             await self._create_all_edges(
                 summaries_created,
                 nodes_by_type,
-                converted_correlations,  # Use converted correlations instead of raw
-                converted_tasks,  # Use converted tasks instead of raw
+                converted_correlations,
+                tasks,  # Use tasks directly (already TaskCorrelationData objects)
                 period_start,
                 period_label,
             )
@@ -649,32 +706,16 @@ class TSDBConsolidationService(BaseGraphService):
                 if created:
                     logger.debug(f"Created {created} temporal edges from {summary.id} to {previous_id}")
 
-    async def _create_all_edges(
+    def _create_consolidator_edges(
         self,
         summaries: List[GraphNode],
         nodes_by_type: Dict[str, TSDBNodeQueryResult],
         correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
-        tasks: List[TaskCorrelationData],  # Now contains typed task objects
+        tasks: List[TaskCorrelationData],
         period_start: datetime,
         period_label: str,
-    ) -> None:
-        """
-        Create all necessary edges for the summaries.
-
-        This includes:
-        1. Type-specific edges (e.g., TSDB->metrics, conversation->users)
-        2. Summary->ALL nodes edges (SUMMARIZES relationship)
-        3. Temporal edges to previous period
-        4. Cross-summary edges within same period
-
-        Args:
-            summaries: List of summary nodes created
-            nodes_by_type: All nodes in the period by type
-            correlations: All correlations in the period by type
-            tasks: All tasks in the period
-            period_start: Start of the period
-            period_label: Human-readable period label
-        """
+    ) -> int:
+        """Create type-specific edges from consolidators and memory edges."""
         all_edges = []
 
         # Collect edges from each consolidator based on summary type
@@ -683,7 +724,6 @@ class TSDBConsolidationService(BaseGraphService):
             all_edges.extend(edges)
 
         # Get memory edges (links from summaries to memory nodes)
-        # Convert TSDBNodeQueryResult back to dict format for memory consolidator
         nodes_by_type_dict = {node_type: result.nodes for node_type, result in nodes_by_type.items()}
         memory_edges = self._memory_consolidator.consolidate(
             period_start, period_start + self._consolidation_interval, period_label, nodes_by_type_dict, summaries
@@ -694,14 +734,18 @@ class TSDBConsolidationService(BaseGraphService):
         if all_edges:
             edges_created = self._edge_manager.create_edges(all_edges)
             logger.info(f"Created {edges_created} edges for period {period_label}")
+            return edges_created
+        return 0
 
-        # CRITICAL: Create edges from summaries to ALL nodes in the period
-        # This ensures every node gets at least one edge after consolidation
+    def _create_summarizes_edges(
+        self, summaries: List[GraphNode], nodes_by_type: Dict[str, TSDBNodeQueryResult], period_label: str
+    ) -> int:
+        """Create SUMMARIZES edges from primary summary to all nodes in period."""
+        # Collect all nodes in period (excluding temporary TSDB_DATA nodes)
         all_nodes_in_period = []
         logger.debug(f"Collecting nodes for SUMMARIZES edges. nodes_by_type keys: {list(nodes_by_type.keys())}")
 
         for node_type, result in nodes_by_type.items():
-            # Skip TSDB_DATA nodes as they're temporary and will be cleaned up
             if node_type != "tsdb_data":
                 node_count = len(result.nodes) if hasattr(result, "nodes") else 0
                 logger.debug(f"  {node_type}: {node_count} nodes")
@@ -712,27 +756,39 @@ class TSDBConsolidationService(BaseGraphService):
 
         logger.info(f"Total nodes collected for SUMMARIZES edges: {len(all_nodes_in_period)}")
 
-        if all_nodes_in_period:
-            # Create a primary summary (TSDB or first available) to link all nodes
-            primary_summary = next(
-                (s for s in summaries if s.type == NodeType.TSDB_SUMMARY), summaries[0] if summaries else None
-            )
+        if not all_nodes_in_period:
+            return 0
 
-            if primary_summary:
-                logger.info(f"Creating edges from {primary_summary.id} to {len(all_nodes_in_period)} nodes in period")
-                edges_created = self._edge_manager.create_summary_to_nodes_edges(
-                    primary_summary, all_nodes_in_period, "SUMMARIZES", f"Node active during {period_label}"
-                )
-                logger.info(f"Created {edges_created} SUMMARIZES edges for period {period_label}")
+        # Create a primary summary (TSDB or first available) to link all nodes
+        primary_summary = next(
+            (s for s in summaries if s.type == NodeType.TSDB_SUMMARY), summaries[0] if summaries else None
+        )
 
-        # Create cross-summary edges (same period relationships)
-        if len(summaries) > 1:
-            cross_edges = self._edge_manager.create_cross_summary_edges(summaries, period_start)
-            logger.info(f"Created {cross_edges} cross-summary edges for period {period_label}")
+        if not primary_summary:
+            return 0
 
-        # Create temporal edges to previous period summaries
+        logger.info(f"Creating edges from {primary_summary.id} to {len(all_nodes_in_period)} nodes in period")
+        edges_created = self._edge_manager.create_summary_to_nodes_edges(
+            primary_summary, all_nodes_in_period, "SUMMARIZES", f"Node active during {period_label}"
+        )
+        logger.info(f"Created {edges_created} SUMMARIZES edges for period {period_label}")
+        return edges_created
+
+    def _create_cross_summary_edges(self, summaries: List[GraphNode], period_start: datetime) -> int:
+        """Create edges between summaries in the same period."""
+        if len(summaries) <= 1:
+            return 0
+
+        cross_edges = self._edge_manager.create_cross_summary_edges(summaries, period_start)
+        logger.info(f"Created {cross_edges} cross-summary edges")
+        return cross_edges
+
+    def _create_temporal_edges(self, summaries: List[GraphNode], period_start: datetime) -> int:
+        """Create temporal edges to previous and next period summaries."""
+        total_created = 0
+
+        # Link to previous period summaries
         for summary in summaries:
-            # Extract summary type from ID
             summary_type = summary.id.split("_")[0] + "_" + summary.id.split("_")[1]
             previous_period = period_start - self._consolidation_interval
             previous_id = self._edge_manager.get_previous_summary_id(
@@ -743,11 +799,53 @@ class TSDBConsolidationService(BaseGraphService):
                 created = self._edge_manager.create_temporal_edges(summary, previous_id)
                 if created:
                     logger.debug(f"Created {created} temporal edges for {summary.id}")
+                    total_created += created
 
-        # Also check if there's a next period already consolidated and link to it
+        # Link to next period summaries
         edges_to_next = self._edge_manager.update_next_period_edges(period_start, summaries)
         if edges_to_next > 0:
             logger.info(f"Created {edges_to_next} edges to next period summaries")
+            total_created += edges_to_next
+
+        return total_created
+
+    async def _create_all_edges(
+        self,
+        summaries: List[GraphNode],
+        nodes_by_type: Dict[str, TSDBNodeQueryResult],
+        correlations: Dict[str, List[Union[MetricCorrelationData, ServiceInteractionData, TraceSpanData]]],
+        tasks: List[TaskCorrelationData],
+        period_start: datetime,
+        period_label: str,
+    ) -> None:
+        """
+        Create all necessary edges for the summaries.
+
+        This orchestrates creation of:
+        1. Type-specific edges from consolidators
+        2. SUMMARIZES edges to all nodes in period
+        3. Cross-summary edges within same period
+        4. Temporal edges to previous/next periods
+
+        Args:
+            summaries: List of summary nodes created
+            nodes_by_type: All nodes in the period by type
+            correlations: All correlations in the period by type
+            tasks: All tasks in the period
+            period_start: Start of the period
+            period_label: Human-readable period label
+        """
+        # Create type-specific and memory edges
+        self._create_consolidator_edges(summaries, nodes_by_type, correlations, tasks, period_start, period_label)
+
+        # Create SUMMARIZES edges to all nodes
+        self._create_summarizes_edges(summaries, nodes_by_type, period_label)
+
+        # Create cross-summary edges
+        self._create_cross_summary_edges(summaries, period_start)
+
+        # Create temporal edges
+        self._create_temporal_edges(summaries, period_start)
 
     def _find_oldest_unconsolidated_period(self) -> Optional[datetime]:
         """Find the oldest data that needs consolidation."""
@@ -924,18 +1022,30 @@ class TSDBConsolidationService(BaseGraphService):
             # Query for existing TSDB summary for this exact period
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
 
+            adapter = get_adapter()
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
-            # Query for TSDB summaries with matching period
-            cursor.execute(
+            # Query for TSDB summaries with matching period (PostgreSQL: JSONB operators, SQLite: json_extract)
+            if adapter.is_postgresql():
+                sql = """
+                    SELECT COUNT(*) FROM graph_nodes
+                    WHERE node_type = ?
+                    AND attributes_json->>'period_start' = ?
+                    AND attributes_json->>'period_end' = ?
                 """
-                SELECT COUNT(*) FROM graph_nodes
-                WHERE node_type = ?
-                AND json_extract(attributes_json, '$.period_start') = ?
-                AND json_extract(attributes_json, '$.period_end') = ?
-            """,
+            else:
+                sql = """
+                    SELECT COUNT(*) FROM graph_nodes
+                    WHERE node_type = ?
+                    AND json_extract(attributes_json, '$.period_start') = ?
+                    AND json_extract(attributes_json, '$.period_end') = ?
+                """
+
+            cursor.execute(
+                sql,
                 (NodeType.TSDB_SUMMARY.value, period_start.isoformat(), period_end.isoformat()),
             )
 
@@ -1080,19 +1190,32 @@ class TSDBConsolidationService(BaseGraphService):
         try:
             # Use direct DB query since MemoryQuery doesn't support field conditions
             from ciris_engine.logic.persistence.db.core import get_db_connection
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
 
+            adapter = get_adapter()
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
-            # Query for TSDB summaries with matching period
-            cursor.execute(
+            # Query for TSDB summaries with matching period (PostgreSQL: JSONB operators, SQLite: json_extract)
+            if adapter.is_postgresql():
+                sql = """
+                    SELECT attributes_json FROM graph_nodes
+                    WHERE node_type = ?
+                    AND attributes_json->>'period_start' = ?
+                    AND attributes_json->>'period_end' = ?
+                    LIMIT 1
                 """
-                SELECT attributes_json FROM graph_nodes
-                WHERE node_type = ?
-                AND json_extract(attributes_json, '$.period_start') = ?
-                AND json_extract(attributes_json, '$.period_end') = ?
-                LIMIT 1
-            """,
+            else:
+                sql = """
+                    SELECT attributes_json FROM graph_nodes
+                    WHERE node_type = ?
+                    AND json_extract(attributes_json, '$.period_start') = ?
+                    AND json_extract(attributes_json, '$.period_end') = ?
+                    LIMIT 1
+                """
+
+            cursor.execute(
+                sql,
                 (NodeType.TSDB_SUMMARY.value, period_start.isoformat(), period_end.isoformat()),
             )
 
@@ -1132,6 +1255,56 @@ class TSDBConsolidationService(BaseGraphService):
         """Get the service type."""
         return ServiceType.TELEMETRY
 
+    def _should_anonymize_node(self, node: GraphNode, period_end: datetime) -> bool:
+        """Check if a node should be anonymized due to consent expiry."""
+        if not hasattr(node, "consent_stream") or not hasattr(node, "expires_at"):
+            return False
+
+        if node.consent_stream != ConsentStream.TEMPORARY or not node.expires_at:
+            return False
+
+        return period_end > node.expires_at
+
+    def _generate_anonymized_id(self, original_id: str, consent_stream: ConsentStream) -> str:
+        """Generate anonymized ID based on hash of original ID."""
+        import hashlib
+
+        id_hash = hashlib.sha256(original_id.encode()).hexdigest()[:8]
+
+        if consent_stream == ConsentStream.TEMPORARY:
+            return f"temporary_user_{id_hash}"
+        else:
+            return f"anonymous_user_{id_hash}"
+
+    def _remove_pii_from_attributes(self, node: GraphNode, period_end: datetime) -> None:
+        """Remove PII fields from node attributes and add anonymization metadata."""
+        if not hasattr(node, "attributes") or not isinstance(node.attributes, dict):
+            return
+
+        # Remove PII fields
+        pii_fields = ["email", "name", "phone", "address", "ip_address"]
+        for field in pii_fields:
+            if field in node.attributes:
+                del node.attributes[field]
+
+        # Add anonymization metadata
+        node.attributes["anonymized_at"] = period_end.isoformat()
+        node.attributes["original_stream"] = node.consent_stream
+
+    async def _update_anonymized_node(self, node: GraphNode, old_id: str) -> None:
+        """Update anonymized node in memory bus."""
+        if not self._memory_bus:
+            return
+
+        try:
+            status = await self._memory_bus.memorize(node, handler_name="tsdb_consolidation")
+            if status.status == MemoryOpStatus.SUCCESS:
+                logger.info(f"Successfully anonymized node {old_id}")
+            else:
+                logger.warning(f"Failed to update anonymized node: {status.reason}")
+        except Exception as e:
+            logger.error(f"Error updating anonymized node: {e}")
+
     async def _handle_consent_expiry(self, nodes_by_type: Dict[str, TSDBNodeQueryResult], period_end: datetime) -> None:
         """
         Handle consent expiry by anonymizing expired TEMPORARY nodes.
@@ -1152,53 +1325,23 @@ class TSDBConsolidationService(BaseGraphService):
         ).nodes
 
         for node in user_nodes:
-            # Check if node has consent_stream and expires_at
-            if hasattr(node, "consent_stream") and hasattr(node, "expires_at"):
-                # Check if TEMPORARY and expired
-                if node.consent_stream == ConsentStream.TEMPORARY and node.expires_at:
-                    if period_end > node.expires_at:
-                        # Node has expired - anonymize it
-                        old_id = node.id
+            if not self._should_anonymize_node(node, period_end):
+                continue
 
-                        # Generate anonymized ID based on hash of original ID
-                        import hashlib
+            # Node has expired - anonymize it
+            old_id = node.id
+            new_id = self._generate_anonymized_id(old_id, node.consent_stream)
 
-                        id_hash = hashlib.sha256(old_id.encode()).hexdigest()[:8]
+            logger.info(f"Anonymizing expired node: {old_id} -> {new_id}")
 
-                        # Rename based on stream type
-                        if node.consent_stream == ConsentStream.TEMPORARY:
-                            new_id = f"temporary_user_{id_hash}"
-                        else:
-                            new_id = f"anonymous_user_{id_hash}"
+            # Update the node ID
+            node.id = new_id
 
-                        logger.info(f"Anonymizing expired node: {old_id} -> {new_id}")
+            # Clear any PII from attributes
+            self._remove_pii_from_attributes(node, period_end)
 
-                        # Update the node ID
-                        node.id = new_id
-
-                        # Clear any PII from attributes if present
-                        if hasattr(node, "attributes") and isinstance(node.attributes, dict):
-                            # Remove PII fields
-                            pii_fields = ["email", "name", "phone", "address", "ip_address"]
-                            for field in pii_fields:
-                                if field in node.attributes:
-                                    del node.attributes[field]
-
-                            # Add anonymization metadata
-                            node.attributes["anonymized_at"] = period_end.isoformat()
-                            node.attributes["original_stream"] = node.consent_stream
-
-                        # Update in memory bus if available
-                        if self._memory_bus:
-                            try:
-                                # Update the node in the graph using memorize
-                                status = await self._memory_bus.memorize(node, handler_name="tsdb_consolidation")
-                                if status.status == MemoryOpStatus.SUCCESS:
-                                    logger.info(f"Successfully anonymized node {old_id}")
-                                else:
-                                    logger.warning(f"Failed to update anonymized node: {status.reason}")
-                            except Exception as e:
-                                logger.error(f"Error updating anonymized node: {e}")
+            # Update in memory bus
+            await self._update_anonymized_node(node, old_id)
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service can handle."""
@@ -1249,94 +1392,111 @@ class TSDBConsolidationService(BaseGraphService):
             logger.info(f"Consolidating week: {week_start} to {week_end}")
             logger.info(f"Period: {period_start.isoformat()} to {period_end.isoformat()}")
 
-            # Process summaries
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
+            # Try to acquire lock for this week to prevent duplicate consolidation
+            week_identifier = week_start.isoformat()  # e.g., "2023-10-01"
+            lock_acquired = self._query_manager.acquire_consolidation_lock("extensive", week_identifier)
 
-                # Get all summary types to consolidate
-                summary_types = [
-                    "tsdb_summary",
-                    "audit_summary",
-                    "trace_summary",
-                    "conversation_summary",
-                    "task_summary",
-                ]
+            if not lock_acquired:
+                logger.info(
+                    f"Extensive consolidation for week {week_identifier} is locked by another instance, skipping"
+                )
+                return
 
-                for summary_type in summary_types:
-                    # Query basic summaries using helper
-                    summaries = query_basic_summaries_in_period(cursor, summary_type, period_start, period_end)
+            try:
+                # Process summaries
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
 
-                    if not summaries:
-                        logger.info(f"No {summary_type} summaries found for consolidation")
-                        continue
+                    # Get all summary types to consolidate
+                    summary_types = [
+                        "tsdb_summary",
+                        "audit_summary",
+                        "trace_summary",
+                        "conversation_summary",
+                        "task_summary",
+                    ]
 
-                    logger.info(f"Found {len(summaries)} {summary_type} summaries to consolidate")
-                    total_basic_summaries += len(summaries)
+                    for summary_type in summary_types:
+                        # Query basic summaries using helper
+                        summaries = query_basic_summaries_in_period(cursor, summary_type, period_start, period_end)
 
-                    # Group summaries by day using helper
-                    summaries_by_day = group_summaries_by_day(summaries)
-
-                    # Create daily summary for each day
-                    for day, day_summaries in summaries_by_day.items():
-                        if len(day_summaries) == 0:
+                        if not summaries:
+                            logger.info(f"No {summary_type} summaries found for consolidation")
                             continue
 
-                        # Convert date to datetime for helpers
-                        day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+                        logger.info(f"Found {len(summaries)} {summary_type} summaries to consolidate")
+                        total_basic_summaries += len(summaries)
 
-                        # Generate daily node ID
-                        daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
+                        # Group summaries by day using helper
+                        summaries_by_day = group_summaries_by_day(summaries)
 
-                        # Check if already exists using helper
-                        if check_daily_summary_exists(cursor, daily_node_id):
-                            logger.debug(f"Daily summary {daily_node_id} already exists, skipping")
-                            continue
+                        # Create daily summary for each day
+                        for day, day_summaries in summaries_by_day.items():
+                            if len(day_summaries) == 0:
+                                continue
 
-                        # Parse summary attributes using helper
-                        summary_attrs_list = parse_summary_attributes(day_summaries)
+                            # Convert date to datetime for helpers
+                            day_datetime = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
 
-                        # Aggregate metrics, resources, and actions using helpers
-                        daily_metrics = aggregate_metric_stats(summary_attrs_list)
-                        daily_resources = aggregate_resource_usage(summary_attrs_list)
-                        daily_action_counts = aggregate_action_counts(summary_attrs_list)
+                            # Generate daily node ID
+                            daily_node_id = f"{summary_type}_daily_{day.strftime('%Y%m%d')}"
 
-                        # Create daily summary attributes using helper
-                        daily_attrs = create_daily_summary_attributes(
-                            summary_type,
-                            day_datetime,
-                            day_summaries,
-                            daily_metrics,
-                            daily_resources,
-                            daily_action_counts,
-                        )
+                            # Check if already exists using helper
+                            if check_daily_summary_exists(cursor, daily_node_id):
+                                logger.debug(f"Daily summary {daily_node_id} already exists, skipping")
+                                continue
 
-                        # Create daily summary node using helper
-                        daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
+                            # Parse summary attributes using helper
+                            summary_attrs_list = parse_summary_attributes(day_summaries)
 
-                        # Store in memory
-                        if self._memory_bus:
-                            result = await self._memory_bus.memorize(daily_summary, handler_name="tsdb_consolidation")
-                            if result.status == MemoryOpStatus.OK:
-                                daily_summaries_created += 1
-                                logger.info(
-                                    f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
+                            # Aggregate metrics, resources, and actions using helpers
+                            daily_metrics = aggregate_metric_stats(summary_attrs_list)
+                            daily_resources = aggregate_resource_usage(summary_attrs_list)
+                            daily_action_counts = aggregate_action_counts(summary_attrs_list)
+
+                            # Create daily summary attributes using helper
+                            daily_attrs = create_daily_summary_attributes(
+                                summary_type,
+                                day_datetime,
+                                day_summaries,
+                                daily_metrics,
+                                daily_resources,
+                                daily_action_counts,
+                            )
+
+                            # Create daily summary node using helper
+                            daily_summary = create_daily_summary_node(summary_type, day_datetime, daily_attrs, now)
+
+                            # Store in memory
+                            if self._memory_bus:
+                                result = await self._memory_bus.memorize(
+                                    daily_summary, handler_name="tsdb_consolidation"
                                 )
+                                if result.status == MemoryOpStatus.OK:
+                                    daily_summaries_created += 1
+                                    logger.info(
+                                        f"Created daily summary {daily_node_id} from {len(day_summaries)} basic summaries"
+                                    )
 
-                # Final summary
-                total_duration = (self._now() - consolidation_start).total_seconds()
-                logger.info(f"Extensive consolidation complete in {total_duration:.2f}s:")
-                logger.info(f"  - Basic summaries processed: {total_basic_summaries}")
-                logger.info(f"  - Daily summaries created: {daily_summaries_created}")
-                if total_basic_summaries > 0:
-                    compression_ratio = total_basic_summaries / max(daily_summaries_created, 1)
-                    logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
-                logger.info("=" * 60)
+                    # Final summary
+                    total_duration = (self._now() - consolidation_start).total_seconds()
+                    logger.info(f"Extensive consolidation complete in {total_duration:.2f}s:")
+                    logger.info(f"  - Basic summaries processed: {total_basic_summaries}")
+                    logger.info(f"  - Daily summaries created: {daily_summaries_created}")
+                    if total_basic_summaries > 0:
+                        compression_ratio = total_basic_summaries / max(daily_summaries_created, 1)
+                        logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
+                    logger.info("=" * 60)
 
-                # Maintain temporal chain using helper
-                if daily_summaries_created > 0:
-                    edges_created = maintain_temporal_chain_to_daily(cursor, period_start)
-                    if edges_created > 0:
-                        logger.info(f"Created {edges_created} temporal chain edges")
+                    # Maintain temporal chain using helper
+                    if daily_summaries_created > 0:
+                        edges_created = maintain_temporal_chain_to_daily(cursor, period_start)
+                        if edges_created > 0:
+                            logger.info(f"Created {edges_created} temporal chain edges")
+
+            finally:
+                # Release lock
+                self._query_manager.release_consolidation_lock("extensive", week_identifier)
 
         except Exception as e:
             logger.error(f"Extensive consolidation failed: {e}", exc_info=True)
@@ -1407,74 +1567,91 @@ class TSDBConsolidationService(BaseGraphService):
             # Calculate the previous month period using helper
             month_start, month_end = calculate_month_period(now)
 
-            # Initialize compressor
-            compressor = SummaryCompressor(self._profound_target_mb_per_day)
+            # Try to acquire lock for this month to prevent duplicate consolidation
+            month_identifier = month_start.strftime("%Y-%m")  # e.g., "2023-10"
+            lock_acquired = self._query_manager.acquire_consolidation_lock("profound", month_identifier)
 
-            # Query and process summaries
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-
-                # Query all extensive summaries from the month using helper
-                summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
-                total_daily_summaries = len(summaries)
-
-                if len(summaries) < 7:  # Less than a week's worth
-                    logger.info(
-                        f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
-                    )
-                    return
-
-                logger.info(f"Found {total_daily_summaries} daily summaries to compress")
-
-                # Calculate current storage using helper
-                days_in_period = (month_end - month_start).days + 1
-                current_daily_mb, summary_attrs_list = calculate_storage_metrics(
-                    cursor, month_start, month_end, compressor
-                )
-                storage_before_mb = float(current_daily_mb * days_in_period)
-                logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
-                logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
-
-                # Check if compression is needed
-                if not compressor.needs_compression(summary_attrs_list, days_in_period):
-                    logger.info("Daily summaries already meet storage target, skipping compression")
-                    return
-
-                # Compress summaries using helper
-                compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
-                summaries_compressed = compressed_count
-
-                conn.commit()
-
-                # Calculate new storage using helper
-                new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
-                storage_after_mb = new_daily_mb * days_in_period
-                avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
-
-                # Final summary
-                total_duration = (self._now() - consolidation_start).total_seconds()
-                logger.info(f"Profound consolidation complete in {total_duration:.2f}s:")
-                logger.info(f"  - Daily summaries processed: {total_daily_summaries}")
-                logger.info(f"  - Summaries compressed: {summaries_compressed}")
-                logger.info(f"  - Average compression: {avg_reduction:.1%}")
+            if not lock_acquired:
                 logger.info(
-                    f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
+                    f"Profound consolidation for month {month_identifier} is locked by another instance, skipping"
                 )
-                logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
-                if storage_before_mb > 0:
-                    logger.info(
-                        f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
+                return
+
+            try:
+                # Initialize compressor
+                compressor = SummaryCompressor(self._profound_target_mb_per_day)
+
+                # Query and process summaries
+                with get_db_connection(db_path=self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    # Query all extensive summaries from the month using helper
+                    summaries = query_extensive_summaries_in_month(cursor, month_start, month_end)
+                    total_daily_summaries = len(summaries)
+
+                    if len(summaries) < 7:  # Less than a week's worth
+                        logger.info(
+                            f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
+                        )
+                        return
+
+                    logger.info(f"Found {total_daily_summaries} daily summaries to compress")
+
+                    # Calculate current storage using helper
+                    days_in_period = (month_end - month_start).days + 1
+                    current_daily_mb, summary_attrs_list = calculate_storage_metrics(
+                        cursor, month_start, month_end, compressor
                     )
+                    storage_before_mb = float(current_daily_mb * days_in_period)
+                    logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
+                    logger.info(f"Target: {self._profound_target_mb_per_day}MB/day")
 
-                # Clean up old basic summaries using helper
-                cleanup_cutoff = now - timedelta(days=30)
-                deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
+                    # Check if compression is needed
+                    if not compressor.needs_compression(summary_attrs_list, days_in_period):
+                        logger.info("Daily summaries already meet storage target, skipping compression")
+                        return
 
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} old basic summaries")
+                    # Compress summaries using helper
+                    compressed_count, total_reduction = compress_and_update_summaries(
+                        cursor, summaries, compressor, now
+                    )
+                    summaries_compressed = compressed_count
+
                     conn.commit()
 
-            self._last_profound_consolidation = now
+                    # Calculate new storage using helper
+                    new_daily_mb, _ = calculate_storage_metrics(cursor, month_start, month_end, compressor)
+                    storage_after_mb = new_daily_mb * days_in_period
+                    avg_reduction = total_reduction / compressed_count if compressed_count > 0 else 0
+
+                    # Final summary
+                    total_duration = (self._now() - consolidation_start).total_seconds()
+                    logger.info(f"Profound consolidation complete in {total_duration:.2f}s:")
+                    logger.info(f"  - Daily summaries processed: {total_daily_summaries}")
+                    logger.info(f"  - Summaries compressed: {summaries_compressed}")
+                    logger.info(f"  - Average compression: {avg_reduction:.1%}")
+                    logger.info(
+                        f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
+                    )
+                    logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
+                    if storage_before_mb > 0:
+                        logger.info(
+                            f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
+                        )
+
+                    # Clean up old basic summaries using helper
+                    cleanup_cutoff = now - timedelta(days=30)
+                    deleted = cleanup_old_basic_summaries(cursor, cleanup_cutoff)
+
+                    if deleted > 0:
+                        logger.info(f"Cleaned up {deleted} old basic summaries")
+                        conn.commit()
+
+                    self._last_profound_consolidation = now
+
+            finally:
+                # Release lock
+                self._query_manager.release_consolidation_lock("profound", month_identifier)
 
         except Exception as e:
             logger.error(f"Profound consolidation failed: {e}", exc_info=True)

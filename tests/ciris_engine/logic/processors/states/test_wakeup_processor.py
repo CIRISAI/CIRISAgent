@@ -1,7 +1,8 @@
 """Comprehensive tests for WakeupProcessor."""
 
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -48,11 +49,13 @@ class TestWakeupProcessorInitialization:
 class TestWakeupProcessorTaskManagement:
     """Test task creation and management in WakeupProcessor."""
 
-    @patch('ciris_engine.logic.persistence.models.tasks.add_system_task')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.persistence.models.tasks.add_system_task")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
-    async def test_create_wakeup_tasks_creates_sequence(self, mock_persistence, mock_identity, mock_add_task, wakeup_processor):
+    async def test_create_wakeup_tasks_creates_sequence(
+        self, mock_persistence, mock_identity, mock_add_task, wakeup_processor
+    ):
         """Test that _create_wakeup_tasks creates a wakeup sequence."""
         # Mock identity with attributes
         identity_mock = Mock()
@@ -63,8 +66,8 @@ class TestWakeupProcessorTaskManagement:
 
         # Mock add_system_task to return tasks
         def create_task(description=None, channel_id=None, task_id=None, task_obj=None, **kwargs):
-            from ciris_engine.schemas.runtime.models import Task
             from ciris_engine.schemas.runtime.enums import TaskStatus
+            from ciris_engine.schemas.runtime.models import Task
 
             # Handle both task object and description string
             if task_obj:
@@ -89,7 +92,7 @@ class TestWakeupProcessorTaskManagement:
         root_task = wakeup_processor.wakeup_tasks[0]
         assert "WAKEUP" in root_task.task_id or "wakeup" in root_task.description.lower()
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     def test_check_all_steps_complete_returns_true_when_all_completed(
         self, mock_persistence, wakeup_processor, wakeup_task_sequence
     ):
@@ -111,7 +114,7 @@ class TestWakeupProcessorTaskManagement:
         result = wakeup_processor._check_all_steps_complete()
         assert result is True
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     def test_check_all_steps_complete_returns_false_when_incomplete(
         self, mock_persistence, wakeup_processor, wakeup_task_sequence
     ):
@@ -136,10 +139,8 @@ class TestWakeupProcessorTaskManagement:
         result = wakeup_processor._check_all_steps_complete()
         assert result is False
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
-    def test_count_completed_steps_counts_correctly(
-        self, mock_persistence, wakeup_processor, wakeup_task_sequence
-    ):
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    def test_count_completed_steps_counts_correctly(self, mock_persistence, wakeup_processor, wakeup_task_sequence):
         """Test that _count_completed_steps counts completed tasks correctly."""
         wakeup_processor.wakeup_tasks = wakeup_task_sequence
 
@@ -165,8 +166,8 @@ class TestWakeupProcessorTaskManagement:
 class TestWakeupProcessorThoughtCreation:
     """Test thought creation logic in WakeupProcessor."""
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.generate_thought_id')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.generate_thought_id")
     def test_create_step_thought_creates_valid_thought(
         self, mock_gen_id, mock_persistence, wakeup_processor, sample_task
     ):
@@ -188,12 +189,10 @@ class TestWakeupProcessorThoughtCreation:
 class TestWakeupProcessorNonBlocking:
     """Test non-blocking wakeup processing."""
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
-    async def test_process_wakeup_non_blocking_creates_tasks(
-        self, mock_persistence, mock_identity, wakeup_processor
-    ):
+    async def test_process_wakeup_non_blocking_creates_tasks(self, mock_persistence, mock_identity, wakeup_processor):
         """Test that non-blocking mode creates wakeup tasks."""
         identity_mock = Mock()
         identity_mock.agent_name = "TestAgent"
@@ -210,9 +209,9 @@ class TestWakeupProcessorNonBlocking:
         assert "status" in result
         assert len(wakeup_processor.wakeup_tasks) > 0
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.generate_thought_id')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.generate_thought_id")
     @pytest.mark.asyncio
     async def test_process_wakeup_non_blocking_creates_thoughts_for_active_tasks(
         self, mock_gen_id, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence
@@ -241,8 +240,8 @@ class TestWakeupProcessorNonBlocking:
         # Should have created thoughts for step tasks (not root)
         assert mock_persistence.add_thought.call_count >= 1
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_process_wakeup_non_blocking_skips_tasks_with_pending_thoughts(
         self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence, sample_thought
@@ -266,8 +265,8 @@ class TestWakeupProcessorNonBlocking:
         # Should not create new thoughts since pending thoughts exist
         assert result["processed_thoughts"] is True  # Found pending thoughts to process
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_process_wakeup_non_blocking_detects_completion(
         self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence
@@ -292,8 +291,8 @@ class TestWakeupProcessorNonBlocking:
         assert result["wakeup_complete"] is True
         assert wakeup_processor.wakeup_complete is True
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_process_wakeup_non_blocking_detects_failure(
         self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence
@@ -330,8 +329,8 @@ class TestWakeupProcessorNonBlocking:
 class TestWakeupProcessorProcess:
     """Test the main process() method."""
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_process_returns_wakeup_result(self, mock_persistence, mock_identity, wakeup_processor):
         """Test that process() returns a proper WakeupResult."""
@@ -353,8 +352,8 @@ class TestWakeupProcessorProcess:
         assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
     async def test_process_tracks_errors_on_failure(
         self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence, failed_task
@@ -380,10 +379,12 @@ class TestWakeupProcessorProcess:
 class TestWakeupProcessorEdgeCases:
     """Test edge cases and error handling."""
 
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context')
-    @patch('ciris_engine.logic.processors.states.wakeup_processor.persistence')
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
-    async def test_process_wakeup_handles_exception(self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence):
+    async def test_process_wakeup_handles_exception(
+        self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence
+    ):
         """Test that _process_wakeup handles exceptions gracefully."""
         # Set up wakeup tasks first so it doesn't try to create them
         wakeup_processor.wakeup_tasks = wakeup_task_sequence

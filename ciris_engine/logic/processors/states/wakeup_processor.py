@@ -154,10 +154,7 @@ class WakeupProcessor(BaseProcessor):
         Returns:
             List of status dicts for each step
         """
-        return [
-            self._build_step_status(task, i + 1)
-            for i, task in enumerate(self.wakeup_tasks[1:])
-        ]
+        return [self._build_step_status(task, i + 1) for i, task in enumerate(self.wakeup_tasks[1:])]
 
     def __init__(
         self,
@@ -244,9 +241,7 @@ class WakeupProcessor(BaseProcessor):
                 for i, step_task in enumerate(self.wakeup_tasks[1:]):
                     # Use helper to validate task state
                     is_valid, status_str = self._validate_task_state(step_task)
-                    logger.debug(
-                        f"Step {i+1}: task_id={step_task.task_id}, status={status_str}"
-                    )
+                    logger.debug(f"Step {i+1}: task_id={step_task.task_id}, status={status_str}")
 
                     if not is_valid:
                         logger.debug(f"Skipping step {i+1} - not ACTIVE (status: {status_str})")
@@ -256,7 +251,9 @@ class WakeupProcessor(BaseProcessor):
                     thought_summary = self._get_task_thoughts_summary(step_task.task_id)
                     existing_thoughts = thought_summary["thoughts"]
                     logger.debug(f"Step {i+1} has {thought_summary['total']} existing thoughts")
-                    logger.debug(f"Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}")
+                    logger.debug(
+                        f"Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}"
+                    )
 
                     if thought_summary["pending"] > 0:
                         logger.debug(

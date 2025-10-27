@@ -7,27 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Service Initialization Warnings** - Fixed 3 initialization order and naming issues
-  - **Issue 1**: "Runtime does not have attribute 'database_maintenance_service' - skipping injection"
-    - **Root Cause**: API adapter expected `runtime.database_maintenance_service` but runtime only exposed `runtime.maintenance_service`
-    - **Solution**: Added property alias `database_maintenance_service` that returns `maintenance_service`
-    - **Impact**: Ensures all 22/22 core services are accessible to API adapter
-    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:272-280`
-
-  - **Issue 2**: "No available communication service found with capabilities ['send_message']"
-    - **Root Cause**: Components built (accessing buses) before adapter services were registered
-    - **Solution**: Moved adapter service registration from Phase 6 to Phase 5 (immediately after adapters start)
-    - **Impact**: Communication services available when components need them, prevents spurious warnings
-    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:505-512`
-
-  - **Issue 3**: "Thought has no payload attribute" warnings in incidents log
-    - **Root Cause**: Dead code from incomplete refactoring attempted to access non-existent `thought.payload` field
-    - **Solution**: Removed dead code (lines 125-132), added explanatory comment about ConscienceCheckResult usage
-    - **Impact**: Eliminates log noise, clarifies that observation data is stored in ConscienceCheckResult
-    - **Files**: `ciris_engine/logic/conscience/updated_status_conscience.py:125-127`
+## [1.4.7] - 2025-10-26
 
 ### Added
+- **Modular Service Loading via ADAPTERS** - Support loading modular services via `--adapter` flag or `CIRIS_ADAPTER` env var
+  - Automatically discovers modular services from `ciris_modular_services/` directory
+  - Validates required environment configuration before loading
+  - Registers services with appropriate buses (Tool, Communication, LLM)
+  - Example: `CIRIS_ADAPTER=reddit` loads Reddit adapter if config is present
+  - Files: `main.py:275-332`, `ciris_engine/logic/runtime/service_initializer.py:968-1032`
+
+- **Enhanced ServiceManifest Schema** - Updated to support all modular service manifest formats
+  - Added support for `env`, `sensitivity`, and `required` fields in configuration parameters
+  - Added `safe_domain` field to ModuleInfo
+  - Added `external` dependencies for package requirements
+  - Added `prohibited_sensors` for sensor modules
+  - Makes `default` optional for configuration parameters
+  - Files: `ciris_engine/schemas/runtime/manifest.py:82-110`
 - **Reddit Adapter** - Complete Reddit integration for r/ciris subreddit monitoring and interaction
   - Tool service for posting, commenting, removals, user context lookups
   - Communication service with channel routing (`reddit:r/ciris:post/abc123`)
@@ -44,10 +40,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Parallel Database Backend Testing Support** - QA runner can now test SQLite and PostgreSQL backends simultaneously with `--parallel-backends` flag, reducing test time by ~50%
 
+- **Modular Service Loading Tests** - Comprehensive unit test suite for modular service loading integration (10 tests)
+  - Tests service discovery, type routing (TOOL/COMMUNICATION/LLM), and bus registration
+  - Tests error handling (service not found, load failure, instantiation failure)
+  - Tests case-insensitive matching and adapter suffix normalization
+  - **Files**: `tests/ciris_engine/logic/runtime/test_service_initializer.py:433-792`
+
+### Fixed
+- **CRITICAL: PostgreSQL Incompatibility in TSDB Extensive Consolidation** - Fixed production failures on multi-occurrence PostgreSQL agents
+  - **Issue**: `function json_extract(jsonb, unknown) does not exist` when running extensive (daily) consolidation
+  - **Root Cause**: Hardcoded SQLite `json_extract()` calls instead of using database adapter for PostgreSQL JSONB operators
+  - **Solution**: Added adapter checks and conditional SQL for all TSDB consolidation helper functions
+  - **Scope**: Fixed 15 hardcoded `json_extract()` calls across 3 files (extensive_helpers.py, profound_helpers.py, service.py)
+  - **Impact**: Resolves 100% of extensive/profound consolidation failures on PostgreSQL deployments
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/extensive_helpers.py:43-78, 237-259`,
+              `ciris_engine/logic/services/graph/tsdb_consolidation/profound_helpers.py:86-108, 207-227, 251-277`,
+              `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:927-961, 1095-1122`
+
+- **CRITICAL: Missing Occurrence Locking in Extensive/Profound Consolidation** - Added database-level locks to prevent duplicate consolidation
+  - **Issue**: Multiple agent occurrences could simultaneously consolidate same week/month periods, causing race conditions
+  - **Solution**: Added `acquire_consolidation_lock("extensive", week_identifier)` and `acquire_consolidation_lock("profound", month_identifier)`
+  - **Pattern**: Leverages existing lock infrastructure (PostgreSQL pg_try_advisory_lock, SQLite BEGIN IMMEDIATE)
+  - **Impact**: Prevents duplicate consolidation work and potential data corruption in multi-occurrence deployments
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:1277-1283, 1375-1377, 1448-1454, 1526-1528`
+
+- **P0: Modular Service Configuration Parameter Access** - Fixed AttributeError preventing modular service loading
+  - **Issue**: `AttributeError: 'ConfigurationParameter' object has no attribute 'get'` when validating modular service configuration
+  - **Root Cause**: Code used dict-style access (`config_spec.get("env")`, `"default" not in config_spec`) on Pydantic model instances
+  - **Solution**: Changed to attribute access (`config_spec.env`, `config_spec.default is None`)
+  - **Impact**: Allows modular services (Reddit adapter) to load from CLI when configuration is declared
+  - **Files**: `main.py:298-306`
+
+- **P1: Modular Services Started Before Registration** - Fixed uninitialized resources in modular service instances
+  - **Issue**: Services registered with buses/registry without calling `start()`, leaving HTTP clients and credentials uninitialized
+  - **Root Cause**: Missing `await service_instance.start()` call before registration in service_initializer.py
+  - **Solution**: Added conditional `await service_instance.start()` before bus/registry registration (respects services without start method)
+  - **Impact**: Ensures modular services (e.g., Reddit) have all resources initialized before first use
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1009-1012`
+
 ### Notes
-- **Risk**: TRIVIAL - All changes are backward compatible, minimal code changes
-- **Testing**: 9/9 new unit tests pass, all existing tests pass
-- **Validation**: Fixed via parallel investigation using 3 git worktrees + specialized agents
+- **Risk**: TRIVIAL - All changes are backward compatible, use existing database abstraction patterns
+- **Testing**: All 135 TSDB consolidation tests pass, mypy strict mode passes with zero errors
+- **Validation**: Fixes production incident reported on PostgreSQL multi-occurrence agent
+- **Type Safety**: Mypy strict mode passes with zero errors
+- **Architecture**: Extensive/profound consolidation locks prevent out-of-band duplicates while basic consolidation lock coordinates all levels
 
 ## [1.4.6] - 2025-10-26
 

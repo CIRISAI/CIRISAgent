@@ -33,7 +33,7 @@ def mock_time_service():
 @pytest.fixture
 def tsdb_service(mock_memory_bus, mock_time_service):
     """Create TSDB service for testing."""
-    return TSDBConsolidationService(memory_bus=mock_memory_bus, time_service=mock_time_service)
+    return TSDBConsolidationService(memory_bus=mock_memory_bus, time_service=mock_time_service, db_path=":memory:")
 
 
 @pytest.fixture

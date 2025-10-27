@@ -66,6 +66,7 @@ class ModuleInfo(BaseModel):
     is_mock: bool = Field(False, description="Whether this is a MOCK module", alias="MOCK")
     license: Optional[str] = Field(None, description="Module license")
     homepage: Optional[str] = Field(None, description="Module homepage URL")
+    safe_domain: Optional[bool] = Field(None, description="Whether module operates in safe domains")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -75,6 +76,7 @@ class LegacyDependencies(BaseModel):
 
     protocols: List[str] = Field(default_factory=list, description="Required protocols")
     schemas: List[str] = Field(default_factory=list, description="Required schemas")
+    external: Optional[Dict[str, str]] = Field(None, description="External package dependencies")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -83,8 +85,11 @@ class ConfigurationParameter(BaseModel):
     """Configuration parameter definition."""
 
     type: str = Field(..., description="Parameter type (integer, float, string, boolean)")
-    default: Any = Field(..., description="Default value")
+    default: Optional[Any] = Field(None, description="Default value (optional)")
     description: str = Field(..., description="Parameter description")
+    env: Optional[str] = Field(None, description="Environment variable name")
+    sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
+    required: bool = Field(True, description="Whether this parameter is required")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -97,9 +102,10 @@ class ServiceManifest(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Global capabilities list")
     dependencies: Optional[LegacyDependencies] = Field(None, description="Legacy dependencies format")
     configuration: Optional[Dict[str, ConfigurationParameter]] = Field(None, description="Configuration parameters")
-    exports: Optional[Dict[str, str]] = Field(None, description="Exported components")
+    exports: Optional[Dict[str, Any]] = Field(None, description="Exported components (string or list)")
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
+    prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")
 
     model_config = ConfigDict(extra="forbid")
 

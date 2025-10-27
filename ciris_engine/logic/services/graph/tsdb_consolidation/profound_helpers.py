@@ -83,17 +83,29 @@ def calculate_storage_metrics(
         >>> daily_mb > 0
         True
     """
-    # Query extensive summaries in period
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # Query extensive summaries in period (PostgreSQL: JSONB operators, SQLite: json_extract)
+    if adapter.is_postgresql():
+        sql = """
+            SELECT attributes_json
+            FROM graph_nodes
+            WHERE attributes_json->>'consolidation_level' = 'extensive'
+              AND (attributes_json->>'period_start')::timestamp >= ?::timestamp
+              AND (attributes_json->>'period_start')::timestamp <= ?::timestamp
         """
-        SELECT attributes_json
-        FROM graph_nodes
-        WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-          AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-          AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-    """,
-        (month_start.isoformat(), month_end.isoformat()),
-    )
+    else:
+        sql = """
+            SELECT attributes_json
+            FROM graph_nodes
+            WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
+              AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
+              AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
+        """
+
+    cursor.execute(sql, (month_start.isoformat(), month_end.isoformat()))
 
     # Parse attributes
     summary_attrs_list = []
@@ -192,14 +204,25 @@ def cleanup_old_basic_summaries(
         >>> deleted >= 0
         True
     """
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # PostgreSQL: JSONB operators, SQLite: json_extract
+    if adapter.is_postgresql():
+        sql = """
+            DELETE FROM graph_nodes
+            WHERE attributes_json->>'consolidation_level' = 'basic'
+              AND (attributes_json->>'period_start')::timestamp < ?::timestamp
         """
-        DELETE FROM graph_nodes
-        WHERE json_extract(attributes_json, '$.consolidation_level') = 'basic'
-          AND datetime(json_extract(attributes_json, '$.period_start')) < datetime(?)
-    """,
-        (cutoff_date.isoformat(),),
-    )
+    else:
+        sql = """
+            DELETE FROM graph_nodes
+            WHERE json_extract(attributes_json, '$.consolidation_level') = 'basic'
+              AND datetime(json_extract(attributes_json, '$.period_start')) < datetime(?)
+        """
+
+    cursor.execute(sql, (cutoff_date.isoformat(),))
 
     return cursor.rowcount
 
@@ -225,16 +248,30 @@ def query_extensive_summaries_in_month(
         >>> all(len(s) == 4 for s in summaries)
         True
     """
-    cursor.execute(
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # PostgreSQL: JSONB operators, SQLite: json_extract
+    if adapter.is_postgresql():
+        sql = """
+            SELECT node_id, node_type, attributes_json, version
+            FROM graph_nodes
+            WHERE attributes_json->>'consolidation_level' = 'extensive'
+              AND (attributes_json->>'period_start')::timestamp >= ?::timestamp
+              AND (attributes_json->>'period_start')::timestamp <= ?::timestamp
+            ORDER BY node_type, attributes_json->>'period_start'
         """
-        SELECT node_id, node_type, attributes_json, version
-        FROM graph_nodes
-        WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
-          AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
-          AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
-        ORDER BY node_type, json_extract(attributes_json, '$.period_start')
-    """,
-        (month_start.isoformat(), month_end.isoformat()),
-    )
+    else:
+        sql = """
+            SELECT node_id, node_type, attributes_json, version
+            FROM graph_nodes
+            WHERE json_extract(attributes_json, '$.consolidation_level') = 'extensive'
+              AND datetime(json_extract(attributes_json, '$.period_start')) >= datetime(?)
+              AND datetime(json_extract(attributes_json, '$.period_start')) <= datetime(?)
+            ORDER BY node_type, json_extract(attributes_json, '$.period_start')
+        """
+
+    cursor.execute(sql, (month_start.isoformat(), month_end.isoformat()))
 
     return cursor.fetchall()

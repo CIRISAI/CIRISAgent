@@ -449,8 +449,10 @@ class QARunner:
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
+            # Use server_manager's config which has the correct backend-specific base_url
+            base_url = self.server_manager.config.base_url
             response = requests.post(
-                f"{self.config.base_url}/v1/auth/login",
+                f"{base_url}/v1/auth/login",
                 json={"username": self.config.admin_username, "password": self.config.admin_password},
                 timeout=10,
             )
@@ -625,8 +627,10 @@ class QARunner:
         try:
             # Login as the OAuth test user using password authentication
             # This will create an API key in the auth service's in-memory store
+            # Use server_manager's config which has the correct backend-specific base_url
+            base_url = self.server_manager.config.base_url
             response = requests.post(
-                f"{self.config.base_url}/v1/auth/login",
+                f"{base_url}/v1/auth/login",
                 json={"username": "qa_oauth_user", "password": "qa_test_oauth_password_temp"},
                 timeout=10,
             )

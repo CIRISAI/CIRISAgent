@@ -272,6 +272,65 @@ def main(
 
         selected_adapter_types = validated_adapter_types
 
+        # Check for modular services matching adapter names
+        from ciris_engine.logic.runtime.modular_service_loader import ModularServiceLoader
+
+        modular_loader = ModularServiceLoader()
+        discovered_services = modular_loader.discover_services()
+        modular_service_map = {svc.module.name.lower().replace("_adapter", ""): svc for svc in discovered_services}
+
+        # Separate built-in adapters from potential modular services
+        builtin_adapters = ["cli", "api", "discord"]
+        final_adapter_types = []
+        modular_services_to_load = []
+
+        for adapter_type in selected_adapter_types:
+            base_type = adapter_type.split(":")[0]  # Handle instance IDs
+
+            # Check if it's a built-in adapter
+            if any(base_type.startswith(builtin) for builtin in builtin_adapters):
+                final_adapter_types.append(adapter_type)
+            # Check if it matches a modular service
+            elif base_type.lower() in modular_service_map:
+                manifest = modular_service_map[base_type.lower()]
+                logger.info(f"Found modular service '{manifest.module.name}' for adapter type '{adapter_type}'")
+
+                # Validate required configuration is present
+                if manifest.configuration:
+                    missing_required = []
+                    for config_key, config_spec in manifest.configuration.items():
+                        env_var = config_spec.get("env")
+                        if env_var and not get_env_var(env_var):
+                            # Check if it has a default value
+                            if "default" not in config_spec:
+                                missing_required.append(f"{env_var}")
+
+                    if missing_required:
+                        click.echo(
+                            f"ERROR: Modular service '{manifest.module.name}' requires configuration:",
+                            err=True,
+                        )
+                        for var in missing_required:
+                            click.echo(f"  - {var}", err=True)
+                        click.echo(
+                            f"Skipping modular service '{manifest.module.name}' due to missing configuration.",
+                            err=True,
+                        )
+                        continue
+
+                # Add to modular services to load
+                modular_services_to_load.append((adapter_type, manifest))
+                logger.info(f"Modular service '{manifest.module.name}' validated and will be loaded")
+            else:
+                # Unknown adapter type
+                click.echo(
+                    f"WARNING: Unknown adapter type '{adapter_type}'. Not a built-in adapter or modular service.",
+                    err=True,
+                )
+                final_adapter_types.append(adapter_type)  # Try to load anyway
+
+        selected_adapter_types = final_adapter_types
+
         # Load config
         try:
             # Validate config file exists if provided
@@ -316,6 +375,11 @@ def main(
         if mock_llm:
             modules_to_load.append("mock_llm")
             logger.info("Mock LLM module will be loaded")
+
+        # Add modular services as modules to load
+        for adapter_type, manifest in modular_services_to_load:
+            modules_to_load.append(f"modular:{manifest.module.name}")
+            logger.info(f"Modular service '{manifest.module.name}' added to modules to load")
 
         # Import AdapterConfig for proper type conversion
         from ciris_engine.schemas.runtime.adapter_management import AdapterConfig

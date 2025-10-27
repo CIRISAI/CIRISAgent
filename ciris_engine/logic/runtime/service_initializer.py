@@ -965,11 +965,77 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error(f"Core services verification failed: {e}")
             return False
 
+    async def _load_modular_service(self, service_name: str) -> None:
+        """Load a modular service and register its services with appropriate buses.
+
+        Args:
+            service_name: Name of the modular service to load (e.g. "reddit_adapter")
+        """
+        from ciris_engine.logic.runtime.modular_service_loader import ModularServiceLoader
+
+        logger.info(f"Loading modular service: {service_name}")
+
+        # Discover and find the service
+        modular_loader = ModularServiceLoader()
+        discovered_services = modular_loader.discover_services()
+
+        # Find matching service (case-insensitive, with or without _adapter suffix)
+        manifest = None
+        for svc in discovered_services:
+            svc_name_normalized = svc.module.name.lower().replace("_adapter", "")
+            search_name_normalized = service_name.lower().replace("_adapter", "")
+            if svc_name_normalized == search_name_normalized:
+                manifest = svc
+                break
+
+        if not manifest:
+            raise ValueError(f"Modular service '{service_name}' not found")
+
+        logger.info(f"Found manifest for modular service '{manifest.module.name}'")
+
+        # Load each service defined in the manifest
+        for service_def in manifest.services:
+            try:
+                # Load the service class
+                service_class = modular_loader.load_service(manifest)
+                if not service_class:
+                    logger.error(f"Failed to load service class for {manifest.module.name}")
+                    continue
+
+                # Instantiate the service (services usually need minimal initialization)
+                # Most modular services are self-contained and load config from env
+                service_instance = service_class()
+
+                # Register with appropriate bus based on service type
+                if service_def.type == ServiceType.TOOL and self.tool_bus:
+                    logger.info(f"Registering {manifest.module.name} with ToolBus")
+                    self.tool_bus.register_service(service_instance, service_def.capabilities)
+
+                elif service_def.type == ServiceType.COMMUNICATION and self.communication_bus:
+                    logger.info(f"Registering {manifest.module.name} with CommunicationBus")
+                    self.communication_bus.register_service(service_instance, service_def.capabilities)
+
+                elif service_def.type == ServiceType.LLM and self.service_registry:
+                    logger.info(f"Registering {manifest.module.name} as LLM service")
+                    self.service_registry.register_service(
+                        service_type=ServiceType.LLM,
+                        service=service_instance,
+                        priority=service_def.priority.value if hasattr(service_def.priority, 'value') else 5,
+                        capabilities=service_def.capabilities,
+                    )
+
+                logger.info(f"Successfully loaded and registered modular service: {manifest.module.name}")
+                self.loaded_modules.append(f"modular:{service_name}")
+
+            except Exception as e:
+                logger.error(f"Failed to load service {service_def.class_path} from {manifest.module.name}: {e}", exc_info=True)
+                raise
+
     async def load_modules(self, modules: List[str], disable_core_on_mock: bool = True) -> None:
         """Load external modules with MOCK safety checks.
 
         Args:
-            modules: List of module names to load (e.g. ["mockllm", "custom_tool"])
+            modules: List of module names to load (e.g. ["mockllm", "custom_tool", "modular:reddit_adapter"])
             disable_core_on_mock: If True, MOCK modules disable core services
         """
         if not self.module_loader:
@@ -979,6 +1045,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         for module_name in modules:
             try:
+                # Check if this is a modular service
+                if module_name.startswith("modular:"):
+                    service_name = module_name[8:]  # Remove "modular:" prefix
+                    await self._load_modular_service(service_name)
+                    continue
+
                 # Load module with safety checks
                 if self.module_loader.load_module(module_name, disable_core_on_mock):
                     # Initialize services from module

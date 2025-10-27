@@ -7,27 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **Service Initialization Warnings** - Fixed 3 initialization order and naming issues
-  - **Issue 1**: "Runtime does not have attribute 'database_maintenance_service' - skipping injection"
-    - **Root Cause**: API adapter expected `runtime.database_maintenance_service` but runtime only exposed `runtime.maintenance_service`
-    - **Solution**: Added property alias `database_maintenance_service` that returns `maintenance_service`
-    - **Impact**: Ensures all 22/22 core services are accessible to API adapter
-    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:272-280`
-
-  - **Issue 2**: "No available communication service found with capabilities ['send_message']"
-    - **Root Cause**: Components built (accessing buses) before adapter services were registered
-    - **Solution**: Moved adapter service registration from Phase 6 to Phase 5 (immediately after adapters start)
-    - **Impact**: Communication services available when components need them, prevents spurious warnings
-    - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:505-512`
-
-  - **Issue 3**: "Thought has no payload attribute" warnings in incidents log
-    - **Root Cause**: Dead code from incomplete refactoring attempted to access non-existent `thought.payload` field
-    - **Solution**: Removed dead code (lines 125-132), added explanatory comment about ConscienceCheckResult usage
-    - **Impact**: Eliminates log noise, clarifies that observation data is stored in ConscienceCheckResult
-    - **Files**: `ciris_engine/logic/conscience/updated_status_conscience.py:125-127`
+## [1.4.7] - 2025-10-26
 
 ### Added
+- **Modular Service Loading via ADAPTERS** - Support loading modular services via `--adapter` flag or `CIRIS_ADAPTER` env var
+  - Automatically discovers modular services from `ciris_modular_services/` directory
+  - Validates required environment configuration before loading
+  - Registers services with appropriate buses (Tool, Communication, LLM)
+  - Example: `CIRIS_ADAPTER=reddit` loads Reddit adapter if config is present
+  - Files: `main.py:275-332`, `ciris_engine/logic/runtime/service_initializer.py:968-1032`
+
+- **Enhanced ServiceManifest Schema** - Updated to support all modular service manifest formats
+  - Added support for `env`, `sensitivity`, and `required` fields in configuration parameters
+  - Added `safe_domain` field to ModuleInfo
+  - Added `external` dependencies for package requirements
+  - Added `prohibited_sensors` for sensor modules
+  - Makes `default` optional for configuration parameters
+  - Files: `ciris_engine/schemas/runtime/manifest.py:82-110`
 - **Reddit Adapter** - Complete Reddit integration for r/ciris subreddit monitoring and interaction
   - Tool service for posting, commenting, removals, user context lookups
   - Communication service with channel routing (`reddit:r/ciris:post/abc123`)

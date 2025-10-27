@@ -271,8 +271,6 @@ class ShutdownProcessor(BaseProcessor):
                 self.shutdown_task = existing_task
                 return
 
-        now_iso = self._time_service.now().isoformat()
-
         # Get channel ID from runtime or communication bus
         channel_id = None
         if self.runtime and hasattr(self.runtime, "startup_channel_id"):

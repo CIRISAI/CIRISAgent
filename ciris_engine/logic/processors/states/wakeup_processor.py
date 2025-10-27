@@ -284,8 +284,49 @@ class WakeupProcessor(BaseProcessor):
                 # Use helper to collect steps status
                 steps_status = self._collect_steps_status()
 
-                all_complete = all(s["status"] == "completed" for s in steps_status)
+                # If we only have the root task (no steps), we're a non-claiming occurrence
+                # We should only monitor, not mark the shared task complete
+                if len(self.wakeup_tasks) == 1:
+                    # Check if the shared root task is complete
+                    root_task = self.wakeup_tasks[0]
+                    current_root = persistence.get_task_by_id(root_task.task_id, root_task.agent_occurrence_id)
+                    if current_root and current_root.status == TaskStatus.COMPLETED:
+                        self.wakeup_complete = True
+                        logger.info("✓ Shared wakeup task completed by claiming occurrence")
+                        return {
+                            "status": "completed",
+                            "wakeup_complete": True,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                        }
+                    elif current_root and current_root.status == TaskStatus.FAILED:
+                        self.wakeup_complete = False
+                        logger.error("✗ Shared wakeup task failed")
+                        return {
+                            "status": "failed",
+                            "wakeup_complete": False,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                            "error": "Shared wakeup task failed",
+                        }
+                    else:
+                        # Still in progress
+                        logger.debug("Waiting for claiming occurrence to complete wakeup")
+                        return {
+                            "status": "in_progress",
+                            "wakeup_complete": False,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                        }
 
+                # We have step tasks, so we're the claiming occurrence
+                all_complete = all(s["status"] == "completed" for s in steps_status)
                 any_failed = any(s["status"] == "failed" for s in steps_status)
 
                 if any_failed:
@@ -438,7 +479,7 @@ class WakeupProcessor(BaseProcessor):
 
             # This should never happen if adapters are properly initialized
             raise RuntimeError(
-                f"No communication adapter has a home channel configured. "
+                "No communication adapter has a home channel configured. "
                 f"Found {num_providers} communication provider(s) in registry. "
                 "At least one adapter must provide a home channel for wakeup tasks. "
                 "Check adapter configurations and ensure they specify a home_channel_id. "
@@ -489,10 +530,10 @@ class WakeupProcessor(BaseProcessor):
                 # Enhance first step with multi-occurrence context
                 multi_occurrence_note = (
                     "\n\nMULTI-OCCURRENCE CONTEXT:\n"
-                    f"You are processing this wakeup ritual on behalf of ALL runtime occurrences of this agent. "
-                    f"Your affirmation will confirm identity for the entire agent system. "
-                    f"This decision applies to all occurrences, ensuring consistent agent identity across "
-                    f"all runtime instances."
+                    "You are processing this wakeup ritual on behalf of ALL runtime occurrences of this agent. "
+                    "Your affirmation will confirm identity for the entire agent system. "
+                    "This decision applies to all occurrences, ensuring consistent agent identity across "
+                    "all runtime instances."
                 )
                 enhanced_content = content + multi_occurrence_note
                 enhanced_sequence.append((step_type, enhanced_content))

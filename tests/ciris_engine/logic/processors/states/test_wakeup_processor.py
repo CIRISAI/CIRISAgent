@@ -448,3 +448,59 @@ class TestWakeupProcessorEdgeCases:
         wakeup_processor.wakeup_tasks = [Mock()]  # Only root task
         result = wakeup_processor._check_all_steps_complete()
         assert result is False
+
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    @pytest.mark.asyncio
+    async def test_non_claiming_occurrence_monitors_without_marking_complete(
+        self, mock_persistence, mock_identity, wakeup_processor
+    ):
+        """Test that non-claiming occurrence monitors shared task without marking it complete."""
+        # Simulate non-claiming occurrence with only root task
+        root_task = Mock()
+        root_task.task_id = "WAKEUP_SHARED_20251027"
+        root_task.agent_occurrence_id = "__shared__"
+        root_task.status = TaskStatus.ACTIVE
+        wakeup_processor.wakeup_tasks = [root_task]
+
+        # Mock the shared task as still in progress
+        mock_persistence.get_task_by_id.return_value = root_task
+
+        # Process wakeup - should return in_progress without marking complete
+        result = await wakeup_processor._process_wakeup(round_number=1, non_blocking=True)
+
+        assert result["status"] == "in_progress"
+        assert result["wakeup_complete"] is False
+        assert result["steps_status"] == []
+
+        # Verify it checked the task but didn't try to mark it complete
+        mock_persistence.get_task_by_id.assert_called_once_with(root_task.task_id, root_task.agent_occurrence_id)
+        # update_task_status should not be called by non-claiming occurrence
+        mock_persistence.update_task_status.assert_not_called()
+
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    @pytest.mark.asyncio
+    async def test_non_claiming_occurrence_detects_completion(self, mock_persistence, mock_identity, wakeup_processor):
+        """Test that non-claiming occurrence detects when shared task completes."""
+        # Simulate non-claiming occurrence with only root task
+        root_task = Mock()
+        root_task.task_id = "WAKEUP_SHARED_20251027"
+        root_task.agent_occurrence_id = "__shared__"
+        root_task.status = TaskStatus.COMPLETED
+        wakeup_processor.wakeup_tasks = [root_task]
+
+        # Mock the shared task as completed
+        completed_task = Mock()
+        completed_task.status = TaskStatus.COMPLETED
+        mock_persistence.get_task_by_id.return_value = completed_task
+
+        # Process wakeup - should detect completion
+        result = await wakeup_processor._process_wakeup(round_number=1, non_blocking=True)
+
+        assert result["status"] == "completed"
+        assert result["wakeup_complete"] is True
+        assert wakeup_processor.wakeup_complete is True
+
+        # Should NOT call update_task_status - claiming occurrence already marked it
+        mock_persistence.update_task_status.assert_not_called()

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.8-rc3] - 2025-10-27
+
+### Added
+- **Multi-Occurrence Agent Coordination** - Horizontal scaling support for multiple CIRIS instances sharing PostgreSQL database
+  - Atomic shared task claiming using PostgreSQL `INSERT ... ON CONFLICT DO NOTHING`
+  - Each instance has unique `agent_occurrence_id` for isolation
+  - Backward compatible with default occurrence `"default"`
+  - 19 comprehensive QA tests for multi-occurrence functionality
+- **Audit Logging for Task Ownership Transfers** - Comprehensive observability with dependency injection
+  - Automatic audit event generation on every ownership transfer (`task_ownership_transfer`)
+  - Centralized `mock_audit_service` fixture with triple backend support (graph, file, hash chain)
+  - Fire-and-forget async pattern doesn't block processing
+  - Full mypy compliance with proper type annotations
+
+### Fixed
+- **CRITICAL (P0): Shared Task Ownership Transfer Bug** - Tasks claimed from `__shared__` namespace were not persisting ownership to database
+  - Created `transfer_task_ownership()` function that persists ownership changes
+  - Updated shutdown and wakeup processors to call transfer BEFORE status updates
+  - 6 comprehensive unit tests validate the fix
+  - Prevents zero-row UPDATE queries and distributed deployment hangs
+- **P1: Non-Claiming Occurrences Marking Shared Tasks Complete** - Only claiming occurrence now marks shared wakeup tasks complete
+- **PostgreSQL Dialect Adapter** - Fixed `INSERT OR IGNORE` to use `ON CONFLICT DO NOTHING` for PostgreSQL
+- **Occurrence Context Restoration** - Fixed shutdown task context handling for shared tasks
+- **PRIMARY KEY Conflicts** - Corrected conflict_columns to match actual PRIMARY KEYs
+
+### Changed
+- Added `agent_occurrence_id` column to tasks, thoughts, and related tables
+- All persistence queries now filter by occurrence ID
+- QA runner enhanced with backend-specific configuration support
+
 ## [1.4.7] - 2025-10-26
 
 ### Added

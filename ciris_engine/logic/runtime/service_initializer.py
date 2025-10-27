@@ -1006,6 +1006,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 # Most modular services are self-contained and load config from env
                 service_instance = service_class()
 
+                # Start the service before registration to initialize resources (HTTP clients, credentials, etc.)
+                if hasattr(service_instance, "start"):
+                    await service_instance.start()
+                    logger.info(f"Started modular service {manifest.module.name}")
+
                 # Register with appropriate bus based on service type
                 if service_def.type == ServiceType.TOOL and self.bus_manager and hasattr(self.bus_manager, "tool"):
                     logger.info(f"Registering {manifest.module.name} with ToolBus")

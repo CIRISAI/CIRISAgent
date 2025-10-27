@@ -299,10 +299,10 @@ def main(
                 if manifest.configuration:
                     missing_required = []
                     for config_key, config_spec in manifest.configuration.items():
-                        env_var = config_spec.get("env")
+                        env_var = config_spec.env
                         if env_var and not get_env_var(env_var):
                             # Check if it has a default value
-                            if "default" not in config_spec:
+                            if config_spec.default is None:
                                 missing_required.append(f"{env_var}")
 
                     if missing_required:

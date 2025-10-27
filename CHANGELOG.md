@@ -64,6 +64,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Prevents duplicate consolidation work and potential data corruption in multi-occurrence deployments
   - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:1277-1283, 1375-1377, 1448-1454, 1526-1528`
 
+- **P0: Modular Service Configuration Parameter Access** - Fixed AttributeError preventing modular service loading
+  - **Issue**: `AttributeError: 'ConfigurationParameter' object has no attribute 'get'` when validating modular service configuration
+  - **Root Cause**: Code used dict-style access (`config_spec.get("env")`, `"default" not in config_spec`) on Pydantic model instances
+  - **Solution**: Changed to attribute access (`config_spec.env`, `config_spec.default is None`)
+  - **Impact**: Allows modular services (Reddit adapter) to load from CLI when configuration is declared
+  - **Files**: `main.py:298-306`
+
+- **P1: Modular Services Started Before Registration** - Fixed uninitialized resources in modular service instances
+  - **Issue**: Services registered with buses/registry without calling `start()`, leaving HTTP clients and credentials uninitialized
+  - **Root Cause**: Missing `await service_instance.start()` call before registration in service_initializer.py
+  - **Solution**: Added conditional `await service_instance.start()` before bus/registry registration (respects services without start method)
+  - **Impact**: Ensures modular services (e.g., Reddit) have all resources initialized before first use
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1009-1012`
+
 ### Notes
 - **Risk**: TRIVIAL - All changes are backward compatible, use existing database abstraction patterns
 - **Testing**: All 135 TSDB consolidation tests pass, mypy strict mode passes with zero errors

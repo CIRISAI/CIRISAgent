@@ -1279,7 +1279,9 @@ class TSDBConsolidationService(BaseGraphService):
             lock_acquired = self._query_manager.acquire_consolidation_lock("extensive", week_identifier)
 
             if not lock_acquired:
-                logger.info(f"Extensive consolidation for week {week_identifier} is locked by another instance, skipping")
+                logger.info(
+                    f"Extensive consolidation for week {week_identifier} is locked by another instance, skipping"
+                )
                 return
 
             try:
@@ -1349,7 +1351,9 @@ class TSDBConsolidationService(BaseGraphService):
 
                             # Store in memory
                             if self._memory_bus:
-                                result = await self._memory_bus.memorize(daily_summary, handler_name="tsdb_consolidation")
+                                result = await self._memory_bus.memorize(
+                                    daily_summary, handler_name="tsdb_consolidation"
+                                )
                                 if result.status == MemoryOpStatus.OK:
                                     daily_summaries_created += 1
                                     logger.info(
@@ -1450,7 +1454,9 @@ class TSDBConsolidationService(BaseGraphService):
             lock_acquired = self._query_manager.acquire_consolidation_lock("profound", month_identifier)
 
             if not lock_acquired:
-                logger.info(f"Profound consolidation for month {month_identifier} is locked by another instance, skipping")
+                logger.info(
+                    f"Profound consolidation for month {month_identifier} is locked by another instance, skipping"
+                )
                 return
 
             try:
@@ -1467,8 +1473,8 @@ class TSDBConsolidationService(BaseGraphService):
 
                     if len(summaries) < 7:  # Less than a week's worth
                         logger.info(
-                        f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
-                    )
+                            f"Not enough daily summaries for profound consolidation (found {len(summaries)}, need at least 7)"
+                        )
                     return
 
                     logger.info(f"Found {total_daily_summaries} daily summaries to compress")
@@ -1476,7 +1482,7 @@ class TSDBConsolidationService(BaseGraphService):
                     # Calculate current storage using helper
                     days_in_period = (month_end - month_start).days + 1
                     current_daily_mb, summary_attrs_list = calculate_storage_metrics(
-                    cursor, month_start, month_end, compressor
+                        cursor, month_start, month_end, compressor
                     )
                     storage_before_mb = float(current_daily_mb * days_in_period)
                     logger.info(f"Current storage: {current_daily_mb:.2f}MB/day ({storage_before_mb:.2f}MB total)")
@@ -1488,7 +1494,9 @@ class TSDBConsolidationService(BaseGraphService):
                     return
 
                     # Compress summaries using helper
-                    compressed_count, total_reduction = compress_and_update_summaries(cursor, summaries, compressor, now)
+                    compressed_count, total_reduction = compress_and_update_summaries(
+                        cursor, summaries, compressor, now
+                    )
                     summaries_compressed = compressed_count
 
                     conn.commit()
@@ -1505,13 +1513,13 @@ class TSDBConsolidationService(BaseGraphService):
                     logger.info(f"  - Summaries compressed: {summaries_compressed}")
                     logger.info(f"  - Average compression: {avg_reduction:.1%}")
                     logger.info(
-                    f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
+                        f"  - Storage before: {storage_before_mb:.2f}MB ({storage_before_mb/days_in_period:.2f}MB/day)"
                     )
                     logger.info(f"  - Storage after: {storage_after_mb:.2f}MB ({new_daily_mb:.2f}MB/day)")
                     if storage_before_mb > 0:
                         logger.info(
-                        f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
-                    )
+                            f"  - Total reduction: {((storage_before_mb - storage_after_mb) / storage_before_mb * 100):.1f}%"
+                        )
 
                     # Clean up old basic summaries using helper
                     cleanup_cutoff = now - timedelta(days=30)

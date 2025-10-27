@@ -1007,20 +1007,40 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 service_instance = service_class()
 
                 # Register with appropriate bus based on service type
-                if service_def.type == ServiceType.TOOL and self.tool_bus:
+                if service_def.type == ServiceType.TOOL and self.bus_manager and hasattr(self.bus_manager, "tool"):
                     logger.info(f"Registering {manifest.module.name} with ToolBus")
-                    self.tool_bus.register_service(service_instance, service_def.capabilities)
+                    self.bus_manager.tool.register_service(service_instance, service_def.capabilities)
 
-                elif service_def.type == ServiceType.COMMUNICATION and self.communication_bus:
+                elif (
+                    service_def.type == ServiceType.COMMUNICATION
+                    and self.bus_manager
+                    and hasattr(self.bus_manager, "communication")
+                ):
                     logger.info(f"Registering {manifest.module.name} with CommunicationBus")
-                    self.communication_bus.register_service(service_instance, service_def.capabilities)
+                    self.bus_manager.communication.register_service(service_instance, service_def.capabilities)
 
                 elif service_def.type == ServiceType.LLM and self.service_registry:
                     logger.info(f"Registering {manifest.module.name} as LLM service")
+                    # Convert ServicePriority to Priority enum
+                    from ciris_engine.logic.registries.base import Priority
+
+                    priority_map = {
+                        "CRITICAL": Priority.CRITICAL,
+                        "HIGH": Priority.HIGH,
+                        "NORMAL": Priority.NORMAL,
+                        "LOW": Priority.LOW,
+                    }
+                    priority_value = (
+                        service_def.priority.value
+                        if hasattr(service_def.priority, "value")
+                        else service_def.priority.name
+                    )
+                    priority = priority_map.get(priority_value, Priority.NORMAL)
+
                     self.service_registry.register_service(
                         service_type=ServiceType.LLM,
-                        service=service_instance,
-                        priority=service_def.priority.value if hasattr(service_def.priority, 'value') else 5,
+                        provider=service_instance,
+                        priority=priority,
                         capabilities=service_def.capabilities,
                     )
 
@@ -1028,7 +1048,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 self.loaded_modules.append(f"modular:{service_name}")
 
             except Exception as e:
-                logger.error(f"Failed to load service {service_def.class_path} from {manifest.module.name}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to load service {service_def.class_path} from {manifest.module.name}: {e}", exc_info=True
+                )
                 raise
 
     async def load_modules(self, modules: List[str], disable_core_on_mock: bool = True) -> None:

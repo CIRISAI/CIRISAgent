@@ -253,8 +253,7 @@ class CommunicationBus(BaseBus[CommunicationService]):
 
             # Convert messages to FetchedMessage objects using helper method
             fetched_messages = [
-                converted for msg in messages
-                if (converted := self._convert_to_fetched_message(msg)) is not None
+                converted for msg in messages if (converted := self._convert_to_fetched_message(msg)) is not None
             ]
 
             # Track messages received

@@ -33,9 +33,7 @@ class RedditCredentials(BaseModel):
             "reddit_client_secret": os.getenv("CIRIS_REDDIT_CLIENT_SECRET"),
             "reddit_username": os.getenv("CIRIS_REDDIT_USERNAME"),
             "reddit_password": os.getenv("CIRIS_REDDIT_PASSWORD"),
-            "reddit_user_agent": os.getenv(
-                "CIRIS_REDDIT_USER_AGENT", "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)"
-            ),
+            "reddit_user_agent": os.getenv("CIRIS_REDDIT_USER_AGENT", "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)"),
             "reddit_subreddit": os.getenv("CIRIS_REDDIT_SUBREDDIT", "ciris"),
         }
 

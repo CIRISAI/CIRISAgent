@@ -40,10 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Parallel Database Backend Testing Support** - QA runner can now test SQLite and PostgreSQL backends simultaneously with `--parallel-backends` flag, reducing test time by ~50%
 
+- **Modular Service Loading Tests** - Comprehensive unit test suite for modular service loading integration (10 tests)
+  - Tests service discovery, type routing (TOOL/COMMUNICATION/LLM), and bus registration
+  - Tests error handling (service not found, load failure, instantiation failure)
+  - Tests case-insensitive matching and adapter suffix normalization
+  - **Files**: `tests/ciris_engine/logic/runtime/test_service_initializer.py:433-792`
+
 ### Notes
 - **Risk**: TRIVIAL - All changes are backward compatible, minimal code changes
-- **Testing**: 9/9 new unit tests pass, all existing tests pass
+- **Testing**: 19/19 new unit tests pass (9 initialization + 10 modular service loading), all existing tests pass
 - **Validation**: Fixed via parallel investigation using 3 git worktrees + specialized agents
+- **Type Safety**: Mypy strict mode passes with zero errors
 
 ## [1.4.6] - 2025-10-26
 

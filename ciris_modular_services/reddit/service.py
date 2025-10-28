@@ -1114,9 +1114,7 @@ class RedditToolService(RedditServiceBase):
 
     def _build_tool_schemas(self) -> Dict[str, ToolParameterSchema]:
         return {
-            "reddit_get_user_context": self._schema_to_param_schema(
-                RedditUserContextRequest.model_json_schema()
-            ),
+            "reddit_get_user_context": self._schema_to_param_schema(RedditUserContextRequest.model_json_schema()),
             "reddit_submit_post": self._schema_to_param_schema(RedditSubmitPostRequest.model_json_schema()),
             "reddit_submit_comment": self._schema_to_param_schema(RedditSubmitCommentRequest.model_json_schema()),
             "reddit_remove_content": self._schema_to_param_schema(RedditRemoveContentRequest.model_json_schema()),

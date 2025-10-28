@@ -184,6 +184,7 @@ class QARunner:
             QAModule.BILLING,
             QAModule.BILLING_INTEGRATION,
             QAModule.MESSAGE_ID_DEBUG,
+            QAModule.REDDIT,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -686,6 +687,7 @@ class QARunner:
 
         from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
+        from .modules.reddit_tests import RedditTests
 
         all_passed = True
 
@@ -697,6 +699,7 @@ class QARunner:
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
             QAModule.MESSAGE_ID_DEBUG: MessageIDDebugTests,
+            QAModule.REDDIT: RedditTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

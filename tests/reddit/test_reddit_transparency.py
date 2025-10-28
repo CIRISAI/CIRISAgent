@@ -217,9 +217,7 @@ class TestTransparencyCompliance:
         ) or "mod team" in comment_text.lower()
 
     @pytest.mark.asyncio
-    async def test_disclosure_contact_information(
-        self, reddit_credentials, mock_reddit_api_client, mock_time_service
-    ):
+    async def test_disclosure_contact_information(self, reddit_credentials, mock_reddit_api_client, mock_time_service):
         """Test that disclosure includes contact information."""
         service = RedditToolService(reddit_credentials, time_service=mock_time_service)
         service._client = mock_reddit_api_client

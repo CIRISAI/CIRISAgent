@@ -78,9 +78,7 @@ class TestDeletionCompliance:
         assert status_complete.is_complete is True
 
     @pytest.mark.asyncio
-    async def test_delete_content_tool_submission(
-        self, reddit_credentials, mock_reddit_api_client, mock_time_service
-    ):
+    async def test_delete_content_tool_submission(self, reddit_credentials, mock_reddit_api_client, mock_time_service):
         """Test reddit_delete_content tool for submission."""
         service = RedditToolService(reddit_credentials, time_service=mock_time_service)
         service._client = mock_reddit_api_client

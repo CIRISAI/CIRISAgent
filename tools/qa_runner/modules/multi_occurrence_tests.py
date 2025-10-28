@@ -97,9 +97,12 @@ class MultiOccurrenceTestModule:
 
             # Step 2: Start first occurrence
             runner.console.print("[cyan]🚀 Starting occurrence_1...[/cyan]")
+            runner.console.print("[dim]📁 Logs: logs/occurrence_1/[/dim]")
             success_1 = runner.start_occurrence("occurrence_1", occurrence_managers["occurrence_1"])
             if not success_1:
                 results["errors"].append("Failed to start occurrence_1")
+                runner.console.print("[red]❌ Check logs at: logs/occurrence_1/incidents_latest.log[/red]")
+                runner.console.print("[red]❌ Check logs at: logs/occurrence_1/latest.log[/red]")
                 return results
             runner.console.print("[green]✅ occurrence_1 started successfully[/green]\n")
 
@@ -109,9 +112,12 @@ class MultiOccurrenceTestModule:
 
             # Step 3: Start second occurrence (should detect wakeup already done)
             runner.console.print("[cyan]🚀 Starting occurrence_2...[/cyan]")
+            runner.console.print("[dim]📁 Logs: logs/occurrence_2/[/dim]")
             success_2 = runner.start_occurrence("occurrence_2", occurrence_managers["occurrence_2"])
             if not success_2:
                 results["errors"].append("Failed to start occurrence_2")
+                runner.console.print("[red]❌ Check logs at: logs/occurrence_2/incidents_latest.log[/red]")
+                runner.console.print("[red]❌ Check logs at: logs/occurrence_2/latest.log[/red]")
                 return results
             runner.console.print("[green]✅ occurrence_2 started successfully[/green]\n")
 

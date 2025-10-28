@@ -145,14 +145,25 @@ class ActionDispatcher:
                         f"All actions MUST be audited for production integrity."
                     )
 
+                # Extract additional context for specific action types
+                import json
+                timeout_parameters = {
+                    "error": "Service registry not ready",
+                    "timeout": str(getattr(dispatch_context, "registry_timeout", 30.0)),
+                }
+
+                # For TOOL actions, include the tool name AND parameters in audit entry for searchability
+                if action_type == HandlerActionType.TOOL and hasattr(final_action_result.action_parameters, "name"):
+                    from ciris_engine.schemas.actions.parameters import ToolParams
+                    if isinstance(final_action_result.action_parameters, ToolParams):
+                        timeout_parameters["tool_name"] = final_action_result.action_parameters.name
+                        timeout_parameters["tool_parameters"] = json.dumps(final_action_result.action_parameters.parameters)
+
                 audit_context = AuditActionContext(
                     thought_id=thought.thought_id,
                     task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                     handler_name=handler_instance.__class__.__name__,
-                    parameters={
-                        "error": "Service registry not ready",
-                        "timeout": getattr(dispatch_context, "registry_timeout", 30.0),
-                    },
+                    parameters=timeout_parameters,
                 )
                 audit_result = await self.audit_service.log_action(
                     action_type=action_type, context=audit_context, outcome="error:RegistryNotReady"
@@ -227,11 +238,30 @@ class ActionDispatcher:
                     f"All actions MUST be audited for production integrity."
                 )
 
+            # Extract additional context for specific action types
+            import json
+            audit_parameters = {"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {}
+
+            # For TOOL actions, include the tool name AND parameters in audit entry for searchability
+            if action_type == HandlerActionType.TOOL and hasattr(final_action_result.action_parameters, "name"):
+                from ciris_engine.schemas.actions.parameters import ToolParams
+                if isinstance(final_action_result.action_parameters, ToolParams):
+                    audit_parameters["tool_name"] = final_action_result.action_parameters.name
+                    # JSON-serialize tool parameters for AuditActionContext (Dict[str, str] requirement)
+                    audit_parameters["tool_parameters"] = json.dumps(final_action_result.action_parameters.parameters)
+                    logger.info(f"DEBUG: Added tool info to audit: name={audit_parameters['tool_name']}, params={final_action_result.action_parameters.parameters}")
+                else:
+                    logger.info(f"DEBUG: action_parameters is not ToolParams, type: {type(final_action_result.action_parameters)}")
+            elif action_type == HandlerActionType.TOOL:
+                logger.info(f"DEBUG: TOOL action but no 'name' attribute on action_parameters")
+
+            logger.info(f"DEBUG: Creating audit context with parameters: {audit_parameters}")
+
             audit_context = AuditActionContext(
                 thought_id=thought.thought_id,
                 task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                 handler_name=handler_instance.__class__.__name__,
-                parameters={"follow_up_thought_id": follow_up_thought_id} if follow_up_thought_id else {},
+                parameters=audit_parameters,
             )
             audit_result = await self.audit_service.log_action(
                 action_type=action_type, context=audit_context, outcome="success"
@@ -285,11 +315,22 @@ class ActionDispatcher:
                     f"All actions MUST be audited, especially failures."
                 )
 
+            # Extract additional context for specific action types
+            import json
+            error_parameters = {"error": str(e), "error_type": type(e).__name__}
+
+            # For TOOL actions, include the tool name AND parameters in audit entry for searchability
+            if action_type == HandlerActionType.TOOL and hasattr(final_action_result.action_parameters, "name"):
+                from ciris_engine.schemas.actions.parameters import ToolParams
+                if isinstance(final_action_result.action_parameters, ToolParams):
+                    error_parameters["tool_name"] = final_action_result.action_parameters.name
+                    error_parameters["tool_parameters"] = json.dumps(final_action_result.action_parameters.parameters)
+
             audit_context = AuditActionContext(
                 thought_id=thought.thought_id,
                 task_id=dispatch_context.task_id if hasattr(dispatch_context, "task_id") else "unknown",
                 handler_name=handler_instance.__class__.__name__,
-                parameters={"error": str(e), "error_type": type(e).__name__},
+                parameters=error_parameters,
             )
             audit_result = await self.audit_service.log_action(
                 action_type=action_type, context=audit_context, outcome=f"error:{type(e).__name__}"

@@ -26,11 +26,19 @@ from .server import APIServerManager
 class QARunner:
     """Main QA test runner."""
 
-    def __init__(self, config: Optional[QAConfig] = None):
+    def __init__(self, config: Optional[QAConfig] = None, modules: Optional[List[QAModule]] = None):
         """Initialize QA runner with configuration."""
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
+
+        # Auto-configure adapter based on modules being tested
+        # This allows modular services to be loaded automatically
+        if modules and QAModule.REDDIT in modules:
+            # Reddit tests need both api and reddit adapters
+            if "reddit" not in self.config.adapter:
+                self.config.adapter = "api,reddit"
+                self.console.print("[dim]Auto-configured adapter: api,reddit for Reddit tests[/dim]")
 
         # Determine database backends to test
         if self.config.database_backends is None:
@@ -267,9 +275,10 @@ class QARunner:
             self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
 
         # ALWAYS print log location reminders - helpful for debugging
+        log_dir = f"logs/{self.server_manager.database_backend}"
         self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
-        self.console.print("[dim]   • Full logs: logs/latest.log[/dim]")
-        self.console.print("[dim]   • Incidents: logs/incidents_latest.log[/dim]")
+        self.console.print(f"[dim]   • Full logs: {log_dir}/latest.log[/dim]")
+        self.console.print(f"[dim]   • Incidents: {log_dir}/incidents_latest.log[/dim]")
 
         # Billing-specific reminder for billing integration tests
         if QAModule.BILLING_INTEGRATION in modules:
@@ -713,7 +722,8 @@ class QARunner:
             token_to_use = auth_token if auth_token else self.token
 
             # Create SDK client with authentication
-            async with CIRISClient(base_url=self.config.base_url) as client:
+            # Use longer timeout for Reddit operations (e.g., get_user_context can be slow)
+            async with CIRISClient(base_url=self.config.base_url, timeout=120.0) as client:
                 # Manually set the token (skip login since we already have it)
                 client._transport.set_api_key(token_to_use, persist=False)
 
@@ -1442,7 +1452,7 @@ class QARunner:
             # Create a new runner instance for this backend with the correct server manager
             # Use the backend's server manager config which has the correct port
             backend_config = self.server_managers[backend].config
-            backend_runner = QARunner(backend_config)
+            backend_runner = QARunner(backend_config, modules=modules)
             backend_runner.database_backends = [backend]
             backend_runner.server_manager = self.server_managers[backend]
             backend_runner.server_managers = {backend: self.server_managers[backend]}
@@ -1522,7 +1532,7 @@ class QARunner:
 
                 # Create a new runner instance for this backend with the correct server manager
                 backend_config = self.server_managers[backend].config
-                backend_runner = QARunner(backend_config)
+                backend_runner = QARunner(backend_config, modules=modules)
                 backend_runner.database_backends = [backend]
                 backend_runner.server_manager = self.server_managers[backend]
                 backend_runner.server_managers = {backend: self.server_managers[backend]}

@@ -84,17 +84,24 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                 # Extract what comes after Original Thought:
                 if "Original Thought:" in content:
-                    thought_match = re.search(r'Original Thought:\s*"([^"]+)"', content)
+                    # Find the Original Thought section and show what comes after it
+                    ot_index = content.find("Original Thought:")
+                    sample = content[ot_index:ot_index+300] if ot_index != -1 else ""
+                    logger.info(f"[MOCK_LLM DEBUG] Original Thought section: {sample}")
+
+                    # Use a more robust regex that handles nested quotes
+                    # Match everything up to the LAST quote before a newline (greedy match)
+                    thought_match = re.search(r'Original Thought:\s*"(.*)"(?:\n|$)', content, re.DOTALL)
                     if thought_match:
                         actual_thought_content = thought_match.group(1)
+                        logger.info(f"[MOCK_LLM DEBUG] Matched thought length: {len(actual_thought_content)}")
                         logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
 
                         # Check if this is a passive observation
-                        # Support both old format "You observed @" and new format "PRIORITY (high): User @"
+                        # Support both old format "You observed @" and new format "PRIORITY (high): @username ... said:"
                         is_observation = (
                             actual_thought_content.startswith("You observed @")
-                            or "User @" in actual_thought_content
-                            and " said: " in actual_thought_content
+                            or ("@" in actual_thought_content and " said: " in actual_thought_content)
                         )
 
                         if is_observation:
@@ -108,6 +115,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                             if delimiter_index != -1:
                                 remaining_content = actual_thought_content[delimiter_index + delimiter_len :]
+                                logger.info(f"[MOCK_LLM DEBUG] Remaining content length: {len(remaining_content)}, first 200 chars: {remaining_content[:200]}")
                                 # Extract message, stopping at | or newline
                                 actual_user_message = (
                                     remaining_content.split("|")[0].split("\n")[0].split("\\n")[0].strip()

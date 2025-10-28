@@ -535,6 +535,8 @@ class TestModularServiceLoading:
     @pytest.mark.asyncio
     async def test_load_modular_service_communication_adapter(self, mock_service_initializer, test_manifest):
         """Test loading a COMMUNICATION type modular service."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock service class
         mock_service_class = Mock()
         mock_service_instance = Mock()
@@ -548,10 +550,13 @@ class TestModularServiceLoading:
 
             await mock_service_initializer._load_modular_service("test_adapter")
 
-            # Verify service was registered with CommunicationBus
-            mock_service_initializer.bus_manager.communication.register_service.assert_called_once_with(
-                mock_service_instance, ["send_message", "receive_message"]
-            )
+            # Verify service was registered with ServiceRegistry
+            mock_service_initializer.service_registry.register_service.assert_called_once()
+            call_args = mock_service_initializer.service_registry.register_service.call_args
+            assert call_args[1]["service_type"] == ServiceType.COMMUNICATION
+            assert call_args[1]["provider"] == mock_service_instance
+            assert "send_message" in call_args[1]["capabilities"]
+            assert "receive_message" in call_args[1]["capabilities"]
 
             # Verify loaded_modules was updated
             assert "modular:test_adapter" in mock_service_initializer.loaded_modules
@@ -598,10 +603,12 @@ class TestModularServiceLoading:
 
             await mock_service_initializer._load_modular_service("tool_service")
 
-            # Verify service was registered with ToolBus
-            mock_service_initializer.bus_manager.tool.register_service.assert_called_once_with(
-                mock_service_instance, ["execute_tool"]
-            )
+            # Verify service was registered with ServiceRegistry
+            mock_service_initializer.service_registry.register_service.assert_called_once()
+            call_args = mock_service_initializer.service_registry.register_service.call_args
+            assert call_args[1]["service_type"] == ServiceType.TOOL
+            assert call_args[1]["provider"] == mock_service_instance
+            assert "execute_tool" in call_args[1]["capabilities"]
 
     @pytest.mark.asyncio
     async def test_load_modular_service_llm_type(self, mock_service_initializer):
@@ -736,8 +743,8 @@ class TestModularServiceLoading:
             # Call load_modules with modular prefix
             await mock_service_initializer.load_modules(["modular:test_adapter"])
 
-            # Verify service was loaded
-            mock_service_initializer.bus_manager.communication.register_service.assert_called_once()
+            # Verify service was loaded and registered with ServiceRegistry
+            mock_service_initializer.service_registry.register_service.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_load_modules_loads_mock_services(self, mock_service_initializer):

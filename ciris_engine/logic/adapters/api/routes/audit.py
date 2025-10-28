@@ -97,11 +97,24 @@ class AuditExportResponse(BaseModel):
 
 def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
     """Convert AuditEntry to API response format."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     # Convert context to AuditContext
     ctx = entry.context
     if hasattr(ctx, "model_dump"):
         # Convert AuditEntryContext to dict, then to AuditContext
         ctx_dict = ctx.model_dump()
+        additional_data = ctx_dict.get("additional_data", {})
+
+        # Debug logging to trace metadata propagation
+        if additional_data:
+            logger.info(f"DEBUG: _convert_audit_entry - additional_data keys: {additional_data.keys()}")
+            if "tool_name" in additional_data:
+                logger.info(f"DEBUG: _convert_audit_entry - Found tool_name={additional_data['tool_name']}")
+        else:
+            logger.info(f"DEBUG: _convert_audit_entry - No additional_data in ctx_dict")
+
         context = AuditContext(
             entity_id=ctx_dict.get("entity_id"),
             entity_type=ctx_dict.get("entity_type"),
@@ -114,10 +127,11 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
             user_agent=ctx_dict.get("user_agent"),
             result=ctx_dict.get("result"),
             error=ctx_dict.get("error"),
-            metadata=ctx_dict.get("additional_data", {}),
+            metadata=additional_data,
         )
     else:
         # If it's not an AuditEntryContext, create a minimal AuditContext
+        logger.info(f"DEBUG: _convert_audit_entry - ctx doesn't have model_dump, using str(ctx)")
         context = AuditContext(description=str(ctx) if ctx else None)
 
     return AuditEntryResponse(

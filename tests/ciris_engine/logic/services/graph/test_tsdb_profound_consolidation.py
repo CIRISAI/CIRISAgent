@@ -61,6 +61,25 @@ def mock_db_connection():
     """
     )
 
+    # Create consolidation_locks table (migration 005)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS consolidation_locks (
+            lock_key TEXT PRIMARY KEY,
+            locked_by TEXT,
+            locked_at TEXT,
+            lock_timeout_seconds INTEGER DEFAULT 300
+        )
+    """
+    )
+
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_consolidation_locks_expiry
+            ON consolidation_locks(locked_at)
+    """
+    )
+
     return conn
 
 

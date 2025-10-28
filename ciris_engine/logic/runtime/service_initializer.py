@@ -983,16 +983,52 @@ This directory contains critical cryptographic keys for the CIRIS system.
         return None
 
     def _register_tool_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
-        """Register a TOOL service with ToolBus."""
-        if self.bus_manager and hasattr(self.bus_manager, "tool"):
-            logger.info(f"Registering {manifest.module.name} with ToolBus")
-            self.bus_manager.tool.register_service(service_instance, service_def.capabilities)
+        """Register a TOOL service with ServiceRegistry."""
+        if not self.service_registry:
+            return
+
+        logger.info(f"Registering {manifest.module.name} as TOOL service")
+        from ciris_engine.logic.registries.base import Priority
+
+        priority_map = {
+            "CRITICAL": Priority.CRITICAL,
+            "HIGH": Priority.HIGH,
+            "NORMAL": Priority.NORMAL,
+            "LOW": Priority.LOW,
+        }
+
+        priority = priority_map.get(service_def.priority, Priority.NORMAL)
+
+        self.service_registry.register_service(
+            service_type=ServiceType.TOOL,
+            provider=service_instance,
+            priority=priority,
+            capabilities=service_def.capabilities,
+        )
 
     def _register_communication_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
-        """Register a COMMUNICATION service with CommunicationBus."""
-        if self.bus_manager and hasattr(self.bus_manager, "communication"):
-            logger.info(f"Registering {manifest.module.name} with CommunicationBus")
-            self.bus_manager.communication.register_service(service_instance, service_def.capabilities)
+        """Register a COMMUNICATION service with ServiceRegistry."""
+        if not self.service_registry:
+            return
+
+        logger.info(f"Registering {manifest.module.name} as COMMUNICATION service")
+        from ciris_engine.logic.registries.base import Priority
+
+        priority_map = {
+            "CRITICAL": Priority.CRITICAL,
+            "HIGH": Priority.HIGH,
+            "NORMAL": Priority.NORMAL,
+            "LOW": Priority.LOW,
+        }
+
+        priority = priority_map.get(service_def.priority, Priority.NORMAL)
+
+        self.service_registry.register_service(
+            service_type=ServiceType.COMMUNICATION,
+            provider=service_instance,
+            priority=priority,
+            capabilities=service_def.capabilities,
+        )
 
     def _register_llm_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
         """Register an LLM service with ServiceRegistry."""

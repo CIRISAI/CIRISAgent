@@ -290,16 +290,28 @@ def action_selection(
                                 tool_params = {"url": parts[1].strip()}
                                 logger.info(f"[MOCK_LLM] TOOL handler - curl with URL: {tool_params}")
                             else:
-                                # Try simple key=value parsing
+                                # Try simple key=value parsing with quote handling
                                 # First clean up the parameters string by removing escaped newlines
                                 params_str = parts[1].split("\\n")[0].strip()
-                                for pair in params_str.split():
-                                    if "=" in pair:
-                                        k, v = pair.split("=", 1)
-                                        # Clean up the value
-                                        v = v.strip().rstrip("\\")
-                                        tool_params[k] = v
-                                logger.info(f"[MOCK_LLM] TOOL handler - parsed as key=value: {tool_params}")
+                                import shlex
+                                try:
+                                    # Use shlex to properly handle quoted strings
+                                    tokens = shlex.split(params_str)
+                                    for token in tokens:
+                                        if "=" in token:
+                                            k, v = token.split("=", 1)
+                                            tool_params[k] = v
+                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed with shlex: {tool_params}")
+                                except ValueError as e:
+                                    # Fallback to simple parsing if shlex fails
+                                    logger.info(f"[MOCK_LLM] TOOL handler - shlex failed ({e}), using fallback")
+                                    for pair in params_str.split():
+                                        if "=" in pair:
+                                            k, v = pair.split("=", 1)
+                                            # Clean up the value
+                                            v = v.strip().rstrip("\\").strip('"')
+                                            tool_params[k] = v
+                                    logger.info(f"[MOCK_LLM] TOOL handler - parsed as key=value: {tool_params}")
                     else:
                         logger.info("[MOCK_LLM] TOOL handler - no parameters provided")
 
@@ -513,13 +525,23 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
 
                             tool_params = json.loads(params_str)
                         except json.JSONDecodeError:
-                            # Try simple key=value parsing
-                            for pair in params_str.split():
-                                if "=" in pair:
-                                    k, v = pair.split("=", 1)
-                                    # Clean up the value
-                                    v = v.strip().rstrip("\\")
-                                    tool_params[k] = v
+                            # Try simple key=value parsing with quote handling
+                            import shlex
+                            try:
+                                # Use shlex to properly handle quoted strings
+                                tokens = shlex.split(params_str)
+                                for token in tokens:
+                                    if "=" in token:
+                                        k, v = token.split("=", 1)
+                                        tool_params[k] = v
+                            except ValueError:
+                                # Fallback to simple parsing if shlex fails
+                                for pair in params_str.split():
+                                    if "=" in pair:
+                                        k, v = pair.split("=", 1)
+                                        # Clean up the value
+                                        v = v.strip().rstrip("\\").strip('"')
+                                        tool_params[k] = v
 
             params = ToolParams(name=tool_name, parameters=tool_params)
             action = HandlerActionType.TOOL

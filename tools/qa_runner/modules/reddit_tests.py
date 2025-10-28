@@ -106,13 +106,21 @@ class RedditTests:
         health = await self.client.system.health()
 
         # Basic health check
-        if not hasattr(health, 'status'):
+        if not hasattr(health, "status"):
             raise ValueError("Health response missing status field")
 
         self.console.print(f"     [dim]System status: {health.status}[/dim]")
 
         # Note: Reddit credentials should be pre-configured via environment variables or config files
         # The QA runner should have set these up before starting the server
+
+    async def _complete_task(self):
+        """Complete the current task to prevent task consolidation."""
+        try:
+            await self.client.agent.interact("$task_complete")
+            await asyncio.sleep(1)  # Give it time to process
+        except Exception:
+            pass  # Ignore errors - task might already be complete
 
     async def _verify_audit_entry(self, search_text: str, max_age_seconds: int = 30) -> Dict:
         """
@@ -134,14 +142,11 @@ class RedditTests:
         # Wait a moment for audit entry to be written
         await asyncio.sleep(1)
 
-        audit_response = await self.client.audit.query_entries(
-            start_time=cutoff,
-            limit=50
-        )
+        audit_response = await self.client.audit.query_entries(start_time=cutoff, limit=50)
 
         # Search through entries
         for entry in audit_response.entries:
-            entry_dict = entry.model_dump() if hasattr(entry, 'model_dump') else entry
+            entry_dict = entry.model_dump() if hasattr(entry, "model_dump") else entry
             entry_str = str(entry_dict)
 
             if search_text.lower() in entry_str.lower():
@@ -151,11 +156,16 @@ class RedditTests:
 
     async def test_submit_post(self):
         """Test submitting a post via agent interaction."""
-        # Trigger action via LLM - the agent decides to use reddit_submit_post tool
+        # Complete any previous task to prevent task consolidation
+        await self._complete_task()
+
+        # Trigger action via mock LLM command: $tool <name> [params]
         message = (
-            "Please create a post on r/ciris_test with the title 'CIRIS QA Test Post' "
-            "and body 'This is an automated test post created by the CIRIS QA suite. "
-            "This post will be automatically removed after testing.'"
+            "$tool reddit_submit_post "
+            'title="CIRIS QA Test Post" '
+            'body="This is an automated test post created by the CIRIS QA suite. '
+            'This post will be automatically removed after testing." '
+            'subreddit="ciris"'
         )
 
         response = await self.client.agent.interact(message)
@@ -172,9 +182,10 @@ class RedditTests:
 
             # Look for submission ID patterns (e.g., "t3_abc123" or just "abc123")
             import re
-            match = re.search(r't3_([a-z0-9]+)', str(audit_entry))
+
+            match = re.search(r"t3_([a-z0-9]+)", str(audit_entry))
             if not match:
-                match = re.search(r'submission[_\s]id[:\s]+([a-z0-9]+)', str(audit_entry), re.IGNORECASE)
+                match = re.search(r"submission[_\s]id[:\s]+([a-z0-9]+)", str(audit_entry), re.IGNORECASE)
 
             if match:
                 self.created_submission_id = match.group(1).replace("t3_", "")
@@ -194,10 +205,11 @@ class RedditTests:
             self.console.print("     [dim]No submission ID, skipping comment test[/dim]")
             return
 
-        # Trigger comment action via LLM
+        # Trigger comment action via mock LLM command
         message = (
-            f"Please comment on the Reddit post with ID {self.created_submission_id}. "
-            "The comment should say: 'This is an automated test comment created by the CIRIS QA suite.'"
+            f"$tool reddit_submit_comment "
+            f'parent_fullname="t3_{self.created_submission_id}" '
+            f'text="This is an automated test comment created by the CIRIS QA suite."'
         )
 
         response = await self.client.agent.interact(message)
@@ -208,9 +220,10 @@ class RedditTests:
 
             # Try to extract comment ID
             import re
-            match = re.search(r't1_([a-z0-9]+)', str(audit_entry))
+
+            match = re.search(r"t1_([a-z0-9]+)", str(audit_entry))
             if not match:
-                match = re.search(r'comment[_\s]id[:\s]+([a-z0-9]+)', str(audit_entry), re.IGNORECASE)
+                match = re.search(r"comment[_\s]id[:\s]+([a-z0-9]+)", str(audit_entry), re.IGNORECASE)
 
             if match:
                 self.created_comment_id = match.group(1).replace("t1_", "")
@@ -220,13 +233,17 @@ class RedditTests:
 
     async def test_get_user_context(self):
         """Test getting user context via agent interaction."""
-        # Trigger user context lookup via LLM
-        message = f"What can you tell me about the Reddit user {self.reddit_username}?"
-
-        response = await self.client.agent.interact(message)
-
-        # Verify via audit trail
         try:
+            # Complete any previous task to prevent task consolidation
+            await self._complete_task()
+
+            # Trigger user context lookup via mock LLM command
+            message = f'$tool reddit_get_user_context username="{self.reddit_username}"'
+
+            # reddit_get_user_context can be slow - give it more time
+            response = await self.client.agent.interact(message)
+
+            # Verify via audit trail
             audit_entry = await self._verify_audit_entry("reddit_get_user_context")
 
             # Verify username appears in the audit entry
@@ -242,10 +259,11 @@ class RedditTests:
             self.console.print("     [dim]No submission ID, skipping disclosure test[/dim]")
             return
 
-        # Trigger disclosure via LLM
+        # Trigger disclosure via mock LLM command
         message = (
-            f"Please post an AI transparency disclosure on the Reddit post {self.created_submission_id}. "
-            "The custom message should be: 'This is a test AI transparency disclosure from the CIRIS QA suite.'"
+            f"$tool reddit_disclose_identity "
+            f'channel_reference="reddit:r/ciris:post/{self.created_submission_id}" '
+            f'custom_message="This is a test AI transparency disclosure from the CIRIS QA suite."'
         )
 
         response = await self.client.agent.interact(message)
@@ -267,10 +285,11 @@ class RedditTests:
             self.console.print("     [dim]No submission ID, skipping deletion test[/dim]")
             return
 
-        # Trigger deletion via LLM
+        # Trigger deletion via mock LLM command
         message = (
-            f"Please permanently delete the Reddit post with ID {self.created_submission_id}. "
-            "Make sure to purge the cache to comply with Reddit's Terms of Service."
+            f"$tool reddit_delete_content "
+            f'thing_fullname="t3_{self.created_submission_id}" '
+            f'purge_cache=true'
         )
 
         response = await self.client.agent.interact(message)
@@ -292,8 +311,15 @@ class RedditTests:
 
     async def test_observe_subreddit(self):
         """Test passive observation of subreddit via agent interaction."""
-        # Trigger observation via LLM
-        message = "Please observe recent activity in r/ciris_test subreddit and tell me what you see."
+        # Complete any previous task to prevent task consolidation
+        await self._complete_task()
+
+        # Trigger observation via mock LLM command
+        message = (
+            "$tool reddit_observe "
+            'channel_reference="reddit:r/ciris" '
+            'limit=5'
+        )
 
         response = await self.client.agent.interact(message)
 
@@ -302,8 +328,8 @@ class RedditTests:
             audit_entry = await self._verify_audit_entry("reddit_observe")
 
             # Verify subreddit name appears
-            if "ciris_test" not in str(audit_entry).lower():
-                raise ValueError("Subreddit name not found in audit entry")
+            if "ciris" not in str(audit_entry).lower():
+                raise ValueError("Subreddit 'ciris' not found in audit entry")
 
         except ValueError as e:
             raise ValueError(f"Subreddit observation not found in audit trail: {e}")
@@ -314,8 +340,9 @@ class RedditTests:
         if self.created_submission_id:
             try:
                 message = (
-                    f"Please permanently delete the Reddit post with ID {self.created_submission_id} "
-                    "and purge the cache."
+                    f"$tool reddit_delete_content "
+                    f'thing_fullname="t3_{self.created_submission_id}" '
+                    f'purge_cache=true'
                 )
                 await self.client.agent.interact(message)
                 await asyncio.sleep(1)  # Give it time to process

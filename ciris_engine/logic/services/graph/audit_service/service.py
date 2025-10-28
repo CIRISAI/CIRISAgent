@@ -249,6 +249,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 
         # Create audit entry
+        import json
+        logger.info(f"DEBUG: log_action called with action_type={action_type.value}, context.parameters={context.parameters}")
+
+        # Serialize parameters dict to JSON string for AuditRequest (Dict[str, str] requirement)
+        parameters_json = json.dumps(context.parameters) if context.parameters else "{}"
+
         entry = AuditRequest(
             entry_id=str(uuid4()),
             timestamp=self._time_service.now() if self._time_service else datetime.now(),
@@ -261,9 +267,12 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
                 "task_id": context.task_id,
                 "handler_name": context.handler_name,
                 "metadata": str(getattr(context, "metadata", {})),
+                "parameters": parameters_json,  # JSON-serialized parameters (e.g., {"tool_name": "reddit_submit_post"})
             },
             outcome=outcome,
         )
+
+        logger.info(f"DEBUG: Created AuditRequest with details.parameters={entry.details.get('parameters')}")
 
         # Add to hash chain FIRST (REQUIRED in production)
         hash_chain_data = await self._add_to_hash_chain(entry)
@@ -833,6 +842,29 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             return
 
         # Create specialized audit node WITH signature from hash chain
+        # Build additional_data with core fields plus any extra parameters from context
+        import json
+        additional_data = {
+            "thought_id": entry.details.get("thought_id", ""),
+            "task_id": entry.details.get("task_id", ""),
+            "outcome": entry.outcome or "success",
+            "severity": self._get_severity(action_type),
+        }
+
+        # Include any additional parameters from the audit context (e.g., tool_name, follow_up_thought_id)
+        logger.info(f"DEBUG: entry.details keys: {entry.details.keys()}")
+        if "parameters" in entry.details and entry.details["parameters"]:
+            logger.info(f"DEBUG: Found parameters in entry.details: {entry.details['parameters']}")
+            try:
+                # Deserialize JSON string back to dict
+                params_dict = json.loads(entry.details["parameters"])
+                additional_data.update(params_dict)
+                logger.info(f"DEBUG: Updated additional_data: {additional_data}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"DEBUG: Failed to parse parameters JSON: {e}")
+        else:
+            logger.info(f"DEBUG: No 'parameters' key in entry.details or empty")
+
         node = AuditEntryNode(
             id=f"audit_{action_type.value}_{entry.entry_id}",
             action=action_type.value,
@@ -841,12 +873,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             context=AuditEntryContext(
                 service_name=entry.details.get("handler_name", ""),
                 correlation_id=entry.entry_id,
-                additional_data={
-                    "thought_id": entry.details.get("thought_id", ""),
-                    "task_id": entry.details.get("task_id", ""),
-                    "outcome": entry.outcome or "success",
-                    "severity": self._get_severity(action_type),
-                },
+                additional_data=additional_data,
             ),
             signature=hash_chain_data.get("signature") if hash_chain_data else None,
             hash_chain=hash_chain_data.get("entry_hash") if hash_chain_data else None,

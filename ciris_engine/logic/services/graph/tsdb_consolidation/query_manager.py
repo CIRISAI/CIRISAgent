@@ -6,13 +6,14 @@ Handles querying both graph nodes and service correlations for consolidation per
 
 import json
 import logging
+import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, TypedDict
+from typing import Any, Dict, List, Optional, Set, TypedDict, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.persistence.db.core import get_db_connection, RetryConnection, PostgreSQLConnectionWrapper
 from ciris_engine.logic.services.graph.tsdb_consolidation.data_converter import TSDBDataConverter
 from ciris_engine.schemas.services.graph.consolidation import (
     MetricCorrelationData,
@@ -26,6 +27,9 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+# Type alias for database connections (both SQLite and PostgreSQL wrappers)
+DBConnection = Union[sqlite3.Connection, RetryConnection, PostgreSQLConnectionWrapper]
 
 
 class ThoughtQueryResult(TypedDict):
@@ -51,6 +55,50 @@ class QueryManager:
         """
         self._memory_bus = memory_bus
         self._db_path = db_path
+        # Hostname for identifying this instance in locks
+        import socket
+        self._instance_id = socket.gethostname()
+
+        # Ensure consolidation_locks table exists
+        self._ensure_locks_table_exists()
+
+    def _ensure_locks_table_exists(self) -> None:
+        """
+        Ensure the consolidation_locks table exists.
+
+        Creates the table and index if they don't already exist (safe for repeated calls).
+        This is necessary for tests and fresh databases that haven't run migrations yet.
+        """
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+
+        try:
+            with get_db_connection(db_path=self._db_path) as conn:
+                cursor = conn.cursor()
+
+                # Create table (idempotent - safe to call multiple times)
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS consolidation_locks (
+                        lock_key TEXT PRIMARY KEY,
+                        locked_by TEXT,
+                        locked_at TEXT,
+                        lock_timeout_seconds INTEGER DEFAULT 300
+                    )
+                """
+                )
+
+                # Create index (idempotent)
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_consolidation_locks_expiry
+                        ON consolidation_locks(locked_at)
+                """
+                )
+
+                conn.commit()
+        except Exception as e:
+            # Log warning but don't fail - table might already exist in multi-instance scenario
+            logger.warning(f"Error ensuring consolidation_locks table exists: {e}")
 
     def _query_thoughts_for_tasks(
         self, cursor: Any, adapter: Any, task_ids: List[str]
@@ -352,6 +400,169 @@ class QueryManager:
 
         return task_correlations
 
+    def _ensure_lock_row_exists(self, lock_key: str) -> None:
+        """
+        Ensure a row exists in consolidation_locks for the given key.
+
+        Uses INSERT OR IGNORE pattern to safely create row if it doesn't exist.
+
+        Args:
+            lock_key: Lock key to ensure exists
+        """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
+        try:
+            with get_db_connection(db_path=self._db_path) as conn:
+                cursor = conn.cursor()
+
+                # Ensure table exists (necessary for :memory: databases in tests)
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS consolidation_locks (
+                        lock_key TEXT PRIMARY KEY,
+                        locked_by TEXT,
+                        locked_at TEXT,
+                        lock_timeout_seconds INTEGER DEFAULT 300
+                    )
+                """
+                )
+
+                # INSERT OR IGNORE - creates row only if it doesn't exist
+                if adapter.is_postgresql():
+                    cursor.execute(
+                        """
+                        INSERT INTO consolidation_locks (lock_key, locked_by, locked_at)
+                        VALUES (%s, NULL, NULL)
+                        ON CONFLICT (lock_key) DO NOTHING
+                        """,
+                        (lock_key,)
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO consolidation_locks (lock_key, locked_by, locked_at)
+                        VALUES (?, NULL, NULL)
+                        """,
+                        (lock_key,)
+                    )
+                conn.commit()
+
+        except Exception as e:
+            logger.warning(f"Error ensuring lock row exists for {lock_key}: {e}")
+            # Non-fatal - the conditional UPDATE will handle missing rows gracefully
+
+    def _try_acquire_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> bool:
+        """
+        Try to acquire lock using conditional UPDATE pattern.
+
+        This pattern works for both SQLite and PostgreSQL:
+        - UPDATE with WHERE clause checking lock availability
+        - If rowcount > 0, we got the lock
+        - If rowcount = 0, lock held by another instance
+
+        Locks auto-expire after 5 minutes (lock_timeout_seconds).
+
+        Args:
+            lock_key: Lock key string (e.g., "basic:2025-10-22T06:00:00+00:00")
+            consolidation_type: Type of consolidation (for logging)
+            period_identifier: Period identifier (for logging)
+
+        Returns:
+            True if lock acquired, False if held by another instance
+        """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
+        try:
+            # Calculate expiry threshold (5 minutes ago)
+            from datetime import datetime, timedelta, timezone
+            now = datetime.now(timezone.utc)
+            expiry_threshold = now - timedelta(seconds=300)  # 5 minutes
+
+            with get_db_connection(db_path=self._db_path) as conn:
+                cursor = conn.cursor()
+
+                # Ensure table exists (necessary for :memory: databases in tests)
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS consolidation_locks (
+                        lock_key TEXT PRIMARY KEY,
+                        locked_by TEXT,
+                        locked_at TEXT,
+                        lock_timeout_seconds INTEGER DEFAULT 300
+                    )
+                """
+                )
+
+                # Ensure lock row exists in THIS connection (necessary for :memory: databases)
+                if adapter.is_postgresql():
+                    cursor.execute(
+                        """
+                        INSERT INTO consolidation_locks (lock_key, locked_by, locked_at)
+                        VALUES (%s, NULL, NULL)
+                        ON CONFLICT (lock_key) DO NOTHING
+                        """,
+                        (lock_key,)
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO consolidation_locks (lock_key, locked_by, locked_at)
+                        VALUES (?, NULL, NULL)
+                        """,
+                        (lock_key,)
+                    )
+
+                # Conditional UPDATE: claim lock if it's NULL or expired
+                if adapter.is_postgresql():
+                    cursor.execute(
+                        """
+                        UPDATE consolidation_locks
+                        SET locked_by = %s, locked_at = %s
+                        WHERE lock_key = %s
+                          AND (locked_by IS NULL OR locked_at < %s)
+                        """,
+                        (self._instance_id, now, lock_key, expiry_threshold)
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE consolidation_locks
+                        SET locked_by = ?, locked_at = ?
+                        WHERE lock_key = ?
+                          AND (locked_by IS NULL OR locked_at < ?)
+                        """,
+                        (self._instance_id, now.isoformat(), lock_key, expiry_threshold.isoformat())
+                    )
+
+                conn.commit()
+
+                # Check if we acquired the lock
+                acquired = cursor.rowcount > 0
+
+                if acquired:
+                    logger.info(
+                        f"Acquired {consolidation_type} lock for {period_identifier} (instance: {self._instance_id})"
+                    )
+                else:
+                    logger.info(
+                        f"Failed to acquire {consolidation_type} lock for {period_identifier} "
+                        f"(held by another instance)"
+                    )
+
+                return acquired
+
+        except Exception as e:
+            logger.error(
+                f"Error acquiring {consolidation_type} lock for {period_identifier}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return False
+
     def acquire_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> bool:
         """
         Try to acquire exclusive lock for a consolidation activity.
@@ -361,10 +572,11 @@ class QueryManager:
         - extensive: Lock a specific week
         - profound: Lock a specific month
 
-        Uses database-level locking to prevent multiple instances from
-        consolidating simultaneously:
-        - PostgreSQL: pg_try_advisory_lock with hash of type+period
-        - SQLite: BEGIN IMMEDIATE transaction
+        Uses database-backed locking via conditional UPDATE pattern:
+        - Works identically for both SQLite and PostgreSQL
+        - Locks stored in consolidation_locks table
+        - Locks auto-expire after 5 minutes
+        - Non-blocking - other database operations continue normally
 
         Args:
             consolidation_type: Type of consolidation ('basic', 'extensive', 'profound')
@@ -373,120 +585,93 @@ class QueryManager:
         Returns:
             True if lock acquired successfully, False if another instance holds it
         """
+        lock_key = f"{consolidation_type}:{period_identifier}"
+        return self._try_acquire_lock(lock_key, consolidation_type, period_identifier)
+
+    def _release_lock(self, lock_key: str, consolidation_type: str, period_identifier: str) -> None:
+        """
+        Release lock using conditional UPDATE pattern.
+
+        Only releases if this instance holds the lock (locked_by matches instance_id).
+        Works identically for both SQLite and PostgreSQL.
+
+        Args:
+            lock_key: Lock key string (e.g., "basic:2025-10-22T06:00:00+00:00")
+            consolidation_type: Type of consolidation (for logging)
+            period_identifier: Period identifier (for logging)
+        """
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+        adapter = get_adapter()
+
         try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            adapter = get_adapter()
-
-            # Generate a consistent numeric lock ID from type + period
-            # Use hash for deterministic lock ID across instances
-            lock_key = f"{consolidation_type}:{period_identifier}"
-            lock_id = hash(lock_key) & 0x7FFFFFFF  # Keep positive 32-bit
-
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
 
+                # Ensure table exists (necessary for :memory: databases in tests)
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS consolidation_locks (
+                        lock_key TEXT PRIMARY KEY,
+                        locked_by TEXT,
+                        locked_at TEXT,
+                        lock_timeout_seconds INTEGER DEFAULT 300
+                    )
+                """
+                )
+
+                # Conditional UPDATE: release lock only if we hold it
                 if adapter.is_postgresql():
-                    # PostgreSQL: Try to acquire advisory lock
-                    cursor.execute("SELECT pg_try_advisory_lock(%s)", (lock_id,))
-                    result = cursor.fetchone()
-
-                    if not result:
-                        logger.error(
-                            f"Failed to acquire {consolidation_type} lock for {period_identifier}: "
-                            f"pg_try_advisory_lock returned no result (lock_id={lock_id})"
-                        )
-                        return False
-
-                    # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
-                    # Use dict-style access because RealDictCursor returns dict-like objects
-                    acquired = bool(result["pg_try_advisory_lock"])
-
-                    if acquired:
-                        logger.info(
-                            f"Acquired {consolidation_type} consolidation lock for {period_identifier} (lock_id={lock_id})"
-                        )
-                    else:
-                        logger.info(
-                            f"Failed to acquire {consolidation_type} lock for {period_identifier} (already locked, lock_id={lock_id})"
-                        )
-
-                    return acquired
-
+                    cursor.execute(
+                        """
+                        UPDATE consolidation_locks
+                        SET locked_by = NULL, locked_at = NULL
+                        WHERE lock_key = %s AND locked_by = %s
+                        """,
+                        (lock_key, self._instance_id)
+                    )
                 else:
-                    # SQLite: Use BEGIN IMMEDIATE to acquire write lock
-                    try:
-                        cursor.execute("BEGIN IMMEDIATE")
-                        conn.commit()
-                        logger.info(f"Acquired SQLite write lock for {consolidation_type} {period_identifier}")
-                        return True
-                    except Exception as e:
-                        logger.info(
-                            f"Failed to acquire SQLite write lock for {consolidation_type} {period_identifier}: {e}"
-                        )
-                        return False
+                    cursor.execute(
+                        """
+                        UPDATE consolidation_locks
+                        SET locked_by = NULL, locked_at = NULL
+                        WHERE lock_key = ? AND locked_by = ?
+                        """,
+                        (lock_key, self._instance_id)
+                    )
+
+                conn.commit()
+
+                if cursor.rowcount > 0:
+                    logger.debug(
+                        f"Released {consolidation_type} lock for {period_identifier} (instance: {self._instance_id})"
+                    )
+                else:
+                    logger.warning(
+                        f"Attempted to release {consolidation_type} lock for {period_identifier} "
+                        f"but lock not held by this instance (instance: {self._instance_id})"
+                    )
 
         except Exception as e:
             logger.error(
-                f"Error acquiring {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
+                f"Error releasing {consolidation_type} lock for {period_identifier}: "
+                f"{type(e).__name__}: {e}",
                 exc_info=True,
             )
-            return False
 
     def release_consolidation_lock(self, consolidation_type: str, period_identifier: str) -> None:
         """
         Release the consolidation lock.
 
+        Uses database-backed locking via conditional UPDATE pattern.
+        Only releases if this instance currently holds the lock.
+
         Args:
             consolidation_type: Type of consolidation
             period_identifier: Period identifier
         """
-        try:
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            adapter = get_adapter()
-
-            # Generate same lock ID as acquire
-            lock_key = f"{consolidation_type}:{period_identifier}"
-            lock_id = hash(lock_key) & 0x7FFFFFFF
-
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
-
-                if adapter.is_postgresql():
-                    # PostgreSQL: Release advisory lock
-                    cursor.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
-                    result = cursor.fetchone()
-
-                    if not result:
-                        logger.warning(
-                            f"Failed to release {consolidation_type} lock for {period_identifier}: "
-                            f"pg_advisory_unlock returned no result (lock_id={lock_id})"
-                        )
-                        return
-
-                    # Convert to boolean (PostgreSQL returns integer or boolean depending on driver)
-                    # Use dict-style access because RealDictCursor returns dict-like objects
-                    released = bool(result["pg_advisory_unlock"])
-
-                    if released:
-                        logger.debug(f"Released {consolidation_type} lock for {period_identifier} (lock_id={lock_id})")
-                    else:
-                        logger.warning(
-                            f"Failed to release {consolidation_type} lock for {period_identifier} (not held, lock_id={lock_id})"
-                        )
-
-                else:
-                    # SQLite: Lock is automatically released when connection closes
-                    logger.debug(
-                        f"SQLite lock for {consolidation_type} {period_identifier} will be released on connection close"
-                    )
-
-        except Exception as e:
-            logger.error(
-                f"Error releasing {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
-                exc_info=True,
-            )
+        lock_key = f"{consolidation_type}:{period_identifier}"
+        self._release_lock(lock_key, consolidation_type, period_identifier)
 
     def acquire_period_lock(self, period_start: datetime) -> bool:
         """

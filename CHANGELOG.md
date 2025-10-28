@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Solution**: Changed to query `self.agent_occurrence_id` where thoughts are transferred after claiming
   - Enables proper diagnostics of shutdown rejections with specific reasons from REJECT thoughts
   - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:438-440`
+- **P1: Shutdown Thought Status Updates Missing occurrence_id** - Fixed `_process_shutdown_thoughts()` to pass occurrence_id
+  - **Problem**: Calls to `update_thought_status()` missing `occurrence_id` parameter (lines 492, 534-539)
+  - **Impact**: Thoughts stayed PENDING in non-'default' occurrences, causing repeated processing
+  - **Solution**: Added `occurrence_id=self.agent_occurrence_id` to both success and error paths
+  - Prevents silent update failures in multi-occurrence environments
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:492-495, 534-539`
 - **P2: Multi-Occurrence QA Test Expectations** - Fixed test to properly validate coordination without false positives
   - Filter wakeup tasks by today's date to exclude historical completed tasks
   - Filter thoughts to only consider test occurrence_ids, not leftover data from previous runs

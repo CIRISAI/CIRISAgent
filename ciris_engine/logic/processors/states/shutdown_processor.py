@@ -489,7 +489,10 @@ class ShutdownProcessor(BaseProcessor):
         for thought in pending_thoughts:
             try:
                 # Mark as processing
-                persistence.update_thought_status(thought_id=thought.thought_id, status=ThoughtStatus.PROCESSING)
+                # CRITICAL: Must pass occurrence_id since thoughts were transferred to claiming occurrence
+                persistence.update_thought_status(
+                    thought_id=thought.thought_id, status=ThoughtStatus.PROCESSING, occurrence_id=self.agent_occurrence_id
+                )
 
                 # Process through thought processor
                 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -527,8 +530,12 @@ class ShutdownProcessor(BaseProcessor):
 
             except Exception as e:
                 logger.error(f"Error processing shutdown thought {thought.thought_id}: {e}", exc_info=True)
+                # CRITICAL: Must pass occurrence_id since thoughts were transferred to claiming occurrence
                 persistence.update_thought_status(
-                    thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action={"error": str(e)}
+                    thought_id=thought.thought_id,
+                    status=ThoughtStatus.FAILED,
+                    final_action={"error": str(e)},
+                    occurrence_id=self.agent_occurrence_id,
                 )
 
     def cleanup(self) -> bool:

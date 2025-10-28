@@ -95,12 +95,20 @@ class RedditObserver(BaseObserver[RedditMessage]):
         for entry in posts:
             if self._mark_seen(self._seen_posts, entry.item_id):
                 continue
+            # Check persistent storage for existing task with this correlation_id
+            if await self._already_handled(entry.item_id):
+                logger.debug(f"Reddit post {entry.item_id} already handled (found in task database), skipping")
+                continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
 
         comments = await self._api_client.fetch_subreddit_comments(self._subreddit, limit=_PASSIVE_LIMIT)
         for entry in comments:
             if self._mark_seen(self._seen_comments, entry.item_id):
+                continue
+            # Check persistent storage for existing task with this correlation_id
+            if await self._already_handled(entry.item_id):
+                logger.debug(f"Reddit comment {entry.item_id} already handled (found in task database), skipping")
                 continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
@@ -112,6 +120,37 @@ class RedditObserver(BaseObserver[RedditMessage]):
         while len(cache) > _CACHE_LIMIT:
             cache.popitem(last=False)
         return False
+
+    async def _already_handled(self, reddit_item_id: str) -> bool:
+        """
+        Check if a Reddit post/comment has already been handled.
+
+        This queries the task database for any task with this correlation_id,
+        preventing re-processing of content after restart.
+
+        Args:
+            reddit_item_id: The Reddit post/comment ID
+
+        Returns:
+            True if already handled, False otherwise
+        """
+        try:
+            from ciris_engine.logic.persistence.models.tasks import get_task_by_correlation_id
+
+            # Query tasks table for this correlation_id
+            existing_task = get_task_by_correlation_id(reddit_item_id, self.agent_occurrence_id)
+            if existing_task:
+                logger.debug(
+                    f"Found existing task {existing_task.task_id} for Reddit item {reddit_item_id}, "
+                    f"status={existing_task.status.value}"
+                )
+                return True
+            return False
+        except Exception as exc:
+            # If database query fails, log error but don't block processing
+            # (fail open - better to potentially re-process than miss content)
+            logger.warning(f"Failed to check if Reddit item {reddit_item_id} already handled: {exc}")
+            return False
 
     def _build_message_from_entry(self, entry) -> RedditMessage:
         content = entry.title or entry.body or "(no content)"

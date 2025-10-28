@@ -194,9 +194,7 @@ class TestActionDispatcherDispatch:
         assert response.execution_time_ms >= 0
 
         # Verify handler was called
-        mock_handler.handle.assert_called_once_with(
-            action_result, sample_thought, sample_dispatch_context
-        )
+        mock_handler.handle.assert_called_once_with(action_result, sample_thought, sample_dispatch_context)
 
         # Verify audit was logged
         mock_audit_service.log_action.assert_called_once()

@@ -246,11 +246,14 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         self, action_type: HandlerActionType, context: AuditActionContext, outcome: Optional[str] = None
     ) -> AuditEntryResult:
         """Log an action and return audit entry with hash chain data (REQUIRED)."""
-        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
-
         # Create audit entry
         import json
-        logger.info(f"DEBUG: log_action called with action_type={action_type.value}, context.parameters={context.parameters}")
+
+        from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+
+        logger.info(
+            f"DEBUG: log_action called with action_type={action_type.value}, context.parameters={context.parameters}"
+        )
 
         # Serialize parameters dict to JSON string for AuditRequest (Dict[str, str] requirement)
         parameters_json = json.dumps(context.parameters) if context.parameters else "{}"
@@ -844,6 +847,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         # Create specialized audit node WITH signature from hash chain
         # Build additional_data with core fields plus any extra parameters from context
         import json
+
         additional_data = {
             "thought_id": entry.details.get("thought_id", ""),
             "task_id": entry.details.get("task_id", ""),
@@ -863,7 +867,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
             except json.JSONDecodeError as e:
                 logger.warning(f"DEBUG: Failed to parse parameters JSON: {e}")
         else:
-            logger.info(f"DEBUG: No 'parameters' key in entry.details or empty")
+            logger.info("DEBUG: No 'parameters' key in entry.details or empty")
 
         node = AuditEntryNode(
             id=f"audit_{action_type.value}_{entry.entry_id}",

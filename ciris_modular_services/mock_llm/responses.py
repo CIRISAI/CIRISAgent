@@ -86,7 +86,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                 if "Original Thought:" in content:
                     # Find the Original Thought section and show what comes after it
                     ot_index = content.find("Original Thought:")
-                    sample = content[ot_index:ot_index+300] if ot_index != -1 else ""
+                    sample = content[ot_index : ot_index + 300] if ot_index != -1 else ""
                     logger.info(f"[MOCK_LLM DEBUG] Original Thought section: {sample}")
 
                     # Use a more robust regex that handles nested quotes
@@ -99,9 +99,8 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                         # Check if this is a passive observation
                         # Support both old format "You observed @" and new format "PRIORITY (high): @username ... said:"
-                        is_observation = (
-                            actual_thought_content.startswith("You observed @")
-                            or ("@" in actual_thought_content and " said: " in actual_thought_content)
+                        is_observation = actual_thought_content.startswith("You observed @") or (
+                            "@" in actual_thought_content and " said: " in actual_thought_content
                         )
 
                         if is_observation:
@@ -115,7 +114,9 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                             if delimiter_index != -1:
                                 remaining_content = actual_thought_content[delimiter_index + delimiter_len :]
-                                logger.info(f"[MOCK_LLM DEBUG] Remaining content length: {len(remaining_content)}, first 200 chars: {remaining_content[:200]}")
+                                logger.info(
+                                    f"[MOCK_LLM DEBUG] Remaining content length: {len(remaining_content)}, first 200 chars: {remaining_content[:200]}"
+                                )
                                 # Extract message, stopping at | or newline
                                 actual_user_message = (
                                     remaining_content.split("|")[0].split("\n")[0].split("\\n")[0].strip()

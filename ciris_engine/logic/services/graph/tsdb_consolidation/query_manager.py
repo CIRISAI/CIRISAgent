@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Set, TypedDict, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.logic.persistence.db.core import get_db_connection, RetryConnection, PostgreSQLConnectionWrapper
+from ciris_engine.logic.persistence.db.core import PostgreSQLConnectionWrapper, RetryConnection, get_db_connection
 from ciris_engine.logic.services.graph.tsdb_consolidation.data_converter import TSDBDataConverter
 from ciris_engine.schemas.services.graph.consolidation import (
     MetricCorrelationData,
@@ -30,6 +30,21 @@ logger = logging.getLogger(__name__)
 
 # Type alias for database connections (both SQLite and PostgreSQL wrappers)
 DBConnection = Union[sqlite3.Connection, RetryConnection, PostgreSQLConnectionWrapper]
+
+# SQL constants for consolidation_locks table
+_CREATE_LOCKS_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS consolidation_locks (
+        lock_key TEXT PRIMARY KEY,
+        locked_by TEXT,
+        locked_at TEXT,
+        lock_timeout_seconds INTEGER DEFAULT 300
+    )
+"""
+
+_CREATE_LOCKS_INDEX_SQL = """
+    CREATE INDEX IF NOT EXISTS idx_consolidation_locks_expiry
+        ON consolidation_locks(locked_at)
+"""
 
 
 class ThoughtQueryResult(TypedDict):
@@ -57,6 +72,7 @@ class QueryManager:
         self._db_path = db_path
         # Hostname for identifying this instance in locks
         import socket
+
         self._instance_id = socket.gethostname()
 
         # Ensure consolidation_locks table exists
@@ -76,24 +92,10 @@ class QueryManager:
                 cursor = conn.cursor()
 
                 # Create table (idempotent - safe to call multiple times)
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS consolidation_locks (
-                        lock_key TEXT PRIMARY KEY,
-                        locked_by TEXT,
-                        locked_at TEXT,
-                        lock_timeout_seconds INTEGER DEFAULT 300
-                    )
-                """
-                )
+                cursor.execute(_CREATE_LOCKS_TABLE_SQL)
 
                 # Create index (idempotent)
-                cursor.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_consolidation_locks_expiry
-                        ON consolidation_locks(locked_at)
-                """
-                )
+                cursor.execute(_CREATE_LOCKS_INDEX_SQL)
 
                 conn.commit()
         except Exception as e:
@@ -418,16 +420,7 @@ class QueryManager:
                 cursor = conn.cursor()
 
                 # Ensure table exists (necessary for :memory: databases in tests)
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS consolidation_locks (
-                        lock_key TEXT PRIMARY KEY,
-                        locked_by TEXT,
-                        locked_at TEXT,
-                        lock_timeout_seconds INTEGER DEFAULT 300
-                    )
-                """
-                )
+                cursor.execute(_CREATE_LOCKS_TABLE_SQL)
 
                 # INSERT OR IGNORE - creates row only if it doesn't exist
                 if adapter.is_postgresql():
@@ -437,7 +430,7 @@ class QueryManager:
                         VALUES (%s, NULL, NULL)
                         ON CONFLICT (lock_key) DO NOTHING
                         """,
-                        (lock_key,)
+                        (lock_key,),
                     )
                 else:
                     cursor.execute(
@@ -445,7 +438,7 @@ class QueryManager:
                         INSERT OR IGNORE INTO consolidation_locks (lock_key, locked_by, locked_at)
                         VALUES (?, NULL, NULL)
                         """,
-                        (lock_key,)
+                        (lock_key,),
                     )
                 conn.commit()
 
@@ -479,6 +472,7 @@ class QueryManager:
         try:
             # Calculate expiry threshold (5 minutes ago)
             from datetime import datetime, timedelta, timezone
+
             now = datetime.now(timezone.utc)
             expiry_threshold = now - timedelta(seconds=300)  # 5 minutes
 
@@ -486,16 +480,7 @@ class QueryManager:
                 cursor = conn.cursor()
 
                 # Ensure table exists (necessary for :memory: databases in tests)
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS consolidation_locks (
-                        lock_key TEXT PRIMARY KEY,
-                        locked_by TEXT,
-                        locked_at TEXT,
-                        lock_timeout_seconds INTEGER DEFAULT 300
-                    )
-                """
-                )
+                cursor.execute(_CREATE_LOCKS_TABLE_SQL)
 
                 # Ensure lock row exists in THIS connection (necessary for :memory: databases)
                 if adapter.is_postgresql():
@@ -505,7 +490,7 @@ class QueryManager:
                         VALUES (%s, NULL, NULL)
                         ON CONFLICT (lock_key) DO NOTHING
                         """,
-                        (lock_key,)
+                        (lock_key,),
                     )
                 else:
                     cursor.execute(
@@ -513,7 +498,7 @@ class QueryManager:
                         INSERT OR IGNORE INTO consolidation_locks (lock_key, locked_by, locked_at)
                         VALUES (?, NULL, NULL)
                         """,
-                        (lock_key,)
+                        (lock_key,),
                     )
 
                 # Conditional UPDATE: claim lock if it's NULL or expired
@@ -525,7 +510,7 @@ class QueryManager:
                         WHERE lock_key = %s
                           AND (locked_by IS NULL OR locked_at < %s)
                         """,
-                        (self._instance_id, now, lock_key, expiry_threshold)
+                        (self._instance_id, now, lock_key, expiry_threshold),
                     )
                 else:
                     cursor.execute(
@@ -535,7 +520,7 @@ class QueryManager:
                         WHERE lock_key = ?
                           AND (locked_by IS NULL OR locked_at < ?)
                         """,
-                        (self._instance_id, now.isoformat(), lock_key, expiry_threshold.isoformat())
+                        (self._instance_id, now.isoformat(), lock_key, expiry_threshold.isoformat()),
                     )
 
                 conn.commit()
@@ -557,8 +542,7 @@ class QueryManager:
 
         except Exception as e:
             logger.error(
-                f"Error acquiring {consolidation_type} lock for {period_identifier}: "
-                f"{type(e).__name__}: {e}",
+                f"Error acquiring {consolidation_type} lock for {period_identifier}: " f"{type(e).__name__}: {e}",
                 exc_info=True,
             )
             return False
@@ -609,16 +593,7 @@ class QueryManager:
                 cursor = conn.cursor()
 
                 # Ensure table exists (necessary for :memory: databases in tests)
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS consolidation_locks (
-                        lock_key TEXT PRIMARY KEY,
-                        locked_by TEXT,
-                        locked_at TEXT,
-                        lock_timeout_seconds INTEGER DEFAULT 300
-                    )
-                """
-                )
+                cursor.execute(_CREATE_LOCKS_TABLE_SQL)
 
                 # Conditional UPDATE: release lock only if we hold it
                 if adapter.is_postgresql():
@@ -628,7 +603,7 @@ class QueryManager:
                         SET locked_by = NULL, locked_at = NULL
                         WHERE lock_key = %s AND locked_by = %s
                         """,
-                        (lock_key, self._instance_id)
+                        (lock_key, self._instance_id),
                     )
                 else:
                     cursor.execute(
@@ -637,7 +612,7 @@ class QueryManager:
                         SET locked_by = NULL, locked_at = NULL
                         WHERE lock_key = ? AND locked_by = ?
                         """,
-                        (lock_key, self._instance_id)
+                        (lock_key, self._instance_id),
                     )
 
                 conn.commit()
@@ -654,8 +629,7 @@ class QueryManager:
 
         except Exception as e:
             logger.error(
-                f"Error releasing {consolidation_type} lock for {period_identifier}: "
-                f"{type(e).__name__}: {e}",
+                f"Error releasing {consolidation_type} lock for {period_identifier}: " f"{type(e).__name__}: {e}",
                 exc_info=True,
             )
 

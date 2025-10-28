@@ -294,6 +294,7 @@ def action_selection(
                                 # First clean up the parameters string by removing escaped newlines
                                 params_str = parts[1].split("\\n")[0].strip()
                                 import shlex
+
                                 try:
                                     # Use shlex to properly handle quoted strings
                                     tokens = shlex.split(params_str)
@@ -527,6 +528,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                         except json.JSONDecodeError:
                             # Try simple key=value parsing with quote handling
                             import shlex
+
                             try:
                                 # Use shlex to properly handle quoted strings
                                 tokens = shlex.split(params_str)

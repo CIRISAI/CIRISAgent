@@ -287,9 +287,7 @@ class RedditTests:
 
         # Trigger deletion via mock LLM command
         message = (
-            f"$tool reddit_delete_content "
-            f'thing_fullname="t3_{self.created_submission_id}" '
-            f'purge_cache=true'
+            f"$tool reddit_delete_content " f'thing_fullname="t3_{self.created_submission_id}" ' f"purge_cache=true"
         )
 
         response = await self.client.agent.interact(message)
@@ -315,11 +313,7 @@ class RedditTests:
         await self._complete_task()
 
         # Trigger observation via mock LLM command
-        message = (
-            "$tool reddit_observe "
-            'channel_reference="reddit:r/ciris" '
-            'limit=5'
-        )
+        message = "$tool reddit_observe " 'channel_reference="reddit:r/ciris" ' "limit=5"
 
         response = await self.client.agent.interact(message)
 
@@ -342,7 +336,7 @@ class RedditTests:
                 message = (
                     f"$tool reddit_delete_content "
                     f'thing_fullname="t3_{self.created_submission_id}" '
-                    f'purge_cache=true'
+                    f"purge_cache=true"
                 )
                 await self.client.agent.interact(message)
                 await asyncio.sleep(1)  # Give it time to process

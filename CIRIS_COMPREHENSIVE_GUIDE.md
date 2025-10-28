@@ -950,6 +950,185 @@ curl https://agents.ciris.ai/v1/transparency/feed
 - **Graceful shutdown**: Agents process as task
 - **Agent autonomy**: Can defer/reject updates
 
+### Reddit Deployment
+
+**Status**: ⚠️ NOT YET IMPLEMENTED - Planning Phase
+
+CIRIS plans to deploy to Reddit community r/ciris with account **u/ciris-scout** for community engagement and support.
+
+#### Prerequisites
+
+Before deploying to Reddit, the following must be completed:
+
+1. **Reddit Adapter Implementation**
+   - Create `ciris_engine/logic/adapters/reddit/` directory structure
+   - Implement Reddit API integration using PRAW (Python Reddit API Wrapper)
+   - Follow existing adapter patterns (Discord, API, CLI)
+
+2. **Reddit API Credentials**
+   ```bash
+   # Required environment variables:
+   REDDIT_CLIENT_ID="your_client_id"
+   REDDIT_CLIENT_SECRET="your_client_secret"
+   REDDIT_USER_AGENT="CIRIS/1.4.9 by u/ciris-scout"
+   REDDIT_USERNAME="ciris-scout"
+   REDDIT_PASSWORD="secure_password"
+   ```
+
+3. **Rate Limit Compliance**
+   - **Maximum**: 60 requests per minute (OAuth2 authenticated)
+   - Implement exponential backoff for rate limit errors
+   - Cache responses where appropriate
+   - Use batch operations when possible
+
+#### Reddit API Terms Compliance
+
+**Critical Requirements:**
+
+1. **Bot Identification** (MANDATORY)
+   - Username must clearly indicate bot nature: **u/ciris-scout**
+   - User-agent must be accurate and identify the bot
+   - Never spoof browsers or other bots
+   - Profile must state "AI moderation assistant" in bio
+
+2. **Authentication**
+   - Must use OAuth2 with registered application
+   - Never share or expose credentials
+   - Rotate secrets regularly
+
+3. **Data Retention Policy**
+   - **ZERO retention of deleted content** - Reddit ToS violation
+   - Even if de-identified or anonymized, deletion = permanent removal
+   - Implement deletion webhook to purge local copies immediately
+
+4. **Transparency Requirements**
+   - Clear disclosure in all interactions that user is speaking with an AI
+   - Link to CIRIS privacy policy and transparency feed
+   - Respond to user data requests (GDPR/CCPA compliance)
+
+5. **Moderator Bot Exemption**
+   - Moderator tools and bots remain free (no API pricing)
+   - If bot needs >60 req/min, contact Reddit via their form
+
+#### Community Guidelines Compliance
+
+**r/ciris Specific Considerations:**
+
+1. **Initial Community Announcement** (REQUIRED before activation)
+   ```markdown
+   # Introducing u/ciris-scout - AI Community Assistant
+
+   Hello r/ciris community!
+
+   We're introducing u/ciris-scout, an AI-powered community assistant designed to:
+   - Answer questions about CIRIS
+   - Provide technical support
+   - Share updates and announcements
+   - Foster healthy community discussion
+
+   **This is an AI bot** - All interactions are with an AI system, not a human.
+
+   **Privacy & Transparency:**
+   - Privacy Policy: https://agents.ciris.ai/privacy
+   - Transparency Feed: https://agents.ciris.ai/v1/transparency/feed
+   - Data Requests: https://agents.ciris.ai/v1/dsr
+
+   **Community Control:**
+   - You can opt-out by messaging the mods
+   - We respect all user preferences
+   - Moderators have full control over bot activity
+
+   Questions? Ask below or message the moderation team.
+   ```
+
+2. **Bot Disclosure in Every Interaction**
+   - Auto-footer on all responses: `---\n*This is an AI assistant. [Learn more about CIRIS](https://agents.ciris.ai)*`
+   - Never attempt to pass as human
+   - Immediately clarify if user seems confused about AI nature
+
+3. **Content Moderation Policy**
+   - **Never remove or edit user content** without explicit moderator directive
+   - Report policy violations to human moderators
+   - Provide explanations for any actions taken
+   - Defer controversial decisions to human oversight (Wise Authority)
+
+4. **Human Escalation Protocol**
+   - Complex ethical questions → Wise Authority deferral
+   - Conflict/harassment → Human moderator notification
+   - Medical/legal advice → Explicit disclaimer + human referral
+   - Uncertain situations → Conservative response + mod alert
+
+#### Anti-Bot Verification Compliance
+
+**Recent Reddit Policy (2025):**
+
+Reddit announced plans to "tighten verification to keep out human-like AI bots" after incidents of undisclosed AI bots impersonating humans.
+
+**Our Approach:**
+1. **Never attempt to pass Turing tests** - We are transparent about AI nature
+2. **Cooperate with verification systems** - Implement any required verification APIs
+3. **Proactive disclosure** - Bot status in username, profile, and all interactions
+4. **Community-first approach** - Prioritize genuine engagement over growth metrics
+
+#### Deployment Checklist
+
+Before activating u/ciris-scout on r/ciris:
+
+- [ ] Reddit adapter implementation complete and tested
+- [ ] API credentials obtained and secured
+- [ ] Rate limiting implemented (60 req/min max)
+- [ ] Data retention policy updated (ZERO deleted content retention)
+- [ ] Community announcement drafted and approved by Wise Authority
+- [ ] Bot profile clearly states AI nature
+- [ ] User-agent accurately identifies CIRIS
+- [ ] Transparency disclosure in all responses
+- [ ] Human escalation protocol tested
+- [ ] GDPR/CCPA data request handling implemented
+- [ ] r/ciris moderators briefed and approve deployment
+- [ ] Monitoring dashboard configured
+- [ ] Emergency shutdown procedure documented
+
+#### Monitoring & Compliance
+
+**Continuous Monitoring:**
+- Track API rate limits (stay well below 60/min)
+- Monitor community sentiment (feedback analysis)
+- Audit bot responses for disclosure compliance
+- Check for unauthorized data retention
+- Review escalation patterns to Wise Authority
+
+**Monthly Review:**
+- Community feedback summary
+- Compliance audit report
+- Rate limit analysis
+- Human escalation statistics
+- Recommendations for improvement
+
+#### Emergency Procedures
+
+**Immediate Shutdown Triggers:**
+- Reddit API ToS violation detected
+- Community backlash >threshold
+- Data retention policy breach
+- Unauthorized impersonation behavior
+- Wise Authority directive
+
+**Shutdown Process:**
+1. Disable bot immediately via runtime control API
+2. Post community notification explaining reason
+3. Conduct incident review with Wise Authority
+4. Implement corrective measures
+5. Seek community approval before reactivation
+
+#### Future Enhancements
+
+**Planned Features:**
+- Flair-based response customization
+- Community sentiment analysis
+- Automated FAQ responses
+- Integration with r/ciris wiki
+- Cross-post notification system
+
 ---
 
 ## Scout GUI - User Interface

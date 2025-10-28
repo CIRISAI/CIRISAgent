@@ -345,7 +345,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM tasks WHERE status = ?", (TaskStatus.ACTIVE.value,))
                 rows = cursor.fetchall()
-                from ciris_engine.logic.persistence.models.tasks import map_row_to_task
+                from ciris_engine.logic.persistence.utils import map_row_to_task
 
                 for row in rows:
                     active_tasks.append(map_row_to_task(row))

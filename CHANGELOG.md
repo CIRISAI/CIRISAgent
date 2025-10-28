@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed `_cleanup_old_active_tasks()` to query ALL occurrences
   - Added 7 TDD tests for multi-occurrence cleanup scenarios (100% pass rate)
   - **Files**: `ciris_engine/logic/services/infrastructure/database_maintenance/service.py`, `tests/fixtures/database_maintenance.py`, `tests/test_services/test_database_maintenance_multi_occurrence.py`
+- **P1: Shutdown Failure Diagnostics Ignore Transferred Thoughts** - Fixed `_check_failure_reason()` to query claiming occurrence
+  - **Problem**: Queried `task.agent_occurrence_id` ("__shared__") instead of claiming occurrence for thoughts
+  - **Impact**: Rejection reasons never surfaced to operators, always returned generic "Shutdown task failed"
+  - **Solution**: Changed to query `self.agent_occurrence_id` where thoughts are transferred after claiming
+  - Enables proper diagnostics of shutdown rejections with specific reasons from REJECT thoughts
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:438-440`
 - **P2: Multi-Occurrence QA Test Expectations** - Fixed test to properly validate coordination without false positives
   - Filter wakeup tasks by today's date to exclude historical completed tasks
   - Filter thoughts to only consider test occurrence_ids, not leftover data from previous runs

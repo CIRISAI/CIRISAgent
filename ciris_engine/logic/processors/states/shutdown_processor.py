@@ -435,7 +435,9 @@ class ShutdownProcessor(BaseProcessor):
 
     def _check_failure_reason(self, task: Task) -> ShutdownResult:
         """Check why the task failed - could be REJECT or actual error."""
-        thoughts = persistence.get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id)
+        # CRITICAL: For shared tasks, thoughts are transferred to claiming occurrence
+        # Use self.agent_occurrence_id, not task.agent_occurrence_id (which is "__shared__")
+        thoughts = persistence.get_thoughts_by_task_id(task.task_id, self.agent_occurrence_id)
         if not thoughts:
             return ShutdownResult(
                 status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0

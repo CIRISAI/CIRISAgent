@@ -256,3 +256,80 @@ class TestObserverAutoPurge:
 
         # Verify comment type detected
         assert was_deleted is True
+
+
+class TestObserverAlreadyHandled:
+    """Test Reddit observer _already_handled for correlation tracking."""
+
+    @pytest.fixture
+    def mock_observer_with_occurrence(self, reddit_credentials, mock_reddit_api_client, mock_time_service):
+        """Create mock observer with specific occurrence_id."""
+        with patch("ciris_modular_services.reddit.observer.RedditAPIClient", return_value=mock_reddit_api_client):
+            observer = RedditObserver(
+                credentials=reddit_credentials,
+                subreddit="test",
+                poll_interval=15.0,
+                time_service=mock_time_service,
+                agent_id="test_agent",
+            )
+            observer._api_client = mock_reddit_api_client
+            observer.agent_occurrence_id = "test_occurrence"
+            return observer
+
+    @pytest.mark.asyncio
+    async def test_already_handled_task_exists(self, mock_observer_with_occurrence):
+        """Test _already_handled returns True when task exists with correlation_id."""
+        reddit_item_id = "reddit_post_abc123"
+
+        # Mock get_task_by_correlation_id to return a task
+        with patch("ciris_engine.logic.persistence.models.tasks.get_task_by_correlation_id") as mock_get_task:
+            from ciris_engine.schemas.runtime.enums import TaskStatus
+            from ciris_engine.schemas.runtime.models import Task
+
+            mock_task = Task(
+                task_id="task_123",
+                channel_id="reddit:r/test",
+                agent_occurrence_id="test_occurrence",
+                description="Test task",
+                status=TaskStatus.COMPLETED,
+                priority=0,
+                created_at="2025-01-01T00:00:00Z",
+                updated_at="2025-01-01T00:00:00Z",
+            )
+            mock_get_task.return_value = mock_task
+
+            # Check if already handled
+            result = await mock_observer_with_occurrence._already_handled(reddit_item_id)
+
+            assert result is True
+            mock_get_task.assert_called_once_with(reddit_item_id, "test_occurrence")
+
+    @pytest.mark.asyncio
+    async def test_already_handled_task_not_exists(self, mock_observer_with_occurrence):
+        """Test _already_handled returns False when no task exists."""
+        reddit_item_id = "reddit_post_xyz789"
+
+        # Mock get_task_by_correlation_id to return None
+        with patch("ciris_engine.logic.persistence.models.tasks.get_task_by_correlation_id") as mock_get_task:
+            mock_get_task.return_value = None
+
+            # Check if already handled
+            result = await mock_observer_with_occurrence._already_handled(reddit_item_id)
+
+            assert result is False
+            mock_get_task.assert_called_once_with(reddit_item_id, "test_occurrence")
+
+    @pytest.mark.asyncio
+    async def test_already_handled_database_error_fails_open(self, mock_observer_with_occurrence):
+        """Test _already_handled fails open (returns False) on database error."""
+        reddit_item_id = "reddit_post_error123"
+
+        # Mock get_task_by_correlation_id to raise an exception
+        with patch("ciris_engine.logic.persistence.models.tasks.get_task_by_correlation_id") as mock_get_task:
+            mock_get_task.side_effect = RuntimeError("Database connection failed")
+
+            # Check if already handled - should fail open and return False
+            result = await mock_observer_with_occurrence._already_handled(reddit_item_id)
+
+            assert result is False  # Fail open - better to re-process than miss content
+            mock_get_task.assert_called_once_with(reddit_item_id, "test_occurrence")

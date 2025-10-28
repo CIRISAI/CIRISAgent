@@ -38,6 +38,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         archive_dir_path: str = "data_archive",
         archive_older_than_hours: int = 24,
         config_service: Optional[Any] = None,
+        db_path: Optional[str] = None,
     ) -> None:
         # Initialize BaseScheduledService with hourly maintenance interval
         super().__init__(time_service=time_service, run_interval_seconds=3600)  # Run every hour
@@ -45,6 +46,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self.archive_dir = Path(archive_dir_path)
         self.archive_older_than_hours = archive_older_than_hours
         self.config_service = config_service
+        self.db_path = db_path
 
         # Tracking variables for metrics
         self._cleanup_runs = 0
@@ -121,7 +123,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
 
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self.db_path)
         task_ids_to_delete: List[Any] = []
 
         for task in active_tasks:
@@ -133,7 +135,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             if task.task_id.startswith("shutdown_") and task.parent_task_id is None:
                 pass  # Shutdown tasks are valid root tasks
             elif task.parent_task_id:
-                parent_task = get_task_by_id(task.parent_task_id)
+                # CRITICAL: Pass task's own occurrence_id to find parent in same namespace
+                # This prevents shared tasks from being marked as orphans in multi-occurrence setups
+                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id, db_path=self.db_path)
                 if not parent_task or parent_task.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
                     is_orphan = True
             elif task.parent_task_id is None:
@@ -147,18 +151,19 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 task_ids_to_delete.append(task.task_id)
 
         if task_ids_to_delete:
-            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete)
+            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete, db_path=self.db_path)
             logger.info(
                 f"Deleted {orphaned_tasks_deleted_count} orphaned active tasks (and their thoughts via cascade)."
             )
 
-        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
-        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING)
+        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self.db_path)
+        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING, db_path=self.db_path)
         all_potentially_orphaned_thoughts = pending_thoughts + processing_thoughts
         thought_ids_to_delete_orphan: List[Any] = []
 
         for thought in all_potentially_orphaned_thoughts:
-            source_task = get_task_by_id(thought.source_task_id)
+            # CRITICAL: Pass thought's own occurrence_id to find task in same namespace
+            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id, db_path=self.db_path)
             if not source_task or source_task.status != TaskStatus.ACTIVE:
                 logger.info(
                     f"Orphaned thought found: {thought.thought_id} (Task: {thought.source_task_id} not found or not active). Marking for deletion."
@@ -167,7 +172,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         if thought_ids_to_delete_orphan:
             unique_thought_ids_to_delete = list(set(thought_ids_to_delete_orphan))
-            count = delete_thoughts_by_ids(unique_thought_ids_to_delete)
+            count = delete_thoughts_by_ids(unique_thought_ids_to_delete, db_path=self.db_path)
             orphaned_thoughts_deleted_count += count
             logger.info(f"Deleted {count} additional orphaned active/processing thoughts.")
 
@@ -191,7 +196,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Task archival skipped - tasks are now managed by TSDB consolidator")
         task_ids_actually_archived_and_deleted: set[str] = set()
 
-        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp)
+        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp, db_path=self.db_path)
         if thoughts_to_archive:
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
@@ -203,7 +208,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     thought_ids_to_delete_for_archive.append(thought.thought_id)
 
             if thought_ids_to_delete_for_archive:
-                archived_thoughts_count = delete_thoughts_by_ids(thought_ids_to_delete_for_archive)
+                archived_thoughts_count = delete_thoughts_by_ids(
+                    thought_ids_to_delete_for_archive, db_path=self.db_path
+                )
                 logger.info(
                     f"Archived and deleted {archived_thoughts_count} thoughts older than {self.archive_older_than_hours} hours to {thought_archive_file}."
                 )
@@ -250,7 +257,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         invalid_thought_ids = []
 
         try:
-            with get_db_connection() as conn:
+            with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(sql)
                 rows = cursor.fetchall()
@@ -329,8 +336,20 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get current time
             current_time = self.time_service.now()
 
-            # Get all active tasks
-            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
+            # Get all active tasks from all occurrences by querying the database directly
+            # We need to check ALL occurrences for old active tasks
+            from ciris_engine.logic.persistence import get_db_connection
+
+            active_tasks = []
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM tasks WHERE status = ?", (TaskStatus.ACTIVE.value,))
+                rows = cursor.fetchall()
+                from ciris_engine.logic.persistence.utils import map_row_to_task
+
+                for row in rows:
+                    active_tasks.append(map_row_to_task(row))
+
             old_task_ids = []
 
             for task in active_tasks:
@@ -369,8 +388,16 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             # Mark old tasks as completed
             if old_task_ids:
-                for task_id in old_task_ids:
-                    update_task_status(task_id, TaskStatus.COMPLETED, "default", self.time_service)
+                for task in active_tasks:
+                    if task.task_id in old_task_ids:
+                        # CRITICAL: Use task's own occurrence_id, not hardcoded "default"
+                        update_task_status(
+                            task.task_id,
+                            TaskStatus.COMPLETED,
+                            task.agent_occurrence_id,
+                            self.time_service,
+                            db_path=self.db_path,
+                        )
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
             else:
                 logger.info("No old active tasks found")
@@ -386,8 +413,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get current time for comparison
             current_time = self.time_service.now()
 
-            # Get all wakeup and shutdown related tasks
-            all_tasks = get_all_tasks()
+            # Get all wakeup and shutdown related tasks from __shared__ occurrence
+            # Wakeup tasks are always in the shared namespace
+            all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
             stale_tasks = []
             for task in all_tasks:
                 if not hasattr(task, "task_id"):
@@ -423,7 +451,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
                 if is_old_task:
                     # For old tasks, clean up any pending/processing thoughts
-                    thoughts = get_thoughts_by_task_id(task.task_id)
+                    # CRITICAL: Pass task's occurrence_id to fetch thoughts in same namespace
+                    thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
                     for thought in thoughts:
                         if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
                             logger.info(
@@ -438,12 +467,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             # Delete stale thoughts first
             if stale_thought_ids:
-                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids)
+                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
             # Then delete stale active tasks (only ACTIVE ones from interrupted startups)
             if stale_task_ids:
-                deleted_tasks = delete_tasks_by_ids(stale_task_ids)
+                deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
                 logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")
 
             if not stale_task_ids and not stale_thought_ids:

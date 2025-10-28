@@ -8,7 +8,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, TypedDict
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
@@ -23,8 +23,19 @@ from ciris_engine.schemas.services.graph.consolidation import (
 from ciris_engine.schemas.services.graph.query_results import ServiceCorrelationQueryResult, TSDBNodeQueryResult
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+class ThoughtQueryResult(TypedDict):
+    """Type for thought query results."""
+
+    thought_id: str
+    thought_type: str
+    status: str
+    created_at: str
+    final_action: Optional[JSONDict]
 
 
 class QueryManager:
@@ -43,7 +54,7 @@ class QueryManager:
 
     def _query_thoughts_for_tasks(
         self, cursor: Any, adapter: Any, task_ids: List[str]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> Dict[str, List[ThoughtQueryResult]]:
         """Query thoughts for a list of task IDs.
 
         Args:
@@ -52,7 +63,7 @@ class QueryManager:
             task_ids: List of task IDs to query
 
         Returns:
-            Dict mapping task_id to list of thought dictionaries
+            Dict mapping task_id to list of thought query results
         """
         placeholders = ",".join([adapter.placeholder()] * len(task_ids))
         cursor.execute(
@@ -83,7 +94,7 @@ class QueryManager:
                 }
             )
 
-        return thoughts_by_task
+        return dict(thoughts_by_task)
 
     def query_all_nodes_in_period(self, period_start: datetime, period_end: datetime) -> Dict[str, TSDBNodeQueryResult]:
         """

@@ -6,7 +6,7 @@ Provides typed schemas in service loading and module manifests.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -85,7 +85,7 @@ class ConfigurationParameter(BaseModel):
     """Configuration parameter definition."""
 
     type: str = Field(..., description="Parameter type (integer, float, string, boolean)")
-    default: Optional[Any] = Field(None, description="Default value (optional)")
+    default: Optional[Union[int, float, str, bool]] = Field(None, description="Default value (optional)")
     description: str = Field(..., description="Parameter description")
     env: Optional[str] = Field(None, description="Environment variable name")
     sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
@@ -102,7 +102,9 @@ class ServiceManifest(BaseModel):
     capabilities: List[str] = Field(default_factory=list, description="Global capabilities list")
     dependencies: Optional[LegacyDependencies] = Field(None, description="Legacy dependencies format")
     configuration: Optional[Dict[str, ConfigurationParameter]] = Field(None, description="Configuration parameters")
-    exports: Optional[Dict[str, Any]] = Field(None, description="Exported components (string or list)")
+    exports: Optional[Dict[str, Union[str, List[str]]]] = Field(
+        None, description="Exported components (string or list)"
+    )
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
     prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")

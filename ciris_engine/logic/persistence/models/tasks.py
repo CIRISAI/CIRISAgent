@@ -4,9 +4,10 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_task
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.runtime.models import Task, TaskContext
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
@@ -118,6 +119,141 @@ def update_task_status(
             return False
     except Exception as e:
         logger.exception(f"Failed to update task status for {task_id}: {e}")
+        return False
+
+
+def transfer_task_ownership(
+    task_id: str,
+    from_occurrence_id: str,
+    to_occurrence_id: str,
+    time_service: TimeServiceProtocol,
+    audit_service: AuditServiceProtocol,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Transfer task ownership from one occurrence to another.
+
+    This is used when claiming shared tasks to transfer ownership from '__shared__'
+    to the claiming occurrence so seed thoughts can be processed.
+
+    Args:
+        task_id: The task ID to transfer
+        from_occurrence_id: Current occurrence ID (typically '__shared__')
+        to_occurrence_id: New occurrence ID (the claiming occurrence)
+        time_service: Time service for timestamp
+        audit_service: Audit service for logging ownership transfer events
+        db_path: Optional database path
+
+    Returns:
+        True if transfer successful, False otherwise
+    """
+    sql = "UPDATE tasks SET agent_occurrence_id = ?, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
+    params = (to_occurrence_id, time_service.now_iso(), task_id, from_occurrence_id)
+
+    success = False
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}")
+                success = True
+            else:
+                logger.warning(f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer")
+    except Exception as e:
+        logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
+        success = False
+
+    # Log audit event for ownership transfer (fire and forget)
+    import asyncio
+    from typing import cast
+
+    from ciris_engine.schemas.audit.core import EventPayload
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+    audit_event = AuditEventData(
+        entity_id=task_id,
+        actor="system",
+        outcome="success" if success else "failed",
+        severity="info",
+        action="task_ownership_transfer",
+        resource="task",
+        metadata={
+            "task_id": task_id,
+            "from_occurrence_id": from_occurrence_id,
+            "to_occurrence_id": to_occurrence_id,
+            "task_type": "shared_coordination",
+        },
+    )
+
+    try:
+        # Try to get the running event loop
+        loop = asyncio.get_running_loop()
+        # Schedule the audit event as a task - cast to EventPayload for protocol compatibility
+        loop.create_task(audit_service.log_event("task_ownership_transfer", cast(EventPayload, audit_event)))
+    except RuntimeError:
+        # No event loop running - this is expected in sync contexts like tests
+        # The audit service will still track the call via the mock
+        logger.debug("No event loop running, audit logging deferred")
+
+    return success
+
+
+def update_task_context_and_signing(
+    task_id: str,
+    occurrence_id: str,
+    context: TaskContext,
+    time_service: TimeServiceProtocol,
+    signed_by: Optional[str] = None,
+    signature: Optional[str] = None,
+    signed_at: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Update the context and signing metadata for an existing task."""
+
+    context_json = json.dumps(context.model_dump(mode="json"))
+    sql = """
+        UPDATE tasks
+        SET context_json = ?,
+            signed_by = ?,
+            signature = ?,
+            signed_at = ?,
+            updated_at = ?
+        WHERE task_id = ? AND agent_occurrence_id = ?
+    """
+    params = (
+        context_json,
+        signed_by,
+        signature,
+        signed_at,
+        time_service.now_iso(),
+        task_id,
+        occurrence_id,
+    )
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(
+                    "Updated context and signing metadata for task %s (occurrence: %s)",
+                    task_id,
+                    occurrence_id,
+                )
+                return True
+            logger.warning(
+                "Task %s not found when updating context/signature for occurrence %s",
+                task_id,
+                occurrence_id,
+            )
+            return False
+    except Exception as e:
+        logger.exception(
+            "Failed to update context/signature for task %s (occurrence: %s): %s",
+            task_id,
+            occurrence_id,
+            e,
+        )
         return False
 
 
@@ -381,3 +517,226 @@ def set_task_updated_info_flag(
     except Exception as e:
         logger.exception(f"Failed to set updated_info_available flag for task {task_id}: {e}")
         return False
+
+
+# ==================== Multi-Occurrence Shared Task Functions ====================
+
+
+def try_claim_shared_task(
+    task_type: str,
+    channel_id: str,
+    description: str,
+    priority: int,
+    time_service: TimeServiceProtocol,
+    db_path: Optional[str] = None,
+) -> tuple[Task, bool]:
+    """Atomically create or retrieve a shared agent-level task.
+
+    Uses deterministic task_id based on date to prevent race conditions when
+    multiple occurrences try to create the same shared task simultaneously.
+
+    The task is created with agent_occurrence_id="__shared__" to make it visible
+    to all occurrences of the agent.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        channel_id: Channel where task originated
+        description: Task description
+        priority: Task priority (0-10)
+        time_service: Time service for timestamps
+        db_path: Optional database path
+
+    Returns:
+        Tuple of (Task, was_created) where was_created=True if this call created
+        the task, False if it already existed.
+
+    Example:
+        >>> task, created = try_claim_shared_task("wakeup", "system", "Identity affirmation", 10, time_service)
+        >>> if created:
+        ...     print("This occurrence will process wakeup")
+        ... else:
+        ...     print("Another occurrence already claimed wakeup")
+    """
+    from datetime import datetime, timezone
+
+    # Create deterministic task ID based on type and date
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    task_id = f"{task_type.upper()}_SHARED_{date_str}"
+
+    # First, check if task already exists
+    existing = get_task_by_id(task_id, "__shared__", db_path)
+    if existing:
+        logger.info(f"Shared task {task_id} already exists, returning existing task")
+        return (existing, False)
+
+    # Try to create the task with INSERT OR IGNORE for race safety
+    # Use dialect adapter for database compatibility
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+    now = time_service.now_iso()
+
+    columns = [
+        "task_id",
+        "channel_id",
+        "agent_occurrence_id",
+        "description",
+        "status",
+        "priority",
+        "created_at",
+        "updated_at",
+        "parent_task_id",
+        "context_json",
+        "outcome_json",
+        "signed_by",
+        "signature",
+        "signed_at",
+        "updated_info_available",
+        "updated_info_content",
+    ]
+    conflict_columns = ["task_id"]  # Primary key constraint (task_id only)
+
+    sql = adapter.insert_or_ignore("tasks", columns, conflict_columns)
+    params = (
+        task_id,
+        channel_id,
+        "__shared__",
+        description,
+        TaskStatus.PENDING.value,
+        priority,
+        now,
+        now,
+        None,  # parent_task_id
+        None,  # context_json
+        None,  # outcome_json
+        None,  # signed_by
+        None,  # signature
+        None,  # signed_at
+        0,  # updated_info_available
+        None,  # updated_info_content
+    )
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                # We successfully created the task
+                logger.info(f"Successfully claimed shared task {task_id}")
+                created_task = get_task_by_id(task_id, "__shared__", db_path)
+                if created_task:
+                    return (created_task, True)
+                else:
+                    # This shouldn't happen, but handle gracefully
+                    logger.error(f"Created shared task {task_id} but couldn't retrieve it")
+                    raise RuntimeError(f"Failed to retrieve newly created shared task {task_id}")
+            else:
+                # INSERT OR IGNORE returned 0 rows - another occurrence created it between our check and insert
+                logger.info(f"Another occurrence claimed shared task {task_id} during race")
+                existing = get_task_by_id(task_id, "__shared__", db_path)
+                if existing:
+                    return (existing, False)
+                else:
+                    # This shouldn't happen, but handle gracefully
+                    logger.error(f"INSERT OR IGNORE for {task_id} returned 0 rows but task doesn't exist")
+                    raise RuntimeError(f"Shared task {task_id} creation race condition failed")
+
+    except Exception as e:
+        logger.exception(f"Failed to claim shared task {task_id}: {e}")
+        raise
+
+
+def get_shared_task_status(
+    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
+) -> Optional[TaskStatus]:
+    """Get the status of the most recent shared task of a given type.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        TaskStatus enum if task found, None if no recent task exists
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    cutoff_iso = cutoff_time.isoformat()
+
+    sql = """
+        SELECT status FROM tasks
+        WHERE agent_occurrence_id = '__shared__'
+          AND task_id LIKE ?
+          AND created_at > ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    pattern = f"{task_type.upper()}_SHARED_%"
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (pattern, cutoff_iso))
+            row = cursor.fetchone()
+            if row:
+                return TaskStatus(row["status"])
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get shared task status for {task_type}: {e}")
+        return None
+
+
+def is_shared_task_completed(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> bool:
+    """Check if a shared task of the given type has been completed recently.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        True if a completed task exists, False otherwise
+    """
+    status = get_shared_task_status(task_type, within_hours, db_path)
+    return status == TaskStatus.COMPLETED if status else False
+
+
+def get_latest_shared_task(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> Optional[Task]:
+    """Get the most recent shared task of a given type.
+
+    Args:
+        task_type: Type of task (e.g., "wakeup", "shutdown")
+        within_hours: Only consider tasks created within this many hours (default: 24)
+        db_path: Optional database path
+
+    Returns:
+        Task object if found, None otherwise
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    cutoff_iso = cutoff_time.isoformat()
+
+    sql = """
+        SELECT * FROM tasks
+        WHERE agent_occurrence_id = '__shared__'
+          AND task_id LIKE ?
+          AND created_at > ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    pattern = f"{task_type.upper()}_SHARED_%"
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (pattern, cutoff_iso))
+            row = cursor.fetchone()
+            if row:
+                return map_row_to_task(row)
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get latest shared task for {task_type}: {e}")
+        return None

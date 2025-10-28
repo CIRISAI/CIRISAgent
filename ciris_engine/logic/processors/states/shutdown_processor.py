@@ -57,6 +57,7 @@ class ShutdownProcessor(BaseProcessor):
         self.shutdown_task: Optional[Task] = None
         self.shutdown_complete = False
         self.shutdown_result: Optional[ShutdownResult] = None
+        self.is_claiming_occurrence = False  # Flag to track if this occurrence claimed the shared task
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -102,7 +103,7 @@ class ShutdownProcessor(BaseProcessor):
             logger.error("Shutdown task is None after creation")
             return None
 
-        current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+        current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id)
         if not current_task:
             logger.error("Shutdown task disappeared!")
             return None
@@ -115,15 +116,42 @@ class ShutdownProcessor(BaseProcessor):
 
         # If task is pending, activate it
         if current_task.status == TaskStatus.PENDING:
-            persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
+            persistence.update_task_status(
+                self.shutdown_task.task_id, TaskStatus.ACTIVE, self.shutdown_task.agent_occurrence_id, self.time_service
+            )
             logger.info("Activated shutdown task")
 
         # Generate seed thought if needed
         if current_task.status == TaskStatus.ACTIVE:
-            existing_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+            # Check for existing thoughts in BOTH __shared__ (before transfer) and local occurrence (after transfer)
+            # This handles both initial state and post-transfer state
+            shared_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, "__shared__")
+            local_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            existing_thoughts = shared_thoughts + local_thoughts
+
             if not existing_thoughts:
                 generated = self.thought_manager.generate_seed_thoughts([current_task], round_number)
                 logger.info(f"Generated {generated} seed thoughts for shutdown task")
+
+                # Transfer seed thought ownership from __shared__ to this occurrence
+                # CRITICAL: Thoughts created for shared tasks inherit __shared__ occurrence
+                # They must be transferred to the claiming occurrence to be processable
+                if generated > 0:
+                    from ciris_engine.logic.persistence.models.thoughts import transfer_thought_ownership
+
+                    # Get the newly created thoughts
+                    new_thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, "__shared__")
+                    for thought in new_thoughts:
+                        transfer_thought_ownership(
+                            thought_id=thought.thought_id,
+                            from_occurrence_id="__shared__",
+                            to_occurrence_id=self.agent_occurrence_id,
+                            time_service=self.time_service,
+                            audit_service=self.audit_service,
+                        )
+                    logger.info(
+                        f"Transferred {len(new_thoughts)} seed thought(s) from __shared__ to {self.agent_occurrence_id}"
+                    )
 
     async def _handle_task_completion(self, current_task: Task) -> Optional[ShutdownResult]:
         """Handle completed or failed task status. Returns result if terminal, None if still processing."""
@@ -181,7 +209,9 @@ class ShutdownProcessor(BaseProcessor):
 
             # Re-fetch task to check updated status
             assert self.shutdown_task is not None  # Already validated above
-            current_task = persistence.get_task_by_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            current_task = persistence.get_task_by_id(
+                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+            )
             if not current_task:
                 logger.error("Current task is None after fetching")
                 return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
@@ -192,7 +222,9 @@ class ShutdownProcessor(BaseProcessor):
                 return result
 
             # Still processing - return status
-            thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+            thoughts = persistence.get_thoughts_by_task_id(
+                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+            )
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
             return ShutdownResult(
@@ -208,8 +240,17 @@ class ShutdownProcessor(BaseProcessor):
             return ShutdownResult(status="error", message=str(e), errors=1, duration_seconds=0.0)
 
     async def _create_shutdown_task(self) -> None:
-        """Create the shutdown task."""
-        from ciris_engine.logic.persistence.models.tasks import add_system_task
+        """Create the shutdown task with multi-occurrence coordination.
+
+        Checks if another occurrence already decided on shutdown. If so, uses
+        that decision. Otherwise, tries to claim the shared shutdown task.
+        """
+        from ciris_engine.logic.persistence.models.tasks import (
+            get_latest_shared_task,
+            is_shared_task_completed,
+            try_claim_shared_task,
+            update_task_context_and_signing,
+        )
 
         shutdown_manager = get_shutdown_manager()
         reason = shutdown_manager.get_shutdown_reason() or "Graceful shutdown requested"
@@ -242,10 +283,19 @@ class ShutdownProcessor(BaseProcessor):
             else:
                 logger.warning("Emergency shutdown requested without requester ID")
 
-        now_iso = self._time_service.now().isoformat()
+        # Check if shutdown already decided by another occurrence
+        if is_shared_task_completed("shutdown", within_hours=1):
+            # Another occurrence already completed shutdown decision
+            existing_task = get_latest_shared_task("shutdown", within_hours=1)
+            if existing_task:
+                logger.info(
+                    f"Shutdown already decided by another occurrence (task {existing_task.task_id}). "
+                    "Using that decision for this occurrence."
+                )
+                self.shutdown_task = existing_task
+                return
 
-        # Create task context with shutdown details and proper channel context
-        # Get channel ID from runtime if available
+        # Get channel ID from runtime or communication bus
         channel_id = None
         if self.runtime and hasattr(self.runtime, "startup_channel_id"):
             channel_id = self.runtime.startup_channel_id
@@ -273,13 +323,17 @@ class ShutdownProcessor(BaseProcessor):
                 channel_id = ""
                 logger.warning("No channel ID available for shutdown task, using empty string for adapter routing")
 
-        # Create proper TaskContext for the shutdown task
-        context = TaskContext(
-            channel_id=channel_id,
-            user_id="system",
-            correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
-            parent_task_id=None,
+        # Build shutdown description with multi-occurrence context
+        base_description = f"{'EMERGENCY' if is_emergency else 'System'} shutdown requested: {reason}"
+
+        multi_occurrence_note = (
+            "\n\nMULTI-OCCURRENCE CONTEXT:\n"
+            "You are processing this shutdown request on behalf of ALL runtime occurrences of this agent. "
+            "Your decision (accept or reject) will apply to the entire agent system. "
+            "All occurrences will follow this decision, ensuring unified agent response."
         )
+
+        description = base_description + multi_occurrence_note
 
         # Store shutdown context in runtime for system snapshot
         if self.runtime:
@@ -292,20 +346,73 @@ class ShutdownProcessor(BaseProcessor):
                 agreement_context=None,
             )
 
-        self.shutdown_task = Task(
-            task_id=f"shutdown_{uuid.uuid4().hex[:8]}",
+        # Try to claim the shared shutdown task
+        claimed_task, was_created = try_claim_shared_task(
+            task_type="shutdown",
             channel_id=channel_id,
-            description=f"{'EMERGENCY' if is_emergency else 'System'} shutdown requested: {reason}",
-            priority=10,  # Maximum priority (was 100, but max is 10)
-            status=TaskStatus.ACTIVE,  # Set as ACTIVE to prevent orphan deletion
-            created_at=now_iso,
-            updated_at=now_iso,
-            context=context,
-            parent_task_id=None,  # Root-level task
+            description=description,
+            priority=10,  # Maximum priority
+            time_service=self._time_service,
         )
 
-        await add_system_task(self.shutdown_task, auth_service=self.auth_service)
-        logger.info(f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id}")
+        if not was_created:
+            # Another occurrence claimed it
+            logger.info(
+                f"Another occurrence claimed shutdown task {claimed_task.task_id}. "
+                "This occurrence will monitor the decision."
+            )
+            self.shutdown_task = claimed_task
+            self.is_claiming_occurrence = False  # This is a monitoring occurrence
+            return
+
+        logger.info(
+            f"This occurrence claimed shared shutdown task {claimed_task.task_id}. "
+            "Making decision on behalf of all occurrences."
+        )
+        self.is_claiming_occurrence = True  # This is the claiming occurrence
+
+        # We claimed it - attach context, sign, and activate
+        self.shutdown_task = claimed_task
+        shutdown_context = TaskContext(
+            channel_id=channel_id,
+            user_id="system",
+            correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
+            parent_task_id=None,
+            agent_occurrence_id=self.agent_occurrence_id,
+        )
+        claimed_task.context = shutdown_context
+
+        if self.auth_service:
+            try:
+                system_wa_id = await self.auth_service.get_system_wa_id()
+                if system_wa_id:
+                    signature, signed_at = await self.auth_service.sign_task(claimed_task, system_wa_id)
+                    claimed_task.signed_by = system_wa_id
+                    claimed_task.signature = signature
+                    claimed_task.signed_at = signed_at
+                else:
+                    logger.warning("No system WA available to sign shared shutdown task")
+            except Exception as signing_error:
+                logger.error(f"Failed to sign shared shutdown task: {signing_error}")
+
+        # CRITICAL: Keep task in "__shared__" namespace for multi-occurrence coordination
+        # All occurrences need to be able to query this task to monitor the decision
+        update_task_context_and_signing(
+            task_id=claimed_task.task_id,
+            occurrence_id="__shared__",  # Keep in __shared__ for coordination
+            context=shutdown_context,
+            time_service=self._time_service,
+            signed_by=claimed_task.signed_by,
+            signature=claimed_task.signature,
+            signed_at=claimed_task.signed_at,
+        )
+
+        # Update task status in __shared__ namespace
+        persistence.update_task_status(self.shutdown_task.task_id, TaskStatus.ACTIVE, "__shared__", self._time_service)
+        logger.info(
+            f"Created {'emergency' if is_emergency else 'normal'} shutdown task: {self.shutdown_task.task_id} "
+            f"(claimed by {self.agent_occurrence_id})"
+        )
 
     def _extract_rejection_reason(self, action: Any) -> str:
         """Extract rejection reason from action parameters."""
@@ -328,7 +435,9 @@ class ShutdownProcessor(BaseProcessor):
 
     def _check_failure_reason(self, task: Task) -> ShutdownResult:
         """Check why the task failed - could be REJECT or actual error."""
-        thoughts = persistence.get_thoughts_by_task_id(task.task_id)
+        # CRITICAL: For shared tasks, thoughts are transferred to claiming occurrence
+        # Use self.agent_occurrence_id, not task.agent_occurrence_id (which is "__shared__")
+        thoughts = persistence.get_thoughts_by_task_id(task.task_id, self.agent_occurrence_id)
         if not thoughts:
             return ShutdownResult(
                 status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
@@ -360,8 +469,16 @@ class ShutdownProcessor(BaseProcessor):
         if not self.shutdown_task:
             return
 
+        # CRITICAL: Only the claiming occurrence should process thoughts
+        # Monitoring occurrences should only watch task status
+        if not self.is_claiming_occurrence:
+            logger.debug("Monitoring occurrence - skipping thought processing")
+            return
+
         # Get pending thoughts for our shutdown task
-        thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id)
+        # CRITICAL: After transfer_thought_ownership(), thoughts are in the claiming occurrence
+        # Query using self.agent_occurrence_id, not self.shutdown_task.agent_occurrence_id (which is "__shared__")
+        thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
         pending_thoughts = [t for t in thoughts if t.status == ThoughtStatus.PENDING]
 
         if not pending_thoughts:
@@ -372,7 +489,10 @@ class ShutdownProcessor(BaseProcessor):
         for thought in pending_thoughts:
             try:
                 # Mark as processing
-                persistence.update_thought_status(thought_id=thought.thought_id, status=ThoughtStatus.PROCESSING)
+                # CRITICAL: Must pass occurrence_id since thoughts were transferred to claiming occurrence
+                persistence.update_thought_status(
+                    thought_id=thought.thought_id, status=ThoughtStatus.PROCESSING, occurrence_id=self.agent_occurrence_id
+                )
 
                 # Process through thought processor
                 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -384,7 +504,7 @@ class ShutdownProcessor(BaseProcessor):
 
                 if result:
                     # Dispatch the action
-                    task = persistence.get_task_by_id(thought.source_task_id, self.agent_occurrence_id)
+                    task = persistence.get_task_by_id(thought.source_task_id, self.shutdown_task.agent_occurrence_id)
                     from ciris_engine.logic.utils.context_utils import build_dispatch_context
 
                     # Get action from final_action (result is ConscienceApplicationResult)
@@ -410,8 +530,12 @@ class ShutdownProcessor(BaseProcessor):
 
             except Exception as e:
                 logger.error(f"Error processing shutdown thought {thought.thought_id}: {e}", exc_info=True)
+                # CRITICAL: Must pass occurrence_id since thoughts were transferred to claiming occurrence
                 persistence.update_thought_status(
-                    thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action={"error": str(e)}
+                    thought_id=thought.thought_id,
+                    status=ThoughtStatus.FAILED,
+                    final_action={"error": str(e)},
+                    occurrence_id=self.agent_occurrence_id,
                 )
 
     def cleanup(self) -> bool:

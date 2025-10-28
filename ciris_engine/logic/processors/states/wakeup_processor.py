@@ -77,23 +77,24 @@ class WakeupProcessor(BaseProcessor):
             Tuple of (is_valid, status_message) where is_valid indicates
             if the task exists and is ACTIVE.
         """
-        current_task = persistence.get_task_by_id(task.task_id)
+        current_task = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
         if not current_task:
             return False, "missing"
         if current_task.status != TaskStatus.ACTIVE:
             return False, current_task.status.value
         return True, "active"
 
-    def _get_task_thoughts_summary(self, task_id: str) -> Dict[str, Any]:
+    def _get_task_thoughts_summary(self, task_id: str, occurrence_id: str) -> Dict[str, Any]:
         """Get summary of thought statuses for a task.
 
         Args:
             task_id: ID of task to get thoughts for
+            occurrence_id: Occurrence ID that owns the task
 
         Returns:
             Dict with counts of thoughts by status
         """
-        thoughts = persistence.get_thoughts_by_task_id(task_id)
+        thoughts = persistence.get_thoughts_by_task_id(task_id, occurrence_id)
         return {
             "total": len(thoughts),
             "pending": sum(1 for t in thoughts if t.status == ThoughtStatus.PENDING),
@@ -112,7 +113,7 @@ class WakeupProcessor(BaseProcessor):
         Returns:
             Dict with step status information
         """
-        current_task = persistence.get_task_by_id(step_task.task_id)
+        current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
         status = "missing" if not current_task else current_task.status.value
         step_type = step_task.task_id.split("_")[0] if "_" in step_task.task_id else "unknown"
 
@@ -248,7 +249,7 @@ class WakeupProcessor(BaseProcessor):
                         continue
 
                     # Use helper to get thought summary
-                    thought_summary = self._get_task_thoughts_summary(step_task.task_id)
+                    thought_summary = self._get_task_thoughts_summary(step_task.task_id, step_task.agent_occurrence_id)
                     existing_thoughts = thought_summary["thoughts"]
                     logger.debug(f"Step {i+1} has {thought_summary['total']} existing thoughts")
                     logger.debug(
@@ -269,7 +270,7 @@ class WakeupProcessor(BaseProcessor):
                         continue
 
                     # Use helper to determine if new thought is needed
-                    current_task = persistence.get_task_by_id(step_task.task_id)
+                    current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
                     if self._needs_new_thought(existing_thoughts, current_task):
                         logger.debug(
                             f"Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
@@ -283,8 +284,49 @@ class WakeupProcessor(BaseProcessor):
                 # Use helper to collect steps status
                 steps_status = self._collect_steps_status()
 
-                all_complete = all(s["status"] == "completed" for s in steps_status)
+                # If we only have the root task (no steps), we're a non-claiming occurrence
+                # We should only monitor, not mark the shared task complete
+                if len(self.wakeup_tasks) == 1:
+                    # Check if the shared root task is complete
+                    root_task = self.wakeup_tasks[0]
+                    current_root = persistence.get_task_by_id(root_task.task_id, root_task.agent_occurrence_id)
+                    if current_root and current_root.status == TaskStatus.COMPLETED:
+                        self.wakeup_complete = True
+                        logger.info("✓ Shared wakeup task completed by claiming occurrence")
+                        return {
+                            "status": "completed",
+                            "wakeup_complete": True,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                        }
+                    elif current_root and current_root.status == TaskStatus.FAILED:
+                        self.wakeup_complete = False
+                        logger.error("✗ Shared wakeup task failed")
+                        return {
+                            "status": "failed",
+                            "wakeup_complete": False,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                            "error": "Shared wakeup task failed",
+                        }
+                    else:
+                        # Still in progress
+                        logger.debug("Waiting for claiming occurrence to complete wakeup")
+                        return {
+                            "status": "in_progress",
+                            "wakeup_complete": False,
+                            "steps_status": [],
+                            "steps_completed": 0,
+                            "total_steps": len(wakeup_sequence),
+                            "processed_thoughts": False,
+                        }
 
+                # We have step tasks, so we're the claiming occurrence
+                all_complete = all(s["status"] == "completed" for s in steps_status)
                 any_failed = any(s["status"] == "failed" for s in steps_status)
 
                 if any_failed:
@@ -339,12 +381,14 @@ class WakeupProcessor(BaseProcessor):
         _tasks: List[Any] = []
 
         for i, step_task in enumerate(self.wakeup_tasks[1:]):  # Skip root
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task:
                 continue
 
             if current_task.status == TaskStatus.ACTIVE:
-                existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+                existing_thoughts = persistence.get_thoughts_by_task_id(
+                    step_task.task_id, step_task.agent_occurrence_id
+                )
 
                 if any(t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING] for t in existing_thoughts):
                     logger.debug(f"Step {i+1} already has active thoughts, skipping")
@@ -358,7 +402,7 @@ class WakeupProcessor(BaseProcessor):
                 logger.debug(f"Queued step {i+1} for async processing")
 
         for step_task in self.wakeup_tasks[1:]:
-            thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+            thoughts = persistence.get_thoughts_by_task_id(step_task.task_id, step_task.agent_occurrence_id)
             for thought in thoughts:
                 if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
                     logger.debug(f"Found existing thought {thought.thought_id} for processing")
@@ -369,7 +413,7 @@ class WakeupProcessor(BaseProcessor):
             return False
 
         for step_task in self.wakeup_tasks[1:]:
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task or current_task.status != TaskStatus.COMPLETED:
                 logger.debug(
                     f"Step {step_task.task_id} not yet complete (status: {current_task.status if current_task else 'missing'})"
@@ -385,17 +429,34 @@ class WakeupProcessor(BaseProcessor):
             return 0
         completed = 0
         for step_task in self.wakeup_tasks[1:]:
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if current_task and current_task.status == TaskStatus.COMPLETED:
                 completed += 1
         return completed
 
     async def _create_wakeup_tasks(self) -> None:
-        """Always create new wakeup sequence tasks for each run, regardless of previous completions."""
+        """Create wakeup sequence tasks with multi-occurrence coordination.
+
+        Checks if another occurrence already completed wakeup. If so, skips
+        wakeup and marks this occurrence as joining the active pool.
+        """
         from typing import cast
 
         from ciris_engine.logic.buses.communication_bus import CommunicationBus
-        from ciris_engine.logic.persistence.models.tasks import add_system_task
+        from ciris_engine.logic.persistence.models.tasks import (
+            add_system_task,
+            is_shared_task_completed,
+            try_claim_shared_task,
+        )
+
+        # Check if wakeup already completed by another occurrence
+        if is_shared_task_completed("wakeup", within_hours=24):
+            logger.info(
+                "Wakeup already completed by another occurrence within the last 24 hours. "
+                "This occurrence is joining the active pool."
+            )
+            self.wakeup_complete = True
+            return
 
         now_iso = self.time_service.now().isoformat()
 
@@ -418,7 +479,7 @@ class WakeupProcessor(BaseProcessor):
 
             # This should never happen if adapters are properly initialized
             raise RuntimeError(
-                f"No communication adapter has a home channel configured. "
+                "No communication adapter has a home channel configured. "
                 f"Found {num_providers} communication provider(s) in registry. "
                 "At least one adapter must provide a home channel for wakeup tasks. "
                 "Check adapter configurations and ensure they specify a home_channel_id. "
@@ -427,39 +488,69 @@ class WakeupProcessor(BaseProcessor):
 
         logger.info(f"Using default channel for wakeup: {default_channel}")
 
-        # Create proper TaskContext with the resolved channel_id
-        from ciris_engine.schemas.runtime.models import TaskContext as ModelTaskContext
-
-        task_context = ModelTaskContext(
+        # Try to claim the shared wakeup task
+        root_task, was_created = try_claim_shared_task(
+            task_type="wakeup",
             channel_id=default_channel,
-            user_id="system",
-            correlation_id=f"wakeup_{uuid.uuid4().hex[:8]}",
-            parent_task_id=None,
+            description="Wakeup ritual (shared across all occurrences)",
+            priority=10,
+            time_service=self.time_service,
         )
 
-        root_task = Task(
-            task_id="WAKEUP_ROOT",
-            channel_id=default_channel,
-            description="Wakeup ritual",
-            status=TaskStatus.ACTIVE,
-            priority=1,
-            created_at=now_iso,
-            updated_at=now_iso,
-            context=task_context,
+        if not was_created:
+            # Another occurrence claimed the wakeup task
+            logger.info(
+                f"Another occurrence claimed wakeup task {root_task.task_id}. "
+                "This occurrence will wait for wakeup completion."
+            )
+            # We'll use the existing shared task as our root
+            self.wakeup_tasks = [root_task]
+            # Don't create step tasks - we'll just monitor the shared task
+            return
+
+        logger.info(
+            f"This occurrence claimed shared wakeup task {root_task.task_id}. "
+            "Processing wakeup ritual on behalf of all occurrences."
         )
-        if not persistence.task_exists(root_task.task_id):
-            await add_system_task(root_task, auth_service=self.auth_service)
-        else:
-            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "default", self.time_service)
+
+        # Get occurrence ID for context
+        occurrence_id = getattr(self, "occurrence_id", "default")
+
+        # CRITICAL: Keep shared wakeup task in "__shared__" namespace for multi-occurrence coordination
+        # All occurrences need to be able to query this task to monitor completion
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
         self.wakeup_tasks = [root_task]
+
+        # Create step tasks as child tasks of the shared root
         wakeup_sequence = self._get_wakeup_sequence()
-        for step_type, content in wakeup_sequence:
+
+        # Add multi-occurrence context to first step
+        enhanced_sequence = []
+        for i, (step_type, content) in enumerate(wakeup_sequence):
+            if i == 0:
+                # Enhance first step with multi-occurrence context
+                multi_occurrence_note = (
+                    "\n\nMULTI-OCCURRENCE CONTEXT:\n"
+                    "You are processing this wakeup ritual on behalf of ALL runtime occurrences of this agent. "
+                    "Your affirmation will confirm identity for the entire agent system. "
+                    "This decision applies to all occurrences, ensuring consistent agent identity across "
+                    "all runtime instances."
+                )
+                enhanced_content = content + multi_occurrence_note
+                enhanced_sequence.append((step_type, enhanced_content))
+            else:
+                enhanced_sequence.append((step_type, content))
+
+        for step_type, content in enhanced_sequence:
             # Create task with proper context using the default channel
+            from ciris_engine.schemas.runtime.models import TaskContext as ModelTaskContext
+
             step_context = ModelTaskContext(
                 channel_id=default_channel,
                 user_id="system",
                 correlation_id=f"wakeup_{step_type}_{uuid.uuid4().hex[:8]}",
                 parent_task_id=root_task.task_id,
+                agent_occurrence_id=occurrence_id,  # Mark which occurrence created this step
             )
 
             step_task = Task(
@@ -472,6 +563,7 @@ class WakeupProcessor(BaseProcessor):
                 updated_at=now_iso,
                 parent_task_id=root_task.task_id,
                 context=step_context,
+                agent_occurrence_id=occurrence_id,  # Step tasks belong to this occurrence
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)
@@ -483,10 +575,10 @@ class WakeupProcessor(BaseProcessor):
         for i, step_task in enumerate(step_tasks):
             step_type = step_task.task_id.split("_")[0] if "_" in step_task.task_id else "UNKNOWN"
             logger.debug(f"Processing wakeup step {i+1}/{len(step_tasks)}: {step_type}")
-            current_task = persistence.get_task_by_id(step_task.task_id)
+            current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
             if not current_task or current_task.status != TaskStatus.ACTIVE:
                 continue
-            existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id)
+            existing_thoughts = persistence.get_thoughts_by_task_id(step_task.task_id, step_task.agent_occurrence_id)
             if any(t.status in [ThoughtStatus.PROCESSING, ThoughtStatus.PENDING] for t in existing_thoughts):
                 logger.debug(
                     f"Skipping creation of new thought for step {step_type} (task_id={step_task.task_id}) because an active thought already exists."
@@ -498,7 +590,7 @@ class WakeupProcessor(BaseProcessor):
             result = await self._process_step_thought(thought, processing_context)
             if not result:
                 logger.error(f"Wakeup step {step_type} failed: no result")
-                self._mark_task_failed(step_task.task_id, "No result from processing")
+                self._mark_task_failed(step_task.task_id, "No result from processing", step_task.agent_occurrence_id)
                 return False
             selected_action = None
             if hasattr(result, "selected_action"):
@@ -510,7 +602,9 @@ class WakeupProcessor(BaseProcessor):
                 logger.error(
                     f"Wakeup step {step_type} failed: result object missing selected action attribute (result={result})"
                 )
-                self._mark_task_failed(step_task.task_id, "Result object missing selected action attribute")
+                self._mark_task_failed(
+                    step_task.task_id, "Result object missing selected action attribute", step_task.agent_occurrence_id
+                )
                 return False
 
             if selected_action in [HandlerActionType.SPEAK, HandlerActionType.PONDER]:
@@ -531,7 +625,11 @@ class WakeupProcessor(BaseProcessor):
                 self.metrics.items_processed += 1
             else:
                 logger.error(f"Wakeup step {step_type} failed: expected SPEAK or PONDER, got {selected_action}")
-                self._mark_task_failed(step_task.task_id, f"Expected SPEAK or PONDER action, got {selected_action}")
+                self._mark_task_failed(
+                    step_task.task_id,
+                    f"Expected SPEAK or PONDER action, got {selected_action}",
+                    step_task.agent_occurrence_id,
+                )
                 return False
         return True
 
@@ -615,7 +713,7 @@ class WakeupProcessor(BaseProcessor):
             await asyncio.sleep(poll_interval)
             waited += poll_interval
 
-            current_status = persistence.get_task_by_id(task.task_id)
+            current_status = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
             if not current_status:
                 logger.error(f"Task {task.task_id} disappeared while waiting")
                 return False
@@ -629,21 +727,29 @@ class WakeupProcessor(BaseProcessor):
             logger.debug(f"Waiting for task {task.task_id} completion... ({waited}s)")
 
         logger.error(f"Task {task.task_id} timed out after {max_wait}s")
-        self._mark_task_failed(task.task_id, "Timeout waiting for completion")
+        self._mark_task_failed(task.task_id, "Timeout waiting for completion", task.agent_occurrence_id)
         return False
 
-    def _mark_task_failed(self, task_id: str, reason: str) -> None:
+    def _mark_task_failed(self, task_id: str, reason: str, occurrence_id: str = "default") -> None:
         """Mark a task as failed."""
-        persistence.update_task_status(task_id, TaskStatus.FAILED, "default", self.time_service)
+        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
         logger.error(f"Task {task_id} marked as FAILED: {reason}")
 
     def _mark_root_task_complete(self) -> None:
         """Mark the root wakeup task as complete."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.COMPLETED, "default", self.time_service)
+        if self.wakeup_tasks:
+            root_task = self.wakeup_tasks[0]
+            occurrence_id = root_task.agent_occurrence_id
+            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id, self.time_service)
+            logger.info(f"Marked shared wakeup task {root_task.task_id} as COMPLETED")
 
     def _mark_root_task_failed(self) -> None:
         """Mark the root wakeup task as failed."""
-        persistence.update_task_status("WAKEUP_ROOT", TaskStatus.FAILED, "default", self.time_service)
+        if self.wakeup_tasks:
+            root_task = self.wakeup_tasks[0]
+            occurrence_id = root_task.agent_occurrence_id
+            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+            logger.error(f"Marked shared wakeup task {root_task.task_id} as FAILED")
 
     def is_wakeup_complete(self) -> bool:
         """Check if wakeup sequence is complete."""
@@ -672,7 +778,7 @@ class WakeupProcessor(BaseProcessor):
 
         if self.wakeup_tasks:
             for task in self.wakeup_tasks[1:]:  # Skip root task
-                status = persistence.get_task_by_id(task.task_id)
+                status = persistence.get_task_by_id(task.task_id, task.agent_occurrence_id)
                 if status and status.status == TaskStatus.COMPLETED:
                     completed_steps += 1
 

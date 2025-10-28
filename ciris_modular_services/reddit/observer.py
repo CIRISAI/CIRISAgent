@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_replace_spoofed_markers
 from ciris_engine.logic.buses import BusManager
@@ -159,3 +161,99 @@ class RedditObserver(BaseObserver[RedditMessage]):
             setattr(msg, "permalink_url", msg.permalink)
 
         return msg
+
+    # ------------------------------------------------------------------
+    # Reddit ToS Compliance - Auto-purge on deletion detection
+    # ------------------------------------------------------------------
+
+    async def check_content_deleted(self, content_id: str) -> bool:
+        """
+        Check if content has been deleted on Reddit (Reddit ToS compliance).
+
+        Args:
+            content_id: Reddit content ID (without t3_/t1_ prefix)
+
+        Returns:
+            True if content is deleted or inaccessible
+        """
+        try:
+            # Try to fetch the content
+            fullname = f"t3_{content_id}" if not content_id.startswith("t") else content_id
+            metadata = await self._api_client._fetch_item_metadata(fullname)
+
+            # Check for deletion markers
+            removed_by = metadata.get("removed_by_category")
+            if removed_by is not None:
+                return True
+
+            # Check if marked as deleted
+            if metadata.get("removed") or metadata.get("deleted"):
+                return True
+
+            return False
+
+        except Exception as exc:
+            # If we can't fetch it, assume it's deleted
+            logger.debug(f"Unable to fetch {content_id}, assuming deleted: {exc}")
+            return True
+
+    async def purge_deleted_content(self, content_id: str, content_type: str = "unknown") -> None:
+        """
+        Purge deleted content from local caches (Reddit ToS compliance).
+
+        Reddit ToS Requirement: Zero retention of deleted content.
+
+        Args:
+            content_id: Reddit content ID (without prefixes)
+            content_type: Type of content (submission or comment)
+        """
+        purged_from_posts = False
+        purged_from_comments = False
+
+        # Purge from submission cache
+        if content_id in self._seen_posts:
+            del self._seen_posts[content_id]
+            purged_from_posts = True
+
+        # Purge from comment cache
+        if content_id in self._seen_comments:
+            del self._seen_comments[content_id]
+            purged_from_comments = True
+
+        if purged_from_posts or purged_from_comments:
+            # Log purge event (audit trail)
+            audit_event = {
+                "event": "reddit_content_purged",
+                "content_id": content_id,
+                "content_type": content_type,
+                "purged_from_posts": purged_from_posts,
+                "purged_from_comments": purged_from_comments,
+                "reason": "reddit_tos_compliance",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "audit_id": str(uuid4()),
+            }
+            logger.info(
+                f"Purged deleted {content_type} {content_id} from cache (ToS compliance): "
+                f"posts={purged_from_posts}, comments={purged_from_comments}"
+            )
+
+            # TODO: Send audit event to audit service if available
+            # if self._audit_service:
+            #     await self._audit_service.log_event(audit_event)
+
+    async def check_and_purge_if_deleted(self, content_id: str) -> bool:
+        """
+        Check if content is deleted and purge if so (convenience method).
+
+        Args:
+            content_id: Reddit content ID
+
+        Returns:
+            True if content was deleted and purged
+        """
+        is_deleted = await self.check_content_deleted(content_id)
+        if is_deleted:
+            content_type = "submission" if content_id.startswith("t3_") else "comment"
+            await self.purge_deleted_content(content_id, content_type)
+            return True
+        return False

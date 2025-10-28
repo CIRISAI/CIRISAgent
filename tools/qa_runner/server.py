@@ -53,9 +53,14 @@ class APIServerManager:
         env["PYTHONUNBUFFERED"] = "1"
 
         # Set backend-specific log directory to avoid symlink collisions
-        log_dir = f"logs/{self.database_backend}"
-        env["CIRIS_LOG_DIR"] = log_dir
-        self.console.print(f"[dim]Log directory: {log_dir}[/dim]")
+        # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)
+        if "CIRIS_LOG_DIR" in env:
+            log_dir = env["CIRIS_LOG_DIR"]
+            self.console.print(f"[dim]Log directory: {log_dir} (from environment)[/dim]")
+        else:
+            log_dir = f"logs/{self.database_backend}"
+            env["CIRIS_LOG_DIR"] = log_dir
+            self.console.print(f"[dim]Log directory: {log_dir}[/dim]")
 
         # Set database URL based on backend
         if self.database_backend == "postgres":

@@ -136,11 +136,10 @@ class MultiOccurrenceTestModule:
             # Verify exactly 1 shared wakeup task FROM TODAY
             # Filter by today's date to exclude historical completed wakeup tasks
             from datetime import datetime, timezone
+
             today = datetime.now(timezone.utc).strftime("%Y%m%d")
             wakeup_tasks = [
-                t for t in shared_tasks
-                if "wakeup" in t["description"].lower()
-                and f"_SHARED_{today}" in t["task_id"]
+                t for t in shared_tasks if "wakeup" in t["description"].lower() and f"_SHARED_{today}" in t["task_id"]
             ]
             results["details"]["shared_wakeup_tasks"] = len(wakeup_tasks)
 
@@ -166,7 +165,9 @@ class MultiOccurrenceTestModule:
             # Only consider the specific occurrence_ids we're testing
             test_occ_thoughts = {k: v for k, v in thoughts_by_occ.items() if k in occurrence_ids}
             if len(test_occ_thoughts) >= 1:
-                runner.console.print(f"[green]✅ Test occurrences have thoughts: {list(test_occ_thoughts.keys())}[/green]")
+                runner.console.print(
+                    f"[green]✅ Test occurrences have thoughts: {list(test_occ_thoughts.keys())}[/green]"
+                )
                 results["details"]["thought_ownership"] = "PASS"
             else:
                 runner.console.print("[red]❌ No test occurrences have thoughts![/red]")

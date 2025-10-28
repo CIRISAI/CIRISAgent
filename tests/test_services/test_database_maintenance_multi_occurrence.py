@@ -8,12 +8,12 @@ These tests verify that the maintenance service properly handles:
 4. Thought cleanup with correct occurrence_id context
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -195,21 +195,13 @@ class TestMultiOccurrenceThoughtCleanup:
         # Verify expected thoughts were cleaned
         for thought_id in scenario["expected_cleaned_thoughts"]:
             thought_data = next(t for t in scenario["thoughts"] if t["thought_id"] == thought_id)
-            retrieved = persistence.get_thought_by_id(
-                thought_id,
-                thought_data["agent_occurrence_id"],
-                clean_db
-            )
+            retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"], clean_db)
             assert retrieved is None, f"Expected {thought_id} to be cleaned"
 
         # Verify expected thoughts were preserved
         for thought_id in scenario["expected_preserved_thoughts"]:
             thought_data = next(t for t in scenario["thoughts"] if t["thought_id"] == thought_id)
-            retrieved = persistence.get_thought_by_id(
-                thought_id,
-                thought_data["agent_occurrence_id"],
-                clean_db
-            )
+            retrieved = persistence.get_thought_by_id(thought_id, thought_data["agent_occurrence_id"], clean_db)
             assert retrieved is not None, f"Expected {thought_id} to be preserved"
 
 

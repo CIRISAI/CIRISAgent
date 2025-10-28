@@ -208,7 +208,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     thought_ids_to_delete_for_archive.append(thought.thought_id)
 
             if thought_ids_to_delete_for_archive:
-                archived_thoughts_count = delete_thoughts_by_ids(thought_ids_to_delete_for_archive, db_path=self.db_path)
+                archived_thoughts_count = delete_thoughts_by_ids(
+                    thought_ids_to_delete_for_archive, db_path=self.db_path
+                )
                 logger.info(
                     f"Archived and deleted {archived_thoughts_count} thoughts older than {self.archive_older_than_hours} hours to {thought_archive_file}."
                 )
@@ -337,12 +339,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get all active tasks from all occurrences by querying the database directly
             # We need to check ALL occurrences for old active tasks
             from ciris_engine.logic.persistence import get_db_connection
+
             active_tasks = []
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM tasks WHERE status = ?", (TaskStatus.ACTIVE.value,))
                 rows = cursor.fetchall()
                 from ciris_engine.logic.persistence.models.tasks import map_row_to_task
+
                 for row in rows:
                     active_tasks.append(map_row_to_task(row))
 
@@ -387,7 +391,13 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 for task in active_tasks:
                     if task.task_id in old_task_ids:
                         # CRITICAL: Use task's own occurrence_id, not hardcoded "default"
-                        update_task_status(task.task_id, TaskStatus.COMPLETED, task.agent_occurrence_id, self.time_service, db_path=self.db_path)
+                        update_task_status(
+                            task.task_id,
+                            TaskStatus.COMPLETED,
+                            task.agent_occurrence_id,
+                            self.time_service,
+                            db_path=self.db_path,
+                        )
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
             else:
                 logger.info("No old active tasks found")

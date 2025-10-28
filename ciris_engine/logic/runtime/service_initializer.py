@@ -997,7 +997,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "LOW": Priority.LOW,
         }
 
-        priority = priority_map.get(service_def.priority, Priority.NORMAL)
+        priority_value = (
+            service_def.priority.value if hasattr(service_def.priority, "value") else service_def.priority.name
+        )
+        priority = priority_map.get(priority_value, Priority.NORMAL)
 
         self.service_registry.register_service(
             service_type=ServiceType.TOOL,
@@ -1021,7 +1024,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "LOW": Priority.LOW,
         }
 
-        priority = priority_map.get(service_def.priority, Priority.NORMAL)
+        priority_value = (
+            service_def.priority.value if hasattr(service_def.priority, "value") else service_def.priority.name
+        )
+        priority = priority_map.get(priority_value, Priority.NORMAL)
 
         self.service_registry.register_service(
             service_type=ServiceType.COMMUNICATION,

@@ -542,7 +542,7 @@ class QueryManager:
 
         except Exception as e:
             logger.error(
-                f"Error acquiring {consolidation_type} lock for {period_identifier}: " f"{type(e).__name__}: {e}",
+                f"Error acquiring {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
                 exc_info=True,
             )
             return False
@@ -629,7 +629,7 @@ class QueryManager:
 
         except Exception as e:
             logger.error(
-                f"Error releasing {consolidation_type} lock for {period_identifier}: " f"{type(e).__name__}: {e}",
+                f"Error releasing {consolidation_type} lock for {period_identifier}: {type(e).__name__}: {e}",
                 exc_info=True,
             )
 

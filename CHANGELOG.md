@@ -27,11 +27,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `purge_deleted_content()` - Removes from local caches with audit trail logging
     - `check_and_purge_if_deleted()` - Convenience method for deletion check + purge
     - Zero retention policy enforcement across all caches
-  - **Comprehensive Test Suite** - 51 tests covering all compliance functionality
+  - **Persistent Correlation Tracking** - Database-backed deduplication for Reddit observations
+    - `get_task_by_correlation_id()` function to query tasks by Reddit post/comment ID
+    - `_already_handled()` method in RedditObserver to prevent duplicate processing after restart
+    - Fail-open pattern on database errors to avoid blocking content processing
+    - Survives agent restarts and maintains processing history across occurrences
+  - **Comprehensive Test Suite** - 58 tests covering all compliance and tracking functionality
     - 13 deletion compliance tests (Reddit ToS)
     - 12 transparency tests (community guidelines)
-    - 18 observer purge tests (auto-purge mechanism)
+    - 21 observer tests (auto-purge + correlation tracking)
     - 8 schema validation tests
+    - 4 correlation tracking tests (test_shared_tasks.py)
+- **ActionDispatcher Test Coverage** - Comprehensive unit tests for action dispatcher (75.68% coverage)
+  - 10 passing tests covering SPEAK, TOOL, PONDER, WAIT, DEFER actions
+  - Audit trail integration testing with tool metadata extraction
+  - Proper Pydantic schema validation across all action types
+  - Coverage improved from 16.89% to 75.68% (+58.79%)
 
 ### Fixed
 - **P0: Reddit Tool Schema Definition** - Fixed `ToolParameterSchema` construction to match expected format
@@ -50,17 +61,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Disclosure tool always failed with validation errors
   - **Solution**: Changed to `parent_fullname` and removed `distinguish` (not supported by schema)
   - **Files**: `ciris_modular_services/reddit/service.py:1008-1014`
+- **P2: SonarCloud String Concatenation Warnings** - Fixed implicit string concatenation in TSDB query manager
+  - **Problem**: Two f-strings placed adjacent without explicit concatenation operator
+  - **Impact**: SonarCloud code quality warnings at lines 545 and 632
+  - **Solution**: Merged adjacent f-strings into single f-strings
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/query_manager.py:545, 632`
 
 ### Changed
 - Updated Reddit test fixtures to match nested schema structure (`RedditCommentResult` with nested `comment` field)
 - Removed `test_disclosure_comment_is_distinguished` (distinguish not supported), replaced with `test_disclosure_comment_parent_is_submission`
 
 ### Test Results
-- ✅ **51/51 Reddit module tests passing** (100%)
+- ✅ **58/58 Reddit module tests passing** (100%)
   - 13 deletion compliance tests
   - 12 transparency tests
-  - 18 observer purge tests
-  - 8 schema tests
+  - 21 observer tests (auto-purge + correlation tracking)
+  - 8 schema validation tests
+  - 4 correlation tracking tests (test_shared_tasks.py)
+- ✅ **10/10 ActionDispatcher tests passing** (100%)
+  - Coverage: 75.68% (up from 16.89%)
+- ✅ **Overall test suite: 5942 tests passing, 74.28% coverage**
 
 ## [1.4.8] - 2025-10-27
 

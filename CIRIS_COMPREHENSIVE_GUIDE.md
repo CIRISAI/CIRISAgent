@@ -11,21 +11,22 @@
 2. [Core Philosophy](#core-philosophy)
 3. [Current Status](#current-status)
 4. [Architecture Overview](#architecture-overview)
-5. [Security & Anti-Spoofing](#security--anti-spoofing)
-6. [Service Architecture](#service-architecture)
-7. [Billing & Credits](#billing--credits)
-8. [Privacy Safeguards & Transparency](#privacy-safeguards--transparency)
-9. [API v1.0 Complete Reference](#api-v10-complete-reference)
-10. [Agent Creation Ceremony](#agent-creation-ceremony)
-11. [Development Tools](#development-tools)
-12. [Production Deployment](#production-deployment)
-13. [Scout GUI - User Interface](#scout-gui---user-interface)
-14. [Debugging Guidelines](#debugging-guidelines)
-15. [Local Development](#local-development)
-16. [Testing Framework](#testing-framework)
-17. [Critical Commands](#critical-commands)
-18. [Important URLs](#important-urls)
-19. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
+5. [Multi-Occurrence Architecture](#multi-occurrence-architecture)
+6. [Security & Anti-Spoofing](#security--anti-spoofing)
+7. [Service Architecture](#service-architecture)
+8. [Billing & Credits](#billing--credits)
+9. [Privacy Safeguards & Transparency](#privacy-safeguards--transparency)
+10. [API v1.0 Complete Reference](#api-v10-complete-reference)
+11. [Agent Creation Ceremony](#agent-creation-ceremony)
+12. [Development Tools](#development-tools)
+13. [Production Deployment](#production-deployment)
+14. [Scout GUI - User Interface](#scout-gui---user-interface)
+15. [Debugging Guidelines](#debugging-guidelines)
+16. [Local Development](#local-development)
+17. [Testing Framework](#testing-framework)
+18. [Critical Commands](#critical-commands)
+19. [Important URLs](#important-urls)
+20. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
 
 ---
 
@@ -143,6 +144,133 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 4. **SOLITUDE** - Reflection
 5. **DREAM** - Deep introspection
 6. **SHUTDOWN** - Graceful termination
+
+---
+
+## Multi-Occurrence Architecture
+
+**Status**: ✅ PRODUCTION-READY (since v1.4.8)
+
+CIRIS supports running multiple runtime instances (occurrences) against the same shared database, enabling horizontal scalability and high availability.
+
+### What is Multi-Occurrence?
+
+Multiple **occurrences** are runtime instances with:
+- **IDENTICAL**: `agent_id`, identity, memories, ethics, purpose
+- **UNIQUE**: `agent_occurrence_id`, runtime state, processing queue
+- **SHARED DATABASE**: PostgreSQL or SQLite (PostgreSQL recommended for production)
+
+### Key Features
+
+#### 1. Occurrence Isolation
+Each occurrence processes only its own tasks and thoughts:
+```python
+# All persistence queries filter by occurrence_id
+tasks = get_tasks_by_status("active", occurrence_id="occurrence_1")
+thoughts = get_thoughts_by_task_id(task_id, occurrence_id="occurrence_1")
+```
+
+#### 2. Shared Task Coordination
+Critical decisions (wakeup/shutdown) use atomic shared task claiming:
+```python
+# Only ONE occurrence claims and processes shared task
+task, was_created = try_claim_shared_task(
+    task_type="WAKEUP_RITUAL",
+    occurrence_id="occurrence_1"  # Claiming occurrence
+)
+```
+
+#### 3. Thought Ownership Transfer
+When claiming a shared task, thoughts transfer to the claiming occurrence:
+```python
+# Transfer thoughts from "__shared__" to claiming occurrence
+transfer_thought_ownership(
+    from_occurrence_id="__shared__",
+    to_occurrence_id="occurrence_1",
+    task_id=shared_task.task_id
+)
+```
+
+### Configuration
+
+#### Setting Occurrence ID
+```bash
+# Environment variable (recommended)
+export CIRIS_AGENT_OCCURRENCE_ID="occurrence_1"
+
+# Or via config.yml
+agent_occurrence_id: "occurrence_1"
+```
+
+#### Database Backend
+
+**SQLite** (development, single-machine):
+```bash
+export CIRIS_DB_URL="sqlite:///path/to/agent.db"
+```
+
+**PostgreSQL** (production, multi-occurrence):
+```bash
+export CIRIS_DB_URL="postgresql://user:password@host:5432/ciris_db"
+```
+
+### Production Deployment
+
+#### Example: 3 Occurrences on PostgreSQL
+```bash
+# Shared PostgreSQL database
+DB_URL="postgresql://ciris:password@db.internal:5432/agent_production"
+
+# Occurrence 1 (explorer role)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="explorer" python main.py --adapter api --port 9001 &
+
+# Occurrence 2 (primary)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="primary" python main.py --adapter api --port 9002 &
+
+# Occurrence 3 (backup)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="backup" python main.py --adapter api --port 9003 &
+```
+
+### Testing Multi-Occurrence
+
+```bash
+# Run multi-occurrence QA tests with PostgreSQL
+python -m tools.qa_runner multi_occurrence --database-backends postgres
+
+# Expected: 27/27 tests passing (100%)
+```
+
+### Best Practices
+
+1. **Use PostgreSQL for Production**: SQLite works for development, but PostgreSQL provides:
+   - Better concurrency handling
+   - Connection pooling
+   - Production-grade reliability
+
+2. **Unique Occurrence IDs**: Each runtime must have a unique `agent_occurrence_id`
+
+3. **Monitor Database Cleanup**: DatabaseMaintenanceService handles:
+   - Stale wakeup task cleanup (>5 minutes old)
+   - Orphaned task cleanup
+   - Occurrence-aware retention policies
+
+4. **Load Balancing**: Use a reverse proxy (nginx, HAProxy) to distribute requests
+
+### Architecture Validation
+
+Multi-occurrence support spans all layers:
+1. **Schema**: Database columns with `agent_occurrence_id`
+2. **Models**: Task/Thought include occurrence ID
+3. **Persistence**: All queries filter by occurrence
+4. **Services**: TaskManager/ThoughtManager respect boundaries
+5. **Processors**: State processors pass occurrence ID through
+6. **Config**: EssentialConfig exposes `agent_occurrence_id`
+7. **Runtime**: Occurrence ID threads through initialization
+
+### Related Documentation
+- `tools/qa_runner/modules/MULTI_OCCURRENCE_README.md` - QA test documentation
+- `FSD/multi_occurrence_implementation_plan_1.4.8.md` - Implementation details
+- `docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md` - Philosophical analysis
 
 ---
 

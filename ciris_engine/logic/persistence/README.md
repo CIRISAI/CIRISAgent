@@ -63,6 +63,7 @@ ServiceCorrelation:
 ```python
 Task:
   - task_id: UUID
+  - agent_occurrence_id: Runtime instance identifier (for multi-occurrence)
   - description: What needs to be done
   - status: pending, in_progress, completed, cancelled
   - priority: Task priority level
@@ -73,6 +74,7 @@ Task:
 ```python
 Thought:
   - thought_id: UUID
+  - agent_occurrence_id: Runtime instance identifier (for multi-occurrence)
   - content: The thought content
   - thought_type: Type classification
   - status: pending, processing, completed, rejected
@@ -210,3 +212,257 @@ filter_node = GraphNode(
 3. **Set retention policies**: Use "aggregated" or "downsampled" for long-term data
 4. **Batch operations**: Use transactions for multiple related operations
 5. **Monitor growth**: Regularly check database size and optimize queries
+
+## Multi-Occurrence Support
+
+**Status**: ✅ PRODUCTION-READY (since v1.4.8)
+
+The persistence layer fully supports multiple runtime instances (occurrences) sharing the same database, enabling horizontal scaling and high availability.
+
+### Core Concepts
+
+#### Occurrence ID
+Every task and thought includes an `agent_occurrence_id` column that identifies which runtime instance owns it:
+- **`"default"`** - Single-occurrence mode (backward compatible)
+- **`"occurrence_1"`, `"occurrence_2"`, etc.** - Multi-occurrence mode
+- **`"__shared__"`** - Special namespace for shared coordination tasks
+
+#### Occurrence Isolation
+All persistence queries automatically filter by occurrence ID:
+```python
+# Query tasks for specific occurrence
+tasks = get_tasks_by_status("active", occurrence_id="occurrence_1")
+
+# Query thoughts for specific occurrence
+thoughts = get_thoughts_by_task_id(task_id, occurrence_id="occurrence_1")
+```
+
+### Multi-Occurrence APIs
+
+#### 1. Shared Task Coordination
+
+**Atomic Task Claiming** - Ensures only ONE occurrence processes critical decisions:
+```python
+from ciris_engine.logic.persistence.models.tasks import try_claim_shared_task
+
+# Atomically claim or retrieve shared task
+task, was_created = try_claim_shared_task(
+    task_type="WAKEUP_RITUAL",
+    occurrence_id="occurrence_1",  # This occurrence's ID
+    channel_id="api",
+    description="Daily wakeup ritual",
+    priority=10,
+    time_service=time_service,
+    db_path=":memory:"
+)
+
+if was_created:
+    # This occurrence won the race - process the task
+    logger.info("Claimed wakeup task")
+else:
+    # Another occurrence already claimed it
+    logger.info("Wakeup already handled by another occurrence")
+```
+
+**How it Works:**
+- Uses deterministic task_id: `{task_type}_SHARED_{date}` (e.g., `WAKEUP_RITUAL_SHARED_20251028`)
+- Uses PostgreSQL `ON CONFLICT DO NOTHING` or SQLite `INSERT OR IGNORE` for atomicity
+- Task is created with `agent_occurrence_id="__shared__"`
+- Claiming occurrence transfers ownership via `transfer_task_ownership()`
+
+#### 2. Task Ownership Transfer
+
+**Transfer Task to Claiming Occurrence:**
+```python
+from ciris_engine.logic.persistence.models.tasks import transfer_task_ownership
+
+# Transfer shared task to claiming occurrence
+transfer_task_ownership(
+    task_id="WAKEUP_RITUAL_SHARED_20251028",
+    from_occurrence_id="__shared__",
+    to_occurrence_id="occurrence_1",
+    db_path=":memory:"
+)
+```
+
+**Use Cases:**
+- After claiming a shared task via `try_claim_shared_task()`
+- Moving task ownership between occurrences
+- Graceful occurrence shutdown (transfer pending tasks)
+
+#### 3. Thought Ownership Transfer
+
+**Transfer Thoughts to Claiming Occurrence:**
+```python
+from ciris_engine.logic.persistence.models.thoughts import transfer_thought_ownership
+
+# Transfer all thoughts from shared namespace to claiming occurrence
+transfer_thought_ownership(
+    from_occurrence_id="__shared__",
+    to_occurrence_id="occurrence_1",
+    task_id="WAKEUP_RITUAL_SHARED_20251028",
+    db_path=":memory:"
+)
+```
+
+**Critical for Shared Tasks:**
+- Thoughts start in `"__shared__"` namespace
+- After claiming, transfer to the occurrence that will process them
+- Ensures proper occurrence isolation after transfer
+
+#### 4. Query Helpers
+
+**Check Shared Task Status:**
+```python
+from ciris_engine.logic.persistence.models.tasks import (
+    get_shared_task_status,
+    is_shared_task_completed,
+    get_latest_shared_task
+)
+
+# Get shared task if it exists
+task = get_shared_task_status("WAKEUP_RITUAL", within_hours=24)
+
+# Check if completed recently
+if is_shared_task_completed("WAKEUP_RITUAL", within_hours=24):
+    logger.info("Wakeup already completed today")
+
+# Get latest shared task (any status)
+latest = get_latest_shared_task("WAKEUP_RITUAL", within_hours=24)
+```
+
+### Coordination Patterns
+
+#### Pattern 1: Shared Wakeup/Shutdown Decision
+```python
+# In wakeup_processor.py or shutdown_processor.py
+task, was_created = try_claim_shared_task(
+    task_type=f"{state.value.upper()}_RITUAL",
+    occurrence_id=self.agent_occurrence_id,
+    channel_id=self.channel_id,
+    description=f"{state.value.capitalize()} ritual",
+    priority=10,
+    time_service=self.time_service
+)
+
+if was_created:
+    # This occurrence claimed the task - transfer ownership
+    transfer_task_ownership(
+        task_id=task.task_id,
+        from_occurrence_id="__shared__",
+        to_occurrence_id=self.agent_occurrence_id
+    )
+
+    transfer_thought_ownership(
+        from_occurrence_id="__shared__",
+        to_occurrence_id=self.agent_occurrence_id,
+        task_id=task.task_id
+    )
+
+    # Process the task
+    return self._process_shared_task(task)
+else:
+    # Another occurrence is handling it - skip
+    logger.info(f"{state.value} already handled by another occurrence")
+    return None
+```
+
+#### Pattern 2: Occurrence-Specific Processing
+```python
+# Process only this occurrence's tasks
+active_tasks = get_tasks_by_status(
+    TaskStatus.ACTIVE,
+    occurrence_id=self.agent_occurrence_id
+)
+
+for task in active_tasks:
+    # Process task
+    thoughts = get_thoughts_by_task_id(
+        task.task_id,
+        occurrence_id=self.agent_occurrence_id
+    )
+    # ... process thoughts
+```
+
+### Database Maintenance
+
+The `DatabaseMaintenanceService` handles multi-occurrence cleanup:
+
+```python
+# Clean stale shared wakeup tasks (>5 minutes old)
+# Query: WHERE task_id LIKE '%_SHARED_%' AND agent_occurrence_id = '__shared__'
+```
+
+**What Gets Cleaned:**
+- Stale shared wakeup tasks (>5 min, still in `__shared__` namespace)
+- Orphaned tasks across ALL occurrences
+- Old completed tasks (respects occurrence boundaries)
+
+**What's Preserved:**
+- Fresh shared tasks (<5 min)
+- Transferred tasks (owned by specific occurrence)
+- Active occurrence-specific tasks
+
+### Testing Multi-Occurrence
+
+```bash
+# Run multi-occurrence QA tests
+python -m tools.qa_runner multi_occurrence
+
+# Test with PostgreSQL
+python -m tools.qa_runner multi_occurrence --database-backends postgres
+
+# Expect: 27/27 tests passing (100%)
+```
+
+### Migration Guide
+
+**Upgrading to Multi-Occurrence:**
+
+1. **Add occurrence_id to queries** (backward compatible with "default"):
+   ```python
+   # Before (implicit "default")
+   tasks = get_all_tasks()
+
+   # After (explicit occurrence_id)
+   tasks = get_all_tasks(occurrence_id=self.agent_occurrence_id)
+   ```
+
+2. **Use shared task claiming for critical decisions:**
+   ```python
+   # Replace direct task creation with atomic claiming
+   task, was_created = try_claim_shared_task(...)
+   ```
+
+3. **Transfer ownership after claiming:**
+   ```python
+   if was_created:
+       transfer_task_ownership(...)
+       transfer_thought_ownership(...)
+   ```
+
+### Performance Considerations
+
+- **PostgreSQL Recommended**: Better concurrency handling for multi-occurrence
+- **Indexing**: `agent_occurrence_id` column is indexed for fast queries
+- **Transaction Isolation**: Use `READ COMMITTED` or higher for PostgreSQL
+- **Connection Pooling**: Each occurrence maintains its own connection pool
+
+### Troubleshooting
+
+**Problem**: Occurrence sees another occurrence's tasks
+**Solution**: Ensure all queries include `occurrence_id` parameter
+
+**Problem**: Shared task claimed by multiple occurrences
+**Solution**: Check database dialect - must use `ON CONFLICT` for PostgreSQL or `INSERT OR IGNORE` for SQLite
+
+**Problem**: Thoughts stuck in `__shared__` namespace
+**Solution**: Call `transfer_thought_ownership()` after claiming shared task
+
+**Problem**: Orphaned tasks after occurrence shutdown
+**Solution**: DatabaseMaintenanceService cleanup will handle (or implement graceful shutdown with transfer)
+
+### Related Documentation
+- `CIRIS_COMPREHENSIVE_GUIDE.md` - Multi-occurrence architecture overview
+- `tools/qa_runner/modules/MULTI_OCCURRENCE_README.md` - QA test documentation
+- `FSD/multi_occurrence_implementation_plan_1.4.8.md` - Implementation plan

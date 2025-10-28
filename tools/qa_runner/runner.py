@@ -1645,7 +1645,10 @@ class QARunner:
         import os
 
         # Customize environment for this occurrence
-        old_env = os.environ.copy()
+        # Store original values to restore later
+        orig_occ_id = os.environ.get("CIRIS_OCCURRENCE_ID")
+        orig_log_dir = os.environ.get("CIRIS_LOG_DIR")
+
         os.environ["CIRIS_OCCURRENCE_ID"] = occurrence_id
         os.environ["CIRIS_LOG_DIR"] = f"logs/occurrence_{occurrence_id}"
 
@@ -1653,9 +1656,16 @@ class QARunner:
             success = manager.start()
             return success
         finally:
-            # Restore environment
-            os.environ.clear()
-            os.environ.update(old_env)
+            # Restore original environment values
+            if orig_occ_id is None:
+                os.environ.pop("CIRIS_OCCURRENCE_ID", None)
+            else:
+                os.environ["CIRIS_OCCURRENCE_ID"] = orig_occ_id
+
+            if orig_log_dir is None:
+                os.environ.pop("CIRIS_LOG_DIR", None)
+            else:
+                os.environ["CIRIS_LOG_DIR"] = orig_log_dir
 
     def query_shared_tasks_db(self) -> List[Dict]:
         """Query shared tasks directly from PostgreSQL database.

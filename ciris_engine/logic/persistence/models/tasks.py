@@ -4,9 +4,10 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.utils import map_row_to_task
+from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.runtime.models import Task, TaskContext
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
@@ -118,6 +119,141 @@ def update_task_status(
             return False
     except Exception as e:
         logger.exception(f"Failed to update task status for {task_id}: {e}")
+        return False
+
+
+def transfer_task_ownership(
+    task_id: str,
+    from_occurrence_id: str,
+    to_occurrence_id: str,
+    time_service: TimeServiceProtocol,
+    audit_service: AuditServiceProtocol,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Transfer task ownership from one occurrence to another.
+
+    This is used when claiming shared tasks to transfer ownership from '__shared__'
+    to the claiming occurrence so seed thoughts can be processed.
+
+    Args:
+        task_id: The task ID to transfer
+        from_occurrence_id: Current occurrence ID (typically '__shared__')
+        to_occurrence_id: New occurrence ID (the claiming occurrence)
+        time_service: Time service for timestamp
+        audit_service: Audit service for logging ownership transfer events
+        db_path: Optional database path
+
+    Returns:
+        True if transfer successful, False otherwise
+    """
+    sql = "UPDATE tasks SET agent_occurrence_id = ?, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
+    params = (to_occurrence_id, time_service.now_iso(), task_id, from_occurrence_id)
+
+    success = False
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}")
+                success = True
+            else:
+                logger.warning(f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer")
+    except Exception as e:
+        logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
+        success = False
+
+    # Log audit event for ownership transfer (fire and forget)
+    import asyncio
+    from typing import cast
+
+    from ciris_engine.schemas.audit.core import EventPayload
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+    audit_event = AuditEventData(
+        entity_id=task_id,
+        actor="system",
+        outcome="success" if success else "failed",
+        severity="info",
+        action="task_ownership_transfer",
+        resource="task",
+        metadata={
+            "task_id": task_id,
+            "from_occurrence_id": from_occurrence_id,
+            "to_occurrence_id": to_occurrence_id,
+            "task_type": "shared_coordination",
+        },
+    )
+
+    try:
+        # Try to get the running event loop
+        loop = asyncio.get_running_loop()
+        # Schedule the audit event as a task - cast to EventPayload for protocol compatibility
+        loop.create_task(audit_service.log_event("task_ownership_transfer", cast(EventPayload, audit_event)))
+    except RuntimeError:
+        # No event loop running - this is expected in sync contexts like tests
+        # The audit service will still track the call via the mock
+        logger.debug("No event loop running, audit logging deferred")
+
+    return success
+
+
+def update_task_context_and_signing(
+    task_id: str,
+    occurrence_id: str,
+    context: TaskContext,
+    time_service: TimeServiceProtocol,
+    signed_by: Optional[str] = None,
+    signature: Optional[str] = None,
+    signed_at: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Update the context and signing metadata for an existing task."""
+
+    context_json = json.dumps(context.model_dump(mode="json"))
+    sql = """
+        UPDATE tasks
+        SET context_json = ?,
+            signed_by = ?,
+            signature = ?,
+            signed_at = ?,
+            updated_at = ?
+        WHERE task_id = ? AND agent_occurrence_id = ?
+    """
+    params = (
+        context_json,
+        signed_by,
+        signature,
+        signed_at,
+        time_service.now_iso(),
+        task_id,
+        occurrence_id,
+    )
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(
+                    "Updated context and signing metadata for task %s (occurrence: %s)",
+                    task_id,
+                    occurrence_id,
+                )
+                return True
+            logger.warning(
+                "Task %s not found when updating context/signature for occurrence %s",
+                task_id,
+                occurrence_id,
+            )
+            return False
+    except Exception as e:
+        logger.exception(
+            "Failed to update context/signature for task %s (occurrence: %s): %s",
+            task_id,
+            occurrence_id,
+            e,
+        )
         return False
 
 
@@ -434,22 +570,50 @@ def try_claim_shared_task(
         return (existing, False)
 
     # Try to create the task with INSERT OR IGNORE for race safety
+    # Use dialect adapter for database compatibility
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
     now = time_service.now_iso()
-    sql = """
-        INSERT OR IGNORE INTO tasks
-        (task_id, channel_id, agent_occurrence_id, description, status, priority,
-         created_at, updated_at, parent_task_id, context_json, outcome_json,
-         signed_by, signature, signed_at, updated_info_available, updated_info_content)
-        VALUES (?, ?, '__shared__', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL)
-    """
+
+    columns = [
+        "task_id",
+        "channel_id",
+        "agent_occurrence_id",
+        "description",
+        "status",
+        "priority",
+        "created_at",
+        "updated_at",
+        "parent_task_id",
+        "context_json",
+        "outcome_json",
+        "signed_by",
+        "signature",
+        "signed_at",
+        "updated_info_available",
+        "updated_info_content",
+    ]
+    conflict_columns = ["task_id"]  # Primary key constraint (task_id only)
+
+    sql = adapter.insert_or_ignore("tasks", columns, conflict_columns)
     params = (
         task_id,
         channel_id,
+        "__shared__",
         description,
         TaskStatus.PENDING.value,
         priority,
         now,
         now,
+        None,  # parent_task_id
+        None,  # context_json
+        None,  # outcome_json
+        None,  # signed_by
+        None,  # signature
+        None,  # signed_at
+        0,  # updated_info_available
+        None,  # updated_info_content
     )
 
     try:

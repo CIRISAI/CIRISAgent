@@ -64,6 +64,7 @@ class BaseProcessor(ABC):
 
         # Extract other commonly used services with direct attribute access
         self.memory_service = services.memory_service
+        self.audit_service = services.audit_service
         self.graphql_provider = getattr(services, "graphql_provider", None)
         self.app_config = getattr(services, "app_config", None)
         self.runtime = getattr(services, "runtime", None)

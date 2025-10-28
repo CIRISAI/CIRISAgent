@@ -146,6 +146,8 @@ def skip_without_discord_token(request):
 pytest_plugins = [
     "tests.fixtures.telemetry_api",
     "tests.fixtures.system_snapshot_fixtures",
+    "tests.fixtures.audit",
+    "tests.fixtures.database_maintenance",
 ]
 
 

@@ -137,7 +137,8 @@ class EssentialConfig(BaseModel):
         """Load configuration from environment variables if present."""
         import os
 
-        env_occurrence_id = os.getenv("AGENT_OCCURRENCE_ID")
+        # Check both CIRIS_OCCURRENCE_ID (new standard) and AGENT_OCCURRENCE_ID (legacy) for backward compatibility
+        env_occurrence_id = os.getenv("CIRIS_OCCURRENCE_ID") or os.getenv("AGENT_OCCURRENCE_ID")
         if env_occurrence_id:
             self.agent_occurrence_id = env_occurrence_id
 

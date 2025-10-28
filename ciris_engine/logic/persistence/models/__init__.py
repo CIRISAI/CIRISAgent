@@ -37,6 +37,7 @@ from .tasks import (
     get_tasks_older_than,
     get_top_tasks,
     task_exists,
+    update_task_context_and_signing,
     update_task_status,
 )
 from .thoughts import (
@@ -67,6 +68,7 @@ __all__ = [
     "count_tasks",
     "delete_tasks_by_ids",
     "get_tasks_older_than",
+    "update_task_context_and_signing",
     "add_thought",
     "get_thought_by_id",
     "async_get_thought_by_id",

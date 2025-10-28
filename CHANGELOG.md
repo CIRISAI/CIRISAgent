@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prevents "thought not found" errors and ensures proper multi-occurrence coordination
 - **P0: Shared Task Ownership Transfer** - Tasks claimed from `__shared__` were not persisting ownership to database (REVERTED - see architecture fix above)
 - **P1: Non-Claiming Occurrences Marking Shared Tasks Complete** - Only claiming occurrence now marks shared wakeup tasks complete
+- **P1: Database Maintenance Multi-Occurrence Support** - Fixed startup cleanup to properly handle multi-occurrence database
+  - Added `db_path` parameter to DatabaseMaintenanceService for test isolation
+  - Fixed all persistence function calls to pass `db_path` parameter
+  - Fixed `_cleanup_stale_wakeup_tasks()` to query `"__shared__"` occurrence
+  - Fixed `_cleanup_old_active_tasks()` to query ALL occurrences
+  - Added 7 TDD tests for multi-occurrence cleanup scenarios (100% pass rate)
+  - **Files**: `ciris_engine/logic/services/infrastructure/database_maintenance/service.py`, `tests/fixtures/database_maintenance.py`, `tests/test_services/test_database_maintenance_multi_occurrence.py`
+- **P2: Multi-Occurrence QA Test Expectations** - Fixed test to properly validate coordination without false positives
+  - Filter wakeup tasks by today's date to exclude historical completed tasks
+  - Filter thoughts to only consider test occurrence_ids, not leftover data from previous runs
+  - Multi-occurrence integration test now achieves 100% pass rate (5/5 tests)
+  - **Files**: `tools/qa_runner/modules/multi_occurrence_tests.py`
 - **PostgreSQL Dialect Adapter** - Fixed `INSERT OR IGNORE` to use `ON CONFLICT DO NOTHING` for PostgreSQL
 - **Occurrence Context Restoration** - Fixed shutdown task context handling for shared tasks
 - **PRIMARY KEY Conflicts** - Corrected conflict_columns to match actual PRIMARY KEYs

@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2025-10-28
+
+### Added
+- **Reddit Module Production Readiness** - Complete Reddit ToS and community guidelines compliance implementation
+  - **Deletion Compliance (Reddit ToS)** - Zero retention of deleted content with DSAR-pattern tracking
+    - `reddit_delete_content` tool for permanent content deletion
+    - Multi-phase deletion: Reddit API → cache purge → audit trail
+    - Deletion status tracking with `RedditDeletionStatus` (DSAR pattern)
+    - `get_deletion_status()` method for DSAR-style deletion queries
+  - **Transparency Compliance (Community Guidelines)** - AI disclosure requirement
+    - `reddit_disclose_identity` tool for posting AI transparency disclosures
+    - Default and custom disclosure messages with automatic footer
+    - Clear AI identification: "I am CIRIS, an AI moderation assistant"
+    - Links to ciris.ai for learn more and issue reporting
+    - Human oversight mention in default disclosure message
+  - **Observer Auto-Purge** - Passive deletion detection and cache cleanup
+    - `check_content_deleted()` - Detects deleted content via removed_by_category, removed, and deleted flags
+    - `purge_deleted_content()` - Removes from local caches with audit trail logging
+    - `check_and_purge_if_deleted()` - Convenience method for deletion check + purge
+    - Zero retention policy enforcement across all caches
+  - **Comprehensive Test Suite** - 51 tests covering all compliance functionality
+    - 13 deletion compliance tests (Reddit ToS)
+    - 12 transparency tests (community guidelines)
+    - 18 observer purge tests (auto-purge mechanism)
+    - 8 schema validation tests
+
+### Fixed
+- **P0: Reddit Tool Schema Definition** - Fixed `ToolParameterSchema` construction to match expected format
+  - **Problem**: `_build_tool_schemas()` was passing wrong fields (name, parameters, description) to `ToolParameterSchema`
+  - **Impact**: Reddit module couldn't instantiate due to schema validation errors
+  - **Solution**: Created `_schema_to_param_schema()` helper to extract type, properties, required from JSON schema
+  - Affects all Reddit tools: get_user_context, submit_post, submit_comment, remove_content, get_submission, delete_content, disclose_identity
+  - **Files**: `ciris_modular_services/reddit/service.py:1108-1151`
+- **P0: Reddit MRO Conflict** - Fixed Method Resolution Order conflict in RedditToolService and RedditCommunicationService
+  - **Problem**: Diamond inheritance with `RedditOAuthProtocol` appearing twice in hierarchy
+  - **Impact**: Module import failed with "Cannot create a consistent method resolution order (MRO)"
+  - **Solution**: Removed duplicate protocol inheritance, rely on `RedditServiceBase` providing protocol
+  - **Files**: `ciris_modular_services/reddit/service.py:648, 1197`
+- **P1: Disclosure Comment Schema Mismatch** - Fixed `_tool_disclose_identity` to use correct field names
+  - **Problem**: Used `target_id` and `distinguish` fields that don't exist in `RedditSubmitCommentRequest`
+  - **Impact**: Disclosure tool always failed with validation errors
+  - **Solution**: Changed to `parent_fullname` and removed `distinguish` (not supported by schema)
+  - **Files**: `ciris_modular_services/reddit/service.py:1008-1014`
+
+### Changed
+- Updated Reddit test fixtures to match nested schema structure (`RedditCommentResult` with nested `comment` field)
+- Removed `test_disclosure_comment_is_distinguished` (distinguish not supported), replaced with `test_disclosure_comment_parent_is_submission`
+
+### Test Results
+- ✅ **51/51 Reddit module tests passing** (100%)
+  - 13 deletion compliance tests
+  - 12 transparency tests
+  - 18 observer purge tests
+  - 8 schema tests
+
 ## [1.4.8] - 2025-10-27
 
 ### Added

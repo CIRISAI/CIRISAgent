@@ -645,7 +645,7 @@ class RedditServiceBase(BaseService, RedditOAuthProtocol):
 # ----------------------------------------------------------------------
 
 
-class RedditToolService(RedditServiceBase, RedditToolProtocol):
+class RedditToolService(RedditServiceBase):
     """Tool service providing Reddit moderation and outreach utilities."""
 
     def __init__(
@@ -1006,13 +1006,12 @@ class RedditToolService(RedditServiceBase, RedditToolProtocol):
 
             # Post disclosure as comment
             comment_request = RedditSubmitCommentRequest(
-                target_id=f"t3_{submission_id}",
+                parent_fullname=f"t3_{submission_id}",
                 text=comment_text,
-                distinguish=True,
                 lock_thread=False,
             )
 
-            comment = await self._client.submit_comment(comment_request)
+            comment_result = await self._client.submit_comment(comment_request)
 
             logger.info(f"Posted AI disclosure to {request.channel_reference}")
 
@@ -1023,7 +1022,7 @@ class RedditToolService(RedditServiceBase, RedditToolProtocol):
             tool_name="reddit_disclose_identity",
             status=ToolExecutionStatus.COMPLETED,
             success=True,
-            data=comment.model_dump(mode="json"),
+            data=comment_result.model_dump(mode="json"),
             error=None,
             correlation_id=correlation_id,
         )
@@ -1105,60 +1104,48 @@ class RedditToolService(RedditServiceBase, RedditToolProtocol):
             correlation_id=correlation_id,
         )
 
+    def _schema_to_param_schema(self, json_schema: JSONDict) -> ToolParameterSchema:
+        """Convert a Pydantic JSON schema to ToolParameterSchema format."""
+        return ToolParameterSchema(
+            type=json_schema.get("type", "object"),
+            properties=json_schema.get("properties", {}),
+            required=json_schema.get("required", []),
+        )
+
     def _build_tool_schemas(self) -> Dict[str, ToolParameterSchema]:
         return {
-            "reddit_get_user_context": ToolParameterSchema(
-                name="reddit_get_user_context",
-                parameters=RedditUserContextRequest.model_json_schema(),
-                description="Fetch metadata and recent activity for a Reddit user",
+            "reddit_get_user_context": self._schema_to_param_schema(
+                RedditUserContextRequest.model_json_schema()
             ),
-            "reddit_submit_post": ToolParameterSchema(
-                name="reddit_submit_post",
-                parameters=RedditSubmitPostRequest.model_json_schema(),
-                description="Submit a markdown self-post to the configured subreddit",
-            ),
-            "reddit_submit_comment": ToolParameterSchema(
-                name="reddit_submit_comment",
-                parameters=RedditSubmitCommentRequest.model_json_schema(),
-                description="Reply to a submission or comment",
-            ),
-            "reddit_remove_content": ToolParameterSchema(
-                name="reddit_remove_content",
-                parameters=RedditRemoveContentRequest.model_json_schema(),
-                description="Remove a submission or comment",
-            ),
-            "reddit_get_submission": ToolParameterSchema(
-                name="reddit_get_submission",
-                parameters=RedditGetSubmissionRequest.model_json_schema(),
-                description="Fetch metadata for a submission",
-            ),
-            "reddit_delete_content": ToolParameterSchema(
-                name="reddit_delete_content",
-                parameters=RedditDeleteContentRequest.model_json_schema(),
-                description="Permanently delete content from Reddit (ToS compliance)",
-            ),
-            "reddit_disclose_identity": ToolParameterSchema(
-                name="reddit_disclose_identity",
-                parameters=RedditDisclosureRequest.model_json_schema(),
-                description="Post AI transparency disclosure (community guidelines compliance)",
-            ),
+            "reddit_submit_post": self._schema_to_param_schema(RedditSubmitPostRequest.model_json_schema()),
+            "reddit_submit_comment": self._schema_to_param_schema(RedditSubmitCommentRequest.model_json_schema()),
+            "reddit_remove_content": self._schema_to_param_schema(RedditRemoveContentRequest.model_json_schema()),
+            "reddit_get_submission": self._schema_to_param_schema(RedditGetSubmissionRequest.model_json_schema()),
+            "reddit_delete_content": self._schema_to_param_schema(RedditDeleteContentRequest.model_json_schema()),
+            "reddit_disclose_identity": self._schema_to_param_schema(RedditDisclosureRequest.model_json_schema()),
             "reddit_observe": ToolParameterSchema(
-                name="reddit_observe",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "channel_reference": {"type": "string"},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 100},
-                    },
-                    "required": ["channel_reference"],
+                type="object",
+                properties={
+                    "channel_reference": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
                 },
-                description="Fetch passive observation data for a subreddit, submission, comment, or user",
+                required=["channel_reference"],
             ),
         }
 
     def _build_tool_info(self) -> Dict[str, ToolInfo]:
+        tool_descriptions = {
+            "reddit_get_user_context": "Fetch metadata and recent activity for a Reddit user",
+            "reddit_submit_post": "Submit a markdown self-post to the configured subreddit",
+            "reddit_submit_comment": "Reply to a submission or comment",
+            "reddit_remove_content": "Remove a submission or comment",
+            "reddit_get_submission": "Fetch metadata for a submission",
+            "reddit_delete_content": "Permanently delete content from Reddit (ToS compliance)",
+            "reddit_disclose_identity": "Post AI transparency disclosure (community guidelines compliance)",
+            "reddit_observe": "Fetch passive observation data for a subreddit, submission, comment, or user",
+        }
         return {
-            name: ToolInfo(name=name, description=schema.description or "", parameters=schema.parameters)
+            name: ToolInfo(name=name, description=tool_descriptions.get(name, ""), parameters=schema)
             for name, schema in self._tool_schemas.items()
         }
 
@@ -1194,7 +1181,7 @@ class RedditToolService(RedditServiceBase, RedditToolProtocol):
 # ----------------------------------------------------------------------
 
 
-class RedditCommunicationService(RedditServiceBase, RedditCommunicationProtocol):
+class RedditCommunicationService(RedditServiceBase):
     """Communication service that lets CIRIS speak and fetch on Reddit."""
 
     def __init__(

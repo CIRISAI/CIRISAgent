@@ -1102,7 +1102,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 # Some services (like observers) may need runtime dependencies
                 try:
                     # Try to inject runtime dependencies if the service accepts them
-                    service_instance = service_class(
+                    # Cast to Any for duck-typed optional runtime dependency injection
+                    from typing import Any, cast
+
+                    service_instance = cast(Any, service_class)(
                         bus_manager=self.bus_manager,
                         memory_service=self.memory_service,
                         agent_id=None,  # Will be set by observer from identity service

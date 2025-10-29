@@ -756,11 +756,16 @@ def get_task_by_correlation_id(
     Returns:
         Task if found, None otherwise
     """
-    # Query using JSON extraction for correlation_id from context_json
-    sql = """
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    # Use dialect adapter for JSON extraction (SQLite vs PostgreSQL)
+    adapter = get_adapter()
+    json_expr = adapter.json_extract("context_json", "$.correlation_id")
+
+    sql = f"""
         SELECT * FROM tasks
-        WHERE agent_occurrence_id = ?
-          AND json_extract(context_json, '$.correlation_id') = ?
+        WHERE agent_occurrence_id = {adapter.placeholder()}
+          AND {json_expr} = {adapter.placeholder()}
         ORDER BY created_at DESC
         LIMIT 1
     """

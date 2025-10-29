@@ -796,3 +796,135 @@ class TestModularServiceLoading:
 
             # Verify service WAS registered (load_modules doesn't filter MOCK)
             mock_service_initializer.service_registry.register_service.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_runtime_dependency_injection_success(self, mock_service_initializer, test_manifest):
+        """Test successful runtime dependency injection into modular service."""
+        # Create mock service class that accepts runtime dependencies
+        mock_service_instance = Mock()
+
+        def mock_service_constructor(**kwargs):
+            """Simulate service that accepts runtime dependencies."""
+            # Verify all expected dependencies are passed
+            assert "bus_manager" in kwargs
+            assert "memory_service" in kwargs
+            assert "agent_id" in kwargs
+            assert "filter_service" in kwargs
+            assert "secrets_service" in kwargs
+            assert "time_service" in kwargs
+            return mock_service_instance
+
+        mock_service_class = Mock(side_effect=mock_service_constructor)
+
+        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+            mock_loader = Mock()
+            mock_loader.discover_services.return_value = [test_manifest]
+            mock_loader.load_service_class.return_value = mock_service_class
+            mock_loader_class.return_value = mock_loader
+
+            # Add required dependencies to initializer
+            mock_service_initializer.memory_service = Mock()
+            mock_service_initializer.adaptive_filter_service = Mock()
+            mock_service_initializer.secrets_service = Mock()
+            mock_service_initializer.time_service = Mock()
+
+            await mock_service_initializer._load_modular_service("test_adapter")
+
+            # Verify service was instantiated with runtime dependencies
+            mock_service_class.assert_called_once()
+            call_kwargs = mock_service_class.call_args[1]
+            assert call_kwargs["bus_manager"] == mock_service_initializer.bus_manager
+            assert call_kwargs["memory_service"] == mock_service_initializer.memory_service
+            assert call_kwargs["agent_id"] is None  # Identity service will set later
+            assert call_kwargs["filter_service"] == mock_service_initializer.adaptive_filter_service
+            assert call_kwargs["secrets_service"] == mock_service_initializer.secrets_service
+            assert call_kwargs["time_service"] == mock_service_initializer.time_service
+
+            # Verify service was registered
+            mock_service_initializer.service_registry.register_service.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_runtime_dependency_injection_fallback(self, mock_service_initializer, test_manifest):
+        """Test fallback to no-args constructor when service doesn't accept dependencies."""
+        # Create mock service class that ONLY accepts no-args constructor
+        mock_service_instance = Mock()
+
+        def mock_service_constructor(*args, **kwargs):
+            """Simulate service that raises TypeError if kwargs provided."""
+            if kwargs:
+                raise TypeError(f"Unexpected keyword arguments: {list(kwargs.keys())}")
+            return mock_service_instance
+
+        mock_service_class = Mock(side_effect=mock_service_constructor)
+
+        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+            mock_loader = Mock()
+            mock_loader.discover_services.return_value = [test_manifest]
+            mock_loader.load_service_class.return_value = mock_service_class
+            mock_loader_class.return_value = mock_loader
+
+            # Add required dependencies to initializer
+            mock_service_initializer.memory_service = Mock()
+            mock_service_initializer.adaptive_filter_service = Mock()
+            mock_service_initializer.secrets_service = Mock()
+            mock_service_initializer.time_service = Mock()
+
+            await mock_service_initializer._load_modular_service("test_adapter")
+
+            # Verify service was instantiated twice:
+            # 1. First with runtime dependencies (raised TypeError)
+            # 2. Second with no args (fallback)
+            assert mock_service_class.call_count == 2
+
+            # First call had kwargs
+            first_call_kwargs = mock_service_class.call_args_list[0][1]
+            assert len(first_call_kwargs) > 0
+
+            # Second call had no args/kwargs (fallback)
+            second_call_args = mock_service_class.call_args_list[1][0]
+            second_call_kwargs = mock_service_class.call_args_list[1][1]
+            assert len(second_call_args) == 0
+            assert len(second_call_kwargs) == 0
+
+            # Verify service was registered
+            mock_service_initializer.service_registry.register_service.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_runtime_dependency_injection_with_none_dependencies(self, mock_service_initializer, test_manifest):
+        """Test runtime dependency injection when some dependencies are None."""
+        # Create mock service class that accepts runtime dependencies
+        mock_service_instance = Mock()
+
+        def mock_service_constructor(**kwargs):
+            """Simulate service that accepts None values for dependencies."""
+            # Service should handle None gracefully
+            assert kwargs.get("bus_manager") is not None  # Always set
+            assert kwargs.get("memory_service") is None  # Might be None
+            assert kwargs.get("agent_id") is None  # Always None initially
+            return mock_service_instance
+
+        mock_service_class = Mock(side_effect=mock_service_constructor)
+
+        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+            mock_loader = Mock()
+            mock_loader.discover_services.return_value = [test_manifest]
+            mock_loader.load_service_class.return_value = mock_service_class
+            mock_loader_class.return_value = mock_loader
+
+            # Set some dependencies to None
+            mock_service_initializer.memory_service = None
+            mock_service_initializer.adaptive_filter_service = None
+            mock_service_initializer.secrets_service = None
+            mock_service_initializer.time_service = None
+
+            await mock_service_initializer._load_modular_service("test_adapter")
+
+            # Verify service was instantiated with None dependencies
+            mock_service_class.assert_called_once()
+            call_kwargs = mock_service_class.call_args[1]
+            assert call_kwargs["bus_manager"] == mock_service_initializer.bus_manager
+            assert call_kwargs["memory_service"] is None
+            assert call_kwargs["agent_id"] is None
+            assert call_kwargs["filter_service"] is None
+            assert call_kwargs["secrets_service"] is None
+            assert call_kwargs["time_service"] is None

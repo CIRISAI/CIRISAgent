@@ -817,3 +817,148 @@ async def test_tsdb_service_node_type(tsdb_service):
     """Test that TSDBConsolidationService manages TSDB_SUMMARY nodes."""
     node_type = tsdb_service.get_node_type()
     assert node_type == NodeType.TSDB_SUMMARY
+
+
+@pytest.mark.asyncio
+async def test_consolidate_missed_windows_acquires_locks(tsdb_service, mock_memory_bus):
+    """Test that _consolidate_missed_windows acquires locks before consolidating each period."""
+    # Mock _find_oldest_unconsolidated_period to return a timestamp (simulate data exists)
+    oldest_time = datetime.now(timezone.utc) - timedelta(hours=48)
+    with patch.object(tsdb_service, "_find_oldest_unconsolidated_period", return_value=oldest_time):
+        # Mock check_period_consolidated to return False for multiple periods
+        with patch.object(tsdb_service._query_manager, "check_period_consolidated", return_value=False):
+            with patch.object(tsdb_service._query_manager, "_try_acquire_lock", return_value=True) as mock_acquire:
+                with patch.object(tsdb_service, "_consolidate_period", new_callable=AsyncMock) as mock_consolidate:
+                    # Set consolidation as enabled
+                    tsdb_service._consolidation_enabled = True
+
+                    # Run missed window consolidation
+                    await tsdb_service._consolidate_missed_windows()
+
+                    # Verify locks were acquired for each missed period
+                    assert mock_acquire.call_count > 0
+
+                    # Verify each lock acquisition used correct key format
+                    for call in mock_acquire.call_args_list:
+                        lock_key = call[0][0]
+                        assert lock_key.startswith("missed:")
+                        # ISO format timestamp (either Z or +00:00)
+                        assert lock_key.endswith("Z") or lock_key.endswith("+00:00")
+
+                    # Verify consolidation happened after acquiring locks
+                    assert mock_consolidate.call_count == mock_acquire.call_count
+
+
+@pytest.mark.asyncio
+async def test_consolidate_missed_windows_skips_locked_periods(tsdb_service):
+    """Test that _consolidate_missed_windows skips periods when lock is held by another occurrence."""
+    # Mock _find_oldest_unconsolidated_period to return a timestamp (simulate data exists)
+    oldest_time = datetime.now(timezone.utc) - timedelta(hours=48)
+    with patch.object(tsdb_service, "_find_oldest_unconsolidated_period", return_value=oldest_time):
+        # Mock check_period_consolidated to return False for multiple periods
+        with patch.object(tsdb_service._query_manager, "check_period_consolidated", return_value=False):
+            with patch.object(tsdb_service._query_manager, "_try_acquire_lock", return_value=False) as mock_acquire:
+                with patch.object(tsdb_service, "_consolidate_period", new_callable=AsyncMock) as mock_consolidate:
+                    # Set consolidation as enabled
+                    tsdb_service._consolidation_enabled = True
+
+                    # Run missed window consolidation
+                    await tsdb_service._consolidate_missed_windows()
+
+                    # Verify lock acquisition was attempted
+                    assert mock_acquire.call_count > 0
+
+                    # Verify consolidation was SKIPPED (lock held by another occurrence)
+                    assert mock_consolidate.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_consolidate_missed_windows_partial_lock_acquisition(tsdb_service):
+    """Test missed window consolidation with mixed lock acquisition results."""
+    lock_results = [True, False, True, False]  # Acquire 1st and 3rd periods
+    lock_call_count = 0
+
+    def mock_acquire_lock(*args, **kwargs):
+        """Simulate mixed lock acquisition results."""
+        nonlocal lock_call_count
+        if lock_call_count < len(lock_results):
+            result = lock_results[lock_call_count]
+            lock_call_count += 1
+            return result
+        return False
+
+    # Mock _find_oldest_unconsolidated_period to return a timestamp (simulate data exists)
+    oldest_time = datetime.now(timezone.utc) - timedelta(hours=48)
+    with patch.object(tsdb_service, "_find_oldest_unconsolidated_period", return_value=oldest_time):
+        # Mock check_period_consolidated to return False for multiple periods
+        with patch.object(tsdb_service._query_manager, "check_period_consolidated", return_value=False):
+            with patch.object(tsdb_service._query_manager, "_try_acquire_lock", side_effect=mock_acquire_lock):
+                with patch.object(tsdb_service, "_consolidate_period", new_callable=AsyncMock) as mock_consolidate:
+                    # Set consolidation as enabled
+                    tsdb_service._consolidation_enabled = True
+
+                    # Run missed window consolidation
+                    await tsdb_service._consolidate_missed_windows()
+
+                    # Verify consolidation only happened for periods where lock was acquired
+                    expected_consolidations = sum(1 for result in lock_results if result)
+                    assert mock_consolidate.call_count == expected_consolidations
+
+
+@pytest.mark.asyncio
+async def test_consolidate_missed_windows_respects_already_consolidated(tsdb_service):
+    """Test that already-consolidated periods are skipped without lock acquisition."""
+    # Mock check_period_consolidated to return True (already consolidated)
+    with patch.object(tsdb_service._query_manager, "check_period_consolidated", return_value=True):
+        with patch.object(tsdb_service._query_manager, "_try_acquire_lock") as mock_acquire:
+            with patch.object(tsdb_service, "_consolidate_period", new_callable=AsyncMock) as mock_consolidate:
+                # Set consolidation as enabled
+                tsdb_service._consolidation_enabled = True
+
+                # Run missed window consolidation
+                await tsdb_service._consolidate_missed_windows()
+
+                # Verify no lock acquisition attempted (periods already consolidated)
+                assert mock_acquire.call_count == 0
+
+                # Verify no consolidation attempted
+                assert mock_consolidate.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_consolidate_missed_windows_lock_key_format(tsdb_service):
+    """Test that lock keys follow correct format for missed window consolidation."""
+    captured_lock_keys = []
+
+    def capture_lock_key(lock_key, *args, **kwargs):
+        """Capture lock keys for validation."""
+        captured_lock_keys.append(lock_key)
+        return True
+
+    # Mock _find_oldest_unconsolidated_period to return a timestamp (simulate data exists)
+    oldest_time = datetime.now(timezone.utc) - timedelta(hours=48)
+    with patch.object(tsdb_service, "_find_oldest_unconsolidated_period", return_value=oldest_time):
+        # Mock check_period_consolidated to return False for at least one period
+        with patch.object(tsdb_service._query_manager, "check_period_consolidated", return_value=False):
+            with patch.object(tsdb_service._query_manager, "_try_acquire_lock", side_effect=capture_lock_key):
+                with patch.object(tsdb_service, "_consolidate_period", new_callable=AsyncMock):
+                    # Set consolidation as enabled
+                    tsdb_service._consolidation_enabled = True
+
+                    # Run missed window consolidation
+                    await tsdb_service._consolidate_missed_windows()
+
+                    # Verify all lock keys follow "missed:<ISO_TIMESTAMP>" format
+                    for lock_key in captured_lock_keys:
+                        assert lock_key.startswith("missed:")
+                        # Extract timestamp part
+                        timestamp_str = lock_key.split(":", 1)[1]
+                        # Verify it's a valid ISO format timestamp
+                        assert "T" in timestamp_str
+                        # ISO format timestamp (either Z or +00:00)
+                        assert timestamp_str.endswith("Z") or timestamp_str.endswith("+00:00")
+                        # Verify can be parsed as datetime
+                        if timestamp_str.endswith("Z"):
+                            datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                        else:
+                            datetime.fromisoformat(timestamp_str)

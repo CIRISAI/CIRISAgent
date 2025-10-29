@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import OrderedDict
+from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_replace_spoofed_markers
 from ciris_engine.logic.buses import BusManager
@@ -93,12 +95,20 @@ class RedditObserver(BaseObserver[RedditMessage]):
         for entry in posts:
             if self._mark_seen(self._seen_posts, entry.item_id):
                 continue
+            # Check persistent storage for existing task with this correlation_id
+            if await self._already_handled(entry.item_id):
+                logger.debug(f"Reddit post {entry.item_id} already handled (found in task database), skipping")
+                continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
 
         comments = await self._api_client.fetch_subreddit_comments(self._subreddit, limit=_PASSIVE_LIMIT)
         for entry in comments:
             if self._mark_seen(self._seen_comments, entry.item_id):
+                continue
+            # Check persistent storage for existing task with this correlation_id
+            if await self._already_handled(entry.item_id):
+                logger.debug(f"Reddit comment {entry.item_id} already handled (found in task database), skipping")
                 continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
@@ -110,6 +120,37 @@ class RedditObserver(BaseObserver[RedditMessage]):
         while len(cache) > _CACHE_LIMIT:
             cache.popitem(last=False)
         return False
+
+    async def _already_handled(self, reddit_item_id: str) -> bool:
+        """
+        Check if a Reddit post/comment has already been handled.
+
+        This queries the task database for any task with this correlation_id,
+        preventing re-processing of content after restart.
+
+        Args:
+            reddit_item_id: The Reddit post/comment ID
+
+        Returns:
+            True if already handled, False otherwise
+        """
+        try:
+            from ciris_engine.logic.persistence.models.tasks import get_task_by_correlation_id
+
+            # Query tasks table for this correlation_id
+            existing_task = get_task_by_correlation_id(reddit_item_id, self.agent_occurrence_id)
+            if existing_task:
+                logger.debug(
+                    f"Found existing task {existing_task.task_id} for Reddit item {reddit_item_id}, "
+                    f"status={existing_task.status.value}"
+                )
+                return True
+            return False
+        except Exception as exc:
+            # If database query fails, log error but don't block processing
+            # (fail open - better to potentially re-process than miss content)
+            logger.warning(f"Failed to check if Reddit item {reddit_item_id} already handled: {exc}")
+            return False
 
     def _build_message_from_entry(self, entry) -> RedditMessage:
         content = entry.title or entry.body or "(no content)"
@@ -159,3 +200,99 @@ class RedditObserver(BaseObserver[RedditMessage]):
             setattr(msg, "permalink_url", msg.permalink)
 
         return msg
+
+    # ------------------------------------------------------------------
+    # Reddit ToS Compliance - Auto-purge on deletion detection
+    # ------------------------------------------------------------------
+
+    async def check_content_deleted(self, content_id: str) -> bool:
+        """
+        Check if content has been deleted on Reddit (Reddit ToS compliance).
+
+        Args:
+            content_id: Reddit content ID (without t3_/t1_ prefix)
+
+        Returns:
+            True if content is deleted or inaccessible
+        """
+        try:
+            # Try to fetch the content
+            fullname = f"t3_{content_id}" if not content_id.startswith("t") else content_id
+            metadata = await self._api_client._fetch_item_metadata(fullname)
+
+            # Check for deletion markers
+            removed_by = metadata.get("removed_by_category")
+            if removed_by is not None:
+                return True
+
+            # Check if marked as deleted
+            if metadata.get("removed") or metadata.get("deleted"):
+                return True
+
+            return False
+
+        except Exception as exc:
+            # If we can't fetch it, assume it's deleted
+            logger.debug(f"Unable to fetch {content_id}, assuming deleted: {exc}")
+            return True
+
+    async def purge_deleted_content(self, content_id: str, content_type: str = "unknown") -> None:
+        """
+        Purge deleted content from local caches (Reddit ToS compliance).
+
+        Reddit ToS Requirement: Zero retention of deleted content.
+
+        Args:
+            content_id: Reddit content ID (without prefixes)
+            content_type: Type of content (submission or comment)
+        """
+        purged_from_posts = False
+        purged_from_comments = False
+
+        # Purge from submission cache
+        if content_id in self._seen_posts:
+            del self._seen_posts[content_id]
+            purged_from_posts = True
+
+        # Purge from comment cache
+        if content_id in self._seen_comments:
+            del self._seen_comments[content_id]
+            purged_from_comments = True
+
+        if purged_from_posts or purged_from_comments:
+            # Log purge event (audit trail)
+            audit_event = {
+                "event": "reddit_content_purged",
+                "content_id": content_id,
+                "content_type": content_type,
+                "purged_from_posts": purged_from_posts,
+                "purged_from_comments": purged_from_comments,
+                "reason": "reddit_tos_compliance",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "audit_id": str(uuid4()),
+            }
+            logger.info(
+                f"Purged deleted {content_type} {content_id} from cache (ToS compliance): "
+                f"posts={purged_from_posts}, comments={purged_from_comments}"
+            )
+
+            # TODO: Send audit event to audit service if available
+            # if self._audit_service:
+            #     await self._audit_service.log_event(audit_event)
+
+    async def check_and_purge_if_deleted(self, content_id: str) -> bool:
+        """
+        Check if content is deleted and purge if so (convenience method).
+
+        Args:
+            content_id: Reddit content ID
+
+        Returns:
+            True if content was deleted and purged
+        """
+        is_deleted = await self.check_content_deleted(content_id)
+        if is_deleted:
+            content_type = "submission" if content_id.startswith("t3_") else "comment"
+            await self.purge_deleted_content(content_id, content_type)
+            return True
+        return False

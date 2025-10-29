@@ -1185,9 +1185,7 @@ class TestWakeupProcessorDispatchAndWait:
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
     @pytest.mark.asyncio
-    async def test_wait_for_task_completion_handles_missing_task(
-        self, mock_persistence, wakeup_processor, sample_task
-    ):
+    async def test_wait_for_task_completion_handles_missing_task(self, mock_persistence, wakeup_processor, sample_task):
         """Test _wait_for_task_completion handles disappeared task."""
         mock_persistence.get_task_by_id.return_value = None
 
@@ -1230,9 +1228,7 @@ class TestWakeupProcessorDispatchAndWait:
         mock_persistence.get_task_by_id.return_value = active_task
         mock_persistence.update_task_status = Mock()
 
-        result = await wakeup_processor._wait_for_task_completion(
-            sample_task, "TEST", max_wait=0.2, poll_interval=0.1
-        )
+        result = await wakeup_processor._wait_for_task_completion(sample_task, "TEST", max_wait=0.2, poll_interval=0.1)
 
         assert result is False
         # Should have marked task as failed

@@ -216,6 +216,29 @@ class RedditGetSubmissionRequest(BaseModel):
         return self
 
 
+class RedditDeleteContentRequest(BaseModel):
+    """
+    Parameters for permanently deleting content (Reddit ToS compliance).
+
+    Note: This is different from remove_content which hides content.
+          This permanently deletes it from Reddit.
+    """
+
+    thing_fullname: str = Field(..., description="Thing ID (t3_xxxxx or t1_xxxxx)")
+    purge_cache: bool = Field(True, description="Purge from local cache (Reddit ToS compliance)")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RedditDisclosureRequest(BaseModel):
+    """Parameters for AI transparency disclosure (community guidelines compliance)."""
+
+    channel_reference: str = Field(..., description="Channel reference (reddit:r/sub:post/id)")
+    custom_message: Optional[str] = Field(None, description="Optional custom disclosure message")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RedditTimelineEntry(BaseModel):
     """Simplified timeline entry for submissions and comments."""
 
@@ -352,4 +375,57 @@ __all__ = [
     "RedditRemovalResult",
     "RedditTimelineResponse",
     "RedditMessage",
+    "RedditDeletionResult",
+    "RedditDeletionStatus",
+    "RedditDeleteContentRequest",
+    "RedditDisclosureRequest",
 ]
+
+
+# ============================================================================
+# Reddit ToS Compliance - Deletion Schemas
+# ============================================================================
+
+
+class RedditDeletionResult(BaseModel):
+    """
+    Result of Reddit content deletion operation.
+
+    Reddit ToS Compliance: Zero retention of deleted content.
+    All deleted content must be purged from local cache immediately.
+    """
+
+    content_id: str = Field(..., description="Reddit content ID (t3_xxxxx or t1_xxxxx)")
+    content_type: Literal["submission", "comment"] = Field(..., description="Type of content deleted")
+    deleted_from_reddit: bool = Field(..., description="Whether content was deleted from Reddit API")
+    purged_from_cache: bool = Field(..., description="Whether content was purged from local cache")
+    audit_entry_id: str = Field(..., description="Audit trail entry ID for this deletion")
+    deleted_at: datetime = Field(..., description="Timestamp of deletion")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RedditDeletionStatus(BaseModel):
+    """
+    Status tracking for Reddit content deletion (similar to DSAR deletion status).
+
+    Tracks deletion progress through multiple phases:
+    1. Initiated - Deletion request received
+    2. Reddit deletion - Content deleted from Reddit API
+    3. Cache purge - Content removed from local cache
+    4. Audit complete - Deletion logged to audit trail
+    """
+
+    content_id: str = Field(..., description="Reddit content ID being tracked")
+    initiated_at: datetime = Field(..., description="When deletion was initiated")
+    completed_at: Optional[datetime] = Field(None, description="When deletion completed (all phases)")
+    deletion_confirmed: bool = Field(..., description="Whether deletion from Reddit confirmed")
+    cache_purged: bool = Field(..., description="Whether local cache purged")
+    audit_trail_updated: bool = Field(..., description="Whether audit trail updated")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @property
+    def is_complete(self) -> bool:
+        """Return True if all deletion phases are complete."""
+        return self.deletion_confirmed and self.cache_purged and self.audit_trail_updated

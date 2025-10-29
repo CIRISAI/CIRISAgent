@@ -152,7 +152,9 @@ def create_test_thought(
 # ========== transfer_thought_ownership Tests ==========
 
 
-def test_transfer_thought_ownership_success(temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol):
+def test_transfer_thought_ownership_success(
+    temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol
+):
     """Test successful thought ownership transfer."""
     # Create a thought with __shared__ ownership
     thought = create_test_thought(
@@ -185,7 +187,9 @@ def test_transfer_thought_ownership_success(temp_db: str, time_service: TimeServ
     assert old_thought is None
 
 
-def test_transfer_thought_ownership_not_found(temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol):
+def test_transfer_thought_ownership_not_found(
+    temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol
+):
     """Test transfer when thought doesn't exist with from_occurrence_id."""
     result = transfer_thought_ownership(
         thought_id="nonexistent-thought",
@@ -199,13 +203,12 @@ def test_transfer_thought_ownership_not_found(temp_db: str, time_service: TimeSe
     assert result is False
 
 
-def test_transfer_thought_ownership_wrong_owner(temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol):
+def test_transfer_thought_ownership_wrong_owner(
+    temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol
+):
     """Test transfer when thought exists but with different owner."""
     # Create thought with occurrence-456
-    thought = create_test_thought(
-        thought_id="owned-thought",
-        occurrence_id="occurrence-456",
-    db_path=temp_db)
+    thought = create_test_thought(thought_id="owned-thought", occurrence_id="occurrence-456", db_path=temp_db)
     add_thought(thought, db_path=temp_db)
 
     # Try to transfer from __shared__ (wrong owner)
@@ -226,7 +229,9 @@ def test_transfer_thought_ownership_wrong_owner(temp_db: str, time_service: Time
     assert thought_check.agent_occurrence_id == "occurrence-456"
 
 
-def test_transfer_thought_ownership_database_error(time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol):
+def test_transfer_thought_ownership_database_error(
+    time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol
+):
     """Test transfer with database error (invalid path)."""
     result = transfer_thought_ownership(
         thought_id="test-thought",
@@ -246,10 +251,7 @@ async def test_transfer_thought_ownership_audit_logging(temp_db: str, time_servi
     audit_service = MockAuditService()
 
     # Create thought
-    thought = create_test_thought(
-        thought_id="audit-test-thought",
-        occurrence_id="__shared__",
-    db_path=temp_db)
+    thought = create_test_thought(thought_id="audit-test-thought", occurrence_id="__shared__", db_path=temp_db)
     add_thought(thought, db_path=temp_db)
 
     # Transfer with running event loop
@@ -275,13 +277,12 @@ async def test_transfer_thought_ownership_audit_logging(temp_db: str, time_servi
     assert event_data.outcome == "success"
 
 
-def test_transfer_thought_ownership_no_event_loop(temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol):
+def test_transfer_thought_ownership_no_event_loop(
+    temp_db: str, time_service: TimeServiceProtocol, audit_service: AuditServiceProtocol
+):
     """Test transfer without event loop (should log debug message)."""
     # Create thought
-    thought = create_test_thought(
-        thought_id="no-loop-thought",
-        occurrence_id="__shared__",
-    db_path=temp_db)
+    thought = create_test_thought(thought_id="no-loop-thought", occurrence_id="__shared__", db_path=temp_db)
     add_thought(thought, db_path=temp_db)
 
     # Call outside of event loop (should handle gracefully)

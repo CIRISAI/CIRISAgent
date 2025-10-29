@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2025-10-28
+
+### Added
+- **Reddit Module Production Readiness** - Complete Reddit ToS and community guidelines compliance implementation
+  - **Deletion Compliance (Reddit ToS)** - Zero retention of deleted content with DSAR-pattern tracking
+    - `reddit_delete_content` tool for permanent content deletion
+    - Multi-phase deletion: Reddit API → cache purge → audit trail
+    - Deletion status tracking with `RedditDeletionStatus` (DSAR pattern)
+    - `get_deletion_status()` method for DSAR-style deletion queries
+  - **Transparency Compliance (Community Guidelines)** - AI disclosure requirement
+    - `reddit_disclose_identity` tool for posting AI transparency disclosures
+    - Default and custom disclosure messages with automatic footer
+    - Clear AI identification: "I am CIRIS, an AI moderation assistant"
+    - Links to ciris.ai for learn more and issue reporting
+    - Human oversight mention in default disclosure message
+  - **Observer Auto-Purge** - Passive deletion detection and cache cleanup
+    - `check_content_deleted()` - Detects deleted content via removed_by_category, removed, and deleted flags
+    - `purge_deleted_content()` - Removes from local caches with audit trail logging
+    - `check_and_purge_if_deleted()` - Convenience method for deletion check + purge
+    - Zero retention policy enforcement across all caches
+  - **Persistent Correlation Tracking** - Database-backed deduplication for Reddit observations
+    - `get_task_by_correlation_id()` function to query tasks by Reddit post/comment ID
+    - `_already_handled()` method in RedditObserver to prevent duplicate processing after restart
+    - Fail-open pattern on database errors to avoid blocking content processing
+    - Survives agent restarts and maintains processing history across occurrences
+  - **Comprehensive Test Suite** - 58 tests covering all compliance and tracking functionality
+    - 13 deletion compliance tests (Reddit ToS)
+    - 12 transparency tests (community guidelines)
+    - 21 observer tests (auto-purge + correlation tracking)
+    - 8 schema validation tests
+    - 4 correlation tracking tests (test_shared_tasks.py)
+- **ActionDispatcher Test Coverage** - Comprehensive unit tests for action dispatcher (75.68% coverage)
+  - 10 passing tests covering SPEAK, TOOL, PONDER, WAIT, DEFER actions
+  - Audit trail integration testing with tool metadata extraction
+  - Proper Pydantic schema validation across all action types
+  - Coverage improved from 16.89% to 75.68% (+58.79%)
+
+### Fixed
+- **P0: Reddit Tool Schema Definition** - Fixed `ToolParameterSchema` construction to match expected format
+  - **Problem**: `_build_tool_schemas()` was passing wrong fields (name, parameters, description) to `ToolParameterSchema`
+  - **Impact**: Reddit module couldn't instantiate due to schema validation errors
+  - **Solution**: Created `_schema_to_param_schema()` helper to extract type, properties, required from JSON schema
+  - Affects all Reddit tools: get_user_context, submit_post, submit_comment, remove_content, get_submission, delete_content, disclose_identity
+  - **Files**: `ciris_modular_services/reddit/service.py:1108-1151`
+- **P0: Reddit MRO Conflict** - Fixed Method Resolution Order conflict in RedditToolService and RedditCommunicationService
+  - **Problem**: Diamond inheritance with `RedditOAuthProtocol` appearing twice in hierarchy
+  - **Impact**: Module import failed with "Cannot create a consistent method resolution order (MRO)"
+  - **Solution**: Removed duplicate protocol inheritance, rely on `RedditServiceBase` providing protocol
+  - **Files**: `ciris_modular_services/reddit/service.py:648, 1197`
+- **P1: Disclosure Comment Schema Mismatch** - Fixed `_tool_disclose_identity` to use correct field names
+  - **Problem**: Used `target_id` and `distinguish` fields that don't exist in `RedditSubmitCommentRequest`
+  - **Impact**: Disclosure tool always failed with validation errors
+  - **Solution**: Changed to `parent_fullname` and removed `distinguish` (not supported by schema)
+  - **Files**: `ciris_modular_services/reddit/service.py:1008-1014`
+- **P2: SonarCloud String Concatenation Warnings** - Fixed implicit string concatenation in TSDB query manager
+  - **Problem**: Two f-strings placed adjacent without explicit concatenation operator
+  - **Impact**: SonarCloud code quality warnings at lines 545 and 632
+  - **Solution**: Merged adjacent f-strings into single f-strings
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/query_manager.py:545, 632`
+
+### Changed
+- Updated Reddit test fixtures to match nested schema structure (`RedditCommentResult` with nested `comment` field)
+- Removed `test_disclosure_comment_is_distinguished` (distinguish not supported), replaced with `test_disclosure_comment_parent_is_submission`
+
+### Test Results
+- ✅ **58/58 Reddit module tests passing** (100%)
+  - 13 deletion compliance tests
+  - 12 transparency tests
+  - 21 observer tests (auto-purge + correlation tracking)
+  - 8 schema validation tests
+  - 4 correlation tracking tests (test_shared_tasks.py)
+- ✅ **10/10 ActionDispatcher tests passing** (100%)
+  - Coverage: 75.68% (up from 16.89%)
+- ✅ **Overall test suite: 5942 tests passing, 74.28% coverage**
+
 ## [1.4.8] - 2025-10-27
 
 ### Added

@@ -740,3 +740,39 @@ def get_latest_shared_task(task_type: str, within_hours: int = 24, db_path: Opti
     except Exception as e:
         logger.exception(f"Failed to get latest shared task for {task_type}: {e}")
         return None
+
+
+def get_task_by_correlation_id(
+    correlation_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
+) -> Optional[Task]:
+    """
+    Query for a task by correlation_id (e.g., Reddit post/comment ID).
+
+    Args:
+        correlation_id: The correlation ID to search for (stored in context_json)
+        occurrence_id: Agent occurrence ID (default: "default")
+        db_path: Optional database path
+
+    Returns:
+        Task if found, None otherwise
+    """
+    # Query using JSON extraction for correlation_id from context_json
+    sql = """
+        SELECT * FROM tasks
+        WHERE agent_occurrence_id = ?
+          AND json_extract(context_json, '$.correlation_id') = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (occurrence_id, correlation_id))
+            row = cursor.fetchone()
+            if row:
+                return map_row_to_task(row)
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
+        return None

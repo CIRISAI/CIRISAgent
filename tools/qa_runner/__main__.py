@@ -164,7 +164,7 @@ def main():
     )
 
     # Create and run runner
-    runner = QARunner(config)
+    runner = QARunner(config, modules=modules)
     success = runner.run(modules)
 
     # Exit with appropriate code

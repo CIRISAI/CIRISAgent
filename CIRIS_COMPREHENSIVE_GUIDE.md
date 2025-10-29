@@ -11,21 +11,22 @@
 2. [Core Philosophy](#core-philosophy)
 3. [Current Status](#current-status)
 4. [Architecture Overview](#architecture-overview)
-5. [Security & Anti-Spoofing](#security--anti-spoofing)
-6. [Service Architecture](#service-architecture)
-7. [Billing & Credits](#billing--credits)
-8. [Privacy Safeguards & Transparency](#privacy-safeguards--transparency)
-9. [API v1.0 Complete Reference](#api-v10-complete-reference)
-10. [Agent Creation Ceremony](#agent-creation-ceremony)
-11. [Development Tools](#development-tools)
-12. [Production Deployment](#production-deployment)
-13. [Scout GUI - User Interface](#scout-gui---user-interface)
-14. [Debugging Guidelines](#debugging-guidelines)
-15. [Local Development](#local-development)
-16. [Testing Framework](#testing-framework)
-17. [Critical Commands](#critical-commands)
-18. [Important URLs](#important-urls)
-19. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
+5. [Multi-Occurrence Architecture](#multi-occurrence-architecture)
+6. [Security & Anti-Spoofing](#security--anti-spoofing)
+7. [Service Architecture](#service-architecture)
+8. [Billing & Credits](#billing--credits)
+9. [Privacy Safeguards & Transparency](#privacy-safeguards--transparency)
+10. [API v1.0 Complete Reference](#api-v10-complete-reference)
+11. [Agent Creation Ceremony](#agent-creation-ceremony)
+12. [Development Tools](#development-tools)
+13. [Production Deployment](#production-deployment)
+14. [Scout GUI - User Interface](#scout-gui---user-interface)
+15. [Debugging Guidelines](#debugging-guidelines)
+16. [Local Development](#local-development)
+17. [Testing Framework](#testing-framework)
+18. [Critical Commands](#critical-commands)
+19. [Important URLs](#important-urls)
+20. [Project Instructions (CLAUDE.md)](#project-instructions-claudemd)
 
 ---
 
@@ -143,6 +144,133 @@ def process_data(data: ProcessRequest) -> ProcessResponse:
 4. **SOLITUDE** - Reflection
 5. **DREAM** - Deep introspection
 6. **SHUTDOWN** - Graceful termination
+
+---
+
+## Multi-Occurrence Architecture
+
+**Status**: ✅ PRODUCTION-READY (since v1.4.8)
+
+CIRIS supports running multiple runtime instances (occurrences) against the same shared database, enabling horizontal scalability and high availability.
+
+### What is Multi-Occurrence?
+
+Multiple **occurrences** are runtime instances with:
+- **IDENTICAL**: `agent_id`, identity, memories, ethics, purpose
+- **UNIQUE**: `agent_occurrence_id`, runtime state, processing queue
+- **SHARED DATABASE**: PostgreSQL or SQLite (PostgreSQL recommended for production)
+
+### Key Features
+
+#### 1. Occurrence Isolation
+Each occurrence processes only its own tasks and thoughts:
+```python
+# All persistence queries filter by occurrence_id
+tasks = get_tasks_by_status("active", occurrence_id="occurrence_1")
+thoughts = get_thoughts_by_task_id(task_id, occurrence_id="occurrence_1")
+```
+
+#### 2. Shared Task Coordination
+Critical decisions (wakeup/shutdown) use atomic shared task claiming:
+```python
+# Only ONE occurrence claims and processes shared task
+task, was_created = try_claim_shared_task(
+    task_type="WAKEUP_RITUAL",
+    occurrence_id="occurrence_1"  # Claiming occurrence
+)
+```
+
+#### 3. Thought Ownership Transfer
+When claiming a shared task, thoughts transfer to the claiming occurrence:
+```python
+# Transfer thoughts from "__shared__" to claiming occurrence
+transfer_thought_ownership(
+    from_occurrence_id="__shared__",
+    to_occurrence_id="occurrence_1",
+    task_id=shared_task.task_id
+)
+```
+
+### Configuration
+
+#### Setting Occurrence ID
+```bash
+# Environment variable (recommended)
+export CIRIS_AGENT_OCCURRENCE_ID="occurrence_1"
+
+# Or via config.yml
+agent_occurrence_id: "occurrence_1"
+```
+
+#### Database Backend
+
+**SQLite** (development, single-machine):
+```bash
+export CIRIS_DB_URL="sqlite:///path/to/agent.db"
+```
+
+**PostgreSQL** (production, multi-occurrence):
+```bash
+export CIRIS_DB_URL="postgresql://user:password@host:5432/ciris_db"
+```
+
+### Production Deployment
+
+#### Example: 3 Occurrences on PostgreSQL
+```bash
+# Shared PostgreSQL database
+DB_URL="postgresql://ciris:password@db.internal:5432/agent_production"
+
+# Occurrence 1 (explorer role)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="explorer" python main.py --adapter api --port 9001 &
+
+# Occurrence 2 (primary)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="primary" python main.py --adapter api --port 9002 &
+
+# Occurrence 3 (backup)
+CIRIS_DB_URL=$DB_URL CIRIS_AGENT_OCCURRENCE_ID="backup" python main.py --adapter api --port 9003 &
+```
+
+### Testing Multi-Occurrence
+
+```bash
+# Run multi-occurrence QA tests with PostgreSQL
+python -m tools.qa_runner multi_occurrence --database-backends postgres
+
+# Expected: 27/27 tests passing (100%)
+```
+
+### Best Practices
+
+1. **Use PostgreSQL for Production**: SQLite works for development, but PostgreSQL provides:
+   - Better concurrency handling
+   - Connection pooling
+   - Production-grade reliability
+
+2. **Unique Occurrence IDs**: Each runtime must have a unique `agent_occurrence_id`
+
+3. **Monitor Database Cleanup**: DatabaseMaintenanceService handles:
+   - Stale wakeup task cleanup (>5 minutes old)
+   - Orphaned task cleanup
+   - Occurrence-aware retention policies
+
+4. **Load Balancing**: Use a reverse proxy (nginx, HAProxy) to distribute requests
+
+### Architecture Validation
+
+Multi-occurrence support spans all layers:
+1. **Schema**: Database columns with `agent_occurrence_id`
+2. **Models**: Task/Thought include occurrence ID
+3. **Persistence**: All queries filter by occurrence
+4. **Services**: TaskManager/ThoughtManager respect boundaries
+5. **Processors**: State processors pass occurrence ID through
+6. **Config**: EssentialConfig exposes `agent_occurrence_id`
+7. **Runtime**: Occurrence ID threads through initialization
+
+### Related Documentation
+- `tools/qa_runner/modules/MULTI_OCCURRENCE_README.md` - QA test documentation
+- `FSD/multi_occurrence_implementation_plan_1.4.8.md` - Implementation details
+- `docs/MULTI_OCCURRENCE_CONSENT_ANALYSIS.md` - Philosophical analysis
 
 ---
 
@@ -821,6 +949,185 @@ curl https://agents.ciris.ai/v1/transparency/feed
 - **No staged containers**: Clean swaps only
 - **Graceful shutdown**: Agents process as task
 - **Agent autonomy**: Can defer/reject updates
+
+### Reddit Deployment
+
+**Status**: ⚠️ NOT YET IMPLEMENTED - Planning Phase
+
+CIRIS plans to deploy to Reddit community r/ciris with account **u/ciris-scout** for community engagement and support.
+
+#### Prerequisites
+
+Before deploying to Reddit, the following must be completed:
+
+1. **Reddit Adapter Implementation**
+   - Create `ciris_engine/logic/adapters/reddit/` directory structure
+   - Implement Reddit API integration using PRAW (Python Reddit API Wrapper)
+   - Follow existing adapter patterns (Discord, API, CLI)
+
+2. **Reddit API Credentials**
+   ```bash
+   # Required environment variables:
+   REDDIT_CLIENT_ID="your_client_id"
+   REDDIT_CLIENT_SECRET="your_client_secret"
+   REDDIT_USER_AGENT="CIRIS/1.4.9 by u/ciris-scout"
+   REDDIT_USERNAME="ciris-scout"
+   REDDIT_PASSWORD="secure_password"
+   ```
+
+3. **Rate Limit Compliance**
+   - **Maximum**: 60 requests per minute (OAuth2 authenticated)
+   - Implement exponential backoff for rate limit errors
+   - Cache responses where appropriate
+   - Use batch operations when possible
+
+#### Reddit API Terms Compliance
+
+**Critical Requirements:**
+
+1. **Bot Identification** (MANDATORY)
+   - Username must clearly indicate bot nature: **u/ciris-scout**
+   - User-agent must be accurate and identify the bot
+   - Never spoof browsers or other bots
+   - Profile must state "AI moderation assistant" in bio
+
+2. **Authentication**
+   - Must use OAuth2 with registered application
+   - Never share or expose credentials
+   - Rotate secrets regularly
+
+3. **Data Retention Policy**
+   - **ZERO retention of deleted content** - Reddit ToS violation
+   - Even if de-identified or anonymized, deletion = permanent removal
+   - Implement deletion webhook to purge local copies immediately
+
+4. **Transparency Requirements**
+   - Clear disclosure in all interactions that user is speaking with an AI
+   - Link to CIRIS privacy policy and transparency feed
+   - Respond to user data requests (GDPR/CCPA compliance)
+
+5. **Moderator Bot Exemption**
+   - Moderator tools and bots remain free (no API pricing)
+   - If bot needs >60 req/min, contact Reddit via their form
+
+#### Community Guidelines Compliance
+
+**r/ciris Specific Considerations:**
+
+1. **Initial Community Announcement** (REQUIRED before activation)
+   ```markdown
+   # Introducing u/ciris-scout - AI Community Assistant
+
+   Hello r/ciris community!
+
+   We're introducing u/ciris-scout, an AI-powered community assistant designed to:
+   - Answer questions about CIRIS
+   - Provide technical support
+   - Share updates and announcements
+   - Foster healthy community discussion
+
+   **This is an AI bot** - All interactions are with an AI system, not a human.
+
+   **Privacy & Transparency:**
+   - Privacy Policy: https://agents.ciris.ai/privacy
+   - Transparency Feed: https://agents.ciris.ai/v1/transparency/feed
+   - Data Requests: https://agents.ciris.ai/v1/dsr
+
+   **Community Control:**
+   - You can opt-out by messaging the mods
+   - We respect all user preferences
+   - Moderators have full control over bot activity
+
+   Questions? Ask below or message the moderation team.
+   ```
+
+2. **Bot Disclosure in Every Interaction**
+   - Auto-footer on all responses: `---\n*This is an AI assistant. [Learn more about CIRIS](https://agents.ciris.ai)*`
+   - Never attempt to pass as human
+   - Immediately clarify if user seems confused about AI nature
+
+3. **Content Moderation Policy**
+   - **Never remove or edit user content** without explicit moderator directive
+   - Report policy violations to human moderators
+   - Provide explanations for any actions taken
+   - Defer controversial decisions to human oversight (Wise Authority)
+
+4. **Human Escalation Protocol**
+   - Complex ethical questions → Wise Authority deferral
+   - Conflict/harassment → Human moderator notification
+   - Medical/legal advice → Explicit disclaimer + human referral
+   - Uncertain situations → Conservative response + mod alert
+
+#### Anti-Bot Verification Compliance
+
+**Recent Reddit Policy (2025):**
+
+Reddit announced plans to "tighten verification to keep out human-like AI bots" after incidents of undisclosed AI bots impersonating humans.
+
+**Our Approach:**
+1. **Never attempt to pass Turing tests** - We are transparent about AI nature
+2. **Cooperate with verification systems** - Implement any required verification APIs
+3. **Proactive disclosure** - Bot status in username, profile, and all interactions
+4. **Community-first approach** - Prioritize genuine engagement over growth metrics
+
+#### Deployment Checklist
+
+Before activating u/ciris-scout on r/ciris:
+
+- [ ] Reddit adapter implementation complete and tested
+- [ ] API credentials obtained and secured
+- [ ] Rate limiting implemented (60 req/min max)
+- [ ] Data retention policy updated (ZERO deleted content retention)
+- [ ] Community announcement drafted and approved by Wise Authority
+- [ ] Bot profile clearly states AI nature
+- [ ] User-agent accurately identifies CIRIS
+- [ ] Transparency disclosure in all responses
+- [ ] Human escalation protocol tested
+- [ ] GDPR/CCPA data request handling implemented
+- [ ] r/ciris moderators briefed and approve deployment
+- [ ] Monitoring dashboard configured
+- [ ] Emergency shutdown procedure documented
+
+#### Monitoring & Compliance
+
+**Continuous Monitoring:**
+- Track API rate limits (stay well below 60/min)
+- Monitor community sentiment (feedback analysis)
+- Audit bot responses for disclosure compliance
+- Check for unauthorized data retention
+- Review escalation patterns to Wise Authority
+
+**Monthly Review:**
+- Community feedback summary
+- Compliance audit report
+- Rate limit analysis
+- Human escalation statistics
+- Recommendations for improvement
+
+#### Emergency Procedures
+
+**Immediate Shutdown Triggers:**
+- Reddit API ToS violation detected
+- Community backlash >threshold
+- Data retention policy breach
+- Unauthorized impersonation behavior
+- Wise Authority directive
+
+**Shutdown Process:**
+1. Disable bot immediately via runtime control API
+2. Post community notification explaining reason
+3. Conduct incident review with Wise Authority
+4. Implement corrective measures
+5. Seek community approval before reactivation
+
+#### Future Enhancements
+
+**Planned Features:**
+- Flair-based response customization
+- Community sentiment analysis
+- Automated FAQ responses
+- Integration with r/ciris wiki
+- Cross-post notification system
 
 ---
 

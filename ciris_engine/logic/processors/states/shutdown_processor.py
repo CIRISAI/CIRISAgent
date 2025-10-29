@@ -491,7 +491,9 @@ class ShutdownProcessor(BaseProcessor):
                 # Mark as processing
                 # CRITICAL: Must pass occurrence_id since thoughts were transferred to claiming occurrence
                 persistence.update_thought_status(
-                    thought_id=thought.thought_id, status=ThoughtStatus.PROCESSING, occurrence_id=self.agent_occurrence_id
+                    thought_id=thought.thought_id,
+                    status=ThoughtStatus.PROCESSING,
+                    occurrence_id=self.agent_occurrence_id,
                 )
 
                 # Process through thought processor

@@ -28,6 +28,7 @@ class QAModule(Enum):
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
+    REDDIT = "reddit"  # Reddit adapter testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -173,6 +174,9 @@ class QAConfig:
         elif module == QAModule.MESSAGE_ID_DEBUG:
             # Message ID debug tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.REDDIT:
+            # Reddit tests use SDK client
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:
@@ -251,6 +255,7 @@ class QAConfig:
                 QAModule.DSAR,
                 QAModule.PARTNERSHIP,
                 QAModule.BILLING,
+                QAModule.REDDIT,
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules
                 QAModule.HANDLERS,

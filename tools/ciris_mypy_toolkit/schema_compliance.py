@@ -87,16 +87,23 @@ class SchemaComplianceChecker:
                 content = f.read()
 
             # Check for legacy schema usage
+            # Note: Using re.IGNORECASE flag, so only uppercase patterns needed
             legacy_patterns = [
                 r"Dict\[str,\s*Any\]",  # Should use BaseSchema
-                r"dict\[str,\s*any\]",  # Should use BaseSchema
                 r"Dict\[Any,\s*Any\]",  # Should use specific schema
             ]
 
             violations = []
+            # Track matched positions to avoid duplicate counting
+            matched_positions = set()
             for pattern in legacy_patterns:
                 matches = re.finditer(pattern, content, re.IGNORECASE)
                 for match in matches:
+                    # Skip if we already matched this position
+                    if match.start() in matched_positions:
+                        continue
+                    matched_positions.add(match.start())
+
                     line_num = content[: match.start()].count("\n") + 1
                     violations.append(
                         {

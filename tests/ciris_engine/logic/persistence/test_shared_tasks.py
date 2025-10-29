@@ -17,6 +17,7 @@ from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.models.tasks import (
     get_latest_shared_task,
     get_shared_task_status,
+    get_task_by_correlation_id,
     is_shared_task_completed,
     try_claim_shared_task,
     update_task_status,
@@ -336,3 +337,145 @@ def test_shared_task_deterministic_id_format(temp_db: str, time_service: TimeSer
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
     expected_id = f"WAKEUP_SHARED_{date_str}"
     assert task.task_id == expected_id
+
+
+def test_get_task_by_correlation_id_found(temp_db: str, time_service: TimeServiceProtocol):
+    """Test retrieving a task by correlation_id when it exists."""
+    from uuid import uuid4
+
+    from ciris_engine.logic.persistence.models.tasks import add_task, get_task_by_correlation_id
+    from ciris_engine.schemas.runtime.models import TaskContext
+
+    # Create a task with a correlation_id
+    correlation_id = "reddit_post_abc123"
+    task = Task(
+        task_id=str(uuid4()),
+        channel_id="reddit:r/ciris",
+        agent_occurrence_id="default",
+        description="Test Reddit post",
+        status=TaskStatus.ACTIVE,
+        priority=0,
+        created_at=time_service.now_iso(),
+        updated_at=time_service.now_iso(),
+        context=TaskContext(
+            channel_id="reddit:r/ciris",
+            user_id="test_user",
+            correlation_id=correlation_id,
+            agent_occurrence_id="default",
+        ),
+    )
+
+    add_task(task, db_path=temp_db)
+
+    # Retrieve by correlation_id
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)
+
+    assert retrieved_task is not None
+    assert retrieved_task.task_id == task.task_id
+    assert retrieved_task.context.correlation_id == correlation_id
+    assert retrieved_task.description == "Test Reddit post"
+
+
+def test_get_task_by_correlation_id_not_found(temp_db: str):
+    """Test retrieving a task by correlation_id when it doesn't exist."""
+    from ciris_engine.logic.persistence.models.tasks import get_task_by_correlation_id
+
+    retrieved_task = get_task_by_correlation_id("nonexistent_correlation_id", occurrence_id="default", db_path=temp_db)
+
+    assert retrieved_task is None
+
+
+def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that get_task_by_correlation_id returns the latest task when multiple exist."""
+    from uuid import uuid4
+
+    from ciris_engine.logic.persistence.models.tasks import add_task, get_task_by_correlation_id
+    from ciris_engine.schemas.runtime.models import TaskContext
+
+    correlation_id = "reddit_comment_xyz789"
+
+    # Create two tasks with same correlation_id but different timestamps
+    task1 = Task(
+        task_id=str(uuid4()),
+        channel_id="reddit:r/ciris",
+        agent_occurrence_id="default",
+        description="First task",
+        status=TaskStatus.COMPLETED,
+        priority=0,
+        created_at="2025-01-01T00:00:00Z",
+        updated_at="2025-01-01T00:00:00Z",
+        context=TaskContext(
+            channel_id="reddit:r/ciris",
+            user_id="test_user",
+            correlation_id=correlation_id,
+            agent_occurrence_id="default",
+        ),
+    )
+
+    task2 = Task(
+        task_id=str(uuid4()),
+        channel_id="reddit:r/ciris",
+        agent_occurrence_id="default",
+        description="Second task (newer)",
+        status=TaskStatus.ACTIVE,
+        priority=0,
+        created_at="2025-01-02T00:00:00Z",
+        updated_at="2025-01-02T00:00:00Z",
+        context=TaskContext(
+            channel_id="reddit:r/ciris",
+            user_id="test_user",
+            correlation_id=correlation_id,
+            agent_occurrence_id="default",
+        ),
+    )
+
+    add_task(task1, db_path=temp_db)
+    add_task(task2, db_path=temp_db)
+
+    # Should return task2 (latest)
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)
+
+    assert retrieved_task is not None
+    assert retrieved_task.task_id == task2.task_id
+    assert retrieved_task.description == "Second task (newer)"
+
+
+def test_get_task_by_correlation_id_different_occurrence(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that get_task_by_correlation_id respects occurrence_id filtering."""
+    from uuid import uuid4
+
+    from ciris_engine.logic.persistence.models.tasks import add_task, get_task_by_correlation_id
+    from ciris_engine.schemas.runtime.models import TaskContext
+
+    correlation_id = "reddit_post_def456"
+
+    # Create task for occurrence "occurrence-1"
+    task = Task(
+        task_id=str(uuid4()),
+        channel_id="reddit:r/ciris",
+        agent_occurrence_id="occurrence-1",
+        description="Test Reddit post",
+        status=TaskStatus.ACTIVE,
+        priority=0,
+        created_at=time_service.now_iso(),
+        updated_at=time_service.now_iso(),
+        context=TaskContext(
+            channel_id="reddit:r/ciris",
+            user_id="test_user",
+            correlation_id=correlation_id,
+            agent_occurrence_id="occurrence-1",
+        ),
+    )
+
+    add_task(task, db_path=temp_db)
+
+    # Try to retrieve with different occurrence_id
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-2", db_path=temp_db)
+
+    assert retrieved_task is None  # Should not find task from different occurrence
+
+    # Retrieve with correct occurrence_id
+    retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="occurrence-1", db_path=temp_db)
+
+    assert retrieved_task is not None
+    assert retrieved_task.task_id == task.task_id

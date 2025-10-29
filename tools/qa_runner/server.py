@@ -43,7 +43,7 @@ class APIServerManager:
 
         # Build command - main.py is in the root directory
         main_path = Path(__file__).parent.parent.parent / "main.py"
-        cmd = [sys.executable, str(main_path), "--adapter", self.config.adapter, "--port", str(self.config.api_port)]
+        cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
 
         if self.config.mock_llm:
             cmd.append("--mock-llm")
@@ -51,6 +51,10 @@ class APIServerManager:
         # Set environment variables
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+
+        # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
+        # This allows loading modular services like Reddit alongside built-in adapters
+        env["CIRIS_ADAPTER"] = self.config.adapter
 
         # Set backend-specific log directory to avoid symlink collisions
         # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)
@@ -91,6 +95,28 @@ class APIServerManager:
             if var in os.environ:
                 env[var] = os.environ[var]
                 self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
+
+        # Load Reddit credentials if Reddit adapter is being used
+        if "reddit" in self.config.adapter.lower():
+            reddit_secrets_path = Path.home() / ".ciris" / "reddit_secrets"
+            if reddit_secrets_path.exists():
+                try:
+                    # Parse Reddit secrets file (format: KEY="value")
+                    with open(reddit_secrets_path, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#"):
+                                continue
+                            if "=" in line:
+                                key, value = line.split("=", 1)
+                                # Remove quotes from value
+                                value = value.strip().strip('"').strip("'")
+                                env[key] = value
+                    self.console.print("[dim]Loaded Reddit credentials from ~/.ciris/reddit_secrets[/dim]")
+                except Exception as e:
+                    self.console.print(f"[yellow]⚠️  Failed to load Reddit secrets: {e}[/yellow]")
+            else:
+                self.console.print(f"[yellow]⚠️  Reddit secrets file not found: {reddit_secrets_path}[/yellow]")
 
         # Start server process
         try:

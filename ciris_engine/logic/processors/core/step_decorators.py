@@ -43,6 +43,8 @@ from ciris_engine.schemas.services.runtime_control import (
 )
 from ciris_engine.schemas.types import JSONDict
 
+F = TypeVar("F", bound=Callable[..., Any])
+
 logger = logging.getLogger(__name__)
 
 # Global registry for paused thought coroutines
@@ -203,7 +205,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
             return context_data
     """
 
-    def decorator[F: Callable[..., Any]](func: F) -> F:
+    def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")
@@ -274,7 +276,7 @@ def step_point(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., 
             return retry_result
     """
 
-    def decorator[F: Callable[..., Any]](func: F) -> F:
+    def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
             thought_id = getattr(thought_item, "thought_id", "unknown")

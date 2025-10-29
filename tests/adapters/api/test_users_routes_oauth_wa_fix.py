@@ -70,13 +70,15 @@ class TestUsersRoutesOAuthWAFix:
         # Store users with correct keys (OAuth user uses OAuth user_id, not wa_id)
         service._users["google:110265575142761676421"] = oauth_user  # OAuth user_id as key
         service._users["wa-2025-09-10-PWD456"] = password_user  # wa_id as key for non-OAuth
+        service._users_loaded = True  # Mark as loaded to skip DB loading
 
         return service
 
-    def test_list_users_returns_correct_user_ids(self, api_auth_service_with_users):
+    @pytest.mark.asyncio
+    async def test_list_users_returns_correct_user_ids(self, api_auth_service_with_users):
         """Test that /users endpoint returns correct user_id values."""
         # Get the users list (this simulates what the API route does)
-        users_list = api_auth_service_with_users.list_users()
+        users_list = await api_auth_service_with_users.list_users()
 
         # Verify: Returns tuples with correct user_ids
         assert len(users_list) == 2
@@ -122,9 +124,10 @@ class TestUsersRoutesOAuthWAFix:
         oauth_user_by_wa_id = api_auth_service_with_users.get_user("wa-2025-09-10-ABC123")
         assert oauth_user_by_wa_id is None
 
-    def test_user_summary_model_consistency(self, api_auth_service_with_users):
+    @pytest.mark.asyncio
+    async def test_user_summary_model_consistency(self, api_auth_service_with_users):
         """Test that UserSummary model receives correct user_id field."""
-        users_list = api_auth_service_with_users.list_users()
+        users_list = await api_auth_service_with_users.list_users()
 
         # This simulates what the API route does when creating UserSummary objects
         for user_id, user in users_list:
@@ -174,9 +177,10 @@ class TestUsersRoutesOAuthWAFix:
         assert user is not None
         assert user.name == "OAuth User"
 
-    def test_no_duplicate_users_in_list(self, api_auth_service_with_users):
+    @pytest.mark.asyncio
+    async def test_no_duplicate_users_in_list(self, api_auth_service_with_users):
         """Test that users list doesn't contain duplicates."""
-        users_list = api_auth_service_with_users.list_users()
+        users_list = await api_auth_service_with_users.list_users()
 
         # Should have exactly 2 users (no duplicates)
         assert len(users_list) == 2

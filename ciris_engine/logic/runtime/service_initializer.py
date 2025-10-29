@@ -254,15 +254,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.md")
 
-        db_path = get_sqlite_db_full_path(self.essential_config)
-        # For PostgreSQL, use separate database; for SQLite, use separate file
-        if db_path.startswith(("postgresql://", "postgres://")):
-            # PostgreSQL - use separate database (append _secrets to database name)
-            # postgresql://user:pass@host:port/dbname -> postgresql://user:pass@host:port/dbname_secrets
-            secrets_db_path = db_path.rsplit("/", 1)[0] + "/" + db_path.rsplit("/", 1)[1] + "_secrets"
-        else:
-            # SQLite - use separate file
-            secrets_db_path = db_path.replace(".db", "_secrets.db")
+        # Use the proper helper function to get secrets database path
+        # This handles PostgreSQL URL query parameter preservation correctly
+        from ciris_engine.logic.config import get_secrets_db_full_path
+
+        secrets_db_path = get_secrets_db_full_path(self.essential_config)
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
@@ -390,13 +386,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         if self.config_accessor is None:
             raise RuntimeError("ConfigAccessor must be initialized before AuthenticationService")
-        # Use the same directory as main database, but different file
+        # Get main database path for WiseAuthority (needs access to tasks table)
         main_db_path = get_sqlite_db_full_path(self.essential_config)
-        # For PostgreSQL, use separate database; for SQLite, use separate file
-        if main_db_path.startswith(("postgresql://", "postgres://")):
-            auth_db_path = main_db_path.rsplit("/", 1)[0] + "/" + main_db_path.rsplit("/", 1)[1] + "_auth"
-        else:
-            auth_db_path = main_db_path.replace(".db", "_auth.db")
+
+        # Use the proper helper function to get auth database path
+        # This handles PostgreSQL URL query parameter preservation correctly
+        from ciris_engine.logic.config import get_audit_db_full_path
+
+        auth_db_path = get_audit_db_full_path(self.essential_config)
         self.auth_service = AuthenticationService(
             db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )
@@ -406,7 +403,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Initialize WA authentication system with TimeService and AuthService
         # Use the main database path - WiseAuthority needs access to tasks table
-        # Reuse main_db_path from above (already handles PostgreSQL vs SQLite)
         self.wa_auth_system = WiseAuthorityService(
             time_service=self.time_service, auth_service=self.auth_service, db_path=main_db_path
         )
@@ -1094,15 +1090,31 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Load each service defined in the manifest
         for service_def in manifest.services:
             try:
-                # Load the service class
-                service_class = modular_loader.load_service(manifest)
+                # Load the specific service class for this service definition
+                service_class = modular_loader.load_service_class(manifest, service_def.class_path)
                 if not service_class:
                     logger.error(f"Failed to load service class for {manifest.module.name}")
                     continue
 
                 # Instantiate the service (services usually need minimal initialization)
                 # Most modular services are self-contained and load config from env
-                service_instance = service_class()
+                # Some services (like observers) may need runtime dependencies
+                try:
+                    # Try to inject runtime dependencies if the service accepts them
+                    # Cast to Any for duck-typed optional runtime dependency injection
+                    from typing import Any, cast
+
+                    service_instance = cast(Any, service_class)(
+                        bus_manager=self.bus_manager,
+                        memory_service=self.memory_service,
+                        agent_id=None,  # Will be set by observer from identity service
+                        filter_service=self.adaptive_filter_service,
+                        secrets_service=self.secrets_service,
+                        time_service=self.time_service,
+                    )
+                except TypeError:
+                    # Service doesn't accept runtime dependencies, instantiate without them
+                    service_instance = service_class()
 
                 # Start the service before registration to initialize resources (HTTP clients, credentials, etc.)
                 if hasattr(service_instance, "start"):

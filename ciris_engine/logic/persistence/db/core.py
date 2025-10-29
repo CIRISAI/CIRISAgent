@@ -3,7 +3,7 @@ import sqlite3
 import time
 import types
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.schemas.persistence.postgres import tables as postgres_tables
@@ -385,7 +385,19 @@ def get_service_correlations_table_schema_sql() -> str:
     return sqlite_tables.SERVICE_CORRELATIONS_TABLE_V1
 
 
-def get_connection_diagnostics(db_path: Optional[str] = None) -> Dict[str, Any]:
+class ConnectionDiagnostics(TypedDict, total=False):
+    """Typed structure for database connection diagnostic information."""
+
+    dialect: str
+    connection_string: str
+    is_postgresql: bool
+    is_sqlite: bool
+    active_connections: int  # PostgreSQL only
+    connection_error: str  # If connection diagnostics failed
+    connectivity: str  # "OK" or "FAILED: {error}"
+
+
+def get_connection_diagnostics(db_path: Optional[str] = None) -> ConnectionDiagnostics:
     """Get diagnostic information about database connections.
 
     Useful for debugging connection issues in production, especially PostgreSQL.
@@ -400,7 +412,7 @@ def get_connection_diagnostics(db_path: Optional[str] = None) -> Dict[str, Any]:
         db_path = get_sqlite_db_full_path()
 
     adapter = init_dialect(db_path)
-    diagnostics: Dict[str, Any] = {
+    diagnostics: ConnectionDiagnostics = {
         "dialect": adapter.dialect.value,
         "connection_string": adapter.db_url if adapter.is_postgresql() else adapter.db_path,
         "is_postgresql": adapter.is_postgresql(),

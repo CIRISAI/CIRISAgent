@@ -3,9 +3,11 @@ import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, Set, Tuple, TypeVar, Union, cast
 
 from pydantic import BaseModel
+
+MessageT = TypeVar("MessageT", bound=BaseModel)
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.document_parser import DocumentParser
@@ -107,7 +109,7 @@ def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] 
     return re.sub(mention_pattern, replace_mention, content)
 
 
-class BaseObserver[MessageT: BaseModel](ABC):
+class BaseObserver(Generic[MessageT], ABC):
     """Common functionality for message observers."""
 
     def __init__(

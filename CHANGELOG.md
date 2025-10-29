@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - TBD
+
+### Added
+- **Reddit Observer Runtime Injection** - Enable passive observation through dependency injection pattern
+  - RedditCommunicationService now accepts optional runtime dependencies (bus_manager, memory_service, etc.)
+  - Creates and starts RedditObserver in `_on_start()` if dependencies available
+  - Observer lifecycle tied to communication service lifecycle (like Discord pattern)
+  - 15-second poll interval, 25-item limit per poll with deduplication
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1100-1115`, `ciris_modular_services/reddit/service.py:1185-1239`
+- **Comprehensive Unit Tests** - Added 15 new unit tests for Reddit observer fixes (100% pass rate)
+  - Runtime dependency injection pattern (3 tests)
+  - TSDB consolidation lock acquisition (5 tests)
+  - Dialect adapter JSON extraction (7 tests)
+
+### Fixed
+- **P0: PostgreSQL URL Corruption in Service Initialization** - Fixed derivative database URL generation
+  - **Problem**: Lines 262 and 394 in `service_initializer.py` used naive `rsplit("/", 1)` string manipulation
+  - **Impact**: URLs like `postgresql://host/db?sslmode=require` became `db?sslmode=require_secrets` causing "invalid sslmode value: require_secrets" error
+  - **Solution**: Use proper helper functions `get_secrets_db_full_path()` and `get_audit_db_full_path()` which preserve query parameters
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:257-262, 390-397`
+  - **Root Cause**: Scout-003 (scout-remote-test-dahrb9) first occurrence with Reddit adapter on main server exposed the bug
+- **P1: Dialect Initialization Timing Bug** - Fixed `get_task_by_correlation_id()` to initialize dialect before building SQL
+  - **Problem**: Called `get_adapter()` BEFORE establishing database connection, causing SQLite syntax to be used with PostgreSQL
+  - **Impact**: PostgreSQL deployments failed correlation ID lookups with syntax errors (json_extract not supported)
+  - **Solution**: Call `init_dialect()` before building SQL query using proper config-based default
+  - **Files**: `ciris_engine/logic/persistence/models/tasks.py:759-764`
+- **P1: Scout Remote Users Not Loading** - Fixed `list_users()` to load from database before returning results
+  - **Problem**: Method accessed `self._users` dict without first calling `await self._ensure_users_loaded()`
+  - **Impact**: Users listing appeared empty in Scout remote PostgreSQL despite 30 WA certificates in database
+  - **Solution**: Made `list_users()` async and added database loading call at beginning
+  - **Files**: `ciris_engine/logic/adapters/api/services/auth_service.py:587-597`, `ciris_engine/logic/adapters/api/routes/users.py:292`
+- **P1: Modular Service Multi-Class Loading** - Fixed loader to instantiate all service classes from manifest
+  - **Problem**: `_load_modular_service()` looped through manifest.services but always loaded first class
+  - **Impact**: Reddit manifest has ToolService AND CommunicationService but both got ToolService, observer never started
+  - **Solution**: Added `load_service_class(manifest, class_path)` method to load specific class per service definition
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1095`, `ciris_engine/logic/runtime/modular_service_loader.py:95-185`
+- **P1: PostgreSQL JSON Extraction** - Fixed `get_task_by_correlation_id()` to use dialect adapter
+  - **Problem**: Hardcoded `json_extract()` which is SQLite-only, PostgreSQL uses JSONB operators (-> and ->>)
+  - **Impact**: PostgreSQL queries failed with "function json_extract(jsonb, unknown) does not exist"
+  - **Solution**: Use dialect adapter's `json_extract()` method which handles both SQLite and PostgreSQL
+  - **Files**: `ciris_engine/logic/persistence/models/tasks.py`
+- **P1: TSDB Consolidation Race Condition** - Added lock acquisition before consolidating missed periods
+  - **Problem**: Multiple occurrences simultaneously consolidated same period during startup
+  - **Impact**: Scout-003 hung during startup with 3 occurrences causing PostgreSQL resource exhaustion
+  - **Solution**: Each occurrence tries to acquire lock before consolidating, skips if another holds it
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/query_manager.py`
+- **P2: Async Test Failures** - Fixed 3 tests after `list_users()` became async
+  - Added @pytest.mark.asyncio decorators and await keywords
+  - Added `_users_loaded = True` to fixture to skip DB loading during tests
+  - All 7 tests in test_users_routes_oauth_wa_fix.py now pass
+  - **Files**: `tests/adapters/api/test_users_routes_oauth_wa_fix.py`
+- **Code Quality**: Removed unused `db_path` variable from service_initializer (SonarCloud Major code smell)
+
+### Changed
+- **Python 3.11 Compatibility** - Converted PEP 695 generic syntax to TypeVar + Generic pattern
+  - BaseObserver, step_decorators, ServiceProvider, TypedServiceRegistry, MemoryOpResult
+  - Improved type accuracy: `_create_service_provider` now returns `ServiceProvider[T_Service]` instead of `ServiceProvider[Any]`
+  - All mypy type checks pass, no runtime behavior changes
+  - **Files**: `ciris_engine/logic/adapters/base_observer.py`, `ciris_engine/logic/processors/core/step_decorators.py`, `ciris_engine/logic/registries/base.py`, `ciris_engine/logic/registries/typed_registries.py`, `ciris_engine/schemas/services/operations.py`
+- **Type Safety Improvements** - Replaced Dict[str, Any] with TypedDict for connection diagnostics
+  - Added `ConnectionDiagnostics` TypedDict with explicit field types (str, bool, int)
+  - Removed outdated Dict[str, Any] comment references from runtime_control.py
+  - **Files**: `ciris_engine/logic/persistence/db/core.py`, `ciris_engine/schemas/services/runtime_control.py`
+- **Documentation** - Clarified PostgreSQL password URL encoding support
+  - Both URL-encoded and non-encoded passwords work via `urllib.parse.unquote()`
+  - Comprehensive test coverage exists in test_dialect.py
+  - **Files**: `POSTGRESQL_SETUP.md`
+
+### Test Results
+- ✅ **All unit tests passing** with async fixes applied
+- ✅ **15 new Reddit observer tests** (100% pass rate)
+- ✅ **Mypy type checking passes** on all modified files
+- ✅ **Python 3.11 and 3.12 compatibility** verified
+
 ## [1.4.9] - 2025-10-28
 
 ### Added

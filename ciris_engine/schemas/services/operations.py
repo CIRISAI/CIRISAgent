@@ -6,7 +6,7 @@ All memory operations are typed - no Dict[str, Any].
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -57,7 +57,10 @@ class MemoryOpAction(str, Enum):
     FORGET = "forget"
 
 
-class MemoryOpResult[T](BaseModel):
+T = TypeVar("T")
+
+
+class MemoryOpResult(BaseModel, Generic[T]):
     """
     Parametrized result of a memory operation.
 

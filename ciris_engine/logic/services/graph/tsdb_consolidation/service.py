@@ -406,14 +406,19 @@ class TSDBConsolidationService(BaseGraphService):
 
                 # Check if this period needs consolidation
                 if not self._query_manager.check_period_consolidated(period_start):
-                    logger.info(f"Consolidating missed period: {period_start} to {period_end}")
+                    # Try to acquire lock for this period - only one occurrence should consolidate
+                    lock_key = f"missed:{period_start.isoformat()}"
+                    if self._query_manager._try_acquire_lock(lock_key, "missed", period_start.isoformat()):
+                        logger.info(f"Acquired lock, consolidating missed period: {period_start} to {period_end}")
 
-                    summaries = await self._consolidate_period(period_start, period_end)
-                    if summaries:
-                        logger.info(f"Created {len(summaries)} summaries for missed period {period_start}")
-                        periods_consolidated += 1
+                        summaries = await self._consolidate_period(period_start, period_end)
+                        if summaries:
+                            logger.info(f"Created {len(summaries)} summaries for missed period {period_start}")
+                            periods_consolidated += 1
+                        else:
+                            logger.debug(f"No data found for period {period_start}")
                     else:
-                        logger.debug(f"No data found for period {period_start}")
+                        logger.info(f"Another occurrence is consolidating period {period_start}, skipping")
                 else:
                     logger.debug(f"Period {period_start} already consolidated, checking edges...")
                     # Ensure edges exist for this already-consolidated period

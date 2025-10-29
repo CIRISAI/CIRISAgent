@@ -118,9 +118,7 @@ def test_get_task_by_correlation_id_exception_handling():
         mock_conn.side_effect = Exception("Database connection failed")
 
         # Call should handle exception and return None
-        result = get_task_by_correlation_id(
-            correlation_id="test_id", occurrence_id="default", db_path="/tmp/test.db"
-        )
+        result = get_task_by_correlation_id(correlation_id="test_id", occurrence_id="default", db_path="/tmp/test.db")
 
         assert result is None
 

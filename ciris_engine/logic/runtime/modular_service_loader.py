@@ -92,9 +92,7 @@ class ModularServiceLoader:
 
         return True
 
-    def load_service_class(
-        self, manifest: ServiceManifest, class_path: str
-    ) -> Optional[type[ServiceProtocol]]:
+    def load_service_class(self, manifest: ServiceManifest, class_path: str) -> Optional[type[ServiceProtocol]]:
         """Load a specific service class by class path from a manifest.
 
         Args:

@@ -387,6 +387,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         if self.config_accessor is None:
             raise RuntimeError("ConfigAccessor must be initialized before AuthenticationService")
+        # Get main database path for WiseAuthority (needs access to tasks table)
+        main_db_path = get_sqlite_db_full_path(self.essential_config)
+
         # Use the proper helper function to get auth database path
         # This handles PostgreSQL URL query parameter preservation correctly
         from ciris_engine.logic.config import get_audit_db_full_path
@@ -401,7 +404,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Initialize WA authentication system with TimeService and AuthService
         # Use the main database path - WiseAuthority needs access to tasks table
-        # Reuse main_db_path from above (already handles PostgreSQL vs SQLite)
         self.wa_auth_system = WiseAuthorityService(
             time_service=self.time_service, auth_service=self.auth_service, db_path=main_db_path
         )

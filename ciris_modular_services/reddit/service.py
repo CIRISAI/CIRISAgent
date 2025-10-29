@@ -1209,7 +1209,8 @@ class RedditCommunicationService(RedditServiceBase):
         await self._resolve_home_channel()
 
         # Create and start Reddit observer if runtime dependencies are available
-        if all([self._bus_manager, self._memory_service, self._agent_id]):
+        # Note: agent_id is optional, observer will use "ciris" as fallback
+        if self._bus_manager and self._memory_service:
             from .observer import RedditObserver
 
             logger.info("Creating RedditObserver with runtime dependencies")

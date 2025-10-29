@@ -207,7 +207,8 @@ class TestAuthServiceOAuthWAFix:
         assert non_oauth_user_record.wa_role == WARole.OBSERVER
         assert non_oauth_user_record.wa_id == "wa-2025-09-10-P123AB"
 
-    def test_list_users_returns_tuples_with_correct_user_ids(self, api_auth_service):
+    @pytest.mark.asyncio
+    async def test_list_users_returns_tuples_with_correct_user_ids(self, api_auth_service):
         """Test that list_users returns (user_id, user) tuples with correct user_ids."""
         # Setup: Add users with different key types
         oauth_user = User(
@@ -230,9 +231,10 @@ class TestAuthServiceOAuthWAFix:
 
         api_auth_service._users["google:12345"] = oauth_user
         api_auth_service._users["wa-2025-09-10-PWD456"] = password_user
+        api_auth_service._users_loaded = True  # Mark as loaded to skip DB load
 
         # Test: List users
-        result = api_auth_service.list_users()
+        result = await api_auth_service.list_users()
 
         # Verify: Returns list of tuples
         assert isinstance(result, list)
@@ -253,7 +255,8 @@ class TestAuthServiceOAuthWAFix:
                 assert user.name == "Password User"
                 assert user.auth_type == "password"
 
-    def test_list_users_filtering_works_with_tuples(self, api_auth_service):
+    @pytest.mark.asyncio
+    async def test_list_users_filtering_works_with_tuples(self, api_auth_service):
         """Test that list_users filtering still works with tuple return format."""
         # Setup: Add users with different attributes
         oauth_admin = User(
@@ -278,28 +281,30 @@ class TestAuthServiceOAuthWAFix:
 
         api_auth_service._users["google:admin"] = oauth_admin
         api_auth_service._users["wa-observer"] = password_observer
+        api_auth_service._users_loaded = True  # Mark as loaded to skip DB load
 
         # Test: Filter by auth_type
-        oauth_result = api_auth_service.list_users(auth_type="oauth")
+        oauth_result = await api_auth_service.list_users(auth_type="oauth")
         assert len(oauth_result) == 1
         assert oauth_result[0][0] == "google:admin"  # user_id
         assert oauth_result[0][1].auth_type == "oauth"  # user
 
         # Test: Filter by api_role
-        admin_result = api_auth_service.list_users(api_role=APIRole.ADMIN)
+        admin_result = await api_auth_service.list_users(api_role=APIRole.ADMIN)
         assert len(admin_result) == 1
         assert admin_result[0][0] == "google:admin"
 
         # Test: Filter by is_active
-        active_result = api_auth_service.list_users(is_active=True)
+        active_result = await api_auth_service.list_users(is_active=True)
         assert len(active_result) == 1
         assert active_result[0][0] == "google:admin"
 
-        inactive_result = api_auth_service.list_users(is_active=False)
+        inactive_result = await api_auth_service.list_users(is_active=False)
         assert len(inactive_result) == 1
         assert inactive_result[0][0] == "wa-observer"
 
-    def test_list_users_search_functionality(self, api_auth_service):
+    @pytest.mark.asyncio
+    async def test_list_users_search_functionality(self, api_auth_service):
         """Test that list_users search functionality works with tuple format."""
         # Setup: Add users with searchable names
         user1 = User(
@@ -320,24 +325,26 @@ class TestAuthServiceOAuthWAFix:
 
         api_auth_service._users["google:john"] = user1
         api_auth_service._users["wa-jane"] = user2
+        api_auth_service._users_loaded = True  # Mark as loaded to skip DB load
 
         # Test: Search by name
-        john_result = api_auth_service.list_users(search="john")
+        john_result = await api_auth_service.list_users(search="john")
         assert len(john_result) == 1
         assert john_result[0][0] == "google:john"
         assert john_result[0][1].name == "John Smith"
 
-        smith_result = api_auth_service.list_users(search="Smith")
+        smith_result = await api_auth_service.list_users(search="Smith")
         assert len(smith_result) == 1
         assert smith_result[0][0] == "google:john"
 
         # Test: Search is case-insensitive
-        JANE_result = api_auth_service.list_users(search="JANE")
+        JANE_result = await api_auth_service.list_users(search="JANE")
         assert len(JANE_result) == 1
         assert JANE_result[0][0] == "wa-jane"
         assert JANE_result[0][1].name == "Jane Doe"
 
-    def test_list_users_sorting_by_created_at(self, api_auth_service):
+    @pytest.mark.asyncio
+    async def test_list_users_sorting_by_created_at(self, api_auth_service):
         """Test that list_users sorting by created_at works with tuple format."""
         # Setup: Add users with different creation times
         older_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -361,9 +368,10 @@ class TestAuthServiceOAuthWAFix:
 
         api_auth_service._users["google:older"] = older_user
         api_auth_service._users["wa-newer"] = newer_user
+        api_auth_service._users_loaded = True  # Mark as loaded to skip DB load
 
         # Test: Users should be sorted by created_at, newest first
-        result = api_auth_service.list_users()
+        result = await api_auth_service.list_users()
         assert len(result) == 2
 
         # First user should be the newer one
@@ -373,6 +381,42 @@ class TestAuthServiceOAuthWAFix:
         # Second user should be the older one
         assert result[1][0] == "google:older"
         assert result[1][1].name == "Older User"
+
+    @pytest.mark.asyncio
+    async def test_list_users_loads_from_database_when_not_loaded(
+        self, api_auth_service, oauth_wa_certificate, mock_auth_service
+    ):
+        """Test that list_users loads from database when users haven't been loaded yet."""
+        # Setup: Mock list_was to return OAuth WA certificate
+        mock_auth_service.list_was.return_value = [oauth_wa_certificate]
+
+        # Verify: Initially _users_loaded is False and _users is empty
+        assert api_auth_service._users_loaded is False
+        assert len(api_auth_service._users) == 0
+
+        # Test: Call list_users (should trigger database load)
+        result = await api_auth_service.list_users()
+
+        # Verify: Database was loaded
+        assert api_auth_service._users_loaded is True
+
+        # Verify: Users were populated from database
+        oauth_user_id = "google:110265575142761676421"
+        assert len(api_auth_service._users) == 2  # OAuth key + WA ID key
+        assert oauth_user_id in api_auth_service._users
+        assert "wa-2025-09-10-T123AB" in api_auth_service._users
+
+        # Verify: Result contains the loaded user (returned with both keys)
+        assert len(result) == 2  # Both keys are returned (wa_id and oauth key)
+        user_ids = [user_id for user_id, user in result]
+        assert oauth_user_id in user_ids
+        assert "wa-2025-09-10-T123AB" in user_ids
+
+        # Verify: Both entries point to the same user object with correct data
+        for user_id, user in result:
+            assert user.name == "Test User"
+            assert user.wa_role == WARole.AUTHORITY
+            assert user.wa_id == "wa-2025-09-10-T123AB"
 
     def test_authority_role_includes_wa_resolve_deferral_permission(self, api_auth_service):
         """Test that AUTHORITY role includes wa.resolve_deferral permission for deferral resolution."""

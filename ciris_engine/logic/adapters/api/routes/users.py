@@ -289,7 +289,7 @@ async def list_users(
     Requires: users.read permission (ADMIN or higher)
     """
     # Get all WA certificates from the auth service
-    users = auth_service.list_users(
+    users = await auth_service.list_users(
         search=search, auth_type=auth_type, api_role=api_role, wa_role=wa_role, is_active=is_active
     )
 

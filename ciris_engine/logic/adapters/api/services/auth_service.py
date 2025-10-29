@@ -584,7 +584,7 @@ class APIAuthService:
 
         return user
 
-    def list_users(
+    async def list_users(
         self,
         search: Optional[str] = None,
         auth_type: Optional[str] = None,
@@ -593,6 +593,9 @@ class APIAuthService:
         is_active: Optional[bool] = None,
     ) -> List[tuple[str, User]]:
         """List all users with optional filtering. Returns (user_id, user) tuples."""
+        # Ensure users are loaded from database before listing
+        await self._ensure_users_loaded()
+
         users = []
 
         # Add all stored users with their keys

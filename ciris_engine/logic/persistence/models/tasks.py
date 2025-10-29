@@ -756,7 +756,12 @@ def get_task_by_correlation_id(
     Returns:
         Task if found, None otherwise
     """
-    from ciris_engine.logic.persistence.db.dialect import get_adapter
+    from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
+    from ciris_engine.logic.persistence.db.dialect import get_adapter, init_dialect
+
+    # Initialize dialect based on db_path BEFORE building SQL
+    # This ensures the correct dialect (SQLite or PostgreSQL) is used
+    init_dialect(db_path if db_path else get_sqlite_db_full_path())
 
     # Use dialect adapter for JSON extraction (SQLite vs PostgreSQL)
     adapter = get_adapter()

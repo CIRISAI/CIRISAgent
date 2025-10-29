@@ -1224,7 +1224,9 @@ class RedditCommunicationService(RedditServiceBase):
                 time_service=self._time_service,
             )
             await self._observer.start()
-            logger.info(f"RedditObserver started and monitoring r/{self._credentials.subreddit if self._credentials else 'unknown'}")
+            logger.info(
+                f"RedditObserver started and monitoring r/{self._credentials.subreddit if self._credentials else 'unknown'}"
+            )
         else:
             logger.warning("RedditCommunicationService: Runtime dependencies not available, observer not started")
 

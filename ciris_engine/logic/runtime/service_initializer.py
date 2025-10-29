@@ -1105,7 +1105,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     service_instance = service_class(
                         bus_manager=self.bus_manager,
                         memory_service=self.memory_service,
-                        agent_id=self.essential_config.agent_id,
+                        agent_id=None,  # Will be set by observer from identity service
                         filter_service=self.adaptive_filter_service,
                         secrets_service=self.secrets_service,
                         time_service=self.time_service,

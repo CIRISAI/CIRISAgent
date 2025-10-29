@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dialect adapter JSON extraction (7 tests)
 
 ### Fixed
+- **P0: Single-Occurrence Shutdown Loop** - Fixed shutdown processor to prevent infinite loop on single-occurrence agents
+  - **Problem**: Multi-occurrence logic checked for completed shared tasks every round, causing single-occurrence agents to find their own completed task
+  - **Impact**: Sage agent stuck in 7-hour shutdown loop during CD update (25,200+ iterations waiting for itself)
+  - **Solution**: Added `not self.shutdown_task` check before querying shared tasks to prevent self-discovery loop
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:289`
+  - **Root Cause**: Single-occurrence agents (SQLite, occurrence_id="default") would create shared task, complete it, then find it again next round
 - **P0: PostgreSQL URL Corruption in Service Initialization** - Fixed derivative database URL generation
   - **Problem**: Lines 262 and 394 in `service_initializer.py` used naive `rsplit("/", 1)` string manipulation
   - **Impact**: URLs like `postgresql://host/db?sslmode=require` became `db?sslmode=require_secrets` causing "invalid sslmode value: require_secrets" error

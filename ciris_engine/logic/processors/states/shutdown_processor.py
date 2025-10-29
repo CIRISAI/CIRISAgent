@@ -284,7 +284,9 @@ class ShutdownProcessor(BaseProcessor):
                 logger.warning("Emergency shutdown requested without requester ID")
 
         # Check if shutdown already decided by another occurrence
-        if is_shared_task_completed("shutdown", within_hours=1):
+        # CRITICAL: Only check if we don't already have a task (prevents single-occurrence loop)
+        # Single-occurrence agents (like Sage) would find their own completed task and loop forever
+        if not self.shutdown_task and is_shared_task_completed("shutdown", within_hours=1):
             # Another occurrence already completed shutdown decision
             existing_task = get_latest_shared_task("shutdown", within_hours=1)
             if existing_task:

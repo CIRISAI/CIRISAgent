@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runtime dependency injection pattern (3 tests)
   - TSDB consolidation lock acquisition (5 tests)
   - Dialect adapter JSON extraction (7 tests)
+- **Comprehensive Deployment Scenario Tests** - Added 9 new shutdown processor tests covering all deployment scenarios
+  - Single-occurrence SQLite (Sage): First run + loop prevention test
+  - Single-occurrence PostgreSQL: Normal shutdown flow
+  - Multi-occurrence SQLite: Claiming + monitoring occurrences
+  - Multi-occurrence PostgreSQL (Scout): Claiming + monitoring occurrences
+  - Late arrival scenario: Finding existing completed decision
+  - Thought processing isolation: Monitoring occurrences don't process
+  - **Total**: 51 shutdown processor tests (42 original + 9 new deployment scenarios)
 
 ### Fixed
 - **P0: Single-Occurrence Shutdown Loop** - Fixed shutdown processor to prevent infinite loop on single-occurrence agents

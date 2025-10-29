@@ -284,9 +284,7 @@ class ShutdownProcessor(BaseProcessor):
                 logger.warning("Emergency shutdown requested without requester ID")
 
         # Check if shutdown already decided by another occurrence
-        # CRITICAL: Only check if we don't already have a task (prevents single-occurrence loop)
-        # Single-occurrence agents (like Sage) would find their own completed task and loop forever
-        if not self.shutdown_task and is_shared_task_completed("shutdown", within_hours=1):
+        if is_shared_task_completed("shutdown", within_hours=1):
             # Another occurrence already completed shutdown decision
             existing_task = get_latest_shared_task("shutdown", within_hours=1)
             if existing_task:
@@ -357,8 +355,12 @@ class ShutdownProcessor(BaseProcessor):
             time_service=self._time_service,
         )
 
-        if not was_created:
-            # Another occurrence claimed it
+        # CRITICAL: Single-occurrence agents must always claim, even if task already exists
+        # Multi-occurrence agents use was_created to determine claiming vs monitoring
+        is_single_occurrence = self.agent_occurrence_id == "default"
+
+        if not was_created and not is_single_occurrence:
+            # Multi-occurrence: Another occurrence claimed it, we monitor
             logger.info(
                 f"Another occurrence claimed shutdown task {claimed_task.task_id}. "
                 "This occurrence will monitor the decision."
@@ -366,6 +368,13 @@ class ShutdownProcessor(BaseProcessor):
             self.shutdown_task = claimed_task
             self.is_claiming_occurrence = False  # This is a monitoring occurrence
             return
+
+        # Single-occurrence OR first to claim: We process the task
+        if is_single_occurrence and not was_created:
+            logger.info(
+                f"Single-occurrence agent claiming existing shutdown task {claimed_task.task_id}. "
+                "(Task persisted from previous run, will process normally)"
+            )
 
         logger.info(
             f"This occurrence claimed shared shutdown task {claimed_task.task_id}. "

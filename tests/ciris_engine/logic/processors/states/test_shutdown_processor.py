@@ -1155,9 +1155,27 @@ class TestMultiOccurrenceScenarios:
         mock_try_claim,
         mock_is_completed,
         mock_get_shutdown_manager,
-        shutdown_processor,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
     ):
-        """Test monitoring occurrence scenario (lines 360-366)"""
+        """Test monitoring occurrence scenario - MULTI-OCCURRENCE agent"""
+        # CRITICAL: Use multi-occurrence ID (not "default") to test monitoring behavior
+        shutdown_processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-2",  # Multi-occurrence, not "default"
+        )
+        
         # Setup
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -2156,3 +2174,83 @@ class TestDeploymentScenarios:
 
         # Verify - should not call get_thoughts_by_task_id
         mock_persistence.get_thoughts_by_task_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_single_occurrence_claims_existing_task(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        CRITICAL P0 FIX TEST: Single-occurrence agent claims existing task
+        
+        This tests the ACTUAL bug that caused Sage's 7-hour shutdown loop:
+        - Task already exists in database (from previous run/restart)
+        - try_claim_shared_task returns was_created=False
+        - Single-occurrence agent MUST still claim and process (not monitor)
+        
+        Before fix: Agent would set is_claiming_occurrence=False and loop forever
+        After fix: Agent recognizes it's single-occurrence and claims anyway
+        """
+        # Setup processor for single-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="default",  # Single-occurrence identifier
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # No existing completed task
+        mock_is_completed.return_value = False
+
+        # CRITICAL: Task already exists (was_created=False)
+        # This simulates the bug condition: task persisted from previous run
+        existing_task = Task(
+            task_id="SHUTDOWN_SHARED_20251029",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-29T17:00:00+00:00",
+            updated_at="2025-10-29T17:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (existing_task, False)  # was_created=False!
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify - P0 FIX: Single-occurrence MUST claim even though was_created=False
+        assert processor.shutdown_task is not None
+        assert processor.shutdown_task.task_id == "SHUTDOWN_SHARED_20251029"
+        assert processor.is_claiming_occurrence is True  # CRITICAL: Must be claiming, not monitoring!
+        
+        # Should still process normally (not return early)
+        mock_try_claim.assert_called_once()
+        mock_update_context.assert_called_once()  # Should update context and sign

@@ -545,7 +545,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             await mock_service_initializer._load_modular_service("test_adapter")
@@ -598,7 +598,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [tool_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             await mock_service_initializer._load_modular_service("tool_service")
@@ -647,7 +647,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [llm_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             await mock_service_initializer._load_modular_service("llm_service")
@@ -669,7 +669,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Test with uppercase
@@ -688,7 +688,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Should match "test" even though manifest is "test_adapter"
@@ -703,7 +703,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = None  # Load failure
+            mock_loader.load_service_class.return_value = None  # Load failure
             mock_loader_class.return_value = mock_loader
 
             # Should not raise, just log error
@@ -720,7 +720,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Should raise the exception
@@ -737,7 +737,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Call load_modules with modular prefix
@@ -788,7 +788,7 @@ class TestModularServiceLoading:
         with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [mock_manifest]
-            mock_loader.load_service.return_value = mock_service_class
+            mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # load_modules DOES load mock services (no filtering at this level)

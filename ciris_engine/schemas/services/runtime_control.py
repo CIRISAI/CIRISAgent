@@ -1,8 +1,8 @@
 """
 Runtime control service schemas for type-safe operations.
 
-This module provides Pydantic models to replace Dict[str, Any] usage
-in the runtime control service, ensuring full type safety and validation.
+This module provides Pydantic models for the runtime control service,
+ensuring full type safety and validation.
 """
 
 from datetime import datetime, timezone
@@ -693,7 +693,6 @@ StepResultUnion = (
 
 
 # Step Data Schemas for type-safe step processing
-# These replace Dict[str, Any] usage in step_decorators.py
 
 
 class BaseStepData(BaseModel):
@@ -807,7 +806,7 @@ class ActionCompleteStepData(BaseStepData):
 
 
 class ActionResponse(BaseModel):
-    """Typed response from action dispatch - replaces Dict[str, Any] dispatch_result."""
+    """Typed response from action dispatch."""
 
     success: bool = Field(..., description="Whether action dispatch succeeded")
     handler: str = Field(..., description="Handler that executed the action")

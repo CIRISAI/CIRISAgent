@@ -255,14 +255,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.info("Created .ciris_keys/README.md")
 
         db_path = get_sqlite_db_full_path(self.essential_config)
-        # For PostgreSQL, use separate database; for SQLite, use separate file
-        if db_path.startswith(("postgresql://", "postgres://")):
-            # PostgreSQL - use separate database (append _secrets to database name)
-            # postgresql://user:pass@host:port/dbname -> postgresql://user:pass@host:port/dbname_secrets
-            secrets_db_path = db_path.rsplit("/", 1)[0] + "/" + db_path.rsplit("/", 1)[1] + "_secrets"
-        else:
-            # SQLite - use separate file
-            secrets_db_path = db_path.replace(".db", "_secrets.db")
+        # Use the proper helper function to get secrets database path
+        # This handles PostgreSQL URL query parameter preservation correctly
+        from ciris_engine.logic.config import get_secrets_db_full_path
+
+        secrets_db_path = get_secrets_db_full_path(self.essential_config)
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
@@ -390,13 +387,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         if self.config_accessor is None:
             raise RuntimeError("ConfigAccessor must be initialized before AuthenticationService")
-        # Use the same directory as main database, but different file
-        main_db_path = get_sqlite_db_full_path(self.essential_config)
-        # For PostgreSQL, use separate database; for SQLite, use separate file
-        if main_db_path.startswith(("postgresql://", "postgres://")):
-            auth_db_path = main_db_path.rsplit("/", 1)[0] + "/" + main_db_path.rsplit("/", 1)[1] + "_auth"
-        else:
-            auth_db_path = main_db_path.replace(".db", "_auth.db")
+        # Use the proper helper function to get auth database path
+        # This handles PostgreSQL URL query parameter preservation correctly
+        from ciris_engine.logic.config import get_audit_db_full_path
+
+        auth_db_path = get_audit_db_full_path(self.essential_config)
         self.auth_service = AuthenticationService(
             db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )

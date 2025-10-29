@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Fixed
+- **P0: PostgreSQL URL Corruption in Service Initialization** - Fixed derivative database URL generation
+  - **Problem**: Lines 262 and 394 in `service_initializer.py` used naive `rsplit("/", 1)` string manipulation
+  - **Impact**: URLs like `postgresql://host/db?sslmode=require` became `db?sslmode=require_secrets` causing "invalid sslmode value: require_secrets" error
+  - **Solution**: Use proper helper functions `get_secrets_db_full_path()` and `get_audit_db_full_path()` which preserve query parameters
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:257-262, 390-397`
+  - **Root Cause**: Scout-003 (scout-remote-test-dahrb9) first occurrence with Reddit adapter on main server exposed the bug
 
 ### Changed
 

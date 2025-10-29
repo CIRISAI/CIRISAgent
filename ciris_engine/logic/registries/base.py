@@ -9,7 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, Union, cast
+from typing import Any, Dict, Generic, List, Optional, Protocol, TypeVar, Union, cast
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -36,8 +36,11 @@ class SelectionStrategy(Enum):
     ROUND_ROBIN = "round_robin"  # Rotate providers
 
 
+T_Service = TypeVar("T_Service")
+
+
 @dataclass
-class ServiceProvider[T_Service]:
+class ServiceProvider(Generic[T_Service]):
     """Represents a registered service provider with metadata"""
 
     name: str
@@ -90,9 +93,7 @@ class ServiceRegistry:
         self._registrations_total = 0
         self._deregistrations_total = 0
 
-    def register_service[
-        T_Service
-    ](
+    def register_service(
         self,
         service_type: ServiceType,
         provider: T_Service,
@@ -177,9 +178,7 @@ class ServiceRegistry:
             f"Existing: {existing_name}, New: {provider_name}"
         )
 
-    def _create_service_provider[
-        T_Service
-    ](
+    def _create_service_provider(
         self,
         service_type: ServiceType,
         name: str,
@@ -190,7 +189,7 @@ class ServiceRegistry:
         metadata: Optional[JSONDict],
         priority_group: int,
         strategy: SelectionStrategy,
-    ) -> ServiceProvider[Any]:
+    ) -> ServiceProvider[T_Service]:
         """Create a service provider with circuit breaker."""
         cb_config = circuit_breaker_config or CircuitBreakerConfig()
         circuit_breaker = CircuitBreaker(f"{service_type}_{name}", cb_config)

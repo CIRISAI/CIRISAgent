@@ -254,7 +254,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.md")
 
-        db_path = get_sqlite_db_full_path(self.essential_config)
         # Use the proper helper function to get secrets database path
         # This handles PostgreSQL URL query parameter preservation correctly
         from ciris_engine.logic.config import get_secrets_db_full_path

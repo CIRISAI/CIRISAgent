@@ -125,6 +125,11 @@ export CIRIS_DB_URL='postgresql://username:password@host:port/database_name'
 
 # Optional - override default host/port
 export CIRIS_DB_URL='postgresql://ciris_test:ciris_test_password@192.168.1.100:5433/ciris_test_db'
+
+# Passwords with special characters (@, {, }, [, ], etc.) are supported
+# Both formats work (URL-encoded or non-encoded):
+export CIRIS_DB_URL='postgresql://user:p@ss{w}rd[123]@localhost:5432/db'           # Non-encoded
+export CIRIS_DB_URL='postgresql://user:p%40ss%7Bw%7Drd%5B123%5D@localhost:5432/db' # URL-encoded
 ```
 
 ### Configuration File

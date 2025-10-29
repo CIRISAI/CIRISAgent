@@ -9,11 +9,14 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
+import httpx
+
 from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_replace_spoofed_markers
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
+from .error_handler import RedditErrorHandler
 from .schemas import RedditChannelReference, RedditChannelType, RedditCredentials, RedditMessage
 from .service import RedditAPIClient
 
@@ -61,6 +64,9 @@ class RedditObserver(BaseObserver[RedditMessage]):
         self._poll_task: Optional[asyncio.Task[None]] = None
         self._seen_posts: "OrderedDict[str, None]" = OrderedDict()
         self._seen_comments: "OrderedDict[str, None]" = OrderedDict()
+        self._error_handler = RedditErrorHandler()
+        self._consecutive_errors = 0
+        self._max_consecutive_errors = 5
         logger.info("RedditObserver configured for r/%s", self._subreddit)
 
     # ------------------------------------------------------------------
@@ -81,14 +87,62 @@ class RedditObserver(BaseObserver[RedditMessage]):
 
     # ------------------------------------------------------------------
     async def _poll_loop(self) -> None:
+        """Poll subreddit with robust error handling and exponential backoff."""
         try:
             while True:
-                await self._poll_subreddit()
+                try:
+                    # Poll subreddit with retry logic
+                    await self._error_handler.retry_with_backoff(
+                        operation=self._poll_subreddit,
+                        max_retries=3,
+                        base_delay=1.0,
+                        max_delay=30.0,
+                        operation_name="poll_subreddit",
+                    )
+                    # Reset consecutive error count on success
+                    self._consecutive_errors = 0
+
+                except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.NetworkError, httpx.ConnectError) as exc:
+                    # Network-level errors with circuit breaker
+                    self._consecutive_errors += 1
+                    error_info = self._error_handler.classify_error(exc, "poll_subreddit")
+
+                    if self._consecutive_errors >= self._max_consecutive_errors:
+                        logger.error(
+                            f"Max consecutive network errors reached ({self._consecutive_errors}), "
+                            "stopping observer to prevent resource exhaustion"
+                        )
+                        break
+
+                    # Exponential backoff with circuit breaker
+                    backoff = min(5 * (2 ** (self._consecutive_errors - 1)), 60)
+                    logger.warning(
+                        f"Network error (attempt {self._consecutive_errors}/{self._max_consecutive_errors}): "
+                        f"{error_info.message}, backing off for {backoff}s"
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+
+                except Exception as exc:
+                    # Unexpected errors - log and continue with backoff
+                    self._consecutive_errors += 1
+                    logger.exception(f"Unexpected poll error (count: {self._consecutive_errors}): {exc}")
+
+                    if self._consecutive_errors >= self._max_consecutive_errors:
+                        logger.error("Too many consecutive errors, stopping observer")
+                        break
+
+                    await asyncio.sleep(min(self._poll_interval * 2, 60))
+                    continue
+
+                # Normal sleep before next poll
                 await asyncio.sleep(self._poll_interval)
+
         except asyncio.CancelledError:
             logger.debug("RedditObserver poll loop cancelled")
+            raise
         except Exception as exc:
-            logger.exception("RedditObserver poll loop error: %s", exc)
+            logger.critical(f"RedditObserver poll loop fatal error: {exc}", exc_info=True)
 
     async def _poll_subreddit(self) -> None:
         posts = await self._api_client.fetch_subreddit_new(self._subreddit, limit=_PASSIVE_LIMIT)

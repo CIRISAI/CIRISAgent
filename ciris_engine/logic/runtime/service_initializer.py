@@ -1099,7 +1099,20 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
                 # Instantiate the service (services usually need minimal initialization)
                 # Most modular services are self-contained and load config from env
-                service_instance = service_class()
+                # Some services (like observers) may need runtime dependencies
+                try:
+                    # Try to inject runtime dependencies if the service accepts them
+                    service_instance = service_class(
+                        bus_manager=self.bus_manager,
+                        memory_service=self.memory_service,
+                        agent_id=self.essential_config.agent_id,
+                        filter_service=self.adaptive_filter_service,
+                        secrets_service=self.secrets_service,
+                        time_service=self.time_service,
+                    )
+                except TypeError:
+                    # Service doesn't accept runtime dependencies, instantiate without them
+                    service_instance = service_class()
 
                 # Start the service before registration to initialize resources (HTTP clients, credentials, etc.)
                 if hasattr(service_instance, "start"):

@@ -1187,14 +1187,53 @@ class RedditCommunicationService(RedditServiceBase):
         credentials: Optional[RedditCredentials] = None,
         *,
         time_service: Optional[TimeServiceProtocol] = None,
+        bus_manager: Optional[object] = None,
+        memory_service: Optional[object] = None,
+        agent_id: Optional[str] = None,
+        filter_service: Optional[object] = None,
+        secrets_service: Optional[object] = None,
     ) -> None:
         super().__init__(credentials, time_service=time_service, service_name="RedditCommunicationService")
         self._home_channel: Optional[str] = None
         self._wakeup_submission_id: Optional[str] = None
+        # Store runtime dependencies for observer creation
+        self._bus_manager = bus_manager
+        self._memory_service = memory_service
+        self._agent_id = agent_id
+        self._filter_service = filter_service
+        self._secrets_service = secrets_service
+        self._observer: Optional[object] = None  # RedditObserver instance
 
     async def _on_start(self) -> None:
         await super()._on_start()
         await self._resolve_home_channel()
+
+        # Create and start Reddit observer if runtime dependencies are available
+        if all([self._bus_manager, self._memory_service, self._agent_id]):
+            from .observer import RedditObserver
+
+            logger.info("Creating RedditObserver with runtime dependencies")
+            self._observer = RedditObserver(
+                credentials=self._credentials,
+                subreddit=self._credentials.subreddit if self._credentials else None,
+                bus_manager=self._bus_manager,
+                memory_service=self._memory_service,
+                agent_id=self._agent_id,
+                filter_service=self._filter_service,
+                secrets_service=self._secrets_service,
+                time_service=self._time_service,
+            )
+            await self._observer.start()
+            logger.info(f"RedditObserver started and monitoring r/{self._credentials.subreddit if self._credentials else 'unknown'}")
+        else:
+            logger.warning("RedditCommunicationService: Runtime dependencies not available, observer not started")
+
+    async def _on_stop(self) -> None:
+        # Stop observer if it was started
+        if self._observer and hasattr(self._observer, "stop"):
+            await self._observer.stop()
+            logger.info("RedditObserver stopped")
+        await super()._on_stop()
 
     def get_service_type(self) -> ServiceType:
         return ServiceType.COMMUNICATION

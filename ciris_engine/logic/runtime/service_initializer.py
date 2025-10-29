@@ -1091,8 +1091,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Load each service defined in the manifest
         for service_def in manifest.services:
             try:
-                # Load the service class
-                service_class = modular_loader.load_service(manifest)
+                # Load the specific service class for this service definition
+                service_class = modular_loader.load_service_class(manifest, service_def.class_path)
                 if not service_class:
                     logger.error(f"Failed to load service class for {manifest.module.name}")
                     continue

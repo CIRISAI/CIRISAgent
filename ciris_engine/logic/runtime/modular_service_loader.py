@@ -92,8 +92,51 @@ class ModularServiceLoader:
 
         return True
 
+    def load_service_class(
+        self, manifest: ServiceManifest, class_path: str
+    ) -> Optional[type[ServiceProtocol]]:
+        """Load a specific service class by class path from a manifest.
+
+        Args:
+            manifest: The service manifest
+            class_path: Specific class path to load (e.g., "reddit.service.RedditCommunicationService")
+
+        Returns:
+            The loaded service class or None if loading fails
+        """
+        if not self.validate_manifest(manifest):
+            return None
+
+        if not self.check_dependencies(manifest):
+            logger.error(f"Dependencies not satisfied for {manifest.module.name}")
+            return None
+
+        # Add service directory to Python path temporarily
+        import sys
+
+        sys.path.insert(0, str(self.services_dir))
+
+        try:
+            parts = class_path.split(".")
+            module_path = ".".join(parts[:-1])
+            class_name = parts[-1]
+
+            # Import module
+            module = importlib.import_module(module_path)
+            service_class = getattr(module, class_name)
+
+            logger.info(f"Successfully loaded service class: {class_name} from {manifest.module.name}")
+            return cast(type[ServiceProtocol], service_class)
+
+        except Exception as e:
+            logger.error(f"Failed to load service class {class_path} from {manifest.module.name}: {e}")
+            return None
+        finally:
+            # Remove from path
+            sys.path.pop(0)
+
     def load_service(self, manifest: ServiceManifest) -> Optional[type[ServiceProtocol]]:
-        """Dynamically load a service class from manifest."""
+        """Dynamically load a service class from manifest (loads first service in manifest)."""
         if not self.validate_manifest(manifest):
             return None
 
@@ -107,55 +150,39 @@ class ModularServiceLoader:
             return None
         service_name = manifest.module.name
 
-        # Add service directory to Python path temporarily
-        import sys
-
-        sys.path.insert(0, str(self.services_dir))
-
-        try:
-            # Import the service module
-            # For new manifest format, get class path from services
-            if manifest.services:
-                service_class_path = manifest.services[0].class_path
-            elif manifest.exports and "service_class" in manifest.exports:
-                # Legacy format support
-                export_value = manifest.exports["service_class"]
-                service_class_path = export_value if isinstance(export_value, str) else export_value[0]
-            else:
-                logger.error("No service class path found in manifest")
-                return None
-            parts = service_class_path.split(".")
-
-            # Build import path relative to services directory
-            module_path = ".".join(parts[:-1])
-            class_name = parts[-1]
-
-            # Import module
-            module = importlib.import_module(module_path)
-            service_class = getattr(module, class_name)
-
-            logger.info(f"Successfully loaded modular service: {service_name}")
-            # Create service metadata
-            service_meta = ServiceMetadata(
-                service_type=manifest.services[0].type if manifest.services else ServiceType.LLM,
-                module_name=service_name,
-                class_name=class_name,
-                version=manifest.module.version,
-                is_mock=manifest.module.is_mock,
-                capabilities=manifest.capabilities or [],
-                priority=manifest.services[0].priority if manifest.services else ServicePriority.NORMAL,
-                health_status="loaded",
-            )
-            self.loaded_services[service_name] = service_meta
-
-            return cast(type[ServiceProtocol], service_class)
-
-        except Exception as e:
-            logger.error(f"Failed to load service {service_name}: {e}")
+        # Get class path from manifest
+        if manifest.services:
+            service_class_path = manifest.services[0].class_path
+        elif manifest.exports and "service_class" in manifest.exports:
+            # Legacy format support
+            export_value = manifest.exports["service_class"]
+            service_class_path = export_value if isinstance(export_value, str) else export_value[0]
+        else:
+            logger.error("No service class path found in manifest")
             return None
-        finally:
-            # Remove from path
-            sys.path.pop(0)
+
+        # Use the new load_service_class method
+        service_class = self.load_service_class(manifest, service_class_path)
+        if not service_class:
+            return None
+
+        # Create service metadata
+        parts = service_class_path.split(".")
+        class_name = parts[-1]
+        service_meta = ServiceMetadata(
+            service_type=manifest.services[0].type if manifest.services else ServiceType.LLM,
+            module_name=service_name,
+            class_name=class_name,
+            version=manifest.module.version,
+            is_mock=manifest.module.is_mock,
+            capabilities=manifest.capabilities or [],
+            priority=manifest.services[0].priority if manifest.services else ServicePriority.NORMAL,
+            health_status="loaded",
+        )
+        self.loaded_services[service_name] = service_meta
+        logger.info(f"Successfully loaded modular service: {service_name}")
+
+        return service_class
 
     def get_service_metadata(self, service_name: str) -> Optional[ServiceMetadata]:
         """Get metadata for a loaded service."""

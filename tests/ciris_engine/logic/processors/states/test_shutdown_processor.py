@@ -1155,9 +1155,27 @@ class TestMultiOccurrenceScenarios:
         mock_try_claim,
         mock_is_completed,
         mock_get_shutdown_manager,
-        shutdown_processor,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
     ):
-        """Test monitoring occurrence scenario (lines 360-366)"""
+        """Test monitoring occurrence scenario - MULTI-OCCURRENCE agent"""
+        # CRITICAL: Use multi-occurrence ID (not "default") to test monitoring behavior
+        shutdown_processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-2",  # Multi-occurrence, not "default"
+        )
+        
         # Setup
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -1534,3 +1552,705 @@ class TestThoughtProcessingNoResult:
         shutdown_processor.process_thought_item.assert_called_once()
         # Dispatch should NOT be called when result is None
         shutdown_processor.action_dispatcher.dispatch.assert_not_called()
+
+
+# ============================================================================
+# COMPREHENSIVE DEPLOYMENT SCENARIO TESTS
+# ============================================================================
+
+
+class TestDeploymentScenarios:
+    """
+    Comprehensive tests for all 4 deployment scenarios:
+    1. Single-occurrence SQLite (e.g., Sage)
+    2. Single-occurrence PostgreSQL
+    3. Multi-occurrence SQLite (claiming)
+    4. Multi-occurrence SQLite (monitoring)
+    5. Multi-occurrence PostgreSQL (claiming)
+    6. Multi-occurrence PostgreSQL (monitoring)
+    
+    Tests the critical P0 fix for single-occurrence shutdown loop bug.
+    """
+
+    # ------------------------------------------------------------------------
+    # Single-Occurrence Scenarios
+    # ------------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_single_occurrence_sqlite_first_run(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 1A: Single-occurrence SQLite agent (Sage) - First run
+        
+        This is the normal case where Sage creates a shutdown task for the first time.
+        """
+        # Setup processor for single-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="default",  # Single-occurrence identifier
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # First run - no existing completed task
+        mock_is_completed.return_value = False
+
+        new_task = Task(
+            task_id="SHUTDOWN_SHARED_abc123",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (new_task, True)  # Created new task
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.shutdown_task.task_id == "SHUTDOWN_SHARED_abc123"
+        assert processor.is_claiming_occurrence is True
+        mock_is_completed.assert_called_once_with("shutdown", within_hours=1)
+        mock_try_claim.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.get_latest_shared_task")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_single_occurrence_sqlite_prevents_loop(
+        self,
+        mock_persistence,
+        mock_get_latest,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 1B: Single-occurrence SQLite agent (Sage) - Second run
+        
+        CRITICAL TEST: This tests the P0 fix for the shutdown loop bug.
+        
+        Before fix: Agent would find its own completed task and return early,
+                   causing infinite loop.
+        After fix: _process_shutdown() checks `if not self.shutdown_task` before
+                   calling _create_shutdown_task(), preventing the check entirely.
+        """
+        # Setup processor for single-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="default",
+        )
+
+        # Simulate first run already created task
+        existing_task = Task(
+            task_id="SHUTDOWN_SHARED_abc123",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update",
+            priority=10,
+            status=TaskStatus.ACTIVE,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:05:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        processor.shutdown_task = existing_task  # Already set from first run
+        
+        # Mock persistence calls
+        mock_persistence.get_task_by_id.return_value = existing_task
+        mock_persistence.get_thoughts_by_task_id.return_value = []
+
+        # Setup shutdown manager
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # Mock that task is completed (should not be checked)
+        mock_is_completed.return_value = True
+        mock_get_latest.return_value = existing_task
+
+        # Execute - Call the full process method, not _create_shutdown_task directly
+        # This properly tests the fix at line 194: `if not self.shutdown_task:`
+        result = await processor.process(round_number=2)
+
+        # Verify - P0 FIX: Should NOT call is_shared_task_completed or _create_shutdown_task
+        # because _process_shutdown checks `if not self.shutdown_task` first (line 194)
+        mock_is_completed.assert_not_called()
+        mock_get_latest.assert_not_called()
+        
+        # Should still process normally without creating new task
+        assert result is not None
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_single_occurrence_postgresql(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 2: Single-occurrence PostgreSQL agent
+        
+        Same behavior as SQLite - should not loop when finding own completed task.
+        """
+        # Setup processor for single-occurrence PostgreSQL
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="default",  # Single-occurrence
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Maintenance"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        mock_is_completed.return_value = False
+
+        new_task = Task(
+            task_id="SHUTDOWN_SHARED_xyz789",
+            channel_id="test_channel",
+            description="System shutdown requested: Maintenance",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (new_task, True)
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.is_claiming_occurrence is True
+        mock_try_claim.assert_called_once()
+
+    # ------------------------------------------------------------------------
+    # Multi-Occurrence Claiming Scenarios
+    # ------------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_multi_occurrence_sqlite_claiming(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 3: Multi-occurrence SQLite agent - Claiming occurrence
+        
+        First occurrence to request shutdown claims the shared task.
+        """
+        # Setup processor for multi-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-1",  # Multi-occurrence identifier
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Rolling restart"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # No existing completed task
+        mock_is_completed.return_value = False
+
+        # This occurrence claims the task
+        new_task = Task(
+            task_id="SHUTDOWN_SHARED_multi123",
+            channel_id="test_channel",
+            description="System shutdown requested: Rolling restart",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (new_task, True)  # was_created=True
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.is_claiming_occurrence is True  # This occurrence claimed it
+        mock_try_claim.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    async def test_multi_occurrence_sqlite_monitoring(
+        self,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 4: Multi-occurrence SQLite agent - Monitoring occurrence
+        
+        Second occurrence arrives after first has claimed, becomes monitoring occurrence.
+        """
+        # Setup processor for multi-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-2",  # Different occurrence
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Rolling restart"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # No existing completed task
+        mock_is_completed.return_value = False
+
+        # Another occurrence already claimed it
+        claimed_task = Task(
+            task_id="SHUTDOWN_SHARED_multi123",
+            channel_id="test_channel",
+            description="System shutdown requested: Rolling restart",
+            priority=10,
+            status=TaskStatus.ACTIVE,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (claimed_task, False)  # was_created=False
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.is_claiming_occurrence is False  # Monitoring occurrence
+        mock_try_claim.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_multi_occurrence_postgresql_claiming(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 5: Multi-occurrence PostgreSQL agent (Scout) - Claiming occurrence
+        
+        Production scenario: Scout occurrence claims shared task in PostgreSQL.
+        """
+        # Setup processor for multi-occurrence PostgreSQL
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="scout-001",  # Scout occurrence
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update to 1.5.0"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        mock_is_completed.return_value = False
+
+        # Scout-001 claims the task
+        new_task = Task(
+            task_id="SHUTDOWN_SHARED_scout456",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update to 1.5.0",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (new_task, True)
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.is_claiming_occurrence is True
+        mock_try_claim.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    async def test_multi_occurrence_postgresql_monitoring(
+        self,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 6: Multi-occurrence PostgreSQL agent (Scout) - Monitoring occurrence
+        
+        Production scenario: Scout-002 and Scout-003 monitor Scout-001's decision.
+        """
+        # Setup processor for multi-occurrence PostgreSQL
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="scout-002",  # Monitoring occurrence
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update to 1.5.0"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        mock_is_completed.return_value = False
+
+        # Scout-001 already claimed it
+        claimed_task = Task(
+            task_id="SHUTDOWN_SHARED_scout456",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update to 1.5.0",
+            priority=10,
+            status=TaskStatus.ACTIVE,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (claimed_task, False)  # was_created=False
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task is not None
+        assert processor.is_claiming_occurrence is False  # Monitoring only
+        mock_try_claim.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.get_latest_shared_task")
+    async def test_multi_occurrence_finds_existing_decision(
+        self,
+        mock_get_latest,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 7: Multi-occurrence agent finds existing completed decision
+        
+        Late-arriving occurrence finds that another occurrence already completed
+        the shutdown decision.
+        """
+        # Setup processor for multi-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-3",
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Update"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # Another occurrence already completed shutdown
+        mock_is_completed.return_value = True
+
+        existing_task = Task(
+            task_id="SHUTDOWN_SHARED_completed",
+            channel_id="test_channel",
+            description="System shutdown requested: Update",
+            priority=10,
+            status=TaskStatus.COMPLETED,
+            created_at="2025-10-07T11:50:00+00:00",
+            updated_at="2025-10-07T11:55:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_get_latest.return_value = existing_task
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify
+        assert processor.shutdown_task == existing_task
+        mock_is_completed.assert_called_once_with("shutdown", within_hours=1)
+        mock_get_latest.assert_called_once_with("shutdown", within_hours=1)
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_monitoring_occurrence_does_not_process_thoughts(
+        self,
+        mock_persistence,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        Scenario 8: Monitoring occurrence skips thought processing
+        
+        Only the claiming occurrence should process thoughts. Monitoring occurrences
+        should only watch the task status.
+        """
+        # Setup processor as monitoring occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="occurrence-2",
+        )
+
+        # Set up as monitoring occurrence
+        processor.shutdown_task = Task(
+            task_id="SHUTDOWN_SHARED_test",
+            channel_id="test_channel",
+            description="Test",
+            priority=10,
+            status=TaskStatus.ACTIVE,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        processor.is_claiming_occurrence = False
+
+        # Execute
+        await processor._process_shutdown_thoughts()
+
+        # Verify - should not call get_thoughts_by_task_id
+        mock_persistence.get_thoughts_by_task_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.persistence.models.tasks.update_task_context_and_signing")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_single_occurrence_claims_existing_task(
+        self,
+        mock_persistence,
+        mock_update_context,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_config_accessor,
+        mock_thought_processor,
+        mock_action_dispatcher,
+        mock_services,
+        mock_time_service,
+        mock_runtime,
+        mock_auth_service,
+    ):
+        """
+        CRITICAL P0 FIX TEST: Single-occurrence agent claims existing task
+        
+        This tests the ACTUAL bug that caused Sage's 7-hour shutdown loop:
+        - Task already exists in database (from previous run/restart)
+        - try_claim_shared_task returns was_created=False
+        - Single-occurrence agent MUST still claim and process (not monitor)
+        
+        Before fix: Agent would set is_claiming_occurrence=False and loop forever
+        After fix: Agent recognizes it's single-occurrence and claims anyway
+        """
+        # Setup processor for single-occurrence
+        processor = ShutdownProcessor(
+            config_accessor=mock_config_accessor,
+            thought_processor=mock_thought_processor,
+            action_dispatcher=mock_action_dispatcher,
+            services=mock_services,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="default",  # Single-occurrence identifier
+        )
+
+        # Setup mocks
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "CD update"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # No existing completed task
+        mock_is_completed.return_value = False
+
+        # CRITICAL: Task already exists (was_created=False)
+        # This simulates the bug condition: task persisted from previous run
+        existing_task = Task(
+            task_id="SHUTDOWN_SHARED_20251029",
+            channel_id="test_channel",
+            description="System shutdown requested: CD update",
+            priority=10,
+            status=TaskStatus.PENDING,
+            created_at="2025-10-29T17:00:00+00:00",
+            updated_at="2025-10-29T17:00:00+00:00",
+            agent_occurrence_id="__shared__",
+        )
+        mock_try_claim.return_value = (existing_task, False)  # was_created=False!
+        mock_persistence.update_task_status.return_value = None
+
+        # Execute
+        await processor._create_shutdown_task()
+
+        # Verify - P0 FIX: Single-occurrence MUST claim even though was_created=False
+        assert processor.shutdown_task is not None
+        assert processor.shutdown_task.task_id == "SHUTDOWN_SHARED_20251029"
+        assert processor.is_claiming_occurrence is True  # CRITICAL: Must be claiming, not monitoring!
+        
+        # Should still process normally (not return early)
+        mock_try_claim.assert_called_once()
+        mock_update_context.assert_called_once()  # Should update context and sign

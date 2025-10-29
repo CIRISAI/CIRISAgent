@@ -20,8 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runtime dependency injection pattern (3 tests)
   - TSDB consolidation lock acquisition (5 tests)
   - Dialect adapter JSON extraction (7 tests)
+- **Comprehensive Deployment Scenario Tests** - Added 9 new shutdown processor tests covering all deployment scenarios
+  - Single-occurrence SQLite (Sage): First run + loop prevention test
+  - Single-occurrence PostgreSQL: Normal shutdown flow
+  - Multi-occurrence SQLite: Claiming + monitoring occurrences
+  - Multi-occurrence PostgreSQL (Scout): Claiming + monitoring occurrences
+  - Late arrival scenario: Finding existing completed decision
+  - Thought processing isolation: Monitoring occurrences don't process
+  - **Total**: 51 shutdown processor tests (42 original + 9 new deployment scenarios)
 
 ### Fixed
+- **P0: Single-Occurrence Shutdown Loop** - Fixed shutdown processor claiming logic for single-occurrence agents
+  - **Problem**: Single-occurrence agents would enter "monitoring mode" when finding existing shutdown tasks, causing infinite loop
+  - **Impact**: Sage agent stuck in 7-hour shutdown loop during CD update (25,200+ iterations, unable to process thoughts)
+  - **Root Cause**: After restart/error, `try_claim_shared_task()` returns `was_created=False` for existing tasks → agent sets `is_claiming_occurrence=False` → thought processing skipped (line 474) → infinite loop
+  - **Solution**: Single-occurrence agents (`occurrence_id="default"`) now ALWAYS claim tasks, even if they already exist in database
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:362-379`
+  - **Production Evidence**: Sage logs showed "Another occurrence claimed shutdown task" despite being single-occurrence
 - **P0: PostgreSQL URL Corruption in Service Initialization** - Fixed derivative database URL generation
   - **Problem**: Lines 262 and 394 in `service_initializer.py` used naive `rsplit("/", 1)` string manipulation
   - **Impact**: URLs like `postgresql://host/db?sslmode=require` became `db?sslmode=require_secrets` causing "invalid sslmode value: require_secrets" error

@@ -239,9 +239,7 @@ class RedditErrorHandler:
 
                 # Last attempt - don't wait
                 if attempt == max_retries:
-                    logger.error(
-                        f"{operation_name} failed after {max_retries + 1} attempts: {error_info.message}"
-                    )
+                    logger.error(f"{operation_name} failed after {max_retries + 1} attempts: {error_info.message}")
                     raise
 
                 # Calculate backoff with jitter

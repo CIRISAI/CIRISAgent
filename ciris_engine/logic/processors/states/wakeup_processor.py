@@ -464,8 +464,6 @@ class WakeupProcessor(BaseProcessor):
             self.wakeup_complete = True
             return
 
-        now_iso = self.time_service.now().isoformat()
-
         # Get the communication bus to find the default channel
         comm_bus_raw = self.services.communication_bus
         if not comm_bus_raw:

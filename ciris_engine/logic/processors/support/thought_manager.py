@@ -37,8 +37,6 @@ class ThoughtManager:
 
     def generate_seed_thought(self, task: Task, round_number: int = 0) -> Optional[Thought]:
         """Generate a seed thought for a task - elegantly copy the context."""
-        now_iso = self.time_service.now().isoformat()
-
         # Convert TaskContext to ThoughtContext for the thought
         # TaskContext and ThoughtContext are different types
         thought_context = None
@@ -204,7 +202,6 @@ class ThoughtManager:
         parent_thought: Thought,
         content: str,
         thought_type: ThoughtType = ThoughtType.FOLLOW_UP,
-        round_number: int = 0,
     ) -> Optional[Thought]:
         """Create a follow-up thought from a parent thought."""
         thought = create_follow_up_thought(

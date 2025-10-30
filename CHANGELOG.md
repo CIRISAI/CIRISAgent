@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `ciris_engine/logic/runtime/service_initializer.py:1114` - Inject from essential_config
   - **Production Evidence**: Scout-003 detected posts 1ojzi91 and 1ojzj66 but created tasks/thoughts with occurrence_id='default', leaving Scout-003 unable to process them
 
+### Added
+- **Test Coverage: Hot/Cold Telemetry Configuration** - Comprehensive unit tests for telemetry path classification
+  - 28 tests covering path configuration, module configs, and telemetry requirements
+  - Tests critical, hot, and cold path detection logic
+  - Validates proper telemetry sampling and retention policies
+  - **Files**: `tests/ciris_engine/logic/telemetry/test_hot_cold_config.py`
+
 ## [1.5.0] - TBD
 
 ### Fixed (1.5.0 Continued)

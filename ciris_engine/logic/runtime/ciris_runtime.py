@@ -617,6 +617,7 @@ class CIRISRuntime:
         if not self.essential_config:
             # Use default essential config if none provided
             self.essential_config = EssentialConfig()
+            self.essential_config.load_env_vars()  # Load CIRIS_DB_URL and other env vars
             logger.warning("No config provided, using defaults")
 
     async def _verify_database_integrity(self) -> bool:

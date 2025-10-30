@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Solution**: Use proper helper functions `get_secrets_db_full_path()` and `get_audit_db_full_path()` which preserve query parameters
   - **Files**: `ciris_engine/logic/runtime/service_initializer.py:257-262, 390-397`
   - **Root Cause**: Scout-003 (scout-remote-test-dahrb9) first occurrence with Reddit adapter on main server exposed the bug
+- **P0: Missing Environment Variable Loading in Database Init** - Fixed `CIRIS_DB_URL` not being loaded during fallback config creation
+  - **Problem**: Line 619 in `ciris_runtime.py` creates `EssentialConfig()` without calling `.load_env_vars()`
+  - **Impact**: PostgreSQL deployments silently fall back to SQLite when no config provided, ignoring `CIRIS_DB_URL` environment variable
+  - **Symptom**: Agent logs "Using SQLite database: data/ciris_engine.db" despite `CIRIS_DB_URL` being set to PostgreSQL
+  - **Solution**: Added `.load_env_vars()` call immediately after `EssentialConfig()` creation at line 620
+  - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:620`
+  - **Production Evidence**: Scout-003 startup logs showed SQLite fallback with PostgreSQL URL configured
 - **P1: Dialect Initialization Timing Bug** - Fixed `get_task_by_correlation_id()` to initialize dialect before building SQL
   - **Problem**: Called `get_adapter()` BEFORE establishing database connection, causing SQLite syntax to be used with PostgreSQL
   - **Impact**: PostgreSQL deployments failed correlation ID lookups with syntax errors (json_extract not supported)

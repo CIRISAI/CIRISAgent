@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2025-10-30
+
+### Fixed
+- **P0: RedditObserver Using Wrong Occurrence ID** - Fixed multi-occurrence Reddit observers creating tasks/thoughts with default occurrence_id
+  - **Problem**: RedditObserver creates tasks/thoughts with `agent_occurrence_id='default'` instead of occurrence's actual ID
+  - **Impact**: Scout-003 (occurrence_id='003') detects Reddit posts but cannot process them - tasks created with 'default' ID are invisible to occurrence '003'
+  - **Root Cause**:
+    1. `RedditObserver.__init__()` doesn't accept `agent_occurrence_id` parameter
+    2. Calls `super().__init__()` without passing occurrence_id
+    3. `BaseObserver` defaults to `agent_occurrence_id="default"`
+  - **Solution**:
+    1. Added `agent_occurrence_id` parameter to `RedditObserver.__init__()`
+    2. Pass it through to `BaseObserver.__init__()`
+    3. Updated `RedditCommunicationService` to accept and pass occurrence_id to observer
+    4. Added occurrence_id to modular service dependency injection in `ServiceInitializer`
+  - **Files**:
+    - `ciris_modular_services/reddit/observer.py:44,62` - Added parameter and pass-through
+    - `ciris_modular_services/reddit/service.py:1195,1206,1228` - Store and pass occurrence_id
+    - `ciris_engine/logic/runtime/service_initializer.py:1114` - Inject from essential_config
+  - **Production Evidence**: Scout-003 detected posts 1ojzi91 and 1ojzj66 but created tasks/thoughts with occurrence_id='default', leaving Scout-003 unable to process them
+
 ## [1.5.0] - TBD
 
 ### Fixed (1.5.0 Continued)

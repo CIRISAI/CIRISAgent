@@ -41,6 +41,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
         filter_service: Optional[object] = None,
         secrets_service: Optional[SecretsService] = None,
         time_service: Optional[TimeServiceProtocol] = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         creds = credentials or RedditCredentials.from_env()
         if not creds:
@@ -58,6 +59,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
             filter_service=filter_service,
             secrets_service=secrets_service,
             time_service=time_service,
+            agent_occurrence_id=agent_occurrence_id,
             origin_service="reddit",
         )
 

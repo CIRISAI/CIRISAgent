@@ -238,7 +238,9 @@ class WakeupProcessor(BaseProcessor):
             if non_blocking:
                 processed_any = False
 
-                logger.info(f"[WAKEUP DEBUG] Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation")
+                logger.info(
+                    f"[WAKEUP DEBUG] Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation"
+                )
                 for i, step_task in enumerate(self.wakeup_tasks[1:]):
                     # Use helper to validate task state
                     is_valid, status_str = self._validate_task_state(step_task)
@@ -449,10 +451,13 @@ class WakeupProcessor(BaseProcessor):
             try_claim_shared_task,
         )
 
-        # Check if wakeup already completed by another occurrence
-        if is_shared_task_completed("wakeup", within_hours=24):
+        # Check if wakeup already completed by another occurrence (within 1 hour)
+        # NOTE: Using 1 hour window instead of 24 hours to ensure fresh wakeup after restarts/deployments
+        # Multi-occurrence agents that start simultaneously will still coordinate, but restarted agents
+        # will go through wakeup ritual again (which is correct behavior after restart)
+        if is_shared_task_completed("wakeup", within_hours=1):
             logger.info(
-                "Wakeup already completed by another occurrence within the last 24 hours. "
+                "Wakeup already completed by another occurrence within the last hour. "
                 "This occurrence is joining the active pool."
             )
             self.wakeup_complete = True

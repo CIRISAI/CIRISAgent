@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.0] - TBD
 
+### Fixed (1.5.0 Continued)
+- **P0: Multi-Occurrence Wakeup Stuck After Restart** - Fixed 24-hour completion window preventing fresh wakeup
+  - **Problem**: `is_shared_task_completed("wakeup", within_hours=24)` finds yesterday's completion, skips wakeup ritual
+  - **Impact**: All 3 Scout remote test agents stuck in WAKEUP after restart, 0 thoughts processed
+  - **Root Cause**: After restart/deployment, agents check if wakeup completed in last 24 hours. Yesterday's completion (Oct 29) prevents new wakeup (Oct 30), leaving `self.wakeup_tasks` empty
+  - **Solution**: Changed completion check from 24 hours to 1 hour - allows simultaneous occurrence coordination while ensuring fresh wakeup after restarts
+  - **Files**: `ciris_engine/logic/processors/states/wakeup_processor.py:458`
+  - **Production Evidence**: Scout-001, Scout-002, Scout-003 all stuck in WAKEUP with "Starting wakeup sequence" but no task processing
+
 ### Debug
 - **TEMP: Wakeup Processor Debug Logging** - Added INFO-level debug logs to diagnose multi-occurrence wakeup stuck issue
   - Investigating why Scout remote test occurrences stuck in WAKEUP state after v1.5.0 update
   - Added `[WAKEUP DEBUG]` prefix to critical thought creation checks (lines 241-282)
   - **Files**: `ciris_engine/logic/processors/states/wakeup_processor.py:241-282`
-  - **Note**: This is temporary debug logging to be removed after root cause identified
+  - **Note**: This is temporary debug logging to be removed after root cause identified and fix verified
 
 ### Added
 - **Reddit Observer Runtime Injection** - Enable passive observation through dependency injection pattern

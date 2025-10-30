@@ -113,6 +113,7 @@ def create_task(
         priority=priority,
         created_at=now_iso,
         updated_at=now_iso,
+        parent_task_id=parent_task_id,
         context=context,
     )
 

@@ -10,6 +10,7 @@ from typing import Any, Deque, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.utils.task_thought_factory import create_follow_up_thought, create_seed_thought_for_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
@@ -95,19 +96,10 @@ class ThoughtManager:
                 logger.critical(f"SEED_THOUGHT: Failed to mark malicious task {task.task_id} as FAILED: {e}")
             return None
 
-        thought = Thought(
-            thought_id=generate_thought_id(thought_type=ThoughtType.STANDARD, task_id=task.task_id, is_seed=True),
-            source_task_id=task.task_id,
-            agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
-            channel_id=channel_id,  # Set channel_id on the thought
-            thought_type=ThoughtType.STANDARD,
-            status=ThoughtStatus.PENDING,
-            created_at=now_iso,
-            updated_at=now_iso,
+        thought = create_seed_thought_for_task(
+            task=task,
+            time_service=self.time_service,
             round_number=round_number,
-            content=f"Initial seed thought for task: {task.description}",
-            context=thought_context,
-            thought_depth=0,
         )
 
         try:
@@ -215,35 +207,12 @@ class ThoughtManager:
         round_number: int = 0,
     ) -> Optional[Thought]:
         """Create a follow-up thought from a parent thought."""
-        now_iso = self.time_service.now().isoformat()
-        context = (
-            parent_thought.context.model_copy()
-            if parent_thought.context
-            else ThoughtContext(
-                task_id=parent_thought.source_task_id,
-                correlation_id=str(uuid.uuid4()),
-                agent_occurrence_id=parent_thought.agent_occurrence_id,
-            )
-        )
-        thought = Thought(
-            thought_id=generate_thought_id(
-                thought_type=ThoughtType.FOLLOW_UP,
-                task_id=parent_thought.source_task_id,
-                parent_thought_id=parent_thought.thought_id,
-            ),
-            source_task_id=parent_thought.source_task_id,
-            agent_occurrence_id=parent_thought.agent_occurrence_id,  # Inherit from parent
-            thought_type=thought_type,
-            status=ThoughtStatus.PENDING,
-            created_at=now_iso,
-            updated_at=now_iso,
-            round_number=round_number,
+        thought = create_follow_up_thought(
+            parent_thought=parent_thought,
             content=content,
-            parent_thought_id=parent_thought.thought_id,
-            context=context,
-            thought_depth=parent_thought.thought_depth + 1,
-            ponder_notes=None,
-            final_action={},
+            time_service=self.time_service,
+            thought_type=thought_type,
+            increment_depth=True,  # Maintain original behavior: depth + 1
         )
         try:
             persistence.add_thought(thought)

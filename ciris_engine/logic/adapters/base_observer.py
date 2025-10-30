@@ -13,6 +13,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task, create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -565,22 +566,15 @@ class BaseObserver(Generic[MessageT], ABC):
             else:
                 description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
 
-            task = Task(
-                task_id=str(uuid.uuid4()),
+            task = create_task(
+                description=description,
                 channel_id=getattr(msg, "channel_id", "system"),
                 agent_occurrence_id=self.agent_occurrence_id,
-                description=description,
+                correlation_id=msg.message_id,  # type: ignore[attr-defined]
+                time_service=self.time_service,
                 status=TaskStatus.ACTIVE,
                 priority=priority,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                context=TaskContext(
-                    channel_id=getattr(msg, "channel_id", None),
-                    user_id=msg.author_id,  # type: ignore[attr-defined]
-                    correlation_id=msg.message_id,  # type: ignore[attr-defined]
-                    parent_task_id=None,
-                    agent_occurrence_id=self.agent_occurrence_id,
-                ),
+                user_id=msg.author_id,  # type: ignore[attr-defined]
             )
 
             await self._sign_and_add_task(task)
@@ -637,30 +631,31 @@ class BaseObserver(Generic[MessageT], ABC):
                 f"total thought size: {len(task_content)} chars"
             )
 
+            # Create seed thought using factory (inherits from task)
+            thought = create_seed_thought_for_task(
+                task=task,
+                time_service=self.time_service,
+            )
+            # Override content with our detailed observation context
+            # Note: Pydantic models are immutable, so we create a new one with updated content
+            from ciris_engine.schemas.runtime.models import Thought
+
             thought = Thought(
-                thought_id=generate_thought_id(thought_type=ThoughtType.STANDARD, task_id=task.task_id),
-                source_task_id=task.task_id,
-                agent_occurrence_id=self.agent_occurrence_id,
-                channel_id=getattr(msg, "channel_id", None),
-                thought_type=ThoughtType.STANDARD,
-                status=ThoughtStatus.PENDING,
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                round_number=0,
-                content=task_content,
-                thought_depth=0,
+                thought_id=thought.thought_id,
+                source_task_id=thought.source_task_id,
+                agent_occurrence_id=thought.agent_occurrence_id,
+                channel_id=thought.channel_id,
+                thought_type=thought.thought_type,
+                status=thought.status,
+                created_at=thought.created_at,
+                updated_at=thought.updated_at,
+                round_number=thought.round_number,
+                content=task_content,  # Our custom detailed content
+                thought_depth=thought.thought_depth,
                 ponder_notes=None,
-                parent_thought_id=None,
+                parent_thought_id=thought.parent_thought_id,
                 final_action=None,
-                context=ThoughtModelContext(
-                    task_id=task.task_id,
-                    channel_id=getattr(msg, "channel_id", None),
-                    round_number=0,
-                    depth=0,
-                    parent_thought_id=None,
-                    correlation_id=msg.message_id,  # type: ignore[attr-defined]
-                    agent_occurrence_id=self.agent_occurrence_id,
-                ),
+                context=thought.context,
             )
 
             persistence.add_thought(thought)

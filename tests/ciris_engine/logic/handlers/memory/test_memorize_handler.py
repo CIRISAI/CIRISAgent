@@ -560,7 +560,7 @@ class TestMemorizeHandler:
 
                 # Verify thought was marked as failed
                 mock_base_persistence.update_thought_status.assert_called_with(
-                    thought_id="thought_123", status=ThoughtStatus.FAILED, final_action=result
+                    thought_id="thought_123", status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
                 )
 
                 # Verify error follow-up was created

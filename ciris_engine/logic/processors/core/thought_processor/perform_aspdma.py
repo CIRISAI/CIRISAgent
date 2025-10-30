@@ -39,7 +39,7 @@ class ActionSelectionPhase:
     if TYPE_CHECKING:
         dma_orchestrator: "DMAOrchestrator"
 
-        async def _fetch_thought(self, thought_id: str) -> Thought | None: ...
+        async def _fetch_thought(self, thought_id: str, occurrence_id: str = "default") -> Thought | None: ...
         def _create_deferral_result(self, dma_results: Any, thought: Thought) -> ActionSelectionDMAResult: ...
         def _get_profile_name(self, thought: Thought) -> str: ...
 
@@ -49,7 +49,7 @@ class ActionSelectionPhase:
         self, thought_item: ProcessingQueueItem, thought_context: Any, dma_results: Any
     ) -> ActionSelectionDMAResult:
         """Step 3: LLM-powered action selection."""
-        thought = await self._fetch_thought(thought_item.thought_id)
+        thought = await self._fetch_thought(thought_item.thought_id, thought_item.agent_occurrence_id)
 
         # Check for WA deferral first
         if (

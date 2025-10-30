@@ -235,7 +235,7 @@ class TestMemorizeHandler:
 
         # Verify thought status updated
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.COMPLETED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.COMPLETED, occurrence_id="default", final_action=result
         )
 
         # Verify follow-up thought created
@@ -282,7 +282,7 @@ class TestMemorizeHandler:
 
         # Verify thought marked as failed
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
         )
 
         # Verify follow-up mentions WA requirement
@@ -328,7 +328,7 @@ class TestMemorizeHandler:
 
         # Verify thought marked as completed
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.COMPLETED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.COMPLETED, occurrence_id="default", final_action=result
         )
 
     @pytest.mark.asyncio
@@ -367,7 +367,7 @@ class TestMemorizeHandler:
 
         # Verify thought marked as failed
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
         )
 
         # Verify follow-up mentions validation error
@@ -407,7 +407,7 @@ class TestMemorizeHandler:
 
         # Verify thought marked as failed
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
         )
 
         # Verify follow-up mentions error
@@ -447,7 +447,7 @@ class TestMemorizeHandler:
 
         # Verify thought marked as failed
         mock_persistence.update_thought_status.assert_called_with(
-            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, final_action=result
+            thought_id=thought.thought_id, status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
         )
 
         # Verify error follow-up created

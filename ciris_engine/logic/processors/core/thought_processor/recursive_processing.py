@@ -82,7 +82,7 @@ class RecursiveProcessingPhase:
         self, thought_item: ProcessingQueueItem, thought_context: Any, dma_results: Any, override_reason: str
     ) -> Optional[Any]:
         """Step 3B: Optional retry action selection after conscience failure."""
-        thought = await self._fetch_thought(thought_item.thought_id)  # type: ignore[attr-defined]
+        thought = await self._fetch_thought(thought_item.thought_id, thought_item.agent_occurrence_id)  # type: ignore[attr-defined]
 
         try:
             # Re-run action selection with guidance about why previous action failed

@@ -998,7 +998,7 @@ async def _broadcast_reasoning_event(
         # Map step points to reasoning events using helper functions
         if step == StepPoint.START_ROUND:
             # Event 0: THOUGHT_START
-            event = _create_thought_start_event(step_data, timestamp, create_reasoning_event)
+            event = _create_thought_start_event(step_data, timestamp, create_reasoning_event, thought_item)
 
         elif step in (StepPoint.GATHER_CONTEXT, StepPoint.PERFORM_DMAS):
             # Event 1: SNAPSHOT_AND_CONTEXT (emitted at PERFORM_DMAS only)
@@ -1246,13 +1246,18 @@ def _extract_lightweight_system_snapshot() -> SystemSnapshot:
     return snapshot
 
 
-def _create_thought_start_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
+def _create_thought_start_event(
+    step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any, thought_item: Any = None
+) -> Any:
     """Create THOUGHT_START reasoning event with thought and task metadata."""
     from ciris_engine.logic.persistence import get_task_by_id, get_thought_by_id
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
+    # Get occurrence_id from thought_item if available
+    occurrence_id = getattr(thought_item, "agent_occurrence_id", "default") if thought_item else "default"
+
     # Get full thought and task data from persistence
-    thought = get_thought_by_id(step_data.thought_id)
+    thought = get_thought_by_id(step_data.thought_id, occurrence_id)
     task = get_task_by_id(step_data.task_id) if step_data.task_id else None
 
     return create_reasoning_event(

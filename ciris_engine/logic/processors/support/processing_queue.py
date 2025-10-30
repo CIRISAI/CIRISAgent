@@ -31,6 +31,9 @@ class ProcessingQueueItem(BaseModel):
     source_task_id: str
     thought_type: ThoughtType  # Corresponds to Thought.thought_type
     content: ThoughtContent
+    agent_occurrence_id: str = Field(
+        default="default", description="Agent occurrence ID that owns this thought (multi-occurrence support)"
+    )
     raw_input_string: Optional[str] = Field(
         default=None, description="The original input string that generated this thought, if applicable."
     )
@@ -81,6 +84,7 @@ class ProcessingQueueItem(BaseModel):
             source_task_id=thought_instance.source_task_id,
             thought_type=thought_instance.thought_type,
             content=resolved_content,
+            agent_occurrence_id=thought_instance.agent_occurrence_id,
             raw_input_string=raw_input if raw_input is not None else str(thought_instance.content),
             initial_context=final_initial_ctx,
             ponder_notes=thought_instance.ponder_notes,

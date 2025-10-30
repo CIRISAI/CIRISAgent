@@ -122,7 +122,10 @@ class BaseActionHandler(ABC):
         # Mark the current thought with the specified status (default to COMPLETED)
         final_status = status or ThoughtStatus.COMPLETED
         success = persistence.update_thought_status(
-            thought_id=thought.thought_id, status=final_status, final_action=action_result
+            thought_id=thought.thought_id,
+            status=final_status,
+            occurrence_id=thought.agent_occurrence_id,
+            final_action=action_result,
         )
 
         if not success:

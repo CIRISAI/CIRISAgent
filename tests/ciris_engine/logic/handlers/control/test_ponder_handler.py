@@ -446,7 +446,10 @@ class TestPonderHandler:
 
             # Verify thought was marked as completed (handler is resilient)
             mock_persistence.update_thought_status.assert_called_with(
-                thought_id="thought_123", status=ThoughtStatus.COMPLETED, final_action=mock_result
+                thought_id="thought_123",
+                status=ThoughtStatus.COMPLETED,
+                occurrence_id="default",
+                final_action=mock_result,
             )
 
             # Verify follow-up was created with empty questions (fallback behavior)

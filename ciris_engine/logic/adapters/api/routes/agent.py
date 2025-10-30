@@ -171,10 +171,19 @@ _response_events: dict[str, asyncio.Event] = {}
 
 async def store_message_response(message_id: str, response: str) -> None:
     """Store a response and notify waiting request."""
+    import os
+
+    occurrence_id = os.environ.get("AGENT_OCCURRENCE_ID", "default")
+    logger.info(
+        f"[STORE_RESPONSE] occurrence={occurrence_id}, message_id={message_id}, response_len={len(response)}, current_keys={list(_message_responses.keys())}"
+    )
     _message_responses[message_id] = response
     event = _response_events.get(message_id)
     if event:
+        logger.info(f"[STORE_RESPONSE] Event found for {message_id}, setting it")
         event.set()
+    else:
+        logger.warning(f"[STORE_RESPONSE] No event found for {message_id}!")
 
 
 # Endpoints
@@ -673,7 +682,16 @@ async def interact(
         await asyncio.wait_for(event.wait(), timeout=timeout)
 
         # Get response
+        import os
+
+        occurrence_id = os.environ.get("AGENT_OCCURRENCE_ID", "default")
+        logger.info(
+            f"[RETRIEVE_RESPONSE] occurrence={occurrence_id}, message_id={message_id}, available_keys={list(_message_responses.keys())}"
+        )
         response_content = _message_responses.get(message_id, "I'm processing your request. Please check back shortly.")
+        logger.info(
+            f"[RETRIEVE_RESPONSE] Retrieved content_len={len(response_content)}, content_preview={response_content[:100] if response_content else 'EMPTY'}"
+        )
 
         # Add consent notice if this is first interaction
         if consent_notice:

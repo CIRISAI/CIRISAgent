@@ -106,19 +106,27 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
         """Handle API interaction response storage if applicable."""
         if not (channel_id and channel_id.startswith("api_")):
+            logger.debug(f"[API_INTERACTION] Skipping non-API channel: {channel_id}")
             return
 
+        logger.info(
+            f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, content_preview={content[:100] if content else 'EMPTY'}"
+        )
         try:
             if not hasattr(self, "_app_state"):
+                logger.warning(f"[API_INTERACTION] No _app_state attribute found")
                 return
 
             message_channel_map = getattr(self._app_state, "message_channel_map", {})
+            logger.debug(f"[API_INTERACTION] message_channel_map keys: {list(message_channel_map.keys())}")
             message_id = message_channel_map.get(channel_id)
             if not message_id:
+                logger.warning(f"[API_INTERACTION] No message_id found for channel {channel_id}")
                 return
 
             from ciris_engine.logic.adapters.api.routes.agent import store_message_response
 
+            logger.info(f"[API_INTERACTION] About to store: message_id={message_id}, content='{content}'")
             await store_message_response(message_id, content)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
             # Clean up the mapping
@@ -136,6 +144,9 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
     async def send_message(self, channel_id: str, content: str) -> bool:
         """Send message through API response or WebSocket."""
         start_time = datetime.now(timezone.utc)
+        logger.info(
+            f"[SEND_MESSAGE] channel_id={channel_id}, content_len={len(content)}, content_preview={content[:100] if content else 'EMPTY'}"
+        )
         try:
             # Create correlation for tracking
             self._create_speak_correlation(channel_id, content)

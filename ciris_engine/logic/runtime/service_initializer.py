@@ -1111,6 +1111,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                         filter_service=self.adaptive_filter_service,
                         secrets_service=self.secrets_service,
                         time_service=self.time_service,
+                        agent_occurrence_id=self.essential_config.agent_occurrence_id,
                     )
                 except TypeError:
                     # Service doesn't accept runtime dependencies, instantiate without them

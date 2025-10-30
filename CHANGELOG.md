@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2025-10-30
+
+### Added
+- **Golden Honmoon: Centralized Task/Thought Factory** - Complete refactoring to guarantee occurrence_id propagation
+  - **New Module**: `ciris_engine/logic/utils/task_thought_factory.py` - Centralized factory with 4 helper functions
+  - **Factory Functions**:
+    - `create_task()` - Type-safe task creation with guaranteed occurrence_id
+    - `create_thought()` - Flexible thought creation for all scenarios
+    - `create_seed_thought_for_task()` - Automatic context inheritance from task
+    - `create_follow_up_thought()` - Proper depth/round handling for thought chains
+  - **Test Coverage**: 35 comprehensive factory tests including multi-occurrence scenarios
+  - **Benefits**: Single source of truth prevents occurrence_id bugs structurally
+
+### Fixed
+- **P0: Missing occurrence_id in Discord Guidance ThoughtContext** - Fixed multi-occurrence WA guidance routing
+  - **Problem**: Guidance thoughts created WITHOUT `agent_occurrence_id` in ThoughtContext
+  - **Impact**: In multi-occurrence deployments, guidance thoughts orphaned or processed by wrong occurrence
+  - **Root Cause**: `discord_observer.py:555` missing explicit occurrence_id assignment
+  - **Solution**: Added `agent_occurrence_id=self.agent_occurrence_id` to ThoughtContext
+  - **Files**: `ciris_engine/logic/adapters/discord/discord_observer.py`
+
+- **P1: Missing parent_task_id Propagation in Factory** - Fixed task hierarchy tracking
+  - **Problem**: `create_task()` accepted `parent_task_id` but never passed to Task() constructor
+  - **Impact**: Task hierarchies broken - parent_task_id always None even when provided
+  - **Solution**: Added `parent_task_id=parent_task_id` to Task instantiation
+  - **Files**: `ciris_engine/logic/utils/task_thought_factory.py:116`
+
+- **P2: Type Safety Issues** - Fixed mypy errors and unused parameters
+  - Optional channel_id type mismatch in DiscordObserver
+  - Invalid round_number parameter in ThoughtManager
+  - Unused timestamp variables (factory handles timestamps)
+  - **Files**: `discord_observer.py`, `thought_manager.py`, `wakeup_processor.py`
+
+- **P0: RedditObserver Using Wrong Occurrence ID** - Fixed multi-occurrence Reddit observers creating tasks/thoughts with default occurrence_id
+  - **Problem**: RedditObserver creates tasks/thoughts with `agent_occurrence_id='default'` instead of occurrence's actual ID
+  - **Impact**: Scout-003 (occurrence_id='003') detects Reddit posts but cannot process them - tasks created with 'default' ID are invisible to occurrence '003'
+  - **Root Cause**:
+    1. `RedditObserver.__init__()` doesn't accept `agent_occurrence_id` parameter
+    2. Calls `super().__init__()` without passing occurrence_id
+    3. `BaseObserver` defaults to `agent_occurrence_id="default"`
+  - **Solution**:
+    1. Added `agent_occurrence_id` parameter to `RedditObserver.__init__()`
+    2. Pass it through to `BaseObserver.__init__()`
+    3. Updated `RedditCommunicationService` to accept and pass occurrence_id to observer
+    4. Added occurrence_id to modular service dependency injection in `ServiceInitializer`
+  - **Files**:
+    - `ciris_modular_services/reddit/observer.py:44,62` - Added parameter and pass-through
+    - `ciris_modular_services/reddit/service.py:1195,1206,1228` - Store and pass occurrence_id
+    - `ciris_engine/logic/runtime/service_initializer.py:1114` - Inject from essential_config
+  - **Production Evidence**: Scout-003 detected posts 1ojzi91 and 1ojzj66 but created tasks/thoughts with occurrence_id='default', leaving Scout-003 unable to process them
+
+### Refactored
+- **Golden Honmoon: Factory Migration** - Migrated critical paths to use centralized factory pattern
+  - **BaseObserver**: All message handlers (Discord, API, CLI) now use `create_task()` and `create_seed_thought_for_task()`
+  - **DiscordObserver**: Guidance flow uses `create_task()` and `create_thought()`
+  - **ThoughtManager**: Seed and follow-up thought creation use factory helpers
+  - **WakeupProcessor**: System initialization tasks use `create_task()`
+  - **Impact**: 1535 tests passing, 99.2% QA success rate, -52 net lines (simpler code)
+  - **COVENANT Alignment**: Embodies Integrity, Sustained Coherence, Resilience, Non-Maleficence principles
+
+### Added
+- **Test Coverage: Hot/Cold Telemetry Configuration** - Comprehensive unit tests for telemetry path classification
+  - 28 tests covering path configuration, module configs, and telemetry requirements
+  - Tests critical, hot, and cold path detection logic
+  - Validates proper telemetry sampling and retention policies
+  - **Files**: `tests/ciris_engine/logic/telemetry/test_hot_cold_config.py`
+
 ## [1.5.0] - TBD
 
 ### Fixed (1.5.0 Continued)

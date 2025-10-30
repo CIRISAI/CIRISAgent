@@ -448,6 +448,7 @@ class TestModularServiceLoading:
         config.data_dir = temp_dir
         config.db_path = os.path.join(temp_dir, "test.db")
         config.log_level = "INFO"
+        config.agent_occurrence_id = "default"  # Add occurrence_id for modular service injection
 
         # Add database attribute
         mock_database = Mock()

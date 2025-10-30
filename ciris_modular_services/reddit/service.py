@@ -1192,6 +1192,7 @@ class RedditCommunicationService(RedditServiceBase):
         agent_id: Optional[str] = None,
         filter_service: Optional[object] = None,
         secrets_service: Optional[object] = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         super().__init__(credentials, time_service=time_service, service_name="RedditCommunicationService")
         self._home_channel: Optional[str] = None
@@ -1202,6 +1203,7 @@ class RedditCommunicationService(RedditServiceBase):
         self._agent_id = agent_id
         self._filter_service = filter_service
         self._secrets_service = secrets_service
+        self._agent_occurrence_id = agent_occurrence_id
         self._observer: Optional[object] = None  # RedditObserver instance
 
     async def _on_start(self) -> None:
@@ -1223,6 +1225,7 @@ class RedditCommunicationService(RedditServiceBase):
                 filter_service=self._filter_service,
                 secrets_service=self._secrets_service,
                 time_service=self._time_service,
+                agent_occurrence_id=self._agent_occurrence_id,
             )
             await self._observer.start()
             logger.info(

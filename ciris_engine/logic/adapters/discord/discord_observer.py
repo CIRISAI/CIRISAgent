@@ -6,6 +6,7 @@ from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.utils.task_thought_factory import create_task, create_thought
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -551,6 +552,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                                 depth=0,
                                 parent_thought_id=referenced_thought_id,
                                 correlation_id=str(uuid.uuid4()),
+                                agent_occurrence_id=self.agent_occurrence_id,  # FIXED: Now includes occurrence_id!
                             )
                             # Add extra fields after creation
                             setattr(guidance_context, "guidance_message_id", msg.message_id)
@@ -568,24 +570,19 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                             f"WISE AUTHORITY RESPONSE: {msg.content}"
                         )
 
-                        guidance_thought = Thought(
-                            thought_id=str(uuid.uuid4()),
+                        # Use factory to create guidance thought with proper occurrence_id
+                        guidance_thought = create_thought(
                             source_task_id=original_task.task_id,
-                            parent_thought_id=referenced_thought_id,
+                            agent_occurrence_id=self.agent_occurrence_id,
+                            correlation_id=guidance_context.correlation_id,
+                            content=combined_content,
+                            time_service=self.time_service,
                             thought_type=ThoughtType.GUIDANCE,
                             status=ThoughtStatus.PENDING,  # Must be PENDING to enter processing queue!
-                            created_at=(
-                                self.time_service.now_iso()
-                                if self.time_service
-                                else datetime.now(timezone.utc).isoformat()
-                            ),
-                            updated_at=(
-                                self.time_service.now_iso()
-                                if self.time_service
-                                else datetime.now(timezone.utc).isoformat()
-                            ),
+                            channel_id=msg.channel_id,
                             round_number=0,  # Reset to 0 for fresh processing after guidance
-                            content=combined_content,
+                            thought_depth=0,
+                            parent_thought_id=referenced_thought_id,
                             context=guidance_context,
                         )
                         persistence.add_thought(guidance_thought)
@@ -603,16 +600,16 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                         await self._send_deferral_message(success_msg)
                         return
 
-            # If we get here, it's unsolicited guidance - create a new task
-            task = Task(
-                task_id=str(uuid.uuid4()),
-                channel_id=msg.channel_id,
+            # If we get here, it's unsolicited guidance - create a new task using factory
+            task = create_task(
                 description=f"Guidance received from authorized WA {msg.author_name} (ID: {msg.author_id}) please act accordingly",
+                channel_id=msg.channel_id or "system",
+                agent_occurrence_id=self.agent_occurrence_id,
+                correlation_id=msg.message_id,
+                time_service=self.time_service,
                 status=TaskStatus.PENDING,
                 priority=8,  # High priority for guidance
-                created_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                updated_at=self.time_service.now_iso() if self.time_service else datetime.now(timezone.utc).isoformat(),
-                context=self._create_task_context_with_extras(msg),
+                user_id=msg.author_id,
             )
             persistence.add_task(task)
             logger.info(

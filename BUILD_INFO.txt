@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: ff8f9f862ebc
-Build Time: 2025-10-29T20:36:31.335346
-Git Commit: fc6121223df1243a1719fa2ff41ce52b42ebeb20
-Git Branch: 1.5.0
+Code Hash: 83eaf84a8e0e
+Build Time: 2025-10-30T10:56:26.183181
+Git Commit: d7449d7d204b566ac7bd5bbfa45fe811553d1ab5
+Git Branch: refactor/golden-honmoon-factory-migration
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

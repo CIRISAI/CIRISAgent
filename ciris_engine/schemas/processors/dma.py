@@ -1,8 +1,4 @@
-"""
-Schemas for DMA orchestration operations.
-
-These replace all Dict[str, Any] usage in logic/processors/support/dma_orchestrator.py.
-"""
+"""Schemas for DMA orchestration operations."""
 
 from typing import Dict, Optional
 

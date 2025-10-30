@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3] - 2025-10-30
+
+### Fixed
+- **P0: ShutdownProcessor Thought Query After Ownership Transfer** - Fixed shutdown loop caused by querying with wrong occurrence_id
+  - **Problem**: After transferring shutdown thought ownership from `__shared__` to claiming occurrence, shutdown processor still queried thoughts using `self.shutdown_task.agent_occurrence_id` (which is `"__shared__"`)
+  - **Impact**:
+    - Shutdown processor couldn't find transferred thoughts, reported `thoughts=[]`
+    - Infinite shutdown loop: "Waiting for agent response" with task_status='active'
+    - Affected both SQLite and PostgreSQL deployments
+    - Production evidence: Datum agent stuck in shutdown for 6+ hours running 27,600+ shutdown rounds
+  - **Root Cause**: Line 227 in `shutdown_processor.py` queried with wrong occurrence_id after line 140-154 transferred thought ownership
+  - **Solution**: Changed query at line 227 from `self.shutdown_task.agent_occurrence_id` to `self.agent_occurrence_id` to match transferred thought ownership
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:225-229`
+  - **Verification**: All 52 shutdown processor tests pass, including multi-occurrence scenarios
+  - **Related**: Lines 453 and 494 already had correct pattern with explanatory comments
+
+### Technical Details
+- **Why This Bug Exists**: Shutdown uses shared task coordination with thought ownership transfer (unlike wakeup which creates per-occurrence step tasks)
+- **Query Pattern**: After `transfer_thought_ownership()` moves thoughts from `__shared__` to claiming occurrence, must query with `self.agent_occurrence_id`
+- **Other Processors**: Wakeup processor doesn't have this bug - it creates step tasks with correct occurrence_id from the start (no transfer needed)
+
 ## [1.5.2] - 2025-10-30
 
 ### Fixed

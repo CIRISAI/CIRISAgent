@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.0] - TBD
 
+### Debug
+- **TEMP: Wakeup Processor Debug Logging** - Added INFO-level debug logs to diagnose multi-occurrence wakeup stuck issue
+  - Investigating why Scout remote test occurrences stuck in WAKEUP state after v1.5.0 update
+  - Added `[WAKEUP DEBUG]` prefix to critical thought creation checks (lines 241-282)
+  - **Files**: `ciris_engine/logic/processors/states/wakeup_processor.py:241-282`
+  - **Note**: This is temporary debug logging to be removed after root cause identified
+
 ### Added
 - **Reddit Observer Runtime Injection** - Enable passive observation through dependency injection pattern
   - RedditCommunicationService now accepts optional runtime dependencies (bus_manager, memory_service, etc.)

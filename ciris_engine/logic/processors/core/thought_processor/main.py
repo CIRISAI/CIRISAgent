@@ -149,7 +149,7 @@ class ThoughtProcessor(
     async def _fetch_and_validate_thought(self, thought_item: ProcessingQueueItem) -> Optional[Thought]:
         """Fetch and validate thought exists."""
         logger.info(f"ThoughtProcessor.process_thought: About to fetch thought_id={thought_item.thought_id}")
-        thought = await self._fetch_thought(thought_item.thought_id)
+        thought = await self._fetch_thought(thought_item.thought_id, thought_item.agent_occurrence_id)
         logger.info(
             f"ThoughtProcessor.process_thought: Fetch completed for thought_id={thought_item.thought_id}, result={'present' if thought else 'None'}"
         )
@@ -463,25 +463,29 @@ class ThoughtProcessor(
         persistence.update_correlation(update_req, self._time_service)
 
     # Helper methods that will remain in main.py
-    async def _fetch_thought(self, thought_id: str) -> Optional[Thought]:
+    async def _fetch_thought(self, thought_id: str, occurrence_id: str = "default") -> Optional[Thought]:
         """Fetch thought from persistence layer."""
         import asyncio
 
         from ciris_engine.logic import persistence
 
-        logger.info(f"ThoughtProcessor._fetch_thought: Starting fetch for thought_id={thought_id}")
+        logger.info(
+            f"ThoughtProcessor._fetch_thought: Starting fetch for thought_id={thought_id}, occurrence_id={occurrence_id}"
+        )
 
         try:
             # Add timeout protection to prevent CI hangs
             thought = await asyncio.wait_for(
-                persistence.async_get_thought_by_id(thought_id), timeout=30.0  # 30 second timeout
+                persistence.async_get_thought_by_id(thought_id, occurrence_id), timeout=30.0  # 30 second timeout
             )
             logger.info(
-                f"ThoughtProcessor._fetch_thought: Successfully fetched thought_id={thought_id}, thought={'present' if thought else 'None'}"
+                f"ThoughtProcessor._fetch_thought: Successfully fetched thought_id={thought_id}, occurrence_id={occurrence_id}, thought={'present' if thought else 'None'}"
             )
             return thought
         except asyncio.TimeoutError:
-            logger.error(f"ThoughtProcessor._fetch_thought: TIMEOUT after 30s fetching thought_id={thought_id}")
+            logger.error(
+                f"ThoughtProcessor._fetch_thought: TIMEOUT after 30s fetching thought_id={thought_id}, occurrence_id={occurrence_id}"
+            )
             raise
         except Exception as e:
             logger.error(

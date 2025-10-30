@@ -35,17 +35,20 @@ class RoundInitializationPhase:
     ) -> JSONDict:
         """Step 0: Initialize processing round and prepare thoughts for H3ERE pipeline."""
 
-        # Get the thought ID from the queue item
+        # Get the thought ID and occurrence_id from the queue item
         thought_id = thought_item.thought_id
-        logger.debug(f"Starting round for thought {thought_id}")
+        occurrence_id = thought_item.agent_occurrence_id
+        logger.debug(f"Starting round for thought {thought_id} (occurrence: {occurrence_id})")
 
         # Fetch the full Thought object from persistence
-        full_thought = persistence.get_thought_by_id(thought_id)
+        full_thought = persistence.get_thought_by_id(thought_id, occurrence_id)
         if not full_thought:
-            raise RuntimeError(f"Could not fetch thought {thought_id} from persistence for START_ROUND")
+            raise RuntimeError(
+                f"Could not fetch thought {thought_id} (occurrence: {occurrence_id}) from persistence for START_ROUND"
+            )
 
         # Update thought status from PENDING to PROCESSING
-        persistence.update_thought_status(thought_id, ThoughtStatus.PROCESSING)
+        persistence.update_thought_status(thought_id, ThoughtStatus.PROCESSING, occurrence_id)
         logger.info(f"Transitioned thought {thought_id} from PENDING to PROCESSING")
 
         # The ProcessingQueueItem is already created and passed in, so we just need to

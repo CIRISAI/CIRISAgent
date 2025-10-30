@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2025-10-30
+
+### Fixed
+- **P0: Multi-Occurrence ProcessingQueueItem Missing occurrence_id** - Fixed thought fetching in multi-occurrence deployments
+  - **Problem**: `ProcessingQueueItem` schema lacked `agent_occurrence_id` field, causing thought processor to fetch thoughts with default occurrence_id
+  - **Impact**: In multi-occurrence deployments (Scout-003), thoughts created by one occurrence couldn't be fetched/processed, stuck in PROCESSING status
+  - **Root Cause**:
+    1. `ProcessingQueueItem` lightweight queue representation missing occurrence_id field
+    2. `ThoughtProcessor._fetch_thought()` accepted occurrence_id but call sites didn't provide it
+    3. Multiple call sites (start_round, step_decorators, base_handler) missing occurrence_id propagation
+  - **Solution**:
+    1. Added `agent_occurrence_id` field to `ProcessingQueueItem` schema with default "default"
+    2. Updated `ProcessingQueueItem.from_thought()` to copy occurrence_id from source Thought
+    3. Fixed 6 call sites to pass `thought_item.agent_occurrence_id`:
+       - `start_round.py` - get_thought_by_id and update_thought_status
+       - `step_decorators.py` - _create_thought_start_event reasoning events
+       - `base_handler.py` - update_thought_status in finalize_round
+       - `gather_context.py`, `perform_aspdma.py`, `recursive_processing.py` - _fetch_thought calls
+  - **Files**:
+    - `ciris_engine/logic/processors/support/processing_queue.py:36,58` - Added field and propagation
+    - `ciris_engine/logic/processors/core/thought_processor/main.py:261-277` - Updated _fetch_thought signature
+    - `ciris_engine/logic/processors/core/thought_processor/start_round.py:44,49` - Pass occurrence_id to persistence
+    - `ciris_engine/logic/processors/core/step_decorators.py:109,117` - Extract from thought_item
+    - `ciris_engine/logic/infrastructure/handlers/base_handler.py:115` - Pass to update_thought_status
+  - **Verification**: Multi-occurrence QA tests pass - both occurrence_1 and occurrence_2 successfully fetch and process thoughts
+
+- **P1: APIObserver Missing occurrence_id Parameter** - Fixed API adapter multi-occurrence initialization
+  - **Problem**: API adapter instantiated `APIObserver` WITHOUT passing `agent_occurrence_id` parameter
+  - **Impact**: API-created tasks/thoughts defaulted to occurrence_id="default" instead of actual occurrence ID
+  - **Solution**: Added `agent_occurrence_id=getattr(self.runtime.essential_config, "agent_occurrence_id", "default")` to APIObserver instantiation
+  - **Files**: `ciris_engine/logic/adapters/api/adapter.py:159`
+
+- **P2: MemorizeHandler Exception Path Missing occurrence_id** - Fixed occurrence_id propagation in exception handling
+  - **Problem**: Exception handler in `MemorizeHandler` called `update_thought_status` without `occurrence_id` parameter
+  - **Impact**: Multi-occurrence deployments would fail to mark failed thoughts with correct occurrence_id during error handling
+  - **Solution**: Added `occurrence_id=thought.agent_occurrence_id` to exception path `update_thought_status` call
+  - **Files**: `ciris_engine/logic/handlers/memory/memorize_handler.py:381`
+
+- **Test Suite: Updated Mock Assertions for occurrence_id** - Fixed 10 failing tests after occurrence_id propagation changes
+  - **Problem**: Tests had mock assertions expecting old signature without `occurrence_id` parameter
+  - **Impact**: 10 tests failing after base_handler.py occurrence_id changes
+  - **Solution**: Updated all `update_thought_status` mock assertions to include `occurrence_id='default'` parameter
+  - **Files**:
+    - `tests/ciris_engine/logic/handlers/memory/test_memorize_handler.py` - 1 assertion
+    - `tests/ciris_engine/logic/handlers/control/test_ponder_handler.py` - 1 assertion
+    - `tests/ciris_engine/logic/processors/states/test_shutdown_processor.py` - 1 fixture field
+    - `tests/test_memory_handlers_comprehensive.py` - 7 assertions
+  - **Verification**: All 6057 tests now pass with 0 failures
+
+### Added
+- **Enhanced Multi-Occurrence QA Test Coverage** - Added comprehensive interact endpoint testing for both occurrences
+  - Added occurrence_1 baseline test to verify interact endpoint works correctly
+  - Fixed response extraction to handle `SuccessResponse` wrapper structure (`data.response` vs `response`)
+  - Both occurrence_1 and occurrence_2 now tested with interact endpoint
+  - **Files**: `tools/qa_runner/modules/multi_occurrence_tests.py:176-229,267-278`
+
+- **Type Safety: Fixed mypy Stub Signatures** - Corrected type stubs for phase class mixins
+  - Fixed `_fetch_thought` stub signatures in `ContextGatheringPhase` and `ActionSelectionPhase` to include `occurrence_id` parameter
+  - Ensures mypy can properly type-check mixin composition pattern
+  - **Files**:
+    - `ciris_engine/logic/processors/core/thought_processor/gather_context.py:43`
+    - `ciris_engine/logic/processors/core/thought_processor/perform_aspdma.py:42`
+  - **Verification**: `mypy ciris_engine/` passes with no errors (578 source files checked)
+
+### Debug
+- **Response Storage/Retrieval Debug Logging** - Added comprehensive logging to track interact endpoint response flow
+  - `[SEND_MESSAGE]` - Logs content being sent through communication service
+  - `[API_INTERACTION]` - Tracks API response handling and storage
+  - `[STORE_RESPONSE]` - Logs response storage with occurrence_id, message_id, content preview
+  - `[RETRIEVE_RESPONSE]` - Logs response retrieval from interact endpoint
+  - **Purpose**: Diagnose and verify proper response flow in multi-occurrence deployments
+  - **Files**:
+    - `ciris_engine/logic/adapters/api/api_communication.py:139,112,127` - Send/interaction logging
+    - `ciris_engine/logic/adapters/api/routes/agent.py:176,180,183,684,686` - Storage/retrieval logging
+
 ## [1.5.1] - 2025-10-30
 
 ### Added

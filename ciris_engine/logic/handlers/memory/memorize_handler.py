@@ -378,6 +378,7 @@ class MemorizeHandler(BaseActionHandler):
             persistence.update_thought_status(
                 thought_id=thought_id,
                 status=ThoughtStatus.FAILED,
+                occurrence_id=thought.agent_occurrence_id,
                 final_action=result,
             )
 

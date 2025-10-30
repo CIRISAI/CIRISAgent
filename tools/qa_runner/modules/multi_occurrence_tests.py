@@ -173,7 +173,145 @@ class MultiOccurrenceTestModule:
                 runner.console.print("[red]❌ No test occurrences have thoughts![/red]")
                 results["details"]["thought_ownership"] = "FAIL"
 
-            # Step 6: Verify separate log files
+            # Step 6a: Test thought processing on occurrence_1 (BASELINE CHECK)
+            runner.console.print("\n[cyan]🧠 Testing thought processing on occurrence_1 (baseline)...[/cyan]")
+            runner.console.print("[dim]This verifies interact endpoint works correctly[/dim]")
+
+            import requests
+
+            # Submit a message to occurrence_1's API
+            try:
+                occ1_port = 9000  # occurrence_1 runs on port 9000
+                occ1_url = f"http://localhost:{occ1_port}"
+
+                # Get auth token for occurrence_1
+                runner.console.print(f"[dim]Authenticating to occurrence_1 at {occ1_url}...[/dim]")
+                auth_response = requests.post(
+                    f"{occ1_url}/v1/auth/login",
+                    json={"username": "admin", "password": "ciris_admin_password"},
+                    timeout=10,
+                )
+
+                if auth_response.status_code != 200:
+                    runner.console.print(
+                        f"[red]❌ Failed to authenticate to occurrence_1: {auth_response.status_code}[/red]"
+                    )
+                    results["errors"].append(f"occurrence_1 auth failed: {auth_response.status_code}")
+                else:
+                    token = auth_response.json()["access_token"]
+                    runner.console.print("[green]✅ Authenticated to occurrence_1[/green]")
+
+                    # Submit a test message
+                    runner.console.print("[dim]Submitting test message to occurrence_1...[/dim]")
+                    interact_response = requests.post(
+                        f"{occ1_url}/v1/agent/interact",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"message": "Test thought processing for occurrence_1"},
+                        timeout=60,  # Allow time for thought processing
+                    )
+
+                    if interact_response.status_code == 200:
+                        response_data = interact_response.json()
+                        # Extract response from SuccessResponse wrapper
+                        actual_response = (
+                            response_data.get("data", {}).get("response", "")
+                            if isinstance(response_data.get("data"), dict)
+                            else ""
+                        )
+                        if actual_response:
+                            runner.console.print(f"[green]✅ occurrence_1 processed thought successfully![/green]")
+                            runner.console.print(f"[dim]Response: {actual_response[:100]}...[/dim]")
+                        else:
+                            runner.console.print(f"[yellow]⚠️  occurrence_1 responded but with empty response[/yellow]")
+                            runner.console.print(f"[dim]DEBUG response_data: {response_data}[/dim]")
+                    else:
+                        runner.console.print(
+                            f"[red]❌ occurrence_1 interact failed: {interact_response.status_code}[/red]"
+                        )
+                        runner.console.print(f"[red]Response: {interact_response.text[:200]}[/red]")
+                        results["errors"].append(f"occurrence_1 interact failed: {interact_response.status_code}")
+
+            except requests.exceptions.Timeout:
+                runner.console.print("[red]❌ occurrence_1 interact request timed out[/red]")
+                results["errors"].append("occurrence_1 interact timeout")
+            except Exception as e:
+                runner.console.print(f"[red]❌ Error testing occurrence_1 thought processing: {e}[/red]")
+                results["errors"].append(f"occurrence_1 thought processing test error: {str(e)}")
+
+            # Step 6b: Test thought processing on occurrence_2 (CRITICAL BUG CHECK)
+            runner.console.print("\n[cyan]🧠 Testing thought processing on occurrence_2...[/cyan]")
+            runner.console.print(
+                "[dim]This verifies thoughts can be fetched and processed with correct occurrence_id[/dim]"
+            )
+
+            # Submit a message to occurrence_2's API
+            try:
+                occ2_port = 9001  # occurrence_2 runs on port 9001
+                occ2_url = f"http://localhost:{occ2_port}"
+
+                # Get auth token for occurrence_2
+                runner.console.print(f"[dim]Authenticating to occurrence_2 at {occ2_url}...[/dim]")
+                auth_response = requests.post(
+                    f"{occ2_url}/v1/auth/login",
+                    json={"username": "admin", "password": "ciris_admin_password"},
+                    timeout=10,
+                )
+
+                if auth_response.status_code != 200:
+                    runner.console.print(
+                        f"[red]❌ Failed to authenticate to occurrence_2: {auth_response.status_code}[/red]"
+                    )
+                    results["errors"].append(f"occurrence_2 auth failed: {auth_response.status_code}")
+                    results["details"]["thought_processing"] = "FAIL"
+                else:
+                    token = auth_response.json()["access_token"]
+                    runner.console.print("[green]✅ Authenticated to occurrence_2[/green]")
+
+                    # Submit a test message
+                    runner.console.print("[dim]Submitting test message to occurrence_2...[/dim]")
+                    interact_response = requests.post(
+                        f"{occ2_url}/v1/agent/interact",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"message": "Test thought processing for occurrence_2"},
+                        timeout=60,  # Allow time for thought processing
+                    )
+
+                    if interact_response.status_code == 200:
+                        response_data = interact_response.json()
+                        # Extract response from SuccessResponse wrapper
+                        actual_response = (
+                            response_data.get("data", {}).get("response", "")
+                            if isinstance(response_data.get("data"), dict)
+                            else ""
+                        )
+                        if actual_response:
+                            runner.console.print(f"[green]✅ occurrence_2 processed thought successfully![/green]")
+                            runner.console.print(f"[dim]Response: {actual_response[:100]}...[/dim]")
+                            results["details"]["thought_processing"] = "PASS"
+                        else:
+                            runner.console.print(f"[yellow]⚠️  occurrence_2 responded but with empty response[/yellow]")
+                            runner.console.print(f"[dim]DEBUG response_data: {response_data}[/dim]")
+                            results["details"]["thought_processing"] = "PARTIAL"
+                    else:
+                        runner.console.print(
+                            f"[red]❌ occurrence_2 interact failed: {interact_response.status_code}[/red]"
+                        )
+                        runner.console.print(f"[red]Response: {interact_response.text[:200]}[/red]")
+                        results["errors"].append(f"occurrence_2 interact failed: {interact_response.status_code}")
+                        results["details"]["thought_processing"] = "FAIL"
+
+            except requests.exceptions.Timeout:
+                runner.console.print(
+                    "[red]❌ occurrence_2 interact request timed out (thought processing likely hung)[/red]"
+                )
+                results["errors"].append("occurrence_2 interact timeout - thoughts may be stuck in processing")
+                results["details"]["thought_processing"] = "TIMEOUT"
+            except Exception as e:
+                runner.console.print(f"[red]❌ Error testing occurrence_2 thought processing: {e}[/red]")
+                results["errors"].append(f"occurrence_2 thought processing test error: {str(e)}")
+                results["details"]["thought_processing"] = "ERROR"
+
+            # Step 7: Verify separate log files
             runner.console.print("\n[cyan]📋 Verifying separate log files...[/cyan]")
             import os
             from pathlib import Path
@@ -199,15 +337,21 @@ class MultiOccurrenceTestModule:
                 results["details"]["log_separation"] = "FAIL"
 
             # Determine overall success
+            thought_processing_ok = results["details"].get("thought_processing") == "PASS"
             if (
                 len(wakeup_tasks) == 1
                 and len(test_occ_thoughts) >= 1  # At least one test occurrence has thoughts
                 and all(count > 0 for count in log_files_found.values())
+                and thought_processing_ok  # NEW: Thought processing must work
             ):
                 results["success"] = True
                 runner.console.print("\n[bold green]✅ MULTI-OCCURRENCE INTEGRATION TEST PASSED![/bold green]")
             else:
                 runner.console.print("\n[bold yellow]⚠️  MULTI-OCCURRENCE INTEGRATION TEST HAD ISSUES[/bold yellow]")
+                if not thought_processing_ok:
+                    runner.console.print(
+                        "[red]❌ CRITICAL: Thought processing failed (ProcessingQueueItem bug detected!)[/red]"
+                    )
 
         except Exception as e:
             runner.console.print(f"\n[bold red]❌ Test failed with exception: {e}[/bold red]")

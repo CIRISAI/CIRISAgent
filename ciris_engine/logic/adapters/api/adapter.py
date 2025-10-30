@@ -335,6 +335,7 @@ class ApiPlatform(Service):
             filter_service=getattr(self.runtime, "adaptive_filter_service", None),
             secrets_service=getattr(self.runtime, "secrets_service", None),
             time_service=getattr(self.runtime, "time_service", None),
+            agent_occurrence_id=getattr(self.runtime.essential_config, "agent_occurrence_id", "default"),
             origin_service="api",
             resource_monitor=resource_monitor_from_runtime,
         )

@@ -40,7 +40,7 @@ class ContextGatheringPhase:
     # Type hints for attributes provided by ThoughtProcessor
     context_builder: "ContextBuilder"
 
-    async def _fetch_thought(self, thought_id: str) -> Optional["Thought"]:
+    async def _fetch_thought(self, thought_id: str, occurrence_id: str = "default") -> Optional["Thought"]:
         """Fetch thought - implemented in ThoughtProcessor."""
         raise NotImplementedError("Must be implemented by ThoughtProcessor")
 
@@ -60,7 +60,7 @@ class ContextGatheringPhase:
         from ciris_engine.logic import persistence
         from ciris_engine.logic.context.batch_context import build_system_snapshot_with_batch
 
-        thought = await self._fetch_thought(thought_item.thought_id)
+        thought = await self._fetch_thought(thought_item.thought_id, thought_item.agent_occurrence_id)
 
         # Validate thought was successfully fetched
         if thought is None:

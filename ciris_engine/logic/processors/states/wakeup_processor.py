@@ -12,6 +12,7 @@ from ciris_engine.logic.persistence.models import get_identity_for_context
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
+from ciris_engine.logic.utils.task_thought_factory import create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.results import WakeupResult
@@ -463,8 +464,6 @@ class WakeupProcessor(BaseProcessor):
             self.wakeup_complete = True
             return
 
-        now_iso = self.time_service.now().isoformat()
-
         # Get the communication bus to find the default channel
         comm_bus_raw = self.services.communication_bus
         if not comm_bus_raw:
@@ -548,27 +547,17 @@ class WakeupProcessor(BaseProcessor):
 
         for step_type, content in enhanced_sequence:
             # Create task with proper context using the default channel
-            from ciris_engine.schemas.runtime.models import TaskContext as ModelTaskContext
-
-            step_context = ModelTaskContext(
-                channel_id=default_channel,
-                user_id="system",
-                correlation_id=f"wakeup_{step_type}_{uuid.uuid4().hex[:8]}",
-                parent_task_id=root_task.task_id,
-                agent_occurrence_id=occurrence_id,  # Mark which occurrence created this step
-            )
-
-            step_task = Task(
-                task_id=f"{step_type}_{uuid.uuid4()}",
-                channel_id=default_channel,
+            step_task = create_task(
                 description=content,
+                channel_id=default_channel,
+                agent_occurrence_id=occurrence_id,
+                correlation_id=f"wakeup_{step_type}_{uuid.uuid4().hex[:8]}",
+                time_service=self.time_service,
                 status=TaskStatus.ACTIVE,
                 priority=0,
-                created_at=now_iso,
-                updated_at=now_iso,
+                task_id=f"{step_type}_{uuid.uuid4()}",
+                user_id="system",
                 parent_task_id=root_task.task_id,
-                context=step_context,
-                agent_occurrence_id=occurrence_id,  # Step tasks belong to this occurrence
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)

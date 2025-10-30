@@ -114,7 +114,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         )
         try:
             if not hasattr(self, "_app_state"):
-                logger.warning(f"[API_INTERACTION] No _app_state attribute found")
+                logger.warning("[API_INTERACTION] No _app_state attribute found")
                 return
 
             message_channel_map = getattr(self._app_state, "message_channel_map", {})

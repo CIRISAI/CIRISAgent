@@ -238,22 +238,24 @@ class WakeupProcessor(BaseProcessor):
             if non_blocking:
                 processed_any = False
 
-                logger.debug(f"Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation")
+                logger.info(
+                    f"[WAKEUP DEBUG] Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation"
+                )
                 for i, step_task in enumerate(self.wakeup_tasks[1:]):
                     # Use helper to validate task state
                     is_valid, status_str = self._validate_task_state(step_task)
-                    logger.debug(f"Step {i+1}: task_id={step_task.task_id}, status={status_str}")
+                    logger.info(f"[WAKEUP DEBUG] Step {i+1}: task_id={step_task.task_id}, status={status_str}")
 
                     if not is_valid:
-                        logger.debug(f"Skipping step {i+1} - not ACTIVE (status: {status_str})")
+                        logger.info(f"[WAKEUP DEBUG] Skipping step {i+1} - not ACTIVE (status: {status_str})")
                         continue
 
                     # Use helper to get thought summary
                     thought_summary = self._get_task_thoughts_summary(step_task.task_id, step_task.agent_occurrence_id)
                     existing_thoughts = thought_summary["thoughts"]
-                    logger.debug(f"Step {i+1} has {thought_summary['total']} existing thoughts")
-                    logger.debug(
-                        f"Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}"
+                    logger.info(f"[WAKEUP DEBUG] Step {i+1} has {thought_summary['total']} existing thoughts")
+                    logger.info(
+                        f"[WAKEUP DEBUG] Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}"
                     )
 
                     if thought_summary["pending"] > 0:
@@ -272,14 +274,14 @@ class WakeupProcessor(BaseProcessor):
                     # Use helper to determine if new thought is needed
                     current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
                     if self._needs_new_thought(existing_thoughts, current_task):
-                        logger.debug(
-                            f"Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
+                        logger.info(
+                            f"[WAKEUP DEBUG] Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
                         )
                         thought, processing_context = self._create_step_thought(step_task, round_number)
-                        logger.debug(f"Created new thought {thought.thought_id} for step {i+1}")
+                        logger.info(f"[WAKEUP DEBUG] Created new thought {thought.thought_id} for step {i+1}")
                         processed_any = True
                     else:
-                        logger.debug(f"Step {i+1} does not need new thought, skipping")
+                        logger.info(f"[WAKEUP DEBUG] Step {i+1} does not need new thought, skipping")
 
                 # Use helper to collect steps status
                 steps_status = self._collect_steps_status()
@@ -449,10 +451,13 @@ class WakeupProcessor(BaseProcessor):
             try_claim_shared_task,
         )
 
-        # Check if wakeup already completed by another occurrence
-        if is_shared_task_completed("wakeup", within_hours=24):
+        # Check if wakeup already completed by another occurrence (within 1 hour)
+        # NOTE: Using 1 hour window instead of 24 hours to ensure fresh wakeup after restarts/deployments
+        # Multi-occurrence agents that start simultaneously will still coordinate, but restarted agents
+        # will go through wakeup ritual again (which is correct behavior after restart)
+        if is_shared_task_completed("wakeup", within_hours=1):
             logger.info(
-                "Wakeup already completed by another occurrence within the last 24 hours. "
+                "Wakeup already completed by another occurrence within the last hour. "
                 "This occurrence is joining the active pool."
             )
             self.wakeup_complete = True

@@ -1175,7 +1175,7 @@ class TestMultiOccurrenceScenarios:
             auth_service=mock_auth_service,
             agent_occurrence_id="occurrence-2",  # Multi-occurrence, not "default"
         )
-        
+
         # Setup
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Test"
@@ -1568,7 +1568,7 @@ class TestDeploymentScenarios:
     4. Multi-occurrence SQLite (monitoring)
     5. Multi-occurrence PostgreSQL (claiming)
     6. Multi-occurrence PostgreSQL (monitoring)
-    
+
     Tests the critical P0 fix for single-occurrence shutdown loop bug.
     """
 
@@ -1599,7 +1599,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 1A: Single-occurrence SQLite agent (Sage) - First run
-        
+
         This is the normal case where Sage creates a shutdown task for the first time.
         """
         # Setup processor for single-occurrence
@@ -1667,9 +1667,9 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 1B: Single-occurrence SQLite agent (Sage) - Second run
-        
+
         CRITICAL TEST: This tests the P0 fix for the shutdown loop bug.
-        
+
         Before fix: Agent would find its own completed task and return early,
                    causing infinite loop.
         After fix: _process_shutdown() checks `if not self.shutdown_task` before
@@ -1699,7 +1699,7 @@ class TestDeploymentScenarios:
             agent_occurrence_id="__shared__",
         )
         processor.shutdown_task = existing_task  # Already set from first run
-        
+
         # Mock persistence calls
         mock_persistence.get_task_by_id.return_value = existing_task
         mock_persistence.get_thoughts_by_task_id.return_value = []
@@ -1722,7 +1722,7 @@ class TestDeploymentScenarios:
         # because _process_shutdown checks `if not self.shutdown_task` first (line 194)
         mock_is_completed.assert_not_called()
         mock_get_latest.assert_not_called()
-        
+
         # Should still process normally without creating new task
         assert result is not None
 
@@ -1749,7 +1749,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 2: Single-occurrence PostgreSQL agent
-        
+
         Same behavior as SQLite - should not loop when finding own completed task.
         """
         # Setup processor for single-occurrence PostgreSQL
@@ -1820,7 +1820,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 3: Multi-occurrence SQLite agent - Claiming occurrence
-        
+
         First occurrence to request shutdown claims the shared task.
         """
         # Setup processor for multi-occurrence
@@ -1885,7 +1885,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 4: Multi-occurrence SQLite agent - Monitoring occurrence
-        
+
         Second occurrence arrives after first has claimed, becomes monitoring occurrence.
         """
         # Setup processor for multi-occurrence
@@ -1953,7 +1953,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 5: Multi-occurrence PostgreSQL agent (Scout) - Claiming occurrence
-        
+
         Production scenario: Scout occurrence claims shared task in PostgreSQL.
         """
         # Setup processor for multi-occurrence PostgreSQL
@@ -2017,7 +2017,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 6: Multi-occurrence PostgreSQL agent (Scout) - Monitoring occurrence
-        
+
         Production scenario: Scout-002 and Scout-003 monitor Scout-001's decision.
         """
         # Setup processor for multi-occurrence PostgreSQL
@@ -2080,7 +2080,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 7: Multi-occurrence agent finds existing completed decision
-        
+
         Late-arriving occurrence finds that another occurrence already completed
         the shutdown decision.
         """
@@ -2140,7 +2140,7 @@ class TestDeploymentScenarios:
     ):
         """
         Scenario 8: Monitoring occurrence skips thought processing
-        
+
         Only the claiming occurrence should process thoughts. Monitoring occurrences
         should only watch the task status.
         """
@@ -2198,12 +2198,12 @@ class TestDeploymentScenarios:
     ):
         """
         CRITICAL P0 FIX TEST: Single-occurrence agent claims existing task
-        
+
         This tests the ACTUAL bug that caused Sage's 7-hour shutdown loop:
         - Task already exists in database (from previous run/restart)
         - try_claim_shared_task returns was_created=False
         - Single-occurrence agent MUST still claim and process (not monitor)
-        
+
         Before fix: Agent would set is_claiming_occurrence=False and loop forever
         After fix: Agent recognizes it's single-occurrence and claims anyway
         """
@@ -2250,7 +2250,7 @@ class TestDeploymentScenarios:
         assert processor.shutdown_task is not None
         assert processor.shutdown_task.task_id == "SHUTDOWN_SHARED_20251029"
         assert processor.is_claiming_occurrence is True  # CRITICAL: Must be claiming, not monitoring!
-        
+
         # Should still process normally (not return early)
         mock_try_claim.assert_called_once()
         mock_update_context.assert_called_once()  # Should update context and sign

@@ -122,16 +122,27 @@ class TaskCompleteHandler(BaseActionHandler):
                     raise RuntimeError(error_msg)
 
                 # Only mark task complete if no pending thoughts
+                # CRITICAL: Get the correct occurrence_id from the task itself
+                # This handles shared tasks (__shared__), single-occurrence (default), and multi-occurrence scenarios
+                task = persistence.get_task_by_id(parent_task_id)
+                if not task:
+                    self.logger.error(f"Failed to get task {parent_task_id} - cannot mark as COMPLETED.")
+                    return None
+
+                task_occurrence_id = task.agent_occurrence_id
+                self.logger.debug(
+                    f"Marking task {parent_task_id} as COMPLETED with occurrence_id={task_occurrence_id}"
+                )
+
                 task_updated = persistence.update_task_status(
-                    parent_task_id, TaskStatus.COMPLETED, "default", self.time_service
+                    parent_task_id, TaskStatus.COMPLETED, task_occurrence_id, self.time_service
                 )
                 if task_updated:
                     self.logger.info(
                         f"Marked parent task {parent_task_id} as COMPLETED due to TASK_COMPLETE action on thought {thought_id}."
                     )
 
-                    # Send notification to API channels if agent did not speak
-                    task = persistence.get_task_by_id(parent_task_id)
+                    # Send notification to API channels if agent did not speak (reuse task we already fetched)
                     if task and task.channel_id:
                         is_api = self._is_api_channel(task.channel_id)
                         has_spoken = await self._has_speak_action_completed(parent_task_id)

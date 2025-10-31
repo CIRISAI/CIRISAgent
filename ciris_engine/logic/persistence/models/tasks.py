@@ -15,6 +15,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def get_task_occurrence_id_for_update(task_id: str, db_path: Optional[str] = None) -> Optional[str]:
+    """
+    Get the correct occurrence_id for updating a task's status.
+
+    This handles 6 scenarios robustly:
+    1. SQLite single agent (default) - returns "default"
+    2. SQLite multi-occurrence claiming agent - returns actual occurrence_id
+    3. SQLite multi-occurrence non-claimant - returns "__shared__"
+    4. PostgreSQL single agent (default) - returns "default"
+    5. PostgreSQL multi-occurrence claiming agent - returns actual occurrence_id
+    6. PostgreSQL multi-occurrence non-claimant - returns "__shared__"
+
+    Args:
+        task_id: The task ID to look up
+        db_path: Optional database path (defaults to main database)
+
+    Returns:
+        The occurrence_id to use for UPDATE queries, or None if task not found
+
+    Examples:
+        >>> get_task_occurrence_id_for_update("SHUTDOWN_SHARED_20251031")
+        '__shared__'
+        >>> get_task_occurrence_id_for_update("regular-task-123")
+        'default'
+    """
+    sql = "SELECT agent_occurrence_id FROM tasks WHERE task_id = ? LIMIT 1"
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (task_id,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            logger.warning(f"Task {task_id} not found when looking up occurrence_id for update")
+            return None
+    except Exception as e:
+        logger.exception(f"Failed to get occurrence_id for task {task_id}: {e}")
+        return None
+
+
 def get_tasks_by_status(
     status: TaskStatus, occurrence_id: str = "default", db_path: Optional[str] = None
 ) -> List[Task]:

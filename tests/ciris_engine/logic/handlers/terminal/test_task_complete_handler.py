@@ -508,9 +508,9 @@ class TestTaskCompleteHandler:
             assert mock_persistence.update_thought_status.called
             update_call = mock_persistence.update_thought_status.call_args
             assert update_call.kwargs["status"] == ThoughtStatus.COMPLETED
-            # Task status update should have been attempted but returned False
-            assert mock_persistence.update_task_status.called
-            # The return value was configured to be False for missing task
+            # NEW BEHAVIOR: Task status update should NOT be attempted if task not found (fail-fast)
+            # This is safer than attempting to update with potentially wrong occurrence_id
+            assert not mock_persistence.update_task_status.called
 
     @pytest.mark.asyncio
     async def test_communication_failure(

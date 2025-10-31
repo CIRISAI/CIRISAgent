@@ -213,7 +213,8 @@ class TestCleanupTsdbSummary:
         deleted = cleanup_tsdb_summary(cursor, "summary_123", json.dumps(attrs))
 
         assert deleted == 10
-        assert cursor.execute.call_count == 2  # 1 count + 1 delete
+        # 1 count query + 2 delete calls (edges + nodes) = 3 total
+        assert cursor.execute.call_count == 3
 
     def test_does_not_cleanup_when_counts_mismatch(self):
         """Should not cleanup when counts don't match."""
@@ -266,7 +267,8 @@ class TestCleanupAuditSummary:
         deleted = cleanup_audit_summary(cursor, "audit_summary_123", json.dumps(attrs))
 
         assert deleted == 5
-        assert cursor.execute.call_count == 2
+        # 1 count query + 2 delete calls (edges + nodes) = 3 total
+        assert cursor.execute.call_count == 3
 
     def test_does_not_cleanup_when_counts_mismatch(self):
         """Should not cleanup when counts mismatch."""

@@ -2035,7 +2035,7 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
                 return count
 
         except Exception as e:
-            logger.error(f"Failed to get metric count: {e}")
+            logger.error(f"Failed to get metric count: {type(e).__name__}: {e}", exc_info=True)
             return 0
 
     async def get_telemetry_summary(self) -> "TelemetrySummary":

@@ -51,7 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CIRIS Attribution on Reddit** - All posts and comments now include CIRIS branding footer
   - **Format**: "Posted by a CIRIS agent, learn more at https://ciris.ai or chat with scout at https://scout.ciris.ai"
   - **Implementation**: `_add_ciris_attribution()` helper appends footer to all submissions
-  - **Files**: `ciris_modular_services/reddit/service.py:131-138, 274-275, 302-303`
+  - **Character Limit Protection**: Automatically truncates text to fit Reddit's 10,000 character limit while preserving attribution
+  - **Smart Truncation**: Preserves beginning of content + ellipsis + attribution when text exceeds limit
+  - **Comprehensive Test Coverage**: 11 tests covering boundary cases, truncation, and edge cases
+  - **Files**: `ciris_modular_services/reddit/service.py:131-174, 274-275, 302-303`
+  - **Tests**: `tests/reddit/test_reddit_attribution_length.py`
 
 - **CIRIS Agent Runtime Guide** - Context-engineered operational guide for agents at runtime
   - **Purpose**: Essential knowledge for running CIRIS agents (not developers)

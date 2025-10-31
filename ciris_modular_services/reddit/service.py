@@ -128,14 +128,50 @@ class RedditAPIClient:
     def metrics(self) -> Dict[str, float]:
         return {"requests": float(self._request_count), "errors": float(self._error_count)}
 
-    def _add_ciris_attribution(self, text: str) -> str:
-        """Add CIRIS attribution footer to post/comment text."""
+    def _add_ciris_attribution(self, text: str, *, max_length: int = 10000) -> str:
+        """
+        Add CIRIS attribution footer to post/comment text.
+
+        Args:
+            text: Original post/comment text
+            max_length: Reddit character limit (10000 for posts/comments)
+
+        Returns:
+            Text with attribution, truncated if necessary to fit within limit
+
+        Note: Reddit rejects posts/comments longer than 10,000 characters.
+              This method ensures attribution is always included by truncating
+              the original text if needed.
+        """
         attribution = (
             "\n\n"
             "Posted by a CIRIS agent, learn more at https://ciris.ai "
             "or chat with scout at https://scout.ciris.ai"
         )
-        return text + attribution
+
+        # If text + attribution fits within limit, return as-is
+        if len(text) + len(attribution) <= max_length:
+            return text + attribution
+
+        # Otherwise, truncate text to make room for attribution
+        # Leave space for attribution + ellipsis + newline
+        truncation_marker = "...\n"
+        available_space = max_length - len(attribution) - len(truncation_marker)
+
+        if available_space < 100:  # Sanity check: need at least 100 chars for meaningful content
+            # If attribution is too large for the limit, skip it (shouldn't happen with 10k limit)
+            logger.warning(
+                f"Attribution footer ({len(attribution)} chars) too large for limit ({max_length}), "
+                "submitting without attribution"
+            )
+            return text[:max_length]
+
+        truncated_text = text[:available_space]
+        logger.info(
+            f"Truncated text from {len(text)} to {len(truncated_text)} chars to fit attribution "
+            f"within {max_length} char limit"
+        )
+        return truncated_text + truncation_marker + attribution
 
     async def refresh_token(self, force: bool = False) -> bool:
         async with self._token_lock:

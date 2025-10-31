@@ -482,6 +482,10 @@ python tools/dev/bump_version.py major     # Breaking changes
 ### Production Server Access
 - **SSH**: `ssh -i ~/.ssh/ciris_deploy root@108.61.119.117`
 - **Agent Locations**: `/opt/ciris/agents/`
+- **Log Files**: Logs are always written to files inside containers at `/app/logs/`
+  - `/app/logs/incidents_latest.log` - Current incidents (ALWAYS CHECK THIS FIRST)
+  - `/app/logs/application.log` - General application logs
+  - `/app/logs/ciris_YYYY-MM-DD.log` - Daily log files
 - **Common Commands**:
   ```bash
   # Find agent containers
@@ -491,8 +495,15 @@ python tools/dev/bump_version.py major     # Breaking changes
   cd /opt/ciris/agents/echo-speculative-4fc6ru
   docker-compose ps
 
-  # View agent logs
-  docker-compose logs --tail=50 echo-speculative-4fc6ru
+  # View agent logs FROM FILES (not docker logs)
+  docker exec echo-speculative-4fc6ru tail -100 /app/logs/incidents_latest.log
+  docker exec echo-speculative-4fc6ru tail -100 /app/logs/application.log
+
+  # Check for consolidation activity
+  docker exec echo-speculative-4fc6ru grep -i "consolidat" /app/logs/incidents_latest.log | tail -20
+
+  # Check shutdown status
+  docker exec echo-speculative-4fc6ru grep -i "shutdown" /app/logs/incidents_latest.log | tail -20
 
   # Execute commands in container
   docker-compose exec echo-speculative-4fc6ru python -c "print('hello')"

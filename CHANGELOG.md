@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2025-10-30
 
 ### Fixed
+- **P0: Shared Task Completion Blocked by Hardcoded Occurrence ID** - Fixed TaskCompleteHandler preventing shutdown and wakeup completion
+  - **Problem**: `TaskCompleteHandler` used hardcoded `"default"` occurrence_id when marking tasks complete, causing shared tasks (`__shared__`) to never be marked complete
+  - **Impact**:
+    - **Datum agent stuck in shutdown for 8+ minutes** (task `SHUTDOWN_SHARED_20251031` remained `active` despite thought completed)
+    - All agents using shared wakeup/shutdown tasks affected
+    - Agents unable to complete graceful shutdowns
+    - Multi-occurrence coordination broken for terminal tasks
+  - **Root Cause**: Line 126 in `task_complete_handler.py` called `update_task_status()` with hardcoded `"default"` instead of reading the task's actual `agent_occurrence_id`
+  - **Solution**:
+    1. Get task object with `persistence.get_task_by_id()` (line 127)
+    2. Extract actual `agent_occurrence_id` from task (line 132)
+    3. Use task's occurrence_id in `update_task_status()` call (line 137)
+    4. Added centralized helper `get_task_occurrence_id_for_update()` in tasks.py (line 18-55)
+    5. Works for all 6 scenarios: SQLite single/multi/shared + PostgreSQL single/multi/shared
+  - **Files**:
+    - `ciris_engine/logic/handlers/terminal/task_complete_handler.py:124-139`
+    - `ciris_engine/logic/persistence/models/tasks.py:18-55`
+  - **Verification**:
+    - All 11 TaskCompleteHandler tests pass
+    - Eliminates duplicate `get_task_by_id()` call (reuses task object)
+    - Production validation: Datum can now complete shutdown correctly
+  - **Database Evidence**: Query showed `SHUTDOWN_SHARED_20251031` stuck as `active` with completed thought
+
 - **P0: TSDB FOREIGN KEY Constraint Violation** - Fixed cleanup failing when deleting nodes with edge references
   - **Problem**: `delete_nodes_in_period()` deleted nodes without removing edges first, causing FOREIGN KEY constraint violations. Additionally, initial fix used wrong column names (`source_id`/`target_id` instead of `source_node_id`/`target_node_id`)
   - **Impact**:

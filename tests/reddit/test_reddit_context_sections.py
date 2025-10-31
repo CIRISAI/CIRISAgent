@@ -73,36 +73,40 @@ class TestAddCustomContextSections:
         task_lines = []
 
         # Mock API client methods
-        reddit_observer._api_client.fetch_submission_comments = AsyncMock(return_value=[
-            RedditCommentSummary(
-                comment_id="other_comment_1",
-                fullname="t1_other_comment_1",
-                submission_id="post_456",
-                body="First other comment",
-                author="OtherUser1",
-                subreddit="test",
-                permalink="https://reddit.com/r/test/comments/post_456/title/other_comment_1",
-                created_at=datetime.now(timezone.utc),
-                score=5,
-                channel_reference="reddit_test_post_456_other_comment_1",
-            )
-        ])
+        reddit_observer._api_client.fetch_submission_comments = AsyncMock(
+            return_value=[
+                RedditCommentSummary(
+                    comment_id="other_comment_1",
+                    fullname="t1_other_comment_1",
+                    submission_id="post_456",
+                    body="First other comment",
+                    author="OtherUser1",
+                    subreddit="test",
+                    permalink="https://reddit.com/r/test/comments/post_456/title/other_comment_1",
+                    created_at=datetime.now(timezone.utc),
+                    score=5,
+                    channel_reference="reddit_test_post_456_other_comment_1",
+                )
+            ]
+        )
 
-        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(return_value=[
-            RedditTimelineEntry(
-                item_id="recent_post_1",
-                fullname="t3_recent_post_1",
-                subreddit="test",
-                score=10,
-                entry_type="submission",
-                title="Recent Post Title",
-                body="Recent post body",
-                author="RecentAuthor",
-                created_at=datetime.now(timezone.utc),
-                channel_reference="reddit_test_recent_post_1",
-                permalink="https://reddit.com/r/test/comments/recent_post_1",
-            )
-        ])
+        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(
+            return_value=[
+                RedditTimelineEntry(
+                    item_id="recent_post_1",
+                    fullname="t3_recent_post_1",
+                    subreddit="test",
+                    score=10,
+                    entry_type="submission",
+                    title="Recent Post Title",
+                    body="Recent post body",
+                    author="RecentAuthor",
+                    created_at=datetime.now(timezone.utc),
+                    channel_reference="reddit_test_recent_post_1",
+                    permalink="https://reddit.com/r/test/comments/recent_post_1",
+                )
+            ]
+        )
 
         await reddit_observer._add_custom_context_sections(task_lines, sample_reddit_message, [])
 
@@ -142,12 +146,8 @@ class TestAddCustomContextSections:
         task_lines = []
 
         # Mock API failures
-        reddit_observer._api_client.fetch_submission_comments = AsyncMock(
-            side_effect=Exception("API Error")
-        )
-        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(
-            side_effect=Exception("API Error")
-        )
+        reddit_observer._api_client.fetch_submission_comments = AsyncMock(side_effect=Exception("API Error"))
+        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(side_effect=Exception("API Error"))
 
         # Should not raise exception
         await reddit_observer._add_custom_context_sections(task_lines, sample_reddit_message, [])
@@ -329,9 +329,7 @@ class TestAddThreadContext:
         """Should not raise exception when fetch fails."""
         task_lines = []
 
-        reddit_observer._api_client.fetch_submission_comments = AsyncMock(
-            side_effect=Exception("Network error")
-        )
+        reddit_observer._api_client.fetch_submission_comments = AsyncMock(side_effect=Exception("Network error"))
 
         # Should not raise
         await reddit_observer._add_thread_context(task_lines, "post_123", None)
@@ -500,9 +498,7 @@ class TestAddRecentPostsContext:
         """Should not raise exception when fetch fails."""
         task_lines = []
 
-        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(
-            side_effect=Exception("Network error")
-        )
+        reddit_observer._api_client.fetch_subreddit_new = AsyncMock(side_effect=Exception("Network error"))
 
         # Should not raise
         await reddit_observer._add_recent_posts_context(task_lines, "test")

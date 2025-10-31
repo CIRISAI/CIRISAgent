@@ -268,9 +268,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
 
         return msg
 
-    async def _add_custom_context_sections(
-        self, task_lines: list, msg: RedditMessage, history_context: list
-    ) -> None:
+    async def _add_custom_context_sections(self, task_lines: list, msg: RedditMessage, history_context: list) -> None:
         """
         Add Reddit-specific context sections: thread comments and recent subreddit posts.
 
@@ -315,9 +313,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
 
                     # Format: Author | Score | Body (truncated)
                     body_preview = comment.body[:150] + "..." if len(comment.body) > 150 else comment.body
-                    task_lines.append(
-                        f"@{comment.author} ({comment.score} pts): {body_preview}"
-                    )
+                    task_lines.append(f"@{comment.author} ({comment.score} pts): {body_preview}")
                     comment_count += 1
 
                     if comment_count >= 5:  # Limit to 5 other comments to avoid context bloat
@@ -341,10 +337,10 @@ class RedditObserver(BaseObserver[RedditMessage]):
                 task_lines.append(f"\n=== RECENT POSTS IN r/{subreddit} ===")
                 for post in posts[:3]:  # Show only top 3 to avoid context bloat
                     # Format: Title | Author | Score
-                    title_preview = post.title[:100] + "..." if post.title and len(post.title) > 100 else post.title or "(no title)"
-                    task_lines.append(
-                        f"• {title_preview} (by @{post.author}, {post.created_at.strftime('%Y-%m-%d')})"
+                    title_preview = (
+                        post.title[:100] + "..." if post.title and len(post.title) > 100 else post.title or "(no title)"
                     )
+                    task_lines.append(f"• {title_preview} (by @{post.author}, {post.created_at.strftime('%Y-%m-%d')})")
 
                 task_lines.append(f"=== END RECENT POSTS IN r/{subreddit} ===")
 

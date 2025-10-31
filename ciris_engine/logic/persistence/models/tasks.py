@@ -82,7 +82,7 @@ def get_task_occurrence_id_for_update(task_id: str, db_path: Optional[str] = Non
             cursor.execute(sql, (task_id,))
             row = cursor.fetchone()
             if row:
-                return row[0]
+                return str(row[0])
             logger.warning(f"Task {task_id} not found when looking up occurrence_id for update")
             return None
     except Exception as e:

@@ -386,7 +386,7 @@ def test_get_task_by_correlation_id_not_found(temp_db: str):
 
 
 def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, time_service: TimeServiceProtocol):
-    """Test that get_task_by_correlation_id returns the latest task when multiple exist."""
+    """Test that unique constraint prevents duplicate correlation_ids and add_task returns existing task_id."""
     from uuid import uuid4
 
     from ciris_engine.logic.persistence.models.tasks import add_task, get_task_by_correlation_id
@@ -394,7 +394,7 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
 
     correlation_id = "reddit_comment_xyz789"
 
-    # Create two tasks with same correlation_id but different timestamps
+    # Create first task with correlation_id
     task1 = Task(
         task_id=str(uuid4()),
         channel_id="reddit:r/ciris",
@@ -412,6 +412,7 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
         ),
     )
 
+    # Create second task with same correlation_id (should be prevented by unique constraint)
     task2 = Task(
         task_id=str(uuid4()),
         channel_id="reddit:r/ciris",
@@ -429,15 +430,20 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
         ),
     )
 
-    add_task(task1, db_path=temp_db)
-    add_task(task2, db_path=temp_db)
+    # Add first task
+    task1_id = add_task(task1, db_path=temp_db)
+    assert task1_id == task1.task_id
 
-    # Should return task2 (latest)
+    # Try to add second task - should return existing task1_id due to unique constraint
+    returned_task_id = add_task(task2, db_path=temp_db)
+    assert returned_task_id == task1.task_id, "add_task should return existing task_id when duplicate correlation_id is detected"
+
+    # Verify only task1 exists in database
     retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)
 
     assert retrieved_task is not None
-    assert retrieved_task.task_id == task2.task_id
-    assert retrieved_task.description == "Second task (newer)"
+    assert retrieved_task.task_id == task1.task_id, "Should return the first task since duplicate was prevented"
+    assert retrieved_task.description == "First task"
 
 
 def test_get_task_by_correlation_id_different_occurrence(temp_db: str, time_service: TimeServiceProtocol):

@@ -22,6 +22,8 @@ def validate_and_count_nodes(
     """
     Count nodes of a specific type within a period.
 
+    Database-agnostic: Works with both SQLite and PostgreSQL.
+
     Args:
         cursor: Database cursor
         node_type: Type of nodes to count (e.g., 'tsdb_data', 'audit_entry')
@@ -36,15 +38,30 @@ def validate_and_count_nodes(
         >>> count
         42
     """
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (node_type, period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = %s
+              AND created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (node_type, period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (node_type, period_start, period_end),
+        )
 
     result = cursor.fetchone()
     return result[0] if result else 0
@@ -57,6 +74,8 @@ def validate_and_count_correlations(
 ) -> int:
     """
     Count service correlations within a period.
+
+    Database-agnostic: Works with both SQLite and PostgreSQL.
 
     Args:
         cursor: Database cursor
@@ -71,14 +90,28 @@ def validate_and_count_correlations(
         >>> count
         15
     """
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM service_correlations
-        WHERE datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM service_correlations
+            WHERE created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM service_correlations
+            WHERE datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (period_start, period_end),
+        )
 
     result = cursor.fetchone()
     return result[0] if result else 0
@@ -189,6 +222,8 @@ def delete_correlations_in_period(
     """
     Delete service correlations within a period.
 
+    Database-agnostic: Works with both SQLite and PostgreSQL.
+
     Args:
         cursor: Database cursor
         period_start: ISO format period start
@@ -201,14 +236,28 @@ def delete_correlations_in_period(
         >>> deleted = delete_correlations_in_period(cursor, '2023-10-01T00:00:00+00:00', '2023-10-02T00:00:00+00:00')
         >>> logger.info(f"Deleted {deleted} correlations")
     """
-    cursor.execute(
-        """
-        DELETE FROM service_correlations
-        WHERE datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            DELETE FROM service_correlations
+            WHERE created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            DELETE FROM service_correlations
+            WHERE datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (period_start, period_end),
+        )
 
     return cursor.rowcount
 

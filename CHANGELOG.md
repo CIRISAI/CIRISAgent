@@ -10,6 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2025-10-30
 
 ### Fixed
+- **P0: TSDB FOREIGN KEY Constraint Violation** - Fixed cleanup failing when deleting nodes with edge references
+  - **Problem**: `delete_nodes_in_period()` deleted nodes without removing edges first, causing FOREIGN KEY constraint violations
+  - **Impact**:
+    - TSDB cleanup operations failing in production (Datum, Echo-Core, Echo-Speculative)
+    - `sqlite3.IntegrityError: FOREIGN KEY constraint failed`
+    - Audit entry cleanup blocked, causing data accumulation
+  - **Root Cause**: Direct DELETE on `graph_nodes` table violated foreign key constraints from `graph_edges` table
+  - **Solution**: Added two-step deletion: (1) Delete edges referencing the nodes, (2) Delete the nodes
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/cleanup_helpers.py:111-143`
+  - **Verification**: Cleanup operations now complete without errors
+
+- **P1: Database Locking in Edge Cleanup** - Fixed "database is locked" errors during orphaned edge cleanup
+  - **Problem**: `cleanup_orphaned_edges()` failed when another transaction held a write lock
+  - **Impact**:
+    - "Failed to cleanup orphaned edges: database is locked" errors in production
+    - Orphaned edges accumulating over time
+  - **Root Cause**: No retry logic or timeout handling for concurrent database access
+  - **Solution**: Added retry logic with exponential backoff (3 retries, 500ms base delay) and 5-second busy timeout
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:544-591`
+  - **Verification**: Edge cleanup now retries on lock contention instead of failing
+
+- **P2: Visibility Service Noisy Warning** - Reduced log noise from telemetry correlation fallback
+  - **Problem**: WARNING log every 30s: "Telemetry service found but _recent_correlations not available"
+  - **Impact**: Log spam in production (Echo-Core, Echo-Speculative), but no functional impact
+  - **Root Cause**: Warning logged for normal fallback behavior (query database when in-memory cache unavailable)
+  - **Solution**: Downgraded from WARNING to DEBUG since fallback is expected and works correctly
+  - **Files**: `ciris_engine/logic/services/governance/visibility/service.py:416`
+  - **Verification**: Cleaner incident logs, functionality unchanged
+
 - **P0: RedditObserver Self-Reply Bug** - Fixed Reddit agents replying to their own messages
   - **Problem**: RedditObserver was not detecting its own messages as agent messages, causing infinite reply loops
   - **Impact**:

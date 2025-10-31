@@ -93,6 +93,8 @@ def delete_nodes_in_period(
     """
     Delete nodes of a specific type within a period.
 
+    CRITICAL: Deletes edges referencing the nodes first to avoid FOREIGN KEY constraint violations.
+
     Args:
         cursor: Database cursor
         node_type: Type of nodes to delete
@@ -106,6 +108,28 @@ def delete_nodes_in_period(
         >>> deleted = delete_nodes_in_period(cursor, 'tsdb_data', '2023-10-01T00:00:00+00:00', '2023-10-02T00:00:00+00:00')
         >>> logger.info(f"Deleted {deleted} nodes")
     """
+    # Step 1: Delete edges referencing these nodes to avoid FOREIGN KEY constraint violations
+    # Delete edges where source_id or target_id references nodes being deleted
+    cursor.execute(
+        """
+        DELETE FROM graph_edges
+        WHERE source_id IN (
+            SELECT node_id FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        )
+        OR target_id IN (
+            SELECT node_id FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        )
+    """,
+        (node_type, period_start, period_end, node_type, period_start, period_end),
+    )
+
+    # Step 2: Delete the nodes
     cursor.execute(
         """
         DELETE FROM graph_nodes

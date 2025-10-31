@@ -33,6 +33,7 @@ from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 # Import new infrastructure services
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient
+from ciris_engine.protocols.infrastructure import RegistryAwareServiceProtocol
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.enums import ServiceType

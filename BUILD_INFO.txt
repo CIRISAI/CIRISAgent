@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 52a711449359
-Build Time: 2025-10-31T17:27:20.543801
-Git Commit: 7677efcd9cb6417be1a656178f821a39893ff43d
-Git Branch: issue-1-telemetry-fix
+Code Hash: a10ff994ca92
+Build Time: 2025-10-31T17:59:38.576667
+Git Commit: 432d6ebf35b661f5dc6f7c58f0b10d8e55f9a99d
+Git Branch: 1.5.5
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

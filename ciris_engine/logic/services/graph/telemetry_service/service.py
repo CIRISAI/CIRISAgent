@@ -523,9 +523,9 @@ class TelemetryAggregator:
         except Exception as e:
             logger.error(f"Failed to collect from {service_name}: {e}")
             # Return empty telemetry data instead of empty dict
-        return ServiceTelemetryData(
-            healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-        )  # NO FALLBACKS - service failed
+            return ServiceTelemetryData(
+                healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
+            )  # NO FALLBACKS - service failed
 
     def _get_service_from_runtime(self, service_name: str) -> Any:
         """Get service directly from runtime attributes."""

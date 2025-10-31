@@ -71,6 +71,17 @@ class RedditObserver(BaseObserver[RedditMessage]):
         self._max_consecutive_errors = 5
         logger.info("RedditObserver configured for r/%s", self._subreddit)
 
+    def _is_agent_message(self, msg: RedditMessage) -> bool:
+        """
+        Override BaseObserver to check against Reddit username, not CIRIS agent_id.
+
+        BaseObserver compares msg.author_id against self.agent_id (CIRIS agent ID),
+        but for Reddit, msg.author_id is the Reddit username (e.g., "CIRIS-Scout").
+        We need to compare against the Reddit credentials username to prevent
+        the agent from replying to its own messages.
+        """
+        return msg.author_id == self._api_client._credentials.username
+
     # ------------------------------------------------------------------
     async def start(self) -> None:
         await self._api_client.start()

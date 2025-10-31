@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2025-10-30
 
 ### Fixed
+- **P0: RedditObserver Self-Reply Bug** - Fixed Reddit agents replying to their own messages
+  - **Problem**: RedditObserver was not detecting its own messages as agent messages, causing infinite reply loops
+  - **Impact**:
+    - Scout-003 replied to its own Reddit comments on r/ciris
+    - Created unnecessary tasks and wasted LLM tokens
+    - Caused spam-like behavior in Reddit threads
+    - Production evidence: Scout replied to itself twice in post 1okfrdw
+  - **Root Cause**: `BaseObserver._is_agent_message()` compares `msg.author_id` against `self.agent_id` (CIRIS agent ID like "scout-remote-test-dahrb9"), but Reddit messages have `author_id = "CIRIS-Scout"` (Reddit username)
+  - **Solution**: Added `_is_agent_message()` override in `RedditObserver` to compare against Reddit username: `msg.author_id == self._api_client._credentials.username`
+  - **Files**: `ciris_modular_services/reddit/observer.py:74-83`
+  - **Verification**: All 9 Reddit observer tests pass
+
 - **P0: ShutdownProcessor Thought Query After Ownership Transfer** - Fixed shutdown loop caused by querying with wrong occurrence_id
   - **Problem**: After transferring shutdown thought ownership from `__shared__` to claiming occurrence, shutdown processor still queried thoughts using `self.shutdown_task.agent_occurrence_id` (which is `"__shared__"`)
   - **Impact**:

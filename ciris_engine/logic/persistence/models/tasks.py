@@ -126,6 +126,62 @@ def get_all_tasks(occurrence_id: str = "default", db_path: Optional[str] = None)
     return tasks_list
 
 
+def _is_correlation_id_constraint_violation(error_msg: str) -> bool:
+    """
+    Check if error message indicates a unique constraint violation on correlation_id.
+
+    Args:
+        error_msg: Lowercase error message from database exception
+
+    Returns:
+        True if this is a correlation_id constraint violation
+    """
+    return "unique constraint" in error_msg and ("correlation" in error_msg or "json_extract" in error_msg)
+
+
+def _get_correlation_id_from_task(task: Task) -> Optional[str]:
+    """
+    Extract correlation_id from task context if available.
+
+    Args:
+        task: Task object to extract correlation_id from
+
+    Returns:
+        correlation_id if present, None otherwise
+    """
+    if not task.context:
+        return None
+    return getattr(task.context, "correlation_id", None)
+
+
+def _handle_duplicate_task(task: Task, db_path: Optional[str]) -> str:
+    """
+    Handle duplicate task detection by returning existing task_id.
+
+    Args:
+        task: Task that triggered duplicate constraint
+        db_path: Optional database path
+
+    Returns:
+        Existing task_id if found, otherwise the attempted task_id
+    """
+    correlation_id = _get_correlation_id_from_task(task)
+    logger.info(
+        f"Task with correlation_id={correlation_id} already exists for occurrence {task.agent_occurrence_id}, "
+        "skipping duplicate (race condition prevented)"
+    )
+
+    # Treat empty string as None
+    if not correlation_id:
+        return task.task_id
+
+    existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id, db_path)
+    if existing_task:
+        return existing_task.task_id
+
+    return task.task_id
+
+
 def add_task(task: Task, db_path: Optional[str] = None) -> str:
     task_dict = task.model_dump(mode="json")
     sql = """
@@ -156,23 +212,8 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
         return task.task_id
     except Exception as e:
         error_msg = str(e).lower()
-        # Check if this is a unique constraint violation on correlation_id
-        # SQLite: "UNIQUE constraint failed: tasks.agent_occurrence_id, tasks.json_extract..."
-        # PostgreSQL: "duplicate key value violates unique constraint "idx_tasks_occurrence_correlation""
-        if "unique constraint" in error_msg and ("correlation" in error_msg or "json_extract" in error_msg):
-            # This is a duplicate - another task with the same correlation_id already exists
-            correlation_id = getattr(task.context, "correlation_id", None) if task.context else None
-            logger.info(
-                f"Task with correlation_id={correlation_id} already exists for occurrence {task.agent_occurrence_id}, "
-                "skipping duplicate (race condition prevented)"
-            )
-            # Return the existing task ID by querying with correlation_id
-            if correlation_id:
-                existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id, db_path)
-                if existing_task:
-                    return existing_task.task_id
-            # If we can't find it, return the attempted task_id (caller can handle)
-            return task.task_id
+        if _is_correlation_id_constraint_violation(error_msg):
+            return _handle_duplicate_task(task, db_path)
         logger.exception(f"Failed to add task {task.task_id}: {e}")
         raise
 

@@ -64,6 +64,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Verification**: All 52 shutdown processor tests pass, including multi-occurrence scenarios
   - **Related**: Lines 453 and 494 already had correct pattern with explanatory comments
 
+### Test Coverage Added
+- **TSDB Cleanup Tests** (8 tests):
+  - Fixed mock test in `test_cleanup_helpers.py` expecting 2 execute calls (edges + nodes)
+  - Added 3 FOREIGN KEY constraint integration tests in `test_tsdb_cleanup_logic.py`:
+    - `test_cleanup_deletes_edges_before_nodes` - Validates edges deleted before nodes (19 edges, 20 nodes)
+    - `test_cleanup_handles_mixed_edge_references` - Tests partial cleanup with old/recent nodes
+    - `test_foreign_key_constraints_enabled` - Verifies PRAGMA foreign_keys works
+  - Added 5 database locking retry tests in `test_tsdb_edge_creation.py`:
+    - `test_cleanup_with_database_locked_error` - 3 retry attempts, succeeds on 3rd
+    - `test_cleanup_max_retries_exceeded` - Graceful failure after max retries
+    - `test_cleanup_exponential_backoff_timing` - Validates 0.5s, 1.0s backoff delays
+    - `test_cleanup_non_locking_error_no_retry` - Non-locking errors fail immediately
+    - `test_cleanup_retry_success_after_one_failure` - Recovery after single failure
+
 ### Technical Details
 - **Why This Bug Exists**: Shutdown uses shared task coordination with thought ownership transfer (unlike wakeup which creates per-occurrence step tasks)
 - **Query Pattern**: After `transfer_thought_ownership()` moves thoughts from `__shared__` to claiming occurrence, must query with `self.agent_occurrence_id`

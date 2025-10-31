@@ -65,7 +65,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_with_registry(self, telemetry_service, mock_service_registry):
         """Test aggregated telemetry with registry set."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         # Mock the aggregator
         mock_aggregator = Mock(spec=TelemetryAggregator)
@@ -98,7 +98,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_cache_hit(self, telemetry_service, mock_service_registry):
         """Test that cached results are returned when available."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         # Create aggregator with cached data
         aggregator = TelemetryAggregator(
@@ -144,7 +144,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_cache_expired(self, telemetry_service, mock_service_registry):
         """Test that expired cache is not used."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         aggregator = TelemetryAggregator(
             service_registry=mock_service_registry, time_service=telemetry_service._time_service
@@ -170,7 +170,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_aggregator_initialization(self, telemetry_service, mock_service_registry):
         """Test that aggregator is initialized on first use."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         # Initially no aggregator
         assert telemetry_service._telemetry_aggregator is None
@@ -188,7 +188,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_get_aggregated_telemetry_full_integration(self, telemetry_service, mock_service_registry):
         """Test full integration with actual aggregator."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         # Mock services to return telemetry
         mock_service_registry.get_services_by_type.return_value = [
@@ -224,7 +224,7 @@ class TestGraphTelemetryServiceAggregation:
     @pytest.mark.asyncio
     async def test_aggregator_with_registry_providers(self, telemetry_service, mock_service_registry):
         """Test aggregator handles registry providers correctly, triggering debug logs."""
-        telemetry_service._set_service_registry(mock_service_registry)
+        await telemetry_service.attach_registry(mock_service_registry)
 
         # Set up registry to return providers that will trigger our debug paths
         mock_memory_provider = Mock()

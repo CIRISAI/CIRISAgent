@@ -30,6 +30,7 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol as TelemetryServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1253,7 +1254,7 @@ class TelemetryAggregator:
         }
 
 
-class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
+class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, RegistryAwareServiceProtocol):
     """
     Consolidated TelemetryService that stores all metrics as graph memories.
 
@@ -1314,8 +1315,16 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol):
         else:
             logger.debug("[TELEMETRY] Aggregator will be created later with runtime when first needed")
 
-    def _set_service_registry(self, registry: object) -> None:
-        """Set the service registry for accessing memory bus and time service (internal method)."""
+    async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
+        """
+        Attach service registry for bus and service discovery.
+        
+        Implements RegistryAwareServiceProtocol to enable proper initialization
+        of memory bus and time service dependencies.
+        
+        Args:
+            registry: Service registry providing access to buses and services
+        """
         self._service_registry = registry
         if not self._memory_bus and registry:
             # Try to get memory bus from registry

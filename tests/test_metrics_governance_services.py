@@ -518,7 +518,7 @@ class TestSelfObservationServiceMetrics(BaseMetricsTest):
 
         # Mock the service registry to avoid initialization issues
         mock_registry = MagicMock()
-        service._set_service_registry(mock_registry)
+        await service.attach_registry(mock_registry)
 
         await service.start()
         return service

@@ -194,8 +194,8 @@ class MockTelemetryService:
         self.is_healthy = AsyncMock(return_value=True)
         self.is_healthy = AsyncMock(return_value=True)
 
-    def _set_service_registry(self, registry):
-        """Set the service registry."""
+    async def attach_registry(self, registry):
+        """Attach service registry (protocol method)."""
         self._service_registry = registry
 
     async def record_metric(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):

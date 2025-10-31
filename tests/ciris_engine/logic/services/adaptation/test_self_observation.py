@@ -72,7 +72,7 @@ class TestSelfObservationService:
         return registry
 
     @pytest.fixture
-    def service(self, mock_time_service, mock_memory_bus, mock_telemetry, mock_service_registry):
+    async def service(self, mock_time_service, mock_memory_bus, mock_telemetry, mock_service_registry):
         """Create SelfObservationService instance."""
         with patch("ciris_engine.logic.services.governance.self_observation.service.MemoryBus") as mock_bus_class:
             with patch(
@@ -91,7 +91,7 @@ class TestSelfObservationService:
                 )
 
                 # Set service registry
-                service._set_service_registry(mock_service_registry)
+                await service.attach_registry(mock_service_registry)
 
                 # Mock sub-services
                 service._identity_monitor = MockIdentityVarianceMonitor()
@@ -110,10 +110,11 @@ class TestSelfObservationService:
         assert service._observation_interval.total_seconds() == 3600  # 1 hour
         assert service._current_state == ObservationState.LEARNING
 
-    def test_set_service_registry(self, service, mock_service_registry):
+    @pytest.mark.asyncio
+    async def test_set_service_registry(self, service, mock_service_registry):
         """Test setting service registry."""
         new_registry = MockServiceRegistry()
-        service._set_service_registry(new_registry)
+        await service.attach_registry(new_registry)
         assert service._service_registry == new_registry
 
     @pytest.mark.asyncio

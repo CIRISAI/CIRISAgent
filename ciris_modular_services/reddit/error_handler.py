@@ -123,13 +123,23 @@ class RedditErrorHandler:
         # Runtime errors - check for authentication failures
         elif isinstance(error, RuntimeError):
             error_str = str(error).lower()
-            # Authentication failures (suspended account, invalid credentials)
-            if "authentication failed" in error_str or "suspended" in error_str or "invalid credentials" in error_str:
+            # Authentication failures (suspended account, invalid credentials, OAuth errors)
+            # Covers: "authentication failed", "suspended", "invalid credentials"
+            # Plus Reddit OAuth error codes: "invalid_grant", "invalid_client"
+            # Plus 401 status in token requests (always auth failure, never transient)
+            if (
+                "authentication failed" in error_str
+                or "suspended" in error_str
+                or "invalid credentials" in error_str
+                or "invalid_grant" in error_str
+                or "invalid_client" in error_str
+                or ("token request failed" in error_str and "(401)" in error_str)
+            ):
                 severity = ErrorSeverity.CRITICAL
                 can_retry = False  # Don't retry auth failures - requires manual intervention
                 suggested_action = "check_account_status"
                 message = f"Reddit authentication failure: {str(error)}"
-            # Token refresh failures
+            # Token refresh failures (temporary, non-auth issues like 5xx)
             elif "token request failed" in error_str:
                 severity = ErrorSeverity.HIGH
                 can_retry = True  # Temporary token issues may resolve

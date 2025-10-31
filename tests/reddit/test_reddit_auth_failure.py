@@ -176,6 +176,58 @@ class TestAuthFailureDetection:
             assert "invalid credentials" in error_msg.lower()
 
     @pytest.mark.asyncio
+    async def test_invalid_grant_oauth_error(self, api_client):
+        """
+        GIVEN a Reddit OAuth response with invalid_grant error code
+        WHEN refresh_token() is called
+        THEN error message should contain invalid_grant
+        """
+        # Mock the HTTP response with OAuth error
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "error": "invalid_grant",
+            "error_description": "Bad credentials",
+        }
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(RuntimeError) as exc_info:
+                await api_client.refresh_token(force=True)
+
+            error_msg = str(exc_info.value)
+            assert "invalid_grant" in error_msg
+
+    @pytest.mark.asyncio
+    async def test_invalid_client_oauth_error(self, api_client):
+        """
+        GIVEN a Reddit OAuth response with invalid_client error code
+        WHEN refresh_token() is called
+        THEN error message should contain invalid_client
+        """
+        # Mock the HTTP response with OAuth error
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "error": "invalid_client",
+            "error_description": "Invalid client credentials",
+        }
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(RuntimeError) as exc_info:
+                await api_client.refresh_token(force=True)
+
+            error_msg = str(exc_info.value)
+            assert "invalid_client" in error_msg
+
+    @pytest.mark.asyncio
     async def test_valid_token_does_not_raise(self, api_client):
         """
         GIVEN a Reddit OAuth response with valid access_token
@@ -224,6 +276,45 @@ class TestErrorHandlerAuthClassification:
         assert error_info.can_retry is False
         assert error_info.suggested_action == "check_account_status"
         assert "authentication failure" in error_info.message.lower()
+
+    def test_invalid_grant_classified_as_critical(self, error_handler):
+        """
+        GIVEN a RuntimeError with invalid_grant OAuth error
+        WHEN classify_error() is called
+        THEN it should return CRITICAL severity and can_retry=False
+        """
+        error = RuntimeError("Reddit authentication failed: invalid_grant - Bad credentials")
+        error_info = error_handler.classify_error(error, operation="refresh_token")
+
+        assert error_info.severity == ErrorSeverity.CRITICAL
+        assert error_info.can_retry is False
+        assert error_info.suggested_action == "check_account_status"
+
+    def test_invalid_client_classified_as_critical(self, error_handler):
+        """
+        GIVEN a RuntimeError with invalid_client OAuth error
+        WHEN classify_error() is called
+        THEN it should return CRITICAL severity and can_retry=False
+        """
+        error = RuntimeError("Reddit authentication failed: invalid_client - Invalid client credentials")
+        error_info = error_handler.classify_error(error, operation="refresh_token")
+
+        assert error_info.severity == ErrorSeverity.CRITICAL
+        assert error_info.can_retry is False
+        assert error_info.suggested_action == "check_account_status"
+
+    def test_token_request_401_classified_as_critical(self, error_handler):
+        """
+        GIVEN a RuntimeError with 401 status in token request
+        WHEN classify_error() is called
+        THEN it should return CRITICAL severity and can_retry=False
+        """
+        error = RuntimeError("Token request failed (401): Unauthorized")
+        error_info = error_handler.classify_error(error, operation="refresh_token")
+
+        assert error_info.severity == ErrorSeverity.CRITICAL
+        assert error_info.can_retry is False
+        assert error_info.suggested_action == "check_account_status"
 
     def test_suspended_account_classified_as_critical(self, error_handler):
         """

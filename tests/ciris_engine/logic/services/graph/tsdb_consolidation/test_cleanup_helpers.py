@@ -87,7 +87,8 @@ class TestDeleteNodesInPeriod:
         deleted = delete_nodes_in_period(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 10
-        cursor.execute.assert_called_once()
+        # CRITICAL: delete_nodes_in_period calls execute TWICE (edges first, then nodes)
+        assert cursor.execute.call_count == 2
 
     def test_returns_zero_when_no_rows_deleted(self):
         """Should return 0 when no rows deleted."""

@@ -43,10 +43,31 @@ def tsdb_service(mock_memory_bus, mock_time_service):
 @pytest.fixture
 def mock_db_connection():
     """Create an in-memory SQLite database for testing."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
+    real_conn = sqlite3.connect(":memory:")
+    real_conn.row_factory = sqlite3.Row
 
-    # Create necessary tables
+    # CRITICAL: Enable FOREIGN KEY constraints (disabled by default in SQLite)
+    real_conn.execute("PRAGMA foreign_keys = ON")
+
+    # Wrap connection to prevent close() from actually closing it
+    class ConnectionWrapper:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def __getattr__(self, name):
+            if name == "close":
+                return lambda: None  # No-op close for testing
+            return getattr(self._conn, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+    conn = ConnectionWrapper(real_conn)
+
+    # Create necessary tables using real connection
     conn.execute(
         """
         CREATE TABLE graph_nodes (
@@ -58,6 +79,20 @@ def mock_db_connection():
             updated_by TEXT,
             updated_at TEXT,
             created_at TEXT
+        )
+    """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE graph_edges (
+            edge_id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            edge_type TEXT NOT NULL,
+            created_at TEXT,
+            FOREIGN KEY (source_id) REFERENCES graph_nodes(node_id),
+            FOREIGN KEY (target_id) REFERENCES graph_nodes(node_id)
         )
     """
     )
@@ -486,3 +521,219 @@ class TestCleanupEdgeCases:
 
             # Nothing deleted (count mismatch: 0 != 10)
             assert deleted == 0
+
+
+class TestForeignKeyConstraintHandling:
+    """Test that FOREIGN KEY constraints are properly handled during cleanup.
+
+    CRITICAL: This validates the fix from 1.5.3 where delete_nodes_in_period()
+    was failing with FOREIGN KEY constraint violations because it deleted nodes
+    before deleting edges that reference them.
+    """
+
+    @pytest.mark.asyncio
+    async def test_cleanup_deletes_edges_before_nodes(self, tsdb_service, mock_db_connection):
+        """Test that cleanup deletes edges BEFORE nodes to avoid FOREIGN KEY violations."""
+
+        # Create a mock that acts as both a callable and context manager
+        # It needs to return the actual connection when called OR used as context manager
+        class MockDBConnection:
+            def __call__(self, db_path=None, **kwargs):
+                return mock_db_connection  # Return connection directly for non-context-manager usage
+
+            def __enter__(self):
+                return mock_db_connection
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return False
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", new=MockDBConnection()):
+            cursor = mock_db_connection.cursor()
+
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+
+            # Insert TSDB data nodes with edges between them
+            node_ids = []
+            for i in range(20):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                node_ids.append(node_data[0])
+                cursor.execute(
+                    """
+                        INSERT INTO graph_nodes
+                        (node_id, node_type, scope, attributes_json, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                    node_data,
+                )
+
+            # Create edges between consecutive nodes (19 edges total)
+            for i in range(len(node_ids) - 1):
+                cursor.execute(
+                    """
+                        INSERT INTO graph_edges
+                        (edge_id, source_id, target_id, edge_type, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"edge_{i}",
+                        node_ids[i],
+                        node_ids[i + 1],
+                        "temporal_sequence",
+                        old_time.isoformat(),
+                    ),
+                )
+
+            # Create summary
+            summary_data = create_summary_node(old_time, "tsdb_summary", 20)
+            cursor.execute(
+                """
+                    INSERT INTO graph_nodes
+                    (node_id, node_type, scope, attributes_json, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                summary_data,
+            )
+
+            mock_db_connection.commit()
+
+            # Verify edges exist before cleanup
+            cursor.execute("SELECT COUNT(*) FROM graph_edges")
+            assert cursor.fetchone()[0] == 19
+
+            # Run cleanup - should NOT raise FOREIGN KEY constraint error
+            deleted = tsdb_service._cleanup_old_data()
+
+            # All 20 nodes should be deleted
+            assert deleted == 20
+
+            # All edges should also be deleted
+            cursor.execute("SELECT COUNT(*) FROM graph_edges")
+            assert cursor.fetchone()[0] == 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_handles_mixed_edge_references(self, tsdb_service, mock_db_connection):
+        """Test cleanup with edges where only some nodes should be deleted."""
+
+        class MockDBConnection:
+            def __call__(self, db_path=None, **kwargs):
+                return mock_db_connection  # Return connection directly for non-context-manager usage
+
+            def __enter__(self):
+                return mock_db_connection
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return False
+
+        with patch("ciris_engine.logic.persistence.db.core.get_db_connection", new=MockDBConnection()):
+            cursor = mock_db_connection.cursor()
+
+            old_time = datetime(2025, 7, 14, 0, 0, 0, tzinfo=timezone.utc)  # 36 hours ago
+            recent_time = datetime(2025, 7, 15, 0, 0, 0, tzinfo=timezone.utc)  # 12 hours ago
+
+            # Insert old nodes (should be deleted)
+            old_node_ids = []
+            for i in range(10):
+                node_data = create_tsdb_data_node(old_time + timedelta(minutes=i))
+                old_node_ids.append(node_data[0])
+                cursor.execute(
+                    """
+                        INSERT INTO graph_nodes
+                        (node_id, node_type, scope, attributes_json, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                    node_data,
+                )
+
+            # Insert recent nodes (should NOT be deleted)
+            recent_node_ids = []
+            for i in range(10):
+                node_data = create_tsdb_data_node(recent_time + timedelta(minutes=i))
+                recent_node_ids.append(node_data[0])
+                cursor.execute(
+                    """
+                        INSERT INTO graph_nodes
+                        (node_id, node_type, scope, attributes_json, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """,
+                    node_data,
+                )
+
+            # Create edges:
+            # 1. Between old nodes (should be deleted)
+            # 2. Between recent nodes (should NOT be deleted)
+            # 3. From old to recent (should be deleted because source is old)
+            cursor.execute(
+                """
+                    INSERT INTO graph_edges
+                    (edge_id, source_id, target_id, edge_type, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                ("edge_old_to_old", old_node_ids[0], old_node_ids[1], "temporal", old_time.isoformat()),
+            )
+
+            cursor.execute(
+                """
+                    INSERT INTO graph_edges
+                    (edge_id, source_id, target_id, edge_type, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                ("edge_recent_to_recent", recent_node_ids[0], recent_node_ids[1], "temporal", recent_time.isoformat()),
+            )
+
+            cursor.execute(
+                """
+                    INSERT INTO graph_edges
+                    (edge_id, source_id, target_id, edge_type, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                ("edge_old_to_recent", old_node_ids[2], recent_node_ids[0], "reference", old_time.isoformat()),
+            )
+
+            # Create summary for old nodes
+            summary_data = create_summary_node(old_time, "tsdb_summary", 10)
+            cursor.execute(
+                """
+                    INSERT INTO graph_nodes
+                    (node_id, node_type, scope, attributes_json, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                summary_data,
+            )
+
+            mock_db_connection.commit()
+
+            # Run cleanup
+            deleted = tsdb_service._cleanup_old_data()
+
+            # 10 old nodes should be deleted
+            assert deleted == 10
+
+            # Verify recent nodes still exist
+            cursor.execute("SELECT COUNT(*) FROM graph_nodes WHERE node_type = 'tsdb_data'")
+            assert cursor.fetchone()[0] == 10  # Only recent nodes remain
+
+            # Verify only the recent-to-recent edge remains
+            cursor.execute("SELECT COUNT(*) FROM graph_edges")
+            assert cursor.fetchone()[0] == 1
+
+            cursor.execute("SELECT edge_id FROM graph_edges")
+            assert cursor.fetchone()[0] == "edge_recent_to_recent"
+
+    @pytest.mark.asyncio
+    async def test_foreign_key_constraints_enabled(self, mock_db_connection):
+        """Verify that FOREIGN KEY constraints are actually enabled in test database."""
+        cursor = mock_db_connection.cursor()
+
+        # Attempt to insert edge with non-existent node reference
+        with pytest.raises(sqlite3.IntegrityError) as exc_info:
+            cursor.execute(
+                """
+                    INSERT INTO graph_edges
+                    (edge_id, source_id, target_id, edge_type)
+                    VALUES (?, ?, ?, ?)
+                """,
+                ("bad_edge", "nonexistent_source", "nonexistent_target", "test"),
+            )
+
+        # Should raise FOREIGN KEY constraint error
+        assert "FOREIGN KEY constraint failed" in str(exc_info.value)

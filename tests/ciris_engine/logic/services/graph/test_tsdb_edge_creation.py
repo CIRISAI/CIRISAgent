@@ -918,8 +918,8 @@ class TestCleanupOrphanedEdges:
     @pytest.mark.asyncio
     async def test_cleanup_with_database_locked_error(self, edge_manager, mock_db_connection):
         """Test that cleanup retries when database is locked."""
-        from unittest.mock import MagicMock, patch
         from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
 
         # Track retry attempts
         attempt_count = 0
@@ -968,8 +968,8 @@ class TestCleanupOrphanedEdges:
     @pytest.mark.asyncio
     async def test_cleanup_max_retries_exceeded(self, edge_manager):
         """Test that cleanup returns 0 after max retries exceeded."""
-        from unittest.mock import patch
         from contextlib import contextmanager
+        from unittest.mock import patch
 
         attempt_count = 0
 
@@ -993,8 +993,8 @@ class TestCleanupOrphanedEdges:
     async def test_cleanup_exponential_backoff_timing(self, edge_manager, mock_db_connection):
         """Test that cleanup uses exponential backoff between retries."""
         import time
-        from unittest.mock import patch
         from contextlib import contextmanager
+        from unittest.mock import patch
 
         # Setup orphaned edge
         cursor = mock_db_connection.cursor()
@@ -1046,8 +1046,8 @@ class TestCleanupOrphanedEdges:
     @pytest.mark.asyncio
     async def test_cleanup_non_locking_error_no_retry(self, edge_manager):
         """Test that non-locking errors are not retried."""
-        from unittest.mock import patch
         from contextlib import contextmanager
+        from unittest.mock import patch
 
         attempt_count = 0
 
@@ -1070,8 +1070,8 @@ class TestCleanupOrphanedEdges:
     @pytest.mark.asyncio
     async def test_cleanup_retry_success_after_one_failure(self, edge_manager, mock_db_connection):
         """Test successful cleanup after one retry."""
-        from unittest.mock import patch
         from contextlib import contextmanager
+        from unittest.mock import patch
 
         # Setup orphaned edge
         cursor = mock_db_connection.cursor()

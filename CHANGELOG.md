@@ -11,15 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **P0: TSDB FOREIGN KEY Constraint Violation** - Fixed cleanup failing when deleting nodes with edge references
-  - **Problem**: `delete_nodes_in_period()` deleted nodes without removing edges first, causing FOREIGN KEY constraint violations
+  - **Problem**: `delete_nodes_in_period()` deleted nodes without removing edges first, causing FOREIGN KEY constraint violations. Additionally, initial fix used wrong column names (`source_id`/`target_id` instead of `source_node_id`/`target_node_id`)
   - **Impact**:
     - TSDB cleanup operations failing in production (Datum, Echo-Core, Echo-Speculative)
     - `sqlite3.IntegrityError: FOREIGN KEY constraint failed`
+    - Would have caused `sqlite3.OperationalError: no such column: source_id` with initial fix
     - Audit entry cleanup blocked, causing data accumulation
-  - **Root Cause**: Direct DELETE on `graph_nodes` table violated foreign key constraints from `graph_edges` table
-  - **Solution**: Added two-step deletion: (1) Delete edges referencing the nodes, (2) Delete the nodes
-  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/cleanup_helpers.py:111-143`
-  - **Verification**: Cleanup operations now complete without errors
+  - **Root Cause**:
+    1. Direct DELETE on `graph_nodes` table violated foreign key constraints from `graph_edges` table
+    2. Incorrect column names in edge deletion query (initial fix)
+    3. No database dialect support for SQLite vs PostgreSQL
+  - **Solution**:
+    1. Added two-step deletion: (1) Delete edges referencing the nodes, (2) Delete the nodes
+    2. Corrected column names to `source_node_id`/`target_node_id` (verified against schema)
+    3. Added database dialect awareness using `get_adapter()` for SQLite (`datetime()`, `?`) vs PostgreSQL (`::timestamp`, `%s`)
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/cleanup_helpers.py:87-181`
+  - **Verification**: Cleanup operations now complete without errors on both SQLite and PostgreSQL
 
 - **P1: Database Locking in Edge Cleanup** - Fixed "database is locked" errors during orphaned edge cleanup
   - **Problem**: `cleanup_orphaned_edges()` failed when another transaction held a write lock

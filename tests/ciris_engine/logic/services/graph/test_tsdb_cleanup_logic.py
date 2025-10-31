@@ -87,12 +87,12 @@ def mock_db_connection():
         """
         CREATE TABLE graph_edges (
             edge_id TEXT PRIMARY KEY,
-            source_id TEXT NOT NULL,
-            target_id TEXT NOT NULL,
+            source_node_id TEXT NOT NULL,
+            target_node_id TEXT NOT NULL,
             edge_type TEXT NOT NULL,
             created_at TEXT,
-            FOREIGN KEY (source_id) REFERENCES graph_nodes(node_id),
-            FOREIGN KEY (target_id) REFERENCES graph_nodes(node_id)
+            FOREIGN KEY (source_node_id) REFERENCES graph_nodes(node_id),
+            FOREIGN KEY (target_node_id) REFERENCES graph_nodes(node_id)
         )
     """
     )
@@ -571,7 +571,7 @@ class TestForeignKeyConstraintHandling:
                 cursor.execute(
                     """
                         INSERT INTO graph_edges
-                        (edge_id, source_id, target_id, edge_type, created_at)
+                        (edge_id, source_node_id, target_node_id, edge_type, created_at)
                         VALUES (?, ?, ?, ?, ?)
                     """,
                     (
@@ -665,7 +665,7 @@ class TestForeignKeyConstraintHandling:
             cursor.execute(
                 """
                     INSERT INTO graph_edges
-                    (edge_id, source_id, target_id, edge_type, created_at)
+                    (edge_id, source_node_id, target_node_id, edge_type, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
                 ("edge_old_to_old", old_node_ids[0], old_node_ids[1], "temporal", old_time.isoformat()),
@@ -674,7 +674,7 @@ class TestForeignKeyConstraintHandling:
             cursor.execute(
                 """
                     INSERT INTO graph_edges
-                    (edge_id, source_id, target_id, edge_type, created_at)
+                    (edge_id, source_node_id, target_node_id, edge_type, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
                 ("edge_recent_to_recent", recent_node_ids[0], recent_node_ids[1], "temporal", recent_time.isoformat()),
@@ -683,7 +683,7 @@ class TestForeignKeyConstraintHandling:
             cursor.execute(
                 """
                     INSERT INTO graph_edges
-                    (edge_id, source_id, target_id, edge_type, created_at)
+                    (edge_id, source_node_id, target_node_id, edge_type, created_at)
                     VALUES (?, ?, ?, ?, ?)
                 """,
                 ("edge_old_to_recent", old_node_ids[2], recent_node_ids[0], "reference", old_time.isoformat()),
@@ -729,7 +729,7 @@ class TestForeignKeyConstraintHandling:
             cursor.execute(
                 """
                     INSERT INTO graph_edges
-                    (edge_id, source_id, target_id, edge_type)
+                    (edge_id, source_node_id, target_node_id, edge_type)
                     VALUES (?, ?, ?, ?)
                 """,
                 ("bad_edge", "nonexistent_source", "nonexistent_target", "test"),

@@ -165,6 +165,32 @@ def stale_thought_data():
 
 
 @pytest.fixture
+def old_shutdown_task_data():
+    """
+    Provide sample old shutdown task data for cleanup testing.
+
+    Tests uppercase SHUTDOWN_ pattern (shared shutdown tasks use uppercase).
+
+    Returns:
+        Dict: Old shutdown task with stale timestamp
+    """
+    now = datetime.now(timezone.utc)
+    old_time = now - timedelta(minutes=10)  # 10 minutes old
+
+    return {
+        "task_id": "SHUTDOWN_SHARED_20251027",
+        "description": "System shutdown requested (shared across all occurrences)",
+        "status": "active",
+        "agent_occurrence_id": "__shared__",
+        "parent_task_id": None,
+        "created_at": old_time.isoformat(),
+        "updated_at": old_time.isoformat(),
+        "channel_id": "api",
+        "priority": 10,
+    }
+
+
+@pytest.fixture
 def multi_occurrence_cleanup_scenario():
     """
     Provide a complete multi-occurrence cleanup scenario.

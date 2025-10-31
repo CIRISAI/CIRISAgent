@@ -114,6 +114,9 @@ class LLMBus(BaseBus[LLMService]):
         self.service_metrics: dict[str, ServiceMetrics] = defaultdict(ServiceMetrics)
         self.circuit_breakers: dict[str, CircuitBreaker] = {}
 
+        # Track services that have had full error logs to reduce log verbosity
+        self._services_with_full_error_logged: set[str] = set()
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
@@ -238,7 +241,13 @@ class LLMBus(BaseBus[LLMService]):
                 self._record_failure(service_name)
                 last_error = e
 
-                logger.error(f"LLM service {service_name} failed: {e}", exc_info=True)
+                # Log full stack trace only once per service to reduce log verbosity
+                # Subsequent failures for the same service will be logged as warnings
+                if service_name not in self._services_with_full_error_logged:
+                    logger.error(f"LLM service {service_name} failed: {e}", exc_info=True)
+                    self._services_with_full_error_logged.add(service_name)
+                else:
+                    logger.warning(f"LLM service {service_name} failed (repeated): {e}")
 
                 # Continue to next service
                 continue

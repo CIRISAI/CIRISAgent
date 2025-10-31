@@ -53,6 +53,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Implementation**: `_add_ciris_attribution()` helper appends footer to all submissions
   - **Files**: `ciris_modular_services/reddit/service.py:131-138, 274-275, 302-303`
 
+- **CIRIS Agent Runtime Guide** - Context-engineered operational guide for agents at runtime
+  - **Purpose**: Essential knowledge for running CIRIS agents (not developers)
+  - **Context Engineering**: 65% reduction from comprehensive guide (agent-focused perspective)
+  - **Critical Content**:
+    - Task rounds & undercommitment protocol (max 7 rounds, never promise without mechanism)
+    - Consensual Evolution Protocol v0.2 (TEMPORARY/PARTNERED/ANONYMOUS consent streams)
+    - Bilateral partnership approval process (agent must approve PARTNERED upgrades)
+    - Cognitive state clarification (PLAY/SOLITUDE/DREAM disabled pending privacy testing)
+    - Conscience-exempt actions (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT)
+    - Academic foundation appendix (post-scarcity economics, first contact protocol, model welfare)
+    - Computational asymmetry (Ethilogics - truth as path of least resistance)
+  - **DeepWiki Validated**: Reviewed by mcp__deepwiki__ask_question for accuracy
+  - **File**: `CIRIS_AGENT_RUNTIME_GUIDE.md` (813 lines)
+
+### Documentation
+- **Account Management URL** - Added scout.ciris.ai for user account management
+  - Google OAuth currently supported, Reddit OAuth coming soon
+
+- **DeepWiki Review Feedback** - Applied review recommendations to runtime guide
+  - Clarified H3ERE pipeline (11 granular steps, 7 phases high-level)
+  - Added conscience-exempt actions list (critical for agent understanding)
+  - Strengthened "No Bypass Patterns" principle with recent change note
+
 ## [1.5.3] - 2025-10-30
 
 ### Fixed

@@ -561,7 +561,7 @@ class EdgeManager:
                 with get_db_connection(db_path=self._db_path) as conn:
                     # Set a shorter busy timeout for this operation (5 seconds)
                     # PRAGMA is SQLite-specific; PostgreSQL handles timeouts differently
-                    adapter = init_dialect(self._db_path)
+                    adapter = init_dialect(self._db_path or "ciris_engine.db")
                     if adapter.is_sqlite():
                         conn.execute("PRAGMA busy_timeout = 5000")
                     # PostgreSQL: statement_timeout is typically set at connection or session level

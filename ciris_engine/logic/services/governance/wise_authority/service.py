@@ -377,7 +377,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 priority_int = int(priority) if priority else 0
 
                 # Convert integer priority to string for PendingDeferral
-                priority_str = "high" if priority_int > 5 else "medium" if priority_int > 0 else "low"
+                if priority_int > 5:
+                    priority_str = "high"
+                elif priority_int > 0:
+                    priority_str = "medium"
+                else:
+                    priority_str = "low"
 
                 # Create PendingDeferral
                 deferral = PendingDeferral(

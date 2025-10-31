@@ -915,6 +915,205 @@ class TestCleanupOrphanedEdges:
             result = cursor.fetchone()
             assert result["count"] == 0
 
+    @pytest.mark.asyncio
+    async def test_cleanup_with_database_locked_error(self, edge_manager, mock_db_connection):
+        """Test that cleanup retries when database is locked."""
+        from unittest.mock import MagicMock, patch
+        from contextlib import contextmanager
+
+        # Track retry attempts
+        attempt_count = 0
+
+        # Setup: Create orphaned edge
+        cursor = mock_db_connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO graph_edges
+            (edge_id, source_node_id, target_node_id, scope,
+             relationship, weight, attributes_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "edge_orphan",
+                "node1",
+                "non_existent_node",
+                "local",
+                "TEST",
+                1.0,
+                "{}",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        mock_db_connection.commit()
+
+        @contextmanager
+        def mock_conn_with_retry(db_path=None, **kwargs):
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count < 3:  # Fail first 2 attempts
+                raise Exception("database is locked")
+            # Success on 3rd attempt
+            yield mock_db_connection
+
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection",
+            side_effect=mock_conn_with_retry,
+        ):
+            deleted = edge_manager.cleanup_orphaned_edges()
+
+        # Should succeed after retries
+        assert deleted == 1
+        assert attempt_count == 3  # Failed twice, succeeded on 3rd
+
+    @pytest.mark.asyncio
+    async def test_cleanup_max_retries_exceeded(self, edge_manager):
+        """Test that cleanup returns 0 after max retries exceeded."""
+        from unittest.mock import patch
+        from contextlib import contextmanager
+
+        attempt_count = 0
+
+        @contextmanager
+        def mock_conn_always_locked(db_path=None, **kwargs):
+            nonlocal attempt_count
+            attempt_count += 1
+            raise Exception("database is locked")
+
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection",
+            side_effect=mock_conn_always_locked,
+        ):
+            deleted = edge_manager.cleanup_orphaned_edges()
+
+        # Should return 0 after max retries
+        assert deleted == 0
+        assert attempt_count == 3  # max_retries = 3
+
+    @pytest.mark.asyncio
+    async def test_cleanup_exponential_backoff_timing(self, edge_manager, mock_db_connection):
+        """Test that cleanup uses exponential backoff between retries."""
+        import time
+        from unittest.mock import patch
+        from contextlib import contextmanager
+
+        # Setup orphaned edge
+        cursor = mock_db_connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO graph_edges
+            (edge_id, source_node_id, target_node_id, scope,
+             relationship, weight, attributes_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "edge_orphan",
+                "node1",
+                "non_existent",
+                "local",
+                "TEST",
+                1.0,
+                "{}",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        mock_db_connection.commit()
+
+        retry_times = []
+
+        @contextmanager
+        def mock_conn_track_timing(db_path=None, **kwargs):
+            retry_times.append(time.time())
+            if len(retry_times) < 3:
+                raise Exception("database is locked")
+            yield mock_db_connection
+
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection",
+            side_effect=mock_conn_track_timing,
+        ):
+            edge_manager.cleanup_orphaned_edges()
+
+        # Verify exponential backoff: 0.5s, 1.0s, 1.5s
+        assert len(retry_times) == 3
+        delay1 = retry_times[1] - retry_times[0]
+        delay2 = retry_times[2] - retry_times[1]
+
+        # Allow tolerance for timing
+        assert delay1 >= 0.4  # Should be ~0.5s (0.5 * 1)
+        assert delay2 >= 0.9  # Should be ~1.0s (0.5 * 2)
+        assert delay2 > delay1  # Exponential increase
+
+    @pytest.mark.asyncio
+    async def test_cleanup_non_locking_error_no_retry(self, edge_manager):
+        """Test that non-locking errors are not retried."""
+        from unittest.mock import patch
+        from contextlib import contextmanager
+
+        attempt_count = 0
+
+        @contextmanager
+        def mock_conn_syntax_error(db_path=None, **kwargs):
+            nonlocal attempt_count
+            attempt_count += 1
+            raise Exception("syntax error near 'SELECT'")
+
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection",
+            side_effect=mock_conn_syntax_error,
+        ):
+            deleted = edge_manager.cleanup_orphaned_edges()
+
+        # Should fail immediately without retries (non-locking error)
+        assert deleted == 0
+        assert attempt_count == 1  # Only one attempt
+
+    @pytest.mark.asyncio
+    async def test_cleanup_retry_success_after_one_failure(self, edge_manager, mock_db_connection):
+        """Test successful cleanup after one retry."""
+        from unittest.mock import patch
+        from contextlib import contextmanager
+
+        # Setup orphaned edge
+        cursor = mock_db_connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO graph_edges
+            (edge_id, source_node_id, target_node_id, scope,
+             relationship, weight, attributes_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "edge_orphan",
+                "node1",
+                "non_existent",
+                "local",
+                "TEST",
+                1.0,
+                "{}",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        mock_db_connection.commit()
+
+        attempt_count = 0
+
+        @contextmanager
+        def mock_conn_fail_once(db_path=None, **kwargs):
+            nonlocal attempt_count
+            attempt_count += 1
+            if attempt_count == 1:
+                raise Exception("database is locked")
+            yield mock_db_connection
+
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection",
+            side_effect=mock_conn_fail_once,
+        ):
+            deleted = edge_manager.cleanup_orphaned_edges()
+
+        assert deleted == 1
+        assert attempt_count == 2  # Failed once, succeeded on 2nd
+
 
 class TestDailyConsolidationEdgeCreation:
     """Test temporal edge creation for daily consolidation summaries."""

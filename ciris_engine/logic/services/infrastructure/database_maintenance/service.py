@@ -406,7 +406,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
 
     async def _cleanup_stale_wakeup_tasks(self) -> None:
-        """Clean up stale wakeup and shutdown thoughts from previous runs while preserving completed tasks for history."""
+        """
+        Clean up stale wakeup and shutdown thoughts from previous runs while preserving completed tasks for history.
+
+        This prevents infinite loops where old PENDING/ACTIVE shutdown tasks with completed thoughts
+        get reused on restart, causing the shutdown processor to wait forever for an LLM response.
+        """
         try:
             logger.info("Checking for stale wakeup and shutdown tasks from previous runs")
 
@@ -429,6 +434,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     or task.task_id.startswith("ACCEPT_INCOMPLETENESS_")
                     or task.task_id.startswith("EXPRESS_GRATITUDE_")
                     or task.task_id.startswith("shutdown_")
+                    or task.task_id.startswith("SHUTDOWN_")  # Also match uppercase SHUTDOWN_ tasks
                 ):
                     stale_tasks.append(task)
 

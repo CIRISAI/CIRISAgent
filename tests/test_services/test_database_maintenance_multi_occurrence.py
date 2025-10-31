@@ -21,6 +21,47 @@ pytestmark = pytest.mark.asyncio
 class TestMultiOccurrenceWakeupCleanup:
     """Test stale wakeup task cleanup with multi-occurrence support."""
 
+    async def test_cleanup_removes_stale_uppercase_shutdown_tasks(
+        self,
+        clean_db,
+        database_maintenance_service,
+        old_shutdown_task_data,
+    ):
+        """
+        GIVEN a stale shared shutdown task with uppercase SHUTDOWN_ prefix (> 5 minutes old)
+        WHEN startup cleanup runs
+        THEN the task should be deleted
+
+        This tests the fix for the bug where SHUTDOWN_ (uppercase) tasks weren't being
+        cleaned up because the code only checked for "shutdown_" (lowercase), causing
+        infinite loops when old shutdown tasks were reused on restart.
+        """
+        # Create stale shared shutdown task with uppercase SHUTDOWN_
+        from ciris_engine.schemas.runtime.models import Task
+
+        task = Task(**old_shutdown_task_data)
+        persistence.add_task(task, clean_db)
+
+        # Verify task exists before cleanup
+        retrieved_before = persistence.get_task_by_id(
+            old_shutdown_task_data["task_id"],
+            old_shutdown_task_data["agent_occurrence_id"],
+            clean_db,
+        )
+        assert retrieved_before is not None
+        assert retrieved_before.task_id == "SHUTDOWN_SHARED_20251027"
+
+        # Run startup cleanup
+        await database_maintenance_service.perform_startup_cleanup()
+
+        # Verify task was deleted
+        retrieved_after = persistence.get_task_by_id(
+            old_shutdown_task_data["task_id"],
+            old_shutdown_task_data["agent_occurrence_id"],
+            clean_db,
+        )
+        assert retrieved_after is None
+
     async def test_cleanup_preserves_fresh_shared_wakeup_tasks(
         self,
         clean_db,

@@ -373,8 +373,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 reason = deferral_info.get("reason", description)[:200]  # Limit to 200 chars
                 user_id = deferral_info.get("context", {}).get("user_id")
 
+                # Convert priority to int (database may return string in some cases)
+                priority_int = int(priority) if priority else 0
+
                 # Convert integer priority to string for PendingDeferral
-                priority_str = "high" if priority and priority > 5 else "medium" if priority and priority > 0 else "low"
+                if priority_int > 5:
+                    priority_str = "high"
+                elif priority_int > 0:
+                    priority_str = "medium"
+                else:
+                    priority_str = "low"
 
                 # Create PendingDeferral
                 deferral = PendingDeferral(

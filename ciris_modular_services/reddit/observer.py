@@ -177,6 +177,12 @@ class RedditObserver(BaseObserver[RedditMessage]):
             if await self._already_handled(entry.item_id):
                 logger.debug(f"Reddit comment {entry.item_id} already handled (found in task database), skipping")
                 continue
+            # CRITICAL: Only process comments that are replies to Scout's own comments/posts
+            if not await self._is_reply_to_scout(entry):
+                logger.debug(
+                    f"Reddit comment {entry.item_id} is not a reply to Scout's content, skipping observation"
+                )
+                continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
 
@@ -217,6 +223,64 @@ class RedditObserver(BaseObserver[RedditMessage]):
             # If database query fails, log error but don't block processing
             # (fail open - better to potentially re-process than miss content)
             logger.warning(f"Failed to check if Reddit item {reddit_item_id} already handled: {exc}")
+            return False
+
+    async def _is_reply_to_scout(self, entry: object) -> bool:
+        """
+        Check if a comment is a reply to Scout's own comment or post.
+
+        Args:
+            entry: RedditTimelineEntry for a comment
+
+        Returns:
+            True if parent was authored by Scout, False otherwise
+        """
+        # Must be a comment with a parent_id
+        if not hasattr(entry, "entry_type") or not hasattr(entry, "parent_id"):
+            return False
+        if entry.entry_type != "comment" or not entry.parent_id:  # type: ignore[attr-defined]
+            return False
+
+        try:
+            # Fetch parent item metadata to check author
+            parent_response = await self._api_client._request("GET", f"/api/info", params={"id": entry.parent_id})  # type: ignore[attr-defined]
+            if parent_response.status_code >= 300:
+                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
+                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"  # type: ignore[attr-defined]
+                logger.warning(
+                    f"Failed to fetch parent {parent_id_str} for comment {item_id}: "
+                    f"status={parent_response.status_code}"
+                )
+                return False
+
+            parent_data = parent_response.json()
+            if not isinstance(parent_data, dict):
+                return False
+
+            # Navigate Reddit API response structure: data -> children -> [0] -> data -> author
+            data = parent_data.get("data", {})
+            children = data.get("children", [])
+            if not children or not isinstance(children[0], dict):
+                return False
+
+            parent_author = children[0].get("data", {}).get("author")
+            scout_username = self._api_client._credentials.username
+
+            # Check if parent was authored by Scout
+            is_scouts_content = parent_author == scout_username
+            if is_scouts_content:
+                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
+                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"  # type: ignore[attr-defined]
+                logger.debug(
+                    f"Comment {item_id} is a reply to Scout's {parent_id_str} "
+                    f"(parent_author={parent_author})"
+                )
+            return bool(is_scouts_content)
+
+        except Exception as exc:
+            item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
+            logger.warning(f"Error checking if comment {item_id} is reply to Scout: {exc}")
+            # Fail closed - if we can't verify, don't create observation
             return False
 
     def _build_message_from_entry(self, entry) -> RedditMessage:

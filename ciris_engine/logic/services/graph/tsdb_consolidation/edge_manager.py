@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import init_dialect
 from ciris_engine.logic.persistence.db.operations import (
     batch_insert_edges_if_not_exist,
     insert_edge_if_not_exists,
@@ -559,7 +560,11 @@ class EdgeManager:
             try:
                 with get_db_connection(db_path=self._db_path) as conn:
                     # Set a shorter busy timeout for this operation (5 seconds)
-                    conn.execute("PRAGMA busy_timeout = 5000")
+                    # PRAGMA is SQLite-specific; PostgreSQL handles timeouts differently
+                    adapter = init_dialect(self._db_path or "ciris_engine.db")
+                    if adapter.is_sqlite():
+                        conn.execute("PRAGMA busy_timeout = 5000")
+                    # PostgreSQL: statement_timeout is typically set at connection or session level
                     cursor = conn.cursor()
 
                     # Delete edges with missing nodes

@@ -467,8 +467,12 @@ class TestPriorityFailover:
         assert low_priority.call_count == 0  # Not needed
 
     @pytest.mark.asyncio
-    async def test_all_priorities_fail(self, llm_bus, service_registry):
-        """Test error when all priority levels fail"""
+    async def test_all_priorities_fail(self, llm_bus, service_registry, caplog):
+        """Test error when all priority levels fail, and verify log verbosity reduction"""
+        import logging
+
+        caplog.set_level(logging.WARNING)  # Capture both WARNING and ERROR
+
         # Register failing services at all priorities
         for priority in [Priority.HIGH, Priority.NORMAL, Priority.LOW]:
             service = MockLLMService(f"{priority.name}LLM", failure_rate=1.0)
@@ -480,11 +484,31 @@ class TestPriorityFailover:
                 metadata={"provider": "mock"},
             )
 
-        # Should try all and fail
+        # First call - should log full errors for each service
         with pytest.raises(RuntimeError, match="All LLM services failed"):
             await llm_bus.call_llm_structured(
                 messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
+
+        # Count ERROR level logs from first attempt (one per service)
+        first_error_count = sum(1 for record in caplog.records if record.levelname == "ERROR")
+        assert first_error_count == 3, "Should have 3 ERROR logs (one per failing service)"
+
+        # Clear log capture
+        caplog.clear()
+
+        # Second call - should log warnings instead of full errors (log verbosity reduction)
+        with pytest.raises(RuntimeError, match="All LLM services failed"):
+            await llm_bus.call_llm_structured(
+                messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
+            )
+
+        # Second attempt should have 0 ERROR logs (all converted to WARNING)
+        second_error_count = sum(1 for record in caplog.records if record.levelname == "ERROR")
+        second_warning_count = sum(1 for record in caplog.records if record.levelname == "WARNING")
+
+        assert second_error_count == 0, "Should have 0 ERROR logs on repeated failures"
+        assert second_warning_count == 3, "Should have 3 WARNING logs for repeated failures"
 
 
 class TestConcurrentAccess:

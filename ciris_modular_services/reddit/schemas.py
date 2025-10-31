@@ -254,6 +254,7 @@ class RedditTimelineEntry(BaseModel):
     title: Optional[str] = None
     body: Optional[str] = None
     url: Optional[str] = None
+    parent_id: Optional[str] = None  # Reddit fullname of parent (t1_xxx for comment, t3_xxx for post)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -306,6 +307,7 @@ class RedditCommentSummary(BaseModel):
     created_at: datetime
     score: int
     channel_reference: str
+    parent_id: Optional[str] = None  # Reddit fullname of parent (t1_xxx for comment, t3_xxx for post)
 
     model_config = ConfigDict(extra="forbid")
 

@@ -128,6 +128,51 @@ class RedditAPIClient:
     def metrics(self) -> Dict[str, float]:
         return {"requests": float(self._request_count), "errors": float(self._error_count)}
 
+    def _add_ciris_attribution(self, text: str, *, max_length: int = 10000) -> str:
+        """
+        Add CIRIS attribution footer to post/comment text.
+
+        Args:
+            text: Original post/comment text
+            max_length: Reddit character limit (10000 for posts/comments)
+
+        Returns:
+            Text with attribution, truncated if necessary to fit within limit
+
+        Note: Reddit rejects posts/comments longer than 10,000 characters.
+              This method ensures attribution is always included by truncating
+              the original text if needed.
+        """
+        attribution = (
+            "\n\n"
+            "Posted by a CIRIS agent, learn more at https://ciris.ai "
+            "or chat with scout at https://scout.ciris.ai"
+        )
+
+        # If text + attribution fits within limit, return as-is
+        if len(text) + len(attribution) <= max_length:
+            return text + attribution
+
+        # Otherwise, truncate text to make room for attribution
+        # Leave space for attribution + ellipsis + newline
+        truncation_marker = "...\n"
+        available_space = max_length - len(attribution) - len(truncation_marker)
+
+        if available_space < 100:  # Sanity check: need at least 100 chars for meaningful content
+            # If attribution is too large for the limit, skip it (shouldn't happen with 10k limit)
+            logger.warning(
+                f"Attribution footer ({len(attribution)} chars) too large for limit ({max_length}), "
+                "submitting without attribution"
+            )
+            return text[:max_length]
+
+        truncated_text = text[:available_space]
+        logger.info(
+            f"Truncated text from {len(text)} to {len(truncated_text)} chars to fit attribution "
+            f"within {max_length} char limit"
+        )
+        return truncated_text + truncation_marker + attribution
+
     async def refresh_token(self, force: bool = False) -> bool:
         async with self._token_lock:
             if not force and self._token and not self._token.is_expired(self._now()):
@@ -262,11 +307,13 @@ class RedditAPIClient:
 
     async def submit_post(self, request: RedditSubmitPostRequest) -> RedditSubmissionSummary:
         subreddit = request.subreddit or self._credentials.subreddit
+        # Add CIRIS attribution to post body
+        body_with_attribution = self._add_ciris_attribution(request.body)
         payload = {
             "sr": subreddit,
             "kind": "self",
             "title": request.title,
-            "text": request.body,
+            "text": body_with_attribution,
             "resubmit": "true",
             "sendreplies": "true" if request.send_replies else "false",
         }
@@ -288,11 +335,15 @@ class RedditAPIClient:
         return result.submission
 
     async def submit_comment(self, request: RedditSubmitCommentRequest) -> RedditCommentSummary:
-        payload = {"thing_id": request.parent_fullname, "text": request.text}
+        # Add CIRIS attribution to comment text
+        text_with_attribution = self._add_ciris_attribution(request.text)
+        payload = {"thing_id": request.parent_fullname, "text": text_with_attribution}
         response = await self._request("POST", "/api/comment", data=payload)
         comment = await self._parse_comment_response(response)
         if not comment:
-            raise RuntimeError("Comment response missing data")
+            raise RuntimeError(
+                f"Comment response missing data - status: {response.status_code}, " f"text: {response.text[:200]}"
+            )
 
         if request.lock_thread and comment.submission_id:
             await self._request("POST", "/api/lock", data={"id": f"t3_{comment.submission_id}"})
@@ -421,6 +472,7 @@ class RedditAPIClient:
         payload = self._expect_dict(response.json(), context="comment")
         json_data = payload.get("json")
         if not isinstance(json_data, dict):
+            logger.error(f"Comment response missing 'json' dict: {payload}")
             return None
 
         errors = json_data.get("errors", [])
@@ -430,6 +482,7 @@ class RedditAPIClient:
         data_dict = self._expect_dict(json_data.get("data"), context="comment.data")
         things = data_dict.get("things", [])
         if not isinstance(things, list) or not things:
+            logger.error(f"Comment response missing 'things' list: json_data={json_data}")
             return None
 
         first = self._expect_dict(things[0], context="comment.thing")
@@ -542,6 +595,7 @@ class RedditAPIClient:
             )
         if kind_value == "t1":
             submission_id = self._strip_prefix(self._get_str(child_data, "link_id"), prefix="t3_")
+            parent_id = self._get_str(child_data, "parent_id", default="") or None
             return RedditTimelineEntry(
                 entry_type="comment",
                 item_id=item_id,
@@ -553,6 +607,7 @@ class RedditAPIClient:
                 channel_reference=_build_channel_reference(subreddit, submission_id, item_id),
                 author=self._get_str(child_data, "author"),
                 body=self._get_str(child_data, "body"),
+                parent_id=parent_id,
             )
         return None
 
@@ -568,6 +623,7 @@ class RedditAPIClient:
         comment_id = self._get_str(comment_data, "id")
         subreddit = self._get_str(comment_data, "subreddit")
         permalink = self._build_permalink(self._get_str(comment_data, "permalink"))
+        parent_id = self._get_str(comment_data, "parent_id", default="") or None
         return RedditCommentSummary(
             comment_id=comment_id,
             fullname=self._get_str(comment_data, "name"),
@@ -581,6 +637,7 @@ class RedditAPIClient:
             ),
             score=int(float(self._get_str(comment_data, "score", default="0"))),
             channel_reference=_build_channel_reference(subreddit, submission_id, comment_id),
+            parent_id=parent_id,
         )
 
 

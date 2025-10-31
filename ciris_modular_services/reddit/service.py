@@ -128,6 +128,15 @@ class RedditAPIClient:
     def metrics(self) -> Dict[str, float]:
         return {"requests": float(self._request_count), "errors": float(self._error_count)}
 
+    def _add_ciris_attribution(self, text: str) -> str:
+        """Add CIRIS attribution footer to post/comment text."""
+        attribution = (
+            "\n\n"
+            "Posted by a CIRIS agent, learn more at https://ciris.ai "
+            "or chat with scout at https://scout.ciris.ai"
+        )
+        return text + attribution
+
     async def refresh_token(self, force: bool = False) -> bool:
         async with self._token_lock:
             if not force and self._token and not self._token.is_expired(self._now()):
@@ -262,11 +271,13 @@ class RedditAPIClient:
 
     async def submit_post(self, request: RedditSubmitPostRequest) -> RedditSubmissionSummary:
         subreddit = request.subreddit or self._credentials.subreddit
+        # Add CIRIS attribution to post body
+        body_with_attribution = self._add_ciris_attribution(request.body)
         payload = {
             "sr": subreddit,
             "kind": "self",
             "title": request.title,
-            "text": request.body,
+            "text": body_with_attribution,
             "resubmit": "true",
             "sendreplies": "true" if request.send_replies else "false",
         }
@@ -288,7 +299,9 @@ class RedditAPIClient:
         return result.submission
 
     async def submit_comment(self, request: RedditSubmitCommentRequest) -> RedditCommentSummary:
-        payload = {"thing_id": request.parent_fullname, "text": request.text}
+        # Add CIRIS attribution to comment text
+        text_with_attribution = self._add_ciris_attribution(request.text)
+        payload = {"thing_id": request.parent_fullname, "text": text_with_attribution}
         response = await self._request("POST", "/api/comment", data=payload)
         comment = await self._parse_comment_response(response)
         if not comment:

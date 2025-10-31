@@ -39,7 +39,9 @@ def patch_persistence_properly(test_task: Optional[Task] = None) -> Any:
     """Properly patch persistence in both handler and base handler."""
     with patch("ciris_engine.logic.handlers.terminal.task_complete_handler.persistence") as mock_p, patch(
         "ciris_engine.logic.infrastructure.handlers.base_handler.persistence"
-    ) as mock_base_p:
+    ) as mock_base_p, patch(
+        "ciris_engine.logic.persistence.models.tasks.get_task_by_id_any_occurrence"
+    ) as mock_get_any:
         # Configure handler persistence
         mock_p.get_task_by_id.return_value = test_task
         mock_p.add_thought = Mock()
@@ -49,6 +51,9 @@ def patch_persistence_properly(test_task: Optional[Task] = None) -> Any:
         mock_p.update_task_status = Mock(return_value=bool(test_task))
         mock_p.get_child_tasks = Mock(return_value=[])
         mock_p.get_thoughts_by_task_id = Mock(return_value=[])
+
+        # Configure get_task_by_id_any_occurrence
+        mock_get_any.return_value = test_task
 
         # Configure base handler persistence
         mock_base_p.add_thought = Mock()

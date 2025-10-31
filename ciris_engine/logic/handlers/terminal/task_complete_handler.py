@@ -123,12 +123,14 @@ class TaskCompleteHandler(BaseActionHandler):
 
                 # Only mark task complete if no pending thoughts
                 # CRITICAL: Get the correct occurrence_id from the task itself
-                # This handles shared tasks (__shared__), single-occurrence (default), and multi-occurrence scenarios
-                # First try to get with default occurrence, then try __shared__ (for shared tasks)
-                task = persistence.get_task_by_id(parent_task_id, "default")
-                if not task:
-                    # Try __shared__ for shared tasks like SHUTDOWN_SHARED_20251031
-                    task = persistence.get_task_by_id(parent_task_id, "__shared__")
+                # This handles all scenarios:
+                # - Single-occurrence (default): agent_occurrence_id="default"
+                # - Multi-occurrence unclaimed: agent_occurrence_id="__shared__"
+                # - Multi-occurrence CLAIMED: agent_occurrence_id="occurrence-a" (after transfer_task_ownership)
+                # Must fetch without occurrence_id filter because transferred tasks have been updated
+                from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence
+
+                task = get_task_by_id_any_occurrence(parent_task_id)
                 if not task:
                     self.logger.error(f"Failed to get task {parent_task_id} - cannot mark as COMPLETED.")
                     return None
@@ -136,7 +138,7 @@ class TaskCompleteHandler(BaseActionHandler):
                 task_occurrence_id = task.agent_occurrence_id
                 self.logger.debug(
                     f"Marking task {parent_task_id} as COMPLETED with occurrence_id={task_occurrence_id} "
-                    f"(task found without occurrence filter)"
+                    f"(task may be default, __shared__, or transferred to specific occurrence)"
                 )
 
                 task_updated = persistence.update_task_status(

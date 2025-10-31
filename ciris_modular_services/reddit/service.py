@@ -595,6 +595,7 @@ class RedditAPIClient:
             )
         if kind_value == "t1":
             submission_id = self._strip_prefix(self._get_str(child_data, "link_id"), prefix="t3_")
+            parent_id = self._get_str(child_data, "parent_id", default="") or None
             return RedditTimelineEntry(
                 entry_type="comment",
                 item_id=item_id,
@@ -606,6 +607,7 @@ class RedditAPIClient:
                 channel_reference=_build_channel_reference(subreddit, submission_id, item_id),
                 author=self._get_str(child_data, "author"),
                 body=self._get_str(child_data, "body"),
+                parent_id=parent_id,
             )
         return None
 
@@ -621,6 +623,7 @@ class RedditAPIClient:
         comment_id = self._get_str(comment_data, "id")
         subreddit = self._get_str(comment_data, "subreddit")
         permalink = self._build_permalink(self._get_str(comment_data, "permalink"))
+        parent_id = self._get_str(comment_data, "parent_id", default="") or None
         return RedditCommentSummary(
             comment_id=comment_id,
             fullname=self._get_str(comment_data, "name"),
@@ -634,6 +637,7 @@ class RedditAPIClient:
             ),
             score=int(float(self._get_str(comment_data, "score", default="0"))),
             channel_reference=_build_channel_reference(subreddit, submission_id, comment_id),
+            parent_id=parent_id,
         )
 
 

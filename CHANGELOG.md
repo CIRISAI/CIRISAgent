@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.4] - 2025-10-31
+
+### Fixed
+- **PostgreSQL PRAGMA Compatibility** - Fixed edge_manager using SQLite-specific PRAGMA on PostgreSQL
+  - **Problem**: `cleanup_orphaned_edges()` executed `PRAGMA busy_timeout` on PostgreSQL databases
+  - **Impact**: Production errors on all Scout instances using PostgreSQL
+  - **Error**: `syntax error at or near "PRAGMA"` in edge_manager.py:588
+  - **Solution**: Added database dialect detection, wrapped PRAGMA in `if adapter.is_sqlite():` check
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:562-577`
+
+- **WiseAuthority Type Safety** - Fixed type comparison error in pending deferrals query
+  - **Problem**: Database priority field sometimes returned as string, causing comparison failure
+  - **Impact**: Recurring errors on Scout and other agents
+  - **Error**: `'>' not supported between instances of 'str' and 'int'` in service.py:400
+  - **Solution**: Added explicit `int()` conversion before priority comparisons
+  - **Files**: `ciris_engine/logic/services/governance/wise_authority/service.py:376-380`
+
+- **LLM Bus Log Verbosity** - Reduced massive log files during cascading LLM provider failures
+  - **Problem**: Full stack trace logged for every LLM failure (both Together.AI + Groq), creating 9000+ line incident logs
+  - **Impact**: Echo agents experiencing simultaneous provider outages filled disk with repeated error traces
+  - **Root Cause**: Together.AI timeouts + Groq rate limits, but fallback WAS working correctly
+  - **Solution**: Track logged services, log full error once per service, subsequent failures as WARNING
+  - **Files**: `ciris_engine/logic/buses/llm_bus.py:117-118, 244-250`
+  - **Test Coverage**: Enhanced `test_all_priorities_fail` to verify log deduplication
+
+### Improved
+- **Reddit Comment Error Diagnostics** - Enhanced error messages when comment submission fails
+  - **Problem**: Generic "Comment response missing data" error provided no debugging context
+  - **Impact**: Scout 003 comment failures difficult to diagnose
+  - **Solution**:
+    - Log full payload when 'json' dict missing
+    - Log json_data when 'things' list missing
+    - Include HTTP status code and response text in error message
+  - **Files**: `ciris_modular_services/reddit/service.py:424, 434, 295-297`
+
+- **Telemetry Error Logging** - Added exception type and stack trace to metric count errors
+  - **Problem**: Cryptic "Failed to get metric count: 0" error with no context
+  - **Solution**: Include exception type name and full stack trace with `exc_info=True`
+  - **Files**: `ciris_engine/logic/services/graph/telemetry_service/service.py:2038`
+
+### Added
+- **CIRIS Attribution on Reddit** - All posts and comments now include CIRIS branding footer
+  - **Format**: "Posted by a CIRIS agent, learn more at https://ciris.ai or chat with scout at https://scout.ciris.ai"
+  - **Implementation**: `_add_ciris_attribution()` helper appends footer to all submissions
+  - **Files**: `ciris_modular_services/reddit/service.py:131-138, 274-275, 302-303`
+
 ## [1.5.3] - 2025-10-30
 
 ### Fixed

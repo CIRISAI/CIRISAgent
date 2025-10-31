@@ -545,33 +545,50 @@ class EdgeManager:
         """
         Remove edges where source or target nodes no longer exist.
 
+        Uses a low-priority DELETE with timeout to avoid blocking other operations.
+
         Returns:
             Number of edges deleted
         """
-        try:
-            with get_db_connection(db_path=self._db_path) as conn:
-                cursor = conn.cursor()
+        import time
 
-                # Delete edges with missing nodes
-                cursor.execute(
+        max_retries = 3
+        retry_delay = 0.5  # 500ms
+
+        for attempt in range(max_retries):
+            try:
+                with get_db_connection(db_path=self._db_path) as conn:
+                    # Set a shorter busy timeout for this operation (5 seconds)
+                    conn.execute("PRAGMA busy_timeout = 5000")
+                    cursor = conn.cursor()
+
+                    # Delete edges with missing nodes
+                    cursor.execute(
+                        """
+                        DELETE FROM graph_edges
+                        WHERE source_node_id NOT IN (SELECT node_id FROM graph_nodes)
+                           OR target_node_id NOT IN (SELECT node_id FROM graph_nodes)
                     """
-                    DELETE FROM graph_edges
-                    WHERE source_node_id NOT IN (SELECT node_id FROM graph_nodes)
-                       OR target_node_id NOT IN (SELECT node_id FROM graph_nodes)
-                """
-                )
+                    )
 
-                deleted = cursor.rowcount
-                conn.commit()
+                    deleted = cursor.rowcount
+                    conn.commit()
 
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} orphaned edges")
+                    if deleted > 0:
+                        logger.info(f"Cleaned up {deleted} orphaned edges")
 
-                return deleted
+                    return deleted
 
-        except Exception as e:
-            logger.error(f"Failed to cleanup orphaned edges: {e}")
-            return 0
+            except Exception as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    logger.warning(f"Database locked during orphaned edge cleanup, retry {attempt + 1}/{max_retries}")
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    logger.error(f"Failed to cleanup orphaned edges: {e}")
+                    return 0
+
+        return 0
 
     def _normalize_edge_specifications(
         self, edges: List[EdgeSpecification]

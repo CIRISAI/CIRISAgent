@@ -71,6 +71,17 @@ class RedditObserver(BaseObserver[RedditMessage]):
         self._max_consecutive_errors = 5
         logger.info("RedditObserver configured for r/%s", self._subreddit)
 
+    def _is_agent_message(self, msg: RedditMessage) -> bool:
+        """
+        Override BaseObserver to check against Reddit username, not CIRIS agent_id.
+
+        BaseObserver compares msg.author_id against self.agent_id (CIRIS agent ID),
+        but for Reddit, msg.author_id is the Reddit username (e.g., "CIRIS-Scout").
+        We need to compare against the Reddit credentials username to prevent
+        the agent from replying to its own messages.
+        """
+        return msg.author_id == self._api_client._credentials.username
+
     # ------------------------------------------------------------------
     async def start(self) -> None:
         await self._api_client.start()
@@ -256,6 +267,89 @@ class RedditObserver(BaseObserver[RedditMessage]):
             setattr(msg, "permalink_url", msg.permalink)
 
         return msg
+
+    async def _add_custom_context_sections(
+        self, task_lines: list, msg: RedditMessage, history_context: list
+    ) -> None:
+        """
+        Add Reddit-specific context sections: thread comments and recent subreddit posts.
+
+        Similar to Discord's ACTIVE MODS section, this provides Reddit-specific context
+        for better understanding of the conversation and subreddit activity.
+
+        Args:
+            task_lines: List of strings to append context to
+            msg: RedditMessage being processed
+            history_context: Existing conversation history (unused, but required by interface)
+        """
+        try:
+            # Add thread context if this is a comment on a submission
+            if msg.submission_id:
+                await self._add_thread_context(task_lines, msg.submission_id, msg.comment_id)
+
+            # Add recent subreddit activity
+            if msg.subreddit:
+                await self._add_recent_posts_context(task_lines, msg.subreddit)
+
+        except Exception as exc:
+            logger.warning(f"Failed to add Reddit custom context: {exc}")
+            # Add a note about missing context but continue processing
+            task_lines.append("\n=== REDDIT CONTEXT ===")
+            task_lines.append(f"(Context fetch failed: {str(exc)})")
+            task_lines.append("=== END REDDIT CONTEXT ===")
+
+    async def _add_thread_context(
+        self, task_lines: list, submission_id: str, current_comment_id: Optional[str]
+    ) -> None:
+        """Add other comments from the same Reddit post thread."""
+        try:
+            comments = await self._api_client.fetch_submission_comments(submission_id, limit=10)
+
+            if comments:
+                task_lines.append("\n=== THREAD CONTEXT (Other replies on this post) ===")
+                comment_count = 0
+                for comment in comments:
+                    # Skip the current comment to avoid duplication
+                    if comment.comment_id == current_comment_id:
+                        continue
+
+                    # Format: Author | Score | Body (truncated)
+                    body_preview = comment.body[:150] + "..." if len(comment.body) > 150 else comment.body
+                    task_lines.append(
+                        f"@{comment.author} ({comment.score} pts): {body_preview}"
+                    )
+                    comment_count += 1
+
+                    if comment_count >= 5:  # Limit to 5 other comments to avoid context bloat
+                        break
+
+                if comment_count == 0:
+                    task_lines.append("(No other comments on this post yet)")
+
+                task_lines.append("=== END THREAD CONTEXT ===")
+
+        except Exception as exc:
+            logger.debug(f"Could not fetch thread context for submission {submission_id}: {exc}")
+
+    async def _add_recent_posts_context(self, task_lines: list, subreddit: str) -> None:
+        """Add recent posts from the same subreddit."""
+        try:
+            # Fetch recent posts from the subreddit
+            posts = await self._api_client.fetch_subreddit_new(subreddit, limit=5)
+
+            if posts:
+                task_lines.append(f"\n=== RECENT POSTS IN r/{subreddit} ===")
+                for post in posts[:3]:  # Show only top 3 to avoid context bloat
+                    # Format: Title | Author | Score
+                    title_preview = post.title[:100] + "..." if post.title and len(post.title) > 100 else post.title or "(no title)"
+                    task_lines.append(
+                        f"• {title_preview} (by @{post.author}, {post.created_at.strftime('%Y-%m-%d')})"
+                    )
+
+                task_lines.append(f"=== END RECENT POSTS IN r/{subreddit} ===")
+
+        except Exception as exc:
+            logger.debug(f"Could not fetch recent posts for r/{subreddit}: {exc}")
 
     # ------------------------------------------------------------------
     # Reddit ToS Compliance - Auto-purge on deletion detection

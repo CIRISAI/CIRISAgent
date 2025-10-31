@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3] - 2025-10-30
+
+### Fixed
+- **P0: TSDB FOREIGN KEY Constraint Violation** - Fixed cleanup failing when deleting nodes with edge references
+  - **Problem**: `delete_nodes_in_period()` deleted nodes without removing edges first, causing FOREIGN KEY constraint violations. Additionally, initial fix used wrong column names (`source_id`/`target_id` instead of `source_node_id`/`target_node_id`)
+  - **Impact**:
+    - TSDB cleanup operations failing in production (Datum, Echo-Core, Echo-Speculative)
+    - `sqlite3.IntegrityError: FOREIGN KEY constraint failed`
+    - Would have caused `sqlite3.OperationalError: no such column: source_id` with initial fix
+    - Audit entry cleanup blocked, causing data accumulation
+  - **Root Cause**:
+    1. Direct DELETE on `graph_nodes` table violated foreign key constraints from `graph_edges` table
+    2. Incorrect column names in edge deletion query (initial fix)
+    3. No database dialect support for SQLite vs PostgreSQL
+  - **Solution**:
+    1. Added two-step deletion: (1) Delete edges referencing the nodes, (2) Delete the nodes
+    2. Corrected column names to `source_node_id`/`target_node_id` (verified against schema)
+    3. Added database dialect awareness using `get_adapter()` for SQLite (`datetime()`, `?`) vs PostgreSQL (`::timestamp`, `%s`)
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/cleanup_helpers.py:87-181`
+  - **Verification**: Cleanup operations now complete without errors on both SQLite and PostgreSQL
+
+- **P1: Database Locking in Edge Cleanup** - Fixed "database is locked" errors during orphaned edge cleanup
+  - **Problem**: `cleanup_orphaned_edges()` failed when another transaction held a write lock
+  - **Impact**:
+    - "Failed to cleanup orphaned edges: database is locked" errors in production
+    - Orphaned edges accumulating over time
+  - **Root Cause**: No retry logic or timeout handling for concurrent database access
+  - **Solution**: Added retry logic with exponential backoff (3 retries, 500ms base delay) and 5-second busy timeout
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:544-591`
+  - **Verification**: Edge cleanup now retries on lock contention instead of failing
+
+- **P2: Visibility Service Noisy Warning** - Reduced log noise from telemetry correlation fallback
+  - **Problem**: WARNING log every 30s: "Telemetry service found but _recent_correlations not available"
+  - **Impact**: Log spam in production (Echo-Core, Echo-Speculative), but no functional impact
+  - **Root Cause**: Warning logged for normal fallback behavior (query database when in-memory cache unavailable)
+  - **Solution**: Downgraded from WARNING to DEBUG since fallback is expected and works correctly
+  - **Files**: `ciris_engine/logic/services/governance/visibility/service.py:416`
+  - **Verification**: Cleaner incident logs, functionality unchanged
+
+- **P0: RedditObserver Self-Reply Bug** - Fixed Reddit agents replying to their own messages
+  - **Problem**: RedditObserver was not detecting its own messages as agent messages, causing infinite reply loops
+  - **Impact**:
+    - Scout-003 replied to its own Reddit comments on r/ciris
+    - Created unnecessary tasks and wasted LLM tokens
+    - Caused spam-like behavior in Reddit threads
+    - Production evidence: Scout replied to itself twice in post 1okfrdw
+  - **Root Cause**: `BaseObserver._is_agent_message()` compares `msg.author_id` against `self.agent_id` (CIRIS agent ID like "scout-remote-test-dahrb9"), but Reddit messages have `author_id = "CIRIS-Scout"` (Reddit username)
+  - **Solution**: Added `_is_agent_message()` override in `RedditObserver` to compare against Reddit username: `msg.author_id == self._api_client._credentials.username`
+  - **Files**: `ciris_modular_services/reddit/observer.py:74-83`
+  - **Verification**: All 9 Reddit observer tests pass
+
+- **P0: ShutdownProcessor Thought Query After Ownership Transfer** - Fixed shutdown loop caused by querying with wrong occurrence_id
+  - **Problem**: After transferring shutdown thought ownership from `__shared__` to claiming occurrence, shutdown processor still queried thoughts using `self.shutdown_task.agent_occurrence_id` (which is `"__shared__"`)
+  - **Impact**:
+    - Shutdown processor couldn't find transferred thoughts, reported `thoughts=[]`
+    - Infinite shutdown loop: "Waiting for agent response" with task_status='active'
+    - Affected both SQLite and PostgreSQL deployments
+    - Production evidence: Datum agent stuck in shutdown for 6+ hours running 27,600+ shutdown rounds
+  - **Root Cause**: Line 227 in `shutdown_processor.py` queried with wrong occurrence_id after line 140-154 transferred thought ownership
+  - **Solution**: Changed query at line 227 from `self.shutdown_task.agent_occurrence_id` to `self.agent_occurrence_id` to match transferred thought ownership
+  - **Files**: `ciris_engine/logic/processors/states/shutdown_processor.py:225-229`
+  - **Verification**: All 52 shutdown processor tests pass, including multi-occurrence scenarios
+  - **Related**: Lines 453 and 494 already had correct pattern with explanatory comments
+
+### Test Coverage Added
+- **TSDB Cleanup Tests** (8 tests):
+  - Fixed mock test in `test_cleanup_helpers.py` expecting 2 execute calls (edges + nodes)
+  - Added 3 FOREIGN KEY constraint integration tests in `test_tsdb_cleanup_logic.py`:
+    - `test_cleanup_deletes_edges_before_nodes` - Validates edges deleted before nodes (19 edges, 20 nodes)
+    - `test_cleanup_handles_mixed_edge_references` - Tests partial cleanup with old/recent nodes
+    - `test_foreign_key_constraints_enabled` - Verifies PRAGMA foreign_keys works
+  - Added 5 database locking retry tests in `test_tsdb_edge_creation.py`:
+    - `test_cleanup_with_database_locked_error` - 3 retry attempts, succeeds on 3rd
+    - `test_cleanup_max_retries_exceeded` - Graceful failure after max retries
+    - `test_cleanup_exponential_backoff_timing` - Validates 0.5s, 1.0s backoff delays
+    - `test_cleanup_non_locking_error_no_retry` - Non-locking errors fail immediately
+    - `test_cleanup_retry_success_after_one_failure` - Recovery after single failure
+
+### Technical Details
+- **Why This Bug Exists**: Shutdown uses shared task coordination with thought ownership transfer (unlike wakeup which creates per-occurrence step tasks)
+- **Query Pattern**: After `transfer_thought_ownership()` moves thoughts from `__shared__` to claiming occurrence, must query with `self.agent_occurrence_id`
+- **Other Processors**: Wakeup processor doesn't have this bug - it creates step tasks with correct occurrence_id from the start (no transfer needed)
+
 ## [1.5.2] - 2025-10-30
 
 ### Fixed

@@ -87,7 +87,8 @@ class TestDeleteNodesInPeriod:
         deleted = delete_nodes_in_period(cursor, "tsdb_data", "2023-10-01T00:00:00+00:00", "2023-10-02T00:00:00+00:00")
 
         assert deleted == 10
-        cursor.execute.assert_called_once()
+        # CRITICAL: delete_nodes_in_period calls execute TWICE (edges first, then nodes)
+        assert cursor.execute.call_count == 2
 
     def test_returns_zero_when_no_rows_deleted(self):
         """Should return 0 when no rows deleted."""
@@ -212,7 +213,8 @@ class TestCleanupTsdbSummary:
         deleted = cleanup_tsdb_summary(cursor, "summary_123", json.dumps(attrs))
 
         assert deleted == 10
-        assert cursor.execute.call_count == 2  # 1 count + 1 delete
+        # 1 count query + 2 delete calls (edges + nodes) = 3 total
+        assert cursor.execute.call_count == 3
 
     def test_does_not_cleanup_when_counts_mismatch(self):
         """Should not cleanup when counts don't match."""
@@ -265,7 +267,8 @@ class TestCleanupAuditSummary:
         deleted = cleanup_audit_summary(cursor, "audit_summary_123", json.dumps(attrs))
 
         assert deleted == 5
-        assert cursor.execute.call_count == 2
+        # 1 count query + 2 delete calls (edges + nodes) = 3 total
+        assert cursor.execute.call_count == 3
 
     def test_does_not_cleanup_when_counts_mismatch(self):
         """Should not cleanup when counts mismatch."""

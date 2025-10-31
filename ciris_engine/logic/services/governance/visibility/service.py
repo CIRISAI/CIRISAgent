@@ -413,7 +413,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     logger.debug(f"Retrieved {len(correlations)} traces from telemetry service")
                     return list(correlations)
                 else:
-                    logger.warning("Telemetry service found but _recent_correlations not available")
+                    logger.debug("Telemetry service found but _recent_correlations not available, will query database")
             else:
                 logger.warning("No _runtime reference on visibility service - cannot get telemetry service")
 

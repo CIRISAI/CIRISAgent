@@ -22,6 +22,8 @@ def validate_and_count_nodes(
     """
     Count nodes of a specific type within a period.
 
+    Database-agnostic: Works with both SQLite and PostgreSQL.
+
     Args:
         cursor: Database cursor
         node_type: Type of nodes to count (e.g., 'tsdb_data', 'audit_entry')
@@ -36,15 +38,30 @@ def validate_and_count_nodes(
         >>> count
         42
     """
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (node_type, period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = %s
+              AND created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (node_type, period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (node_type, period_start, period_end),
+        )
 
     result = cursor.fetchone()
     return result[0] if result else 0
@@ -57,6 +74,8 @@ def validate_and_count_correlations(
 ) -> int:
     """
     Count service correlations within a period.
+
+    Database-agnostic: Works with both SQLite and PostgreSQL.
 
     Args:
         cursor: Database cursor
@@ -71,14 +90,28 @@ def validate_and_count_correlations(
         >>> count
         15
     """
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM service_correlations
-        WHERE datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM service_correlations
+            WHERE created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT COUNT(*) FROM service_correlations
+            WHERE datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (period_start, period_end),
+        )
 
     result = cursor.fetchone()
     return result[0] if result else 0
@@ -93,6 +126,9 @@ def delete_nodes_in_period(
     """
     Delete nodes of a specific type within a period.
 
+    CRITICAL: Deletes edges referencing the nodes first to avoid FOREIGN KEY constraint violations.
+    Database-agnostic: Works with both SQLite and PostgreSQL.
+
     Args:
         cursor: Database cursor
         node_type: Type of nodes to delete
@@ -106,15 +142,74 @@ def delete_nodes_in_period(
         >>> deleted = delete_nodes_in_period(cursor, 'tsdb_data', '2023-10-01T00:00:00+00:00', '2023-10-02T00:00:00+00:00')
         >>> logger.info(f"Deleted {deleted} nodes")
     """
-    cursor.execute(
-        """
-        DELETE FROM graph_nodes
-        WHERE node_type = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (node_type, period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    # Step 1: Delete edges referencing these nodes to avoid FOREIGN KEY constraint violations
+    # Use correct column names: source_node_id and target_node_id (not source_id/target_id)
+    if adapter.is_postgresql():
+        # PostgreSQL: Use CAST for datetime comparison
+        cursor.execute(
+            """
+            DELETE FROM graph_edges
+            WHERE source_node_id IN (
+                SELECT node_id FROM graph_nodes
+                WHERE node_type = %s
+                  AND created_at::timestamp >= %s::timestamp
+                  AND created_at::timestamp < %s::timestamp
+            )
+            OR target_node_id IN (
+                SELECT node_id FROM graph_nodes
+                WHERE node_type = %s
+                  AND created_at::timestamp >= %s::timestamp
+                  AND created_at::timestamp < %s::timestamp
+            )
+        """,
+            (node_type, period_start, period_end, node_type, period_start, period_end),
+        )
+    else:
+        # SQLite: Use datetime() function
+        cursor.execute(
+            """
+            DELETE FROM graph_edges
+            WHERE source_node_id IN (
+                SELECT node_id FROM graph_nodes
+                WHERE node_type = ?
+                  AND datetime(created_at) >= datetime(?)
+                  AND datetime(created_at) < datetime(?)
+            )
+            OR target_node_id IN (
+                SELECT node_id FROM graph_nodes
+                WHERE node_type = ?
+                  AND datetime(created_at) >= datetime(?)
+                  AND datetime(created_at) < datetime(?)
+            )
+        """,
+            (node_type, period_start, period_end, node_type, period_start, period_end),
+        )
+
+    # Step 2: Delete the nodes
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            DELETE FROM graph_nodes
+            WHERE node_type = %s
+              AND created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (node_type, period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            DELETE FROM graph_nodes
+            WHERE node_type = ?
+              AND datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (node_type, period_start, period_end),
+        )
 
     return cursor.rowcount
 
@@ -126,6 +221,8 @@ def delete_correlations_in_period(
 ) -> int:
     """
     Delete service correlations within a period.
+
+    Database-agnostic: Works with both SQLite and PostgreSQL.
 
     Args:
         cursor: Database cursor
@@ -139,14 +236,28 @@ def delete_correlations_in_period(
         >>> deleted = delete_correlations_in_period(cursor, '2023-10-01T00:00:00+00:00', '2023-10-02T00:00:00+00:00')
         >>> logger.info(f"Deleted {deleted} correlations")
     """
-    cursor.execute(
-        """
-        DELETE FROM service_correlations
-        WHERE datetime(created_at) >= datetime(?)
-          AND datetime(created_at) < datetime(?)
-    """,
-        (period_start, period_end),
-    )
+    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+    adapter = get_adapter()
+
+    if adapter.is_postgresql():
+        cursor.execute(
+            """
+            DELETE FROM service_correlations
+            WHERE created_at::timestamp >= %s::timestamp
+              AND created_at::timestamp < %s::timestamp
+        """,
+            (period_start, period_end),
+        )
+    else:
+        cursor.execute(
+            """
+            DELETE FROM service_correlations
+            WHERE datetime(created_at) >= datetime(?)
+              AND datetime(created_at) < datetime(?)
+        """,
+            (period_start, period_end),
+        )
 
     return cursor.rowcount
 

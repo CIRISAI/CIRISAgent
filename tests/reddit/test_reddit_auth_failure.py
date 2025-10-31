@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_modular_services.reddit.error_handler import ErrorSeverity, RedditErrorHandler
-from ciris_modular_services.reddit.service import RedditAPIClient
 from ciris_modular_services.reddit.schemas import RedditCredentials
+from ciris_modular_services.reddit.service import RedditAPIClient
 
 
 class TestAuthFailureDetection:
@@ -375,6 +375,7 @@ class TestErrorHandlerAuthClassification:
         WHEN retry_with_backoff() is called
         THEN it should immediately raise without retrying
         """
+
         async def failing_operation():
             raise RuntimeError("Reddit authentication failed: invalid_grant - Account suspended")
 

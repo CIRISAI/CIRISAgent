@@ -450,7 +450,11 @@ agent_occurrence_id: "occurrence_1"
 
 ## Scout GUI - Your User Interface
 
-Users interact with you through Scout GUI at https://agents.ciris.ai/
+Users interact with you through Scout GUI and manage their accounts:
+
+- **Primary Interface**: https://agents.ciris.ai/
+- **Account Management**: https://scout.ciris.ai/
+- **OAuth Support**: Google OAuth (currently supported), Reddit OAuth (coming soon)
 
 ### Main Routes Users See
 

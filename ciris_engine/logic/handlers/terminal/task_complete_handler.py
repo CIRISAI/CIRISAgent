@@ -124,14 +124,19 @@ class TaskCompleteHandler(BaseActionHandler):
                 # Only mark task complete if no pending thoughts
                 # CRITICAL: Get the correct occurrence_id from the task itself
                 # This handles shared tasks (__shared__), single-occurrence (default), and multi-occurrence scenarios
-                task = persistence.get_task_by_id(parent_task_id)
+                # First try to get with default occurrence, then try __shared__ (for shared tasks)
+                task = persistence.get_task_by_id(parent_task_id, "default")
+                if not task:
+                    # Try __shared__ for shared tasks like SHUTDOWN_SHARED_20251031
+                    task = persistence.get_task_by_id(parent_task_id, "__shared__")
                 if not task:
                     self.logger.error(f"Failed to get task {parent_task_id} - cannot mark as COMPLETED.")
                     return None
 
                 task_occurrence_id = task.agent_occurrence_id
                 self.logger.debug(
-                    f"Marking task {parent_task_id} as COMPLETED with occurrence_id={task_occurrence_id}"
+                    f"Marking task {parent_task_id} as COMPLETED with occurrence_id={task_occurrence_id} "
+                    f"(task found without occurrence filter)"
                 )
 
                 task_updated = persistence.update_task_status(

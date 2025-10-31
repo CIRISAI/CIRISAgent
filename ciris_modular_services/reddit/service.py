@@ -292,7 +292,9 @@ class RedditAPIClient:
         response = await self._request("POST", "/api/comment", data=payload)
         comment = await self._parse_comment_response(response)
         if not comment:
-            raise RuntimeError("Comment response missing data")
+            raise RuntimeError(
+                f"Comment response missing data - status: {response.status_code}, " f"text: {response.text[:200]}"
+            )
 
         if request.lock_thread and comment.submission_id:
             await self._request("POST", "/api/lock", data={"id": f"t3_{comment.submission_id}"})
@@ -421,6 +423,7 @@ class RedditAPIClient:
         payload = self._expect_dict(response.json(), context="comment")
         json_data = payload.get("json")
         if not isinstance(json_data, dict):
+            self._logger.error(f"Comment response missing 'json' dict: {payload}")
             return None
 
         errors = json_data.get("errors", [])
@@ -430,6 +433,7 @@ class RedditAPIClient:
         data_dict = self._expect_dict(json_data.get("data"), context="comment.data")
         things = data_dict.get("things", [])
         if not isinstance(things, list) or not things:
+            self._logger.error(f"Comment response missing 'things' list: json_data={json_data}")
             return None
 
         first = self._expect_dict(things[0], context="comment.thing")

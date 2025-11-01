@@ -656,8 +656,8 @@ class CIRISRuntime:
 
     async def _initialize_memory_service(self) -> None:
         """Initialize memory service early for identity storage."""
-        config = self._ensure_config()
-        await self.service_initializer.initialize_memory_service(config)
+        # No config parameter needed - uses typed config internally
+        await self.service_initializer.initialize_memory_service()
 
     async def _verify_memory_service(self) -> bool:
         """Verify memory service is operational."""

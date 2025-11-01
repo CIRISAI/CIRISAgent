@@ -179,9 +179,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
                 continue
             # CRITICAL: Only process comments that are replies to Scout's own comments/posts
             if not await self._is_reply_to_scout(entry):
-                logger.debug(
-                    f"Reddit comment {entry.item_id} is not a reply to Scout's content, skipping observation"
-                )
+                logger.debug(f"Reddit comment {entry.item_id} is not a reply to Scout's content, skipping observation")
                 continue
             message = self._build_message_from_entry(entry)
             await self.handle_incoming_message(message)
@@ -272,8 +270,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
                 item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
                 parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"  # type: ignore[attr-defined]
                 logger.debug(
-                    f"Comment {item_id} is a reply to Scout's {parent_id_str} "
-                    f"(parent_author={parent_author})"
+                    f"Comment {item_id} is a reply to Scout's {parent_id_str} " f"(parent_author={parent_author})"
                 )
             return bool(is_scouts_content)
 

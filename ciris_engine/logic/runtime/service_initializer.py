@@ -35,6 +35,7 @@ from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.config.initialization_config import InitializationConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ServiceManifest
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
@@ -45,11 +46,19 @@ logger = logging.getLogger(__name__)
 class ServiceInitializer:
     """Manages initialization of all core services."""
 
-    def __init__(self, essential_config: Optional[EssentialConfig] = None) -> None:
+    def __init__(
+        self,
+        essential_config: Optional[EssentialConfig] = None,
+        init_config: Optional[InitializationConfig] = None,
+    ) -> None:
         self.service_registry: Optional[ServiceRegistry] = None
         self.bus_manager: Optional[Any] = None  # Will be BusManager
         self.essential_config = essential_config or EssentialConfig()
         self.config_accessor: Optional[ConfigAccessor] = None
+
+        # Typed initialization config (Phase 2 integration)
+        # If not provided, will be created on-demand from essential_config
+        self._init_config = init_config
 
         # Infrastructure services (initialized first)
         self.time_service: Optional[TimeService] = None
@@ -90,6 +99,24 @@ class ServiceInitializer:
         self._dependencies_resolved: int = 0
         self._startup_start_time: Optional[float] = None
         self._startup_end_time: Optional[float] = None
+
+    @property
+    def init_config(self) -> InitializationConfig:
+        """
+        Get typed initialization config, creating on-demand if not provided.
+
+        This property enables gradual migration from environment variables to
+        typed config models. Legacy code continues to work without changes.
+
+        Returns:
+            InitializationConfig with all service configurations
+        """
+        if self._init_config is None:
+            # Create from essential_config + environment (legacy path)
+            self._init_config = InitializationConfig.from_essential_config(
+                self.essential_config, skip_llm_init=self._skip_llm_init
+            )
+        return self._init_config
 
     async def initialize_infrastructure_services(self) -> None:
         """Initialize infrastructure services that all other services depend on."""
@@ -134,41 +161,34 @@ class ServiceInitializer:
         budget = ResourceBudget()  # Uses defaults from schema
 
         # Credit provider: Always enabled for OAuth user credit gating
-        # - If CIRIS_BILLING_ENABLED=true: Use full billing backend (paid credits, purchases)
-        # - If CIRIS_BILLING_ENABLED=false: Use simple provider (1 free credit per OAuth user)
+        # Now configured via typed InfrastructureConfig (replaces environment var checks)
+        from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider, SimpleCreditProvider
         from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
+        from ciris_engine.schemas.config.infrastructure_config import CreditProviderType
 
+        resource_config = self.init_config.infrastructure.resource_monitor
         credit_provider: CreditGateProtocol
-        billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
-        if billing_enabled:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            # Get API key from environment (required for CIRISBillingProvider)
-            api_key = os.getenv("CIRIS_BILLING_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true"
-                )
+        if resource_config.credit_provider == CreditProviderType.BILLING:
+            billing_cfg = resource_config.billing
+            assert billing_cfg is not None, "Billing config required when provider=billing"
+            assert billing_cfg.api_key is not None, "Billing API key required"
 
-            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
-            timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
-            cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
-            fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
             credit_provider = CIRISBillingProvider(
-                api_key=api_key,
-                base_url=base_url,
-                timeout_seconds=timeout,
-                cache_ttl_seconds=cache_ttl,
-                fail_open=fail_open,
+                api_key=billing_cfg.api_key,
+                base_url=billing_cfg.base_url,
+                timeout_seconds=billing_cfg.timeout_seconds,
+                cache_ttl_seconds=billing_cfg.cache_ttl_seconds,
+                fail_open=billing_cfg.fail_open,
             )
-            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", base_url)
+            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", billing_cfg.base_url)
         else:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+            # Now using typed config from InfrastructureConfig
+            simple_cfg = resource_config.simple
+            assert simple_cfg is not None, "Simple config required when billing disabled"
 
-            # Get free uses from environment (default: 0)
-            free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
-            credit_provider = SimpleCreditProvider(free_uses=free_uses)
-            logger.info(f"Using SimpleCreditProvider - {free_uses} free uses per OAuth user")
+            credit_provider = SimpleCreditProvider(free_uses=simple_cfg.free_uses)
+            logger.info(f"Using SimpleCreditProvider - {simple_cfg.free_uses} free uses per OAuth user")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,
@@ -374,8 +394,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error(f"Memory service verification error: {e}")
             return False
 
-    async def initialize_security_services(self, config: Any, app_config: Any) -> None:
-        """Initialize security-related services."""
+    async def initialize_security_services(self) -> None:
+        """Initialize security-related services.
+
+        Migrated to use typed config in Phase 3B.
+        No longer accepts untyped config parameters.
+        """
         # SecretsService already initialized in initialize_memory_service
 
         # Initialize AuthenticationService first
@@ -411,7 +435,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("WA authentication system initialized")
 
     async def verify_security_services(self) -> bool:
-        """Verify security services are operational."""
+        """Verify security services are operational.
+
+        Migrated to use typed config in Phase 3B.
+        No config parameters needed for verification.
+        """
         # Verify secrets service
         if not self.secrets_service:
             logger.error("Secrets service not initialized")
@@ -587,7 +615,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Secrets service no longer needs LLM service reference
 
         # Initialize ALL THREE REQUIRED audit services
-        await self._initialize_audit_services(config, agent_id)
+        # Updated for Phase 3B: No longer passes config/agent_id parameters
+        await self._initialize_audit_services()
 
         # Initialize adaptive filter service
         assert self.memory_service is not None
@@ -744,48 +773,45 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         CRITICAL: Only mock OR real LLM services are active, never both.
         This prevents attack vectors where mock responses could be confused with real ones.
+
+        Now using typed LLMConfig instead of environment variable access.
         """
-        # Skip if mock LLM module is being loaded
+        # Skip if mock LLM module is being loaded (set by module loader)
+        # CRITICAL: Check _skip_llm_init directly, not cached config, because
+        # init_config may have been cached before module detection set the flag
         if self._skip_llm_init:
             logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
             return
 
-        # Validate config
-        if not hasattr(config, "services"):
-            raise ValueError("Configuration missing LLM service settings")
+        llm_config_typed = self.init_config.llm
 
-        # Get API key
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            logger.warning("No OPENAI_API_KEY found - LLM service will not be initialized")
+        # Double-check config-level skip flag for explicit skip_llm_init=True
+        if llm_config_typed.skip_initialization:
+            logger.info("🤖 LLM initialization explicitly skipped via config")
             return
 
-        # Initialize real LLM service
-        logger.info("Initializing real LLM service")
+        # Check if primary LLM configured
+        if llm_config_typed.primary is None:
+            logger.warning("No primary LLM configured - LLM service will not be initialized")
+            return
+
+        # Initialize primary LLM service
+        logger.info("Initializing primary LLM service")
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
-        llm_config = OpenAIConfig(
-            base_url=(
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
-            ),
-            model_name=(
-                config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2"
-            ),
-            api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+        primary_cfg = llm_config_typed.primary
+        llm_service_config = OpenAIConfig(
+            base_url=primary_cfg.base_url,
+            model_name=primary_cfg.model_name,
+            api_key=primary_cfg.api_key,
+            instructor_mode=primary_cfg.instructor_mode.value,
+            timeout_seconds=primary_cfg.timeout_seconds,
+            max_retries=primary_cfg.max_retries,
         )
 
         # Create and start service
         openai_service = OpenAICompatibleClient(
-            config=llm_config, telemetry_service=self.telemetry_service, time_service=self.time_service
+            config=llm_service_config, telemetry_service=self.telemetry_service, time_service=self.time_service
         )
         await openai_service.start()
 
@@ -796,50 +822,35 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 provider=openai_service,
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": "openai", "model": llm_config.model_name},
+                metadata={"provider": "openai", "model": llm_service_config.model_name},
             )
 
         # Store reference
         self.llm_service = openai_service
-        logger.info(f"Primary LLM service initialized: {llm_config.model_name}")
+        logger.info(f"Primary LLM service initialized: {llm_service_config.model_name}")
 
         # Optional: Initialize secondary LLM service
-        second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
-        if second_api_key:
-            await self._initialize_secondary_llm(config, second_api_key)
+        if llm_config_typed.secondary is not None:
+            await self._initialize_secondary_llm(llm_config_typed.secondary)
 
-    async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
-        """Initialize optional secondary LLM service."""
+    async def _initialize_secondary_llm(self, secondary_config: Any) -> None:
+        """Initialize optional secondary LLM service.
+
+        Args:
+            secondary_config: LLMProviderConfig with secondary LLM configuration
+        """
         logger.info("Initializing secondary LLM service")
 
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
-        # Get configuration from environment
-        base_url = os.environ.get(
-            "CIRIS_OPENAI_API_BASE_2",
-            (
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
-            ),
-        )
-        model_name = os.environ.get(
-            "CIRIS_OPENAI_MODEL_NAME_2",
-            config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2",
-        )
-
-        # Create config
+        # Create config from typed LLMProviderConfig
         llm_config = OpenAIConfig(
-            base_url=base_url,
-            model_name=model_name,
-            api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+            base_url=secondary_config.base_url,
+            model_name=secondary_config.model_name,
+            api_key=secondary_config.api_key,
+            instructor_mode=secondary_config.instructor_mode.value,
+            timeout_seconds=secondary_config.timeout_seconds,
+            max_retries=secondary_config.max_retries,
         )
 
         # Create and start service
@@ -855,18 +866,25 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 provider=service,
                 priority=Priority.NORMAL,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": "openai_secondary", "model": model_name, "base_url": base_url},
+                metadata={
+                    "provider": "openai_secondary",
+                    "model": secondary_config.model_name,
+                    "base_url": secondary_config.base_url,
+                },
             )
 
-        logger.info(f"Secondary LLM service initialized: {model_name}")
+        logger.info(f"Secondary LLM service initialized: {secondary_config.model_name}")
 
-    async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
+    async def _initialize_audit_services(self) -> None:
         """Initialize the consolidated audit service with three storage backends.
 
         The single GraphAuditService writes to three places:
         1. SQLite hash chain database (cryptographic integrity)
         2. Graph memory via MemoryBus (primary storage, searchable)
         3. File export (optional, for compliance)
+
+        Migrated to use typed config in Phase 3B.
+        Uses self.init_config.observability.audit for all configuration.
         """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")
@@ -876,23 +894,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # - Optional file export for compliance
         # - Cryptographic hash chain for integrity
         # - Time-series capabilities built-in
-        # Use config accessor for audit configuration
-        assert self.config_accessor is not None
-        audit_db_path = await self.config_accessor.get_path("database.audit_db", Path("data/ciris_audit.db"))
-        audit_key_path = await self.config_accessor.get_path("security.audit_key_path", Path(".ciris_keys"))
-        retention_days = await self.config_accessor.get_int("security.audit_retention_days", 90)
+
+        # Use typed config from Phase 3B migration
+        audit_config = self.init_config.observability.audit
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
 
         graph_audit = GraphAuditService(
             memory_bus=None,  # Will be set via service registry
             time_service=self.time_service,
-            export_path="audit_logs.jsonl",  # Standard audit log path
-            export_format="jsonl",
-            enable_hash_chain=True,
-            db_path=str(audit_db_path),
-            key_path=str(audit_key_path),
-            retention_days=retention_days,
+            export_path=str(audit_config.export_path),
+            export_format=audit_config.export_format,
+            enable_hash_chain=audit_config.enable_hash_chain,
+            db_path=str(audit_config.db_path),
+            key_path=str(audit_config.key_path),
+            retention_days=audit_config.retention_days,
         )
         # Runtime will be set later when available
         # Set service registry so it can access memory bus

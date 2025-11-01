@@ -671,9 +671,11 @@ class CIRISRuntime:
         return await self.identity_manager.verify_identity_integrity()
 
     async def _initialize_security_services(self) -> None:
-        """Initialize security-critical services first."""
-        config = self._ensure_config()
-        await self.service_initializer.initialize_security_services(config, self.essential_config)
+        """Initialize security-critical services first.
+
+        Updated for Phase 3B: No longer passes untyped config parameters.
+        """
+        await self.service_initializer.initialize_security_services()
 
     async def _verify_security_services(self) -> bool:
         """Verify security services are operational."""

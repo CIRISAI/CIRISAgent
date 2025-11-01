@@ -10,6 +10,7 @@ Tests database-agnostic graph operations including:
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+
 from ciris_engine.logic.persistence.models.graph import GraphEdge, GraphEdgeAttributes, GraphScope, get_edges_for_node
 
 
@@ -134,6 +135,7 @@ def test_get_edges_for_node_returns_both_incoming_and_outgoing():
 
 def test_get_edges_for_node_filters_by_scope():
     """Test that get_edges_for_node only returns edges matching the requested scope."""
+
     # Only return edges when scope matches
     def mock_execute_with_scope_check(sql, params):
         requested_scope = params[0]  # First param is scope

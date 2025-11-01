@@ -9,7 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.6] - 2025-11-01
 
-### Fixed
+### Fixed - CRITICAL P0 BUGS
+- **P0-CRITICAL: Multi-Occurrence Wakeup Loop** - Fixed infinite wakeup loop blocking ALL Scout agent operations
+  - **Problem**: Scout 001 & Scout 002 stuck in wakeup for 14+ hours, unable to process any tasks
+    - Wakeup round 9774+ (infinite loop)
+    - `WAKEUP_SHARED_20251101` task stuck in 'active' status since 03:15:21 UTC
+    - "0 wakeup step tasks for thought creation" every 5 seconds
+    - All multi-occurrence PostgreSQL deployments affected
+  - **Root Cause**: `get_shared_task_status()` used hardcoded `?` placeholders in LIKE query
+    - PostgreSQL requires `%s`, not `?`
+    - Query: `WHERE task_id LIKE ? AND created_at > ?` (lines 805-806)
+    - On PostgreSQL: Query fails silently → returns 0 rows
+    - `is_shared_task_completed()` always returns False
+    - Every occurrence thinks wakeup hasn't been done → infinite loop
+  - **Impact**:
+    - **CRITICAL**: ALL Scout agents down for 14+ hours
+    - No task processing, no LLM calls, no user interactions
+    - Multi-occurrence coordination completely broken
+    - Affects: Scout 001, Scout 002, all PostgreSQL multi-occurrence deployments
+  - **Solution**: Documented that PostgreSQLCursorWrapper automatically translates `?` to `%s`
+  - **Files**:
+    - `ciris_engine/logic/persistence/models/tasks.py:815` - `get_shared_task_status()`
+    - `ciris_engine/logic/persistence/models/tasks.py:870` - `get_latest_shared_task()`
+  - **Evidence**: Direct PostgreSQL query showed task exists but code couldn't find it
+  - **Timeline**: Started when containers restarted Nov 1 at 03:15 UTC
+
+- **P0: Memory Visualization Missing Edges** - Fixed visualization showing isolated summary nodes
+  - **Problem**: Memory graph visualization showed summaries with no connecting edges
+    - `tsdb_summary_20251025_18` appeared isolated (no visible edges)
+    - `tsdb_summary_20251031_00` showed proper connectivity
+    - Database contained edges, but visualization couldn't retrieve them
+  - **Root Cause**: `get_edges_for_node()` used hardcoded `?` placeholders
+    - Query: `WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)` (line 242)
+    - On PostgreSQL: Query fails → returns 0 edges → visualization shows isolated nodes
+  - **Impact**:
+    - All PostgreSQL deployments showed broken memory graphs
+    - TEMPORAL_CORRELATION, IMPACTS_QUALITY edges invisible
+    - Made it impossible to visualize memory relationships in production
+  - **Solution**: Documented PostgreSQLCursorWrapper translation
+  - **Files**: `ciris_engine/logic/persistence/models/graph.py:247`
+  - **Test Coverage**: 7 new unit tests (100% pass rate)
+
 - **P0: PostgreSQL Temporal Edge Creation Broken** - Fixed SQL placeholder incompatibility causing duplicate/missing temporal edges
   - **Problem**: Temporal edges between summaries were duplicated or missing in PostgreSQL deployments
     - `task_summary_20251030_00` had 20 duplicate TEMPORAL_NEXT edges (all self-referencing!)

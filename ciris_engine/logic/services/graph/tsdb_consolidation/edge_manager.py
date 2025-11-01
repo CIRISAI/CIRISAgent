@@ -254,11 +254,17 @@ class EdgeManager:
                 if previous_summary_id:
                     # Step 2a: Update previous TEMPORAL_NEXT to point to current
                     # First, delete the self-referencing edge
+                    # Use database-agnostic placeholder
+                    from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+                    adapter = get_adapter()
+                    ph = adapter.placeholder()
+
                     cursor.execute(
-                        """
+                        f"""
                         DELETE FROM graph_edges
-                        WHERE source_node_id = ?
-                          AND target_node_id = ?
+                        WHERE source_node_id = {ph}
+                          AND target_node_id = {ph}
                           AND relationship = 'TEMPORAL_NEXT'
                     """,
                         (previous_summary_id, previous_summary_id),
@@ -267,11 +273,11 @@ class EdgeManager:
                     # Then create new edge pointing to current
                     edge_id_forward = f"edge_{uuid4().hex[:8]}"
                     cursor.execute(
-                        """
+                        f"""
                         INSERT INTO graph_edges
                         (edge_id, source_node_id, target_node_id, scope,
                          relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                     """,
                         (
                             edge_id_forward,
@@ -289,11 +295,11 @@ class EdgeManager:
                     # Step 2b: Create TEMPORAL_PREV from current to previous
                     edge_id_backward = f"edge_{uuid4().hex[:8]}"
                     cursor.execute(
-                        """
+                        f"""
                         INSERT INTO graph_edges
                         (edge_id, source_node_id, target_node_id, scope,
                          relationship, weight, attributes_json, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
                     """,
                         (
                             edge_id_backward,

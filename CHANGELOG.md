@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2025-11-01
+
+### Fixed
+- **P0: PostgreSQL Temporal Edge Creation Broken** - Fixed SQL placeholder incompatibility causing duplicate/missing temporal edges
+  - **Problem**: Temporal edges between summaries were duplicated or missing in PostgreSQL deployments
+    - `task_summary_20251030_00` had 20 duplicate TEMPORAL_NEXT edges (all self-referencing!)
+    - `task_summary_20251027_12` had NO temporal edges at all
+    - DELETE statements failing silently (old self-referencing edges not removed)
+    - INSERT statements creating duplicate edges on every consolidation run
+  - **Root Cause**: `edge_manager.py:create_temporal_edges()` used hardcoded `?` placeholders
+    - PostgreSQL requires `%s` placeholders, not `?`
+    - SQLite uses `?`, PostgreSQL uses `%s`
+    - Bug affected lines 257-315 (DELETE and 2x INSERT statements)
+  - **Impact**:
+    - Production PostgreSQL instances (all Scout agents) had broken temporal chains
+    - Visualization timeline view showed disconnected summary clusters
+    - Database accumulating duplicate edges (58 duplicate TEMPORAL_NEXT edges observed)
+  - **Solution**: Use `adapter.placeholder()` for database-agnostic SQL
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:254-315`
+  - **Evidence**: Scout 002 database analysis showed 20 TEMPORAL_NEXT + 38 TEMPORAL_PREV duplicates for single summary
+
+- **TSDB SUMMARIZES Edge Exclusion** - Removed tsdb_data exclusion filter to enable full visualization connectivity
+  - **Problem**: Summary nodes only had edges to 3% of actual data (23 edges out of 764 total nodes)
+    - Visualization showed summaries with very few connections
+    - tsdb_data nodes (97% of data) had NO SUMMARIZES edges
+    - User reported: "consolidated nodes seem to be missing some edges in the visualization"
+  - **Design Intent**: Original code excluded tsdb_data nodes because they're temporary and should be deleted
+  - **Solution**: Create SUMMARIZES edges to ALL nodes including tsdb_data
+    - Provides full connectivity during retention window
+    - Orphaned edge cleanup automatically removes edges when nodes are deleted
+    - Visualization now shows complete data provenance
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:752-773`
+  - **Impact**: Visualizations now show full connectivity (764 edges instead of 23)
+
 ## [1.5.5] - 2025-11-01
 
 ### Fixed

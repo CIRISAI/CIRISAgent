@@ -752,19 +752,25 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
     def _create_summarizes_edges(
         self, summaries: List[GraphNode], nodes_by_type: Dict[str, TSDBNodeQueryResult], period_label: str
     ) -> int:
-        """Create SUMMARIZES edges from primary summary to all nodes in period."""
-        # Collect all nodes in period (excluding temporary TSDB_DATA nodes)
+        """Create SUMMARIZES edges from primary summary to all nodes in period.
+
+        NOTE: We create edges to ALL nodes including tsdb_data, even though tsdb_data
+        will be deleted later. This ensures:
+        1. Visualizations show full connectivity during the retention window
+        2. Audit trail shows what was summarized
+        3. Orphaned edge cleanup removes edges when nodes are deleted
+        """
+        # Collect all nodes in period (INCLUDING tsdb_data for visualization)
         all_nodes_in_period = []
         logger.debug(f"Collecting nodes for SUMMARIZES edges. nodes_by_type keys: {list(nodes_by_type.keys())}")
 
         for node_type, result in nodes_by_type.items():
-            if node_type != "tsdb_data":
-                node_count = len(result.nodes) if hasattr(result, "nodes") else 0
-                logger.debug(f"  {node_type}: {node_count} nodes")
-                if hasattr(result, "nodes"):
-                    all_nodes_in_period.extend(result.nodes)
-                else:
-                    logger.warning(f"  {node_type} result has no 'nodes' attribute: {type(result)}")
+            node_count = len(result.nodes) if hasattr(result, "nodes") else 0
+            logger.debug(f"  {node_type}: {node_count} nodes")
+            if hasattr(result, "nodes"):
+                all_nodes_in_period.extend(result.nodes)
+            else:
+                logger.warning(f"  {node_type} result has no 'nodes' attribute: {type(result)}")
 
         logger.info(f"Total nodes collected for SUMMARIZES edges: {len(all_nodes_in_period)}")
 

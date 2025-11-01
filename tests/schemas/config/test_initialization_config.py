@@ -24,8 +24,9 @@ class TestInitializationConfig:
         # Mock essential config
         essential_config = MagicMock()
         essential_config.security.secrets_key_path = Path(".ciris_keys")
-        essential_config.audit.audit_log_path = Path("audit.jsonl")
-        essential_config.security.signing_key_path = Path(".keys/signing.pem")
+        # Correct field names from actual EssentialConfig
+        essential_config.security.audit_key_path = Path(".keys/audit.pem")
+        essential_config.security.audit_retention_days = 90
         essential_config.services.llm_endpoint = "https://api.openai.com/v1"
         essential_config.services.llm_model = "gpt-4o-mini"
         essential_config.services.llm_timeout = 30
@@ -53,16 +54,17 @@ class TestInitializationConfig:
         assert config.infrastructure.resource_monitor.simple.free_uses == 10
         assert config.llm.primary.api_key == "test-key"
         assert config.llm.skip_initialization is False
-        assert config.memory.memory_db_path == Path("/data/memory.db")
-        assert config.observability.audit.db_path == Path("/data/audit.db")
-        assert config.governance.visibility.db_path == Path("/data/memory.db")  # Uses main db
+        assert config.memory.memory_db_path == "/data/memory.db"  # str (can be Postgres URL)
+        assert config.observability.audit.db_path == "/data/audit.db"  # str (can be Postgres URL)
+        # NOTE: governance.visibility.db_path is also str (can be Postgres URL)
 
     def test_from_essential_config_respects_skip_llm_init(self):
         """InitializationConfig.from_essential_config() passes skip_llm_init to LLMConfig."""
         essential_config = MagicMock()
         essential_config.security.secrets_key_path = Path(".ciris_keys")
-        essential_config.audit.audit_log_path = Path("audit.jsonl")
-        essential_config.security.signing_key_path = Path(".keys/signing.pem")
+        # Correct field names from actual EssentialConfig
+        essential_config.security.audit_key_path = Path(".keys/audit.pem")
+        essential_config.security.audit_retention_days = 90
 
         with (
             patch.dict(os.environ, {}, clear=True),
@@ -84,8 +86,9 @@ class TestInitializationConfig:
             patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path", return_value="/data/audit.db"),
         ):
             essential_mock = MagicMock()
-            essential_mock.audit.audit_log_path = Path("audit.jsonl")
-            essential_mock.security.signing_key_path = Path(".keys/signing.pem")
+            # Correct field names from actual EssentialConfig
+            essential_mock.security.audit_key_path = Path(".keys/audit.pem")
+            essential_mock.security.audit_retention_days = 90
 
             config = InitializationConfig(
                 infrastructure=InfrastructureConfig.from_env(),

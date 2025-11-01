@@ -195,6 +195,20 @@ class RedditAPIClient:
 
             payload = self._expect_dict(response.json(), context="token")
             access_token = self._get_str(payload, "access_token")
+
+            # Validate access token - empty token indicates auth failure (suspended account, invalid credentials)
+            if not access_token or access_token.strip() == "":
+                error_msg = payload.get("error", "Unknown error")
+                error_desc = payload.get("error_description", "No access_token in response")
+                logger.error(
+                    f"Reddit OAuth failed - likely suspended account or invalid credentials. "
+                    f"Error: {error_msg}, Description: {error_desc}, Response: {payload}"
+                )
+                raise RuntimeError(
+                    f"Reddit authentication failed: {error_msg} - {error_desc}. "
+                    "This may indicate a suspended Reddit account or invalid credentials."
+                )
+
             expires_in = int(float(self._get_str(payload, "expires_in", default="3600")))
             expires_at = self._now() + timedelta(seconds=expires_in)
             self._token = RedditToken(access_token=access_token, expires_at=expires_at)

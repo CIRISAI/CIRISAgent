@@ -700,8 +700,39 @@ def try_claim_shared_task(
     # First, check if task already exists
     existing = get_task_by_id(task_id, "__shared__", db_path)
     if existing:
-        logger.info(f"Shared task {task_id} already exists, returning existing task")
-        return (existing, False)
+        # CRITICAL: Only reuse task if it's in a valid reusable state
+        # Stale tasks (completed, failed, or very old active tasks) should NOT be reused
+        # This prevents infinite loops from reusing tasks with completed seed thoughts
+
+        from datetime import timedelta
+
+        # Parse created_at string to datetime for age calculation
+        created_at = datetime.fromisoformat(existing.created_at.replace("Z", "+00:00"))
+        task_age = time_service.now() - created_at
+        is_fresh = task_age < timedelta(minutes=10)  # Fresh if created within last 10 minutes
+        is_reusable_status = existing.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]
+
+        if not is_reusable_status:
+            logger.warning(
+                f"Shared task {task_id} exists but has terminal status {existing.status.value}. "
+                "This stale task should have been cleaned up. Creating new task instead."
+            )
+            # Delete the stale task and create a new one
+            delete_tasks_by_ids([task_id], db_path)
+        elif not is_fresh:
+            logger.warning(
+                f"Shared task {task_id} exists but is stale (age: {task_age}). "
+                "This old active task should have been cleaned up. Creating new task instead."
+            )
+            # Delete the stale task and create a new one
+            delete_tasks_by_ids([task_id], db_path)
+        else:
+            # Task is fresh and in valid state - safe to reuse
+            logger.info(
+                f"Shared task {task_id} already exists (status={existing.status.value}, age={task_age}), "
+                "returning existing task"
+            )
+            return (existing, False)
 
     # Try to create the task with INSERT OR IGNORE for race safety
     # Use dialect adapter for database compatibility

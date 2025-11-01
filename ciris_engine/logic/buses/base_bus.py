@@ -7,9 +7,11 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, TypeVar
 
-from ciris_engine.logic.registries.base import ServiceRegistry
+if TYPE_CHECKING:
+    from ciris_engine.protocols.infrastructure.base import ServiceRegistryProtocol
+
 from ciris_engine.protocols.services import Service
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -42,7 +44,7 @@ class BaseBus(ABC, Generic[ServiceT]):
     - Handles failures gracefully
     """
 
-    def __init__(self, service_type: ServiceType, service_registry: ServiceRegistry, max_queue_size: int = 1000):
+    def __init__(self, service_type: ServiceType, service_registry: "ServiceRegistryProtocol", max_queue_size: int = 1000):
         self.service_type = service_type
         self.service_registry = service_registry
         self.max_queue_size = max_queue_size

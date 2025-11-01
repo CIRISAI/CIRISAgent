@@ -9,7 +9,10 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, Protocol, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Protocol, TypeVar, Union, cast
+
+if TYPE_CHECKING:
+    from ciris_engine.protocols.infrastructure.base import ServiceRegistryProtocol
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -61,12 +64,20 @@ class HealthCheckProtocol(Protocol):
         ...
 
 
-class ServiceRegistry:
+if TYPE_CHECKING:
+    _Base = ServiceRegistryProtocol
+else:
+    _Base = object
+
+
+class ServiceRegistry(_Base):
     """
     Central registry for all services with priority/fallback support.
 
     Manages service registration, discovery, and health monitoring with
     circuit breaker patterns for resilience.
+
+    Implements ServiceRegistryProtocol for type safety.
     """
 
     def __init__(self, required_services: Optional[List[ServiceType]] = None) -> None:

@@ -24,12 +24,12 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.logic.infrastructure.sub_services.identity_variance_monitor import IdentityVarianceMonitor
 from ciris_engine.logic.infrastructure.sub_services.pattern_analysis_loop import PatternAnalysisLoop
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.protocols.services import SelfObservationServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -149,10 +149,10 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
     async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
         """
         Attach service registry for bus and service discovery.
-        
+
         Implements RegistryAwareServiceProtocol to enable proper initialization
         of memory bus and component services.
-        
+
         Args:
             registry: Service registry providing access to buses and services
         """

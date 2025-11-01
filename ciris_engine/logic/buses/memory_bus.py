@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.protocols.infrastructure.base import ServiceRegistryProtocol
 
 from dataclasses import dataclass
 
@@ -61,7 +61,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
     def __init__(
         self,
-        service_registry: "ServiceRegistry",
+        service_registry: "ServiceRegistryProtocol",
         time_service: TimeServiceProtocol,
         audit_service: Optional[object] = None,
         telemetry_service: Optional[object] = None,

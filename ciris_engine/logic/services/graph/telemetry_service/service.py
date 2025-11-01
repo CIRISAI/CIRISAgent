@@ -30,8 +30,8 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
-from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.runtime.base import GraphServiceProtocol as TelemetryServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.protocols_core import MetricDataPoint, ResourceLimits
@@ -1318,10 +1318,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
     async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
         """
         Attach service registry for bus and service discovery.
-        
+
         Implements RegistryAwareServiceProtocol to enable proper initialization
         of memory bus and time service dependencies.
-        
+
         Args:
             registry: Service registry providing access to buses and services
         """

@@ -142,10 +142,10 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
     async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
         """
         Attach service registry for service discovery.
-        
+
         Implements RegistryAwareServiceProtocol to enable proper initialization
         of time service dependency.
-        
+
         Args:
             registry: Service registry providing access to services
         """

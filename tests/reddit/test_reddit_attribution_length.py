@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ciris_modular_services.reddit.schemas import RedditCredentials, RedditSubmitCommentRequest, RedditSubmitPostRequest
 from ciris_modular_services.reddit.service import RedditAPIClient
-from ciris_modular_services.reddit.schemas import RedditCredentials, RedditSubmitPostRequest, RedditSubmitCommentRequest
 
 
 @pytest.fixture

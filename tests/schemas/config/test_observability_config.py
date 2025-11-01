@@ -30,27 +30,27 @@ class TestAuditConfig:
     def test_from_essential_config_loads_all_paths(self):
         """AuditConfig.from_essential_config() loads all paths correctly."""
         essential_config = MagicMock()
-        essential_config.audit.audit_log_path = Path("audit_logs.jsonl")
-        essential_config.security.signing_key_path = Path(".ciris_keys/signing.pem")
+        # Correct field names from actual EssentialConfig
+        essential_config.security.audit_key_path = Path(".ciris_keys/audit.pem")
+        essential_config.security.audit_retention_days = 90
 
         with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_audit_path:
             mock_audit_path.return_value = "/app/data/audit.db"
 
             config = AuditConfig.from_essential_config(essential_config)
 
-        assert config.export_path == Path("audit_logs.jsonl")
+        assert config.export_path == "audit_logs.jsonl"  # Hardcoded default
         assert config.export_format == "jsonl"
         assert config.enable_hash_chain is True
-        assert config.db_path == Path("/app/data/audit.db")
-        assert config.key_path == Path(".ciris_keys/signing.pem")
+        assert config.db_path == "/app/data/audit.db"  # str (can be Postgres URL)
+        assert config.key_path == Path(".ciris_keys/audit.pem")
         assert config.retention_days == 90
 
     def test_default_values(self):
         """AuditConfig uses sensible defaults."""
-        config = AuditConfig(
-            export_path=Path("audit.jsonl"), db_path=Path("/data/audit.db"), key_path=Path(".keys/signing.pem")
-        )
+        config = AuditConfig(db_path="/data/audit.db", key_path=Path(".keys/audit.pem"))
 
+        assert config.export_path == "audit_logs.jsonl"  # Default value
         assert config.export_format == "jsonl"
         assert config.enable_hash_chain is True
         assert config.retention_days == 90
@@ -82,8 +82,9 @@ class TestObservabilityConfig:
     def test_from_essential_config_creates_complete_config(self):
         """ObservabilityConfig.from_essential_config() creates complete configuration."""
         essential_config = MagicMock()
-        essential_config.audit.audit_log_path = Path("audit.jsonl")
-        essential_config.security.signing_key_path = Path(".keys/signing.pem")
+        # Correct field names from actual EssentialConfig
+        essential_config.security.audit_key_path = Path(".keys/audit.pem")
+        essential_config.security.audit_retention_days = 90
 
         with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_audit:
             mock_audit.return_value = "/app/data/audit.db"
@@ -93,5 +94,5 @@ class TestObservabilityConfig:
         assert isinstance(config.telemetry, TelemetryConfig)
         assert isinstance(config.audit, AuditConfig)
         assert isinstance(config.tsdb, TSDBConfig)
-        assert config.audit.db_path == Path("/app/data/audit.db")
+        assert config.audit.db_path == "/app/data/audit.db"  # str (can be Postgres URL)
         assert config.tsdb.consolidation_interval_hours == 6

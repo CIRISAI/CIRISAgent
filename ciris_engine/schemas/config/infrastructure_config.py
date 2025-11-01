@@ -8,7 +8,7 @@ This module provides typed configuration for infrastructure services:
 
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -32,7 +32,7 @@ class BillingConfig(BaseModel):
 
     @field_validator("api_key")
     @classmethod
-    def validate_api_key_if_enabled(cls, v: Optional[str], info) -> Optional[str]:
+    def validate_api_key_if_enabled(cls, v: Optional[str], info: Any) -> Optional[str]:
         """Validate API key is provided if billing is enabled."""
         if info.data.get("enabled") and not v:
             raise ValueError("api_key is required when billing is enabled")
@@ -94,7 +94,7 @@ class ResourceMonitorConfig(BaseModel):
 
     @field_validator("billing")
     @classmethod
-    def validate_billing_config(cls, v: Optional[BillingConfig], info) -> Optional[BillingConfig]:
+    def validate_billing_config(cls, v: Optional[BillingConfig], info: Any) -> Optional[BillingConfig]:
         """Ensure billing config is provided if billing provider selected."""
         if info.data.get("credit_provider") == CreditProviderType.BILLING and not v:
             raise ValueError("billing config required when credit_provider=billing")
@@ -102,7 +102,7 @@ class ResourceMonitorConfig(BaseModel):
 
     @field_validator("simple")
     @classmethod
-    def validate_simple_config(cls, v: Optional[SimpleCreditConfig], info) -> Optional[SimpleCreditConfig]:
+    def validate_simple_config(cls, v: Optional[SimpleCreditConfig], info: Any) -> Optional[SimpleCreditConfig]:
         """Ensure simple config is provided if simple provider selected."""
         if info.data.get("credit_provider") == CreditProviderType.SIMPLE and not v:
             raise ValueError("simple config required when credit_provider=simple")

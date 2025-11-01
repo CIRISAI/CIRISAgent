@@ -5,6 +5,8 @@ This module provides the complete typed configuration that replaces
 the Dict[str, Any] parameters in ServiceInitializer.
 """
 
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel
 
 from ciris_engine.schemas.config.governance_config import GovernanceConfig
@@ -12,6 +14,9 @@ from ciris_engine.schemas.config.infrastructure_config import InfrastructureConf
 from ciris_engine.schemas.config.llm_config import LLMConfig
 from ciris_engine.schemas.config.memory_config import MemoryConfig
 from ciris_engine.schemas.config.observability_config import ObservabilityConfig
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class InitializationConfig(BaseModel):

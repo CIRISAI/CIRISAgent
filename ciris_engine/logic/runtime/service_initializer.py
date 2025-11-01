@@ -817,7 +817,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if llm_config_typed.secondary is not None:
             await self._initialize_secondary_llm(llm_config_typed.secondary)
 
-    async def _initialize_secondary_llm(self, secondary_config) -> None:
+    async def _initialize_secondary_llm(self, secondary_config: Any) -> None:
         """Initialize optional secondary LLM service.
 
         Args:

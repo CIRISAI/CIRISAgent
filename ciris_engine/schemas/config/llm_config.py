@@ -6,9 +6,12 @@ for primary/secondary providers and fallback scenarios.
 """
 
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class InstructorMode(str, Enum):
@@ -42,7 +45,7 @@ class LLMConfig(BaseModel):
     skip_initialization: bool = Field(default=False, description="Skip LLM init (set by mock module detection)")
 
     @classmethod
-    def from_env_and_essential(cls, essential_config, skip_llm_init: bool = False) -> "LLMConfig":
+    def from_env_and_essential(cls, essential_config: "EssentialConfig", skip_llm_init: bool = False) -> "LLMConfig":
         """Load from environment and essential config.
 
         Environment Variables:

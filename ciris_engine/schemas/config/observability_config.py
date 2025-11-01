@@ -8,8 +8,12 @@ This module provides typed configuration for observability services:
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class TelemetryConfig(BaseModel):
@@ -33,7 +37,7 @@ class AuditConfig(BaseModel):
     retention_days: int = Field(default=90, ge=1, description="Audit log retention in days")
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "AuditConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "AuditConfig":
         """Create from EssentialConfig.
 
         Args:
@@ -67,7 +71,7 @@ class TSDBConfig(BaseModel):
     raw_retention_hours: int = Field(default=72, ge=24, description="How long to keep raw metrics before consolidation")
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "TSDBConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "TSDBConfig":
         """Create from EssentialConfig.
 
         Args:
@@ -90,7 +94,7 @@ class ObservabilityConfig(BaseModel):
     tsdb: TSDBConfig
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "ObservabilityConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "ObservabilityConfig":
         """Load all observability config from essential config.
 
         Args:

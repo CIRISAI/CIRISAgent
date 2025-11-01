@@ -7,8 +7,12 @@ This module provides typed configuration for memory-related services:
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class MemoryConfig(BaseModel):
@@ -22,7 +26,7 @@ class MemoryConfig(BaseModel):
     memory_db_path: Path = Field(description="Path to main memory database")
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "MemoryConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "MemoryConfig":
         """Create from EssentialConfig using helper functions.
 
         This maintains backward compatibility with existing path resolution.

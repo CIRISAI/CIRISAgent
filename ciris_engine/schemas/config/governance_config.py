@@ -9,8 +9,12 @@ This module provides typed configuration for governance services:
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, field_validator
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.config.essential import EssentialConfig
 
 
 class AdaptiveFilterConfig(BaseModel):
@@ -49,7 +53,7 @@ class VisibilityConfig(BaseModel):
     db_path: Path = Field(description="Path to main database (shared with other services)")
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "VisibilityConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "VisibilityConfig":
         """Create from EssentialConfig.
 
         Args:
@@ -72,7 +76,7 @@ class ConsentConfig(BaseModel):
     db_path: Path = Field(description="Path to main database (shared with other services)")
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "ConsentConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "ConsentConfig":
         """Create from EssentialConfig.
 
         Args:
@@ -95,7 +99,7 @@ class GovernanceConfig(BaseModel):
     consent: ConsentConfig
 
     @classmethod
-    def from_essential_config(cls, essential_config) -> "GovernanceConfig":
+    def from_essential_config(cls, essential_config: "EssentialConfig") -> "GovernanceConfig":
         """Load all governance config from essential config.
 
         Args:

@@ -103,7 +103,7 @@ class TestServiceInitializer:
 
                             # Call the actual initialization sequence
                             await service_initializer.initialize_infrastructure_services()
-                            await service_initializer.initialize_memory_service(mock_essential_config)
+                            await service_initializer.initialize_memory_service()
                             await service_initializer.initialize_security_services(
                                 mock_essential_config, mock_essential_config
                             )
@@ -150,7 +150,7 @@ class TestServiceInitializer:
         await service_initializer.initialize_infrastructure_services()
 
         # Initialize memory
-        await service_initializer.initialize_memory_service(mock_essential_config)
+        await service_initializer.initialize_memory_service()
 
         # Should create secrets and memory services
         assert service_initializer.secrets_service is not None
@@ -165,7 +165,7 @@ class TestServiceInitializer:
         """Test identity initialization."""
         # Initialize prerequisites
         await service_initializer.initialize_infrastructure_services()
-        await service_initializer.initialize_memory_service(mock_essential_config)
+        await service_initializer.initialize_memory_service()
 
         # Mock memory service
         service_initializer.memory_service = Mock()
@@ -486,7 +486,7 @@ class TestServiceInitializer:
                             await service_initializer.initialize_infrastructure_services()
                             calls.append("infrastructure")
 
-                            await service_initializer.initialize_memory_service(mock_essential_config)
+                            await service_initializer.initialize_memory_service()
                             calls.append("memory")
 
                             await service_initializer.initialize_security_services(

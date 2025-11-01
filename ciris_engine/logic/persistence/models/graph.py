@@ -244,6 +244,7 @@ def get_edges_for_node(node_id: str, scope: GraphScope, db_path: Optional[str] =
     try:
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
+            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
             cursor.execute(sql, (scope.value, node_id, node_id))
             rows = cursor.fetchall()
             for row in rows:

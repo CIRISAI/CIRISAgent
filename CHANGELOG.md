@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2025-11-01
+
+### Fixed - CRITICAL P0 BUGS
+- **P0-CRITICAL: Multi-Occurrence Wakeup Loop** - Fixed infinite wakeup loop blocking ALL Scout agent operations
+  - **Problem**: Scout 001 & Scout 002 stuck in wakeup for 14+ hours, unable to process any tasks
+    - Wakeup round 9774+ (infinite loop)
+    - `WAKEUP_SHARED_20251101` task stuck in 'active' status since 03:15:21 UTC
+    - "0 wakeup step tasks for thought creation" every 5 seconds
+    - All multi-occurrence PostgreSQL deployments affected
+  - **Root Cause**: `get_shared_task_status()` used hardcoded `?` placeholders in LIKE query
+    - PostgreSQL requires `%s`, not `?`
+    - Query: `WHERE task_id LIKE ? AND created_at > ?` (lines 805-806)
+    - On PostgreSQL: Query fails silently → returns 0 rows
+    - `is_shared_task_completed()` always returns False
+    - Every occurrence thinks wakeup hasn't been done → infinite loop
+  - **Impact**:
+    - **CRITICAL**: ALL Scout agents down for 14+ hours
+    - No task processing, no LLM calls, no user interactions
+    - Multi-occurrence coordination completely broken
+    - Affects: Scout 001, Scout 002, all PostgreSQL multi-occurrence deployments
+  - **Solution**: Documented that PostgreSQLCursorWrapper automatically translates `?` to `%s`
+  - **Files**:
+    - `ciris_engine/logic/persistence/models/tasks.py:815` - `get_shared_task_status()`
+    - `ciris_engine/logic/persistence/models/tasks.py:870` - `get_latest_shared_task()`
+  - **Evidence**: Direct PostgreSQL query showed task exists but code couldn't find it
+  - **Timeline**: Started when containers restarted Nov 1 at 03:15 UTC
+
+- **P0: Memory Visualization Missing Edges** - Fixed visualization showing isolated summary nodes
+  - **Problem**: Memory graph visualization showed summaries with no connecting edges
+    - `tsdb_summary_20251025_18` appeared isolated (no visible edges)
+    - `tsdb_summary_20251031_00` showed proper connectivity
+    - Database contained edges, but visualization couldn't retrieve them
+  - **Root Cause**: `get_edges_for_node()` used hardcoded `?` placeholders
+    - Query: `WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)` (line 242)
+    - On PostgreSQL: Query fails → returns 0 edges → visualization shows isolated nodes
+  - **Impact**:
+    - All PostgreSQL deployments showed broken memory graphs
+    - TEMPORAL_CORRELATION, IMPACTS_QUALITY edges invisible
+    - Made it impossible to visualize memory relationships in production
+  - **Solution**: Documented PostgreSQLCursorWrapper translation
+  - **Files**: `ciris_engine/logic/persistence/models/graph.py:247`
+  - **Test Coverage**: 7 new unit tests (100% pass rate)
+
+- **P0: PostgreSQL Temporal Edge Creation Broken** - Fixed SQL placeholder incompatibility causing duplicate/missing temporal edges
+  - **Problem**: Temporal edges between summaries were duplicated or missing in PostgreSQL deployments
+    - `task_summary_20251030_00` had 20 duplicate TEMPORAL_NEXT edges (all self-referencing!)
+    - `task_summary_20251027_12` had NO temporal edges at all
+    - DELETE statements failing silently (old self-referencing edges not removed)
+    - INSERT statements creating duplicate edges on every consolidation run
+  - **Root Cause**: `edge_manager.py:create_temporal_edges()` used hardcoded `?` placeholders
+    - PostgreSQL requires `%s` placeholders, not `?`
+    - SQLite uses `?`, PostgreSQL uses `%s`
+    - Bug affected lines 257-315 (DELETE and 2x INSERT statements)
+  - **Impact**:
+    - Production PostgreSQL instances (all Scout agents) had broken temporal chains
+    - Visualization timeline view showed disconnected summary clusters
+    - Database accumulating duplicate edges (58 duplicate TEMPORAL_NEXT edges observed)
+  - **Solution**: Use `adapter.placeholder()` for database-agnostic SQL
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:254-315`
+  - **Evidence**: Scout 002 database analysis showed 20 TEMPORAL_NEXT + 38 TEMPORAL_PREV duplicates for single summary
+  - **Note**: This was the actual root cause of "missing edges" - temporal chains between summaries were broken
+
+### Added
+- **Database Maintenance: Duplicate Temporal Edge Cleanup** - Automatic cleanup of duplicate edges from PostgreSQL bug
+  - **Purpose**: Clean up duplicate TEMPORAL_NEXT/TEMPORAL_PREV edges created by v1.5.5 bug
+  - **Implementation**: New `_cleanup_duplicate_temporal_edges()` method in DatabaseMaintenanceService
+  - **Behavior**:
+    - Runs automatically at startup as part of `perform_startup_cleanup()`
+    - Finds summaries with multiple temporal edges of same type
+    - Keeps most recent edge, deletes older duplicates
+    - Idempotent - safe to run multiple times
+  - **Files**: `ciris_engine/logic/services/infrastructure/database_maintenance/service.py:493-599`
+  - **Impact**: Production agents will automatically clean up duplicates on next restart
+
 ## [1.5.5] - 2025-11-01
 
 ### Fixed

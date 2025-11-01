@@ -752,13 +752,22 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
     def _create_summarizes_edges(
         self, summaries: List[GraphNode], nodes_by_type: Dict[str, TSDBNodeQueryResult], period_label: str
     ) -> int:
-        """Create SUMMARIZES edges from primary summary to all nodes in period."""
-        # Collect all nodes in period (excluding temporary TSDB_DATA nodes)
+        """Create SUMMARIZES edges from primary summary to all nodes in period.
+
+        NOTE: Excludes tsdb_data nodes as they are raw telemetry that gets aggregated
+        into tsdb_summary. Creating edges from other summaries to tsdb_data would violate
+        the data hierarchy - tsdb_data is a different scope/layer than summaries.
+
+        Correct architecture:
+        - tsdb_data → aggregated into → tsdb_summary (via source_node_count)
+        - tsdb_summary ← TEMPORAL edges → other summaries (task_summary, etc.)
+        """
+        # Collect all nodes in period (EXCLUDING tsdb_data - wrong scope/layer)
         all_nodes_in_period = []
         logger.debug(f"Collecting nodes for SUMMARIZES edges. nodes_by_type keys: {list(nodes_by_type.keys())}")
 
         for node_type, result in nodes_by_type.items():
-            if node_type != "tsdb_data":
+            if node_type != "tsdb_data":  # tsdb_data is different scope - only referenced by tsdb_summary
                 node_count = len(result.nodes) if hasattr(result, "nodes") else 0
                 logger.debug(f"  {node_type}: {node_count} nodes")
                 if hasattr(result, "nodes"):

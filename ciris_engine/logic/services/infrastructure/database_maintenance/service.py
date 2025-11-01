@@ -119,6 +119,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # --- Clean up old active tasks from previous runs ---
         await self._cleanup_old_active_tasks()
 
+        # --- Clean up duplicate temporal edges (v1.5.6 PostgreSQL bug) ---
+        await self._cleanup_duplicate_temporal_edges()
+
         # --- 1. Remove orphaned active tasks and thoughts ---
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
@@ -486,6 +489,112 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         except Exception as e:
             logger.error(f"Failed to clean up stale wakeup tasks: {e}", exc_info=True)
+
+    async def _cleanup_duplicate_temporal_edges(self) -> None:
+        """
+        Clean up duplicate temporal edges created by v1.5.5 PostgreSQL bug.
+
+        Bug: edge_manager.py used hardcoded ? placeholders instead of adapter.placeholder(),
+        causing DELETE and INSERT to fail on PostgreSQL, creating duplicate TEMPORAL_NEXT
+        and TEMPORAL_PREV edges.
+
+        This cleanup:
+        1. Finds summaries with multiple TEMPORAL_NEXT/PREV edges
+        2. Keeps only the most recent edge for each relationship type
+        3. Deletes older duplicates
+
+        Safe to run multiple times - idempotent.
+        """
+        try:
+            from ciris_engine.logic.persistence.db.core import get_db_connection
+            from ciris_engine.logic.persistence.db.dialect import get_adapter
+
+            logger.info("Checking for duplicate temporal edges from v1.5.5 PostgreSQL bug")
+
+            adapter = get_adapter()
+            ph = adapter.placeholder()
+
+            with get_db_connection(db_path=self.db_path) as conn:
+                cursor = conn.cursor()
+
+                # Find summaries with duplicate temporal edges
+                cursor.execute(
+                    f"""
+                    SELECT source_node_id, relationship, COUNT(*) as edge_count
+                    FROM graph_edges
+                    WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                    GROUP BY source_node_id, relationship
+                    HAVING COUNT(*) > 1
+                    ORDER BY edge_count DESC
+                """
+                )
+
+                duplicates = cursor.fetchall()
+
+                if not duplicates:
+                    logger.info("No duplicate temporal edges found")
+                    return
+
+                total_duplicates_deleted = 0
+                logger.info(f"Found {len(duplicates)} summaries with duplicate temporal edges")
+
+                for row in duplicates:
+                    if adapter.is_postgresql():
+                        source_id, relationship, count = row["source_node_id"], row["relationship"], row["edge_count"]
+                    else:
+                        source_id, relationship, count = row[0], row[1], row[2]
+
+                    logger.info(f"  {source_id} has {count} duplicate {relationship} edges")
+
+                    # Get all edges for this source + relationship, ordered by created_at DESC
+                    cursor.execute(
+                        f"""
+                        SELECT edge_id, created_at
+                        FROM graph_edges
+                        WHERE source_node_id = {ph}
+                          AND relationship = {ph}
+                        ORDER BY created_at DESC
+                    """,
+                        (source_id, relationship),
+                    )
+
+                    edges = cursor.fetchall()
+
+                    if len(edges) <= 1:
+                        continue  # No duplicates to clean
+
+                    # Keep the first (most recent), delete the rest
+                    edges_to_delete = []
+                    for i, edge_row in enumerate(edges):
+                        if i == 0:
+                            continue  # Keep first edge
+                        if adapter.is_postgresql():
+                            edges_to_delete.append(edge_row["edge_id"])
+                        else:
+                            edges_to_delete.append(edge_row[0])
+
+                    if edges_to_delete:
+                        # Delete duplicate edges
+                        placeholders = ",".join([ph] * len(edges_to_delete))
+                        cursor.execute(
+                            f"""
+                            DELETE FROM graph_edges
+                            WHERE edge_id IN ({placeholders})
+                        """,
+                            edges_to_delete,
+                        )
+
+                        deleted = cursor.rowcount
+                        total_duplicates_deleted += deleted
+                        logger.info(f"    Deleted {deleted} duplicate {relationship} edges from {source_id}")
+
+                conn.commit()
+
+                if total_duplicates_deleted > 0:
+                    logger.info(f"✓ Cleaned up {total_duplicates_deleted} duplicate temporal edges from PostgreSQL bug")
+
+        except Exception as e:
+            logger.error(f"Failed to clean up duplicate temporal edges: {e}", exc_info=True)
 
     def get_capabilities(self) -> "ServiceCapabilities":
         """Get service capabilities."""

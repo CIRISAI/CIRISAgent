@@ -812,6 +812,7 @@ def get_shared_task_status(
     try:
         with get_db_connection(db_path) as conn:
             cursor = conn.cursor()
+            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
             cursor.execute(sql, (pattern, cutoff_iso))
             row = cursor.fetchone()
             if row:
@@ -866,6 +867,7 @@ def get_latest_shared_task(task_type: str, within_hours: int = 24, db_path: Opti
     try:
         with get_db_connection(db_path) as conn:
             cursor = conn.cursor()
+            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
             cursor.execute(sql, (pattern, cutoff_iso))
             row = cursor.fetchone()
             if row:

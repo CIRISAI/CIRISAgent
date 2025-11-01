@@ -14,7 +14,13 @@ from .essential import (
     ServiceEndpointsConfig,
     TelemetryConfig,
 )
-from .governance_config import AdaptiveFilterConfig, ConsentConfig, GovernanceConfig, SelfObservationConfig, VisibilityConfig
+from .governance_config import (
+    AdaptiveFilterConfig,
+    ConsentConfig,
+    GovernanceConfig,
+    SelfObservationConfig,
+    VisibilityConfig,
+)
 from .infrastructure_config import (
     BillingConfig,
     CreditProviderType,
@@ -26,7 +32,9 @@ from .infrastructure_config import (
 from .initialization_config import InitializationConfig
 from .llm_config import InstructorMode, LLMConfig, LLMProviderConfig
 from .memory_config import MemoryConfig
-from .observability_config import AuditConfig, ObservabilityConfig, TSDBConfig, TelemetryConfig as TelemetryServiceConfig
+from .observability_config import AuditConfig, ObservabilityConfig
+from .observability_config import TelemetryConfig as TelemetryServiceConfig
+from .observability_config import TSDBConfig
 
 __all__ = [
     # Essential configs

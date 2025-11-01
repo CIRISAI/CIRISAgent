@@ -25,7 +25,9 @@ class LLMProviderConfig(BaseModel):
     api_key: str = Field(description="API key for LLM provider")
     base_url: str = Field(default="https://api.openai.com/v1", description="API base URL")
     model_name: str = Field(default="gpt-4o-mini", description="Model identifier")
-    instructor_mode: InstructorMode = Field(default=InstructorMode.JSON, description="Instructor mode for structured output")
+    instructor_mode: InstructorMode = Field(
+        default=InstructorMode.JSON, description="Instructor mode for structured output"
+    )
     timeout_seconds: int = Field(default=30, ge=1, le=300, description="Request timeout")
     max_retries: int = Field(default=3, ge=0, le=10, description="Maximum retry attempts")
 

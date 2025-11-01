@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ciris_engine.schemas.config.observability_config import AuditConfig, ObservabilityConfig, TSDBConfig, TelemetryConfig
+from ciris_engine.schemas.config.observability_config import (
+    AuditConfig,
+    ObservabilityConfig,
+    TelemetryConfig,
+    TSDBConfig,
+)
 
 
 class TestTelemetryConfig:

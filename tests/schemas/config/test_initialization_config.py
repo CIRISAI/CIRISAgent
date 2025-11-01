@@ -90,7 +90,9 @@ class TestInitializationConfig:
             config = InitializationConfig(
                 infrastructure=InfrastructureConfig.from_env(),
                 memory=MemoryConfig(
-                    secrets_key_path=Path(".keys"), secrets_db_path=Path("/data/secrets.db"), memory_db_path=Path("/data/memory.db")
+                    secrets_key_path=Path(".keys"),
+                    secrets_db_path=Path("/data/secrets.db"),
+                    memory_db_path=Path("/data/memory.db"),
                 ),
                 llm=LLMConfig(skip_initialization=True),
                 observability=ObservabilityConfig.from_essential_config(essential_mock),

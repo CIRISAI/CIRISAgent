@@ -565,7 +565,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             )
             # Attach service registry using protocol pattern
             # Use hasattr (protocol is not @runtime_checkable)
-            if self.service_registry and hasattr(telemetry_service_impl, 'attach_registry'):
+            if self.service_registry and hasattr(telemetry_service_impl, "attach_registry"):
                 await telemetry_service_impl.attach_registry(self.service_registry)
             await telemetry_service_impl.start()
             # Assign to protocol-typed field after all setup is complete
@@ -686,7 +686,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         # Attach service registry using protocol pattern
         # Use hasattr (protocol is not @runtime_checkable)
-        if self.service_registry and hasattr(self.self_observation_service, 'attach_registry'):
+        if self.service_registry and hasattr(self.self_observation_service, "attach_registry"):
             await self.self_observation_service.attach_registry(self.service_registry)
         # Start the service for API mode (in other modes DREAM processor starts it)
         await self.self_observation_service.start()
@@ -899,7 +899,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Runtime will be set later when available
         # Attach service registry using protocol pattern
         # Use hasattr (protocol is not @runtime_checkable)
-        if self.service_registry and hasattr(graph_audit, 'attach_registry'):
+        if self.service_registry and hasattr(graph_audit, "attach_registry"):
             await graph_audit.attach_registry(self.service_registry)
         await graph_audit.start()
         self._services_started_count += 1

@@ -44,7 +44,9 @@ class BaseBus(ABC, Generic[ServiceT]):
     - Handles failures gracefully
     """
 
-    def __init__(self, service_type: ServiceType, service_registry: "ServiceRegistryProtocol", max_queue_size: int = 1000):
+    def __init__(
+        self, service_type: ServiceType, service_registry: "ServiceRegistryProtocol", max_queue_size: int = 1000
+    ):
         self.service_type = service_type
         self.service_registry = service_registry
         self.max_queue_size = max_queue_size

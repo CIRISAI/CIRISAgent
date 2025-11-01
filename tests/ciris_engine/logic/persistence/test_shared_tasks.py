@@ -30,8 +30,11 @@ from ciris_engine.schemas.runtime.models import Task
 class MockTimeService:
     """Mock time service for testing."""
 
+    def now(self) -> datetime:
+        return datetime.now(timezone.utc)
+
     def now_iso(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return self.now().isoformat()
 
 
 @pytest.fixture
@@ -487,3 +490,248 @@ def test_get_task_by_correlation_id_different_occurrence(temp_db: str, time_serv
 
     assert retrieved_task is not None
     assert retrieved_task.task_id == task.task_id
+
+
+# =============================================================================
+# Stale Task Detection Tests (for try_claim_shared_task bug fix)
+# =============================================================================
+
+
+def test_try_claim_shared_task_reuses_fresh_active_task(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that a fresh ACTIVE task is correctly reused (happy path)."""
+    # Create first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Fresh shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    assert task1.status == TaskStatus.PENDING
+
+    # Update to ACTIVE (simulating processing started)
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+
+    # Try to claim again - should reuse the fresh active task
+    task2, was_created2 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Fresh shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is False, "Should reuse fresh ACTIVE task"
+    assert task2.task_id == task1.task_id
+    assert task2.status == TaskStatus.ACTIVE
+
+
+def test_try_claim_shared_task_reuses_fresh_pending_task(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that a fresh PENDING task is correctly reused."""
+    # Create first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="Fresh wakeup task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    assert task1.status == TaskStatus.PENDING
+
+    # Try to claim again immediately - should reuse the fresh pending task
+    task2, was_created2 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="Fresh wakeup task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is False, "Should reuse fresh PENDING task"
+    assert task2.task_id == task1.task_id
+    assert task2.status == TaskStatus.PENDING
+
+
+def test_try_claim_shared_task_deletes_completed_stale_task(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that a COMPLETED stale task is deleted and new task is created."""
+    # Create and complete first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Old shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    update_task_status(task1.task_id, TaskStatus.COMPLETED, "__shared__", time_service, db_path=temp_db)
+
+    # Try to claim again - should create NEW task (delete stale completed one)
+    task2, was_created2 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="New shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is True, "Should create new task after deleting stale COMPLETED task"
+    assert task2.task_id == task1.task_id  # Same deterministic ID
+    assert task2.status == TaskStatus.PENDING  # Fresh task should be PENDING
+
+
+def test_try_claim_shared_task_deletes_failed_stale_task(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that a FAILED stale task is deleted and new task is created."""
+    # Create and fail first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="Failed wakeup task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    update_task_status(task1.task_id, TaskStatus.FAILED, "__shared__", time_service, db_path=temp_db)
+
+    # Try to claim again - should create NEW task (delete stale failed one)
+    task2, was_created2 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="New wakeup task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is True, "Should create new task after deleting stale FAILED task"
+    assert task2.task_id == task1.task_id  # Same deterministic ID
+    assert task2.status == TaskStatus.PENDING  # Fresh task should be PENDING
+
+
+def test_try_claim_shared_task_deletes_old_active_task(temp_db: str, time_service: TimeServiceProtocol):
+    """Test that an old ACTIVE task (>10 minutes) is deleted and new task is created."""
+    # Create first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Old active shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+
+    # Manually update created_at to be 15 minutes ago (stale)
+    old_time = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+    with get_db_connection(temp_db) as conn:
+        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (old_time, task1.task_id))
+        conn.commit()
+
+    # Try to claim again - should create NEW task (delete stale active one)
+    task2, was_created2 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="New shutdown task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is True, "Should create new task after deleting stale ACTIVE task (>10 min)"
+    assert task2.task_id == task1.task_id  # Same deterministic ID
+    assert task2.status == TaskStatus.PENDING  # Fresh task should be PENDING
+
+
+def test_try_claim_shared_task_boundary_10_minute_age(temp_db: str, time_service: TimeServiceProtocol):
+    """Test behavior at the 10-minute boundary (edge case)."""
+    # Create first task
+    task1, was_created1 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="Boundary test task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+
+    # Manually update created_at to be exactly 9 minutes 59 seconds ago (should still be fresh)
+    boundary_time = (datetime.now(timezone.utc) - timedelta(minutes=9, seconds=59)).isoformat()
+    with get_db_connection(temp_db) as conn:
+        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (boundary_time, task1.task_id))
+        conn.commit()
+
+    # Try to claim again - should REUSE (still fresh)
+    task2, was_created2 = try_claim_shared_task(
+        task_type="wakeup",
+        channel_id="system",
+        description="Boundary test task",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is False, "Should reuse task that's just under 10 minutes old"
+    assert task2.task_id == task1.task_id
+
+
+def test_try_claim_shared_task_datum_bug_scenario(temp_db: str, time_service: TimeServiceProtocol):
+    """Test the exact Datum bug scenario: 20-hour-old ACTIVE task with completed seed thought."""
+    # Simulate Datum's first shutdown attempt (20 hours ago)
+    task1, was_created1 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Datum first shutdown",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created1 is True
+    update_task_status(task1.task_id, TaskStatus.ACTIVE, "__shared__", time_service, db_path=temp_db)
+
+    # Manually update created_at to be 20 hours ago (simulating Datum's stale task)
+    old_time = (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat()
+    with get_db_connection(temp_db) as conn:
+        conn.execute("UPDATE tasks SET created_at = ? WHERE task_id = ?", (old_time, task1.task_id))
+        conn.commit()
+
+    # Now simulate Datum's second shutdown attempt - should DELETE stale task and create new one
+    task2, was_created2 = try_claim_shared_task(
+        task_type="shutdown",
+        channel_id="system",
+        description="Datum second shutdown",
+        priority=10,
+        time_service=time_service,
+        db_path=temp_db,
+    )
+
+    assert was_created2 is True, "Should create new task after deleting 20-hour-old ACTIVE task"
+    assert task2.task_id == task1.task_id  # Same deterministic ID
+    assert task2.status == TaskStatus.PENDING  # Fresh task should be PENDING
+
+    # Verify the old task was actually deleted and replaced (check created_at is recent)
+    from ciris_engine.logic.persistence.models.tasks import get_task_by_id
+
+    retrieved_task = get_task_by_id(task2.task_id, "__shared__", db_path=temp_db)
+    assert retrieved_task is not None
+
+    # Task should have been created very recently (within last minute)
+    task_age = datetime.now(timezone.utc) - datetime.fromisoformat(retrieved_task.created_at.replace("Z", "+00:00"))
+    assert task_age < timedelta(minutes=1), "New task should have fresh created_at timestamp"

@@ -449,12 +449,10 @@ class TestInsertRawThoughtHelper:
 
         # Verify thought exists with empty context
         from ciris_engine.logic.persistence import get_db_connection
+
         with get_db_connection(db_path=clean_db) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT context_json FROM thoughts WHERE thought_id = ?",
-                ("helper_test_002",)
-            )
+            cursor.execute("SELECT context_json FROM thoughts WHERE thought_id = ?", ("helper_test_002",))
             row = cursor.fetchone()
             assert row is not None
             assert row["context_json"] == "{}"
@@ -584,6 +582,7 @@ class TestInvalidThoughtCleanup:
         WHEN cleanup runs
         THEN exception is caught and logged, no crash
         """
+
         # Mock get_db_connection to raise exception
         def mock_get_db_connection(*args, **kwargs):
             raise Exception("Database connection failed")

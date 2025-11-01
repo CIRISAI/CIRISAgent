@@ -103,10 +103,10 @@ class TestServiceInitializer:
 
                             # Call the actual initialization sequence
                             await service_initializer.initialize_infrastructure_services()
+                            # Phase 3A: No longer passes config parameter
                             await service_initializer.initialize_memory_service()
-                            await service_initializer.initialize_security_services(
-                                mock_essential_config, mock_essential_config
-                            )
+                            # Phase 3B: No longer passes config parameters
+                            await service_initializer.initialize_security_services()
                             await service_initializer.initialize_all_services(
                                 mock_essential_config, mock_essential_config, "test_agent", None, []
                             )
@@ -199,7 +199,8 @@ class TestServiceInitializer:
                 mock_wa.start = AsyncMock()
                 mock_wa_class.return_value = mock_wa
 
-                await service_initializer.initialize_security_services(mock_essential_config, mock_essential_config)
+                # Phase 3B: No longer passes config parameters
+                await service_initializer.initialize_security_services()
 
                 # Should create auth service
                 assert service_initializer.auth_service is not None
@@ -489,9 +490,8 @@ class TestServiceInitializer:
                             await service_initializer.initialize_memory_service()
                             calls.append("memory")
 
-                            await service_initializer.initialize_security_services(
-                                mock_essential_config, mock_essential_config
-                            )
+                            # Phase 3B: No longer passes config parameters
+                            await service_initializer.initialize_security_services()
                             calls.append("security")
 
                             await service_initializer.initialize_all_services(

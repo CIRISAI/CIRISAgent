@@ -8,7 +8,7 @@ This module provides typed configuration for observability services:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from pydantic import BaseModel, Field
 
@@ -29,10 +29,14 @@ class TelemetryConfig(BaseModel):
 class AuditConfig(BaseModel):
     """Configuration for AuditService."""
 
-    export_path: Path = Field(description="Path for audit log exports")
+    export_path: str = Field(
+        default="audit_logs.jsonl", description="Path for audit log exports (file path or just filename)"
+    )
     export_format: str = Field(default="jsonl", description="Audit export format")
     enable_hash_chain: bool = Field(default=True, description="Enable cryptographic hash chain")
-    db_path: Path = Field(description="Path to audit database")
+    db_path: Union[str, Path] = Field(
+        description="Path to audit database (SQLite path or PostgreSQL connection string)"
+    )
     key_path: Path = Field(description="Path to audit signing keys")
     retention_days: int = Field(default=90, ge=1, description="Audit log retention in days")
 
@@ -49,12 +53,12 @@ class AuditConfig(BaseModel):
         from ciris_engine.logic.config.db_paths import get_audit_db_full_path
 
         return cls(
-            export_path=essential_config.audit.audit_log_path,
+            export_path="audit_logs.jsonl",  # Standard audit log path (hardcoded in service_initializer.py:899)
             export_format="jsonl",
             enable_hash_chain=True,
-            db_path=Path(get_audit_db_full_path(essential_config)),
-            key_path=essential_config.security.signing_key_path,
-            retention_days=90,
+            db_path=get_audit_db_full_path(essential_config),  # str (SQLite path or Postgres URL)
+            key_path=essential_config.security.audit_key_path,  # Correct field name
+            retention_days=essential_config.security.audit_retention_days,  # From essential config
         )
 
 

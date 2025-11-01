@@ -36,6 +36,7 @@ from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClie
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.config.initialization_config import InitializationConfig
+from ciris_engine.schemas.config.llm_config import LLMProviderConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ServiceManifest
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
@@ -162,7 +163,10 @@ class ServiceInitializer:
 
         # Credit provider: Always enabled for OAuth user credit gating
         # Now configured via typed InfrastructureConfig (replaces environment var checks)
-        from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider, SimpleCreditProvider
+        from ciris_engine.logic.services.infrastructure.resource_monitor import (
+            CIRISBillingProvider,
+            SimpleCreditProvider,
+        )
         from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
         from ciris_engine.schemas.config.infrastructure_config import CreditProviderType
 
@@ -602,12 +606,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.bus_manager.llm.telemetry_service = self.telemetry_service
 
         # Initialize LLM service(s) based on configuration
-        await self._initialize_llm_services(config, modules_to_load)
+        await self._initialize_llm_services(modules_to_load)
 
         # Secrets service no longer needs LLM service reference
 
         # Initialize ALL THREE REQUIRED audit services
-        await self._initialize_audit_services(config, agent_id)
+        await self._initialize_audit_services(agent_id)
 
         # Initialize adaptive filter service
         assert self.memory_service is not None
@@ -759,13 +763,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         self._startup_end_time = time.time()
 
-    async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
+    async def _initialize_llm_services(self, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
         CRITICAL: Only mock OR real LLM services are active, never both.
         This prevents attack vectors where mock responses could be confused with real ones.
 
         Now using typed LLMConfig instead of environment variable access.
+
+        Args:
+            modules_to_load: Optional list of modules being loaded (used for mock detection)
         """
         # Skip if mock LLM module is being loaded (set by module loader)
         # CRITICAL: Check _skip_llm_init directly, not cached config, because
@@ -824,7 +831,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if llm_config_typed.secondary is not None:
             await self._initialize_secondary_llm(llm_config_typed.secondary)
 
-    async def _initialize_secondary_llm(self, secondary_config: Any) -> None:
+    async def _initialize_secondary_llm(self, secondary_config: "LLMProviderConfig") -> None:
         """Initialize optional secondary LLM service.
 
         Args:
@@ -866,13 +873,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         logger.info(f"Secondary LLM service initialized: {secondary_config.model_name}")
 
-    async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
+    async def _initialize_audit_services(self, agent_id: str) -> None:
         """Initialize the consolidated audit service with three storage backends.
 
         The single GraphAuditService writes to three places:
         1. SQLite hash chain database (cryptographic integrity)
         2. Graph memory via MemoryBus (primary storage, searchable)
         3. File export (optional, for compliance)
+
+        Args:
+            agent_id: Agent identifier for audit context
         """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")

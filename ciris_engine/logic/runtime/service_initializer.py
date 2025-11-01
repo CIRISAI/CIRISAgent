@@ -768,10 +768,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
         Now using typed LLMConfig instead of environment variable access.
         """
         # Skip if mock LLM module is being loaded (set by module loader)
+        # CRITICAL: Check _skip_llm_init directly, not cached config, because
+        # init_config may have been cached before module detection set the flag
+        if self._skip_llm_init:
+            logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
+            return
+
         llm_config_typed = self.init_config.llm
 
+        # Double-check config-level skip flag for explicit skip_llm_init=True
         if llm_config_typed.skip_initialization:
-            logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
+            logger.info("🤖 LLM initialization explicitly skipped via config")
             return
 
         # Check if primary LLM configured

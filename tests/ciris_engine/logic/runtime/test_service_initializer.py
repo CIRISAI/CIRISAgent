@@ -40,15 +40,29 @@ class TestServiceInitializer:
         mock_database.database_url = None  # SQLite mode, not PostgreSQL
         config.database = mock_database
 
-        # Add security attribute with secrets_key_path
+        # Add security attribute with secrets_key_path (must be Path, not Mock)
         mock_security = Mock()
         mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        mock_security.signing_key_path = Path(temp_data_dir) / ".signing_keys"
         config.security = mock_security
 
         # Add graph attribute for TSDB configuration
         mock_graph = Mock()
         mock_graph.tsdb_raw_retention_hours = 24  # Default retention
         config.graph = mock_graph
+
+        # Add services attribute for LLM config (required by typed config)
+        mock_services = Mock()
+        mock_services.llm_endpoint = "https://api.openai.com/v1"
+        mock_services.llm_model = "gpt-4"
+        mock_services.llm_timeout = 30
+        mock_services.llm_max_retries = 3
+        config.services = mock_services
+
+        # Add audit attribute for observability config (required by typed config)
+        mock_audit = Mock()
+        mock_audit.audit_log_path = Path(temp_data_dir) / "audit_logs"
+        config.audit = mock_audit
 
         # Add model_dump method that returns a dict for config migration
         config.model_dump = Mock(
@@ -246,6 +260,76 @@ class TestServiceInitializer:
         assert service_initializer.llm_service is None
         # Should NOT register anything in registry
         service_initializer.service_registry.register_service.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_mock_llm_skip_flag_after_config_cached(self, mock_essential_config, temp_data_dir):
+        """Test that _skip_llm_init is respected even if init_config was cached earlier.
+
+        CRITICAL SECURITY TEST: This regression test ensures mock and real LLM
+        services are NEVER active simultaneously. Without this test, a caching bug
+        allowed real LLM initialization even after mock module detection.
+
+        Scenario:
+        1. init_config is cached early (e.g., in initialize_infrastructure_services)
+        2. Module pre-check detects mock LLM and sets _skip_llm_init = True
+        3. _initialize_llm_services MUST check _skip_llm_init directly, not cached config
+
+        Without the direct check, cached config still has skip_initialization=False,
+        allowing real OpenAICompatibleClient alongside mock - the exact attack vector
+        the code warns about.
+        """
+        # Add required audit attribute for config creation
+        mock_audit = Mock()
+        mock_audit.audit_log_path = Path(temp_data_dir) / "audit_logs"
+        mock_essential_config.audit = mock_audit
+
+        # Ensure security.signing_key_path is a real Path (not Mock)
+        mock_essential_config.security.signing_key_path = Path(temp_data_dir) / ".signing_keys"
+
+        # Add required services attribute for config creation
+        mock_essential_config.services = Mock()
+        mock_essential_config.services.llm_endpoint = "https://api.openai.com/v1"
+        mock_essential_config.services.llm_model = "gpt-4"
+        mock_essential_config.services.llm_timeout = 30
+        mock_essential_config.services.llm_max_retries = 3
+
+        # Create fresh service initializer
+        service_initializer = ServiceInitializer(essential_config=mock_essential_config)
+        service_initializer.service_registry = Mock()
+        service_initializer.telemetry_service = Mock()
+
+        # Set OPENAI_API_KEY to simulate real LLM availability
+        os.environ["OPENAI_API_KEY"] = "test-key-should-not-be-used"
+
+        # STEP 1: Access init_config BEFORE mock detection (simulates early access)
+        # This caches the config with skip_initialization=False
+        _ = service_initializer.init_config
+        assert service_initializer._init_config is not None, "Config should be cached"
+        assert service_initializer._init_config.llm.skip_initialization is False, "Cached config has skip=False"
+
+        # STEP 2: Mock module detection sets _skip_llm_init = True (simulates module pre-check)
+        service_initializer._skip_llm_init = True
+
+        # STEP 3: Verify cached config STILL has skip_initialization=False (the bug!)
+        assert service_initializer._init_config.llm.skip_initialization is False, "Cached config unchanged"
+
+        # STEP 4: Initialize LLM - MUST skip because _skip_llm_init = True
+        # This is where the bug would manifest: cached config says skip=False,
+        # but _skip_llm_init says True. Must check _skip_llm_init FIRST.
+        with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as mock_llm_class:
+            await service_initializer._initialize_llm_services(mock_essential_config)
+
+            # CRITICAL: Real LLM should NOT be initialized
+            mock_llm_class.assert_not_called()
+
+        # CRITICAL: No LLM service should be set
+        assert service_initializer.llm_service is None
+
+        # CRITICAL: Should NOT register anything in registry
+        service_initializer.service_registry.register_service.assert_not_called()
+
+        # Clean up
+        os.environ.pop("OPENAI_API_KEY", None)
 
     @pytest.mark.asyncio
     async def test_initialize_llm_service_real(self, service_initializer, mock_essential_config):

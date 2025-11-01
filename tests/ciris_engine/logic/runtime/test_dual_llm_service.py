@@ -24,10 +24,17 @@ def mock_config():
     config.security = Mock()
     config.security.audit_key_path = ".ciris_keys"
     config.security.audit_retention_days = 90
+    config.security.signing_key_path = ".ciris_keys"
+    config.security.secrets_key_path = ".ciris_keys"
     config.database = Mock()
     config.database.graph_db = ":memory:"
     config.database.audit_db = ":memory:"
     config.database.runtime_db = ":memory:"
+    config.database.database_url = "sqlite://:memory:"  # Add database_url for Phase 3B
+    config.database.main_db = ":memory:"
+    config.database.secrets_db = ":memory:"
+    config.audit = Mock()
+    config.audit.audit_log_path = "audit_logs.jsonl"
     config.mock_llm = False  # Explicitly disable mock LLM
     return config
 

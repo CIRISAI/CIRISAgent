@@ -394,8 +394,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error(f"Memory service verification error: {e}")
             return False
 
-    async def initialize_security_services(self, config: Any, app_config: Any) -> None:
-        """Initialize security-related services."""
+    async def initialize_security_services(self) -> None:
+        """Initialize security-related services.
+
+        Migrated to use typed config in Phase 3B.
+        No longer accepts untyped config parameters.
+        """
         # SecretsService already initialized in initialize_memory_service
 
         # Initialize AuthenticationService first
@@ -431,7 +435,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("WA authentication system initialized")
 
     async def verify_security_services(self) -> bool:
-        """Verify security services are operational."""
+        """Verify security services are operational.
+
+        Migrated to use typed config in Phase 3B.
+        No config parameters needed for verification.
+        """
         # Verify secrets service
         if not self.secrets_service:
             logger.error("Secrets service not initialized")
@@ -607,7 +615,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Secrets service no longer needs LLM service reference
 
         # Initialize ALL THREE REQUIRED audit services
-        await self._initialize_audit_services(config, agent_id)
+        # Updated for Phase 3B: No longer passes config/agent_id parameters
+        await self._initialize_audit_services()
 
         # Initialize adaptive filter service
         assert self.memory_service is not None
@@ -866,13 +875,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         logger.info(f"Secondary LLM service initialized: {secondary_config.model_name}")
 
-    async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
+    async def _initialize_audit_services(self) -> None:
         """Initialize the consolidated audit service with three storage backends.
 
         The single GraphAuditService writes to three places:
         1. SQLite hash chain database (cryptographic integrity)
         2. Graph memory via MemoryBus (primary storage, searchable)
         3. File export (optional, for compliance)
+
+        Migrated to use typed config in Phase 3B.
+        Uses self.init_config.observability.audit for all configuration.
         """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")
@@ -882,23 +894,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # - Optional file export for compliance
         # - Cryptographic hash chain for integrity
         # - Time-series capabilities built-in
-        # Use config accessor for audit configuration
-        assert self.config_accessor is not None
-        audit_db_path = await self.config_accessor.get_path("database.audit_db", Path("data/ciris_audit.db"))
-        audit_key_path = await self.config_accessor.get_path("security.audit_key_path", Path(".ciris_keys"))
-        retention_days = await self.config_accessor.get_int("security.audit_retention_days", 90)
+
+        # Use typed config from Phase 3B migration
+        audit_config = self.init_config.observability.audit
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
 
         graph_audit = GraphAuditService(
             memory_bus=None,  # Will be set via service registry
             time_service=self.time_service,
-            export_path="audit_logs.jsonl",  # Standard audit log path
-            export_format="jsonl",
-            enable_hash_chain=True,
-            db_path=str(audit_db_path),
-            key_path=str(audit_key_path),
-            retention_days=retention_days,
+            export_path=str(audit_config.export_path),
+            export_format=audit_config.export_format,
+            enable_hash_chain=audit_config.enable_hash_chain,
+            db_path=str(audit_config.db_path),
+            key_path=str(audit_config.key_path),
+            retention_days=audit_config.retention_days,
         )
         # Runtime will be set later when available
         # Set service registry so it can access memory bus

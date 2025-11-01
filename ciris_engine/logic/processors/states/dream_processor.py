@@ -355,11 +355,11 @@ class DreamProcessor(BaseProcessor):
                 time_service=time_service,
                 observation_interval_hours=6,  # Match our dream schedule
             )
-            self.self_observation_service._set_service_registry(self.service_registry)
+            await self.self_observation_service.attach_registry(self.service_registry)
 
             # Initialize telemetry service
             self.telemetry_service = GraphTelemetryService(memory_bus=self.memory_bus)
-            self.telemetry_service._set_service_registry(self.service_registry)
+            await self.telemetry_service.attach_registry(self.service_registry)
 
             # Initialize identity baseline if needed
             if self.identity_manager and hasattr(self.identity_manager, "agent_identity"):

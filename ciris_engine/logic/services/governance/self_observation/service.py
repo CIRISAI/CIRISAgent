@@ -29,6 +29,7 @@ from ciris_engine.logic.infrastructure.sub_services.pattern_analysis_loop import
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.services.graph.telemetry_service import GraphTelemetryService
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.protocols.services import SelfObservationServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -81,7 +82,7 @@ class ObservationCycle:
     completed_at: Optional[datetime]
 
 
-class SelfObservationService(BaseScheduledService, SelfObservationServiceProtocol, ServiceProtocol):
+class SelfObservationService(BaseScheduledService, SelfObservationServiceProtocol, RegistryAwareServiceProtocol):
     """
     Service that enables self-observation, pattern detection, and insight generation.
 
@@ -145,8 +146,16 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
         self._learning_cycles = 0
         self._model_updates = 0
 
-    def _set_service_registry(self, registry: "ServiceRegistry") -> None:
-        """Set the service registry and initialize component services."""
+    async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
+        """
+        Attach service registry for bus and service discovery.
+
+        Implements RegistryAwareServiceProtocol to enable proper initialization
+        of memory bus and component services.
+
+        Args:
+            registry: Service registry providing access to buses and services
+        """
         self._service_registry = registry
 
         # Initialize memory bus
@@ -161,9 +170,9 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
                 logger.error(f"Failed to initialize memory bus: {e}")
 
         # Initialize component services
-        self._initialize_components()
+        await self._initialize_components()
 
-    def _initialize_components(self) -> None:
+    async def _initialize_components(self) -> None:
         """Initialize the component services."""
         try:
             # Create variance monitor
@@ -188,7 +197,7 @@ class SelfObservationService(BaseScheduledService, SelfObservationServiceProtoco
             # Create telemetry service
             self._telemetry_service = GraphTelemetryService(memory_bus=self._memory_bus)
             if self._service_registry:
-                self._telemetry_service._set_service_registry(self._service_registry)
+                await self._telemetry_service.attach_registry(self._service_registry)
 
             logger.info("Self-configuration components initialized")
 

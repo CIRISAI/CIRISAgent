@@ -563,9 +563,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             telemetry_service_impl = GraphTelemetryService(
                 memory_bus=self.bus_manager.memory, time_service=self.time_service  # Now we have the memory bus
             )
-            # Set service registry so it can initialize the aggregator (private method on concrete type)
-            if self.service_registry:
-                telemetry_service_impl._set_service_registry(self.service_registry)
+            # Attach service registry using protocol pattern
+            # Use hasattr (protocol is not @runtime_checkable)
+            if self.service_registry and hasattr(telemetry_service_impl, "attach_registry"):
+                await telemetry_service_impl.attach_registry(self.service_registry)
             await telemetry_service_impl.start()
             # Assign to protocol-typed field after all setup is complete
             # Note: GraphTelemetryService structurally implements TelemetryService protocol
@@ -683,9 +684,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             variance_threshold=0.20,  # 20% max variance from baseline
             observation_interval_hours=6,
         )
-        # Set service registry so it can initialize components
-        if self.service_registry:
-            self.self_observation_service._set_service_registry(self.service_registry)
+        # Attach service registry using protocol pattern
+        # Use hasattr (protocol is not @runtime_checkable)
+        if self.service_registry and hasattr(self.self_observation_service, "attach_registry"):
+            await self.self_observation_service.attach_registry(self.service_registry)
         # Start the service for API mode (in other modes DREAM processor starts it)
         await self.self_observation_service.start()
         self._services_started_count += 1
@@ -895,9 +897,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             retention_days=retention_days,
         )
         # Runtime will be set later when available
-        # Set service registry so it can access memory bus
-        if self.service_registry:
-            graph_audit._set_service_registry(self.service_registry)
+        # Attach service registry using protocol pattern
+        # Use hasattr (protocol is not @runtime_checkable)
+        if self.service_registry and hasattr(graph_audit, "attach_registry"):
+            await graph_audit.attach_registry(self.service_registry)
         await graph_audit.start()
         self._services_started_count += 1
         self.audit_service = graph_audit

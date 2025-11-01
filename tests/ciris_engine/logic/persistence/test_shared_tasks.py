@@ -436,7 +436,9 @@ def test_get_task_by_correlation_id_multiple_tasks_returns_latest(temp_db: str, 
 
     # Try to add second task - should return existing task1_id due to unique constraint
     returned_task_id = add_task(task2, db_path=temp_db)
-    assert returned_task_id == task1.task_id, "add_task should return existing task_id when duplicate correlation_id is detected"
+    assert (
+        returned_task_id == task1.task_id
+    ), "add_task should return existing task_id when duplicate correlation_id is detected"
 
     # Verify only task1 exists in database
     retrieved_task = get_task_by_correlation_id(correlation_id, occurrence_id="default", db_path=temp_db)

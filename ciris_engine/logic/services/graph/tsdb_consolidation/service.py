@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import ConsentStream
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -49,7 +50,7 @@ from .query_manager import QueryManager
 logger = logging.getLogger(__name__)
 
 
-class TSDBConsolidationService(BaseGraphService):
+class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
     """
     Refactored TSDB Consolidation Service.
 
@@ -138,8 +139,16 @@ class TSDBConsolidationService(BaseGraphService):
         self._profound_target_mb_per_day = 20.0  # Default 20MB/day
         logger.info(f"TSDB profound consolidation target: {self._profound_target_mb_per_day} MB/day")
 
-    def _set_service_registry(self, registry: "ServiceRegistry") -> None:
-        """Set the service registry for accessing services."""
+    async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
+        """
+        Attach service registry for service discovery.
+
+        Implements RegistryAwareServiceProtocol to enable proper initialization
+        of time service dependency.
+
+        Args:
+            registry: Service registry providing access to services
+        """
         self._service_registry = registry
 
         # Only get time service from registry if not provided

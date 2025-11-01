@@ -46,6 +46,7 @@ from ciris_engine.logic.audit.hash_chain import AuditHashChain
 from ciris_engine.logic.audit.verifier import AuditVerifier
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
+from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.services import AuditService as AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
@@ -72,7 +73,7 @@ except ImportError as e:
     raise
 
 
-class GraphAuditService(BaseGraphService, AuditServiceProtocol):
+class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareServiceProtocol):
     """
     Consolidated audit service that stores all audit entries in the graph.
 
@@ -119,7 +120,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         # Initialize BaseGraphService with version 2.0.0
         super().__init__(memory_bus=memory_bus, time_service=time_service, version="2.0.0")
 
-        self._service_registry: Optional["ServiceRegistry"] = None
+        self._service_registry: Optional[ServiceRegistryProtocol] = None
 
         # Export configuration
         self.export_path = Path(export_path) if export_path else None
@@ -161,19 +162,23 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol):
         # Lock for hash chain operations
         self._hash_chain_lock = asyncio.Lock()
 
-    def _set_service_registry(self, registry: object) -> None:
-        """Set the service registry for accessing memory bus."""
-        from ciris_engine.logic.registries.base import ServiceRegistry
+    async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
+        """
+        Attach service registry for bus and service discovery.
 
-        if isinstance(registry, ServiceRegistry):
-            self._service_registry = registry
-        if not self._memory_bus and self._service_registry:
+        Implements RegistryAwareServiceProtocol to enable proper initialization
+        of memory bus dependency.
+
+        Args:
+            registry: Service registry providing access to buses and services
+        """
+        self._service_registry = registry
+
+        if not self._memory_bus and self._service_registry and self._time_service:
             try:
                 from ciris_engine.logic.buses import MemoryBus
 
-                # ServiceRegistry is already imported above from base module
-                if self._time_service:
-                    self._memory_bus = MemoryBus(self._service_registry, self._time_service)
+                self._memory_bus = MemoryBus(self._service_registry, self._time_service)
             except Exception as e:
                 logger.error(f"Failed to initialize memory bus: {e}")
 

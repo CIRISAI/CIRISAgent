@@ -6,7 +6,7 @@ These are the foundational systems that enable everything else to work.
 """
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from ciris_engine.protocols.runtime.base import ServiceProtocol
 from ciris_engine.schemas.infrastructure.base import (
@@ -254,30 +254,124 @@ class PersistenceManagerProtocol(ServiceProtocol):
 # ============================================================================
 
 
-class ServiceRegistryProtocol(ServiceProtocol):
-    """Protocol for service discovery and registration."""
+class ServiceRegistryProtocol(Protocol):
+    """Protocol for service discovery and registration.
+
+    This protocol matches the actual ServiceRegistry implementation.
+    Note: Does NOT inherit from ServiceProtocol because ServiceRegistry
+    is infrastructure, not a service itself.
+    """
 
     @abstractmethod
-    async def register_service(self, service_name: str, _: Any) -> None:
-        """Register a service."""
+    def register_service(
+        self,
+        service_type: Any,
+        provider: Any,
+        priority: Any = None,
+        capabilities: Optional[List[str]] = None,
+        circuit_breaker_config: Any = None,
+        metadata: Any = None,
+        priority_group: int = 0,
+        strategy: Any = None,
+    ) -> str:
+        """Register a service provider."""
         ...
 
     @abstractmethod
-    async def unregister_service(self, service_name: str) -> None:
-        """Unregister a service."""
+    async def get_service(
+        self, handler: str, service_type: Any, required_capabilities: Optional[List[str]] = None
+    ) -> Optional[Any]:
+        """Get the best available service."""
         ...
 
     @abstractmethod
-    def get_service(self, service_name: str) -> ServiceRegistration:
-        """Get service information."""
+    def get_services_by_type(self, service_type: Any) -> List[Any]:
+        """Get all services of a given type."""
         ...
 
     @abstractmethod
-    def list_services(self) -> "ServiceRegistry":
-        """List all registered services."""
+    def get_services(
+        self,
+        service_type: Any,
+        required_capabilities: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+    ) -> List[Any]:
+        """Return multiple healthy providers matching capabilities."""
         ...
 
     @abstractmethod
-    async def health_check_service(self, service_name: str) -> bool:
-        """Health check a specific service."""
+    def get_provider_info(self, handler: Optional[str] = None, service_type: Optional[str] = None) -> Dict[str, Any]:
+        """Get information about registered providers."""
+        ...
+
+
+class RegistryAwareServiceProtocol(ServiceProtocol):
+    """
+    Protocol for services that require ServiceRegistry access after construction.
+
+    This protocol defines a standard pattern for services that cannot receive
+    the ServiceRegistry via constructor injection (e.g., due to circular
+    dependencies or initialization order constraints).
+
+    Usage Guidelines:
+    -----------------
+    Use this protocol when:
+    - A service needs to access buses or other services from the registry
+    - Constructor injection would create circular dependencies
+    - The registry is not available at construction time
+
+    Do NOT use this protocol when:
+    - Dependencies can be injected via constructor (preferred pattern)
+    - The service only needs 1-2 specific dependencies (inject directly)
+
+    Example Implementation:
+    -----------------------
+    ```python
+    from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol
+    from ciris_engine.protocols.runtime.base import ServiceProtocol
+
+    class MyService(RegistryAwareServiceProtocol):
+        def __init__(self):
+            self._service_registry: Optional[ServiceRegistry] = None
+            self._memory_bus: Optional[MemoryBus] = None
+
+        async def attach_registry(self, registry: ServiceRegistryProtocol) -> None:
+            '''Attach registry and initialize buses.'''
+            self._service_registry = registry
+            # Initialize required buses/services from registry
+            if registry:
+                self._memory_bus = MemoryBus(registry, time_service)
+    ```
+
+    ServiceInitializer Usage:
+    -------------------------
+    ```python
+    # After service construction
+    # Use hasattr check (protocol is not @runtime_checkable)
+    if hasattr(service, 'attach_registry'):
+        await service.attach_registry(self.service_registry)
+    ```
+    """
+
+    @abstractmethod
+    async def attach_registry(self, registry: ServiceRegistryProtocol) -> None:
+        """
+        Attach service registry for bus and service discovery.
+
+        This method is called by ServiceInitializer after service construction
+        but before service.start(). It allows the service to initialize any
+        buses or dependencies that require registry access.
+
+        Args:
+            registry: The service registry instance providing access to buses
+                     and other registered services.
+
+        Implementation Notes:
+        --------------------
+        - Store registry reference: `self._service_registry = registry`
+        - Initialize required buses (e.g., MemoryBus, LLMBus)
+        - Retrieve required services via registry.get_capability()
+        - Handle None registry gracefully (for testing)
+        - This method is called BEFORE start() is called
+        """
         ...

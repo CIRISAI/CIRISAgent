@@ -282,36 +282,37 @@ class ServiceRegistryProtocol(ServiceProtocol):
         """Health check a specific service."""
         ...
 
+
 class RegistryAwareServiceProtocol(ServiceProtocol):
     """
     Protocol for services that require ServiceRegistry access after construction.
-    
+
     This protocol defines a standard pattern for services that cannot receive
-    the ServiceRegistry via constructor injection (e.g., due to circular 
+    the ServiceRegistry via constructor injection (e.g., due to circular
     dependencies or initialization order constraints).
-    
+
     Usage Guidelines:
     -----------------
     Use this protocol when:
     - A service needs to access buses or other services from the registry
     - Constructor injection would create circular dependencies
     - The registry is not available at construction time
-    
+
     Do NOT use this protocol when:
     - Dependencies can be injected via constructor (preferred pattern)
     - The service only needs 1-2 specific dependencies (inject directly)
-    
+
     Example Implementation:
     -----------------------
     ```python
     from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol
     from ciris_engine.protocols.runtime.base import ServiceProtocol
-    
+
     class MyService(RegistryAwareServiceProtocol):
         def __init__(self):
             self._service_registry: Optional[ServiceRegistry] = None
             self._memory_bus: Optional[MemoryBus] = None
-        
+
         async def attach_registry(self, registry: ServiceRegistryProtocol) -> None:
             '''Attach registry and initialize buses.'''
             self._service_registry = registry
@@ -319,29 +320,30 @@ class RegistryAwareServiceProtocol(ServiceProtocol):
             if registry:
                 self._memory_bus = MemoryBus(registry, time_service)
     ```
-    
+
     ServiceInitializer Usage:
     -------------------------
     ```python
     # After service construction
-    if isinstance(service, RegistryAwareServiceProtocol):
+    # Use hasattr check (protocol is not @runtime_checkable)
+    if hasattr(service, 'attach_registry'):
         await service.attach_registry(self.service_registry)
     ```
     """
-    
+
     @abstractmethod
     async def attach_registry(self, registry: ServiceRegistryProtocol) -> None:
         """
         Attach service registry for bus and service discovery.
-        
+
         This method is called by ServiceInitializer after service construction
         but before service.start(). It allows the service to initialize any
         buses or dependencies that require registry access.
-        
+
         Args:
             registry: The service registry instance providing access to buses
                      and other registered services.
-        
+
         Implementation Notes:
         --------------------
         - Store registry reference: `self._service_registry = registry`

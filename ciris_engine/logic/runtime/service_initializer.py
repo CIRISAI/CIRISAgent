@@ -33,7 +33,6 @@ from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 # Import new infrastructure services
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient
-from ciris_engine.protocols.infrastructure import RegistryAwareServiceProtocol
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -565,7 +564,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 memory_bus=self.bus_manager.memory, time_service=self.time_service  # Now we have the memory bus
             )
             # Attach service registry using protocol pattern
-            if self.service_registry and isinstance(telemetry_service_impl, RegistryAwareServiceProtocol):
+            # Use hasattr (protocol is not @runtime_checkable)
+            if self.service_registry and hasattr(telemetry_service_impl, 'attach_registry'):
                 await telemetry_service_impl.attach_registry(self.service_registry)
             await telemetry_service_impl.start()
             # Assign to protocol-typed field after all setup is complete
@@ -685,7 +685,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             observation_interval_hours=6,
         )
         # Attach service registry using protocol pattern
-        if self.service_registry and isinstance(self.self_observation_service, RegistryAwareServiceProtocol):
+        # Use hasattr (protocol is not @runtime_checkable)
+        if self.service_registry and hasattr(self.self_observation_service, 'attach_registry'):
             await self.self_observation_service.attach_registry(self.service_registry)
         # Start the service for API mode (in other modes DREAM processor starts it)
         await self.self_observation_service.start()
@@ -897,7 +898,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         # Runtime will be set later when available
         # Attach service registry using protocol pattern
-        if self.service_registry and isinstance(graph_audit, RegistryAwareServiceProtocol):
+        # Use hasattr (protocol is not @runtime_checkable)
+        if self.service_registry and hasattr(graph_audit, 'attach_registry'):
             await graph_audit.attach_registry(self.service_registry)
         await graph_audit.start()
         self._services_started_count += 1

@@ -591,9 +591,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 conn.commit()
 
                 if total_duplicates_deleted > 0:
-                    logger.info(
-                        f"✓ Cleaned up {total_duplicates_deleted} duplicate temporal edges from PostgreSQL bug"
-                    )
+                    logger.info(f"✓ Cleaned up {total_duplicates_deleted} duplicate temporal edges from PostgreSQL bug")
 
         except Exception as e:
             logger.error(f"Failed to clean up duplicate temporal edges: {e}", exc_info=True)

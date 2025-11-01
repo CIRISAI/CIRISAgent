@@ -754,23 +754,26 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
     ) -> int:
         """Create SUMMARIZES edges from primary summary to all nodes in period.
 
-        NOTE: We create edges to ALL nodes including tsdb_data, even though tsdb_data
-        will be deleted later. This ensures:
-        1. Visualizations show full connectivity during the retention window
-        2. Audit trail shows what was summarized
-        3. Orphaned edge cleanup removes edges when nodes are deleted
+        NOTE: Excludes tsdb_data nodes as they are raw telemetry that gets aggregated
+        into tsdb_summary. Creating edges from other summaries to tsdb_data would violate
+        the data hierarchy - tsdb_data is a different scope/layer than summaries.
+
+        Correct architecture:
+        - tsdb_data → aggregated into → tsdb_summary (via source_node_count)
+        - tsdb_summary ← TEMPORAL edges → other summaries (task_summary, etc.)
         """
-        # Collect all nodes in period (INCLUDING tsdb_data for visualization)
+        # Collect all nodes in period (EXCLUDING tsdb_data - wrong scope/layer)
         all_nodes_in_period = []
         logger.debug(f"Collecting nodes for SUMMARIZES edges. nodes_by_type keys: {list(nodes_by_type.keys())}")
 
         for node_type, result in nodes_by_type.items():
-            node_count = len(result.nodes) if hasattr(result, "nodes") else 0
-            logger.debug(f"  {node_type}: {node_count} nodes")
-            if hasattr(result, "nodes"):
-                all_nodes_in_period.extend(result.nodes)
-            else:
-                logger.warning(f"  {node_type} result has no 'nodes' attribute: {type(result)}")
+            if node_type != "tsdb_data":  # tsdb_data is different scope - only referenced by tsdb_summary
+                node_count = len(result.nodes) if hasattr(result, "nodes") else 0
+                logger.debug(f"  {node_type}: {node_count} nodes")
+                if hasattr(result, "nodes"):
+                    all_nodes_in_period.extend(result.nodes)
+                else:
+                    logger.warning(f"  {node_type} result has no 'nodes' attribute: {type(result)}")
 
         logger.info(f"Total nodes collected for SUMMARIZES edges: {len(all_nodes_in_period)}")
 

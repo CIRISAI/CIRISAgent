@@ -27,19 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Solution**: Use `adapter.placeholder()` for database-agnostic SQL
   - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/edge_manager.py:254-315`
   - **Evidence**: Scout 002 database analysis showed 20 TEMPORAL_NEXT + 38 TEMPORAL_PREV duplicates for single summary
-
-- **TSDB SUMMARIZES Edge Exclusion** - Removed tsdb_data exclusion filter to enable full visualization connectivity
-  - **Problem**: Summary nodes only had edges to 3% of actual data (23 edges out of 764 total nodes)
-    - Visualization showed summaries with very few connections
-    - tsdb_data nodes (97% of data) had NO SUMMARIZES edges
-    - User reported: "consolidated nodes seem to be missing some edges in the visualization"
-  - **Design Intent**: Original code excluded tsdb_data nodes because they're temporary and should be deleted
-  - **Solution**: Create SUMMARIZES edges to ALL nodes including tsdb_data
-    - Provides full connectivity during retention window
-    - Orphaned edge cleanup automatically removes edges when nodes are deleted
-    - Visualization now shows complete data provenance
-  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:752-773`
-  - **Impact**: Visualizations now show full connectivity (764 edges instead of 23)
+  - **Note**: This was the actual root cause of "missing edges" - temporal chains between summaries were broken
 
 ### Added
 - **Database Maintenance: Duplicate Temporal Edge Cleanup** - Automatic cleanup of duplicate edges from PostgreSQL bug

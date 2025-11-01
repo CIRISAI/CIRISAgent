@@ -41,6 +41,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py:752-773`
   - **Impact**: Visualizations now show full connectivity (764 edges instead of 23)
 
+### Added
+- **Database Maintenance: Duplicate Temporal Edge Cleanup** - Automatic cleanup of duplicate edges from PostgreSQL bug
+  - **Purpose**: Clean up duplicate TEMPORAL_NEXT/TEMPORAL_PREV edges created by v1.5.5 bug
+  - **Implementation**: New `_cleanup_duplicate_temporal_edges()` method in DatabaseMaintenanceService
+  - **Behavior**:
+    - Runs automatically at startup as part of `perform_startup_cleanup()`
+    - Finds summaries with multiple temporal edges of same type
+    - Keeps most recent edge, deletes older duplicates
+    - Idempotent - safe to run multiple times
+  - **Files**: `ciris_engine/logic/services/infrastructure/database_maintenance/service.py:493-599`
+  - **Impact**: Production agents will automatically clean up duplicates on next restart
+
 ## [1.5.5] - 2025-11-01
 
 ### Fixed

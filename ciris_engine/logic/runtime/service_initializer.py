@@ -162,7 +162,10 @@ class ServiceInitializer:
 
         # Credit provider: Always enabled for OAuth user credit gating
         # Now configured via typed InfrastructureConfig (replaces environment var checks)
-        from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider, SimpleCreditProvider
+        from ciris_engine.logic.services.infrastructure.resource_monitor import (
+            CIRISBillingProvider,
+            SimpleCreditProvider,
+        )
         from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
         from ciris_engine.schemas.config.infrastructure_config import CreditProviderType
 
@@ -200,14 +203,16 @@ class ServiceInitializer:
         self._services_started_count += 1
         logger.info("ResourceMonitorService initialized")
 
-    async def initialize_memory_service(self, config: Any) -> None:
-        """Initialize the memory service."""
+    async def initialize_memory_service(self) -> None:
+        """Initialize the memory service using typed MemoryConfig."""
         # Initialize secrets service first (memory service depends on it)
         import os
-        from pathlib import Path
 
-        # Use configurable secrets key path from essential config
-        keys_dir = Path(self.essential_config.security.secrets_key_path)
+        # Use typed config for memory service initialization
+        memory_config = self.init_config.memory
+
+        # Use configurable secrets key path from typed config
+        keys_dir = memory_config.secrets_key_path
         keys_dir.mkdir(parents=True, exist_ok=True)
 
         # Load or generate master key
@@ -274,11 +279,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.md")
 
-        # Use the proper helper function to get secrets database path
-        # This handles PostgreSQL URL query parameter preservation correctly
-        from ciris_engine.logic.config import get_secrets_db_full_path
-
-        secrets_db_path = get_secrets_db_full_path(self.essential_config)
+        # Use typed config for secrets database path
+        secrets_db_path = str(memory_config.secrets_db_path)
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
@@ -300,10 +302,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("SecretsToolService created and started")
 
-        # LocalGraphMemoryService needs the correct db path from our config
-        db_path = get_sqlite_db_full_path(self.essential_config)
+        # Use typed config for memory database path
+        memory_db_path = str(memory_config.memory_db_path)
         self.memory_service = LocalGraphMemoryService(
-            db_path=db_path, time_service=self.time_service, secrets_service=self.secrets_service
+            db_path=memory_db_path, time_service=self.time_service, secrets_service=self.secrets_service
         )
         await self.memory_service.start()
         self._services_started_count += 1

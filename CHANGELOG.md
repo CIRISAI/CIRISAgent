@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.5] - 2025-11-01
+
+### Fixed
+- **Type Safety: ServiceRegistryProtocol Alignment** - Fixed critical type mismatches causing mypy errors throughout ciris_engine/
+  - **Problem**: `ServiceRegistryProtocol` had incorrect method signatures and inherited from wrong base class
+    - Protocol inherited from `ServiceProtocol` (ServiceRegistry is infrastructure, not a service)
+    - `register_service()` signature didn't match actual implementation
+    - `get_service()` was not marked async and had wrong parameters
+    - Missing methods: `get_services()`, `get_provider_info()`, `get_services_by_type()`
+  - **Impact**:
+    - 6+ mypy errors across buses and services
+    - Poor IDE autocomplete and type checking
+    - Potential future runtime errors from type mismatches
+  - **Solution**:
+    - Changed `ServiceRegistryProtocol` to inherit from `Protocol` (not `ServiceProtocol`)
+    - Updated all method signatures to match actual `ServiceRegistry` implementation
+    - Added missing methods to protocol
+    - Made `ServiceRegistry` conditionally inherit from protocol (TYPE_CHECKING only)
+    - Updated all services to use `ServiceRegistryProtocol` consistently
+  - **Files**:
+    - `ciris_engine/protocols/infrastructure/base.py` - Protocol definition
+    - `ciris_engine/logic/registries/base.py` - Conditional inheritance
+    - `ciris_engine/logic/buses/base_bus.py` - Updated to accept protocol
+    - `ciris_engine/logic/buses/memory_bus.py` - Updated to accept protocol
+    - `ciris_engine/logic/services/graph/audit_service/service.py` - Removed isinstance checks
+    - `ciris_engine/logic/services/graph/telemetry_service/service.py` - Protocol usage
+    - `ciris_engine/logic/services/governance/self_observation/service.py` - Protocol usage
+    - `ciris_engine/logic/services/graph/tsdb_consolidation/service.py` - Protocol usage
+  - **Test Coverage**: All 6,170 tests passing, 118 QA tests at 99.2% pass rate
+  - **Validation**: Zero mypy errors in ciris_engine/
+
+- **P1: isinstance() on Non-Runtime-Checkable Protocol** - Fixed test failures from invalid isinstance checks
+  - **Problem**: `test_registry_aware_protocol.py` used `isinstance(service, RegistryAwareServiceProtocol)` but protocol is intentionally not `@runtime_checkable`
+  - **Impact**: Would cause `TypeError: Instance and class checks can only be used with @runtime_checkable protocols` at test runtime
+  - **Solution**: Replaced all `isinstance()` checks with `hasattr(service, "attach_registry")` as documented in protocol docstring
+  - **Files**: `tests/protocols/test_registry_aware_protocol.py`
+  - **Test Coverage**: All 14 protocol tests passing
+
+### Improved
+- **Type Safety Infrastructure** - Enhanced type checking capabilities for future development
+  - Better IDE autocomplete and type checking across ServiceRegistry usage
+  - Foundation for potential multiple registry implementations
+  - Improved maintainability through explicit protocol contracts
+  - Zero runtime overhead (protocol inheritance only during TYPE_CHECKING)
+
 ## [1.5.4] - 2025-10-31
 
 ### Fixed

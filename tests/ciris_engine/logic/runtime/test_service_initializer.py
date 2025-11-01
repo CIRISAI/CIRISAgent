@@ -43,7 +43,8 @@ class TestServiceInitializer:
         # Add security attribute with secrets_key_path (must be Path, not Mock)
         mock_security = Mock()
         mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
-        mock_security.signing_key_path = Path(temp_data_dir) / ".signing_keys"
+        mock_security.audit_key_path = Path(temp_data_dir) / "audit_keys"  # Correct field name
+        mock_security.audit_retention_days = 90
         config.security = mock_security
 
         # Add graph attribute for TSDB configuration
@@ -59,10 +60,8 @@ class TestServiceInitializer:
         mock_services.llm_max_retries = 3
         config.services = mock_services
 
-        # Add audit attribute for observability config (required by typed config)
-        mock_audit = Mock()
-        mock_audit.audit_log_path = Path(temp_data_dir) / "audit_logs"
-        config.audit = mock_audit
+        # Note: EssentialConfig does NOT have an 'audit' section
+        # Audit config comes from security.audit_* fields (already set above)
 
         # Add model_dump method that returns a dict for config migration
         config.model_dump = Mock(
@@ -278,13 +277,9 @@ class TestServiceInitializer:
         allowing real OpenAICompatibleClient alongside mock - the exact attack vector
         the code warns about.
         """
-        # Add required audit attribute for config creation
-        mock_audit = Mock()
-        mock_audit.audit_log_path = Path(temp_data_dir) / "audit_logs"
-        mock_essential_config.audit = mock_audit
-
-        # Ensure security.signing_key_path is a real Path (not Mock)
-        mock_essential_config.security.signing_key_path = Path(temp_data_dir) / ".signing_keys"
+        # Ensure security.audit_key_path is a real Path (not Mock) - correct field name
+        mock_essential_config.security.audit_key_path = Path(temp_data_dir) / "audit_keys"
+        mock_essential_config.security.audit_retention_days = 90
 
         # Add required services attribute for config creation
         mock_essential_config.services = Mock()

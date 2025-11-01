@@ -358,3 +358,240 @@ class TestSharedWakeupTaskIsolation:
         retrieved = persistence.get_task_by_id("WAKEUP_SHARED_NOW", "__shared__", clean_db)
         assert retrieved is not None
         assert retrieved.status == TaskStatus.ACTIVE
+
+
+def insert_raw_thought(db_path: str, thought_id: str, context_json: str, source_task_id: str = "task_123"):
+    """
+    Helper function to insert a thought with potentially invalid context directly into the database.
+
+    This bypasses Pydantic validation to allow testing cleanup of malformed data.
+
+    Args:
+        db_path: Path to the database
+        thought_id: Unique identifier for the thought
+        context_json: JSON string for context (can be invalid)
+        source_task_id: ID of the source task (default: "task_123")
+    """
+    from ciris_engine.logic.persistence import get_db_connection
+
+    now = datetime.now(timezone.utc)
+
+    with get_db_connection(db_path=db_path) as conn:
+        # First, ensure the source task exists (for foreign key constraint)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO tasks (task_id, description, status, agent_occurrence_id,
+                                        channel_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                source_task_id,
+                f"Test task {source_task_id}",
+                "active",
+                "default",
+                "api",
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+
+        # Now insert the thought
+        conn.execute(
+            """
+            INSERT INTO thoughts (thought_id, source_task_id, agent_occurrence_id, channel_id,
+                                thought_type, status, created_at, updated_at, round_number,
+                                content, context_json, thought_depth)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                thought_id,
+                source_task_id,
+                "default",
+                "api",
+                "standard",  # Valid ThoughtType
+                "pending",
+                now.isoformat(),
+                now.isoformat(),
+                1,
+                f"Test thought {thought_id}",
+                context_json,
+                0,
+            ),
+        )
+        conn.commit()
+
+
+class TestInsertRawThoughtHelper:
+    """Test the insert_raw_thought helper function."""
+
+    def test_insert_raw_thought_creates_record(self, clean_db):
+        """
+        GIVEN a database path and thought parameters
+        WHEN insert_raw_thought is called
+        THEN a thought record is created with the specified context
+        """
+        insert_raw_thought(clean_db, "helper_test_001", '{"task_id": "t1", "correlation_id": "c1"}')
+
+        # Verify thought exists
+        retrieved = persistence.get_thought_by_id("helper_test_001", "default", clean_db)
+        assert retrieved is not None
+        assert retrieved.thought_id == "helper_test_001"
+        assert retrieved.source_task_id == "task_123"
+
+    def test_insert_raw_thought_allows_invalid_context(self, clean_db):
+        """
+        GIVEN invalid context JSON
+        WHEN insert_raw_thought is called
+        THEN the record is created without Pydantic validation
+        """
+        # This would fail Pydantic validation but should work with raw insert
+        insert_raw_thought(clean_db, "helper_test_002", "{}")
+
+        # Verify thought exists with empty context
+        from ciris_engine.logic.persistence import get_db_connection
+        with get_db_connection(db_path=clean_db) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT context_json FROM thoughts WHERE thought_id = ?",
+                ("helper_test_002",)
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert row["context_json"] == "{}"
+
+
+class TestInvalidThoughtCleanup:
+    """Test cleanup of thoughts with invalid or malformed context."""
+
+    async def test_cleanup_invalid_thoughts_with_empty_context(
+        self,
+        clean_db,
+        database_maintenance_service,
+    ):
+        """
+        GIVEN thoughts with empty context {}
+        WHEN cleanup runs
+        THEN invalid thoughts should be deleted
+        """
+        # Insert thought with empty context using helper
+        insert_raw_thought(clean_db, "invalid_001", "{}")
+
+        # Verify thought exists before cleanup
+        retrieved_before = persistence.get_thought_by_id("invalid_001", "default", clean_db)
+        assert retrieved_before is not None
+
+        # Run cleanup
+        await database_maintenance_service._cleanup_invalid_thoughts()
+
+        # Verify thought was deleted
+        retrieved_after = persistence.get_thought_by_id("invalid_001", "default", clean_db)
+        assert retrieved_after is None
+
+    async def test_cleanup_invalid_thoughts_missing_task_id(
+        self,
+        clean_db,
+        database_maintenance_service,
+    ):
+        """
+        GIVEN thoughts with context missing task_id
+        WHEN cleanup runs
+        THEN invalid thoughts should be deleted
+        """
+        # Insert thought with context missing task_id
+        insert_raw_thought(clean_db, "invalid_002", '{"correlation_id": "corr_123"}')
+
+        # Run cleanup
+        await database_maintenance_service._cleanup_invalid_thoughts()
+
+        # Verify thought was deleted
+        retrieved = persistence.get_thought_by_id("invalid_002", "default", clean_db)
+        assert retrieved is None
+
+    async def test_cleanup_invalid_thoughts_missing_correlation_id(
+        self,
+        clean_db,
+        database_maintenance_service,
+    ):
+        """
+        GIVEN thoughts with context missing correlation_id
+        WHEN cleanup runs
+        THEN invalid thoughts should be deleted
+        """
+        # Insert thought with context missing correlation_id
+        insert_raw_thought(clean_db, "invalid_003", '{"task_id": "task_123"}')
+
+        # Run cleanup
+        await database_maintenance_service._cleanup_invalid_thoughts()
+
+        # Verify thought was deleted
+        retrieved = persistence.get_thought_by_id("invalid_003", "default", clean_db)
+        assert retrieved is None
+
+    async def test_cleanup_invalid_thoughts_preserves_valid(
+        self,
+        clean_db,
+        database_maintenance_service,
+    ):
+        """
+        GIVEN mix of valid and invalid thoughts
+        WHEN cleanup runs
+        THEN only invalid thoughts are deleted, valid ones preserved
+        """
+        # Insert valid thought with complete context
+        insert_raw_thought(clean_db, "valid_001", '{"task_id": "task_123", "correlation_id": "corr_123"}')
+
+        # Insert invalid thought with empty context
+        insert_raw_thought(clean_db, "invalid_004", "{}")
+
+        # Run cleanup
+        await database_maintenance_service._cleanup_invalid_thoughts()
+
+        # Verify valid thought preserved
+        valid_retrieved = persistence.get_thought_by_id("valid_001", "default", clean_db)
+        assert valid_retrieved is not None
+
+        # Verify invalid thought deleted
+        invalid_retrieved = persistence.get_thought_by_id("invalid_004", "default", clean_db)
+        assert invalid_retrieved is None
+
+    async def test_cleanup_invalid_thoughts_handles_no_invalid(
+        self,
+        clean_db,
+        database_maintenance_service,
+    ):
+        """
+        GIVEN no invalid thoughts
+        WHEN cleanup runs
+        THEN no errors occur and valid thoughts preserved
+        """
+        # Insert only valid thought
+        insert_raw_thought(clean_db, "valid_002", '{"task_id": "task_123", "correlation_id": "corr_123"}')
+
+        # Run cleanup - should complete without errors
+        await database_maintenance_service._cleanup_invalid_thoughts()
+
+        # Verify valid thought still exists
+        retrieved = persistence.get_thought_by_id("valid_002", "default", clean_db)
+        assert retrieved is not None
+
+    async def test_cleanup_invalid_thoughts_handles_exception(
+        self,
+        database_maintenance_service,
+        monkeypatch,
+    ):
+        """
+        GIVEN database error during cleanup
+        WHEN cleanup runs
+        THEN exception is caught and logged, no crash
+        """
+        # Mock get_db_connection to raise exception
+        def mock_get_db_connection(*args, **kwargs):
+            raise Exception("Database connection failed")
+
+        monkeypatch.setattr(
+            "ciris_engine.logic.persistence.get_db_connection",
+            mock_get_db_connection,
+        )
+
+        # Should not raise exception
+        await database_maintenance_service._cleanup_invalid_thoughts()

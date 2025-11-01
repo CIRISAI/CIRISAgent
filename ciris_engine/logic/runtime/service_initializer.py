@@ -36,6 +36,7 @@ from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClie
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.config.initialization_config import InitializationConfig
+from ciris_engine.schemas.config.llm_config import LLMProviderConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ServiceManifest
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
@@ -203,16 +204,14 @@ class ServiceInitializer:
         self._services_started_count += 1
         logger.info("ResourceMonitorService initialized")
 
-    async def initialize_memory_service(self) -> None:
-        """Initialize the memory service using typed MemoryConfig."""
+    async def initialize_memory_service(self, config: Any) -> None:
+        """Initialize the memory service."""
         # Initialize secrets service first (memory service depends on it)
         import os
+        from pathlib import Path
 
-        # Use typed config for memory service initialization
-        memory_config = self.init_config.memory
-
-        # Use configurable secrets key path from typed config
-        keys_dir = memory_config.secrets_key_path
+        # Use configurable secrets key path from essential config
+        keys_dir = Path(self.essential_config.security.secrets_key_path)
         keys_dir.mkdir(parents=True, exist_ok=True)
 
         # Load or generate master key
@@ -279,8 +278,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 await f.write(readme_content)
             logger.info("Created .ciris_keys/README.md")
 
-        # Use typed config for secrets database path
-        secrets_db_path = str(memory_config.secrets_db_path)
+        # Use the proper helper function to get secrets database path
+        # This handles PostgreSQL URL query parameter preservation correctly
+        from ciris_engine.logic.config import get_secrets_db_full_path
+
+        secrets_db_path = get_secrets_db_full_path(self.essential_config)
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
@@ -302,10 +304,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("SecretsToolService created and started")
 
-        # Use typed config for memory database path
-        memory_db_path = str(memory_config.memory_db_path)
+        # LocalGraphMemoryService needs the correct db path from our config
+        db_path = get_sqlite_db_full_path(self.essential_config)
         self.memory_service = LocalGraphMemoryService(
-            db_path=memory_db_path, time_service=self.time_service, secrets_service=self.secrets_service
+            db_path=db_path, time_service=self.time_service, secrets_service=self.secrets_service
         )
         await self.memory_service.start()
         self._services_started_count += 1
@@ -396,12 +398,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error(f"Memory service verification error: {e}")
             return False
 
-    async def initialize_security_services(self) -> None:
-        """Initialize security-related services.
-
-        Migrated to use typed config in Phase 3B.
-        No longer accepts untyped config parameters.
-        """
+    async def initialize_security_services(self, config: Any, app_config: Any) -> None:
+        """Initialize security-related services."""
         # SecretsService already initialized in initialize_memory_service
 
         # Initialize AuthenticationService first
@@ -437,11 +435,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("WA authentication system initialized")
 
     async def verify_security_services(self) -> bool:
-        """Verify security services are operational.
-
-        Migrated to use typed config in Phase 3B.
-        No config parameters needed for verification.
-        """
+        """Verify security services are operational."""
         # Verify secrets service
         if not self.secrets_service:
             logger.error("Secrets service not initialized")
@@ -612,13 +606,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.bus_manager.llm.telemetry_service = self.telemetry_service
 
         # Initialize LLM service(s) based on configuration
-        await self._initialize_llm_services(config, modules_to_load)
+        await self._initialize_llm_services(modules_to_load)
 
         # Secrets service no longer needs LLM service reference
 
         # Initialize ALL THREE REQUIRED audit services
-        # Updated for Phase 3B: No longer passes config/agent_id parameters
-        await self._initialize_audit_services()
+        await self._initialize_audit_services(agent_id)
 
         # Initialize adaptive filter service
         assert self.memory_service is not None
@@ -770,13 +763,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         self._startup_end_time = time.time()
 
-    async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
+    async def _initialize_llm_services(self, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
         CRITICAL: Only mock OR real LLM services are active, never both.
         This prevents attack vectors where mock responses could be confused with real ones.
 
         Now using typed LLMConfig instead of environment variable access.
+
+        Args:
+            modules_to_load: Optional list of modules being loaded (used for mock detection)
         """
         # Skip if mock LLM module is being loaded (set by module loader)
         # CRITICAL: Check _skip_llm_init directly, not cached config, because
@@ -835,7 +831,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if llm_config_typed.secondary is not None:
             await self._initialize_secondary_llm(llm_config_typed.secondary)
 
-    async def _initialize_secondary_llm(self, secondary_config: Any) -> None:
+    async def _initialize_secondary_llm(self, secondary_config: "LLMProviderConfig") -> None:
         """Initialize optional secondary LLM service.
 
         Args:
@@ -877,7 +873,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         logger.info(f"Secondary LLM service initialized: {secondary_config.model_name}")
 
-    async def _initialize_audit_services(self) -> None:
+    async def _initialize_audit_services(self, agent_id: str) -> None:
         """Initialize the consolidated audit service with three storage backends.
 
         The single GraphAuditService writes to three places:
@@ -885,8 +881,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         2. Graph memory via MemoryBus (primary storage, searchable)
         3. File export (optional, for compliance)
 
-        Migrated to use typed config in Phase 3B.
-        Uses self.init_config.observability.audit for all configuration.
+        Args:
+            agent_id: Agent identifier for audit context
         """
         # Initialize the consolidated GraphAuditService
         logger.info("Initializing consolidated GraphAuditService...")
@@ -896,21 +892,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # - Optional file export for compliance
         # - Cryptographic hash chain for integrity
         # - Time-series capabilities built-in
-
-        # Use typed config from Phase 3B migration
-        audit_config = self.init_config.observability.audit
+        # Use config accessor for audit configuration
+        assert self.config_accessor is not None
+        audit_db_path = await self.config_accessor.get_path("database.audit_db", Path("data/ciris_audit.db"))
+        audit_key_path = await self.config_accessor.get_path("security.audit_key_path", Path(".ciris_keys"))
+        retention_days = await self.config_accessor.get_int("security.audit_retention_days", 90)
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
 
         graph_audit = GraphAuditService(
             memory_bus=None,  # Will be set via service registry
             time_service=self.time_service,
-            export_path=str(audit_config.export_path),
-            export_format=audit_config.export_format,
-            enable_hash_chain=audit_config.enable_hash_chain,
-            db_path=str(audit_config.db_path),
-            key_path=str(audit_config.key_path),
-            retention_days=audit_config.retention_days,
+            export_path="audit_logs.jsonl",  # Standard audit log path
+            export_format="jsonl",
+            enable_hash_chain=True,
+            db_path=str(audit_db_path),
+            key_path=str(audit_key_path),
+            retention_days=retention_days,
         )
         # Runtime will be set later when available
         # Set service registry so it can access memory bus

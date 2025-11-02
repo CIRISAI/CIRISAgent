@@ -245,6 +245,8 @@ class QAConfig:
             tests = []
             # Run all modules in sequence - comprehensive test suite
             for m in [
+                # Streaming tests FIRST (requires clean queue state)
+                QAModule.STREAMING,
                 # Core API modules
                 QAModule.AUTH,
                 QAModule.TELEMETRY,
@@ -272,7 +274,6 @@ class QAConfig:
                 QAModule.EXTENDED_API,
                 QAModule.SINGLE_STEP_SIMPLE,
                 QAModule.SINGLE_STEP_COMPREHENSIVE,
-                QAModule.STREAMING,
             ]:
                 tests.extend(self.get_module_tests(m))
             return tests

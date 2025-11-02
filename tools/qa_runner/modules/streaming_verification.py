@@ -797,6 +797,7 @@ class StreamingVerificationModule:
             drain_timeout = 30  # Wait up to 30 seconds for queue to drain
             drain_elapsed = 0
             drain_check_interval = 0.5
+            initial_queue_size = None
             while drain_elapsed < drain_timeout:
                 queue_response = requests.get(
                     f"{base_url}/v1/system/runtime/queue",
@@ -806,14 +807,30 @@ class StreamingVerificationModule:
                 if queue_response.status_code == 200:
                     queue_data = queue_response.json().get("data", {})
                     queue_size = queue_data.get("queue_size", 0)
+                    if initial_queue_size is None:
+                        initial_queue_size = queue_size
+                        logger.info(f"🔍 Initial queue size before streaming test: {queue_size}")
+                        print(f"\n🔍 Queue state before streaming test: {queue_size} tasks pending")
                     if queue_size == 0:
+                        logger.info(f"✅ Queue drained after {drain_elapsed:.1f}s")
+                        print(f"✅ Queue drained after {drain_elapsed:.1f}s")
                         break  # Queue is empty, ready to submit test message
+                    elif drain_elapsed > 0 and drain_elapsed % 5 == 0:
+                        logger.info(
+                            f"⏳ Waiting for queue to drain: {queue_size} tasks remaining ({drain_elapsed:.0f}s elapsed)"
+                        )
+                        print(f"⏳ Queue: {queue_size} tasks remaining ({drain_elapsed:.0f}s elapsed)", end="\r")
                 time.sleep(drain_check_interval)
                 drain_elapsed += drain_check_interval
             # If queue didn't drain, log it but continue (don't fail the test)
             if drain_elapsed >= drain_timeout:
-                errors.append(f"Queue did not drain within {drain_timeout}s (may affect test timing)")
+                final_queue_size = queue_size if "queue_size" in locals() else "unknown"
+                error_msg = f"Queue did not drain within {drain_timeout}s (started: {initial_queue_size}, current: {final_queue_size})"
+                logger.warning(error_msg)
+                print(f"\n⚠️  {error_msg}")
+                errors.append(error_msg)
         except Exception as e:
+            logger.error(f"Failed to check queue drain status: {e}")
             errors.append(f"Failed to check queue drain status: {e}")
 
         # Trigger a task to generate events using new async message endpoint

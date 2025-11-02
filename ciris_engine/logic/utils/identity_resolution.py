@@ -529,6 +529,8 @@ async def validate_identity_mapping(
     evidence = []
     conflicts = []
     base_score = 0.0
+    direct_mapping_found = False
+    mapping_source = "unknown"
 
     # Build node IDs
     node1_id = f"user_identity:{identifier1_type}:{identifier1}"
@@ -537,9 +539,6 @@ async def validate_identity_mapping(
     # Check for direct mapping
     try:
         edges = await memory_bus.get_node_edges(node1_id, GraphScope.ENVIRONMENT)
-
-        direct_mapping_found = False
-        mapping_source = "unknown"
 
         for edge in edges:
             if edge.relationship == "same_as":

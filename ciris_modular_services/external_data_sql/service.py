@@ -1093,6 +1093,70 @@ class SQLToolService(BaseService, ToolService):
                 correlation_id=correlation_id,
             )
 
+    def _validate_sql_query(self, sql: str) -> Optional[str]:
+        """Validate SQL query against privacy schema.
+
+        Security constraints:
+        1. Only SELECT statements allowed
+        2. Must query configured tables only
+        3. No DDL (CREATE, DROP, ALTER)
+        4. No DML (INSERT, UPDATE, DELETE) except via dedicated tools
+
+        Args:
+            sql: SQL query string to validate
+
+        Returns:
+            Error message if invalid, None if valid
+        """
+        # Normalize query for validation
+        sql_upper = sql.strip().upper()
+
+        # Only allow SELECT queries
+        if not sql_upper.startswith("SELECT"):
+            return "Only SELECT queries are allowed. Use dedicated tools for modifications."
+
+        # Block dangerous keywords
+        dangerous_keywords = [
+            "DROP",
+            "CREATE",
+            "ALTER",
+            "TRUNCATE",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "GRANT",
+            "REVOKE",
+            "EXEC",
+            "EXECUTE",
+        ]
+        for keyword in dangerous_keywords:
+            if keyword in sql_upper:
+                return f"Keyword '{keyword}' is not allowed in queries"
+
+        # Validate against privacy schema if configured
+        if self._config and self._config.privacy_schema:
+            # Extract table names from privacy schema
+            allowed_tables = [table.table_name.upper() for table in self._config.privacy_schema.tables]
+
+            # Basic table name extraction (this is not perfect, but provides basic protection)
+            # Look for FROM and JOIN clauses
+            import re
+
+            # Find FROM clause
+            from_match = re.search(r"\bFROM\s+(\w+)", sql_upper)
+            if from_match:
+                table_name = from_match.group(1)
+                if table_name not in allowed_tables:
+                    return f"Table '{table_name}' is not in privacy schema. Allowed: {', '.join(allowed_tables)}"
+
+            # Find JOIN clauses
+            join_matches = re.findall(r"\bJOIN\s+(\w+)", sql_upper)
+            for table_name in join_matches:
+                if table_name not in allowed_tables:
+                    return f"Table '{table_name}' is not in privacy schema. Allowed: {', '.join(allowed_tables)}"
+
+        return None  # Valid query
+
     async def _query(self, parameters: JSONDict, correlation_id: str) -> ToolExecutionResult:
         """Execute raw SQL query (with privacy constraints)."""
         if not self._engine:
@@ -1132,8 +1196,18 @@ class SQLToolService(BaseService, ToolService):
         if query_params is not None and not isinstance(query_params, dict):
             query_params = {}
 
-        # TODO: Add privacy constraints - only allow queries on configured tables
-        # For now, allow any query (dangerous - needs WA approval)
+        # SECURITY: Validate SQL query against privacy schema
+        # Only allow SELECT queries on configured tables
+        validation_error = self._validate_sql_query(sql)
+        if validation_error:
+            return ToolExecutionResult(
+                tool_name="sql_query",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data={},
+                error=f"SQL validation failed: {validation_error}",
+                correlation_id=correlation_id,
+            )
 
         start_time = time.time()
 

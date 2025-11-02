@@ -1,9 +1,9 @@
 # CIRIS Database Maintenance Service
 
-**Service Category**: Infrastructure Services  
-**Location**: `ciris_engine/logic/persistence/maintenance.py`  
-**Protocol**: `ciris_engine/protocols/services/infrastructure/database_maintenance.py`  
-**Service Type**: `ServiceType.MAINTENANCE`  
+**Service Category**: Infrastructure Services
+**Location**: `ciris_engine/logic/persistence/maintenance.py`
+**Protocol**: `ciris_engine/protocols/services/infrastructure/database_maintenance.py`
+**Service Type**: `ServiceType.MAINTENANCE`
 
 ## Mission Alignment
 
@@ -108,7 +108,7 @@ DatabaseMaintenanceService(
 
 The service identifies and removes these runtime-specific configurations:
 - `adapter.*` - Adapter configurations
-- `runtime.*` - Runtime-specific settings  
+- `runtime.*` - Runtime-specific settings
 - `session.*` - Session-specific data
 - `temp.*` - Temporary configurations
 
@@ -123,7 +123,7 @@ The service identifies and removes these runtime-specific configurations:
     "healthy": bool,
     "uptime_seconds": float,
     "cleanup_runs": int,
-    "records_deleted": int, 
+    "records_deleted": int,
     "vacuum_runs": int,
     "archive_runs": int,
     "last_cleanup_duration_ms": float,

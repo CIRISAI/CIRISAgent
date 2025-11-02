@@ -1,10 +1,10 @@
 # Release Notes - v1.0.1-RC1-patch1
 
 ## Release Overview
-**Version**: 1.0.1-RC1-patch1  
-**Codename**: Stable Foundation  
-**Branch**: 1.0-RC1-patch1  
-**Date**: August 25, 2025  
+**Version**: 1.0.1-RC1-patch1
+**Codename**: Stable Foundation
+**Branch**: 1.0-RC1-patch1
+**Date**: August 25, 2025
 
 This branch contains the RC1 release plus comprehensive testing infrastructure and bug fixes. It includes 23 commits not yet in main.
 

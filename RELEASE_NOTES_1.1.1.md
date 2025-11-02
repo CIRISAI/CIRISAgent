@@ -1,8 +1,8 @@
 # CIRIS Agent v1.1.1 Release Notes
 
-**Release Date**: September 9, 2025  
-**Branch**: `1.1.1`  
-**Status**: Release Candidate Quality  
+**Release Date**: September 9, 2025
+**Branch**: `1.1.1`
+**Status**: Release Candidate Quality
 
 ## 🎯 Overview
 
@@ -17,7 +17,7 @@ CIRIS Agent v1.1.1 focuses on **critical bug fixes**, **stability improvements**
 - **Fix**: Added `replacement_action` to `epistemic_data` for proper conscience execution
 - **Files**: `ciris_engine/logic/conscience/thought_depth_guardrail.py`
 
-### Emergency Shutdown Force Termination Fix  
+### Emergency Shutdown Force Termination Fix
 **Impact**: 🔴 **HIGH** - Emergency shutdowns weren't actually emergency
 - **Issue**: Emergency shutdown endpoint called `request_shutdown()` instead of `emergency_shutdown()`
 - **Symptom**: Agent continued running after "emergency" shutdown (e.g., nemesis agent issue)
@@ -47,7 +47,7 @@ CIRIS Agent v1.1.1 focuses on **critical bug fixes**, **stability improvements**
 Successfully reduced complexity for multiple functions below the threshold of 15:
 
 - **`auth.py` dependencies** L27: 23 → 6 complexity ✅
-- **`auth.py` routes** L446: 49 → 15 complexity ✅  
+- **`auth.py` routes** L446: 49 → 15 complexity ✅
 - **`audit.py` routes** L448: 17 → 15 complexity ✅
 - **`agent.py` routes** L149: 43 → 15 complexity ✅
 
@@ -68,7 +68,7 @@ Systematic cleanup of high-confidence dead code issues:
 
 ### Authentication Routes Coverage
 - **Before**: 23.63% coverage
-- **After**: 40.07% coverage  
+- **After**: 40.07% coverage
 - **Improvement**: +16.44% coverage increase
 
 ### New Test Suites Added
@@ -88,7 +88,7 @@ Systematic cleanup of high-confidence dead code issues:
 - Improved dependency injection patterns in FastAPI route testing
 - Enhanced OAuth provider error handling and status code validation
 
-### Database Layer Improvements  
+### Database Layer Improvements
 - Identified and documented WA persistence architecture (`ciris_engine_auth.db` vs `ciris_auth.db`)
 - Ensured proper database usage patterns for OAuth WA certificate storage
 - Fixed user record management to prevent duplicate entries
@@ -122,7 +122,7 @@ Systematic cleanup of high-confidence dead code issues:
 
 ### Code Quality
 - **Cognitive Complexity**: 4 functions optimized below SonarCloud threshold
-- **Test Coverage**: Significant improvement in critical authentication paths  
+- **Test Coverage**: Significant improvement in critical authentication paths
 - **Bug Density**: 3 critical production bugs resolved
 
 ### Reliability Improvements
@@ -161,7 +161,7 @@ Systematic cleanup of high-confidence dead code issues:
 ## 🎯 Next Steps
 
 1. **Deploy to Staging**: Comprehensive integration testing
-2. **Production Validation**: Monitor emergency shutdown and OAuth flows  
+2. **Production Validation**: Monitor emergency shutdown and OAuth flows
 3. **Performance Testing**: Validate no regression in authentication performance
 4. **User Acceptance**: Confirm WA page display issues resolved
 
@@ -202,13 +202,13 @@ Systematic cleanup of high-confidence dead code issues:
 ### 🐛 Bug Discovery During QA
 **Server Lifecycle Corruption Issue**:
 - **Symptom**: Long-running servers cause test timeouts and failures
-- **Root Cause**: Server state corruption after extended operation  
+- **Root Cause**: Server state corruption after extended operation
 - **Impact**: 42+ tests showed false failures with corrupted server
 - **Resolution**: Proper server lifecycle management in QA runner
 - **Validation**: All previously failing tests now pass 100% with fresh servers
 
 ---
 
-**Release Prepared By**: Claude Code Assistant  
-**Quality Assurance**: 100% test pass rate, comprehensive coverage ✅  
+**Release Prepared By**: Claude Code Assistant
+**Quality Assurance**: 100% test pass rate, comprehensive coverage ✅
 **Deployment Ready**: ✅ Ready for production deployment

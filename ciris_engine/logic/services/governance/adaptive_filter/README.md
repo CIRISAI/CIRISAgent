@@ -1,8 +1,8 @@
 # CIRIS Adaptive Filter Service
 
-**Category**: Governance Services  
-**Location**: `ciris_engine/logic/services/governance/adaptive_filter/` *(modular structure)*  
-**Mission Alignment**: Meta-Goal M-1 Attention Economy Guardian  
+**Category**: Governance Services
+**Location**: `ciris_engine/logic/services/governance/adaptive_filter/` *(modular structure)*
+**Mission Alignment**: Meta-Goal M-1 Attention Economy Guardian
 
 ## Mission Challenge: How does intelligent message filtering serve Meta-Goal M-1 and attention economy?
 
@@ -53,7 +53,7 @@ AdaptiveFilterService
 ### Core Filtering Methods
 
 ```python
-async def filter_message(message: object, adapter_type: str, 
+async def filter_message(message: object, adapter_type: str,
                         is_llm_response: bool = False) -> FilterResult:
     """
     Primary filtering entry point - analyzes message content and context
@@ -63,7 +63,7 @@ async def filter_message(message: object, adapter_type: str,
 async def get_health() -> FilterHealth:
     """Get comprehensive filter system health status."""
 
-async def add_filter_trigger(trigger: FilterTrigger, 
+async def add_filter_trigger(trigger: FilterTrigger,
                            trigger_list: str = "review") -> bool:
     """Add new filter trigger with learning capabilities."""
 
@@ -74,7 +74,7 @@ async def remove_filter_trigger(trigger_id: str) -> bool:
 ### Privacy-Preserving User Management
 
 ```python
-async def handle_consent_transition(user_id: str, from_stream: str, 
+async def handle_consent_transition(user_id: str, from_stream: str,
                                   to_stream: str) -> bool:
     """
     Handle consent stream transitions and detect gaming attempts.
@@ -98,7 +98,7 @@ def get_filter_decision_for_anonymous(user_id: str) -> FilterPriority:
 ```python
 class FilterPriority(str, Enum):
     CRITICAL = "critical"  # DMs, @mentions, name mentions - always processed
-    HIGH = "high"          # Suspicious patterns, new users - reviewed  
+    HIGH = "high"          # Suspicious patterns, new users - reviewed
     MEDIUM = "medium"      # Normal sampling, health checks - occasional
     LOW = "low"           # Background traffic - rarely processed
     IGNORE = "ignore"     # Filtered out completely - spam/abuse
@@ -113,7 +113,7 @@ class FilterTrigger(BaseModel):
     pattern_type: TriggerType    # REGEX, LENGTH, FREQUENCY, SEMANTIC, etc.
     pattern: str                 # Pattern definition or threshold
     priority: FilterPriority     # Priority when triggered
-    
+
     # Learning Metadata
     effectiveness: float         # 0.0-1.0 effectiveness score
     false_positive_rate: float   # 0.0-1.0 FP rate
@@ -129,17 +129,17 @@ class UserTrustProfile(BaseModel):
     trust_score: float              # 0.0-1.0 trust level
     message_count: int              # Total messages processed
     violation_count: int            # Policy violations detected
-    
+
     # Privacy Features
     is_anonymous: bool              # Anonymous consent mode
     user_hash: Optional[str]        # Stable hash for anonymous tracking
     consent_stream: str             # Current consent level
-    
-    # Anti-Gaming Protection  
+
+    # Anti-Gaming Protection
     consent_transitions_24h: int    # Transitions in 24-hour window
     rapid_switching_flag: bool      # Gaming behavior detected
     evasion_score: float           # 0.0-1.0 evasion risk
-    
+
     # Safety Preservation (kept for anonymous users)
     safety_patterns: List[str]      # Active safety pattern IDs
     pattern_score: float           # Pattern-based risk assessment
@@ -173,7 +173,7 @@ FilterTrigger(
     priority=FilterPriority.CRITICAL
 )
 
-# @Mention Detection  
+# @Mention Detection
 FilterTrigger(
     trigger_id="mention_1",
     pattern_type=TriggerType.REGEX,
@@ -183,7 +183,7 @@ FilterTrigger(
 
 # Agent Name Detection
 FilterTrigger(
-    trigger_id="name_1", 
+    trigger_id="name_1",
     pattern_type=TriggerType.REGEX,
     pattern=r"\b(echo|ciris|echo\s*bot)\b",
     priority=FilterPriority.CRITICAL
@@ -293,7 +293,7 @@ should_defer = priority == FilterPriority.LOW and secrets.randbelow(10) > 0
 The service supports **three consent streams**:
 
 - **Identified**: Full user tracking with identity
-- **Temporary**: Session-based tracking, cleared periodically  
+- **Temporary**: Session-based tracking, cleared periodically
 - **Anonymous**: Hash-based tracking, no PII storage
 
 ### Anonymous User Features
@@ -318,7 +318,7 @@ async def anonymize_user_profile(self, user_id: str) -> None:
 The service detects consent stream gaming:
 
 ```python
-async def handle_consent_transition(self, user_id: str, 
+async def handle_consent_transition(self, user_id: str,
                                   from_stream: str, to_stream: str) -> bool:
     """
     Gaming Detection Patterns:
@@ -377,7 +377,7 @@ The service seamlessly integrates with all CIRIS adapters:
 # Discord Integration
 result = await filter_service.filter_message(discord_message, "discord")
 
-# API Integration  
+# API Integration
 result = await filter_service.filter_message(api_request, "api")
 
 # CLI Integration
@@ -434,7 +434,7 @@ if is_llm_response:
 def _collect_custom_metrics() -> Dict[str, float]:
     return {
         "total_messages_processed": float(self._stats.total_messages_processed),
-        "filter_messages_total": float(self._stats.total_messages_processed),  
+        "filter_messages_total": float(self._stats.total_messages_processed),
         "filter_passed_total": float(passed_count),
         "filter_blocked_total": float(blocked_count),
         "filter_adaptations_total": float(adaptations_count),
@@ -453,7 +453,7 @@ async def get_health() -> FilterHealth:
     """
     Comprehensive health checks:
     - Configuration loading status
-    - Critical filter availability  
+    - Critical filter availability
     - False positive rate monitoring
     - Performance statistics
     """
@@ -485,7 +485,7 @@ The service automatically adjusts based on observed patterns:
 ```python
 if self._config.auto_adjust and self._should_adjust():
     await self._perform_adjustment()
-    
+
 # Adjustments include:
 # - Disabling ineffective filters
 # - Adjusting thresholds based on false positive rates
@@ -511,17 +511,17 @@ async def test_filter_never_crashes(content):
 # Critical path scenarios
 async def test_dm_detection():
     """Direct messages always get CRITICAL priority"""
-    
-async def test_mention_detection():  
+
+async def test_mention_detection():
     """@mentions always get CRITICAL priority"""
-    
+
 async def test_spam_detection():
     """Long messages trigger HIGH priority review"""
 ```
 
 ## Migration Path: .py to Module Structure
 
-**Current Status**: Converted to modular structure ✅  
+**Current Status**: Converted to modular structure ✅
 **Implemented Structure**:
 
 ```

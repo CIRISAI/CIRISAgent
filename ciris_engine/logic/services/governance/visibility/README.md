@@ -339,9 +339,9 @@ for decision in current_state.recent_decisions:
 ### With API Client
 ```typescript
 // TypeScript SDK usage
-const traces = await client.telemetry.getTraces({ 
-  limit: 10, 
-  includeReasoning: true 
+const traces = await client.telemetry.getTraces({
+  limit: 10,
+  includeReasoning: true
 });
 
 traces.forEach(trace => {
@@ -363,7 +363,7 @@ python main.py --adapter cli --command "explain task task-123"
 ## Critical Dependencies
 
 - **BusManager**: Service communication and coordination
-- **TimeService**: Timestamp generation and time operations  
+- **TimeService**: Timestamp generation and time operations
 - **Persistence Layer**: Task and thought data storage
 - **Memory Graph**: Optional correlation data source
 

@@ -1,8 +1,8 @@
 # CIRIS Resource Monitor Service
 
-**Service Type**: Infrastructure Service  
-**Location**: `/ciris_engine/logic/services/infrastructure/resource_monitor.py` ⚠️ *Needs module conversion*  
-**Protocol**: `ResourceMonitorServiceProtocol`  
+**Service Type**: Infrastructure Service
+**Location**: `/ciris_engine/logic/services/infrastructure/resource_monitor.py` ⚠️ *Needs module conversion*
+**Protocol**: `ResourceMonitorServiceProtocol`
 **Status**: Production Ready ✅
 
 ## Mission Statement
@@ -69,7 +69,7 @@ Minor issues                            System protection
 class ResourceBudget(BaseModel):
     """Configurable limits for all monitored resources"""
     memory_mb: ResourceLimit = Field(default_factory=_memory_mb_limit)
-    cpu_percent: ResourceLimit = Field(default_factory=_cpu_percent_limit) 
+    cpu_percent: ResourceLimit = Field(default_factory=_cpu_percent_limit)
     tokens_hour: ResourceLimit = Field(default_factory=_tokens_hour_limit)
     tokens_day: ResourceLimit = Field(default_factory=_tokens_day_limit)
     disk_mb: ResourceLimit = Field(default_factory=_disk_mb_limit)
@@ -82,7 +82,7 @@ class ResourceBudget(BaseModel):
 class ResourceSnapshot(BaseModel):
     """Current system state with health indicators"""
     memory_mb: int = Field(ge=0, description="Memory usage in MB")
-    cpu_percent: int = Field(ge=0, le=100, description="CPU usage percentage") 
+    cpu_percent: int = Field(ge=0, le=100, description="CPU usage percentage")
     tokens_used_hour: int = Field(ge=0, description="Tokens used in current hour")
     thoughts_active: int = Field(ge=0, description="Number of active thoughts")
     healthy: bool = Field(default=True, description="Overall health status")
@@ -95,7 +95,7 @@ class ResourceSnapshot(BaseModel):
 ```python
 class ResourceSignalBus:
     """Event bus for resource-driven protective actions"""
-    
+
     async def emit(self, signal: str, resource: str) -> None:
         # Signals: "throttle", "defer", "reject", "shutdown"
         # Enables other services to respond to resource pressure
@@ -115,7 +115,7 @@ class ResourceSignalBus:
    - Used for: Memory pressure, token rates
    - Prioritizes essential operations
 
-3. **REJECT** (Request Limiting) 
+3. **REJECT** (Request Limiting)
    - Refuse new requests when resources critical
    - Used for: Daily token limits
    - Protects existing operations
@@ -136,7 +136,7 @@ class ResourceSignalBus:
 ```python
 {
     "cpu_percent": float,                    # Current CPU usage
-    "memory_mb": float,                      # Current memory in MB  
+    "memory_mb": float,                      # Current memory in MB
     "disk_usage_gb": float,                  # Disk usage in GB
     "network_bytes_sent": float,             # Network bytes sent
     "network_bytes_recv": float,             # Network bytes received
@@ -176,7 +176,7 @@ memory_mb = ResourceLimit(limit=4096, warning=3072, critical=3840, action=DEFER)
 # CPU: Throttle when sustained high usage
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
 
-# Tokens: Rate limiting for cost control  
+# Tokens: Rate limiting for cost control
 tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=DEFER)
 tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=REJECT)
 
@@ -198,7 +198,7 @@ ResourceMonitorService(
 
 ### Runtime Operation
 1. **1-second monitoring loop**: Update resource snapshot
-2. **Limit checking**: Compare current usage against thresholds  
+2. **Limit checking**: Compare current usage against thresholds
 3. **Signal emission**: Send protective signals when limits exceeded
 4. **Historical tracking**: Maintain rolling windows of usage data
 5. **Health reporting**: Provide system health status
@@ -240,7 +240,7 @@ test_limit_enforcement()            # Threshold checking
 test_signal_emission()              # Event system
 test_token_tracking()               # Rate limiting
 
-# Edge cases  
+# Edge cases
 test_psutil_failures()              # System monitoring failures
 test_database_unavailable()         # SQLite connection issues
 test_cooldown_behavior()            # Action rate limiting
@@ -279,7 +279,7 @@ Current:  ciris_engine/logic/services/infrastructure/resource_monitor.py
 Target:   ciris_engine/logic/services/infrastructure/resource_monitor/
           ├── __init__.py
           ├── service.py
-          ├── signal_bus.py  
+          ├── signal_bus.py
           └── README.md
 ```
 
@@ -297,7 +297,7 @@ This aligns with the modular architecture pattern used by other infrastructure s
 
 ### Meta-Goal M-1 Alignment: Sustainable Adaptive Coherence
 
-**Sustainable**: 
+**Sustainable**:
 - Enables deployment in resource-constrained environments worldwide
 - Prevents system exhaustion that would threaten long-term operation
 - Supports the "1000-year design" philosophy through disciplined resource management
@@ -309,7 +309,7 @@ This aligns with the modular architecture pattern used by other infrastructure s
 
 **Coherence**:
 - Prevents resource exhaustion that would degrade decision-making quality
-- Maintains system stability under varying load conditions  
+- Maintains system stability under varying load conditions
 - Enables predictable performance for reliable ethical reasoning
 
 By enforcing the 4GB constraint, the Resource Monitor Service directly enables CIRIS deployment in developing regions, rural clinics, edge devices, and other resource-limited environments where ethical AI can have the greatest positive impact - truly serving diverse sentient beings in their pursuit of flourishing.

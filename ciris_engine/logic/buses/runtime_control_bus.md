@@ -40,7 +40,7 @@ The RuntimeControlBus coordinates the six cognitive states that enable CIRIS's a
 
 - **WAKEUP**: Identity confirmation and system initialization
 - **WORK**: Normal task processing and problem-solving
-- **PLAY**: Creative mode for exploration and innovation  
+- **PLAY**: Creative mode for exploration and innovation
 - **SOLITUDE**: Reflection and self-observation periods
 - **DREAM**: Deep introspection and memory consolidation
 - **SHUTDOWN**: Graceful termination sequences
@@ -64,7 +64,7 @@ current_state = runtime_bus.get_current_state()
 # Pause system processing
 success = await runtime_bus.pause_processing()
 
-# Resume from paused state  
+# Resume from paused state
 success = await runtime_bus.resume_processing()
 
 # Execute single debugging step
@@ -86,7 +86,7 @@ config = await runtime_bus.get_config(path="llm.default_provider")
 
 # Update configuration with validation
 response = await runtime_bus.update_config(
-    path="processor.max_thoughts", 
+    path="processor.max_thoughts",
     value=100,
     reason="Performance optimization"
 )
@@ -102,7 +102,7 @@ Adapters provide RuntimeControlService implementations to enable:
 - Real-time queue monitoring
 - Emergency shutdown capabilities
 
-### API Adapter Integration  
+### API Adapter Integration
 - RESTful endpoints for all runtime control operations
 - WebSocket support for real-time status updates
 - Role-based access control for operations
@@ -172,7 +172,7 @@ adapter_info = await runtime_bus.load_adapter(
 )
 
 # Monitor adapter status
-status = await runtime_bus.get_adapter_info("github_webhook") 
+status = await runtime_bus.get_adapter_info("github_webhook")
 print(f"Adapter status: {status.status}")
 print(f"Messages processed: {status.messages_processed}")
 ```
@@ -211,7 +211,7 @@ Runtime control services must implement the `RuntimeControlServiceProtocol` with
 ```python
 # Processor control
 async def pause_processing() -> ProcessorControlResponse
-async def resume_processing() -> ProcessorControlResponse  
+async def resume_processing() -> ProcessorControlResponse
 async def single_step() -> ProcessorControlResponse
 async def shutdown_runtime(reason: str) -> ProcessorControlResponse
 
@@ -223,7 +223,7 @@ async def get_runtime_status() -> RuntimeStatusResponse
 async def get_config(path: Optional[str], include_sensitive: bool) -> ConfigSnapshot
 async def update_config(path: str, value: object, ...) -> ConfigOperationResponse
 
-# Adapter management  
+# Adapter management
 async def load_adapter(adapter_type: str, ...) -> AdapterOperationResponse
 async def unload_adapter(adapter_id: str, force: bool) -> AdapterOperationResponse
 ```
@@ -231,7 +231,7 @@ async def unload_adapter(adapter_id: str, force: bool) -> AdapterOperationRespon
 ### Capability Declaration
 Services must declare their capabilities through the `get_capabilities()` method, supporting operations like:
 - `"pause_processing"`, `"resume_processing"`, `"single_step"`
-- `"get_processor_queue_status"`, `"get_runtime_status"` 
+- `"get_processor_queue_status"`, `"get_runtime_status"`
 - `"load_adapter"`, `"unload_adapter"`, `"get_adapter_info"`
 - `"get_config"`, `"update_config"`, `"backup_config"`
 - `"shutdown_runtime"`, `"handle_emergency_shutdown"`

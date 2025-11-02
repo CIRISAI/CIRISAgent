@@ -90,10 +90,10 @@ result = await tool_bus.execute_tool(
 ```python
 class APIToolService(BaseService, ToolService):
     """Provides HTTP request functionality"""
-    
+
     tools = {
         "curl": "Execute HTTP requests with curl-like functionality",
-        "http_get": "Perform HTTP GET requests", 
+        "http_get": "Perform HTTP GET requests",
         "http_post": "Perform HTTP POST requests"
     }
 ```
@@ -108,7 +108,7 @@ CLI adapters provide local system tools for file operations, process management,
 ```python
 class SecretsToolService(BaseService, ToolService):
     """Provides secure secrets management tools"""
-    
+
     tools = {
         "recall_secret": "Retrieve stored secrets with audit trail",
         "update_secrets_filter": "Modify secrets detection patterns",
@@ -186,14 +186,14 @@ if result.success:
 # Execute with comprehensive error handling
 try:
     result = await tool_bus.execute_tool("unknown_tool", {})
-    
+
     if result.status == ToolExecutionStatus.NOT_FOUND:
         print(f"Tool not available: {result.error}")
     elif result.status == ToolExecutionStatus.FAILED:
         print(f"Execution failed: {result.error}")
     elif result.status == ToolExecutionStatus.UNAUTHORIZED:
         print(f"Access denied: {result.error}")
-        
+
 except Exception as e:
     print(f"Unexpected error: {e}")
 
@@ -248,28 +248,28 @@ All tool services must implement the complete `ToolServiceProtocol`:
 
 ```python
 class YourToolService(BaseService, ToolService):
-    
+
     async def execute_tool(self, tool_name: str, parameters: dict) -> ToolExecutionResult:
         """Execute a tool with validated parameters."""
-        
+
     async def get_available_tools(self) -> List[str]:
         """Get list of all available tools."""
-        
+
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific tool."""
-        
+
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get information about all available tools."""
-        
+
     async def validate_parameters(self, tool_name: str, parameters: dict) -> bool:
         """Validate parameters for a tool."""
-        
+
     async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of an async tool execution."""
-        
+
     async def list_tools(self) -> List[str]:
         """List available tools - legacy compatibility."""
-        
+
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a specific tool."""
 ```

@@ -1,10 +1,10 @@
 # CIRIS Incident Management Service
 
-**Category**: Graph Services  
-**Location**: `ciris_engine/logic/services/graph/incident_service.py`  
-**Protocol**: `ciris_engine/protocols/services/graph/incident_management.py`  
-**Schemas**: `ciris_engine/schemas/services/graph/incident.py`  
-**Version**: 1.0.0  
+**Category**: Graph Services
+**Location**: `ciris_engine/logic/services/graph/incident_service.py`
+**Protocol**: `ciris_engine/protocols/services/graph/incident_management.py`
+**Schemas**: `ciris_engine/schemas/services/graph/incident.py`
+**Version**: 1.0.0
 **Status**: ⚠️ NEEDS MODULE CONVERSION (single file → directory structure)
 
 ## Overview
@@ -202,7 +202,7 @@ incident_service/
 ### Implementation Notes
 
 1. **Error Handling**: Robust fallbacks when MemoryBus unavailable
-2. **Performance**: Efficient pattern matching with configurable thresholds  
+2. **Performance**: Efficient pattern matching with configurable thresholds
 3. **Extensibility**: Clean separation between detection, analysis, and recommendation phases
 4. **Testing**: Comprehensive test suite with mock dependencies
 
@@ -229,7 +229,7 @@ async def get_incident_count(hours: int = 1) -> int
 def get_capabilities() -> ServiceCapabilities
     """Return service capabilities"""
 
-def get_status() -> ServiceStatus  
+def get_status() -> ServiceStatus
     """Get current service status"""
 
 async def get_metrics() -> Dict[str, float]
@@ -248,9 +248,9 @@ Implements `IncidentManagementServiceProtocol` which extends:
 - **Default Analysis Window**: 24 hours
 - **Pattern Thresholds**:
   - Similarity grouping: 3+ incidents
-  - Component issues: 5+ incidents  
+  - Component issues: 5+ incidents
   - Time clustering: 5+ incidents in 5-minute window
-- **Storage Scope**: 
+- **Storage Scope**:
   - Incidents: LOCAL scope
   - Problems: IDENTITY scope (agent learning)
   - Insights: LOCAL scope

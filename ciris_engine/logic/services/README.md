@@ -9,7 +9,7 @@ CIRIS follows a strict service architecture with exactly **22 core services** or
 ### [Graph Services (6)](#graph-services) - Memory and Data Management
 Services that manage different aspects of the graph memory system and data persistence.
 
-### [Infrastructure Services (4)](#infrastructure-services) - Foundation Systems  
+### [Infrastructure Services (4)](#infrastructure-services) - Foundation Systems
 Core infrastructure services that enable reliable system operation.
 
 ### [Lifecycle Services (4)](#lifecycle-services) - System Lifecycle Management
@@ -71,7 +71,7 @@ Foundation services extending `BaseInfrastructureService`:
    - WA certificate validation
 
 2. **[Resource Monitor Service](infrastructure/resource_monitor.py)** - System resource tracking
-   - CPU, memory, and disk usage monitoring  
+   - CPU, memory, and disk usage monitoring
    - Resource constraint prevention (4GB RAM target)
    - Performance optimization insights
 
@@ -166,7 +166,7 @@ Agent self-help capabilities:
 ### Base Service Classes
 
 - **`BaseService`** - Common service interface and lifecycle management
-- **`BaseGraphService`** - Graph-integrated services with memory capabilities  
+- **`BaseGraphService`** - Graph-integrated services with memory capabilities
 - **`BaseInfrastructureService`** - Infrastructure services with system integration
 - **`BaseScheduledService`** - Services with time-based scheduling capabilities
 
@@ -175,7 +175,7 @@ Agent self-help capabilities:
 Services follow strict dependency order during initialization:
 
 1. **Infrastructure** (time, shutdown, init, resources)
-2. **Database** (SQLite with migrations)  
+2. **Database** (SQLite with migrations)
 3. **Memory Foundation** (secrets, memory service)
 4. **Identity** (load/create agent identity)
 5. **Graph Services** (config, audit, telemetry, etc.)
@@ -189,14 +189,14 @@ Services follow strict dependency order during initialization:
 
 **Services Using Message Buses:**
 - Memory Service (MemoryBus) - Multiple graph backends
-- LLM Service (LLMBus) - Multiple LLM providers  
+- LLM Service (LLMBus) - Multiple LLM providers
 - Wise Authority Service (WiseBus) - Distributed wisdom
 - Secrets Tool Service (ToolBus) - Tool ecosystem
 - Runtime Control Service (RuntimeControlBus) - Management interfaces
 
 **Services Using Direct Injection:**
 - All Graph Services (except memory)
-- All Infrastructure Services  
+- All Infrastructure Services
 - All Lifecycle Services
 - All remaining Governance Services
 

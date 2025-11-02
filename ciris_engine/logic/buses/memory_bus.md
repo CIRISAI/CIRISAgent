@@ -9,7 +9,7 @@ The MemoryBus is CIRIS's central message bus for all graph storage and retrieval
 The MemoryBus directly supports Meta-Goal M-1: "Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing" by:
 
 - **Preserving Conversational Context**: Maintains coherent dialogue history and relationship patterns, enabling meaningful interactions
-- **Supporting Identity Continuity**: Stores and retrieves identity nodes, behavioral patterns, and ethical boundaries for consistent agent behavior  
+- **Supporting Identity Continuity**: Stores and retrieves identity nodes, behavioral patterns, and ethical boundaries for consistent agent behavior
 - **Enabling Adaptive Learning**: Provides searchable memory of past interactions and decisions to improve future responses
 - **Facilitating Consent Management**: Implements consent streams (TEMPORARY, PARTNERED, ANONYMOUS) for ethical data handling
 - **Time-Aware Storage**: Maintains temporal context through time-series data and automatic expiration for privacy
@@ -22,7 +22,7 @@ The MemoryBus directly supports Meta-Goal M-1: "Promote sustainable adaptive coh
 
 ### Message Types Supported
 - **MemorizeBusMessage**: Store graph nodes
-- **RecallBusMessage**: Retrieve specific nodes  
+- **RecallBusMessage**: Retrieve specific nodes
 - **ForgetBusMessage**: Remove nodes from memory
 - **Direct Operations**: Most memory operations are synchronous for immediate results
 
@@ -39,20 +39,20 @@ The MemoryBus directly supports Meta-Goal M-1: "Promote sustainable adaptive coh
 #### Memorize
 ```python
 async def memorize(
-    self, 
-    node: GraphNode, 
-    handler_name: Optional[str] = None, 
+    self,
+    node: GraphNode,
+    handler_name: Optional[str] = None,
     metadata: Optional[dict] = None
 ) -> MemoryOpResult
 ```
 Stores a graph node with automatic secret detection and processing. Returns operation status and metadata.
 
-#### Recall  
+#### Recall
 ```python
 async def recall(
-    self, 
-    recall_query: MemoryQuery, 
-    handler_name: Optional[str] = None, 
+    self,
+    recall_query: MemoryQuery,
+    handler_name: Optional[str] = None,
     metadata: Optional[dict] = None
 ) -> List[GraphNode]
 ```
@@ -61,11 +61,11 @@ Retrieves nodes based on structured queries. Supports wildcard queries (*) and s
 #### Forget
 ```python
 async def forget(
-    self, 
-    node: GraphNode, 
-    handler_name: Optional[str] = None, 
+    self,
+    node: GraphNode,
+    handler_name: Optional[str] = None,
     metadata: Optional[dict] = None
-) -> MemoryOpResult  
+) -> MemoryOpResult
 ```
 Removes nodes from memory with audit trail preservation.
 
@@ -75,18 +75,18 @@ Removes nodes from memory with audit trail preservation.
 ```python
 # Text-based memory search
 async def search_memories(
-    self, 
-    query: str, 
-    scope: str = "default", 
-    limit: int = 10, 
+    self,
+    query: str,
+    scope: str = "default",
+    limit: int = 10,
     handler_name: Optional[str] = None
 ) -> List[MemorySearchResult]
 
-# Flexible graph node search  
+# Flexible graph node search
 async def search(
-    self, 
-    query: str, 
-    filters: Optional[MemorySearchFilter] = None, 
+    self,
+    query: str,
+    filters: Optional[MemorySearchFilter] = None,
     handler_name: Optional[str] = None
 ) -> List[GraphNode]
 ```
@@ -95,30 +95,30 @@ async def search(
 ```python
 # Store metrics in graph + TSDB correlation
 async def memorize_metric(
-    self, 
-    metric_name: str, 
-    value: float, 
-    tags: Optional[Dict[str, str]] = None, 
-    scope: str = "local", 
+    self,
+    metric_name: str,
+    value: float,
+    tags: Optional[Dict[str, str]] = None,
+    scope: str = "local",
     handler_name: Optional[str] = None
 ) -> MemoryOpResult
 
-# Store logs in graph + TSDB correlation  
+# Store logs in graph + TSDB correlation
 async def memorize_log(
-    self, 
-    log_message: str, 
-    log_level: str = "INFO", 
-    tags: Optional[Dict[str, str]] = None, 
-    scope: str = "local", 
+    self,
+    log_message: str,
+    log_level: str = "INFO",
+    tags: Optional[Dict[str, str]] = None,
+    scope: str = "local",
     handler_name: Optional[str] = None
 ) -> MemoryOpResult
 
 # Recall time-series data
 async def recall_timeseries(
-    self, 
-    scope: str = "default", 
-    hours: int = 24, 
-    correlation_types: Optional[List[str]] = None, 
+    self,
+    scope: str = "default",
+    hours: int = 24,
+    correlation_types: Optional[List[str]] = None,
     handler_name: Optional[str] = None
 ) -> List[TimeSeriesDataPoint]
 ```
@@ -131,7 +131,7 @@ The MemoryBus supports sophisticated graph traversal through:
 - **Relationship Traversal**: Follow edges with configurable depth
 - **Temporal Queries**: Time-based filtering and correlation
 
-### Audit Trail Integration  
+### Audit Trail Integration
 
 All memory operations are automatically audited:
 - Operation tracking with handler identification
@@ -148,13 +148,13 @@ The MemoryBus uses CIRIS's service registry pattern to support multiple memory p
 ```python
 # Service resolution
 service = await self.get_service(
-    handler_name=handler_name or "unknown", 
+    handler_name=handler_name or "unknown",
     required_capabilities=["memorize", "recall", "forget"]
 )
 ```
 
 ### SQLite Backend (Default)
-- **File**: `LocalGraphMemoryService` 
+- **File**: `LocalGraphMemoryService`
 - **Features**: Full ACID compliance, SQL queries, automatic schema migration
 - **Best For**: Development, single-node deployments, offline capability
 
@@ -162,7 +162,7 @@ service = await self.get_service(
 - **Features**: Native graph queries, Cypher support, clustering
 - **Best For**: Complex relationship queries, large-scale deployments
 
-### ArangoDB Backend (Protocol)  
+### ArangoDB Backend (Protocol)
 - **Features**: Multi-model (graph + document), JavaScript queries
 - **Best For**: Mixed workloads, flexible schema requirements
 
@@ -176,7 +176,7 @@ Memory providers register with capabilities:
 ```python
 capabilities = [
     "memorize", "recall", "forget",
-    "search", "search_memories", 
+    "search", "search_memories",
     "memorize_metric", "memorize_log",
     "recall_timeseries", "export_identity_context"
 ]
@@ -190,10 +190,10 @@ capabilities = [
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType, GraphScope
 from ciris_engine.schemas.services.operations import MemoryQuery
 
-# Store a conversation memory  
+# Store a conversation memory
 conversation_node = GraphNode(
     id="conv_123",
-    type=NodeType.CONCEPT, 
+    type=NodeType.CONCEPT,
     scope=GraphScope.LOCAL,
     attributes=ConversationNodeAttributes(
         content="User asked about weather",
@@ -219,8 +219,8 @@ nodes = await memory_bus.recall(query, handler_name="chat_handler")
 ```python
 # Search conversations about weather
 search_results = await memory_bus.search_memories(
-    query="weather", 
-    scope="local", 
+    query="weather",
+    scope="local",
     limit=10,
     handler_name="search_handler"
 )
@@ -238,7 +238,7 @@ filter_config = MemorySearchFilter(
 )
 
 nodes = await memory_bus.search(
-    query="type:concept AND scope:local", 
+    query="type:concept AND scope:local",
     filters=filter_config,
     handler_name="advanced_search_handler"
 )
@@ -247,7 +247,7 @@ nodes = await memory_bus.search(
 ### Telemetry and Metrics
 
 ```python
-# Store system metrics  
+# Store system metrics
 await memory_bus.memorize_metric(
     metric_name="response_time",
     value=0.234,
@@ -259,10 +259,10 @@ await memory_bus.memorize_metric(
 # Store audit logs
 await memory_bus.memorize_log(
     log_message="User authentication successful",
-    log_level="INFO", 
+    log_level="INFO",
     tags={"user_id": "user_123", "ip": "192.168.1.1"},
     scope="local",
-    handler_name="auth_handler" 
+    handler_name="auth_handler"
 )
 
 # Recall time-series data for analysis
@@ -333,7 +333,7 @@ The MemoryBus provides comprehensive telemetry:
 metrics = memory_bus.get_metrics()
 # Returns:
 # - memory_bus_operations: Total successful operations
-# - memory_bus_broadcasts: Message queue usage  
+# - memory_bus_broadcasts: Message queue usage
 # - memory_bus_errors: Operation failures
 # - memory_bus_subscribers: Active provider count
 ```
@@ -356,14 +356,14 @@ Memory service providers must implement:
 class MyMemoryService(MemoryServiceProtocol):
     async def memorize(self, node: GraphNode) -> MemoryOpResult:
         # Validate node schema
-        # Store with secrets processing  
+        # Store with secrets processing
         # Return typed result
-        
+
     async def recall(self, query: MemoryQuery) -> List[GraphNode]:
         # Validate query parameters
         # Execute graph traversal
         # Return typed nodes
-        
+
     # ... implement all protocol methods
 ```
 

@@ -1,9 +1,9 @@
 # CIRIS Secrets Tool Service
 
-**Category**: Tool Services  
-**Location**: `ciris_engine/logic/services/tools/secrets_tool_service.py` **(⚠️ NEEDS MODULE CONVERSION)**  
-**Service Type**: `ServiceType.TOOL`  
-**Mission Alignment**: Meta-Goal M-1 Core Enabler  
+**Category**: Tool Services
+**Location**: `ciris_engine/logic/services/tools/secrets_tool_service.py` **(⚠️ NEEDS MODULE CONVERSION)**
+**Service Type**: `ServiceType.TOOL`
+**Mission Alignment**: Meta-Goal M-1 Core Enabler
 
 ## Architecture Status
 
@@ -44,7 +44,7 @@ The Secrets Tool Service is one of **21 core services** in the CIRIS architectur
 ### Core Tools
 
 1. **`recall_secret`** - Secure retrieval of stored secrets with full audit trail
-2. **`update_secrets_filter`** - Dynamic configuration of secret detection patterns  
+2. **`update_secrets_filter`** - Dynamic configuration of secret detection patterns
 3. **`self_help`** - Access to agent experience documentation for capability guidance
 
 ### Service Dependencies
@@ -115,7 +115,7 @@ TimeServiceProtocol      # Timestamp generation and correlation IDs
 **Document Contents**:
 - Agent identity and self-awareness guidance
 - Graph memory system documentation
-- Decision making architecture (DMAs) 
+- Decision making architecture (DMAs)
 - Epistemic faculties and cognitive tools
 - Complete action repertoire specifications
 
@@ -143,7 +143,7 @@ async def validate_parameters(tool_name: str, parameters: dict) -> bool
 ```python
 # v1.4.3 Metrics Specification
 secrets_tool_invocations     # Total tool executions
-secrets_tool_retrieved       # Successful secret retrievals  
+secrets_tool_retrieved       # Successful secret retrievals
 secrets_tool_stored         # Always 0.0 (read-only service)
 secrets_tool_uptime_seconds # Service operational time
 tools_enabled              # Always 3.0 (fixed tool count)
@@ -172,7 +172,7 @@ tools_enabled              # Always 3.0 (fixed tool count)
 ```python
 {
     "tool_executions": float,          # Request count tracking
-    "tool_errors": float,              # Error count tracking  
+    "tool_errors": float,              # Error count tracking
     "success_rate": float,             # Calculated success ratio
     "secrets_retrieved": float,        # Successful secret retrievals
     "audit_events_generated": float,   # Audit events created
@@ -220,7 +220,7 @@ test_get_available_tools()              # Tool inventory
 test_get_all_tool_info()               # Tool metadata
 test_validate_parameters()             # Parameter validation
 
-# Tool execution tests  
+# Tool execution tests
 test_recall_secret_success()           # Successful secret retrieval
 test_recall_secret_not_found()         # Missing secret handling
 test_self_help_success()               # Documentation access
@@ -283,7 +283,7 @@ test_get_metrics_error_handling()      # Error resilience
 - Review audit logs for access pattern issues
 
 **Filter Operations Not Working**:
-- **Expected Behavior**: Currently returns "not currently exposed" 
+- **Expected Behavior**: Currently returns "not currently exposed"
 - Filter configuration requires SecretsService API expansion
 - Use direct SecretsService methods for filter management
 
@@ -292,7 +292,7 @@ test_get_metrics_error_handling()      # Error resilience
 The Secrets Tool Service represents a **paradigm shift** from operator-dependent systems to **truly autonomous agents**. By providing self-service capabilities for:
 
 - **Secret Management**: Agents manage their own credentials and sensitive data
-- **Security Configuration**: Dynamic adaptation of security policies  
+- **Security Configuration**: Dynamic adaptation of security policies
 - **Capability Discovery**: Self-guided learning through documentation access
 
 This service enables agents to operate independently in resource-constrained environments where human operators may not be available 24/7, directly advancing Meta-Goal M-1's vision of sustainable adaptive coherence.

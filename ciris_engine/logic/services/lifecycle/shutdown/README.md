@@ -1,9 +1,9 @@
 # CIRIS Shutdown Service
 
-**SERVICE TYPE**: Infrastructure Service (Lifecycle Services Category)  
-**VERSION**: 1.0.0  
-**STATUS**: Production Ready ✅  
-**CRITICAL LEVEL**: Infrastructure Critical  
+**SERVICE TYPE**: Infrastructure Service (Lifecycle Services Category)
+**VERSION**: 1.0.0
+**STATUS**: Production Ready ✅
+**CRITICAL LEVEL**: Infrastructure Critical
 
 ---
 
@@ -183,7 +183,7 @@ The service integrates with CIRIS emergency command system:
 **Test Scenarios**:
 - Service lifecycle (start/stop)
 - Shutdown request handling
-- Handler registration and execution  
+- Handler registration and execution
 - Thread safety with concurrent requests
 - Metrics and status reporting
 - Emergency shutdown timeout behavior
@@ -248,7 +248,7 @@ lifecycle/
 The Shutdown Service is **critical** for Meta-Goal M-1 because:
 
 1. **Prevents Data Corruption**: Ensures all active transactions complete or rollback safely
-2. **Maintains Coherence**: Coordinated shutdown prevents race conditions between services  
+2. **Maintains Coherence**: Coordinated shutdown prevents race conditions between services
 3. **Enables Recovery**: Proper shutdown state allows clean restart with intact system coherence
 4. **Audit Trail**: All shutdown events are logged for system learning and compliance
 
@@ -296,7 +296,7 @@ async def runtime_loop():
     while not shutdown_service.is_shutdown_requested():
         # Process tasks
         await process_next_task()
-        
+
     # Graceful exit
     logger.info("Shutdown requested, exiting cleanly")
 ```
@@ -313,6 +313,6 @@ python deployment/graceful-shutdown.py \
 
 *🤖 This README documents the CIRIS Shutdown Service, a critical infrastructure component that ensures system coherence and data integrity during graceful and emergency termination scenarios. The service requires conversion from single file to module structure but is production-ready and actively used in agents.ciris.ai deployment.*
 
-**Last Updated**: September 2025  
-**Service Status**: Production Active  
+**Last Updated**: September 2025
+**Service Status**: Production Active
 **Next Action Required**: Module directory conversion

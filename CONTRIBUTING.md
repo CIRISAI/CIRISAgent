@@ -1,7 +1,7 @@
 # Contributing to CIRIS Agent
 
-> **🏠 Looking to build multi-modal AI capabilities?** 
-> 
+> **🏠 Looking to build multi-modal AI capabilities?**
+>
 > **Consider contributing to [CIRISHome](https://github.com/CIRISAI/CIRISHome)** - our active development platform for vision, audio, and sensor fusion capabilities that enable medical AI for underserved communities. CIRISHome welcomes multi-modal AI development using Home Assistant as a foundation, with the ultimate goal of life-saving healthcare access for those who need it most.
 >
 > **CIRISAgent** (this repository) focuses on core AI agent functionality with a complete H3ERE architecture, while **CIRISHome** is where multi-modal capabilities are developed and tested.
@@ -26,7 +26,7 @@ Since the core engine is complete, contributions should focus on:
 
 ### **1. New Adapters** ⭐ *Most Valuable*
 Create new interfaces for CIRIS to interact with different platforms:
-- **Social Media**: Twitter, LinkedIn, Mastodon adapters  
+- **Social Media**: Twitter, LinkedIn, Mastodon adapters
 - **Messaging**: Slack, Teams, Telegram adapters
 - **Development**: GitHub, GitLab integration adapters
 - **Documentation**: Confluence, Notion adapters
@@ -55,7 +55,7 @@ Extend CIRIS capabilities with new modular services:
    ├── adapter.py                   # Main adapter class
    ├── services/                    # Adapter-specific services
    │   ├── communication_service.py # Required: Communication
-   │   ├── tool_service.py         # Optional: Tools  
+   │   ├── tool_service.py         # Optional: Tools
    │   └── runtime_control.py      # Optional: Control
    └── schemas/                     # Adapter-specific schemas
    ```
@@ -63,12 +63,12 @@ Extend CIRIS capabilities with new modular services:
 2. **Implement required interfaces**:
    ```python
    from ciris_engine.protocols.adapters import BaseAdapter
-   
+
    class YourAdapter(BaseAdapter):
        async def initialize(self) -> None:
            """Initialize your adapter"""
            pass
-           
+
        async def cleanup(self) -> None:
            """Clean shutdown"""
            pass
@@ -98,7 +98,7 @@ your_service/
 {
   "module": {
     "name": "your_service",
-    "version": "1.0.0", 
+    "version": "1.0.0",
     "description": "Your service description",
     "author": "Your Name"
   },
@@ -113,7 +113,7 @@ your_service/
       "ciris_engine.protocols.services.RequiredProtocol"
     ],
     "schemas": [
-      "ciris_engine.schemas.required.schemas"  
+      "ciris_engine.schemas.required.schemas"
     ]
   },
   "exports": {
@@ -138,13 +138,13 @@ Understanding the architecture helps create better contributions:
 1. **Input** → Adapter receives external input
 2. **Task Creation** → Adapter creates Task with context
 3. **DMA Evaluation** → PDMA, CSDMA, DSDMA evaluate
-4. **ASPDMA Selection** → Recursive action selection  
+4. **ASPDMA Selection** → Recursive action selection
 5. **Handler Execution** → One of 10 handlers executes
 6. **Output** → Response via Communication Bus
 
 ### **The 10 H3ERE Handlers:**
 - **Action (3)**: SPEAK, TOOL, OBSERVE
-- **Memory (3)**: MEMORIZE, RECALL, FORGET  
+- **Memory (3)**: MEMORIZE, RECALL, FORGET
 - **Deferral (3)**: REJECT, PONDER, DEFER
 - **Terminal (1)**: TASK_COMPLETE
 
@@ -160,7 +160,7 @@ Understanding the architecture helps create better contributions:
 
 ### **Type Safety First**
 - **No Dicts**: Use Pydantic models for all data
-- **No Strings**: Use enums and typed constants  
+- **No Strings**: Use enums and typed constants
 - **No Exceptions**: No special cases or bypass patterns
 
 ### **Task and Thought Creation**
@@ -239,7 +239,7 @@ new_task = Task(..., context=task_context)
 
 - **adapter**: New adapter development
 - **service**: New modular service
-- **bug**: Bug fixes and corrections  
+- **bug**: Bug fixes and corrections
 - **improvement**: Performance or code quality improvements
 - **documentation**: Documentation updates
 - **testing**: Test coverage improvements

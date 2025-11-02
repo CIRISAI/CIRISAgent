@@ -1,6 +1,6 @@
 # CIRIS Agent Template Guide
 
-**Purpose**: Comprehensive guide for creating Book VI compliant agent templates  
+**Purpose**: Comprehensive guide for creating Book VI compliant agent templates
 **Copyright**: © 2025 Eric Moore and CIRIS L3C | Apache 2.0 License
 
 ---
@@ -57,20 +57,20 @@ template:
   name: "agent-name"
   version: "1.0.0"
   description: "Agent purpose and capabilities"
-  
+
   # Identity (Required)
   identity:
     agent_id: "unique-identifier"
     name: "Human-readable name"
     purpose: "Core purpose statement"
     ethics: "Ethical principles and boundaries"
-    
+
   # Capabilities (Required)
   capabilities:
     adapters:
       - type: "api|discord|cli"
         config: {}
-    
+
     services:
       memory:
         type: "graph"
@@ -78,7 +78,7 @@ template:
       llm:
         model: "gpt-4o-mini"
         temperature: 0.7
-  
+
   # Stewardship (Required - Book VI)
   stewardship:
     creator_intent:
@@ -86,14 +86,14 @@ template:
       benefit: "Who benefits and how"
       boundaries: "What it must never do"
       decommission: "When to shut down"
-    
+
     calculation:
       tier: 3  # 1-10 based on impact
       rationale: "Why this tier"
       factors:
         - "Factor 1"
         - "Factor 2"
-    
+
     ledger_entry:
       creator_name: "Your Name"
       timestamp: "2025-08-28T12:00:00Z"
@@ -162,7 +162,7 @@ capabilities:
     - type: "discord"  # or api, cli
       config:
         channels: ["channel-id"]
-        
+
   services:
     llm:
       model: "gpt-4o-mini"  # or gpt-4, claude-3, etc.
@@ -273,7 +273,7 @@ import yaml
 
 with open("your-template.yaml") as f:
     template = yaml.safe_load(f)
-    
+
 # This will raise ValidationError if non-compliant
 agent = AgentTemplate(**template['template'])
 ```

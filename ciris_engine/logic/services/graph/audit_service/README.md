@@ -16,7 +16,7 @@
 The Audit Service provides comprehensive logging and verification of all system operations through an immutable, cryptographically-secured audit trail. It combines three critical capabilities:
 
 1. **Graph-Based Storage** - All audit data stored as graph memories for relationship analysis
-2. **Cryptographic Integrity** - Ed25519 signatures and hash chain for tamper evidence  
+2. **Cryptographic Integrity** - Ed25519 signatures and hash chain for tamper evidence
 3. **Compliance Export** - File-based exports for regulatory requirements
 
 ## Core Capabilities
@@ -83,7 +83,7 @@ await audit_service.log_action(
     action_type=HandlerActionType.MEMORIZE,
     context=AuditActionContext(
         entity_id="user_123",
-        request_id="req_456", 
+        request_id="req_456",
         metadata={"concept": "patient_data", "scope": "LOCAL"}
     ),
     outcome="success"
@@ -109,7 +109,7 @@ Ethical decision process logging:
 ```python
 await audit_service.log_conscience_event(
     thought_id="ethical_123",
-    decision="decline_unsafe_request", 
+    decision="decline_unsafe_request",
     reasoning="Request violates patient safety protocols",
     metadata={"confidence": 0.95, "consulted_authorities": ["medical_ethics"]}
 )
@@ -123,7 +123,7 @@ Comprehensive integrity verification:
 report = await audit_service.verify_audit_integrity()
 # Returns: VerificationReport with:
 # - verified: bool
-# - total_entries: int  
+# - total_entries: int
 # - chain_intact: bool
 # - invalid_entries: List[str]
 ```
@@ -144,7 +144,7 @@ trail = await audit_service.get_audit_trail(
 ```python
 class AuditEventData(BaseModel):
     entity_id: str = "system"
-    actor: str = "system" 
+    actor: str = "system"
     outcome: str = "success"
     severity: str = "info"
     action: Optional[str] = None
@@ -153,7 +153,7 @@ class AuditEventData(BaseModel):
     metadata: Dict[str, Union[str, int, float, bool]] = {}
 ```
 
-### VerificationReport  
+### VerificationReport
 ```python
 class VerificationReport(BaseModel):
     verified: bool
@@ -175,7 +175,7 @@ class VerificationReport(BaseModel):
 
 ### Threat Mitigation
 - **Data Tampering** - Cryptographic signatures detect any modifications
-- **Chain Breaks** - Hash chain verification catches missing/altered entries  
+- **Chain Breaks** - Hash chain verification catches missing/altered entries
 - **Unauthorized Access** - Signature verification prevents forged entries
 - **Compliance Violations** - Complete audit trail for regulatory review
 
@@ -187,7 +187,7 @@ class VerificationReport(BaseModel):
 - **Memory Efficient** - Configurable cache size for recent entries
 - **Storage Optimized** - Graph compression for long-term retention
 
-### Reliability  
+### Reliability
 - **99.99% Availability** - Critical path for all system operations
 - **Automatic Recovery** - Handles temporary storage failures gracefully
 - **Retention Management** - Configurable retention periods with auto-cleanup
@@ -219,6 +219,6 @@ class VerificationReport(BaseModel):
 *The Audit Service is foundational to CIRIS's trustworthiness. Every interaction, decision, and system change is permanently recorded with cryptographic integrity, enabling the transparency and accountability essential for ethical AI deployment in critical domains.*
 
 ## Related Documentation
-- [Graph Memory System](../../../README.md#graph-memory-as-identity) 
+- [Graph Memory System](../../../README.md#graph-memory-as-identity)
 - [Service Architecture](../../README.md#graph-services)
 - [Cryptographic Standards](../../../../protocols/services/graph/audit.py)

@@ -8,7 +8,7 @@ CIRIS implements the **H3ERE (Hyper3 Ethical Recursive Engine)** architecture wi
 
 ### 4 Decision-Making Algorithms (DMAs): 3 Core + 1 Recursive
 - **PDMA** (Principled DMA): Foundational ethical principles
-- **CSDMA** (Common-Sense DMA): Universal common-sense contexts  
+- **CSDMA** (Common-Sense DMA): Universal common-sense contexts
 - **DSDMA** (Domain-Specific DMA): Specialized task-relevant criteria
 - **ASPDMA** (Action Selection PDMA): Recursive final action selection from 3 DMA outputs
 
@@ -28,7 +28,7 @@ CIRIS implements the **H3ERE (Hyper3 Ethical Recursive Engine)** architecture wi
 | **ToolHandler** | ACT | Tool execution | Perform ethically-approved external actions |
 | **ObserveHandler** | LISTEN | Environmental awareness | Gather context while respecting boundaries |
 
-### Memory Handler (3 Options)  
+### Memory Handler (3 Options)
 | Handler | Action | Purpose | Ethical Function |
 |---------|--------|---------|------------------|
 | **MemorizeHandler** | MEMORIZE | Store information | Ethically preserve knowledge with consent |
@@ -83,7 +83,7 @@ The H3ERE engine operates through ethical recursive loops:
 ```python
 class BaseActionHandler:
     """Base class for all H3ERE action handlers."""
-    
+
     async def handle(
         self,
         result: ActionSelectionDMAResult,
@@ -172,7 +172,7 @@ HANDLER_REGISTRY = {
 ### Execution Context
 Handlers receive execution context including:
 - **Original thought**: The triggering thought
-- **DMA result**: Decision-making algorithm output  
+- **DMA result**: Decision-making algorithm output
 - **Dispatch context**: Runtime execution environment
 - **Service dependencies**: Available services and buses
 
@@ -221,7 +221,7 @@ Thought → DMA Evaluation → Action Selection → Handler Execution → Respon
 handlers/
 ├── memory/
 │   ├── memorize_handler.py    # Store information
-│   ├── recall_handler.py      # Retrieve information  
+│   ├── recall_handler.py      # Retrieve information
 │   └── forget_handler.py      # Remove information
 ├── control/
 │   ├── defer_handler.py       # Delegate to authority
@@ -237,6 +237,6 @@ handlers/
 
 ## Related Documentation
 - [Base Handler Infrastructure](../infrastructure/handlers/README.md) - Core handler framework
-- [Action Schemas](../../schemas/actions/README.md) - Handler parameter definitions  
+- [Action Schemas](../../schemas/actions/README.md) - Handler parameter definitions
 - [DMA Documentation](../dma/README.md) - Decision-making integration
 - [Bus Documentation](../buses/README.md) - Service integration patterns

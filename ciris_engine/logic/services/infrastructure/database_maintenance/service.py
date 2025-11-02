@@ -102,6 +102,8 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         3. Cleans up thoughts with invalid context.
         Logs actions taken.
         """
+        from datetime import datetime, timedelta, timezone
+
         # Use provided time_service or fallback to instance time_service
         ts = time_service or self.time_service
         logger.info("Starting database cleanup")
@@ -133,6 +135,18 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             if not hasattr(task, "task_id"):
                 logger.error(f"Item in active_tasks is not a Task object, it's a {type(task)}: {task}")
                 continue  # Skip this item
+
+            # CRITICAL: Multi-occurrence race condition protection
+            # Skip tasks created within last 2 minutes to prevent deleting tasks
+            # created by another occurrence that just started up
+            task_created_at = datetime.fromisoformat(task.created_at.replace("Z", "+00:00"))
+            task_age = ts.now() - task_created_at
+            if task_age < timedelta(minutes=2):
+                logger.debug(
+                    f"Skipping orphan check for recent task {task.task_id} (age: {task_age}). "
+                    "Will check in next cleanup cycle if still orphaned."
+                )
+                continue
 
             is_orphan = False
             if task.task_id.startswith("shutdown_") and task.parent_task_id is None:
@@ -511,10 +525,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             logger.info("Checking for duplicate temporal edges from v1.5.5 PostgreSQL bug")
 
-            adapter = get_adapter()
-            ph = adapter.placeholder()
-
             with get_db_connection(db_path=self.db_path) as conn:
+                # CRITICAL: Get adapter AFTER opening connection to ensure dialect is initialized
+                # for the correct database backend (PostgreSQL vs SQLite)
+                adapter = get_adapter()
+                ph = adapter.placeholder()
                 cursor = conn.cursor()
 
                 # Find summaries with duplicate temporal edges

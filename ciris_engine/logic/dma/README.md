@@ -35,7 +35,7 @@ The DMA (Decision Making Algorithm) system provides structured, ethical decision
 - **Features**: YAML-based prompt definitions with override support
 
 ### 2. Action Selection
-- **File**: `action_selection_pdma.py` 
+- **File**: `action_selection_pdma.py`
 - **Purpose**: Specialized PDMA for action selection decisions
 - **Features**: Context-aware action evaluation and selection
 
@@ -80,7 +80,7 @@ dma = EthicalPDMAEvaluator(
 All DMAs in CIRIS are bound by the **Covenant** ethical framework:
 
 1. **Beneficence**: Decisions must benefit users and society
-2. **Non-maleficence**: Avoid harm in all decisions  
+2. **Non-maleficence**: Avoid harm in all decisions
 3. **Autonomy**: Respect user agency and choice
 4. **Justice**: Fair and equitable treatment
 5. **Transparency**: Clear reasoning for all decisions
@@ -119,7 +119,7 @@ DMAs support various configuration options:
 
 ### Testing DMAs
 - Use `MockLLMService` for unit tests
-- Test both success and failure scenarios  
+- Test both success and failure scenarios
 - Validate ethical compliance in test cases
 - Ensure structured output schema compliance
 

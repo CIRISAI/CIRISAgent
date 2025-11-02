@@ -61,7 +61,7 @@ Raw Data (Hours) → Basic Summaries (6 hours) → Extensive Summaries (Daily) �
 ```
 TSDBConsolidationService
 ├── PeriodManager         # Time period calculations and alignment
-├── QueryManager          # Data retrieval for consolidation periods  
+├── QueryManager          # Data retrieval for consolidation periods
 ├── EdgeManager          # Graph relationship management
 ├── Consolidators/       # Type-specific consolidation logic
 │   ├── MetricsConsolidator     # TSDB metrics aggregation
@@ -162,7 +162,7 @@ class TSDBConsolidationConfig(BaseModel):
 
 ### Performance Characteristics
 - **Basic Consolidation**: ~100:1 compression ratio
-- **Extensive Consolidation**: ~4:1 additional compression  
+- **Extensive Consolidation**: ~4:1 additional compression
 - **Profound Consolidation**: Configurable target (20MB/day default)
 - **Total Compression**: >400:1 over full cycle
 
@@ -173,7 +173,7 @@ The service exposes comprehensive health metrics:
 ```python
 {
     "tsdb_consolidations_total": 1547.0,        # Total consolidation cycles
-    "tsdb_datapoints_processed": 2847291.0,    # Data points consolidated  
+    "tsdb_datapoints_processed": 2847291.0,    # Data points consolidated
     "tsdb_storage_saved_mb": 5694.6,           # Storage space saved
     "tsdb_uptime_seconds": 2847392.0           # Service uptime
 }
@@ -185,7 +185,7 @@ The service exposes comprehensive health metrics:
 - **Data Integrity**: Comprehensive validation before raw data deletion
 - **Audit Trail**: All consolidation operations logged for transparency
 
-### Startup Behavior  
+### Startup Behavior
 - **Missed Window Detection**: Consolidates any periods missed during downtime
 - **Dependency Verification**: Ensures memory bus and time service availability
 - **Edge Repair**: Fixes missing SUMMARIZES edges for existing summaries
@@ -194,7 +194,7 @@ The service exposes comprehensive health metrics:
 
 ### Memory Efficiency
 - **Streaming Processing**: Data processed in batches to minimize memory usage
-- **Direct Database Access**: Bypasses ORM overhead for large data operations  
+- **Direct Database Access**: Bypasses ORM overhead for large data operations
 - **Connection Pooling**: Reuses database connections across consolidation cycles
 
 ### Storage Optimization
@@ -215,7 +215,7 @@ All consolidation times align to calendar boundaries:
 - **TimeService**: Consistent temporal operations
 - **Database**: Direct SQLite access for performance
 
-### Service Consumers  
+### Service Consumers
 - **API Endpoints**: Historical data retrieval via telemetry APIs
 - **Audit Service**: Consolidation activity auditing
 - **Self Observation**: Long-term behavior pattern analysis
@@ -232,7 +232,7 @@ As a Graph Service, TSDB Consolidation uses direct injection rather than message
 
 ### Cultural Adaptation
 - **Configurable Parameters**: Storage targets adjustable for local resource constraints
-- **Consent Respect**: Automatic anonymization honors cultural privacy preferences  
+- **Consent Respect**: Automatic anonymization honors cultural privacy preferences
 - **Transparent Operation**: Full audit trail enables community oversight
 
 ### Resource Sustainability
@@ -250,7 +250,7 @@ As a Graph Service, TSDB Consolidation uses direct injection rather than message
 
 ### Research Areas
 - **Semantic Compression**: Preserve meaning over raw data in extreme storage constraints
-- **Cross-Cultural Patterns**: Learn communication patterns across diverse communities  
+- **Cross-Cultural Patterns**: Learn communication patterns across diverse communities
 - **Intergenerational Handoff**: Mechanisms for transferring knowledge to successor systems
 
 ---

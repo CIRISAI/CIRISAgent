@@ -143,12 +143,12 @@ class UserTrustProfile:
     violation_count: int
     is_anonymous: bool
     consent_stream: str
-    
+
     # Anti-gaming fields
     rapid_switching_flag: bool
     evasion_score: float
     consent_transitions_24h: int
-    
+
     # Safety patterns (retained)
     safety_patterns: List[str]
     pattern_score: float

@@ -1,8 +1,8 @@
 # CIRIS Authentication Service
 
-**Category**: Infrastructure Services  
-**Location**: `ciris_engine/logic/services/infrastructure/authentication.py`  
-**Mission Alignment**: Meta-Goal M-1 Core Enabler  
+**Category**: Infrastructure Services
+**Location**: `ciris_engine/logic/services/infrastructure/authentication.py`
+**Mission Alignment**: Meta-Goal M-1 Core Enabler
 
 ## Mission Challenge: How does identity verification serve Meta-Goal M-1 and ethical AI?
 
@@ -57,7 +57,7 @@ def verify_token_sync(token: str) -> Optional[dict]:
 ### WA Certificate Lifecycle
 
 ```python
-async def create_wa(name: str, email: str, scopes: List[str], 
+async def create_wa(name: str, email: str, scopes: List[str],
                    role: WARole = WARole.OBSERVER) -> WACertificate:
     """Create new Wise Authority identity."""
 
@@ -90,18 +90,18 @@ class WACertificate(BaseModel):
     wa_id: str                    # Format: wa-YYYY-MM-DD-XXXXXX
     name: str                     # Human-readable identity
     role: WARole                  # ROOT, AUTHORITY, or OBSERVER
-    
+
     # Cryptographic Identity
     pubkey: str                   # Base64url Ed25519 public key
     jwt_kid: str                  # JWT key identifier
-    
+
     # Trust Chain
     parent_wa_id: Optional[str]   # Parent in certificate chain
     parent_signature: Optional[str] # Cryptographic parent approval
-    
+
     # Permissions & Scopes
     scopes_json: str             # JSON array of permissions
-    
+
     # Authentication Methods
     password_hash: Optional[str]  # PBKDF2 password hash
     oauth_provider: Optional[str] # OAuth provider name
@@ -123,7 +123,7 @@ class AuthorizationContext(BaseModel):
 ### Token Types
 
 - **STANDARD**: Basic authentication tokens for human users
-- **CHANNEL**: Long-lived adapter tokens for automated systems  
+- **CHANNEL**: Long-lived adapter tokens for automated systems
 - **OAUTH**: OAuth provider authentication tokens
 
 ## Security Architecture
@@ -195,7 +195,7 @@ CREATE TABLE wa_cert (
 ```python
 class WARole(str, Enum):
     ROOT = "root"           # System owner, ultimate authority
-    AUTHORITY = "authority" # Can approve deferrals, system operations  
+    AUTHORITY = "authority" # Can approve deferrals, system operations
     OBSERVER = "observer"   # Read access, basic operations
 ```
 
@@ -238,7 +238,7 @@ async def bootstrap_if_needed() -> None:
 async def _create_adapter_observer(adapter_id: str, name: str) -> WACertificate:
     """Create observer certificates for adapters (CLI, API, Discord)."""
 
-async def _create_channel_token_for_adapter(adapter_type: str, 
+async def _create_channel_token_for_adapter(adapter_type: str,
                                            adapter_info: dict) -> str:
     """Generate long-lived tokens for adapter authentication."""
 ```
@@ -247,7 +247,7 @@ async def _create_channel_token_for_adapter(adapter_type: str,
 
 The Authentication Service operates as a **direct call service** (not bussed) because:
 - Identity verification must be consistent and authoritative
-- No benefit from multiple authentication providers  
+- No benefit from multiple authentication providers
 - Security requires centralized certificate management
 
 ## Security Considerations
@@ -319,7 +319,7 @@ async def is_healthy() -> bool:
 
 ## Migration Path: .py to Module Structure
 
-**Current Status**: Single file implementation (`authentication.py`)  
+**Current Status**: Single file implementation (`authentication.py`)
 **Recommended Structure**:
 
 ```

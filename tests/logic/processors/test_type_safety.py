@@ -7,11 +7,7 @@ Currently validates that mock objects can be created and passed to ThoughtProces
 import pytest
 
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
-from tests.fixtures.processor_mocks import (
-    MockConscienceRegistry,
-    MockContextBuilder,
-    MockDMAOrchestrator,
-)
+from tests.fixtures.processor_mocks import MockConscienceRegistry, MockContextBuilder, MockDMAOrchestrator
 
 
 def test_thought_processor_accepts_mock_implementations():

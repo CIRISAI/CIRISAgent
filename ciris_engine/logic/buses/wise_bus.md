@@ -12,7 +12,7 @@ The WiseBus directly supports **Meta-Goal M-1: "Promote sustainable adaptive coh
 
 - **Ethical Guardrails**: Comprehensive prohibition system preventing harmful capabilities across 18+ categories
 - **Tier-based Governance**: Progressive authority levels ensuring appropriate responsibilities for different agent types
-- **Human-AI Collaboration**: Seamless deferral system enabling human wisdom authority input on complex ethical decisions  
+- **Human-AI Collaboration**: Seamless deferral system enabling human wisdom authority input on complex ethical decisions
 - **Wisdom Aggregation**: Multi-provider guidance system combining multiple ethical perspectives
 - **Crisis Protection**: Specialized community moderation capabilities for Tier 4-5 stewardship agents
 
@@ -29,7 +29,7 @@ The WiseBus directly supports **Meta-Goal M-1: "Promote sustainable adaptive coh
 class WiseBus(BaseBus[WiseAuthorityService]):
     """
     Message bus for all wise authority operations.
-    
+
     Handles:
     - send_deferral: Broadcast deferrals to all WA services
     - fetch_guidance: Route guidance requests to appropriate providers
@@ -52,9 +52,9 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
 ```python
 async def request_guidance(
-    self, 
-    request: GuidanceRequest, 
-    timeout: float = 5.0, 
+    self,
+    request: GuidanceRequest,
+    timeout: float = 5.0,
     agent_tier: Optional[int] = None
 ) -> GuidanceResponse
 ```
@@ -81,8 +81,8 @@ class GuidanceRequest(BaseModel):
 
 ```python
 async def send_deferral(
-    self, 
-    context: DeferralContext, 
+    self,
+    context: DeferralContext,
     handler_name: str
 ) -> bool
 ```
@@ -109,8 +109,8 @@ Provides backward compatibility for older WiseAuthority implementations using `G
 
 ```python
 async def fetch_guidance(
-    self, 
-    context: GuidanceContext, 
+    self,
+    context: GuidanceContext,
     handler_name: str
 ) -> Optional[str]
 ```
@@ -146,7 +146,7 @@ The WiseBus enforces ethical boundaries through a sophisticated prohibition syst
 #### Tier-Restricted (Stewardship Agents Only)
 **Community Moderation** (Tier 4-5 agents only):
 - **CRISIS_ESCALATION**: 12 crisis intervention capabilities
-- **PATTERN_DETECTION**: 12 harm pattern recognition capabilities  
+- **PATTERN_DETECTION**: 12 harm pattern recognition capabilities
 - **PROTECTIVE_ROUTING**: 11 community safety coordination capabilities
 
 ### Tier-based Access Control
@@ -157,7 +157,7 @@ async def get_agent_tier(self) -> int:
     Tier levels:
     - 1-3: Standard agents (no community moderation)
     - 4-5: Stewardship agents (trusted with community moderation)
-    
+
     Returns: Agent tier level (1-5), defaults to 1 if not found
     """
 ```
@@ -222,7 +222,7 @@ class GuidanceResponse(BaseModel):
 
 **Arbitration Algorithm:**
 1. Collect responses from all providers within timeout
-2. Extract confidence scores from `WisdomAdvice` entries  
+2. Extract confidence scores from `WisdomAdvice` entries
 3. Select response with highest confidence
 4. Aggregate all advice from all providers for transparency
 5. Update reasoning to indicate selection criteria
@@ -363,11 +363,11 @@ class MinimalWiseAuthority:
             actions=["fetch_guidance", "send_deferral"],
             version="1.0.0"
         )
-    
+
     async def fetch_guidance(self, context: GuidanceContext) -> Optional[str]:
         # Provide ethical guidance based on context
         pass
-    
+
     async def send_deferral(self, deferral: DeferralRequest) -> str:
         # Handle deferral (e.g., notify human authorities)
         return "deferral_id_123"
@@ -385,7 +385,7 @@ class AdvancedWiseAuthority:
             explanation="Based on ethical principles...",
             disclaimer="This is guidance only, not professional advice"
         )]
-        
+
         return GuidanceResponse(
             selected_option=request.options[0],
             reasoning="Selected based on utilitarian analysis",
@@ -393,7 +393,7 @@ class AdvancedWiseAuthority:
             signature="cryptographic_signature",
             advice=advice
         )
-    
+
     async def get_telemetry(self) -> Dict[str, Any]:
         # Provide detailed telemetry for bus aggregation
         return {

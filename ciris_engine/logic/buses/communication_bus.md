@@ -31,7 +31,7 @@ The CommunicationBus directly supports Meta-Goal M-1: "Promote sustainable adapt
 The bus uses prefixed channel IDs for intelligent routing:
 
 - **Discord**: `discord_{channel_id}` or `discord_{guild_id}_{channel_id}`
-- **API**: `api_{identifier}` or `ws:{websocket_id}`  
+- **API**: `api_{identifier}` or `ws:{websocket_id}`
 - **CLI**: `cli_{user}@{host}`
 
 ## Message Processing
@@ -74,9 +74,9 @@ All message fetching is **synchronous only** as handlers require immediate resul
 async def fetch_messages(self, channel_id: str, limit: int, handler_name: str) -> List[FetchedMessage]:
     service = await self.get_service(handler_name, ["fetch_messages"])
     messages = await service.fetch_messages(channel_id, limit=limit)
-    
+
     # Convert all message formats to standardized FetchedMessage objects
-    return [FetchedMessage(**msg) if isinstance(msg, dict) else msg 
+    return [FetchedMessage(**msg) if isinstance(msg, dict) else msg
             for msg in messages]
 ```
 
@@ -98,10 +98,10 @@ The bus implements priority-based channel resolution when no specific channel is
 async def get_default_channel(self) -> Optional[str]:
     # Get all communication services sorted by priority
     all_services = self.service_registry.get_services_by_type(ServiceType.COMMUNICATION)
-    
+
     # Sort by registry-defined priority (HIGHEST, HIGH, NORMAL, LOW, LOWEST)
     providers_with_priority = self._sort_by_priority(all_services)
-    
+
     # Return home channel from highest priority adapter
     for _, service in providers_with_priority:
         if hasattr(service, "get_home_channel_id"):
@@ -120,12 +120,12 @@ class YourCommunicationAdapter(CommunicationService):
     async def send_message(self, channel_id: str, content: str) -> bool:
         # Implement platform-specific message sending
         pass
-    
-    async def fetch_messages(self, channel_id: str, *, limit: int = 50, 
+
+    async def fetch_messages(self, channel_id: str, *, limit: int = 50,
                            before: Optional[datetime] = None) -> List[FetchedMessage]:
         # Implement platform-specific message fetching
         pass
-    
+
     def get_home_channel_id(self) -> Optional[str]:
         # Return formatted channel ID or None
         # Format: "{platform}_{identifier}"
@@ -143,7 +143,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         return None
 ```
 
-**API Adapter Integration**:  
+**API Adapter Integration**:
 ```python
 class APICommunicationService(CommunicationService):
     def get_home_channel_id(self) -> Optional[str]:
@@ -176,7 +176,7 @@ success = await communication_bus.send_message_sync(
 # Send to Discord channel
 await bus.send_message_sync("discord_123456", "Discord message", "handler")
 
-# Send to API WebSocket  
+# Send to API WebSocket
 await bus.send_message_sync("ws:abc123", "API message", "handler")
 
 # Send to CLI session
@@ -206,7 +206,7 @@ for message in messages:
 class AgentHandler:
     def __init__(self, communication_bus: CommunicationBus):
         self.comm_bus = communication_bus
-    
+
     async def send_response(self, channel_id: str, response: str):
         # Always use sync for handler responses to ensure delivery
         success = await self.comm_bus.send_message_sync(

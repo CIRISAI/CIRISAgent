@@ -1,8 +1,8 @@
 # CIRIS Consent Service
 
-**Service Classification**: Governance Service #5 of 22 Core Services  
-**Current Implementation**: Single-file module (`consent.py`) - **NEEDS conversion to directory module**  
-**Protocol**: ConsentManagerProtocol  
+**Service Classification**: Governance Service #5 of 22 Core Services
+**Current Implementation**: Single-file module (`consent.py`) - **NEEDS conversion to directory module**
+**Protocol**: ConsentManagerProtocol
 **Philosophy**: FAIL FAST, FAIL LOUD, NO FAKE DATA
 
 ## Table of Contents
@@ -74,7 +74,7 @@ graph TD
 ```
 ConsentService
 ├── ConsentManagerProtocol (interface)
-├── ToolService (tool interface)  
+├── ToolService (tool interface)
 ├── Consent Streams (TEMPORARY/PARTNERED/ANONYMOUS)
 ├── Category System (5 categories)
 ├── Partnership Utils (bilateral consent)
@@ -85,7 +85,7 @@ ConsentService
 ### Data Persistence
 
 - **Primary Storage**: Memory graph nodes (`NodeType.CONSENT`)
-- **Cache Layer**: In-memory consent status cache  
+- **Cache Layer**: In-memory consent status cache
 - **Audit Trail**: Immutable audit entries (`NodeType.AUDIT_ENTRY`)
 - **Decay Tracking**: Decay status nodes (`NodeType.DECAY`)
 
@@ -130,7 +130,7 @@ request = ConsentRequest(
 ```python
 # Partnership request (creates agent approval task)
 request = ConsentRequest(
-    user_id="user123", 
+    user_id="user123",
     stream=ConsentStream.PARTNERED,
     categories=[ConsentCategory.ESSENTIAL, ConsentCategory.BEHAVIORAL],
     reason="Want to help improve AI capabilities"
@@ -148,7 +148,7 @@ request = ConsentRequest(
 # Anonymous consent
 request = ConsentRequest(
     user_id="user123",
-    stream=ConsentStream.ANONYMOUS, 
+    stream=ConsentStream.ANONYMOUS,
     categories=[ConsentCategory.STATISTICAL],
     reason="Contribute stats but preserve privacy"
 )
@@ -164,7 +164,7 @@ The consent system defines five granular categories:
 - **Privacy Level**: Minimal - required for service operation
 - **Retention**: Follows stream duration
 
-### BEHAVIORAL  
+### BEHAVIORAL
 - **Purpose**: Learn from user interaction patterns
 - **Examples**: Communication style, preference patterns, workflow habits
 - **Privacy Level**: Medium - enables personalization
@@ -208,8 +208,8 @@ async def get_consent(self, user_id: str) -> ConsentStatus:
 ### Grant/Update Consent
 ```python
 async def grant_consent(
-    self, 
-    request: ConsentRequest, 
+    self,
+    request: ConsentRequest,
     channel_id: Optional[str] = None
 ) -> ConsentStatus:
     """
@@ -221,8 +221,8 @@ async def grant_consent(
 ### Revoke Consent (Start Decay)
 ```python
 async def revoke_consent(
-    self, 
-    user_id: str, 
+    self,
+    user_id: str,
     reason: Optional[str] = None
 ) -> ConsentDecayStatus:
     """
@@ -266,7 +266,7 @@ task = Task(
 ### Agent Response Options
 
 - **TASK_COMPLETE**: Accept partnership, upgrade to PARTNERED
-- **REJECT**: Decline partnership with reason  
+- **REJECT**: Decline partnership with reason
 - **DEFER**: Request more information or delay decision
 
 ### Partnership Status Monitoring
@@ -287,7 +287,7 @@ When consent is revoked, the system initiates a 90-day decay protocol:
    - Identity->Data links broken immediately
    - Consent status set to expired
 
-2. **Pattern Anonymization** (0-90 days)  
+2. **Pattern Anonymization** (0-90 days)
    - Gradual conversion of patterns to anonymous form
    - Safety patterns may be retained (anonymized)
    - Behavioral patterns converted to statistical aggregates
@@ -376,16 +376,16 @@ result = await consent_service.execute_tool(
 )
 ```
 
-### degrade_relationship  
+### degrade_relationship
 - **Purpose**: Downgrade to TEMPORARY or ANONYMOUS
 - **Parameters**: `user_id`, `target_stream`, `reason` (optional)
 - **Behavior**: Immediate downgrade (no approval needed)
 - **Returns**: New consent status
 
 ```python
-# Tool usage  
+# Tool usage
 result = await consent_service.execute_tool(
-    "degrade_relationship", 
+    "degrade_relationship",
     {"user_id": "user123", "target_stream": "ANONYMOUS"}
 )
 ```
@@ -397,7 +397,7 @@ The service tracks comprehensive metrics for operational insight:
 ### Top 5 Critical Metrics
 
 1. **consent_active_users**: Number of users with active consent
-2. **consent_stream_distribution**: Percentage breakdown by stream type  
+2. **consent_stream_distribution**: Percentage breakdown by stream type
 3. **consent_partnership_success_rate**: Partnership approval rate
 4. **consent_average_age_days**: Average age of active consents
 5. **consent_decay_completion_rate**: Decay process completion rate
@@ -407,7 +407,7 @@ The service tracks comprehensive metrics for operational insight:
 ```python
 # Service-level metrics
 consent_checks_total          # Total consent status checks
-consent_grants_total          # Total consent grants/updates  
+consent_grants_total          # Total consent grants/updates
 consent_revokes_total         # Total consent revocations
 consent_expired_cleanups_total # Cleanup operations performed
 
@@ -425,7 +425,7 @@ consent_active_decays         # Currently active decays
 
 ```python
 consent_temporary_percent     # Percentage TEMPORARY users
-consent_partnered_percent     # Percentage PARTNERED users  
+consent_partnered_percent     # Percentage PARTNERED users
 consent_anonymous_percent     # Percentage ANONYMOUS users
 ```
 
@@ -474,7 +474,7 @@ The Consent Service implements comprehensive GDPR compliance:
 
 ### Privacy by Design (Article 25)
 - **Default Privacy**: TEMPORARY consent with auto-expiration
-- **Minimal Data**: Only essential categories by default  
+- **Minimal Data**: Only essential categories by default
 - **Fail Fast**: No processing without explicit consent
 
 ## Mission Alignment (M-1)
@@ -517,13 +517,13 @@ The Consent Service embodies key ethical principles:
 # Privacy by Default (Article 25 GDPR)
 default_stream = ConsentStream.TEMPORARY  # 14-day auto-forget
 
-# Purpose Limitation (Article 5 GDPR)  
+# Purpose Limitation (Article 5 GDPR)
 categories = [ConsentCategory.ESSENTIAL]  # Minimal necessary
 
 # Data Minimization (Article 5 GDPR)
 if stream == ConsentStream.ANONYMOUS:
     identity_retained = False  # Immediate severance
-    
+
 # Transparency (Article 12 GDPR)
 impact_report = generate_real_impact_metrics()  # No fake data
 
@@ -557,7 +557,7 @@ Required:
 ciris_engine/logic/services/governance/consent/
 ├── __init__.py           # Service export
 ├── service.py            # Main ConsentService class
-├── exceptions.py         # ConsentNotFoundError, ConsentValidationError  
+├── exceptions.py         # ConsentNotFoundError, ConsentValidationError
 ├── partnership.py        # Partnership request handling
 ├── decay.py             # Decay protocol implementation
 ├── metrics.py           # Metrics collection
@@ -568,7 +568,7 @@ ciris_engine/logic/services/governance/consent/
 
 - **Unit Tests**: Complete coverage of all consent operations
 - **Integration Tests**: End-to-end consent flow testing
-- **Partnership Tests**: Bilateral consent approval workflow  
+- **Partnership Tests**: Bilateral consent approval workflow
 - **Decay Tests**: 90-day deletion protocol verification
 - **GDPR Compliance Tests**: Regulatory requirement validation
 - **Performance Tests**: Large-scale consent management
@@ -579,7 +579,7 @@ ciris_engine/logic/services/governance/consent/
 ```python
 # Additional imports needed for full implementation
 from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilter
-from ciris_engine.logic.handlers.task_scheduler import TaskScheduler  
+from ciris_engine.logic.handlers.task_scheduler import TaskScheduler
 from ciris_engine.logic.buses.tool_bus import ToolBus
 ```
 
@@ -625,8 +625,8 @@ CONSENT_CONFIG = {
 
 ---
 
-**Version**: 0.2.0  
-**Last Updated**: September 2025  
-**Service Status**: Production Ready (needs module conversion)  
-**GDPR Compliance**: Fully Compliant  
+**Version**: 0.2.0
+**Last Updated**: September 2025
+**Service Status**: Production Ready (needs module conversion)
+**GDPR Compliance**: Fully Compliant
 **Test Coverage**: Target 80% (current ~68%)

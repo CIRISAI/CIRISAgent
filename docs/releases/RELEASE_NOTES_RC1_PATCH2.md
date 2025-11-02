@@ -106,7 +106,7 @@ If using Discord adapter, ensure:
 ### Privacy Configuration
 Anonymous user handling is automatic when consent stream is set to:
 - `ANONYMOUS`
-- `EXPIRED`  
+- `EXPIRED`
 - `REVOKED`
 
 ## 📝 Commit Summary (15 commits since main)

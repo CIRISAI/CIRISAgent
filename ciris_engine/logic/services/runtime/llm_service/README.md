@@ -1,10 +1,10 @@
 # CIRIS LLM Service
 
-**Category**: Runtime Services  
-**Location**: `ciris_engine/logic/services/runtime/llm_service.py` (Requires conversion to module)  
-**Protocol**: `ciris_engine/protocols/services/runtime/llm.py`  
-**Schemas**: `ciris_engine/schemas/services/llm.py`  
-**Version**: 1.0.0  
+**Category**: Runtime Services
+**Location**: `ciris_engine/logic/services/runtime/llm_service.py` (Requires conversion to module)
+**Protocol**: `ciris_engine/protocols/services/runtime/llm.py`
+**Schemas**: `ciris_engine/schemas/services/llm.py`
+**Version**: 1.0.0
 **Status**: Production Ready
 
 ## 🎯 Mission Alignment: Supporting Meta-Goal M-1
@@ -41,7 +41,7 @@ The LLM Service implements a sophisticated multi-provider abstraction that direc
 LLM Service Architecture
 ├── LLMBus (Message Bus)
 │   ├── Multi-Provider Routing
-│   ├── Circuit Breaker Management  
+│   ├── Circuit Breaker Management
 │   ├── Distribution Strategies
 │   └── Domain-Aware Filtering
 ├── Provider Implementations
@@ -71,7 +71,7 @@ LLM Service Architecture
 ```python
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     """Production LLM client with circuit breaker protection."""
-    
+
     # Key Features:
     # - Instructor integration for structured output
     # - Circuit breaker protection (5 failures → open)
@@ -95,7 +95,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 ```python
 class MockLLMService(BaseService, MockLLMServiceProtocol):
     """Offline-capable mock LLM for testing and deployment."""
-    
+
     # Key Features:
     # - Deterministic response generation
     # - Instructor patching for structured output
@@ -148,7 +148,7 @@ class TokenUsageStats(BaseModel):
 class ResourceUsage(BaseModel):
     tokens_used: int           # Total tokens consumed
     tokens_input: int          # Input tokens
-    tokens_output: int         # Output tokens  
+    tokens_output: int         # Output tokens
     cost_cents: float          # API cost in cents
     carbon_grams: float        # Estimated CO2 impact
     energy_kwh: float          # Estimated energy usage
@@ -175,7 +175,7 @@ class ResourceUsage(BaseModel):
 ```python
 # Provider priority levels:
 CRITICAL = 0    # Highest priority
-HIGH = 1        # High priority  
+HIGH = 1        # High priority
 NORMAL = 2      # Default priority
 LOW = 3         # Low priority
 FALLBACK = 9    # Last resort
@@ -193,7 +193,7 @@ await llm_bus.call_llm_structured(
 
 **Domain Support**:
 - `medical`: HIPAA-compliant, offline-required models
-- `legal`: Legal reasoning specialized models  
+- `legal`: Legal reasoning specialized models
 - `financial`: Financial analysis models
 - `general`: Default, broad-capability models
 
@@ -302,11 +302,11 @@ ciris_engine/logic/services/runtime/llm_service/
 # Retryable Errors
 retryable_exceptions = (
     APIConnectionError,    # Network issues
-    RateLimitError,       # Rate limit exceeded  
+    RateLimitError,       # Rate limit exceeded
     InternalServerError   # Server-side errors
 )
 
-# Non-Retryable Errors  
+# Non-Retryable Errors
 non_retryable_exceptions = (
     APIStatusError,       # Authentication, invalid requests
 )

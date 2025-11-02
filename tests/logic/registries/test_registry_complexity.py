@@ -11,11 +11,7 @@ Tests the refactored register_service() and helper methods to ensure:
 
 import pytest
 
-from ciris_engine.logic.registries.base import (
-    Priority,
-    SelectionStrategy,
-    ServiceRegistry,
-)
+from ciris_engine.logic.registries.base import Priority, SelectionStrategy, ServiceRegistry
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
 

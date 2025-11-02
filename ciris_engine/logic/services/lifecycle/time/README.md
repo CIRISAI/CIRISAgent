@@ -1,10 +1,10 @@
 # CIRIS Time Service
 
-**Service Type**: Infrastructure Service (Lifecycle Category)  
-**Location**: `ciris_engine/logic/services/lifecycle/time.py`  
-**Protocol**: `ciris_engine/protocols/services/lifecycle/time.py`  
-**Schema**: `ciris_engine/schemas/services/lifecycle/time.py`  
-**Version**: 1.0.0  
+**Service Type**: Infrastructure Service (Lifecycle Category)
+**Location**: `ciris_engine/logic/services/lifecycle/time.py`
+**Protocol**: `ciris_engine/protocols/services/lifecycle/time.py`
+**Schema**: `ciris_engine/schemas/services/lifecycle/time.py`
+**Version**: 1.0.0
 **Status**: ⚠️ Needs conversion from single file to module
 
 ## Mission Alignment
@@ -109,7 +109,7 @@ The service implements sophisticated time accuracy monitoring:
 # NTP server pools for accuracy checks
 _ntp_pools = [
     "pool.ntp.org",
-    "0.pool.ntp.org", 
+    "0.pool.ntp.org",
     "1.pool.ntp.org",
     "time.nist.gov"
 ]
@@ -129,7 +129,7 @@ When NTP is unavailable, the service simulates realistic drift:
 
 #### Core Metrics
 - `time_requests` - `now()` calls
-- `iso_requests` - `now_iso()` calls  
+- `iso_requests` - `now_iso()` calls
 - `timestamp_requests` - `timestamp()` calls
 - `uptime_requests` - `get_uptime()` calls
 - `total_requests` - Sum of all request types
@@ -265,7 +265,7 @@ Target:  ciris_engine/logic/services/lifecycle/time/
 ### System-Wide Usage
 Every service and adapter relies on TimeService for:
 - **Logging**: Timestamp generation for all log entries
-- **Metrics**: Time-based performance measurements  
+- **Metrics**: Time-based performance measurements
 - **Audit**: Event timestamp generation
 - **Scheduling**: Task timing and intervals
 - **Authentication**: Token expiration tracking

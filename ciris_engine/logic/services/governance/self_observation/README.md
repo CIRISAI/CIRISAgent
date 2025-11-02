@@ -1,8 +1,8 @@
 # CIRIS Self Observation Service
 
-**Version**: 1.4.3  
-**Service Category**: Governance Services  
-**Status**: Production Ready (Release Candidate 1 - Patch 9)  
+**Version**: 1.4.3
+**Service Category**: Governance Services
+**Status**: Production Ready (Release Candidate 1 - Patch 9)
 **Mission Alignment**: Meta-Goal M-1 - Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing
 
 ## Overview

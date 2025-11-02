@@ -56,7 +56,7 @@ Handler Request → Bus Message → Service Selection → Processing → Respons
 
 **Multi-Provider Services** (use buses):
 - Multiple implementations available
-- Load balancing required  
+- Load balancing required
 - Provider-specific capabilities
 - Fallback/redundancy needed
 
@@ -120,7 +120,7 @@ class CustomBus(BaseBus[CustomServiceProtocol]):
 
 **Bus Statistics:**
 - Processed message count
-- Failed message count  
+- Failed message count
 - Current queue size
 - Running status
 

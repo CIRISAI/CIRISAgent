@@ -12,7 +12,7 @@ The Discord Adapter is CIRIS's most mature adapter, currently powering community
 
 **DiscordAdapter** - Main service implementing both `CommunicationService` and `WiseAuthorityService` protocols:
 - Message handling and response generation
-- Community moderation capabilities  
+- Community moderation capabilities
 - Wise Authority deferral and approval workflow
 - Multi-channel monitoring and management
 - Rate limiting and connection management
@@ -95,7 +95,7 @@ The Discord Adapter is CIRIS's most mature adapter, currently powering community
 ### Required Environment Variables
 ```bash
 DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_GUILD_ID=your_server_id_here  
+DISCORD_GUILD_ID=your_server_id_here
 DISCORD_CHANNEL_ID=primary_channel_id  # Optional, discovers all accessible channels
 ```
 
@@ -140,7 +140,7 @@ The DiscordToolService provides comprehensive moderation tools:
 - **`ban_user`** - Permanently ban user with reason
 - **`get_user_info`** - Retrieve user profile and history
 
-### Channel Management  
+### Channel Management
 - **`get_channel_info`** - Channel details and permissions
 - **`list_channels`** - Available channels and access levels
 - **`get_moderators`** - Identify users with moderation permissions
@@ -160,7 +160,7 @@ The DiscordToolService provides comprehensive moderation tools:
 
 ### Message Bus Integration
 - **CommunicationBus** - Provides Discord communication implementation
-- **WiseBus** - Enables distributed wisdom through Discord WAs  
+- **WiseBus** - Enables distributed wisdom through Discord WAs
 - **ToolBus** - Adds Discord-specific moderation tools
 - **RuntimeControlBus** - Remote management through Discord commands
 

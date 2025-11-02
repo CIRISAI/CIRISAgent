@@ -4,14 +4,14 @@ min_confidence = 80
 sort_by_size = true
 exclude = [
     "*/tests/*",
-    "*/__pycache__/*", 
+    "*/__pycache__/*",
     "*/build/*",
     "*/dist/*",
     "*/.venv/*"
 ]
 ignore_decorators = [
     "@router.*",
-    "@app.*", 
+    "@app.*",
     "@pytest.*",
     "@click.*"
 ]

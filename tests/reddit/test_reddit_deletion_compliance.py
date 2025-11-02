@@ -6,11 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from ciris_modular_services.reddit.schemas import (
-    RedditDeleteContentRequest,
-    RedditDeletionResult,
-    RedditDeletionStatus,
-)
+from ciris_modular_services.reddit.schemas import RedditDeleteContentRequest, RedditDeletionResult, RedditDeletionStatus
 from ciris_modular_services.reddit.service import RedditToolService
 
 

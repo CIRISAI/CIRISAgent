@@ -23,13 +23,13 @@ graph TD
     A --> C[TimeServiceProtocol]
     A --> D[ConfigNode Schema]
     A --> E[ConfigValue Schema]
-    
+
     D --> F[TypedGraphNode Registry]
     E --> G[Type Safety Validation]
-    
+
     B --> H[Graph Database]
     H --> I[SQLite Storage]
-    
+
     A --> J[Configuration Listeners]
     A --> K[Cache Management]
 ```
@@ -43,14 +43,14 @@ The `ConfigValue` schema provides type-safe storage for configuration values:
 ```python
 class ConfigValue(BaseModel):
     """Typed configuration value wrapper."""
-    
+
     string_value: Optional[str] = None
     int_value: Optional[int] = None
     float_value: Optional[float] = None
     bool_value: Optional[bool] = None
     list_value: Optional[List[Union[str, int, float, bool]]] = None
     dict_value: Optional[Dict[str, Union[str, int, float, bool, list, dict, None]]] = None
-    
+
     @property
     def value(self) -> Optional[Union[str, int, float, bool, List, Dict]]:
         """Get the actual value, checking each field in priority order."""
@@ -70,14 +70,14 @@ The `ConfigNode` extends `TypedGraphNode` to provide versioned configuration sto
 @register_node_type("config")
 class ConfigNode(TypedGraphNode):
     """A configuration value stored as a graph memory with versioning."""
-    
+
     key: str = Field(..., description="Configuration key")
     value: ConfigValue = Field(..., description="Typed configuration value")
     version: int = Field(default=1, description="Version number")
     updated_by: str = Field(..., description="Who updated this config")
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     previous_version: Optional[str] = Field(None, description="Node ID of previous version")
-    
+
     # Graph node type
     type: NodeType = Field(default=NodeType.CONFIG)
 ```
@@ -108,9 +108,9 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
 
 ```python
 async def set_config(
-    self, 
-    key: str, 
-    value: Union[str, int, float, bool, List, Dict, Path], 
+    self,
+    key: str,
+    value: Union[str, int, float, bool, List, Dict, Path],
     updated_by: str
 ) -> None:
 ```
@@ -215,13 +215,13 @@ async def get_metrics(self) -> Dict[str, float]:
         # Cache performance
         "config_cache_hits": float(self._cache_hits),
         "config_cache_misses": float(self._cache_misses),
-        
-        # Configuration statistics  
+
+        # Configuration statistics
         "config_values_total": float(config_count),
-        
+
         # Service health
         "config_uptime_seconds": uptime_seconds,
-        
+
         # Base service metrics (from BaseGraphService)
         **self._collect_metrics()
     }
@@ -277,7 +277,7 @@ await config_service.set_config("debug.enabled", True, updated_by="admin")
 
 # Complex data structures
 await config_service.set_config(
-    "database.config", 
+    "database.config",
     {
         "host": "localhost",
         "port": 5432,
@@ -297,7 +297,7 @@ await config_service.set_config(
 config_node = await config_service.get_config("api.timeout")
 if config_node:
     timeout_value = config_node.value.value  # Returns: 30
-    
+
 # List configurations by prefix
 api_configs = await config_service.list_configs(prefix="api.")
 # Returns: {"api.timeout": 30, "api.retries": 3, ...}
@@ -342,7 +342,7 @@ The Config Service directly supports **Meta-Goal M-1** ("Promote sustainable ada
 
 #### 2. **Adaptive Configuration Management**
 - **Dynamic Updates**: Real-time configuration changes without service restarts
-- **Change Notifications**: Listener system enables adaptive responses to configuration changes  
+- **Change Notifications**: Listener system enables adaptive responses to configuration changes
 - **Version History**: Full audit trail supports learning from configuration evolution
 - **Pattern-Based Flexibility**: Glob pattern matching allows flexible configuration grouping
 
@@ -383,9 +383,9 @@ The Config Service directly supports **Meta-Goal M-1** ("Promote sustainable ada
    ```python
    # Good
    "service.database.host"
-   "service.database.port" 
+   "service.database.port"
    "service.api.timeout"
-   
+
    # Avoid
    "db_host"
    "api_timeout_value"
@@ -395,7 +395,7 @@ The Config Service directly supports **Meta-Goal M-1** ("Promote sustainable ada
    ```python
    # Breaking changes
    await config_service.set_config("api.version", "2.0.0", updated_by="admin")
-   
+
    # Feature additions
    await config_service.set_config("api.rate_limit", 1000, updated_by="admin")
    ```
@@ -404,8 +404,8 @@ The Config Service directly supports **Meta-Goal M-1** ("Promote sustainable ada
    ```python
    # Development
    "dev.database.host"
-   
-   # Production  
+
+   # Production
    "prod.database.host"
    ```
 
@@ -437,13 +437,13 @@ except Exception as e:
 class MyService:
     def __init__(self, config_service: GraphConfigService):
         self.config = config_service
-        
+
         # Register for configuration changes
         self.config.register_config_listener(
-            "myservice.*", 
+            "myservice.*",
             self._on_config_change
         )
-    
+
     async def _on_config_change(self, key: str, old_value: ConfigValue, new_value: ConfigValue):
         """React to configuration changes."""
         if key == "myservice.log_level":
@@ -466,7 +466,7 @@ POST /v1/agent/interact
 }
 
 # Retrieval
-POST /v1/agent/interact  
+POST /v1/agent/interact
 {
     "message": "$recall config/api_timeout CONFIG LOCAL"
 }
@@ -497,7 +497,7 @@ By replacing traditional configuration approaches with this graph-based, version
 
 ---
 
-**Service Version**: 1.0.0  
-**Documentation Version**: 1.0.0  
-**Last Updated**: September 2025  
+**Service Version**: 1.0.0
+**Documentation Version**: 1.0.0
+**Last Updated**: September 2025
 **Maintainer**: CIRIS Development Team

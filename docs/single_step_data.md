@@ -11,7 +11,7 @@ For each of the 15 step points in the CIRIS Agent processing pipeline, specific 
 
 **Key Data Available**:
 - `tasks_to_process`: List of tasks selected for processing (QueuedTask[])
-- `tasks_deferred`: Tasks skipped with reasons (Dict[task_id, reason])  
+- `tasks_deferred`: Tasks skipped with reasons (Dict[task_id, reason])
 - `selection_criteria`: Priority, age, channel filters used
 - `total_pending_tasks`: Total tasks in queue
 - `total_active_tasks`: Currently processing
@@ -74,7 +74,7 @@ For each of the 15 step points in the CIRIS Agent processing pipeline, specific 
 
 **Key Data Available**:
 - `ethical_dma`: Ethical DMA result (EthicalDMAResult)
-- `common_sense_dma`: Common sense DMA result (CSDMAResult)  
+- `common_sense_dma`: Common sense DMA result (CSDMAResult)
 - `domain_dma`: Domain-specific DMA result (DSDMAResult)
 - `dmas_executed`: Which DMAs ran successfully (str[])
 - `dma_failures`: Any DMA failures with details (Dict[dma_name, error])

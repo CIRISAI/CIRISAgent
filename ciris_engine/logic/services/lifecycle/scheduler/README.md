@@ -1,8 +1,8 @@
 # CIRIS Task Scheduler Service
 
-**SERVICE TYPE**: Runtime Service  
-**CATEGORY**: Lifecycle Services  
-**STATUS**: Production Ready  
+**SERVICE TYPE**: Runtime Service
+**CATEGORY**: Lifecycle Services
+**STATUS**: Production Ready
 **Mission Alignment**: Meta-Goal M-1 Core Enabler
 
 ## Mission Challenge: How does autonomous scheduling serve Meta-Goal M-1 and proactive behavior?
@@ -33,17 +33,17 @@ class ScheduledTask(BaseModel):
     name: str                       # Human-readable name
     goal_description: str           # Task objective
     status: str                     # PENDING, ACTIVE, COMPLETE, FAILED
-    
+
     # Time-based execution
     defer_until: Optional[datetime]  # One-time execution timestamp
     schedule_cron: Optional[str]     # Recurring cron pattern
-    
+
     # Execution metadata
     trigger_prompt: str             # Prompt for thought creation
     origin_thought_id: str          # Creating thought reference
     created_at: datetime
     last_triggered_at: Optional[datetime]
-    
+
     # Self-deferral tracking
     deferral_count: int = 0
     deferral_history: List[Dict[str, str]] = []
@@ -188,12 +188,12 @@ The service provides detailed operational metrics:
     "tasks_triggered": 140.0,
     "tasks_completed": 135.0,
     "tasks_failed": 2.0,
-    
+
     # Performance metrics
     "task_success_rate": 0.985,
     "scheduler_uptime_seconds": 86400.0,
     "check_interval": 60.0,
-    
+
     # Task type breakdown
     "recurring_tasks": 3.0,
     "oneshot_tasks": 2.0

@@ -1,9 +1,9 @@
 # CIRIS Runtime Control Service
 
-**Service Category**: Runtime Services  
-**Location**: `ciris_engine/logic/services/runtime/control_service.py`  
-**Protocol**: `ciris_engine/protocols/services/runtime/runtime_control.py`  
-**Schemas**: `ciris_engine/schemas/services/runtime_control.py`  
+**Service Category**: Runtime Services
+**Location**: `ciris_engine/logic/services/runtime/control_service.py`
+**Protocol**: `ciris_engine/protocols/services/runtime/runtime_control.py`
+**Schemas**: `ciris_engine/schemas/services/runtime_control.py`
 
 ## Mission Statement
 
@@ -18,7 +18,7 @@ The Runtime Control Service serves as CIRIS's unified control plane, enabling dy
 **Meta-Goal M-1 requires sustainable adaptive coherence.** The Runtime Control Service ensures sustainability by:
 
 - **Resource Management**: Processor pause/resume prevents system exhaustion during peak loads
-- **Graceful Degradation**: Circuit breaker management maintains service availability during partial failures  
+- **Graceful Degradation**: Circuit breaker management maintains service availability during partial failures
 - **Adaptive Configuration**: Hot configuration updates enable system adaptation without restart
 - **Emergency Protocols**: WA-signed emergency shutdown provides ultimate safety valve
 
@@ -47,7 +47,7 @@ The Runtime Control Service serves as CIRIS's unified control plane, enabling dy
 ```mermaid
 graph TD
     RC[Runtime Control Service] --> |Controls| G[Graph Services]
-    RC --> |Manages| I[Infrastructure Services]  
+    RC --> |Manages| I[Infrastructure Services]
     RC --> |Monitors| GOV[Governance Services]
     RC --> |Coordinates| R[Runtime Services]
     RC --> |Supervises| T[Tool Services]
@@ -118,7 +118,7 @@ Following CIRIS's "No Untyped Dicts, No Bypass Patterns, No Exceptions" philosop
 class ConfigValueMap(BaseModel):
     """Typed map for configuration values."""
     configs: Dict[str, Union[str, int, float, bool, list, dict]] = Field(
-        default_factory=dict, 
+        default_factory=dict,
         description="Configuration key-value pairs with typed values"
     )
 ```
@@ -148,7 +148,7 @@ CIRIS uses a sophisticated multi-level service selection system:
 
 #### Priority Groups
 - **Group 0**: Primary services (production providers)
-- **Group 1**: Secondary services (backup providers)  
+- **Group 1**: Secondary services (backup providers)
 - **Group 2**: Tertiary services (fallback/mock providers)
 
 #### Priority Levels Within Groups
@@ -204,7 +204,7 @@ command_id:{uuid}|command_type:emergency_shutdown|wa_id:{wa_id}|issued_at:{iso_t
 
 1. **Command Reception**: WA sends signed emergency command
 2. **Signature Verification**: Ed25519 signature validation
-3. **Authorization Check**: Verify WA is in authorized key list  
+3. **Authorization Check**: Verify WA is in authorized key list
 4. **Shutdown Initiation**: Trigger ShutdownService with emergency priority
 5. **Status Tracking**: Record shutdown progress and completion
 
@@ -221,7 +221,7 @@ The service tracks comprehensive operational metrics:
 - `runtime_queue_size`: Current processing queue depth
 - `runtime_uptime_seconds`: Service uptime
 
-#### Performance Metrics  
+#### Performance Metrics
 - `average_thought_time_ms`: Average thought processing time
 - `seconds_per_thought`: Processing rate (5-15 seconds typical)
 - `thoughts_processed`: Total thoughts completed
@@ -240,7 +240,7 @@ The service tracks comprehensive operational metrics:
 ```python
 class ServiceHealthStatus(BaseModel):
     overall_health: str          # "healthy", "degraded", "unhealthy", "critical"
-    healthy_services: int        # Count of healthy services  
+    healthy_services: int        # Count of healthy services
     unhealthy_services: int      # Count of unhealthy services
     service_details: Dict[str, Dict] # Per-service health details
     recommendations: List[str]   # Actionable health recommendations
@@ -435,7 +435,7 @@ The Runtime Control Service powers these API endpoints:
 
 #### Processor Control
 - `POST /v1/runtime/processor/pause` - Pause processor
-- `POST /v1/runtime/processor/resume` - Resume processor  
+- `POST /v1/runtime/processor/resume` - Resume processor
 - `POST /v1/runtime/processor/step` - Execute single step
 - `GET /v1/runtime/processor/queue` - Get queue status
 - `POST /v1/runtime/shutdown` - Shutdown runtime
@@ -446,7 +446,7 @@ The Runtime Control Service powers these API endpoints:
 - `GET /v1/runtime/circuit-breakers` - Get breaker status
 - `GET /v1/runtime/services/selection-explanation` - Get selection docs
 
-#### Configuration Management  
+#### Configuration Management
 - `GET /v1/runtime/config` - Get configuration
 - `PUT /v1/runtime/config/{path}` - Update configuration
 - `POST /v1/runtime/config/backup` - Create backup

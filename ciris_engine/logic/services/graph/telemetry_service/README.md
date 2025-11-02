@@ -1,8 +1,8 @@
 # CIRIS Telemetry Service
 
-**Service Type**: Graph Service  
-**Location**: `ciris_engine/logic/services/graph/telemetry_service.py`  
-**Status**: Production (needs conversion to module directory)  
+**Service Type**: Graph Service
+**Location**: `ciris_engine/logic/services/graph/telemetry_service.py`
+**Status**: Production (needs conversion to module directory)
 **Protocol**: `TelemetryServiceProtocol`
 
 ## Overview
@@ -147,7 +147,7 @@ async def query_metrics(
 ) -> List[Dict[str, Any]]
 
 async def get_metric_summary(
-    metric_name: str, 
+    metric_name: str,
     window_minutes: int = 60
 ) -> Dict[str, float]
 
@@ -172,7 +172,7 @@ The service implements grace-based memory consolidation following covenant princ
 ```python
 class GracePolicy(str, Enum):
     FORGIVE_ERRORS = "forgive_errors"
-    EXTEND_PATIENCE = "extend_patience"  
+    EXTEND_PATIENCE = "extend_patience"
     ASSUME_GOOD_INTENT = "assume_good_intent"
     RECIPROCAL_GRACE = "reciprocal_grace"
 ```
@@ -264,7 +264,7 @@ print(f"Avg response: {summary['mean']}ms, 95th: {summary['p95']}ms")
 - Enables graph-based queries and analysis
 - Supports memory consolidation workflows
 
-### Service Registry Integration  
+### Service Registry Integration
 - Discovers services dynamically through `ServiceRegistry`
 - Generates semantic names for adapter instances
 - Handles service lifecycle changes gracefully
@@ -308,7 +308,7 @@ telemetry_service/
 - **TimeService**: For consistent timestamps (critical)
 - **ServiceRegistry**: For dynamic service discovery
 
-### Optional Services  
+### Optional Services
 - **RuntimeControlService**: For adapter instance listing
 - **PSUtil**: For system resource monitoring (graceful degradation)
 
@@ -331,12 +331,12 @@ The service includes comprehensive test coverage:
 
 ### Throughput
 - Parallel collection across 37+ services in <5 seconds
-- Handles 1000+ metrics per minute  
+- Handles 1000+ metrics per minute
 - Concurrent operations limited to 50 for stability
 
 ### Memory Usage
 - Efficient caching with configurable limits
-- Memory consolidation reduces long-term storage overhead  
+- Memory consolidation reduces long-term storage overhead
 - Graph storage leverages shared memory infrastructure
 
 ### Error Handling
@@ -356,7 +356,7 @@ The service includes comprehensive test coverage:
 ## Future Enhancements
 
 ### Planned Features
-- Real-time alerting based on metric thresholds  
+- Real-time alerting based on metric thresholds
 - Advanced analytics and trend detection
 - Machine learning-based anomaly detection
 - Export capabilities for external monitoring systems

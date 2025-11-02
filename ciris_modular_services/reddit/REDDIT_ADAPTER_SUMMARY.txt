@@ -99,13 +99,13 @@ IMPLEMENTATION STATUS BY FEATURE
      - CIRIS_REDDIT_PASSWORD
      - CIRIS_REDDIT_USER_AGENT (optional)
      - CIRIS_REDDIT_SUBREDDIT (optional, default: ciris)
-   
+
    Channel reference format:
      - reddit:r/<subreddit>
      - reddit:r/<subreddit>:post/<id>
      - reddit:r/<subreddit>:post/<id>:comment/<id>
      - reddit:u/<username>
-   
+
    WAKEUP channel detection: YES
 
 ============================================

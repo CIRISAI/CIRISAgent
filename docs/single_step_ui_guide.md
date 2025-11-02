@@ -109,7 +109,7 @@ async function executeSingleStep(includeDetails = false) {
       include_details: includeDetails
     })
   });
-  
+
   const result = await response.json();
   updateUI(result.data);
 }
@@ -120,17 +120,17 @@ async function executeSingleStep(includeDetails = false) {
 function updateUI(stepData: SingleStepResponse) {
   // Update pipeline highlight
   highlightCurrentStep(stepData.step_point);
-  
+
   // Show step-specific data
   updateStepPanel(stepData.step_result);
-  
+
   // Update performance metrics
   updateMetrics({
     time: stepData.processing_time_ms,
     tokens: stepData.tokens_used,
     success: stepData.success
   });
-  
+
   // Show transparency data if available
   if (stepData.transparency_data) {
     updateTransparencyPanel(stepData.transparency_data);

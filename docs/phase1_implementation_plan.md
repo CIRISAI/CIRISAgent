@@ -28,7 +28,7 @@ from ciris_engine.logic.adapters.api.routes.system_extensions import (
 
 class TestEnhancedSingleStepResponse:
     """Test the enhanced single-step response schema."""
-    
+
     def test_basic_response_structure(self):
         """Test basic response fields using existing RuntimeControlResponse compatibility."""
         response = EnhancedSingleStepResponse(
@@ -38,12 +38,12 @@ class TestEnhancedSingleStepResponse:
             cognitive_state="WORK",
             queue_depth=3
         )
-        
+
         assert response.success is True
         assert response.processor_state == "paused"
         assert response.cognitive_state == "WORK"
         assert response.queue_depth == 3
-    
+
     def test_detailed_response_with_step_point(self):
         """Test response with step point and detailed data."""
         # Use existing StepResultBuildContext schema
@@ -56,7 +56,7 @@ class TestEnhancedSingleStepResponse:
             thought_context={"task": "test task"},
             processing_time_ms=150.0
         )
-        
+
         response = EnhancedSingleStepResponse(
             success=True,
             message="Build context completed",
@@ -68,7 +68,7 @@ class TestEnhancedSingleStepResponse:
             processing_time_ms=150.0,
             tokens_used=45
         )
-        
+
         assert response.step_point == StepPoint.BUILD_CONTEXT
         assert response.step_result.thought_id == "thought_123"
         assert response.processing_time_ms == 150.0
@@ -85,7 +85,7 @@ class TestEnhancedSingleStepResponse:
             entered_step_at=datetime.now(timezone.utc),
             processing_time_ms=200.0
         )
-        
+
         # Use existing PipelineState schema
         pipeline_state = PipelineState(
             is_paused=True,
@@ -95,7 +95,7 @@ class TestEnhancedSingleStepResponse:
             },
             total_thoughts_in_flight=1
         )
-        
+
         response = EnhancedSingleStepResponse(
             success=True,
             message="DMA execution in progress",
@@ -105,7 +105,7 @@ class TestEnhancedSingleStepResponse:
             step_point=StepPoint.PERFORM_DMAS,
             pipeline_state=pipeline_state
         )
-        
+
         assert response.pipeline_state.is_paused is True
         assert len(response.pipeline_state.thoughts_by_step) == 1
         assert response.pipeline_state.total_thoughts_in_flight == 1
@@ -119,7 +119,7 @@ class TestEnhancedSingleStepResponse:
             cognitive_state="WORK",
             queue_depth=0
         )
-        
+
         # Should work like original RuntimeControlResponse
         assert response.success is False
         assert response.message == "No thoughts to process"
@@ -144,12 +144,12 @@ from ciris_engine.schemas.services.runtime_control import (
 
 class TestEnhancedSingleStepIntegration:
     """Test enhanced single-step endpoint integration."""
-    
+
     @pytest.fixture
     def mock_runtime_control_with_details(self):
         """Mock runtime control that returns detailed step results."""
         mock = AsyncMock()
-        
+
         # Mock single_step to return ProcessorControlResponse + step data
         aspdma_result = ActionSelectionDMAResult(
             selected_action="SPEAK",
@@ -157,7 +157,7 @@ class TestEnhancedSingleStepIntegration:
             reasoning="User requested greeting",
             confidence_level=0.95
         )
-        
+
         step_result = StepResultPerformASPDMA(
             step_point=StepPoint.PERFORM_ASPDMA,
             success=True,
@@ -169,15 +169,15 @@ class TestEnhancedSingleStepIntegration:
             tokens_used=67,
             processing_time_ms=340.0
         )
-        
+
         control_response = ProcessorControlResponse(
             success=True,
             processor_name="agent",
-            operation="single_step", 
+            operation="single_step",
             new_status=ProcessorStatus.PAUSED,
             step_result=step_result  # Enhanced with step result
         )
-        
+
         mock.single_step.return_value = control_response
         return mock
 
@@ -186,10 +186,10 @@ class TestEnhancedSingleStepIntegration:
         # Setup
         request = MagicMock()
         request.app.state.main_runtime_control_service = mock_runtime_control_with_details
-        
+
         # Execute
         response = client.post("/v1/system/runtime/single-step", json={})
-        
+
         # Verify basic response (backward compatible)
         assert response.status_code == 200
         data = response.json()["data"]
@@ -201,17 +201,17 @@ class TestEnhancedSingleStepIntegration:
 
     def test_single_step_with_details_parameter(self, client, mock_runtime_control_with_details):
         """Test endpoint with ?include_details=true returns enhanced response."""
-        # Execute  
+        # Execute
         response = client.post("/v1/system/runtime/single-step?include_details=true", json={})
-        
+
         # Verify enhanced response
         assert response.status_code == 200
         data = response.json()["data"]
-        
+
         # Basic fields
         assert data["success"] is True
         assert data["processor_state"] == "paused"
-        
+
         # Enhanced fields
         assert data["step_point"] == "perform_aspdma"
         assert "step_result" in data
@@ -228,13 +228,13 @@ class TestEnhancedSingleStepIntegration:
         mock_pipeline_state.is_paused = True
         mock_pipeline_state.current_round = 5
         mock_pipeline_controller.get_pipeline_state.return_value = mock_pipeline_state
-        
+
         # Add to runtime control mock
         mock_runtime_control_with_details.get_pipeline_controller.return_value = mock_pipeline_controller
-        
+
         # Execute
         response = client.post("/v1/system/runtime/single-step?include_details=true", json={})
-        
+
         # Verify pipeline state included
         data = response.json()["data"]
         assert "pipeline_state" in data
@@ -258,30 +258,30 @@ from ciris_engine.schemas.services.runtime_control import (
 
 class TestSingleStepProtocolIntegration:
     """Test enhanced single-step uses existing protocols correctly."""
-    
+
     def test_pipeline_controller_integration(self):
         """Test that pipeline controller protocol is used correctly."""
         # Create real PipelineController using existing implementation
         controller = PipelineController(is_paused=True)
-        
+
         # Add a thought at a specific step
         thought = ThoughtInPipeline(
             thought_id="test_thought",
-            task_id="test_task", 
+            task_id="test_task",
             thought_type="SPEAK",
             current_step=StepPoint.BUILD_CONTEXT,
             entered_step_at=datetime.now(timezone.utc)
         )
-        
+
         controller._paused_thoughts["test_thought"] = thought
-        
+
         # Get pipeline state using existing method
         pipeline_state = controller.get_pipeline_state()
-        
+
         # Verify we can extract the data correctly
         assert pipeline_state.is_paused is True
         assert "test_thought" in controller._paused_thoughts
-        
+
         # Test step progression
         next_thought = controller.drain_pipeline_step()
         assert next_thought == "test_thought"
@@ -291,7 +291,7 @@ class TestSingleStepProtocolIntegration:
         from ciris_engine.schemas.services.runtime_control import (
             StepResultBuildContext, StepResultPerformDMAs, StepResult
         )
-        
+
         # Test BuildContext step result
         build_result = StepResultBuildContext(
             step_point=StepPoint.BUILD_CONTEXT,
@@ -302,10 +302,10 @@ class TestSingleStepProtocolIntegration:
             thought_context={"context": "test"},
             processing_time_ms=100.0
         )
-        
+
         # Should be valid StepResult union member
         assert isinstance(build_result, StepResultBuildContext)
-        
+
         # Test DMA step result
         dma_result = StepResultPerformDMAs(
             step_point=StepPoint.PERFORM_DMAS,
@@ -315,7 +315,7 @@ class TestSingleStepProtocolIntegration:
             longest_dma_time_ms=200.0,
             total_time_ms=200.0
         )
-        
+
         assert isinstance(dma_result, StepResultPerformDMAs)
 ```
 
@@ -333,14 +333,14 @@ from ciris_engine.schemas.services.runtime_control import (
 
 class EnhancedSingleStepResponse(BaseModel):
     """Enhanced response for single-step operations with optional detailed data."""
-    
+
     # Basic fields (backward compatible with RuntimeControlResponse)
     success: bool = Field(..., description="Whether step succeeded")
-    message: str = Field(..., description="Human-readable status message") 
+    message: str = Field(..., description="Human-readable status message")
     processor_state: str = Field(..., description="Current processor state")
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state")
     queue_depth: int = Field(0, description="Number of items in processing queue")
-    
+
     # Enhanced fields (optional for backward compatibility)
     step_point: Optional[StepPoint] = Field(None, description="Step point that was executed")
     step_result: Optional[Union[StepResult, Dict[str, Any]]] = Field(
@@ -349,23 +349,23 @@ class EnhancedSingleStepResponse(BaseModel):
     pipeline_state: Optional[PipelineState] = Field(
         None, description="Complete pipeline state"
     )
-    
+
     # Performance and debugging data
     processing_time_ms: float = Field(0.0, description="Step execution time")
     tokens_used: Optional[int] = Field(None, description="LLM tokens consumed")
-    
+
     # Demo-specific data
     demo_data: Optional[Dict[str, Any]] = Field(
         None, description="Additional data formatted for demo presentation"
     )
-    
+
     class Config:
         # Enable validation of union types
         use_enum_values = True
-        
+
     @classmethod
     def from_basic_response(
-        cls, 
+        cls,
         control_response: ProcessorControlResponse,
         cognitive_state: Optional[str] = None,
         queue_depth: int = 0
@@ -378,7 +378,7 @@ class EnhancedSingleStepResponse(BaseModel):
             cognitive_state=cognitive_state,
             queue_depth=queue_depth
         )
-    
+
     @classmethod
     def from_detailed_response(
         cls,
@@ -414,8 +414,8 @@ class EnhancedSingleStepResponse(BaseModel):
 ```python
 @router.post("/runtime/single-step", response_model=SuccessResponse[EnhancedSingleStepResponse])
 async def single_step_processor(
-    request: Request, 
-    auth: AuthContext = Depends(require_admin), 
+    request: Request,
+    auth: AuthContext = Depends(require_admin),
     body: dict = Body(default={}),
     include_details: bool = Query(False, description="Include detailed step and pipeline data")
 ) -> SuccessResponse[EnhancedSingleStepResponse]:
@@ -423,10 +423,10 @@ async def single_step_processor(
     Execute a single processing step.
 
     Useful for debugging and demonstrations. Processes one item from the queue.
-    
+
     Args:
         include_details: If True, returns detailed step result data and pipeline state
-        
+
     Requires ADMIN role.
     """
     # Try main runtime control service first (has all methods), fall back to API runtime control
@@ -438,11 +438,11 @@ async def single_step_processor(
 
     try:
         result = await runtime_control.single_step()
-        
+
         # Get additional data for enhanced response
         cognitive_state = None
         queue_depth = 0
-        
+
         # Get cognitive state from agent processor
         if hasattr(request.app.state, 'runtime') and request.app.state.runtime:
             runtime = request.app.state.runtime
@@ -450,14 +450,14 @@ async def single_step_processor(
                 if hasattr(runtime.agent_processor, 'state_manager'):
                     current_state = runtime.agent_processor.state_manager.get_state()
                     cognitive_state = current_state.value if hasattr(current_state, 'value') else str(current_state)
-        
+
         # Get queue depth
         try:
             queue_status = await runtime_control.get_processor_queue_status()
             queue_depth = queue_status.queue_size
         except:
             queue_depth = 0
-        
+
         if not include_details:
             # Basic response (backward compatible)
             response = EnhancedSingleStepResponse.from_basic_response(
@@ -472,7 +472,7 @@ async def single_step_processor(
             pipeline_state = None
             processing_time_ms = 0.0
             tokens_used = None
-            
+
             # Extract step result data if available
             if hasattr(result, 'step_result') and result.step_result:
                 step_result = result.step_result
@@ -482,13 +482,13 @@ async def single_step_processor(
                     processing_time_ms = step_result.processing_time_ms
                 if hasattr(step_result, 'tokens_used'):
                     tokens_used = step_result.tokens_used
-            
-            # Get pipeline state if available  
+
+            # Get pipeline state if available
             if hasattr(runtime_control, 'get_pipeline_controller'):
                 pipeline_controller = await runtime_control.get_pipeline_controller()
                 if pipeline_controller:
                     pipeline_state = pipeline_controller.get_pipeline_state()
-            
+
             response = EnhancedSingleStepResponse.from_detailed_response(
                 control_response=result,
                 step_point=step_point or StepPoint.BUILD_CONTEXT,  # Default fallback
@@ -501,7 +501,7 @@ async def single_step_processor(
             )
 
         return SuccessResponse(data=response)
-        
+
     except Exception as e:
         logger.error(f"Error in single step: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -515,19 +515,19 @@ async def single_step_processor(
 ```python
 class ProcessorControlResponse(BaseModel):
     """Response from processor control operations."""
-    
+
     success: bool = Field(..., description="Whether the operation succeeded")
     processor_name: str = Field(..., description="Name of the processor")
     operation: str = Field(..., description="Operation that was performed")
     new_status: ProcessorStatus = Field(..., description="New processor status after operation")
     message: Optional[str] = Field(None, description="Human-readable message")
     error: Optional[str] = Field(None, description="Error message if operation failed")
-    
+
     # NEW: Enhanced data for single-step operations
     step_result: Optional[Union["StepResult", Dict[str, Any]]] = Field(
         None, description="Detailed step result data"
     )
-    
+
     class Config:
         arbitrary_types_allowed = True
 ```
@@ -540,7 +540,7 @@ async def single_step(self) -> ProcessorControlResponse:
     """Execute a single processing step with enhanced result data."""
     try:
         _start_time = self._now()
-        
+
         # Get the agent processor from runtime
         if not self.runtime or not hasattr(self.runtime, "agent_processor"):
             return ProcessorControlResponse(
@@ -563,27 +563,27 @@ async def single_step(self) -> ProcessorControlResponse:
 
         # Execute single step and capture result
         step_result_raw = await self.runtime.agent_processor.single_step()
-        
+
         # Extract step result data using existing protocols
         step_result = None
         if step_result_raw.get("success"):
             # Convert raw dict to appropriate StepResult type if possible
             if "step_point" in step_result_raw:
-                step_point_str = step_result_raw["step_point"] 
+                step_point_str = step_result_raw["step_point"]
                 step_point = StepPoint(step_point_str)
-                
+
                 # Create appropriate StepResult based on step point
                 step_result = self._create_step_result_from_raw(step_point, step_result_raw)
-        
+
         # Track processing time
         processing_time = (self._now() - _start_time).total_seconds() * 1000
         if step_result_raw.get("processing_time_ms"):
             processing_time = step_result_raw["processing_time_ms"]
-        
+
         return ProcessorControlResponse(
             success=step_result_raw.get("success", False),
             processor_name="agent",
-            operation="single_step", 
+            operation="single_step",
             new_status=self._processor_status,
             error=step_result_raw.get("error"),
             step_result=step_result or step_result_raw  # Include enhanced data
@@ -608,7 +608,7 @@ def _create_step_result_from_raw(self, step_point: StepPoint, raw_data: dict) ->
             StepResultConscienceExecution, StepResultActionSelection,
             StepResultHandlerStart, StepResultHandlerComplete
         )
-        
+
         # Map to appropriate schema based on step point
         if step_point == StepPoint.BUILD_CONTEXT:
             return StepResultBuildContext(
@@ -621,7 +621,7 @@ def _create_step_result_from_raw(self, step_point: StepPoint, raw_data: dict) ->
                 processing_time_ms=raw_data.get("processing_time_ms", 0.0)
             )
         # Add other step point mappings...
-        
+
         return None
     except Exception as e:
         logger.warning(f"Could not create typed step result: {e}")
@@ -630,7 +630,7 @@ def _create_step_result_from_raw(self, step_point: StepPoint, raw_data: dict) ->
 
 ### **Step 5: Update TypeScript SDK**
 
-#### **A. Add Enhanced Response Types** 
+#### **A. Add Enhanced Response Types**
 **File**: `ciris_sdk/types.ts` (add to existing)
 
 ```typescript
@@ -641,7 +641,7 @@ export interface EnhancedSingleStepResponse {
   processor_state: string;
   cognitive_state?: string;
   queue_depth: number;
-  
+
   // Enhanced fields
   step_point?: string;
   step_result?: StepResult | Record<string, any>;
@@ -679,17 +679,17 @@ export interface ThoughtInPipeline {
 async def single_step_enhanced(self, include_details: bool = True) -> EnhancedSingleStepResponse:
     """
     Execute single step with enhanced data for demo purposes.
-    
+
     Args:
         include_details: Include detailed step result and pipeline data
-        
+
     Returns:
         Enhanced single-step response with complete debugging information
     """
     params = {"include_details": include_details} if include_details else {}
     result = await self._transport.request(
-        "POST", 
-        "/v1/system/runtime/single-step", 
+        "POST",
+        "/v1/system/runtime/single-step",
         json={},
         params=params
     )

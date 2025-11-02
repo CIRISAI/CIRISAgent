@@ -172,7 +172,7 @@ async def process_thought_with_conscience(thought_item):
             conscience_feedback=conscience_result.override_reason,
             retry_attempt=retry_count + 1
         )
-        
+
     # 4. Only DEFER when max rounds exceeded
     elif conscience_result.overridden and retry_count >= conscience_retry_limit:
         # Now we DEFER to human authority

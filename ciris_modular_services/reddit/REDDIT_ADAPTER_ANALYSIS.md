@@ -22,7 +22,7 @@ ciris_modular_services/reddit/
 └── observer.py              # Passive observation implementation
 ```
 
-**Size & Scope**: 
+**Size & Scope**:
 - Total: ~1,900 lines of production Python code
 - `service.py`: 1,188 lines (RedditAPIClient, RedditToolService, RedditCommunicationService)
 - `observer.py`: 162 lines (RedditObserver for passive monitoring)
@@ -47,11 +47,11 @@ The adapter implements a **custom HTTP client** (`RedditAPIClient`) instead of u
 class RedditAPIClient:
     _TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
     _API_BASE_URL = "https://oauth.reddit.com"
-    
+
     # OAuth Management
     async def refresh_token(force: bool = False) -> bool
     async def update_credentials(credentials: RedditCredentials) -> None
-    
+
     # Public Methods
     async def fetch_user_context(request: RedditUserContextRequest)
     async def submit_post(request: RedditSubmitPostRequest)
@@ -207,7 +207,7 @@ async def refresh_token(force: bool = False) -> bool:
     async with self._token_lock:  # Thread-safe with asyncio.Lock()
         if not force and self._token and not self._token.is_expired():
             return True
-        
+
         auth = (client_id, client_secret)
         data = {
             "grant_type": "password",
@@ -223,7 +223,7 @@ async def refresh_token(force: bool = False) -> bool:
 class RedditToken(BaseModel):
     access_token: str
     expires_at: datetime
-    
+
     def is_expired(self, now=None, buffer_seconds: int = 60) -> bool:
         """Checks if expired or within 60-second refresh window"""
 ```
@@ -296,16 +296,16 @@ OAuth2 implementation is complete, type-safe, and follows Reddit API best practi
 ```python
 async def _enhance_message(self, msg: RedditMessage) -> RedditMessage:
     """Apply Reddit-specific content hardening before processing."""
-    
+
     # Uses base observer's spoofing detection
     cleaned = detect_and_replace_spoofed_markers(msg.content)
     if cleaned != msg.content:
         msg.content = cleaned
-    
+
     # Surfaces permalink for context reconstruction
     if msg.permalink:
         setattr(msg, "permalink_url", msg.permalink)
-    
+
     return msg
 ```
 
@@ -713,4 +713,3 @@ Test Coverage:      0% (no tests exist)
 Type Annotations:   ~95% coverage (well-typed codebase)
 Documentation:      Good (README, docstrings, manifest)
 ```
-

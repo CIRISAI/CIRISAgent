@@ -66,7 +66,7 @@ python main.py --adapter discord --guild-id YOUR_GUILD_ID
 Adapters provide additional services to the core engine:
 
 1. **Communication Services** - Enable external communication (Discord, API, CLI)
-2. **Tool Services** - Adapter-specific tools and capabilities  
+2. **Tool Services** - Adapter-specific tools and capabilities
 3. **Runtime Control Services** - Environment-specific management interfaces
 4. **Authentication Services** - Platform-specific auth integration
 

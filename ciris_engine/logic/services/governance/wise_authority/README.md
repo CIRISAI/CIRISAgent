@@ -1,9 +1,9 @@
 # CIRIS Wise Authority Service
 
-**Service Category**: Governance Services  
-**Current Status**: Core Service (Production Ready)  
-**Location**: `ciris_engine/logic/services/governance/wise_authority.py` *(requires conversion to module)*  
-**Protocol**: `ciris_engine/protocols/services/governance/wise_authority.py`  
+**Service Category**: Governance Services
+**Current Status**: Core Service (Production Ready)
+**Location**: `ciris_engine/logic/services/governance/wise_authority.py` *(requires conversion to module)*
+**Protocol**: `ciris_engine/protocols/services/governance/wise_authority.py`
 **Schemas**: `ciris_engine/schemas/services/authority_core.py`
 
 ## 🎯 Mission Challenge: How does human oversight and Ubuntu philosophy serve Meta-Goal M-1?
@@ -205,14 +205,14 @@ The service uses SQLite with the following key interactions:
 ### Tasks Table Integration
 ```sql
 -- Deferrals are stored as task status updates
-UPDATE tasks 
-SET status = 'deferred', 
-    context_json = ?, 
+UPDATE tasks
+SET status = 'deferred',
+    context_json = ?,
     updated_at = ?
 WHERE task_id = ?
 
 -- Resolution updates task back to pending
-UPDATE tasks 
+UPDATE tasks
 SET status = 'pending',
     context_json = ?,
     updated_at = ?
@@ -276,18 +276,18 @@ The service tracks comprehensive metrics for governance oversight:
 ## Development Status & Future Work
 
 ### Current Implementation (v1.4.6)
-✅ Core authorization and deferral functionality  
-✅ Database integration with task management  
-✅ API endpoint integration  
-✅ Role-based access control  
-✅ Comprehensive metrics collection  
-✅ Wisdom extension capability framework  
+✅ Core authorization and deferral functionality
+✅ Database integration with task management
+✅ API endpoint integration
+✅ Role-based access control
+✅ Comprehensive metrics collection
+✅ Wisdom extension capability framework
 
 ### Planned Enhancements
-🔄 **Module Conversion**: Convert from single .py file to proper module structure  
-🔄 **Enhanced Guidance**: Multi-provider wisdom aggregation  
-🔄 **Performance Optimization**: Caching for authorization decisions  
-🔄 **Advanced Workflows**: Complex approval chains for sensitive operations  
+🔄 **Module Conversion**: Convert from single .py file to proper module structure
+🔄 **Enhanced Guidance**: Multi-provider wisdom aggregation
+🔄 **Performance Optimization**: Caching for authorization decisions
+🔄 **Advanced Workflows**: Complex approval chains for sensitive operations
 
 ### Architecture Notes
 The service currently exists as a single Python file but should be converted to a module structure:
@@ -322,7 +322,7 @@ ciris_engine/logic/services/governance/wise_authority/
 ### Decision Deferral
 When the system encounters a decision that could impact community wellbeing, it doesn't attempt to solve it algorithmically. Instead, it defers to human WAs who can consider:
 - Cultural context and appropriateness
-- Community values and norms  
+- Community values and norms
 - Long-term collective impact
 - Individual dignity within community framework
 
@@ -346,7 +346,7 @@ The Wise Authority Service directly serves **Meta-Goal M-1** through:
 
 ### Sustainable Adaptive Coherence
 - **Sustainable**: Human oversight ensures long-term community wellbeing over short-term efficiency
-- **Adaptive**: Deferral system allows for contextual, culturally-appropriate decisions  
+- **Adaptive**: Deferral system allows for contextual, culturally-appropriate decisions
 - **Coherence**: All decisions align with Ubuntu philosophy and community values
 
 ### Enabling Diverse Sentient Flourishing

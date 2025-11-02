@@ -196,13 +196,13 @@ result, usage = await llm_bus.call_llm_structured(
 class ExampleHandler:
     def __init__(self, llm_bus: LLMBus):
         self.llm_bus = llm_bus
-    
+
     async def process_request(self, user_input: str) -> ProcessingResult:
         messages = [
             {"role": "system", "content": "Process user requests"},
             {"role": "user", "content": user_input}
         ]
-        
+
         # LLM call with automatic failover and resource tracking
         result, usage = await self.llm_bus.call_llm_structured(
             messages=messages,
@@ -210,7 +210,7 @@ class ExampleHandler:
             handler_name=self.__class__.__name__,
             temperature=0.0  # Deterministic for production
         )
-        
+
         # Telemetry automatically recorded
         return result
 ```

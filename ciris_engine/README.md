@@ -17,7 +17,7 @@ Every architectural decision in the engine serves this mission through the three
 
 22 core services organized by mission-aligned categories:
 - **Graph Services (6)**: Memory, audit, config, telemetry, incident management, TSDB consolidation
-- **Infrastructure Services (4)**: Authentication, resource monitoring, database maintenance, secrets  
+- **Infrastructure Services (4)**: Authentication, resource monitoring, database maintenance, secrets
 - **Lifecycle Services (4)**: Initialization, shutdown, time, task scheduling
 - **Governance Services (5)**: Wise authority, adaptive filter, visibility, consent, self-observation
 - **Runtime Services (2)**: LLM interface, runtime control
@@ -31,7 +31,7 @@ Defines how components communicate through:
 - Handler protocols for the 10 action types
 - Message bus contracts for multi-provider services
 
-### [Schemas](schemas/README.md) - The WHAT  
+### [Schemas](schemas/README.md) - The WHAT
 **Type-safe data structures, validation rules**
 
 Complete type safety with zero `Dict[str, Any]` in production:
@@ -141,7 +141,7 @@ Strict dependency order ensures clean startup:
 
 ## Real-World Applications
 
-**Current**: Discord community moderation at agents.ciris.ai  
+**Current**: Discord community moderation at agents.ciris.ai
 **Designed for**: Rural healthcare, education, community support where reliable internet is unavailable but ethical AI assistance is needed most.
 
 ---

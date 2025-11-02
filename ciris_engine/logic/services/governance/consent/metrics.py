@@ -9,12 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict
 
-from ciris_engine.schemas.consent.core import (
-    ConsentStream,
-    DecayCounters,
-    OperationalCounters,
-    PartnershipCounters,
-)
+from ciris_engine.schemas.consent.core import ConsentStream, DecayCounters, OperationalCounters, PartnershipCounters
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.consent.core import ConsentStatus

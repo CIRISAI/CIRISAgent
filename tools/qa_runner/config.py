@@ -29,6 +29,7 @@ class QAModule(Enum):
     MULTI_OCCURRENCE = "multi_occurrence"
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
     REDDIT = "reddit"  # Reddit adapter testing
+    SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -176,6 +177,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.REDDIT:
             # Reddit tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.SQL_EXTERNAL_DATA:
+            # SQL external data tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

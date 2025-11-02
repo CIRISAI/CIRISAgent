@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from ciris_engine.logic.buses import BusManager
+from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -953,7 +955,13 @@ class RedditToolService(RedditServiceBase):
 
         limit_value = parameters.get("limit", 25)
         try:
-            limit = int(limit_value)
+            # Handle various types that might come from parameters
+            if isinstance(limit_value, int):
+                limit = limit_value
+            elif isinstance(limit_value, (float, str)):
+                limit = int(float(limit_value))
+            else:
+                limit = 25
         except (TypeError, ValueError):
             limit = 25
 
@@ -1018,7 +1026,7 @@ class RedditToolService(RedditServiceBase):
 
             deletion_result = RedditDeletionResult(
                 content_id=content_id,
-                content_type=content_type,  # type: ignore[arg-type]
+                content_type=content_type,
                 deleted_from_reddit=deletion_confirmed,
                 purged_from_cache=cache_purged,
                 audit_entry_id=audit_entry_id,
@@ -1290,11 +1298,11 @@ class RedditCommunicationService(RedditServiceBase):
             self._observer = RedditObserver(
                 credentials=self._credentials,
                 subreddit=self._credentials.subreddit if self._credentials else None,
-                bus_manager=self._bus_manager,
+                bus_manager=self._bus_manager if isinstance(self._bus_manager, BusManager) else None,
                 memory_service=self._memory_service,
                 agent_id=self._agent_id,
                 filter_service=self._filter_service,
-                secrets_service=self._secrets_service,
+                secrets_service=self._secrets_service if isinstance(self._secrets_service, SecretsService) else None,
                 time_service=self._time_service,
                 agent_occurrence_id=self._agent_occurrence_id,
             )

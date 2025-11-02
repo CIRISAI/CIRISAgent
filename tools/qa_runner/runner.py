@@ -40,6 +40,14 @@ class QARunner:
                 self.config.adapter = "api,reddit"
                 self.console.print("[dim]Auto-configured adapter: api,reddit for Reddit tests[/dim]")
 
+        if modules and QAModule.SQL_EXTERNAL_DATA in modules:
+            # SQL external data tests need both api and external_data_sql adapters
+            if "external_data_sql" not in self.config.adapter:
+                self.config.adapter = "api,external_data_sql"
+                self.console.print(
+                    "[dim]Auto-configured adapter: api,external_data_sql for SQL external data tests[/dim]"
+                )
+
         # Determine database backends to test
         if self.config.database_backends is None:
             self.database_backends = ["sqlite"]  # Default to SQLite only
@@ -155,6 +163,24 @@ class QARunner:
                 self.console.print("[red]❌ Failed to setup OAuth test user[/red]")
                 return False
 
+        # Configure SQL external data service if needed - MUST BE BEFORE SERVER STARTS
+        if modules and QAModule.SQL_EXTERNAL_DATA in modules:
+            # Set up test database BEFORE starting server
+            import asyncio
+
+            from .modules.sql_external_data_tests import SQLExternalDataTests
+
+            temp_test = SQLExternalDataTests(None, self.console)  # type: ignore
+            self.console.print("[cyan]Setting up test database...[/cyan]")
+            setup_result = asyncio.run(temp_test._setup_test_database())
+            if setup_result.get("success"):
+                # Set SQL config path on server manager so it can pass to env var
+                self.server_manager._sql_config_path = temp_test.sql_config_path
+                self.console.print("[dim]SQL external data test database configured[/dim]")
+            else:
+                self.console.print(f"[red]❌ Failed to setup SQL test database: {setup_result.get('error')}[/red]")
+                return False
+
         # Start API server if needed
         if self.config.auto_start_server:
             if not self.server_manager.start():
@@ -193,6 +219,7 @@ class QARunner:
             QAModule.BILLING_INTEGRATION,
             QAModule.MESSAGE_ID_DEBUG,
             QAModule.REDDIT,
+            QAModule.SQL_EXTERNAL_DATA,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -697,6 +724,7 @@ class QARunner:
         from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.reddit_tests import RedditTests
+        from .modules.sql_external_data_tests import SQLExternalDataTests
 
         all_passed = True
 
@@ -709,6 +737,7 @@ class QARunner:
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
             QAModule.MESSAGE_ID_DEBUG: MessageIDDebugTests,
             QAModule.REDDIT: RedditTests,
+            QAModule.SQL_EXTERNAL_DATA: SQLExternalDataTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -729,6 +758,7 @@ class QARunner:
 
                 # Instantiate and run test module
                 test_instance = test_class(client, self.console)
+
                 results = await test_instance.run()
 
                 # Store results in runner's results dict

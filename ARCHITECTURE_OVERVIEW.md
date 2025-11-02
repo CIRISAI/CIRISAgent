@@ -227,7 +227,7 @@ Foundation services that enable the system:
 **Purpose**: User consent management and privacy compliance
 **Protocol**: `ConsentServiceProtocol`
 **Access**: Direct injection
-**Why**: GDPR compliance and ethical data handling. Manages TEMPORARY (14-day), PARTNERED (bilateral), and ANONYMOUS consent streams.
+**Why**: GDPR compliance and ethical data handling. Manages TEMPORARY (14-day), PARTNERED (bilateral), and ANONYMOUS consent streams. Coordinates with modular DSAR services for external data compliance.
 
 ### Governance Services (5)
 
@@ -264,6 +264,79 @@ Ethical and operational governance:
 **Protocol**: `ToolServiceProtocol`
 **Bus**: `ToolBus` (always present)
 **Why**: Enables agent self-sufficiency. Core tools always available even offline.
+
+## Modular Services
+
+Beyond the 22 core services, CIRIS supports **modular tool services** that can be dynamically loaded at runtime. These are optional services that extend functionality without being part of the core system.
+
+### Modular Service Architecture
+
+**Key Principles**:
+- **Tools, Not Services** - External data sources are modeled as tools on ToolBus
+- **Privacy Schema-Driven** - All operations governed by privacy schema configuration
+- **Multi-Connector Pattern** - Single service can manage multiple data source connectors
+- **Runtime Configuration** - Connectors can be added/removed without code changes
+
+### SQL External Data Service
+
+**Purpose**: DSAR/GDPR compliance for external SQL databases
+**Protocol**: `SQLDataSourceProtocol` (implements `ToolServiceProtocol`)
+**Bus**: `ToolBus` (dynamic tool registration)
+**Location**: `ciris_modular_services/external_data_sql/`
+
+**Architecture Patterns**:
+
+1. **Privacy Schema as First-Class Citizen**
+   - Declarative mapping of tables, columns, and PII types
+   - Configurable anonymization strategies per column
+   - Cascade deletion rules for related data
+   - YAML-based configuration with runtime loading
+
+2. **Runtime Configuration**
+   - Dynamic connector initialization via `initialize_sql_connector` tool
+   - Metadata discovery via `get_sql_service_metadata` tool
+   - No service restart required for configuration changes
+   - Multiple connectors via connector_id routing parameter
+
+3. **Generic Tool Naming**
+   - 9 tools with generic `sql_*` prefix (not connector-specific)
+   - Connector routing via `connector_id` parameter
+   - Tools: `initialize_sql_connector`, `get_sql_service_metadata`, `sql_find_user_data`, `sql_export_user`, `sql_delete_user`, `sql_anonymize_user`, `sql_verify_deletion`, `sql_get_stats`, `sql_query`
+   - Service validates connector_id matches its configured instance
+
+4. **Tool Bus Integration**
+   - Tools discovered via ToolBus capability matching: `tool:sql`
+   - No service registry lookup - tools are interface
+   - Follows existing CIRIS tool service patterns
+
+5. **Supported Dialects**
+   - SQLite (file-based, serverless)
+   - MySQL (open-source RDBMS)
+   - PostgreSQL (advanced RDBMS)
+   - Dialect-aware query generation with specialized implementations
+
+**DSAR Compliance Features**:
+- **Access** (GDPR Art. 15): Export user data in JSON/CSV via `sql_export_user`
+- **Erasure** (GDPR Art. 17): Delete with cascade and crypto verification via `sql_delete_user`
+- **Portability** (GDPR Art. 20): Structured data export with checksums
+- **Verification**: Post-deletion zero-data confirmation with Ed25519 signatures via `sql_verify_deletion`
+- **Discovery**: Find all user data locations via `sql_find_user_data`
+- **Anonymization**: Privacy-preserving alternative to deletion via `sql_anonymize_user`
+
+**Security Model**:
+- Privacy schema required for DSAR operations
+- Raw SQL queries constrained by privacy schema (SELECT only)
+- Transaction-based delete/anonymize operations
+- Connection strings stored in SecretsService
+- WiseAuthority approval for sensitive operations
+- Runtime reconfiguration with validation
+
+### Future Modular Services
+
+- **OpenAPI Tool Service** - SaaS integration via OpenAPI specs
+- **Graph Query Service** - External graph database connectors
+- **File System Service** - Local file-based data access
+- **Cloud Storage Service** - S3/GCS/Azure Blob integration
 
 ## Runtime Services from Adapters
 
@@ -337,9 +410,9 @@ response = await llm_bus.generate(
 ```
 
 #### 3. ToolBus
-**Providers**: Adapter-specific tools + core secrets tools
+**Providers**: Adapter-specific tools + core secrets tools + modular tool services
 **Purpose**: Dynamic tool discovery and execution
-**Note**: Core secrets tool service always present, adapters add more
+**Note**: Core secrets tool service always present, adapters and modular services (e.g., SQL external data) add more at runtime
 
 #### 4. CommunicationBus
 **Providers**: Discord, API, CLI adapters
@@ -996,12 +1069,14 @@ The system adapts:
 Key decisions that shaped CIRIS:
 
 1. **SQLite over PostgreSQL**: Offline-first requirement
-2. **21 Services**: Right balance of modularity and complexity
+2. **22 Core Services + Modular Services**: Fixed core (22) with optional modular extensions via ToolBus
 3. **Pydantic Everywhere**: Runtime validation critical for medical use
 4. **Graph Memory**: Flexible knowledge representation
 5. **Mock LLM**: Essential for offline operation
 6. **No Backwards Compatibility**: Clean evolution
 7. **Ubuntu Philosophy**: Culturally appropriate for target deployments
+8. **Privacy Schema-Driven**: External data operations governed by declarative privacy schemas
+9. **Tools Over Services**: External data sources as tools on ToolBus, not new service types
 
 ## Development Guidelines
 
@@ -1021,6 +1096,16 @@ Key decisions that shaped CIRIS:
 3. Implement to_graph_node/from_graph_node
 4. Add to nodes.py
 5. Update documentation
+
+### Adding a Modular Service
+
+1. Create directory in `ciris_modular_services/`
+2. Define manifest.json with service metadata
+3. Implement protocol extending `ToolServiceProtocol` (for tools)
+4. Create Pydantic schemas (no Dict[str, Any])
+5. Implement service with privacy schema support (if applicable)
+6. Register tools with ToolBus during initialization
+7. Add tests and documentation
 
 ### Testing Philosophy
 

@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**STABLE RELEASE 1.5.8** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.5.5** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf
@@ -27,6 +27,7 @@ CIRIS wraps LLM calls with:
 - **Complete audit trails** - Every decision is logged with reasoning
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
+- **Privacy compliance** - Built-in DSAR/GDPR tools for data discovery, export, and deletion
 
 **Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 
@@ -70,6 +71,7 @@ CIRIS supports both built-in and modular adapters that can be loaded via `--adap
 | Adapter | Type | Description | Required Configuration | Usage |
 |---------|------|-------------|------------------------|-------|
 | Reddit | Communication + Tools | Reddit integration for r/ciris monitoring and interaction. Supports posting, commenting, content removal, user lookups, and passive observation. | `CIRIS_REDDIT_CLIENT_ID`<br>`CIRIS_REDDIT_CLIENT_SECRET`<br>`CIRIS_REDDIT_USERNAME`<br>`CIRIS_REDDIT_PASSWORD` | `--adapter reddit` |
+| SQL External Data | Tools | DSAR/GDPR compliance tools for SQL databases. Supports data discovery, export, anonymization, and deletion across multiple database types (SQLite, PostgreSQL, MySQL, MSSQL). | Database connection config (see docs) | Loaded automatically via tool system |
 | Mock LLM | LLM Provider | Testing mock LLM service that simulates AI responses without external API calls. Not for production use. | None (optional delay/failure rate) | `--adapter mockllm` or `--mock-llm` |
 | Geo Wisdom | Wise Authority | Geographic navigation guidance using OpenStreetMap for routing and geocoding. | None (uses public OSM API) | Loaded automatically for navigation domains |
 | Weather Wisdom | Wise Authority | Weather forecasting and alerts using NOAA National Weather Service API. | None (uses public NOAA API) | Loaded automatically for weather domains |

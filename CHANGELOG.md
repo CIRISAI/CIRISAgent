@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.8] - 2025-11-02
+
+### Added
+- **Enhanced Identity Resolution System** - Multi-source identity mapping for DSAR automation
+  - **Purpose**: Correlate user identities across multiple data sources (OAuth providers, Discord, Reddit, API keys, external databases)
+  - **Core Components**:
+    - `ciris_engine/schemas/identity.py` - Identity schemas (UserIdentifier, UserIdentityNode, IdentityMapping, IdentityGraph)
+    - `ciris_engine/logic/utils/identity_resolution.py` - Identity resolution logic and graph-based correlation
+    - `ciris_engine/logic/services/governance/dsar/orchestrator.py` - Multi-source DSAR orchestration
+  - **Capabilities**:
+    - Cross-system identifier correlation with confidence scoring
+    - OAuth-based identity verification (Discord, Google, Reddit)
+    - Behavioral pattern matching for identity inference
+    - Conflict detection and resolution
+    - Evidence-based identity mapping with audit trails
+  - **Integration**: Works with SQL External Data Service, OAuth providers, and DSAR automation
+  - **Files**: 3 new core files, comprehensive test coverage
+
+- **DSAR Multi-Source Orchestrator** - Coordinate DSAR operations across multiple external data sources
+  - **Purpose**: Unified DSAR request handling across SQL databases, REST APIs, and HL7 FHIR systems
+  - **Operations**:
+    - Multi-source data discovery and aggregation
+    - Parallel export from multiple connectors
+    - Coordinated deletion with verification
+    - Cross-system data correction
+  - **Architecture**: Service-based orchestration with modular connector discovery
+  - **Files**: `ciris_engine/logic/services/governance/dsar/orchestrator.py`
+
+- **Tool Bus Metadata Filtering** - Enhanced tool discovery with metadata-based queries
+  - **Purpose**: Enable agents to discover tools based on metadata attributes (data source types, capabilities, compliance features)
+  - **Implementation**: `get_tools_by_metadata(metadata_filter: Dict[str, Any])` method in ToolBus
+  - **Use Cases**: Find all SQL tools, discover GDPR-compliant tools, locate tools for specific data source types
+  - **Files**: `ciris_engine/logic/buses/tool_bus.py`, `ciris_engine/protocols/services/runtime/tool.py`
+  - **Test Coverage**: `tests/ciris_engine/logic/buses/test_tool_bus_metadata.py`
+
+### Changed
+- **Authentication Service Enhancement** - Added agent context propagation to all authentication methods
+  - **Purpose**: Enable identity resolution during OAuth flows by propagating agent_id context
+  - **Implementation**: All authentication methods now accept optional `agent_id` parameter
+  - **Impact**: OAuth providers can now correlate external identities with CIRIS agent identities
+  - **Files**: `ciris_engine/logic/services/infrastructure/authentication/service.py`
+
+- **QA Runner Multi-Database Support** - Enhanced test framework with parallel database backend testing
+  - **Purpose**: Validate code against both SQLite and PostgreSQL simultaneously
+  - **Features**:
+    - `--database-backends` flag for backend selection
+    - `--parallel-backends` flag for concurrent execution
+    - Automatic adapter configuration based on test requirements
+  - **Files**: `tools/qa_runner/config.py`, `tools/qa_runner/runner.py`, `tools/qa_runner/server.py`
+
+### Fixed
+- **Tool Service Protocol Type Safety** - Fixed missing abstract method in ToolServiceProtocol
+  - **Problem**: Protocol was missing `get_service_metadata()` method causing mypy errors
+  - **Solution**: Added `get_service_metadata() -> Dict[str, Any]` to protocol definition
+  - **Files**: `ciris_engine/protocols/services/runtime/tool.py`
+
+## [1.5.7] - 2025-11-02
+
+### Changed
+- **Context Engineering Improvements** - Enhanced prompt engineering and context management for better agent performance
+  - Refined system prompts for improved task understanding
+  - Optimized context window utilization
+  - Enhanced conversation flow and continuity
+
 ## [1.5.6] - 2025-11-01
 
 ### Fixed - CRITICAL P0 BUGS
@@ -118,6 +182,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Solution**: Replaced all `isinstance()` checks with `hasattr(service, "attach_registry")` as documented in protocol docstring
   - **Files**: `tests/protocols/test_registry_aware_protocol.py`
   - **Test Coverage**: All 14 protocol tests passing
+
+- **Tool Action Audit Trail Verification** - Fixed test framework to properly verify tool execution audit trails
+  - **Problem**: Tests checked `action_type` field for tool names, but actual audit records use `metadata.tool_name`
+  - **Solution**: Updated audit trail assertions to check `metadata.tool_name` for tool action verification
+  - **Files**: `tests/tools/sql_external_data/test_sql_service.py`
+  - **Impact**: Test suite now correctly validates tool execution audit trails
+
+### Added
+- **SQL External Data Service** - Complete DSAR/GDPR compliance tooling for external database access
+  - **Purpose**: Enable CIRIS agents to interact with external databases for DSAR operations while maintaining strict privacy controls
+  - **Capabilities**:
+    - Runtime connector configuration via `initialize_sql_connector` tool
+    - Multi-database support (SQLite, PostgreSQL, MySQL, Microsoft SQL Server)
+    - Metadata discovery and schema introspection via `get_sql_service_metadata` tool
+    - Privacy schema-driven PII handling and field masking
+    - Complete DSAR operation suite (7 tools):
+      - `sql_dsar_search_subjects` - Find data subjects matching criteria
+      - `sql_dsar_get_subject_data` - Retrieve all data for a subject
+      - `sql_dsar_export_data` - Export subject data in portable formats (JSON, CSV)
+      - `sql_dsar_delete_data` - Delete subject data with cascade support
+      - `sql_dsar_anonymize_data` - Anonymize subject data while preserving referential integrity
+      - `sql_dsar_verify_deletion` - Verify complete data removal
+      - `sql_dsar_audit_access` - Generate compliance audit trails
+  - **Security Features**:
+    - Connection string encryption and secure storage
+    - Query logging and audit trails
+    - Privacy schema validation
+    - Configurable timeout and connection limits
+  - **Files**:
+    - `ciris_engine/logic/services/special/sql_external_data/service.py` - Core service implementation
+    - `ciris_engine/logic/services/special/sql_external_data/dsar_operations.py` - DSAR tooling
+    - `ciris_modular_services/sql_external_data/` - Tool adapter integration
+  - **Test Coverage**: 2/8 initialization tests passing, DSAR operations in progress
+  - **Documentation**: Complete tool schemas with examples and validation rules
 
 ### Improved
 - **Type Safety Infrastructure** - Enhanced type checking capabilities for future development

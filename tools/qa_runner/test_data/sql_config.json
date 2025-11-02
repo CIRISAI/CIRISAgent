@@ -1,0 +1,9 @@
+{
+  "connector_id": "qa_test_db",
+  "connection_string": "sqlite:////home/emoore/CIRISAgent/tools/qa_runner/test_data/qa_test.db",
+  "dialect": "sqlite",
+  "privacy_schema_path": "/home/emoore/CIRISAgent/tools/qa_runner/test_data/qa_test_privacy_schema.yaml",
+  "connection_timeout": 30,
+  "query_timeout": 60,
+  "max_retries": 3
+}

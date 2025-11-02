@@ -741,3 +741,149 @@ class TestMultiOccurrenceRaceConditionProtection:
             f"Old orphaned task should be marked as COMPLETED by _cleanup_old_active_tasks "
             f"(actual status: {retrieved.status})"
         )
+
+
+class TestDialectAdapterInitialization:
+    """Test that dialect adapter is initialized correctly for database operations."""
+
+    async def test_cleanup_duplicate_temporal_edges_uses_correct_placeholders(
+        self,
+        clean_db,
+        database_maintenance_service,
+        mock_time_service,
+    ):
+        """
+        GIVEN a PostgreSQL or SQLite database with duplicate temporal edges
+        WHEN _cleanup_duplicate_temporal_edges runs during startup
+        THEN it should use the correct SQL placeholders for the database backend
+
+        Bug: _cleanup_duplicate_temporal_edges() called get_adapter() BEFORE opening
+        the database connection, causing it to always get the default SQLite adapter
+        even on PostgreSQL. This resulted in using '?' placeholders on PostgreSQL,
+        causing SQL syntax errors during startup cleanup.
+
+        Fix: Move get_adapter() call inside the with block AFTER get_db_connection()
+        to ensure the dialect is initialized for the correct database backend.
+        """
+        from uuid import uuid4
+
+        from ciris_engine.logic.persistence.db import get_db_connection
+        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.schemas.runtime.models import TaskContext
+
+        # Create duplicate temporal edges in the database
+        now = mock_time_service.now().isoformat()
+        old_time = (mock_time_service.now() - timedelta(minutes=10)).isoformat()
+
+        # Create two summary nodes
+        summary1_id = f"summary_{uuid4().hex[:8]}"
+        summary2_id = f"summary_{uuid4().hex[:8]}"
+        summary3_id = f"summary_{uuid4().hex[:8]}"
+
+        with get_db_connection(clean_db) as conn:
+            cursor = conn.cursor()
+            adapter = get_adapter()
+            ph = adapter.placeholder()
+
+            # Insert summary nodes
+            for summary_id in [summary1_id, summary2_id, summary3_id]:
+                cursor.execute(
+                    f"""
+                    INSERT INTO graph_nodes (node_id, scope, node_type, attributes_json, created_at, updated_at)
+                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                """,
+                    (summary_id, "default", "summary", "{}", now, now),
+                )
+
+            # Create duplicate TEMPORAL_NEXT edges (bug scenario)
+            # summary1 -> summary2 (duplicate, older)
+            cursor.execute(
+                f"""
+                INSERT INTO graph_edges (edge_id, source_node_id, target_node_id, scope, relationship, created_at)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            """,
+                (f"edge_1_{uuid4().hex[:8]}", summary1_id, summary2_id, "default", "TEMPORAL_NEXT", old_time),
+            )
+
+            # summary1 -> summary2 (duplicate, newer - should be kept)
+            cursor.execute(
+                f"""
+                INSERT INTO graph_edges (edge_id, source_node_id, target_node_id, scope, relationship, created_at)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            """,
+                (f"edge_2_{uuid4().hex[:8]}", summary1_id, summary2_id, "default", "TEMPORAL_NEXT", now),
+            )
+
+            # Create duplicate TEMPORAL_PREV edges
+            # summary2 -> summary1 (duplicate, older)
+            cursor.execute(
+                f"""
+                INSERT INTO graph_edges (edge_id, source_node_id, target_node_id, scope, relationship, created_at)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            """,
+                (f"edge_3_{uuid4().hex[:8]}", summary2_id, summary1_id, "default", "TEMPORAL_PREV", old_time),
+            )
+
+            # summary2 -> summary1 (duplicate, newer - should be kept)
+            cursor.execute(
+                f"""
+                INSERT INTO graph_edges (edge_id, source_node_id, target_node_id, scope, relationship, created_at)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+            """,
+                (f"edge_4_{uuid4().hex[:8]}", summary2_id, summary1_id, "default", "TEMPORAL_PREV", now),
+            )
+
+            conn.commit()
+
+            # Verify duplicates exist
+            cursor.execute(
+                f"""
+                SELECT source_node_id, relationship, COUNT(*) as count
+                FROM graph_edges
+                WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                GROUP BY source_node_id, relationship
+                HAVING COUNT(*) > 1
+            """
+            )
+            duplicates_before = cursor.fetchall()
+            assert len(duplicates_before) == 2, "Should have 2 sets of duplicate edges"
+
+        # Run cleanup - this should NOT raise SQL syntax errors
+        await database_maintenance_service._cleanup_duplicate_temporal_edges()
+
+        # Verify cleanup worked correctly
+        with get_db_connection(clean_db) as conn:
+            cursor = conn.cursor()
+            adapter = get_adapter()
+
+            # Check that duplicates are gone
+            cursor.execute(
+                """
+                SELECT source_node_id, relationship, COUNT(*) as count
+                FROM graph_edges
+                WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                GROUP BY source_node_id, relationship
+                HAVING COUNT(*) > 1
+            """
+            )
+            duplicates_after = cursor.fetchall()
+            assert len(duplicates_after) == 0, "All duplicate edges should be cleaned up"
+
+            # Check that we still have exactly 2 edges (one TEMPORAL_NEXT, one TEMPORAL_PREV)
+            cursor.execute(
+                """
+                SELECT relationship, COUNT(*) as count
+                FROM graph_edges
+                WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
+                GROUP BY relationship
+            """
+            )
+            remaining_edges = cursor.fetchall()
+
+            if adapter.is_postgresql():
+                edge_counts = {row["relationship"]: row["count"] for row in remaining_edges}
+            else:
+                edge_counts = {row[0]: row[1] for row in remaining_edges}
+
+            assert edge_counts.get("TEMPORAL_NEXT") == 1, "Should have exactly 1 TEMPORAL_NEXT edge (newest)"
+            assert edge_counts.get("TEMPORAL_PREV") == 1, "Should have exactly 1 TEMPORAL_PREV edge (newest)"

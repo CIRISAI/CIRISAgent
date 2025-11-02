@@ -525,10 +525,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             logger.info("Checking for duplicate temporal edges from v1.5.5 PostgreSQL bug")
 
-            adapter = get_adapter()
-            ph = adapter.placeholder()
-
             with get_db_connection(db_path=self.db_path) as conn:
+                # CRITICAL: Get adapter AFTER opening connection to ensure dialect is initialized
+                # for the correct database backend (PostgreSQL vs SQLite)
+                adapter = get_adapter()
+                ph = adapter.placeholder()
                 cursor = conn.cursor()
 
                 # Find summaries with duplicate temporal edges

@@ -594,3 +594,150 @@ class TestInvalidThoughtCleanup:
 
         # Should not raise exception
         await database_maintenance_service._cleanup_invalid_thoughts()
+
+
+class TestMultiOccurrenceRaceConditionProtection:
+    """Test protection against multi-occurrence race conditions during startup cleanup."""
+
+    async def test_orphan_cleanup_skips_recently_created_tasks(
+        self,
+        clean_db,
+        database_maintenance_service,
+        mock_time_service,
+    ):
+        """
+        GIVEN a multi-occurrence setup where Occurrence 2 creates wakeup step tasks
+        AND Occurrence 1 starts up 10 seconds later and runs orphan cleanup
+        WHEN orphan cleanup runs on Occurrence 1
+        THEN tasks created within last 2 minutes should be skipped (not deleted)
+
+        This tests the fix for the Scout wakeup bug where:
+        - Scout 002 created wakeup step tasks at 00:19:56
+        - Scout 001 started at 00:20:08 (12 seconds later)
+        - Scout 001's orphan cleanup deleted Scout 002's fresh tasks
+        - Result: Both stuck in wakeup loop (002 can't find tasks, 001 waits for 002)
+        """
+        from uuid import uuid4
+
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        # Simulate Scout 002 creating wakeup step tasks
+        now = mock_time_service.now()
+        parent_task_id = f"WAKEUP_SHARED_{now.strftime('%Y%m%d')}"
+
+        # Create parent shared wakeup task
+        parent_task = Task(
+            task_id=parent_task_id,
+            channel_id="api_0.0.0.0_8080",
+            agent_occurrence_id="__shared__",
+            description="Wakeup ritual (shared across all occurrences)",
+            status=TaskStatus.ACTIVE,
+            priority=10,
+            created_at=now.isoformat(),
+            updated_at=now.isoformat(),
+            context=TaskContext(
+                channel_id="api_0.0.0.0_8080",
+                user_id="system",
+                correlation_id=f"wakeup_{now.strftime('%Y%m%d')}",
+                agent_occurrence_id="__shared__",
+            ),
+        )
+        persistence.add_task(parent_task, clean_db)
+
+        # Create wakeup step tasks owned by occurrence "002" (child tasks)
+        step_tasks = []
+        for step_name in ["VERIFY_IDENTITY", "VALIDATE_INTEGRITY", "EVALUATE_RESILIENCE"]:
+            task = Task(
+                task_id=f"{step_name}_{uuid4()}",
+                channel_id="api_0.0.0.0_8080",
+                agent_occurrence_id="002",  # Owned by occurrence 002
+                parent_task_id=parent_task_id,  # Child of shared wakeup task
+                description=f"Wakeup step: {step_name}",
+                status=TaskStatus.ACTIVE,
+                priority=0,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                context=TaskContext(
+                    channel_id="api_0.0.0.0_8080",
+                    user_id="system",
+                    correlation_id=f"wakeup_{step_name.lower()}_{uuid4().hex[:8]}",
+                    agent_occurrence_id="002",
+                ),
+            )
+            persistence.add_task(task, clean_db)
+            step_tasks.append(task)
+
+        # Verify all tasks exist before cleanup
+        assert persistence.get_task_by_id(parent_task_id, "__shared__", clean_db) is not None
+        for task in step_tasks:
+            assert persistence.get_task_by_id(task.task_id, "002", clean_db) is not None
+
+        # Simulate Scout 001 starting up 10 seconds later
+        # Run orphan cleanup (should SKIP recent tasks)
+        await database_maintenance_service.perform_startup_cleanup()
+
+        # Verify all tasks still exist (were NOT deleted due to age check)
+        assert (
+            persistence.get_task_by_id(parent_task_id, "__shared__", clean_db) is not None
+        ), "Shared parent task should still exist"
+
+        for task in step_tasks:
+            retrieved = persistence.get_task_by_id(task.task_id, "002", clean_db)
+            assert retrieved is not None, (
+                f"Task {task.task_id} should still exist (created {(mock_time_service.now() - now).seconds}s ago, "
+                "under 2-minute threshold)"
+            )
+
+    async def test_orphan_cleanup_deletes_old_orphaned_tasks(
+        self,
+        clean_db,
+        database_maintenance_service,
+        mock_time_service,
+    ):
+        """
+        GIVEN orphaned tasks created > 2 minutes ago
+        WHEN orphan cleanup runs
+        THEN old orphaned tasks should be deleted
+
+        This ensures the age check doesn't prevent legitimate cleanup of old orphans.
+        """
+        from uuid import uuid4
+
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        # Create orphaned task (parent doesn't exist) from 5 minutes ago
+        old_time = mock_time_service.now() - timedelta(minutes=5)
+
+        orphaned_task = Task(
+            task_id=f"ORPHAN_{uuid4()}",
+            channel_id="api_0.0.0.0_8080",
+            agent_occurrence_id="default",
+            parent_task_id="NONEXISTENT_PARENT",  # Parent doesn't exist - orphan!
+            description="Old orphaned task",
+            status=TaskStatus.ACTIVE,
+            priority=0,
+            created_at=old_time.isoformat(),
+            updated_at=old_time.isoformat(),
+            context=TaskContext(
+                channel_id="api_0.0.0.0_8080",
+                user_id="system",
+                correlation_id=f"orphan_{uuid4().hex[:8]}",
+                agent_occurrence_id="default",
+            ),
+        )
+        persistence.add_task(orphaned_task, clean_db)
+
+        # Verify task exists before cleanup
+        assert persistence.get_task_by_id(orphaned_task.task_id, "default", clean_db) is not None
+
+        # Run orphan cleanup (should DELETE old orphan)
+        await database_maintenance_service.perform_startup_cleanup()
+
+        # Verify old orphaned task was marked as completed (by _cleanup_old_active_tasks)
+        # Note: The old active task cleanup runs before orphan cleanup and marks old tasks as completed
+        retrieved = persistence.get_task_by_id(orphaned_task.task_id, "default", clean_db)
+        assert retrieved is not None, "Task should still exist (marked as completed, not deleted)"
+        assert retrieved.status == TaskStatus.COMPLETED, (
+            f"Old orphaned task should be marked as COMPLETED by _cleanup_old_active_tasks "
+            f"(actual status: {retrieved.status})"
+        )

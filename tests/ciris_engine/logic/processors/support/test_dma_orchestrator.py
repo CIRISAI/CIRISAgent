@@ -148,18 +148,23 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_ethical_result,
+        sample_csdma_result,
+        sample_dsdma_result,
     ):
         """Test handling of Ethical PDMA failure."""
         with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
-            # First call (ethical_pdma) raises exception
-            async def side_effect(*args, **kwargs):
-                call_number = mock_run.call_count
-                if call_number == 1:
+            # Inspect function name to determine which DMA is being called
+            async def side_effect(func, *args, **kwargs):
+                func_name = func.__name__
+                if func_name == "run_pdma":  # Ethical PDMA
                     raise Exception("Ethical PDMA failed")
-                elif call_number == 2:
-                    return CSDMAResult(recommendation="Proceed", confidence=0.8, common_sense_check="OK")
-                elif call_number == 3:
-                    return DSDMAResult(recommendation="Proceed", confidence=0.8, domain_analysis="OK")
+                elif func_name == "run_csdma":
+                    return sample_csdma_result
+                elif func_name == "run_dsdma":
+                    return sample_dsdma_result
+                else:
+                    return sample_ethical_result  # Fallback
 
             mock_run.side_effect = side_effect
 

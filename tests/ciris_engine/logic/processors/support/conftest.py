@@ -150,13 +150,15 @@ def sample_dsdma_result():
 @pytest.fixture
 def sample_action_selection_result():
     """Create a valid Action Selection result."""
+    from ciris_engine.schemas.actions import SpeakParams
     from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
     from ciris_engine.schemas.runtime.enums import HandlerActionType
 
     return ActionSelectionDMAResult(
         selected_action=HandlerActionType.SPEAK,
-        confidence=0.95,
-        reasoning="Best action based on DMA results",
+        action_parameters=SpeakParams(content="Test response"),
+        rationale="Best action based on DMA results",
+        reasoning="Detailed reasoning process",
     )
 
 

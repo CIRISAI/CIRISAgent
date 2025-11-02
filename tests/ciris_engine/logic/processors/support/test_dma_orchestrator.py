@@ -22,16 +22,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ciris_engine.logic.processors.support.dma_orchestrator import DMAOrchestrator
-from ciris_engine.schemas.dma.results import (
-    ActionSelectionDMAResult,
-    CSDMAResult,
-    DSDMAResult,
-    EthicalDMAResult,
-)
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.processors.dma import InitialDMAResults
 from ciris_engine.schemas.runtime.enums import HandlerActionType
-
 
 # Test Class
 
@@ -95,6 +89,7 @@ class TestDMAOrchestrator:
         with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
             # Configure side effects for each DMA type
             call_count = 0
+
             async def side_effect(*args, **kwargs):
                 nonlocal call_count
                 call_count += 1
@@ -200,23 +195,23 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_ethical_result,
+        sample_csdma_result,
+        sample_dsdma_result,
     ):
         """Test run_dmas with circuit breaker protection - all DMAs succeed."""
-        ethical_result = EthicalDMAResult(recommendation="Proceed", confidence=0.9, reasoning="OK")
-        csdma_result = CSDMAResult(recommendation="Proceed", confidence=0.85, common_sense_check="OK")
-        dsdma_result = DSDMAResult(recommendation="Proceed", confidence=0.8, domain_analysis="OK")
-
         with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
             call_count = 0
+
             async def side_effect(*args, **kwargs):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
-                    return ethical_result
+                    return sample_ethical_result
                 elif call_count == 2:
-                    return csdma_result
+                    return sample_csdma_result
                 elif call_count == 3:
-                    return dsdma_result
+                    return sample_dsdma_result
 
             mock_run.side_effect = side_effect
 
@@ -226,9 +221,9 @@ class TestDMAOrchestrator:
             )
 
             assert isinstance(result, DMAResults)
-            assert result.ethical_pdma == ethical_result
-            assert result.csdma == csdma_result
-            assert result.dsdma == dsdma_result
+            assert result.ethical_pdma == sample_ethical_result
+            assert result.csdma == sample_csdma_result
+            assert result.dsdma == sample_dsdma_result
             assert len(result.errors) == 0
 
     @pytest.mark.asyncio
@@ -237,22 +232,24 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_ethical_result,
     ):
         """Test that successful DMA execution records success in circuit breaker."""
         with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
+
             async def return_results(*args, **kwargs):
-                return EthicalDMAResult(recommendation="Proceed", confidence=0.9, reasoning="OK")
+                return sample_ethical_result
 
             mock_run.side_effect = return_results
 
             # Get circuit breaker before execution
             cb = dma_orchestrator._circuit_breakers["ethical_pdma"]
-            initial_successes = cb.success_count
+            initial_successes = cb.total_successes
 
             await dma_orchestrator.run_dmas(sample_thought_item, sample_processing_context)
 
             # Circuit breaker should record success
-            assert cb.success_count > initial_successes
+            assert cb.total_successes > initial_successes
 
     # run_action_selection Tests
 
@@ -262,24 +259,17 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_initial_dma_results,
+        sample_action_selection_result,
     ):
         """Test successful action selection after DMAs."""
-        # Create DMA results
-        dma_results = InitialDMAResults(
-            ethical_pdma=EthicalDMAResult(recommendation="Proceed", confidence=0.9, reasoning="OK"),
-            csdma=CSDMAResult(recommendation="Proceed", confidence=0.85, common_sense_check="OK"),
-            dsdma=DSDMAResult(recommendation="Proceed", confidence=0.8, domain_analysis="OK"),
-        )
-
-        # Mock action selection result
-        action_result = ActionSelectionDMAResult(
-            selected_action=HandlerActionType.SPEAK,
-            confidence=0.95,
-            reasoning="Best action based on DMA results",
-        )
+        # Create mock thought from the sample content
+        mock_thought = MagicMock()
+        mock_thought.thought_id = sample_thought_item.thought_id
+        mock_thought.thought_depth = 0
 
         # Mock identity retrieval
-        with patch("ciris_engine.logic.processors.support.dma_orchestrator.get_identity_for_context") as mock_identity:
+        with patch("ciris_engine.logic.persistence.models.get_identity_for_context") as mock_identity:
             mock_identity_context = MagicMock()
             mock_identity_context.agent_name = "test_agent"
             mock_identity_context.description = "Test agent description"
@@ -292,19 +282,19 @@ class TestDMAOrchestrator:
             mock_identity.return_value = mock_identity_context
 
             with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
-                mock_run.return_value = action_result
+                mock_run.return_value = sample_action_selection_result
 
                 result = await dma_orchestrator.run_action_selection(
                     sample_thought_item,
-                    sample_thought_item.thought,
+                    mock_thought,
                     sample_processing_context,
-                    dma_results,
+                    sample_initial_dma_results,
                     "default",
                 )
 
                 assert isinstance(result, ActionSelectionDMAResult)
                 assert result.selected_action == HandlerActionType.SPEAK
-                assert result.confidence == 0.95
+                assert result.rationale == "Best action based on DMA results"
 
     @pytest.mark.asyncio
     async def test_run_action_selection_with_conscience_retry(
@@ -312,24 +302,27 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_initial_dma_results,
     ):
         """Test action selection marks recursive evaluation when conscience retry."""
         # Set conscience retry flag
         sample_processing_context.is_conscience_retry = True
 
-        dma_results = InitialDMAResults(
-            ethical_pdma=EthicalDMAResult(recommendation="Proceed", confidence=0.9, reasoning="OK"),
-            csdma=CSDMAResult(recommendation="Proceed", confidence=0.85, common_sense_check="OK"),
-            dsdma=DSDMAResult(recommendation="Proceed", confidence=0.8, domain_analysis="OK"),
-        )
+        # Create action result with DEFER
+        from ciris_engine.schemas.actions import DeferParams
 
         action_result = ActionSelectionDMAResult(
             selected_action=HandlerActionType.DEFER,
-            confidence=0.7,
-            reasoning="Retry after conscience feedback",
+            action_parameters=DeferParams(reason="Need more information"),
+            rationale="Retry after conscience feedback",
         )
 
-        with patch("ciris_engine.logic.processors.support.dma_orchestrator.get_identity_for_context") as mock_identity:
+        # Create mock thought
+        mock_thought = MagicMock()
+        mock_thought.thought_id = sample_thought_item.thought_id
+        mock_thought.thought_depth = 0
+
+        with patch("ciris_engine.logic.persistence.models.get_identity_for_context") as mock_identity:
             mock_identity_context = MagicMock()
             mock_identity_context.agent_name = "test_agent"
             mock_identity_context.description = "Test agent"
@@ -342,9 +335,9 @@ class TestDMAOrchestrator:
 
                 result = await dma_orchestrator.run_action_selection(
                     sample_thought_item,
-                    sample_thought_item.thought,
+                    mock_thought,
                     sample_processing_context,
-                    dma_results,
+                    sample_initial_dma_results,
                     "default",
                 )
 
@@ -357,15 +350,15 @@ class TestDMAOrchestrator:
         dma_orchestrator,
         sample_thought_item,
         sample_processing_context,
+        sample_initial_dma_results,
     ):
         """Test that unexpected result type raises TypeError."""
-        dma_results = InitialDMAResults(
-            ethical_pdma=EthicalDMAResult(recommendation="Proceed", confidence=0.9, reasoning="OK"),
-            csdma=CSDMAResult(recommendation="Proceed", confidence=0.85, common_sense_check="OK"),
-            dsdma=DSDMAResult(recommendation="Proceed", confidence=0.8, domain_analysis="OK"),
-        )
+        # Create mock thought
+        mock_thought = MagicMock()
+        mock_thought.thought_id = sample_thought_item.thought_id
+        mock_thought.thought_depth = 0
 
-        with patch("ciris_engine.logic.processors.support.dma_orchestrator.get_identity_for_context") as mock_identity:
+        with patch("ciris_engine.logic.persistence.models.get_identity_for_context") as mock_identity:
             mock_identity_context = MagicMock()
             mock_identity_context.agent_name = "test_agent"
             mock_identity_context.description = "Test agent"
@@ -380,9 +373,9 @@ class TestDMAOrchestrator:
                 with pytest.raises(TypeError, match="Expected ActionSelectionDMAResult"):
                     await dma_orchestrator.run_action_selection(
                         sample_thought_item,
-                        sample_thought_item.thought,
+                        mock_thought,
                         sample_processing_context,
-                        dma_results,
+                        sample_initial_dma_results,
                         "default",
                     )
 

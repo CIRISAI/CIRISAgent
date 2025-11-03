@@ -1,7 +1,7 @@
 """Base SQL dialect interface."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import List
 
 from ..schemas import PrivacyColumnMapping
 

@@ -184,6 +184,7 @@ class TestIncidentCaptureHandler:
 
 class TestHelperFunctions:
 
+    @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_add_incident_capture_handler_to_root(self, root_logger, log_dir, mock_time_service):
         num_initial_handlers = len(root_logger.handlers)
         handler = add_incident_capture_handler(log_dir=str(log_dir), time_service=mock_time_service)
@@ -192,6 +193,7 @@ class TestHelperFunctions:
         assert len(root_logger.handlers) == num_initial_handlers + 1
         assert handler in root_logger.handlers
 
+    @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_add_incident_capture_handler_to_specific_logger(self, specific_logger, log_dir, mock_time_service):
         assert len(specific_logger.handlers) == 0
         handler = add_incident_capture_handler(

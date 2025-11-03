@@ -292,7 +292,7 @@ class TestGuidanceThoughtProcessing:
         assert manager.processing_queue[0].initial_context.round_number == 0
 
     @pytest.mark.asyncio
-    async def test_guidance_thought_completion_flow(self, guidance_thought, shutdown_task):
+    async def test_guidance_thought_completion_flow(self, guidance_thought, shutdown_task, time_service):
         """Test the complete flow of a guidance thought from creation to completion."""
         with patch("ciris_engine.logic.persistence.get_task_by_id") as mock_get_task:
             with patch("ciris_engine.logic.persistence.update_thought_status") as mock_update_status:
@@ -324,10 +324,16 @@ class TestGuidanceThoughtProcessing:
 
                     # 4. Task should be marked complete
                     persistence.update_task_status(
-                        shutdown_task.task_id, TaskStatus.COMPLETED, shutdown_task.agent_occurrence_id
+                        shutdown_task.task_id,
+                        TaskStatus.COMPLETED,
+                        shutdown_task.agent_occurrence_id,
+                        time_service,
                     )
                     mock_update_task.assert_called_with(
-                        shutdown_task.task_id, TaskStatus.COMPLETED, shutdown_task.agent_occurrence_id
+                        shutdown_task.task_id,
+                        TaskStatus.COMPLETED,
+                        shutdown_task.agent_occurrence_id,
+                        time_service,
                     )
 
 

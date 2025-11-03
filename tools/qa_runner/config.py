@@ -262,6 +262,7 @@ class QAConfig:
                 QAModule.PARTNERSHIP,
                 QAModule.BILLING,
                 QAModule.REDDIT,
+                QAModule.SQL_EXTERNAL_DATA,
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules
                 QAModule.HANDLERS,

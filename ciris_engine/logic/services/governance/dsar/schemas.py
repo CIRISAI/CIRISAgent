@@ -138,4 +138,4 @@ class MultiSourceDSARCorrectionResult(BaseModel):
     total_corrections_applied: int = Field(default=0, description="Total corrections applied")
     total_corrections_rejected: int = Field(default=0, description="Total corrections rejected")
     generated_at: str = Field(..., description="When correction was completed")
-    processing_time_seconds: float = Field(default=0.0, description="Total processing time")
+    processing_time_seconds: float = Field(default=0.0, description=_DESC_PROCESSING_TIME)

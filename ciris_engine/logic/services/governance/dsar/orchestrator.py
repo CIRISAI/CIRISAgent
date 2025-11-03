@@ -662,10 +662,15 @@ class DSAROrchestrator:
 
         try:
             # Call SQL export tool via ToolBus
-            tool_name = f"{connector_id}_export_user"
+            # SQL tools are registered with fixed names (sql_export_user, not connector_id prefix)
+            tool_name = "sql_export_user"
             exec_result = await self._tool_bus.execute_tool(
                 tool_name=tool_name,
-                parameters={"user_identifier": user_identifier},
+                parameters={
+                    "connector_id": connector_id,
+                    "user_identifier": user_identifier,
+                    "identifier_type": "email",  # Default to email for DSAR requests
+                },
                 handler_name="default"
             )
 
@@ -721,10 +726,16 @@ class DSAROrchestrator:
         """
         try:
             # Call SQL delete tool via ToolBus
-            tool_name = f"{connector_id}_delete_user"
+            # SQL tools are registered with fixed names (sql_delete_user, not connector_id prefix)
+            tool_name = "sql_delete_user"
             exec_result = await self._tool_bus.execute_tool(
                 tool_name=tool_name,
-                parameters={"user_identifier": user_identifier},
+                parameters={
+                    "connector_id": connector_id,
+                    "user_identifier": user_identifier,
+                    "identifier_type": "email",  # Default to email for DSAR requests
+                    "verify": verify,
+                },
                 handler_name="default"
             )
 
@@ -779,10 +790,15 @@ class DSAROrchestrator:
         """
         try:
             # Call SQL verify_deletion tool via ToolBus
-            tool_name = f"{connector_id}_verify_deletion"
+            # SQL tools are registered with fixed names (sql_verify_deletion, not connector_id prefix)
+            tool_name = "sql_verify_deletion"
             exec_result = await self._tool_bus.execute_tool(
                 tool_name=tool_name,
-                parameters={"user_identifier": user_identifier},
+                parameters={
+                    "connector_id": connector_id,
+                    "user_identifier": user_identifier,
+                    "identifier_type": "email",  # Default to email for DSAR requests
+                },
                 handler_name="default"
             )
 

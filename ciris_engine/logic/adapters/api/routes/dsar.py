@@ -322,8 +322,8 @@ async def submit_dsar(
     # Store request (mark automated requests as completed instantly)
     request_status = "completed" if is_automated and (access_package or export_package) else "pending_review"
 
-    # Store in database
-    create_dsar_ticket(
+    # Store in database - CRITICAL: must succeed for GDPR compliance
+    persistence_success = create_dsar_ticket(
         ticket_id=ticket_id,
         request_type=request.request_type,
         email=request.email,
@@ -337,6 +337,19 @@ async def submit_dsar(
         access_package=access_package.model_dump(mode="json") if access_package else None,
         export_package=export_package.model_dump(mode="json") if export_package else None,
     )
+
+    # P1: Fail the request if persistence fails (GDPR tracking requirement)
+    if not persistence_success:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"CRITICAL: Failed to persist DSAR ticket {ticket_id} - request_type={request.request_type}, email={request.email}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist DSAR request. Request was not recorded and cannot proceed.",
+        )
 
     # Log for audit trail
     import logging

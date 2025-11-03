@@ -58,6 +58,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Files**: `tools/qa_runner/config.py`, `tools/qa_runner/runner.py`, `tools/qa_runner/server.py`
 
 ### Fixed
+- **SonarCloud Code Quality Issues** - Comprehensive code quality improvements addressing static analysis findings
+  - **Cognitive Complexity Reduction** (CRITICAL):
+    - `identity_resolution.py:get_all_identifiers()` - Reduced from complexity 38 → 7 (81% reduction)
+    - `identity_resolution.py:get_identity_graph()` - Reduced from complexity 40 → 8 (80% reduction)
+    - Extracted 7 helper functions for single-responsibility principle
+    - Added 18 comprehensive unit tests for new helper methods (+54% test coverage)
+    - Files: `ciris_engine/logic/utils/identity_resolution.py`, `tests/ciris_engine/logic/utils/test_identity_resolution.py`
+  - **Function Call Issues** (8 occurrences):
+    - Fixed wrong number of arguments in `update_task_status()` calls
+    - Fixed invalid `service_registry` parameter in TSDBConsolidationService instantiation
+    - Removed redundant assignments in `ciris_runtime.py:821`
+    - Files: Multiple test files, `tools/database/*.py`
+  - **Static Analysis Improvements** (7 occurrences):
+    - Made Enum iteration explicit with `list()` wrapper for static analyzers
+    - Fixed unused loop variable in mock LLM context extraction (using `re.finditer()` instead of `re.findall()`)
+    - Removed unused `Dict` import from SQL dialect base class
+    - Files: `ciris_engine/logic/adapters/api/routes/*.py`, `tests/adapters/mock_llm/responses.py`
+  - **Inheritance Issues**:
+    - Added missing `super().__init__()` call in DiscordPlatform service
+    - Ensures proper Service base class initialization for logging
+    - Files: `ciris_engine/logic/adapters/discord/adapter.py:54-58`
+  - **Redundant Code Cleanup**:
+    - Removed redundant self-assignments (`cpu = cpu`, `memory = memory`) in SDK
+    - Deleted obsolete 358-line script `docker/run_next_period.py` with outdated API calls
+    - Files: `ciris_sdk/resources/telemetry.py`
+
 - **Tool Service Protocol Type Safety** - Fixed missing abstract method in ToolServiceProtocol
   - **Problem**: Protocol was missing `get_service_metadata()` method causing mypy errors
   - **Solution**: Added `get_service_metadata() -> Dict[str, Any]` to protocol definition

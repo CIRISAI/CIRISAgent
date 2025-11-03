@@ -5,7 +5,7 @@ Coordinates GDPR data subject requests across CIRIS + external data sources.
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -17,6 +17,12 @@ from ciris_engine.logic.persistence.models.dsar import (
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator
+from ciris_engine.logic.services.governance.dsar.schemas import (
+    MultiSourceDSARAccessPackage,
+    MultiSourceDSARCorrectionResult,
+    MultiSourceDSARDeletionResult,
+    MultiSourceDSARExportPackage,
+)
 from ciris_engine.schemas.consent.core import DSARExportFormat
 
 from ..auth import get_current_user
@@ -36,7 +42,7 @@ class MultiSourceDSARRequest(BaseModel):
     email: str = Field(..., description="Contact email for the request")
     user_identifier: str = Field(..., description="Primary user identifier (email, Discord ID, etc.)")
     export_format: Optional[str] = Field("json", description="Export format for export requests")
-    corrections: Optional[dict] = Field(None, description="Field corrections for correction requests")
+    corrections: Optional[Dict[str, Any]] = Field(None, description="Field corrections for correction requests")
     details: Optional[str] = Field(None, description="Additional details about the request")
     urgent: bool = Field(False, description="Whether this is an urgent request")
 
@@ -76,7 +82,7 @@ class PartialResultsResponse(BaseModel):
     request_id: str
     sources_completed: int
     sources_remaining: int
-    partial_data: dict
+    partial_data: Dict[str, Any]
     is_complete: bool
 
 
@@ -189,39 +195,53 @@ async def submit_multi_source_dsar(
         )
 
     # Process request based on type
-    result_package = None
+    result_package: Optional[
+        MultiSourceDSARAccessPackage
+        | MultiSourceDSARExportPackage
+        | MultiSourceDSARDeletionResult
+        | MultiSourceDSARCorrectionResult
+    ] = None
     total_sources = 0
     processing_time = 0.0
 
     try:
         if request.request_type == "access":
-            result_package = await orchestrator.handle_access_request_multi_source(
+            access_result = await orchestrator.handle_access_request_multi_source(
                 user_identifier=request.user_identifier, request_id=request_id
             )
-            total_sources = result_package.total_sources
-            processing_time = result_package.processing_time_seconds
+            result_package = access_result
+            total_sources = access_result.total_sources
+            processing_time = access_result.processing_time_seconds
 
         elif request.request_type == "export":
             export_format = DSARExportFormat(request.export_format or "json")
-            result_package = await orchestrator.handle_export_request_multi_source(
+            export_result = await orchestrator.handle_export_request_multi_source(
                 user_identifier=request.user_identifier, export_format=export_format, request_id=request_id
             )
-            total_sources = result_package.total_sources
-            processing_time = result_package.processing_time_seconds
+            result_package = export_result
+            total_sources = export_result.total_sources
+            processing_time = export_result.processing_time_seconds
 
         elif request.request_type == "delete":
-            result_package = await orchestrator.handle_deletion_request_multi_source(
+            deletion_result = await orchestrator.handle_deletion_request_multi_source(
                 user_identifier=request.user_identifier, request_id=request_id
             )
-            total_sources = result_package.total_sources
-            processing_time = result_package.processing_time_seconds
+            result_package = deletion_result
+            total_sources = deletion_result.total_sources
+            processing_time = deletion_result.processing_time_seconds
 
         elif request.request_type == "correct":
-            result_package = await orchestrator.handle_correction_request_multi_source(
+            if request.corrections is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Corrections field cannot be None",
+                )
+            correction_result = await orchestrator.handle_correction_request_multi_source(
                 user_identifier=request.user_identifier, corrections=request.corrections, request_id=request_id
             )
-            total_sources = result_package.total_sources
-            processing_time = result_package.processing_time_seconds
+            result_package = correction_result
+            total_sources = correction_result.total_sources
+            processing_time = correction_result.processing_time_seconds
 
     except HTTPException:
         raise

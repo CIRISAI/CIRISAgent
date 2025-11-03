@@ -19,7 +19,7 @@ Architecture:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
@@ -148,14 +148,14 @@ def update_dsar_ticket_status(
             SET status = ?, notes = ?, last_updated = ?
             WHERE ticket_id = ?
         """
-        params = (new_status, notes, datetime.utcnow().isoformat(), ticket_id)
+        params = (new_status, notes, datetime.now(timezone.utc).isoformat(), ticket_id)
     else:
         sql = """
             UPDATE dsar_tickets
             SET status = ?, last_updated = ?
             WHERE ticket_id = ?
         """
-        params = (new_status, datetime.utcnow().isoformat(), ticket_id)
+        params = (new_status, datetime.now(timezone.utc).isoformat(), ticket_id)
 
     try:
         with get_db_connection(db_path=db_path) as conn:

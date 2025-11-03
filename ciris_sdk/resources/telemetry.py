@@ -114,17 +114,13 @@ class TelemetryResourcesHistory(BaseModel):
         if isinstance(cpu, dict):
             if "data" in cpu:
                 cpu = cpu["data"]
-            else:
-                # Keep the whole dict if no data field
-                cpu = cpu
+            # else: Keep the whole dict if no data field (no reassignment needed)
 
         memory = data.get("memory", [])
         if isinstance(memory, dict):
             if "data" in memory:
                 memory = memory["data"]
-            else:
-                # Keep the whole dict if no data field
-                memory = memory
+            # else: Keep the whole dict if no data field (no reassignment needed)
 
         # If cpu/memory are not present, try history field
         if not cpu and not memory and "history" in data:

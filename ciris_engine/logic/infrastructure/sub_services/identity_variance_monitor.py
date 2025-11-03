@@ -309,23 +309,12 @@ class IdentityVarianceMonitor(BaseScheduledService):
                 old_baseline = self._baseline_snapshot_id
                 self._baseline_snapshot_id = baseline_id
 
-                # TODO: Implement correlation through appropriate service
-                # Store baseline reference correlation
-                # from ciris_engine.schemas.persistence.correlations import CorrelationType
-                # if self._memory_bus:
-                #     await self._memory_bus.correlate(
-                #     source_id="identity_baseline",
-                #     target_id=baseline_id,
-                #     relationship=CorrelationType.REFERENCES,
-                #     handler_name="identity_variance_monitor",
-                #     metadata={
-                #         "wa_approval": wa_approval_token,
-                #         "previous_baseline": old_baseline,
-                #         "created_at": self._time_service.now().isoformat()
-                #     }
-                # )
+                # NOTE: Baseline correlation is tracked through audit trail
+                # via the identity_baseline snapshot stored in memory_bus above.
+                # No additional correlation service needed - audit service provides
+                # full history tracking through the audit event system.
 
-                logger.info(f"Successfully re-baselined identity to {baseline_id}")
+                logger.info(f"Successfully re-baselined identity to {baseline_id} (previous: {old_baseline})")
                 return baseline_id
             else:
                 raise RuntimeError(f"Failed to store new baseline: {result.error}")

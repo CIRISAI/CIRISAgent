@@ -15,9 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 class PonderHandler(BaseActionHandler):
+    """Handler for PONDER actions with configurable thought depth limits.
+
+    The max_rounds parameter controls the maximum thought depth before
+    the thought depth conscience intervenes. Default is 7 rounds.
+
+    Note: max_rounds can be passed via constructor for testing/customization.
+    Future enhancement: Load from EssentialConfig.default_max_thought_depth.
+    """
+
     def __init__(self, dependencies: ActionHandlerDependencies, max_rounds: Optional[int] = None) -> None:
         super().__init__(dependencies)
-        # TODO: Get max_rounds from config via dependency injection
+        # Default to 7 rounds if not explicitly set
+        # Can be overridden via constructor parameter for testing
         self.max_rounds = max_rounds if max_rounds is not None else 7
 
     async def handle(

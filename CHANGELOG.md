@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.9] - 2025-11-03
+
+### Added - GDPR Compliance Bot (Pilot Ready)
+- **Persistent DSAR Storage** - Database-backed DSAR ticket tracking
+  - **Purpose**: Replace in-memory dict to prevent data loss on restart
+  - **Implementation**: SQLite/PostgreSQL storage for DSAR tickets
+  - **Impact**: GDPR compliance - no ticket loss during server restarts
+  - **Files**: TBD
+
+- **Ed25519 Deletion Verification** - Cryptographic proof of GDPR compliance
+  - **Purpose**: Generate verifiable cryptographic signatures for deletion operations
+  - **Implementation**: AuditService integration for Ed25519 signatures
+  - **Impact**: Immutable proof of data deletion for GDPR Article 17
+  - **Files**: TBD
+
+- **Multi-Source DSAR Orchestration** - Coordinate GDPR requests across systems
+  - **Purpose**: Handle DSAR requests spanning CIRIS + external SQL databases
+  - **Operations**:
+    - Multi-source access requests (GDPR Article 15)
+    - Multi-source export requests (GDPR Article 20)
+    - Multi-source deletion requests (GDPR Article 17)
+    - Multi-source correction requests (GDPR Article 16)
+  - **Architecture**: DSAROrchestrator coordinates identity resolution + parallel data operations
+  - **Files**: TBD
+
+### Changed
+- **DSAR API Endpoints** - Enhanced with persistent storage backend
+  - All DSAR endpoints now use database storage instead of in-memory dict
+  - DSAR tickets survive server restarts
+  - Files: `ciris_engine/logic/adapters/api/routes/dsar.py`
+
+### Fixed
+- **DSAR Ticket Persistence** - Critical fix for production GDPR compliance
+  - **Problem**: DSAR tickets stored in memory lost on restart (compliance violation)
+  - **Solution**: Database-backed storage with migration support
+  - **Impact**: Production-ready GDPR compliance for 30-day response requirement
+
 ## [1.5.8] - 2025-11-02
 
 ### Added

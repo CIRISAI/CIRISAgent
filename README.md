@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**STABLE RELEASE 1.5.5** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**STABLE RELEASE 1.5.9** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf

@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 from ciris_engine.schemas.consent.core import DSARAccessPackage, DSARDeletionStatus, DSARExportPackage
 from ciris_engine.schemas.identity import UserIdentityNode
 
+# Field description constants to avoid duplication
+_DESC_USER_IDENTIFIER = "User identifier used for request"
+_DESC_IDENTITY_NODE = "Resolved user identity across systems"
+_DESC_PROCESSING_TIME = "Total processing time"
+
 
 class DataSourceExport(BaseModel):
     """Export from a single external data source."""
@@ -29,7 +34,7 @@ class MultiSourceDSARAccessPackage(BaseModel):
     """DSAR access package aggregated from multiple sources."""
 
     request_id: str = Field(..., description="DSAR request identifier")
-    user_identifier: str = Field(..., description="User identifier used for request")
+    user_identifier: str = Field(..., description=_DESC_USER_IDENTIFIER)
 
     # CIRIS internal data (fast path)
     ciris_data: DSARAccessPackage = Field(..., description="Data from CIRIS internal systems")
@@ -38,20 +43,20 @@ class MultiSourceDSARAccessPackage(BaseModel):
     external_sources: List[DataSourceExport] = Field(default_factory=list, description="Data from external sources")
 
     # Identity resolution
-    identity_node: Optional[UserIdentityNode] = Field(default=None, description="Resolved user identity across systems")
+    identity_node: Optional[UserIdentityNode] = Field(default=None, description=_DESC_IDENTITY_NODE)
 
     # Metadata
     total_sources: int = Field(default=0, description="Total number of sources queried")
     total_records: int = Field(default=0, description="Total records across all sources")
     generated_at: str = Field(..., description="When package was generated")
-    processing_time_seconds: float = Field(default=0.0, description="Total processing time")
+    processing_time_seconds: float = Field(default=0.0, description=_DESC_PROCESSING_TIME)
 
 
 class MultiSourceDSARExportPackage(BaseModel):
     """DSAR export package aggregated from multiple sources."""
 
     request_id: str = Field(..., description="DSAR export request identifier")
-    user_identifier: str = Field(..., description="User identifier used for request")
+    user_identifier: str = Field(..., description=_DESC_USER_IDENTIFIER)
 
     # CIRIS internal export
     ciris_export: DSARExportPackage = Field(..., description="Export from CIRIS internal systems")
@@ -60,7 +65,7 @@ class MultiSourceDSARExportPackage(BaseModel):
     external_exports: List[DataSourceExport] = Field(default_factory=list, description="Exports from external sources")
 
     # Identity resolution
-    identity_node: Optional[UserIdentityNode] = Field(default=None, description="Resolved user identity across systems")
+    identity_node: Optional[UserIdentityNode] = Field(default=None, description=_DESC_IDENTITY_NODE)
 
     # Aggregated metadata
     total_sources: int = Field(default=0, description="Total number of sources exported")
@@ -68,7 +73,7 @@ class MultiSourceDSARExportPackage(BaseModel):
     total_size_bytes: int = Field(default=0, description="Total size of all exports")
     export_format: str = Field(default="json", description="Export format")
     generated_at: str = Field(..., description="When package was generated")
-    processing_time_seconds: float = Field(default=0.0, description="Total processing time")
+    processing_time_seconds: float = Field(default=0.0, description=_DESC_PROCESSING_TIME)
 
 
 class DataSourceDeletion(BaseModel):
@@ -89,7 +94,7 @@ class MultiSourceDSARDeletionResult(BaseModel):
     """DSAR deletion result aggregated from multiple sources."""
 
     request_id: str = Field(..., description="DSAR deletion request identifier")
-    user_identifier: str = Field(..., description="User identifier used for request")
+    user_identifier: str = Field(..., description=_DESC_USER_IDENTIFIER)
 
     # CIRIS internal deletion
     ciris_deletion: DSARDeletionStatus = Field(..., description="Deletion status from CIRIS (90-day decay)")
@@ -100,7 +105,7 @@ class MultiSourceDSARDeletionResult(BaseModel):
     )
 
     # Identity resolution
-    identity_node: Optional[UserIdentityNode] = Field(default=None, description="Resolved user identity across systems")
+    identity_node: Optional[UserIdentityNode] = Field(default=None, description=_DESC_IDENTITY_NODE)
 
     # Aggregated status
     total_sources: int = Field(default=0, description="Total number of sources processed")
@@ -110,14 +115,14 @@ class MultiSourceDSARDeletionResult(BaseModel):
     all_verified: bool = Field(default=False, description="Whether all deletions were verified")
     initiated_at: str = Field(..., description="When deletion was initiated")
     completed_at: Optional[str] = Field(default=None, description="When all deletions completed (if completed)")
-    processing_time_seconds: float = Field(default=0.0, description="Total processing time")
+    processing_time_seconds: float = Field(default=0.0, description=_DESC_PROCESSING_TIME)
 
 
 class MultiSourceDSARCorrectionResult(BaseModel):
     """DSAR correction result aggregated from multiple sources."""
 
     request_id: str = Field(..., description="DSAR correction request identifier")
-    user_identifier: str = Field(..., description="User identifier used for request")
+    user_identifier: str = Field(..., description=_DESC_USER_IDENTIFIER)
 
     # Corrections by source
     corrections_by_source: Dict[str, Dict[str, Any]] = Field(
@@ -126,7 +131,7 @@ class MultiSourceDSARCorrectionResult(BaseModel):
     )
 
     # Identity resolution
-    identity_node: Optional[UserIdentityNode] = Field(default=None, description="Resolved user identity across systems")
+    identity_node: Optional[UserIdentityNode] = Field(default=None, description=_DESC_IDENTITY_NODE)
 
     # Aggregated status
     total_sources: int = Field(default=0, description="Total number of sources processed")

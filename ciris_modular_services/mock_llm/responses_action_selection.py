@@ -148,7 +148,7 @@ def action_selection(
 
                         # Get the original messages if available
                         context_display += "\n**Original Messages:**\n"
-                        for i, msg in enumerate(messages):
+                        for i, msg in enumerate(messages or []):
                             role = msg.get("role", "unknown")
                             content = msg.get("content", "")
                             context_display += f"\n[{i}] {role}:\n{content}\n"
@@ -625,7 +625,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             # Check the content of the follow-up thought to determine if it's from a SPEAK handler
             # Extract the thought content from the user message
             thought_content = ""
-            for msg in messages:
+            for msg in messages or []:
                 if isinstance(msg, dict) and msg.get("role") == "user":
                     user_content = msg.get("content", "")
                     # Look for "Original Thought:" pattern
@@ -672,7 +672,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             command_found = False
 
             # Look for the user message in the messages list
-            for msg in messages:
+            for msg in messages or []:
                 if isinstance(msg, dict) and msg.get("role") == "user":
                     user_content = msg.get("content", "")
 
@@ -879,7 +879,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             elif not command_found:
                 # Step 3: Check conversation history in the user message for commands
                 # This handles cases where commands come through API in conversation history
-                for msg in messages:
+                for msg in messages or []:
                     if isinstance(msg, dict) and msg.get("role") == "user":
                         user_content = msg.get("content", "")
 

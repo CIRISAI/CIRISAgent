@@ -140,17 +140,14 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
         # Apply each pattern from the config
         for pattern, extractor in _mock_config.context_patterns.items():
-            matches = re.findall(pattern, content, re.IGNORECASE)
-            for match in matches:
+            # Use finditer to get match objects directly (not just strings)
+            for match_obj in re.finditer(pattern, content, re.IGNORECASE):
                 try:
-                    # Call the extractor function with the match
+                    # Call the extractor function with the match object
                     if callable(extractor):
-                        # Create a match object to pass to the lambda
-                        match_obj = re.search(pattern, content, re.IGNORECASE)
-                        if match_obj:
-                            extracted = extractor(match_obj)
-                            if extracted and extracted not in context_items:
-                                context_items.append(extracted)
+                        extracted = extractor(match_obj)
+                        if extracted and extracted not in context_items:
+                            context_items.append(extracted)
                 except Exception as e:
                     logger.debug(f"Error extracting context with pattern {pattern}: {e}")
 

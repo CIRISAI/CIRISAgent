@@ -187,7 +187,7 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
             logger.info(f"[InitializationService] Registered {len(self._steps)} steps across {len(phases)} phases")
 
             # Execute phases in order
-            for phase in InitializationPhase:
+            for phase in list(InitializationPhase):
                 if phase not in phases:
                     logger.debug(f"[InitializationService] Skipping phase {phase.value} - no steps registered")
                     continue

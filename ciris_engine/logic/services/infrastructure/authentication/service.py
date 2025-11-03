@@ -389,6 +389,27 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 )
             )
 
+            # Add identity mapping to graph for DSAR coordination
+            # This creates a "same_as" edge between wa_id and oauth provider:external_id
+            if hasattr(self, "_memory_bus") and self._memory_bus:
+                try:
+                    from ciris_engine.logic.utils.identity_resolution import add_identity_mapping
+
+                    # Map wa_id to OAuth external_id in identity graph
+                    await add_identity_mapping(
+                        wa_id,
+                        "wa_id",
+                        external_id,
+                        f"{provider}_id",
+                        self._memory_bus,
+                        confidence=1.0,
+                        source="oauth",
+                    )
+                    logger.info(f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to create identity mapping for OAuth link: {e}")
+                    # Non-fatal - OAuth link still works even if graph mapping fails
+
         if primary or (not existing.oauth_provider and not existing.oauth_external_id):
             existing = existing.model_copy(update={"oauth_provider": provider, "oauth_external_id": external_id})
             for link in links:

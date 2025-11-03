@@ -524,3 +524,134 @@ async def test_link_unlink_oauth_identity(auth_service):
     assert updated is not None
     assert all(link.provider != "google" for link in updated.oauth_links)
     assert updated.oauth_provider == "discord"
+
+
+@pytest.mark.asyncio
+async def test_oauth_identity_creates_identity_mapping(temp_db, time_service):
+    """Test that linking OAuth identity creates identity graph mapping for DSAR."""
+    from unittest.mock import AsyncMock, Mock
+
+    from ciris_engine.logic.utils.identity_resolution import get_all_identifiers
+    from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
+
+    # Create mock memory service
+    mock_memory_service = AsyncMock(spec=MemoryServiceProtocol)
+    created_nodes = {}
+    created_edges = []
+
+    async def mock_recall(node_type, scope, filters):
+        """Mock recall that returns stored nodes."""
+        node_id = filters.get("id")
+        if node_id and node_id in created_nodes:
+            return [created_nodes[node_id]]
+        return []
+
+    async def mock_memorize(node):
+        """Mock memorize that stores nodes."""
+        from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
+
+        created_nodes[node.id] = node
+        return MemoryOpResult(status=MemoryOpStatus.OK, data=node)
+
+    async def mock_create_edge(edge):
+        """Mock create_edge that stores edges."""
+        from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus
+
+        created_edges.append(edge)
+        return MemoryOpResult(status=MemoryOpStatus.OK, data=edge)
+
+    async def mock_get_node_edges(node_id, direction=None, edge_type=None):
+        """Mock get_node_edges that returns stored edges."""
+        return [e for e in created_edges if e.source == node_id or e.target == node_id]
+
+    mock_memory_service.recall = mock_recall
+    mock_memory_service.memorize = mock_memorize
+    mock_memory_service.create_edge = mock_create_edge
+    mock_memory_service.get_node_edges = mock_get_node_edges
+
+    # Create auth service with memory bus
+    auth_service = AuthenticationService(db_path=temp_db, time_service=time_service, key_dir=None)
+    auth_service._memory_bus = mock_memory_service
+    await auth_service.start()
+
+    try:
+        # Create WA
+        private_key, public_key = auth_service.generate_keypair()
+        wa = WACertificate(
+            wa_id="wa-2025-06-24-IDMAP1",
+            name="Identity Mapping Test",
+            role=WARole.AUTHORITY,
+            pubkey=auth_service._encode_public_key(public_key),
+            jwt_kid="idmap-kid",
+            scopes_json='["read:any"]',
+            created_at=datetime.now(timezone.utc),
+        )
+        await auth_service._store_wa_certificate(wa)
+
+        # Link OAuth identity - should create identity mapping
+        linked = await auth_service.link_oauth_identity(
+            wa_id=wa.wa_id,
+            provider="google",
+            external_id="google-user-789",
+            account_name="Test User",
+        )
+
+        assert linked is not None
+        assert any(link.provider == "google" for link in linked.oauth_links)
+
+        # Verify identity mapping was created
+        # Should have 2 nodes (wa_id and google_id) and 1 edge connecting them
+        assert len(created_nodes) >= 2, f"Expected at least 2 nodes, got {len(created_nodes)}"
+        assert len(created_edges) >= 1, f"Expected at least 1 edge, got {len(created_edges)}"
+
+        # Verify nodes were created with correct IDs
+        wa_node_id = f"user_identity:wa_id:{wa.wa_id}"
+        google_node_id = "user_identity:google_id:google-user-789"
+        assert wa_node_id in created_nodes, f"WA node not found. Created: {list(created_nodes.keys())}"
+        assert google_node_id in created_nodes, f"Google node not found. Created: {list(created_nodes.keys())}"
+
+        # Verify edge connects the two identities
+        edge = created_edges[0]
+        assert edge.relationship == "same_as"
+        assert {edge.source, edge.target} == {wa_node_id, google_node_id}
+
+        # Verify edge has correct confidence (source=oauth means confidence=1.0)
+        assert edge.weight == 1.0
+        assert "oauth" in edge.attributes.context
+
+    finally:
+        await auth_service.stop()
+
+
+@pytest.mark.asyncio
+async def test_oauth_linking_without_memory_bus_still_works(auth_service):
+    """Test that OAuth linking works even if memory bus is unavailable (non-blocking)."""
+    # Ensure auth_service has no memory_bus
+    if hasattr(auth_service, "_memory_bus"):
+        delattr(auth_service, "_memory_bus")
+
+    # Create WA
+    private_key, public_key = auth_service.generate_keypair()
+    wa = WACertificate(
+        wa_id="wa-2025-06-24-NOMEM1",
+        name="No Memory Bus Test",
+        role=WARole.AUTHORITY,
+        pubkey=auth_service._encode_public_key(public_key),
+        jwt_kid="nomem-kid",
+        scopes_json='["read:any"]',
+        created_at=datetime.now(timezone.utc),
+    )
+    await auth_service._store_wa_certificate(wa)
+
+    # Link OAuth identity - should succeed despite no memory bus
+    linked = await auth_service.link_oauth_identity(
+        wa_id=wa.wa_id,
+        provider="discord",
+        external_id="discord-user-999",
+        account_name="No Mem Test",
+    )
+
+    # OAuth link should still work
+    assert linked is not None
+    assert any(link.provider == "discord" for link in linked.oauth_links)
+    assert linked.oauth_provider == "discord"

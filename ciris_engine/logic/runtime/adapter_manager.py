@@ -422,7 +422,6 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         try:
             adapters = []
             for adapter_id, instance in self.loaded_adapters.items():
-                health_status = "unknown"
                 try:
                     if hasattr(instance.adapter, "is_healthy"):
                         is_healthy = await instance.adapter.is_healthy()

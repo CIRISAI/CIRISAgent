@@ -10,6 +10,7 @@ PyYAML>=6.0.1,<7.0.0
 
 # Database
 psycopg2-binary>=2.9.0,<3.0.0  # PostgreSQL adapter for production deployments
+SQLAlchemy>=2.0.0,<3.0.0  # SQL toolkit and ORM for external data sources
 
 # Async and HTTP
 aiohttp>=3.9.0,<4.0.0

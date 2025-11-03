@@ -1,0 +1,56 @@
+{
+  "module": {
+    "name": "external_data_sql",
+    "version": "1.0.0",
+    "description": "SQL database connector for DSAR automation and external data access",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "external_data_sql.service.SQLToolService",
+      "capabilities": [
+        "tool:sql",
+        "tool:sql:find_user_data",
+        "tool:sql:export_user",
+        "tool:sql:delete_user",
+        "tool:sql:anonymize_user",
+        "tool:sql:verify_deletion",
+        "tool:sql:get_stats",
+        "tool:sql:query"
+      ]
+    }
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService"
+    ],
+    "external": {
+      "pyodbc": ">=5.0.0,<6.0.0",
+      "sqlalchemy": ">=2.0.0,<3.0.0",
+      "pyyaml": ">=6.0.0,<7.0.0"
+    }
+  },
+  "exports": {
+    "protocols": [],
+    "schemas": [
+      "external_data_sql.schemas.SQLConnectorConfig",
+      "external_data_sql.schemas.PrivacySchemaConfig",
+      "external_data_sql.schemas.SQLQueryResult",
+      "external_data_sql.schemas.SQLExportResult",
+      "external_data_sql.schemas.SQLDeletionResult",
+      "external_data_sql.schemas.SQLAnonymizationResult",
+      "external_data_sql.schemas.SQLVerificationResult"
+    ]
+  },
+  "configuration": {
+    "sql_config_file": {
+      "type": "string",
+      "env": "CIRIS_SQL_EXTERNAL_DATA_CONFIG",
+      "default": null,
+      "description": "Path to SQL external data configuration JSON file"
+    }
+  }
+}

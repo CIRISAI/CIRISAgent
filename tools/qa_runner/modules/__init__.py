@@ -12,6 +12,7 @@ from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
 from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
+from .sql_external_data_tests import SQLExternalDataTests
 
 __all__ = [
     "APITestModule",
@@ -24,4 +25,5 @@ __all__ = [
     "FilterTestModule",
     "MultiOccurrenceTestModule",
     "MessageIDDebugTests",
+    "SQLExternalDataTests",
 ]

@@ -54,6 +54,9 @@ class DiscordTaskErrorContext(BaseModel):
 class DiscordPlatform(Service):
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize Discord platform adapter."""
+        # Initialize Service base class (manages service_name for logging)
+        super().__init__(config=None)
+
         self.runtime = runtime
         self.context = context
         self.config: DiscordAdapterConfig  # type: ignore[assignment]

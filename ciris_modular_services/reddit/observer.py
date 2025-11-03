@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections import OrderedDict
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
 import httpx
@@ -15,6 +15,7 @@ from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_r
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.types import JSONDict
 
 from .error_handler import RedditErrorHandler
 from .schemas import RedditChannelReference, RedditChannelType, RedditCredentials, RedditMessage
@@ -236,15 +237,15 @@ class RedditObserver(BaseObserver[RedditMessage]):
         # Must be a comment with a parent_id
         if not hasattr(entry, "entry_type") or not hasattr(entry, "parent_id"):
             return False
-        if entry.entry_type != "comment" or not entry.parent_id:  # type: ignore[attr-defined]
+        if entry.entry_type != "comment" or not entry.parent_id:
             return False
 
         try:
             # Fetch parent item metadata to check author
-            parent_response = await self._api_client._request("GET", f"/api/info", params={"id": entry.parent_id})  # type: ignore[attr-defined]
+            parent_response = await self._api_client._request("GET", f"/api/info", params={"id": entry.parent_id})
             if parent_response.status_code >= 300:
-                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
-                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"  # type: ignore[attr-defined]
+                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"
+                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"
                 logger.warning(
                     f"Failed to fetch parent {parent_id_str} for comment {item_id}: "
                     f"status={parent_response.status_code}"
@@ -267,20 +268,20 @@ class RedditObserver(BaseObserver[RedditMessage]):
             # Check if parent was authored by Scout
             is_scouts_content = parent_author == scout_username
             if is_scouts_content:
-                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
-                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"  # type: ignore[attr-defined]
+                item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"
+                parent_id_str = entry.parent_id if hasattr(entry, "parent_id") else "unknown"
                 logger.debug(
                     f"Comment {item_id} is a reply to Scout's {parent_id_str} " f"(parent_author={parent_author})"
                 )
             return bool(is_scouts_content)
 
         except Exception as exc:
-            item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"  # type: ignore[attr-defined]
+            item_id = entry.item_id if hasattr(entry, "item_id") else "unknown"
             logger.warning(f"Error checking if comment {item_id} is reply to Scout: {exc}")
             # Fail closed - if we can't verify, don't create observation
             return False
 
-    def _build_message_from_entry(self, entry) -> RedditMessage:
+    def _build_message_from_entry(self, entry: Any) -> RedditMessage:
         content = entry.title or entry.body or "(no content)"
         if entry.entry_type == "submission" and entry.body:
             content = f"{entry.title}\n\n{entry.body}" if entry.title else entry.body
@@ -329,7 +330,9 @@ class RedditObserver(BaseObserver[RedditMessage]):
 
         return msg
 
-    async def _add_custom_context_sections(self, task_lines: list, msg: RedditMessage, history_context: list) -> None:
+    async def _add_custom_context_sections(
+        self, task_lines: List[str], msg: RedditMessage, history_context: List[JSONDict]
+    ) -> None:
         """
         Add Reddit-specific context sections: thread comments and recent subreddit posts.
 
@@ -358,7 +361,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
             task_lines.append("=== END REDDIT CONTEXT ===")
 
     async def _add_thread_context(
-        self, task_lines: list, submission_id: str, current_comment_id: Optional[str]
+        self, task_lines: List[str], submission_id: str, current_comment_id: Optional[str]
     ) -> None:
         """Add other comments from the same Reddit post thread."""
         try:
@@ -388,7 +391,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
         except Exception as exc:
             logger.debug(f"Could not fetch thread context for submission {submission_id}: {exc}")
 
-    async def _add_recent_posts_context(self, task_lines: list, subreddit: str) -> None:
+    async def _add_recent_posts_context(self, task_lines: List[str], subreddit: str) -> None:
         """Add recent posts from the same subreddit."""
         try:
             # Fetch recent posts from the subreddit
@@ -428,13 +431,14 @@ class RedditObserver(BaseObserver[RedditMessage]):
             metadata = await self._api_client._fetch_item_metadata(fullname)
 
             # Check for deletion markers
-            removed_by = metadata.get("removed_by_category")
-            if removed_by is not None:
-                return True
+            if metadata is not None:
+                removed_by = metadata.get("removed_by_category")
+                if removed_by is not None:
+                    return True
 
-            # Check if marked as deleted
-            if metadata.get("removed") or metadata.get("deleted"):
-                return True
+                # Check if marked as deleted
+                if metadata.get("removed") or metadata.get("deleted"):
+                    return True
 
             return False
 

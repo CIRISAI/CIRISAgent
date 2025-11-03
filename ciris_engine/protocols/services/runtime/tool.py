@@ -89,3 +89,35 @@ class ToolServiceProtocol(ServiceProtocol, Protocol):
             ToolExecutionResult if found within timeout, None otherwise.
         """
         ...
+
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Get service metadata including data source information.
+
+        Returns:
+            Dict with metadata:
+            {
+                "data_source": bool,              # Whether tool accesses external data source
+                "data_source_type": str,          # Type: sql, rest, hl7, file, api, etc.
+                "contains_pii": bool,             # Whether source contains PII
+                "gdpr_applicable": bool,          # Whether GDPR applies
+                "connector_id": str,              # Unique connector identifier
+                "data_retention_days": int,       # Data retention period (optional)
+                "encryption_at_rest": bool,       # Whether data is encrypted (optional)
+                "geographic_location": str,       # Data location for compliance (optional)
+                "compliance_certifications": list # SOC2, HIPAA, etc. (optional)
+            }
+
+        Default implementation returns empty dict (not a data source).
+        Tool services that access external data should override this method.
+
+        Example:
+            def get_service_metadata(self) -> Dict[str, Any]:
+                return {
+                    "data_source": True,
+                    "data_source_type": "sql",
+                    "contains_pii": True,
+                    "gdpr_applicable": True,
+                    "connector_id": self._connector_id,
+                }
+        """
+        return {}  # Default: not a data source

@@ -96,6 +96,11 @@ class APIServerManager:
                 env[var] = os.environ[var]
                 self.console.print(f"[dim]Setting {var}={os.environ[var]}[/dim]")
 
+        # Load SQL external data service configuration if needed
+        if hasattr(self, "_sql_config_path") and self._sql_config_path:
+            env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
+            self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
+
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
             reddit_secrets_path = Path.home() / ".ciris" / "reddit_secrets"

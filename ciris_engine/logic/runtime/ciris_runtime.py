@@ -818,7 +818,6 @@ class CIRISRuntime:
         for adapter_type, adapter_config in self.adapter_configs.items():
             try:
                 # Determine adapter ID (handle instance-specific types like "api:8081")
-                adapter_id = adapter_type
                 if ":" in adapter_type:
                     base_type, instance_id = adapter_type.split(":", 1)
                     adapter_id = f"{base_type}_{instance_id}"

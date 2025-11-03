@@ -29,6 +29,7 @@ class QAModule(Enum):
     MULTI_OCCURRENCE = "multi_occurrence"
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
     REDDIT = "reddit"  # Reddit adapter testing
+    SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -177,6 +178,9 @@ class QAConfig:
         elif module == QAModule.REDDIT:
             # Reddit tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.SQL_EXTERNAL_DATA:
+            # SQL external data tests use SDK client
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:
@@ -241,6 +245,8 @@ class QAConfig:
             tests = []
             # Run all modules in sequence - comprehensive test suite
             for m in [
+                # Streaming tests FIRST (requires clean queue state)
+                QAModule.STREAMING,
                 # Core API modules
                 QAModule.AUTH,
                 QAModule.TELEMETRY,
@@ -256,6 +262,7 @@ class QAConfig:
                 QAModule.PARTNERSHIP,
                 QAModule.BILLING,
                 QAModule.REDDIT,
+                QAModule.SQL_EXTERNAL_DATA,
                 QAModule.MULTI_OCCURRENCE,
                 # Handler modules
                 QAModule.HANDLERS,
@@ -268,7 +275,6 @@ class QAConfig:
                 QAModule.EXTENDED_API,
                 QAModule.SINGLE_STEP_SIMPLE,
                 QAModule.SINGLE_STEP_COMPREHENSIVE,
-                QAModule.STREAMING,
             ]:
                 tests.extend(self.get_module_tests(m))
             return tests

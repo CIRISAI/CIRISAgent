@@ -67,7 +67,7 @@ async def run_manual_consolidation(
     memory_bus = MemoryBus(registry, time_service)
 
     # Create consolidation service
-    service = TSDBConsolidationService(service_registry=registry, memory_bus=memory_bus, time_service=time_service)
+    service = TSDBConsolidationService(memory_bus=memory_bus, time_service=time_service)
 
     # Initialize the service
     await service.initialize()

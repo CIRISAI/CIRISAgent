@@ -403,39 +403,8 @@ def test_transfer_preserves_all_task_data(mock_audit_service):
             os.unlink(db_path)
 
 
-def run_all_tests():
-    """Run all transfer_task_ownership tests."""
-    print("=" * 80)
-    print("Testing transfer_task_ownership function")
-    print("=" * 80)
-    print()
-
-    test_transfer_task_ownership_success()
-    test_transfer_task_ownership_enables_status_update()
-    test_transfer_task_ownership_wrong_from_occurrence()
-    test_transfer_task_ownership_nonexistent_task()
-    test_transfer_task_ownership_multiple_times()
-    test_transfer_preserves_all_task_data()
-
-    print()
-    print("=" * 80)
-    print("✅ All transfer_task_ownership tests passed!")
-    print("=" * 80)
-    print()
-    print("Tests verified:")
-    print("  ✓ Successful ownership transfer from __shared__ to specific occurrence")
-    print("  ✓ Status updates work correctly after ownership transfer")
-    print("  ✓ Transfer fails when from_occurrence_id doesn't match")
-    print("  ✓ Transfer fails gracefully for nonexistent tasks")
-    print("  ✓ Multiple sequential transfers work correctly")
-    print("  ✓ All task data preserved except occurrence_id")
-    print()
-    print("Critical P0 bug fix validated:")
-    print("  - Tasks can be transferred from __shared__ to claiming occurrence")
-    print("  - update_task_status() works correctly after transfer")
-    print("  - Database row is properly updated before status changes")
-    print()
-
-
 if __name__ == "__main__":
-    run_all_tests()
+    # Run tests through pytest for proper fixture handling
+    import sys
+
+    sys.exit(pytest.main([__file__, "-v"]))

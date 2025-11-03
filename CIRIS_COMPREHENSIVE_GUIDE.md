@@ -465,6 +465,318 @@ agent_occurrence_id: "occurrence_1"
 
 ---
 
+## SQL External Data Service - GDPR/DSAR Compliance
+
+### Overview
+
+The SQL External Data Service provides runtime-configurable database connectors for GDPR/DSAR compliance and PII management. This service enables you to:
+
+- **Connect to external SQL databases** at runtime without code changes
+- **Discover user data** across multiple tables using privacy schemas
+- **Export user data** in standardized formats (JSON/CSV)
+- **Delete or anonymize user data** with cryptographic verification
+- **Verify deletion** with Ed25519 signatures for compliance audit trails
+
+**Architecture**: The SQL connector follows CIRIS organic architecture - external data sources are **Tools** (not services), integrating seamlessly with existing ToolBus infrastructure.
+
+### When to Use This Service
+
+Use the SQL External Data Service when:
+
+1. **GDPR/DSAR Compliance**: You need to fulfill Data Subject Access Requests (right to access, erasure, portability)
+2. **Multi-Database PII Management**: User data spans multiple SQL databases requiring coordinated operations
+3. **Privacy-First Design**: You need privacy schema mapping to know which tables/columns contain PII
+4. **Audit Trail Requirements**: Cryptographic proof of deletion is required for compliance
+5. **Runtime Configuration**: Database connections must be configured without redeployment
+
+**DO NOT use** for operational/transactional queries - this is specifically for privacy operations.
+
+### Supported SQL Dialects
+
+- **SQLite** - File-based, serverless databases
+- **PostgreSQL** - Advanced open-source RDBMS with full feature support
+- **MySQL** - Popular open-source RDBMS
+- **Microsoft SQL Server** - Enterprise RDBMS (future support planned)
+
+### The 9 SQL Tools
+
+Each SQL connector instance provides these tools:
+
+#### 1. Configuration Tools (2 tools)
+
+- **`initialize_sql_connector`** - Configure connector with connection string and privacy schema
+- **`get_sql_service_metadata`** - Retrieve connector metadata, DSAR capabilities, table information
+
+#### 2. DSAR Operation Tools (5 tools)
+
+- **`sql_find_user_data`** - Discover all locations where user data exists (tables, columns, row counts)
+- **`sql_export_user`** - Export all user data in JSON or CSV format with checksums
+- **`sql_delete_user`** - Permanently delete all user data with cascade operations
+- **`sql_anonymize_user`** - Anonymize PII using configured strategies (hash, pseudonymize, null, truncate)
+- **`sql_verify_deletion`** - Verify zero user data remaining with cryptographic proof
+
+#### 3. Database Operation Tools (2 tools)
+
+- **`sql_get_stats`** - Retrieve database statistics and table information
+- **`sql_query`** - Execute read-only SQL queries (SELECT only, privacy-constrained)
+
+### Quick Start Example
+
+#### Step 1: Environment Configuration
+
+Set up database connection details via environment variables or configuration files:
+
+```bash
+# Option A: Environment variable pointing to config file
+export CIRIS_SQL_EXTERNAL_DATA_CONFIG=/path/to/sql_config.json
+
+# Option B: Direct configuration in privacy_schema.yaml
+```
+
+#### Step 2: Create Privacy Schema
+
+Define which tables and columns contain PII in `privacy_schema.yaml`:
+
+```yaml
+tables:
+  - table_name: users
+    identifier_column: email
+    columns:
+      - column_name: email
+        data_type: email
+        is_identifier: true
+        anonymization_strategy: hash
+      - column_name: full_name
+        data_type: name
+        is_identifier: false
+        anonymization_strategy: pseudonymize
+      - column_name: phone
+        data_type: phone
+        is_identifier: false
+        anonymization_strategy: null
+    cascade_deletes:
+      - user_sessions
+      - user_preferences
+
+  - table_name: orders
+    identifier_column: customer_email
+    columns:
+      - column_name: customer_email
+        data_type: email
+        is_identifier: true
+        anonymization_strategy: hash
+      - column_name: shipping_address
+        data_type: address
+        is_identifier: false
+        anonymization_strategy: truncate
+    cascade_deletes: []
+```
+
+**Anonymization Strategies:**
+- **`delete`** - Remove entire row (GDPR Article 17: Right to Erasure)
+- **`null`** - Set column to NULL (preserve row structure)
+- **`hash`** - One-way hash (MD5/SHA256) for pseudonymization
+- **`pseudonymize`** - Replace with deterministic pseudonym
+- **`truncate`** - Keep first 3 characters + '***' for partial anonymization
+
+#### Step 3: Initialize Connector at Runtime
+
+Use the `initialize_sql_connector` tool to configure database connection:
+
+```python
+# Via TOOL action handler
+result = await execute_tool(
+    tool_name="initialize_sql_connector",
+    parameters={
+        "connector_id": "production_db",
+        "connection_string": "postgresql+psycopg2://user:pass@localhost/mydb",
+        "dialect": "postgresql",
+        "privacy_schema_path": "/path/to/privacy_schema.yaml",
+        "connection_timeout": 30,
+        "query_timeout": 60
+    }
+)
+```
+
+**Connection String Formats:**
+- **SQLite**: `sqlite:////path/to/database.db`
+- **PostgreSQL**: `postgresql+psycopg2://user:password@host:port/database`
+- **MySQL**: `mysql+pymysql://user:password@host:port/database`
+
+#### Step 4: Execute DSAR Operations
+
+**Find User Data (Article 15: Right of Access):**
+```python
+result = await execute_tool(
+    tool_name="sql_find_user_data",
+    parameters={
+        "connector_id": "production_db",
+        "user_identifier": "user@example.com"
+    }
+)
+# Returns: List of data locations with table, column, row count
+```
+
+**Export User Data (Article 20: Right to Data Portability):**
+```python
+result = await execute_tool(
+    tool_name="sql_export_user",
+    parameters={
+        "connector_id": "production_db",
+        "user_identifier": "user@example.com",
+        "export_format": "json"  # or "csv"
+    }
+)
+# Returns: Complete user data package with checksum for verification
+```
+
+**Delete User Data (Article 17: Right to Erasure):**
+```python
+result = await execute_tool(
+    tool_name="sql_delete_user",
+    parameters={
+        "connector_id": "production_db",
+        "user_identifier": "user@example.com",
+        "verify": true  # Auto-verify after deletion
+    }
+)
+# Returns: Deletion summary with rows affected, tables modified, verification status
+```
+
+**Anonymize User Data (Alternative to Deletion):**
+```python
+result = await execute_tool(
+    tool_name="sql_anonymize_user",
+    parameters={
+        "connector_id": "production_db",
+        "user_identifier": "user@example.com",
+        "strategy": "pseudonymize"  # Use privacy schema default strategies
+    }
+)
+# Returns: Anonymization summary with rows affected, columns anonymized
+```
+
+**Verify Deletion with Cryptographic Proof:**
+```python
+result = await execute_tool(
+    tool_name="sql_verify_deletion",
+    parameters={
+        "connector_id": "production_db",
+        "user_identifier": "user@example.com",
+        "sign": true  # Generate Ed25519 signature
+    }
+)
+# Returns: Verification result with zero-data confirmation and Ed25519 proof
+```
+
+### Integration Points with Other Services
+
+#### 1. Audit Service Integration
+
+All SQL operations generate audit events with:
+- **User identifier** and **connector_id** for traceability
+- **Operation type** (find, export, delete, anonymize, verify)
+- **Affected tables and row counts**
+- **Ed25519 signatures** for deletion verification (cryptographic proof)
+- **Timestamps** for compliance audit trails
+
+```python
+# Audit event example
+{
+    "event_type": "sql_delete_user",
+    "user_identifier": "user@example.com",
+    "connector_id": "production_db",
+    "tables_affected": ["users", "user_sessions", "user_preferences"],
+    "total_rows_deleted": 127,
+    "verification_passed": true,
+    "cryptographic_proof": "ed25519:abcdef123456...",
+    "timestamp": "2025-11-02T14:30:00Z"
+}
+```
+
+#### 2. Consent Service Integration
+
+SQL operations respect consent boundaries:
+- **TEMPORARY** consent (14-day auto-forget) triggers automatic deletion scheduling
+- **PARTNERED** consent preserves data until explicit revocation
+- **ANONYMOUS** consent severs identity links in external databases
+- **90-day decay protocol** coordinates external SQL deletion with CIRIS memory
+
+```python
+# When consent is revoked, DSARAutomationService coordinates:
+# 1. CIRIS internal data deletion (consent service)
+# 2. External SQL database deletion (via sql_delete_user)
+# 3. Verification and cryptographic proof generation
+# 4. Audit trail recording
+```
+
+#### 3. DSARAutomationService Integration
+
+The SQL connector enables DSARAutomationService to orchestrate across:
+
+1. **CIRIS Internal Data** - Consent records, interactions, contributions, thoughts
+2. **External SQL Databases** - User profiles, transactions, application data
+3. **Future SaaS Connectors** - Third-party services via OpenAPI
+
+```python
+# DSARAutomationService orchestrates multi-source operations
+async def handle_erasure_request(user_id: str):
+    # 1. Delete from CIRIS internal graph
+    await self._delete_ciris_data(user_id)
+
+    # 2. Delete from external SQL databases
+    sql_tools = await tool_bus.get_tools_by_capability("tool:sql")
+    for connector_id in sql_connectors:
+        await execute_tool(
+            tool_name="sql_delete_user",
+            parameters={
+                "connector_id": connector_id,
+                "user_identifier": user_id,
+                "verify": true
+            }
+        )
+
+    # 3. Generate consolidated deletion report
+    return DSARErasureReport(
+        user_id=user_id,
+        ciris_data_deleted=True,
+        external_databases_deleted=True,
+        verification_proofs=[...],
+        timestamp=datetime.now()
+    )
+```
+
+### Security Considerations
+
+**CRITICAL Security Requirements:**
+
+1. **Privacy Schema Required** - Cannot query arbitrary tables without privacy schema configuration
+2. **WiseAuthority Approval** - Raw SQL queries via `sql_query` should require WA approval for safety
+3. **Connection Security** - Use SSL/TLS for production database connections
+4. **Secret Management** - Store connection strings in SecretsService (never in code or logs)
+5. **Transaction Safety** - All delete/anonymize operations use database transactions (rollback on failure)
+6. **Verification Enforcement** - Post-deletion verification with cryptographic proof (Ed25519 signatures)
+7. **Read-Only Queries** - `sql_query` tool enforces SELECT-only operations (no INSERT/UPDATE/DELETE)
+
+### Standards Compliance
+
+The SQL External Data Service implements:
+
+- **GDPR Articles 15, 16, 17, 20** (Access, Rectification, Erasure, Portability)
+- **ISO/IEC 9075** (SQL standard via ODBC)
+- **SQLAlchemy 2.0+** (Database abstraction layer)
+- **Ed25519 Signatures** (RFC 8032 for cryptographic deletion proof)
+- **Privacy Schema YAML** (Structured PII mapping)
+
+### Detailed Documentation
+
+For comprehensive implementation details, see:
+- **[SQL External Data Service README](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/README.md)** - Complete service documentation
+- **[Privacy Schema Examples](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/examples/)** - Real-world configurations
+- **[DSAR Automation Guide](/home/emoore/CIRISAgent/docs/DSAR_AUTOMATION.md)** - Multi-source DSAR orchestration
+
+---
+
 ## Scout GUI - Your User Interface
 
 Users interact with you through Scout GUI and manage their accounts:

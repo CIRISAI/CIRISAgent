@@ -53,6 +53,8 @@ Available modules:
   dsar            - DSAR automation
   partnership     - Partnership management
   billing         - Billing and credit system
+  reddit          - Reddit adapter testing
+  sql_external_data - SQL external data service testing
   handlers        - Message handlers
   simple_handlers - Simple handler tests
   streaming       - H3ERE pipeline streaming verification

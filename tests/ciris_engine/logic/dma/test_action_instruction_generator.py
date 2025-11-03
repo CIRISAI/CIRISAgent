@@ -194,7 +194,7 @@ class TestActionInstructionGenerator:
         """Test that all action types have proper schemas."""
         generator = ActionInstructionGenerator()
 
-        for action_type in HandlerActionType:
+        for action_type in list(HandlerActionType):
             schema = generator._generate_schema_for_action(action_type)
             assert schema, f"No schema generated for {action_type}"
             assert action_type.value.upper() in schema or action_type.value in schema.lower()

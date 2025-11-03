@@ -439,3 +439,44 @@ class ToolBus(BaseBus[ToolService]):
         self._cached_tools_count = len(unique_tools)
 
         return aggregated
+
+    def get_tools_by_metadata(self, metadata_filter: Dict[str, Any]) -> List[Any]:
+        """Get tool services matching metadata filter.
+
+        Enables discovery of data sources for DSAR coordination.
+
+        Args:
+            metadata_filter: Dict of metadata key-value pairs to match
+                Example: {"data_source": True}
+                Example: {"data_source": True, "data_source_type": "sql"}
+                Example: {"gdpr_applicable": True}
+
+        Returns:
+            List of tool service instances matching the filter
+
+        Example:
+            # Get all data sources
+            data_sources = tool_bus.get_tools_by_metadata({"data_source": True})
+
+            # Get SQL data sources only
+            sql_sources = tool_bus.get_tools_by_metadata({
+                "data_source": True,
+                "data_source_type": "sql"
+            })
+
+            # Get GDPR-applicable sources
+            gdpr_sources = tool_bus.get_tools_by_metadata({"gdpr_applicable": True})
+        """
+        matching_services = []
+
+        for provider in self._get_all_tool_services():
+            # Get service metadata
+            metadata = provider.get_service_metadata()
+
+            # Check if all filter criteria match
+            matches = all(metadata.get(key) == value for key, value in metadata_filter.items())
+
+            if matches:
+                matching_services.append(provider)
+
+        return matching_services

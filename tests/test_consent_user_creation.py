@@ -159,14 +159,14 @@ def test_consent_metadata_definitions():
     )
 
     # Test all streams have metadata
-    for stream in ConsentStream:
+    for stream in list(ConsentStream):
         assert stream in STREAM_METADATA
         metadata = STREAM_METADATA[stream]
         assert "name" in metadata
         assert "description" in metadata
 
     # Test all categories have metadata
-    for category in ConsentCategory:
+    for category in list(ConsentCategory):
         assert category in CATEGORY_METADATA
         metadata = CATEGORY_METADATA[category]
         assert "name" in metadata

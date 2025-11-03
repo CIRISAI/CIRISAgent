@@ -386,7 +386,7 @@ class TestPipelineStateTracking:
         assert pipeline_state.total_thoughts_in_flight == 0
 
         # All step points should have empty lists
-        for step in StepPoint:
+        for step in list(StepPoint):
             assert len(pipeline_state.get_thoughts_at_step(step)) == 0
 
     def test_move_thought_between_steps(self, pipeline_state):

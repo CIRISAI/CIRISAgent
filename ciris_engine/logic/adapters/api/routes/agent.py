@@ -844,7 +844,7 @@ def _count_active_services(service_registry: Any) -> Tuple[int, JSONDict]:
     if service_registry:
         from ciris_engine.schemas.runtime.enums import ServiceType
 
-        for service_type in ServiceType:
+        for service_type in list(ServiceType):
             providers = service_registry.get_services_by_type(service_type)
             count = len(providers)
             if count > 0:

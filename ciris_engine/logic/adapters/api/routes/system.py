@@ -523,7 +523,7 @@ async def _collect_service_health(request: Request) -> Dict[str, Dict[str, int]]
 
     service_registry = request.app.state.service_registry
     try:
-        for service_type in ServiceType:
+        for service_type in list(ServiceType):
             providers = service_registry.get_services_by_type(service_type)
             if providers:
                 healthy_count = 0

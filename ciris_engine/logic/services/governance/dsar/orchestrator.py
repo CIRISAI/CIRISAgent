@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Optional
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
-from ciris_engine.logic.utils import identity_resolution
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import DSARExportFormat
 

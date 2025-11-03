@@ -15,8 +15,8 @@ from ciris_engine.logic.adapters.api.routes import dsar
 
 
 @pytest.fixture
-def client():
-    """Create test client."""
+def client(test_db):
+    """Create test client with database."""
     app = create_app()
     return TestClient(app)
 
@@ -30,7 +30,7 @@ def auth_headers():
 class TestDSAREndpoint:
     """Test DSAR endpoint functionality."""
 
-    def test_submit_dsar_request(self, client):
+    def test_submit_dsar_request(self, client, test_db):
         """Test submitting a DSAR request."""
         request_data = {
             "request_type": "access",
@@ -50,7 +50,7 @@ class TestDSAREndpoint:
         assert data["data"]["status"] == "pending_review"
         assert "14 days" in data["data"]["message"]  # Pilot phase retention
 
-    def test_submit_urgent_dsar_request(self, client):
+    def test_submit_urgent_dsar_request(self, client, test_db):
         """Test submitting an urgent DSAR request."""
         request_data = {"request_type": "delete", "email": "urgent@example.com", "urgent": True}
 
@@ -60,7 +60,7 @@ class TestDSAREndpoint:
         data = response.json()
         assert "3 days" in data["data"]["message"]  # Urgent timeline
 
-    def test_dsar_request_types(self, client):
+    def test_dsar_request_types(self, client, test_db):
         """Test all valid DSAR request types."""
         valid_types = ["access", "delete", "export", "correct"]
 
@@ -70,14 +70,14 @@ class TestDSAREndpoint:
             response = client.post("/v1/dsr/", json=request_data)
             assert response.status_code == status.HTTP_200_OK
 
-    def test_invalid_dsar_request_type(self, client):
+    def test_invalid_dsar_request_type(self, client, test_db):
         """Test invalid DSAR request type."""
         request_data = {"request_type": "invalid_type", "email": "user@example.com"}
 
         response = client.post("/v1/dsr/", json=request_data)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    def test_check_dsar_status(self, client):
+    def test_check_dsar_status(self, client, test_db):
         """Test checking DSAR request status."""
         # First submit a request
         request_data = {"request_type": "access", "email": "status@example.com"}
@@ -95,7 +95,7 @@ class TestDSAREndpoint:
         assert data["data"]["status"] == "pending_review"
         assert data["data"]["request_type"] == "access"
 
-    def test_check_nonexistent_dsar_status(self, client):
+    def test_check_nonexistent_dsar_status(self, client, test_db):
         """Test checking status of non-existent DSAR."""
         response = client.get("/v1/dsr/DSAR-NONEXISTENT")
 
@@ -103,7 +103,7 @@ class TestDSAREndpoint:
         assert "not found" in response.json()["detail"]
 
     @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_list_dsar_requests_admin(self, mock_auth, client):
+    def test_list_dsar_requests_admin(self, mock_auth, client, test_db):
         """Test listing DSAR requests as admin."""
         # Mock admin user
         mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
@@ -122,7 +122,7 @@ class TestDSAREndpoint:
         assert "requests" in data["data"]
         assert data["data"]["total"] >= 3
 
-    def test_list_dsar_requests_non_admin(self, client):
+    def test_list_dsar_requests_non_admin(self, client, test_db):
         """Test that non-admins cannot list DSAR requests (when auth is implemented)."""
         # TODO: Currently auth always returns admin, so this test is adjusted
         # When proper auth is implemented, this should test 403 for non-admins
@@ -136,7 +136,7 @@ class TestDSAREndpoint:
         # assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_update_dsar_status_admin(self, mock_auth, client):
+    def test_update_dsar_status_admin(self, mock_auth, client, test_db):
         """Test updating DSAR status as admin."""
         # Mock admin user
         mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
@@ -160,7 +160,7 @@ class TestDSAREndpoint:
         assert data["data"]["updated_by"] == "admin"
 
     @patch("ciris_engine.logic.adapters.api.routes.dsar.get_current_user")
-    def test_update_dsar_invalid_status(self, mock_auth, client):
+    def test_update_dsar_invalid_status(self, mock_auth, client, test_db):
         """Test updating DSAR with invalid status."""
         # Mock admin user
         mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
@@ -180,7 +180,7 @@ class TestDSAREndpoint:
         assert update_response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid status" in update_response.json()["detail"]
 
-    def test_dsar_retention_timeline(self, client):
+    def test_dsar_retention_timeline(self, client, test_db):
         """Test that DSAR timeline reflects 14-day pilot retention."""
         # Use 'correct' type which triggers manual processing with 14-day timeline
         request_data = {"request_type": "correct", "email": "retention@example.com", "urgent": False}
@@ -196,7 +196,7 @@ class TestDSAREndpoint:
         # Allow 1 day variance for timezone differences
         assert abs((estimated - expected).days) <= 1
 
-    def test_dsar_gdpr_articles_compliance(self, client):
+    def test_dsar_gdpr_articles_compliance(self, client, test_db):
         """Test that DSAR endpoint mentions GDPR articles."""
         # The endpoint docstring should reference GDPR articles
         import inspect
@@ -320,7 +320,7 @@ class TestDSARAutomation:
         assert data["data"]["export_package"]["file_size_bytes"] == 2048
         assert len(data["data"]["export_package"]["checksum"]) == 64
 
-    def test_deletion_status_endpoint_exists(self, client):
+    def test_deletion_status_endpoint_exists(self, client, test_db):
         """Test that deletion status endpoint is available."""
         # First submit a deletion request
         request_data = {
@@ -341,7 +341,7 @@ class TestDSARAutomation:
             status.HTTP_404_NOT_FOUND,
         ]
 
-    def test_access_request_includes_interaction_data(self, client):
+    def test_access_request_includes_interaction_data(self, client, test_db):
         """Test that automated access requests include interaction data."""
         request_data = {
             "request_type": "access",
@@ -360,7 +360,7 @@ class TestDSARAutomation:
                 assert "contribution_metrics" in package
                 assert "data_categories" in package
 
-    def test_dsar_automation_graceful_degradation(self, client):
+    def test_dsar_automation_graceful_degradation(self, client, test_db):
         """Test that DSAR endpoint degrades gracefully when automation fails."""
         # This test verifies that users without consent records can still submit DSARs
         # The endpoint should gracefully fall back to manual processing instead of failing

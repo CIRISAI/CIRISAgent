@@ -832,3 +832,324 @@ class TestHelperFunctions:
         recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
 
         assert recommendation == "reject"
+
+
+class TestRefactoredHelperFunctions:
+    """Tests for new helper functions added during cognitive complexity reduction."""
+
+    @pytest.mark.asyncio
+    async def test_find_start_node_id_with_full_id(self, mock_memory_service):
+        """Test _find_start_node_id with full node ID."""
+        user_id = "user_identity:email:test@example.com"
+
+        result = await identity_resolution._find_start_node_id(user_id, mock_memory_service)
+
+        assert result == user_id
+        # Should not query memory_bus if already a full ID
+        mock_memory_service.recall.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_find_start_node_id_with_plain_email(self, mock_memory_service):
+        """Test _find_start_node_id with plain email identifier."""
+        user_id = "test@example.com"
+        expected_node_id = "user_identity:email:test@example.com"
+
+        # Mock memory service to return node for email type
+        mock_node = GraphNode(
+            id=expected_node_id,
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={"identifier_type": "email", "identifier_value": user_id},
+        )
+        mock_memory_service.recall = AsyncMock(return_value=[mock_node])
+
+        result = await identity_resolution._find_start_node_id(user_id, mock_memory_service)
+
+        assert result == expected_node_id
+        assert mock_memory_service.recall.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_find_start_node_id_not_found(self, mock_memory_service):
+        """Test _find_start_node_id when identifier not found."""
+        user_id = "nonexistent@example.com"
+
+        # Mock memory service to return empty for all queries
+        mock_memory_service.recall = AsyncMock(return_value=[])
+
+        result = await identity_resolution._find_start_node_id(user_id, mock_memory_service)
+
+        assert result is None
+        # Should try all common identifier types
+        assert mock_memory_service.recall.call_count == 4  # email, user_id, discord_id, reddit_username
+
+    def test_extract_identifier_from_node_valid(self):
+        """Test _extract_identifier_from_node with valid node."""
+        node = GraphNode(
+            id="user_identity:email:test@example.com",
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={"identifier_type": "email", "identifier_value": "test@example.com"},
+        )
+
+        result = identity_resolution._extract_identifier_from_node(node)
+
+        assert result is not None
+        assert result.identifier_type == "email"
+        assert result.identifier_value == "test@example.com"
+        assert result.confidence == 1.0
+        assert result.source == "graph"
+        assert result.verified is True
+
+    def test_extract_identifier_from_node_invalid_attributes(self):
+        """Test _extract_identifier_from_node with empty attributes."""
+        node = GraphNode(
+            id="user_identity:email:test@example.com",
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={},  # Empty attributes
+        )
+
+        result = identity_resolution._extract_identifier_from_node(node)
+
+        assert result is None
+
+    def test_extract_identifier_from_node_missing_fields(self):
+        """Test _extract_identifier_from_node with missing fields."""
+        node = GraphNode(
+            id="user_identity:email:test@example.com",
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={"identifier_type": "email"},  # Missing identifier_value
+        )
+
+        result = identity_resolution._extract_identifier_from_node(node)
+
+        assert result is None
+
+    def test_find_same_as_neighbors_with_valid_edges(self):
+        """Test _find_same_as_neighbors with valid same_as edges."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = set()
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+            GraphEdge(
+                source="user_identity:reddit_username:testuser",
+                target=current_node_id,
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_same_as_neighbors(edges, current_node_id, visited_nodes)
+
+        assert len(neighbors) == 2
+        assert "user_identity:discord_id:123456" in neighbors
+        assert "user_identity:reddit_username:testuser" in neighbors
+
+    def test_find_same_as_neighbors_filters_visited(self):
+        """Test _find_same_as_neighbors filters already visited nodes."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = {"user_identity:discord_id:123456"}
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",  # Already visited
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:reddit_username:testuser",
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_same_as_neighbors(edges, current_node_id, visited_nodes)
+
+        assert len(neighbors) == 1
+        assert "user_identity:reddit_username:testuser" in neighbors
+
+    def test_find_same_as_neighbors_ignores_other_relationships(self):
+        """Test _find_same_as_neighbors ignores non-same_as edges."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = set()
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",
+                relationship="different_relationship",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_same_as_neighbors(edges, current_node_id, visited_nodes)
+
+        assert len(neighbors) == 0
+
+    def test_normalize_user_id_for_graph_with_full_id(self):
+        """Test _normalize_user_id_for_graph with full node ID."""
+        user_id = "user_identity:email:test@example.com"
+
+        result = identity_resolution._normalize_user_id_for_graph(user_id)
+
+        assert result == user_id
+
+    def test_normalize_user_id_for_graph_with_plain_value(self):
+        """Test _normalize_user_id_for_graph with plain value."""
+        user_id = "test@example.com"
+
+        result = identity_resolution._normalize_user_id_for_graph(user_id)
+
+        assert result == "user_identity:email:test@example.com"
+
+    def test_extract_node_attributes_with_valid_node(self):
+        """Test _extract_node_attributes with valid node."""
+        node = GraphNode(
+            id="user_identity:email:test@example.com",
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={
+                "identifier_type": "email",
+                "identifier_value": "test@example.com",
+                "created_by": "test_system",
+            },
+        )
+
+        result = identity_resolution._extract_node_attributes(node)
+
+        assert result["id"] == "user_identity:email:test@example.com"
+        assert result["type"] == "identity"
+        assert result["identifier_type"] == "email"
+        assert result["identifier_value"] == "test@example.com"
+        assert result["created_by"] == "test_system"
+
+    def test_extract_node_attributes_with_empty_attributes(self):
+        """Test _extract_node_attributes with empty attributes dict."""
+        node = GraphNode(
+            id="user_identity:email:test@example.com",
+            type=NodeType.IDENTITY,
+            scope=GraphScope.ENVIRONMENT,
+            attributes={},  # Empty dict
+        )
+
+        result = identity_resolution._extract_node_attributes(node)
+
+        assert result["id"] == "user_identity:email:test@example.com"
+        assert result["identifier_type"] is None
+        assert result["identifier_value"] is None
+
+    def test_build_edge_dict_with_context(self):
+        """Test _build_edge_dict with edge that has context."""
+        edge = GraphEdge(
+            source="user_identity:email:test@example.com",
+            target="user_identity:discord_id:123456",
+            relationship="same_as",
+            scope=GraphScope.ENVIRONMENT,
+            weight=0.95,
+            attributes=GraphEdgeAttributes(context="source=oauth,confidence=0.95"),
+        )
+
+        result = identity_resolution._build_edge_dict(edge)
+
+        assert result["from"] == "user_identity:email:test@example.com"
+        assert result["to"] == "user_identity:discord_id:123456"
+        assert result["relationship"] == "same_as"
+        assert result["confidence"] == 0.95
+        assert result["context"] == "source=oauth,confidence=0.95"
+
+    def test_build_edge_dict_without_context(self):
+        """Test _build_edge_dict with edge without context."""
+        edge = GraphEdge(
+            source="user_identity:email:test@example.com",
+            target="user_identity:discord_id:123456",
+            relationship="same_as",
+            scope=GraphScope.ENVIRONMENT,
+            weight=1.0,
+        )
+
+        result = identity_resolution._build_edge_dict(edge)
+
+        assert result["context"] is None
+
+    def test_find_graph_neighbors_within_depth(self):
+        """Test _find_graph_neighbors within max depth."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = set()
+        current_depth = 1
+        max_depth = 2
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_graph_neighbors(
+            edges, current_node_id, visited_nodes, current_depth, max_depth
+        )
+
+        assert len(neighbors) == 1
+        assert neighbors[0] == ("user_identity:discord_id:123456", 2)
+
+    def test_find_graph_neighbors_at_max_depth(self):
+        """Test _find_graph_neighbors at max depth."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = set()
+        current_depth = 2
+        max_depth = 2
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_graph_neighbors(
+            edges, current_node_id, visited_nodes, current_depth, max_depth
+        )
+
+        assert len(neighbors) == 0  # At max depth, no neighbors added
+
+    def test_find_graph_neighbors_filters_visited(self):
+        """Test _find_graph_neighbors filters visited nodes."""
+        current_node_id = "user_identity:email:test@example.com"
+        visited_nodes = {"user_identity:discord_id:123456"}
+        current_depth = 0
+        max_depth = 2
+
+        edges = [
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:discord_id:123456",  # Already visited
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+            GraphEdge(
+                source=current_node_id,
+                target="user_identity:reddit_username:testuser",
+                relationship="same_as",
+                scope=GraphScope.ENVIRONMENT,
+            ),
+        ]
+
+        neighbors = identity_resolution._find_graph_neighbors(
+            edges, current_node_id, visited_nodes, current_depth, max_depth
+        )
+
+        assert len(neighbors) == 1
+        assert neighbors[0][0] == "user_identity:reddit_username:testuser"

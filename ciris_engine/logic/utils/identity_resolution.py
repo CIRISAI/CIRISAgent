@@ -14,12 +14,7 @@ Architecture:
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
-from ciris_engine.schemas.identity import (
-    IdentityConfidence,
-    IdentityMappingEvidence,
-    UserIdentifier,
-    UserIdentityNode,
-)
+from ciris_engine.schemas.identity import IdentityConfidence, IdentityMappingEvidence, UserIdentifier, UserIdentityNode
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 
@@ -157,6 +152,85 @@ async def add_identity_mapping(
     return edge
 
 
+async def _find_start_node_id(user_id: str, memory_bus: MemoryServiceProtocol) -> Optional[str]:
+    """Find the starting node ID for identity traversal.
+
+    Args:
+        user_id: User identifier (full node ID or just value)
+        memory_bus: MemoryBus instance for graph queries
+
+    Returns:
+        Node ID string or None if not found
+    """
+    if user_id.startswith("user_identity:"):
+        return user_id
+
+    # Try common identifier types
+    for id_type in ["email", "user_id", "discord_id", "reddit_username"]:
+        candidate_id = f"user_identity:{id_type}:{user_id}"
+        try:
+            query = MemoryQuery(
+                node_id=candidate_id,
+                scope=GraphScope.ENVIRONMENT,
+                type=NodeType.IDENTITY,
+            )
+            nodes = await memory_bus.recall(query)
+            if nodes:
+                return candidate_id
+        except Exception:
+            continue
+
+    return None
+
+
+def _extract_identifier_from_node(node: GraphNode) -> Optional[UserIdentifier]:
+    """Extract UserIdentifier from a GraphNode's attributes.
+
+    Args:
+        node: GraphNode with identity attributes
+
+    Returns:
+        UserIdentifier if valid attributes found, None otherwise
+    """
+    attrs = node.attributes
+    if not isinstance(attrs, dict):
+        return None
+
+    identifier_type = attrs.get("identifier_type")
+    identifier_value = attrs.get("identifier_value")
+
+    if not identifier_type or not identifier_value:
+        return None
+
+    return UserIdentifier(
+        identifier_type=identifier_type,
+        identifier_value=identifier_value,
+        confidence=1.0,
+        source="graph",
+        verified=True,
+    )
+
+
+def _find_same_as_neighbors(edges: List[GraphEdge], current_node_id: str, visited_nodes: set[str]) -> List[str]:
+    """Find unvisited neighbor nodes connected via 'same_as' edges.
+
+    Args:
+        edges: List of edges from current node
+        current_node_id: Current node ID
+        visited_nodes: Set of already visited node IDs
+
+    Returns:
+        List of unvisited neighbor node IDs
+    """
+    neighbors = []
+    for edge in edges:
+        if edge.relationship == "same_as":
+            next_node_id = edge.target if edge.source == current_node_id else edge.source
+            if next_node_id not in visited_nodes:
+                neighbors.append(next_node_id)
+    return neighbors
+
+
 async def get_all_identifiers(user_id: str, memory_bus: MemoryServiceProtocol) -> List[UserIdentifier]:
     """Get all known identifiers for a user via graph traversal.
 
@@ -179,39 +253,15 @@ async def get_all_identifiers(user_id: str, memory_bus: MemoryServiceProtocol) -
         reddit_username: cooluser
         api_key: sk_test_abc123
     """
+    # Find starting node
+    start_node_id = await _find_start_node_id(user_id, memory_bus)
+    if not start_node_id:
+        return []
+
+    # BFS traversal
     identifiers: List[UserIdentifier] = []
     visited_node_ids: set[str] = set()
-    nodes_to_process: List[str] = []
-
-    # Try to find starting node - check if user_id is a full node ID or just identifier
-    if user_id.startswith("user_identity:"):
-        start_node_id: str = user_id
-    else:
-        # Try common identifier types to find starting node
-        start_node_id_opt: Optional[str] = None
-        for id_type in ["email", "user_id", "discord_id", "reddit_username"]:
-            candidate_id = f"user_identity:{id_type}:{user_id}"
-            try:
-                query = MemoryQuery(
-                    node_id=candidate_id,
-                    scope=GraphScope.ENVIRONMENT,
-                    type=NodeType.IDENTITY,
-                )
-                nodes = await memory_bus.recall(query)
-                if nodes:
-                    start_node_id_opt = candidate_id
-                    break
-            except Exception:
-                continue
-
-        if not start_node_id_opt:
-            # No identity node found
-            return []
-
-        start_node_id = start_node_id_opt
-
-    # Start graph traversal
-    nodes_to_process.append(start_node_id)
+    nodes_to_process: List[str] = [start_node_id]
 
     while nodes_to_process:
         current_node_id = nodes_to_process.pop(0)
@@ -221,7 +271,7 @@ async def get_all_identifiers(user_id: str, memory_bus: MemoryServiceProtocol) -
 
         visited_node_ids.add(current_node_id)
 
-        # Get current node
+        # Process current node
         try:
             query = MemoryQuery(
                 node_id=current_node_id,
@@ -233,43 +283,21 @@ async def get_all_identifiers(user_id: str, memory_bus: MemoryServiceProtocol) -
             if not nodes:
                 continue
 
-            node = nodes[0]
+            # Extract identifier from node
+            identifier = _extract_identifier_from_node(nodes[0])
+            if identifier:
+                identifiers.append(identifier)
 
-            # Extract identifier from node attributes
-            attrs = node.attributes
-            if isinstance(attrs, dict):
-                identifier_type = attrs.get("identifier_type")
-                identifier_value = attrs.get("identifier_value")
-
-                if identifier_type and identifier_value:
-                    identifiers.append(
-                        UserIdentifier(
-                            identifier_type=identifier_type,
-                            identifier_value=identifier_value,
-                            confidence=1.0,  # Direct mapping
-                            source="graph",
-                            verified=True,
-                        )
-                    )
-
-            # Get all connected edges
+            # Find neighbors via same_as edges
             edges = await memory_bus.get_node_edges(current_node_id, GraphScope.ENVIRONMENT)
-
-            # Follow "same_as" edges
-            for edge in edges:
-                if edge.relationship == "same_as":
-                    # Add connected node to process queue
-                    next_node_id = edge.target if edge.source == current_node_id else edge.source
-                    if next_node_id not in visited_node_ids:
-                        nodes_to_process.append(next_node_id)
+            neighbors = _find_same_as_neighbors(edges, current_node_id, visited_node_ids)
+            nodes_to_process.extend(neighbors)
 
         except Exception:
-            # Skip node on error
             continue
 
-    # Sort by confidence (all are 1.0 for now, but future-proof)
+    # Sort by confidence
     identifiers.sort(key=lambda x: x.confidence, reverse=True)
-
     return identifiers
 
 
@@ -327,6 +355,85 @@ async def remove_identity_mapping(
         return False
 
 
+def _normalize_user_id_for_graph(user_id: str) -> str:
+    """Normalize user ID to full node ID format.
+
+    Args:
+        user_id: User identifier (full node ID or plain value)
+
+    Returns:
+        Full node ID in format "user_identity:{type}:{value}"
+    """
+    if user_id.startswith("user_identity:"):
+        return user_id
+    return f"user_identity:email:{user_id}"
+
+
+def _extract_node_attributes(node: GraphNode) -> Dict[str, Any]:
+    """Extract node attributes for graph visualization.
+
+    Args:
+        node: GraphNode to extract attributes from
+
+    Returns:
+        Dictionary with node visualization data
+    """
+    attrs = node.attributes if isinstance(node.attributes, dict) else {}
+    return {
+        "id": node.id,
+        "type": str(node.type.value),
+        "identifier_type": attrs.get("identifier_type"),
+        "identifier_value": attrs.get("identifier_value"),
+        "created_by": attrs.get("created_by"),
+    }
+
+
+def _build_edge_dict(edge: GraphEdge) -> Dict[str, Any]:
+    """Build edge dictionary for graph visualization.
+
+    Args:
+        edge: GraphEdge to convert to dict
+
+    Returns:
+        Dictionary with edge visualization data
+    """
+    edge_attrs = edge.attributes if hasattr(edge.attributes, "context") else None
+    return {
+        "from": edge.source,
+        "to": edge.target,
+        "relationship": edge.relationship,
+        "confidence": edge.weight,
+        "context": edge_attrs.context if edge_attrs else None,
+    }
+
+
+def _find_graph_neighbors(
+    edges: List[GraphEdge], current_node_id: str, visited_nodes: set[str], current_depth: int, max_depth: int
+) -> List[tuple[str, int]]:
+    """Find neighbor nodes for graph traversal.
+
+    Args:
+        edges: List of edges from current node
+        current_node_id: Current node ID
+        visited_nodes: Set of visited node IDs
+        current_depth: Current traversal depth
+        max_depth: Maximum allowed depth
+
+    Returns:
+        List of (node_id, depth) tuples for unvisited neighbors
+    """
+    if current_depth >= max_depth:
+        return []
+
+    neighbors = []
+    for edge in edges:
+        if edge.relationship == "same_as":
+            next_node_id = edge.target if edge.source == current_node_id else edge.source
+            if next_node_id not in visited_nodes:
+                neighbors.append((next_node_id, current_depth + 1))
+    return neighbors
+
+
 async def get_identity_graph(user_id: str, memory_bus: MemoryServiceProtocol, depth: int = 2) -> Dict[str, Any]:
     """Get identity graph for visualization/debugging.
 
@@ -350,12 +457,13 @@ async def get_identity_graph(user_id: str, memory_bus: MemoryServiceProtocol, de
             ]
         }
     """
-    nodes_dict = {}
-    edges_list = []
-    visited_nodes = set()
+    nodes_dict: Dict[str, Dict[str, Any]] = {}
+    edges_list: List[Dict[str, Any]] = []
+    visited_nodes: set[str] = set()
 
-    # Queue: (node_id, current_depth)
-    queue = [(user_id if user_id.startswith("user_identity:") else f"user_identity:email:{user_id}", 0)]
+    # BFS queue: (node_id, current_depth)
+    start_node_id = _normalize_user_id_for_graph(user_id)
+    queue: List[tuple[str, int]] = [(start_node_id, 0)]
 
     while queue:
         current_node_id, current_depth = queue.pop(0)
@@ -365,7 +473,7 @@ async def get_identity_graph(user_id: str, memory_bus: MemoryServiceProtocol, de
 
         visited_nodes.add(current_node_id)
 
-        # Get node
+        # Process current node
         try:
             query = MemoryQuery(
                 node_id=current_node_id,
@@ -377,40 +485,19 @@ async def get_identity_graph(user_id: str, memory_bus: MemoryServiceProtocol, de
             if not nodes:
                 continue
 
-            node = nodes[0]
+            # Add node to result
+            nodes_dict[current_node_id] = _extract_node_attributes(nodes[0])
 
-            # Add node to dict
-            attrs = node.attributes if isinstance(node.attributes, dict) else {}
-            nodes_dict[current_node_id] = {
-                "id": current_node_id,
-                "type": str(node.type.value),
-                "identifier_type": attrs.get("identifier_type"),
-                "identifier_value": attrs.get("identifier_value"),
-                "created_by": attrs.get("created_by"),
-            }
+            # Process edges and find neighbors
+            edges = await memory_bus.get_node_edges(current_node_id, GraphScope.ENVIRONMENT)
 
-            # Get edges
-            if current_depth < depth:
-                edges = await memory_bus.get_node_edges(current_node_id, GraphScope.ENVIRONMENT)
+            for edge in edges:
+                if edge.relationship == "same_as":
+                    edges_list.append(_build_edge_dict(edge))
 
-                for edge in edges:
-                    if edge.relationship == "same_as":
-                        # Add edge to list
-                        edge_attrs = edge.attributes if hasattr(edge.attributes, "context") else None
-                        edges_list.append(
-                            {
-                                "from": edge.source,
-                                "to": edge.target,
-                                "relationship": edge.relationship,
-                                "confidence": edge.weight,
-                                "context": edge_attrs.context if edge_attrs else None,
-                            }
-                        )
-
-                        # Add connected node to queue
-                        next_node_id = edge.target if edge.source == current_node_id else edge.source
-                        if next_node_id not in visited_nodes:
-                            queue.append((next_node_id, current_depth + 1))
+            # Add neighbors to queue
+            neighbors = _find_graph_neighbors(edges, current_node_id, visited_nodes, current_depth, depth)
+            queue.extend(neighbors)
 
         except Exception:
             continue

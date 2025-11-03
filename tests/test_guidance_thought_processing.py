@@ -323,8 +323,12 @@ class TestGuidanceThoughtProcessing:
                     )
 
                     # 4. Task should be marked complete
-                    persistence.update_task_status(shutdown_task.task_id, TaskStatus.COMPLETED, None)  # time_service
-                    mock_update_task.assert_called_with(shutdown_task.task_id, TaskStatus.COMPLETED, None)
+                    persistence.update_task_status(
+                        shutdown_task.task_id, TaskStatus.COMPLETED, shutdown_task.agent_occurrence_id
+                    )
+                    mock_update_task.assert_called_with(
+                        shutdown_task.task_id, TaskStatus.COMPLETED, shutdown_task.agent_occurrence_id
+                    )
 
 
 if __name__ == "__main__":

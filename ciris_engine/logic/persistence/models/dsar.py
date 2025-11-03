@@ -20,7 +20,7 @@ Architecture:
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ciris_engine.logic.persistence.db import get_db_connection
 
@@ -142,6 +142,7 @@ def update_dsar_ticket_status(
         True if update was successful, False otherwise
     """
     # Build SQL dynamically based on whether notes are provided
+    params: Tuple[str, ...]
     if notes:
         sql = """
             UPDATE dsar_tickets
@@ -186,6 +187,7 @@ def list_dsar_tickets_by_status(
     Returns:
         List of ticket dicts sorted by submission date (newest first)
     """
+    params: Tuple[str, ...]
     if status:
         sql = "SELECT * FROM dsar_tickets WHERE status = ? ORDER BY submitted_at DESC"
         params = (status,)
@@ -230,7 +232,7 @@ def list_dsar_tickets_by_email(
         return []
 
 
-def _row_to_dict(row) -> Dict[str, Any]:
+def _row_to_dict(row: Any) -> Dict[str, Any]:
     """Convert a database row to a dict matching the original _dsar_requests format.
 
     Args:

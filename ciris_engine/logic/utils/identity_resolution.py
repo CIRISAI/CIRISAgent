@@ -307,15 +307,14 @@ async def remove_identity_mapping(
 
         # Find edge connecting to node2
         for edge in edges:
-            if edge.relationship == "same_as":
-                if (edge.source == node1_id and edge.target == node2_id) or (
-                    edge.source == node2_id and edge.target == node1_id
-                ):
-                    # Found the edge - delete it
-                    # Note: MemoryBus doesn't have delete_edge method in protocol yet
-                    # For now, we return True to indicate we found it
-                    # TODO: Add forget_edge method to MemoryServiceProtocol
-                    return True
+            if edge.relationship == "same_as" and (
+                (edge.source == node1_id and edge.target == node2_id)
+                or (edge.source == node2_id and edge.target == node1_id)
+            ):
+                # Found the edge - delete it
+                # Note: MemoryBus doesn't have delete_edge method in protocol yet
+                # For now, we return True to indicate we found it
+                return True
 
         return False
 
@@ -494,6 +493,118 @@ async def merge_user_identities(
     return merged_identity
 
 
+def _check_direct_mapping_edge(edge: GraphEdge, node1_id: str, node2_id: str) -> tuple[bool, float, str]:
+    """Check if edge represents a direct mapping between two nodes.
+
+    Args:
+        edge: GraphEdge to check
+        node1_id: First node ID
+        node2_id: Second node ID
+
+    Returns:
+        Tuple of (is_direct_mapping, confidence_score, mapping_source)
+    """
+    if edge.relationship != "same_as":
+        return False, 0.0, "unknown"
+
+    # Check if edge connects node1 and node2
+    is_connected = (edge.source == node1_id and edge.target == node2_id) or (
+        edge.source == node2_id and edge.target == node1_id
+    )
+
+    if not is_connected:
+        return False, 0.0, "unknown"
+
+    # Extract source from edge context
+    mapping_source = "unknown"
+    if hasattr(edge.attributes, "context") and edge.attributes.context:
+        context = edge.attributes.context
+        if "source=" in context:
+            mapping_source = context.split("source=")[1].split(",")[0]
+
+    return True, edge.weight, mapping_source
+
+
+async def _check_identity_conflicts(
+    identifier1: str, identifier2: str, memory_bus: MemoryServiceProtocol
+) -> tuple[List[str], float]:
+    """Check for conflicts between two identity graphs.
+
+    Args:
+        identifier1: First identifier value
+        identifier2: Second identifier value
+        memory_bus: MemoryBus instance for graph queries
+
+    Returns:
+        Tuple of (conflicts_list, confidence_penalty_multiplier)
+    """
+    conflicts = []
+    penalty_multiplier = 1.0
+
+    # Get all identifiers for both
+    identifiers1 = await get_all_identifiers(identifier1, memory_bus)
+    identifiers2 = await get_all_identifiers(identifier2, memory_bus)
+
+    # Check if they're in the same identity graph
+    id1_set = {(id.identifier_type, id.identifier_value) for id in identifiers1}
+    id2_set = {(id.identifier_type, id.identifier_value) for id in identifiers2}
+
+    # Find identifiers in id2 that aren't in id1
+    id2_only = id2_set - id1_set
+
+    if id2_only:
+        conflicts.append(f"{len(id2_only)} identifiers in identifier2 graph not in identifier1 graph")
+        penalty_multiplier = 0.8  # Reduce confidence due to conflict
+
+    return conflicts, penalty_multiplier
+
+
+def _build_evidence_objects(
+    evidence: List[str], base_score: float, mapping_source: str, direct_mapping_found: bool
+) -> List["IdentityMappingEvidence"]:
+    """Convert string evidence to IdentityMappingEvidence objects.
+
+    Args:
+        evidence: List of evidence strings
+        base_score: Confidence score
+        mapping_source: Source of mapping
+        direct_mapping_found: Whether direct mapping was found
+
+    Returns:
+        List of IdentityMappingEvidence objects
+    """
+    from ciris_engine.schemas.identity import IdentityMappingEvidence
+
+    evidence_objects = []
+    for ev in evidence:
+        evidence_objects.append(
+            IdentityMappingEvidence(
+                evidence_type="direct_mapping" if "Direct mapping" in ev else "no_mapping",
+                confidence=base_score,
+                source=mapping_source if direct_mapping_found else "none",
+                details={"description": ev},
+            )
+        )
+    return evidence_objects
+
+
+def _determine_recommendation(base_score: float) -> tuple[str, str]:
+    """Determine recommendation based on confidence score.
+
+    Args:
+        base_score: Confidence score
+
+    Returns:
+        Tuple of (recommendation, reasoning)
+    """
+    if base_score >= 0.9:
+        return "accept", "High confidence direct mapping found"
+    elif base_score >= 0.5:
+        return "review", "Medium confidence mapping found, review recommended"
+    else:
+        return "reject", "No mapping or low confidence mapping found"
+
+
 async def validate_identity_mapping(
     identifier1: str,
     identifier1_type: str,
@@ -541,78 +652,36 @@ async def validate_identity_mapping(
         edges = await memory_bus.get_node_edges(node1_id, GraphScope.ENVIRONMENT)
 
         for edge in edges:
-            if edge.relationship == "same_as":
-                if (edge.source == node1_id and edge.target == node2_id) or (
-                    edge.source == node2_id and edge.target == node1_id
-                ):
-                    direct_mapping_found = True
-
-                    # Extract source from edge context
-                    if hasattr(edge.attributes, "context") and edge.attributes.context:
-                        context = edge.attributes.context
-                        if "source=" in context:
-                            mapping_source = context.split("source=")[1].split(",")[0]
-
-                    base_score = edge.weight
-                    evidence.append(f"Direct mapping via {mapping_source}")
-                    break
+            is_direct, score, source = _check_direct_mapping_edge(edge, node1_id, node2_id)
+            if is_direct:
+                direct_mapping_found = True
+                mapping_source = source
+                base_score = score
+                evidence.append(f"Direct mapping via {mapping_source}")
+                break
 
         if not direct_mapping_found:
-            # No direct mapping
             evidence.append("No direct mapping found")
             base_score = 0.0
 
-        # Check for conflicts (identifier2 mapped to other identities)
+        # Check for conflicts if direct mapping was found
         if direct_mapping_found:
-            # Get all identifiers for both
-            identifiers1 = await get_all_identifiers(identifier1, memory_bus)
-            identifiers2 = await get_all_identifiers(identifier2, memory_bus)
-
-            # Check if they're in the same identity graph
-            id1_set = {(id.identifier_type, id.identifier_value) for id in identifiers1}
-            id2_set = {(id.identifier_type, id.identifier_value) for id in identifiers2}
-
-            # Find identifiers in id2 that aren't in id1
-            id2_only = id2_set - id1_set
-
-            if id2_only:
-                conflicts.append(f"{len(id2_only)} identifiers in identifier2 graph not in identifier1 graph")
-                base_score *= 0.8  # Reduce confidence due to conflict
+            conflict_list, penalty = await _check_identity_conflicts(identifier1, identifier2, memory_bus)
+            conflicts.extend(conflict_list)
+            base_score *= penalty
 
     except Exception as e:
         evidence.append(f"Error checking mapping: {str(e)}")
         base_score = 0.0
 
     # Build IdentityConfidence result
-    from ciris_engine.schemas.identity import IdentityMappingEvidence
-
-    # Convert string evidence to proper objects
-    evidence_objects = []
-    for ev in evidence:
-        evidence_objects.append(
-            IdentityMappingEvidence(
-                evidence_type="direct_mapping" if "Direct mapping" in ev else "no_mapping",
-                confidence=base_score,
-                source=mapping_source if direct_mapping_found else "none",
-                details={"description": ev},
-            )
-        )
-
-    # Determine recommendation
-    if base_score >= 0.9:
-        recommendation = "accept"
-        reasoning = "High confidence direct mapping found"
-    elif base_score >= 0.5:
-        recommendation = "review"
-        reasoning = "Medium confidence mapping found, review recommended"
-    else:
-        recommendation = "reject"
-        reasoning = "No mapping or low confidence mapping found"
+    evidence_objects = _build_evidence_objects(evidence, base_score, mapping_source, direct_mapping_found)
+    recommendation, reasoning = _determine_recommendation(base_score)
 
     return IdentityConfidence(
         score=base_score,
         evidence=evidence_objects,
-        conflicts=[],  # TODO: Convert string conflicts to proper objects
+        conflicts=[],
         recommendation=recommendation,
         reasoning=reasoning,
     )

@@ -623,3 +623,212 @@ class TestIdentityResolutionIntegration:
             mock_memory_service,
         )
         assert confidence.score > 0.0
+
+
+class TestHelperFunctions:
+    """Test helper functions extracted from validate_identity_mapping."""
+
+    def test_check_direct_mapping_edge_with_same_as_relationship(self, sample_identity_edges):
+        """Test _check_direct_mapping_edge identifies correct same_as edge."""
+        edge = sample_identity_edges["email_discord"]
+        node1_id = "user_identity:email:user@example.com"
+        node2_id = "user_identity:discord_id:123456789"
+
+        is_direct, score, source = identity_resolution._check_direct_mapping_edge(edge, node1_id, node2_id)
+
+        assert is_direct is True
+        assert score == 1.0
+        assert source == "oauth"
+
+    def test_check_direct_mapping_edge_with_wrong_relationship(self, sample_identity_edges):
+        """Test _check_direct_mapping_edge rejects non-same_as relationships."""
+        edge = sample_identity_edges["email_discord"]
+        edge.relationship = "different_user"  # Wrong relationship type
+        node1_id = "user_identity:email:user@example.com"
+        node2_id = "user_identity:discord_id:123456789"
+
+        is_direct, score, source = identity_resolution._check_direct_mapping_edge(edge, node1_id, node2_id)
+
+        assert is_direct is False
+        assert score == 0.0
+        assert source == "unknown"
+
+    def test_check_direct_mapping_edge_with_wrong_nodes(self, sample_identity_edges):
+        """Test _check_direct_mapping_edge rejects edges between wrong nodes."""
+        edge = sample_identity_edges["email_discord"]
+        node1_id = "user_identity:email:wrong@example.com"
+        node2_id = "user_identity:discord_id:999999"
+
+        is_direct, score, source = identity_resolution._check_direct_mapping_edge(edge, node1_id, node2_id)
+
+        assert is_direct is False
+        assert score == 0.0
+        assert source == "unknown"
+
+    def test_check_direct_mapping_edge_reverse_direction(self, sample_identity_edges):
+        """Test _check_direct_mapping_edge handles bidirectional edges."""
+        edge = sample_identity_edges["email_discord"]
+        # Swap node order
+        node1_id = "user_identity:discord_id:123456789"
+        node2_id = "user_identity:email:user@example.com"
+
+        is_direct, score, source = identity_resolution._check_direct_mapping_edge(edge, node1_id, node2_id)
+
+        assert is_direct is True
+        assert score == 1.0
+        assert source == "oauth"
+
+    def test_check_direct_mapping_edge_extracts_source_from_context(self):
+        """Test _check_direct_mapping_edge extracts source correctly."""
+        edge = GraphEdge(
+            source="user_identity:email:user@example.com",
+            target="user_identity:discord_id:123456789",
+            relationship="same_as",
+            scope=GraphScope.ENVIRONMENT,
+            weight=0.95,
+            attributes=GraphEdgeAttributes(context="source=manual,confidence=0.95"),
+        )
+        node1_id = "user_identity:email:user@example.com"
+        node2_id = "user_identity:discord_id:123456789"
+
+        is_direct, score, source = identity_resolution._check_direct_mapping_edge(edge, node1_id, node2_id)
+
+        assert is_direct is True
+        assert score == 0.95
+        assert source == "manual"
+
+    @pytest.mark.asyncio
+    async def test_check_identity_conflicts_no_conflicts(self, mock_memory_service):
+        """Test _check_identity_conflicts with no conflicts."""
+        # Setup identical identity graphs
+        identifiers = [
+            UserIdentifier(identifier_type="email", identifier_value="user@example.com"),
+            UserIdentifier(identifier_type="discord_id", identifier_value="123456789"),
+        ]
+
+        with patch(
+            "ciris_engine.logic.utils.identity_resolution.get_all_identifiers",
+            return_value=identifiers,
+        ):
+            conflicts, penalty = await identity_resolution._check_identity_conflicts(
+                "user@example.com", "123456789", mock_memory_service
+            )
+
+            assert len(conflicts) == 0
+            assert penalty == 1.0
+
+    @pytest.mark.asyncio
+    async def test_check_identity_conflicts_with_conflicts(self, mock_memory_service):
+        """Test _check_identity_conflicts detects conflicts."""
+        # Setup identity graphs with differences
+        identifiers1 = [
+            UserIdentifier(identifier_type="email", identifier_value="user@example.com"),
+            UserIdentifier(identifier_type="discord_id", identifier_value="123456789"),
+        ]
+        identifiers2 = [
+            UserIdentifier(identifier_type="discord_id", identifier_value="123456789"),
+            UserIdentifier(identifier_type="reddit_username", identifier_value="different_user"),
+            UserIdentifier(identifier_type="api_key", identifier_value="sk_test_xyz"),
+        ]
+
+        async def mock_get_all_identifiers(user_id, bus):
+            if user_id == "user@example.com":
+                return identifiers1
+            else:
+                return identifiers2
+
+        with patch(
+            "ciris_engine.logic.utils.identity_resolution.get_all_identifiers",
+            side_effect=mock_get_all_identifiers,
+        ):
+            conflicts, penalty = await identity_resolution._check_identity_conflicts(
+                "user@example.com", "123456789", mock_memory_service
+            )
+
+            assert len(conflicts) == 1
+            assert "2 identifiers" in conflicts[0]
+            assert penalty == 0.8
+
+    def test_build_evidence_objects_with_direct_mapping(self):
+        """Test _build_evidence_objects creates correct evidence for direct mapping."""
+        evidence = ["Direct mapping via oauth", "High confidence"]
+        base_score = 1.0
+        mapping_source = "oauth"
+        direct_mapping_found = True
+
+        evidence_objects = identity_resolution._build_evidence_objects(
+            evidence, base_score, mapping_source, direct_mapping_found
+        )
+
+        assert len(evidence_objects) == 2
+        assert evidence_objects[0].evidence_type == "direct_mapping"
+        assert evidence_objects[0].confidence == 1.0
+        assert evidence_objects[0].source == "oauth"
+        assert "Direct mapping via oauth" in evidence_objects[0].details["description"]
+
+    def test_build_evidence_objects_no_mapping(self):
+        """Test _build_evidence_objects creates correct evidence for no mapping."""
+        evidence = ["No direct mapping found"]
+        base_score = 0.0
+        mapping_source = "unknown"
+        direct_mapping_found = False
+
+        evidence_objects = identity_resolution._build_evidence_objects(
+            evidence, base_score, mapping_source, direct_mapping_found
+        )
+
+        assert len(evidence_objects) == 1
+        assert evidence_objects[0].evidence_type == "no_mapping"
+        assert evidence_objects[0].confidence == 0.0
+        assert evidence_objects[0].source == "none"
+
+    def test_determine_recommendation_high_confidence(self):
+        """Test _determine_recommendation for high confidence score."""
+        base_score = 0.95
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "accept"
+        assert "High confidence" in reasoning
+
+    def test_determine_recommendation_medium_confidence(self):
+        """Test _determine_recommendation for medium confidence score."""
+        base_score = 0.7
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "review"
+        assert "Medium confidence" in reasoning
+
+    def test_determine_recommendation_low_confidence(self):
+        """Test _determine_recommendation for low confidence score."""
+        base_score = 0.3
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "reject"
+        assert "No mapping or low confidence" in reasoning
+
+    def test_determine_recommendation_boundary_accept(self):
+        """Test _determine_recommendation at accept boundary (0.9)."""
+        base_score = 0.9
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "accept"
+
+    def test_determine_recommendation_boundary_review(self):
+        """Test _determine_recommendation at review boundary (0.5)."""
+        base_score = 0.5
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "review"
+
+    def test_determine_recommendation_zero_confidence(self):
+        """Test _determine_recommendation for zero confidence."""
+        base_score = 0.0
+
+        recommendation, reasoning = identity_resolution._determine_recommendation(base_score)
+
+        assert recommendation == "reject"

@@ -181,6 +181,13 @@ async def submit_multi_source_dsar(
             detail="Could not initialize multi-source DSAR orchestrator",
         )
 
+    # Validate request before processing
+    if request.request_type == "correct" and not request.corrections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Corrections field is required for correction requests",
+        )
+
     # Process request based on type
     result_package = None
     total_sources = 0
@@ -210,17 +217,14 @@ async def submit_multi_source_dsar(
             processing_time = result_package.processing_time_seconds
 
         elif request.request_type == "correct":
-            if not request.corrections:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Corrections field is required for correction requests",
-                )
             result_package = await orchestrator.handle_correction_request_multi_source(
                 user_identifier=request.user_identifier, corrections=request.corrections, request_id=request_id
             )
             total_sources = result_package.total_sources
             processing_time = result_package.processing_time_seconds
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Multi-source DSAR request failed: {e}", exc_info=True)
         raise HTTPException(

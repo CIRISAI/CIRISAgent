@@ -79,7 +79,7 @@ class ConnectorTestResult(BaseModel):
 class ConnectorUpdateRequest(BaseModel):
     """Request to update connector configuration."""
 
-    config: Dict[str, Any] = Field(..., description="Updated configuration (partial or full)")
+    config: Optional[Dict[str, Any]] = Field(None, description="Updated configuration (partial or full)")
     enabled: Optional[bool] = Field(None, description="Whether connector should be enabled")
 
 

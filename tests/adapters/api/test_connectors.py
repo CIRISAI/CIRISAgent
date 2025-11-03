@@ -118,15 +118,20 @@ class TestRegisterSQLConnector:
     def test_register_sql_connector_requires_admin(self, client_with_auth):
         """Test that connector registration requires admin privileges."""
         # Create non-admin user
+        import bcrypt
+
         from ciris_engine.logic.adapters.api.services.auth_service import User
 
+        password_hash = bcrypt.hashpw("observer_password".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
         observer_user = User(
-            wa_id="test_observer",
+            wa_id="observer",
             name="Test Observer",
             auth_type="password",
             api_role="OBSERVER",
             created_at=datetime.now(timezone.utc),
             is_active=True,
+            password_hash=password_hash,
         )
         client_with_auth.app.state.auth_service._users[observer_user.wa_id] = observer_user
 

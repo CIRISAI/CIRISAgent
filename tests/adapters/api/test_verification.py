@@ -18,7 +18,18 @@ from ciris_engine.logic.services.governance.dsar.signature_service import (
 @pytest.fixture
 def signature_service():
     """Create real signature service for testing."""
-    return RSASignatureService()
+    from ciris_engine.logic.adapters.api.routes import verification
+
+    # Create new service
+    service = RSASignatureService()
+
+    # Inject it into the verification module's global
+    verification._signature_service = service
+
+    yield service
+
+    # Clean up after test
+    verification._signature_service = None
 
 
 @pytest.fixture

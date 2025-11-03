@@ -984,13 +984,9 @@ class SQLToolService(BaseService, ToolService):
                 timestamp = datetime.utcnow().isoformat() + "Z"
 
             # TODO: Generate Ed25519 signature via AuditService
+            # When implemented, sign: user_identifier, timestamp, zero_data_confirmed
             cryptographic_proof = None
             if sign and zero_data_confirmed:
-                proof_data = {
-                    "user_identifier": user_identifier,
-                    "timestamp": timestamp,
-                    "zero_data_confirmed": True,
-                }
                 cryptographic_proof = "TODO:Ed25519_signature"
 
             verification_result = SQLVerificationResult(

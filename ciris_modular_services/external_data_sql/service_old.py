@@ -16,7 +16,6 @@ from ciris_engine.schemas.types import JSONDict
 
 from .schemas import (
     DataLocation,
-    PrivacySchemaConfig,
     SQLAnonymizationResult,
     SQLConnectorConfig,
     SQLDeletionResult,

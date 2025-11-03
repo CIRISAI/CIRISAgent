@@ -237,37 +237,41 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
 
     Args:
         row: Database row from cursor.fetchone() or cursor.fetchall()
+            - SQLite: sqlite3.Row (supports both dict and int indexing)
+            - PostgreSQL: psycopg2.extras.RealDictRow (dict-only access)
 
     Returns:
         Dict with keys matching the original in-memory dict format
     """
-    # Get column names from the row description
-    keys = [desc[0] for desc in row.cursor_description] if hasattr(row, "cursor_description") else []
-
-    # If keys not available from row, use standard column order
-    if not keys:
-        keys = [
-            "ticket_id",
-            "request_type",
-            "email",
-            "user_identifier",
-            "details",
-            "urgent",
-            "status",
-            "submitted_at",
-            "estimated_completion",
-            "last_updated",
-            "notes",
-            "automated",
-            "access_package_json",
-            "export_package_json",
-            "created_at",
-        ]
-
-    # Create dict from row
+    # Handle both SQLite (Row) and PostgreSQL (RealDictRow)
+    # RealDictRow only supports dict-style access, so we use that for both
     result: Dict[str, Any] = {}
-    for i, key in enumerate(keys):
-        value = row[i]
+
+    # Standard column order (PostgreSQL RealDictRow will have all these keys)
+    columns = [
+        "ticket_id",
+        "request_type",
+        "email",
+        "user_identifier",
+        "details",
+        "urgent",
+        "status",
+        "submitted_at",
+        "estimated_completion",
+        "last_updated",
+        "notes",
+        "automated",
+        "access_package_json",
+        "export_package_json",
+        "created_at",
+    ]
+
+    for key in columns:
+        # Get value using dict-style access (works for both SQLite Row and PostgreSQL RealDictRow)
+        try:
+            value = row[key]
+        except (KeyError, IndexError):
+            value = None
 
         # Convert JSON strings back to dicts
         if key in ("access_package_json", "export_package_json") and value:
@@ -277,7 +281,7 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
                 result[key.replace("_json", "")] = None
         # Convert INTEGER booleans to Python bools
         elif key in ("urgent", "automated"):
-            result[key] = bool(value)
+            result[key] = bool(value) if value is not None else False
         # Skip the _json and created_at fields (created_at is internal)
         elif key.endswith("_json") or key == "created_at":
             continue

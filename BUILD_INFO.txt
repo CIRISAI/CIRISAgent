@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: a476030ccc4d
-Build Time: 2025-11-03T09:41:24.469989
-Git Commit: 9b730e3cb4735e39e6a60c0114788630f4981e0c
-Git Branch: persistent-dsar-storage
+Code Hash: d1c676e3b3a5
+Build Time: 2025-11-03T09:59:37.154561
+Git Commit: f17c8e69860f7c2240964d887bf1d12406f61787
+Git Branch: multi-source-dsar-orchestration
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

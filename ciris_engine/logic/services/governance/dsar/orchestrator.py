@@ -259,7 +259,7 @@ class DSAROrchestrator:
             ciris_export = DSARExportPackage(
                 user_id=user_identifier,
                 request_id=request_id,
-                export_format=export_format if not hasattr(export_format, "value") else export_format,
+                export_format=export_format,
                 generated_at=self._now(),
                 file_path=None,
                 file_size_bytes=0,

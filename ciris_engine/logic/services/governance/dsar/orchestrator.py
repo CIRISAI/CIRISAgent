@@ -124,7 +124,7 @@ class DSAROrchestrator:
         except Exception as e:
             logger.exception(f"Failed to get CIRIS data for {user_identifier}: {e}")
             # Create empty package as fallback
-            from ciris_engine.schemas.consent.core import DSARAccessPackage, ConsentAuditEntry
+            from ciris_engine.schemas.consent.core import ConsentAuditEntry, DSARAccessPackage
 
             ciris_data = DSARAccessPackage(
                 user_id=user_identifier,
@@ -243,7 +243,9 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-EXPORT-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source export request {request_id} for {user_identifier} (format: {export_format})")
+        logger.info(
+            f"Starting multi-source export request {request_id} for {user_identifier} (format: {export_format})"
+        )
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -500,10 +502,7 @@ class DSAROrchestrator:
                     new_value=str(new_value),
                     reason="Multi-source DSAR correction request",
                 )
-                ciris_result = await self._dsar_automation.handle_correction_request(
-                    correction_req,
-                    request_id
-                )
+                ciris_result = await self._dsar_automation.handle_correction_request(correction_req, request_id)
 
             # Track CIRIS corrections
             corrections_by_source["ciris"] = corrections
@@ -671,7 +670,7 @@ class DSAROrchestrator:
                     "user_identifier": user_identifier,
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
-                handler_name="default"
+                handler_name="default",
             )
 
             # Parse export result from ToolExecutionResult
@@ -736,7 +735,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                     "verify": verify,
                 },
-                handler_name="default"
+                handler_name="default",
             )
 
             # Parse deletion result from ToolExecutionResult
@@ -799,7 +798,7 @@ class DSAROrchestrator:
                     "user_identifier": user_identifier,
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
-                handler_name="default"
+                handler_name="default",
             )
 
             # Parse verification result from ToolExecutionResult

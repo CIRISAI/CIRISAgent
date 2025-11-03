@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Purpose**: Replace in-memory dict to prevent data loss on restart
   - **Implementation**: SQLite/PostgreSQL storage for DSAR tickets
   - **Impact**: GDPR compliance - no ticket loss during server restarts
-  - **Files**: TBD
+  - **Files**:
+    - `ciris_engine/logic/persistence/migrations/sqlite/007_add_dsar_tickets.sql`
+    - `ciris_engine/logic/persistence/migrations/postgres/007_add_dsar_tickets.sql`
+    - `ciris_engine/logic/persistence/models/dsar.py` (new)
+    - `ciris_engine/logic/adapters/api/routes/dsar.py` (modified)
 
 - **Ed25519 Deletion Verification** - Cryptographic proof of GDPR compliance
   - **Purpose**: Generate verifiable cryptographic signatures for deletion operations

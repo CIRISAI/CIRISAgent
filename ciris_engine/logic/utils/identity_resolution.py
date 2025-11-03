@@ -14,7 +14,12 @@ Architecture:
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
-from ciris_engine.schemas.identity import IdentityConfidence, UserIdentifier, UserIdentityNode
+from ciris_engine.schemas.identity import (
+    IdentityConfidence,
+    IdentityMappingEvidence,
+    UserIdentifier,
+    UserIdentityNode,
+)
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus, MemoryQuery
 
@@ -561,7 +566,7 @@ async def _check_identity_conflicts(
 
 def _build_evidence_objects(
     evidence: List[str], base_score: float, mapping_source: str, direct_mapping_found: bool
-) -> List["IdentityMappingEvidence"]:
+) -> List[IdentityMappingEvidence]:
     """Convert string evidence to IdentityMappingEvidence objects.
 
     Args:
@@ -573,8 +578,6 @@ def _build_evidence_objects(
     Returns:
         List of IdentityMappingEvidence objects
     """
-    from ciris_engine.schemas.identity import IdentityMappingEvidence
-
     evidence_objects = []
     for ev in evidence:
         evidence_objects.append(

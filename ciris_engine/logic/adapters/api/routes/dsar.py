@@ -334,8 +334,8 @@ async def submit_dsar(
         user_identifier=request.user_identifier,
         details=request.details,
         urgent=request.urgent,
-        access_package=access_package.model_dump(mode='json') if access_package else None,
-        export_package=export_package.model_dump(mode='json') if export_package else None,
+        access_package=access_package.model_dump(mode="json") if access_package else None,
+        export_package=export_package.model_dump(mode="json") if export_package else None,
     )
 
     # Log for audit trail

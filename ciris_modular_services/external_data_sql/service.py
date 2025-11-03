@@ -1016,7 +1016,9 @@ class SQLToolService(BaseService, ToolService):
                 if self._signature_manager:
                     try:
                         # Create deterministic hash of verification data
-                        verification_data = f"{user_identifier}|{timestamp}|{zero_data_confirmed}|{','.join(sorted(tables_scanned))}"
+                        verification_data = (
+                            f"{user_identifier}|{timestamp}|{zero_data_confirmed}|{','.join(sorted(tables_scanned))}"
+                        )
                         data_hash = hashlib.sha256(verification_data.encode("utf-8")).hexdigest()
 
                         # Sign the hash using RSA-PSS

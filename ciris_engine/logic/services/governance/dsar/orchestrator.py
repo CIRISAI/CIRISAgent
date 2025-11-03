@@ -11,14 +11,21 @@ For multi-source DSAR, use this orchestrator.
 """
 
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, cast
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
+from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.consent.core import DSARExportFormat
+from ciris_engine.schemas.consent.core import (
+    ConsentCategory,
+    ConsentImpactReport,
+    ConsentStatus,
+    ConsentStream,
+    DSARExportFormat,
+)
 
 from .schemas import (
     DataSourceDeletion,
@@ -109,7 +116,7 @@ class DSAROrchestrator:
         logger.info(f"Starting multi-source access request {request_id} for {user_identifier}")
 
         # Step 1: Resolve user identity across all systems
-        identity_node = await resolve_user_identity(user_identifier, self._memory_bus)
+        identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Get CIRIS internal data (fast path)
         try:
@@ -117,14 +124,33 @@ class DSAROrchestrator:
         except Exception as e:
             logger.exception(f"Failed to get CIRIS data for {user_identifier}: {e}")
             # Create empty package as fallback
-            from ciris_engine.schemas.consent.core import DSARAccessPackage
+            from ciris_engine.schemas.consent.core import DSARAccessPackage, ConsentAuditEntry
 
             ciris_data = DSARAccessPackage(
-                request_id=request_id,
                 user_id=user_identifier,
-                data_collected={},
-                total_records=0,
-                generated_at=self._now().isoformat(),
+                request_id=request_id,
+                generated_at=self._now(),
+                consent_status=ConsentStatus(
+                    user_id=user_identifier,
+                    stream=ConsentStream.TEMPORARY,
+                    categories=[],
+                    granted_at=self._now(),
+                    last_modified=self._now(),
+                ),
+                consent_history=[],
+                interaction_summary={},
+                contribution_metrics=ConsentImpactReport(
+                    user_id=user_identifier,
+                    total_interactions=0,
+                    patterns_contributed=0,
+                    users_helped=0,
+                    categories_active=[],
+                    impact_score=0.0,
+                    example_contributions=[],
+                ),
+                data_categories=[],
+                retention_periods={},
+                processing_purposes=[],
             )
 
         # Step 3: Discover and query SQL connectors
@@ -152,7 +178,7 @@ class DSAROrchestrator:
         # TODO: Implement REST connector discovery and export
 
         # Step 5: Calculate totals
-        total_records = ciris_data.total_records + sum(src.total_records for src in external_sources)
+        total_records = sum(src.total_records for src in external_sources)
         processing_time = time.time() - start_time
 
         # Step 6: Update metrics
@@ -220,7 +246,7 @@ class DSAROrchestrator:
         logger.info(f"Starting multi-source export request {request_id} for {user_identifier} (format: {export_format})")
 
         # Step 1: Resolve user identity
-        identity_node = await resolve_user_identity(user_identifier, self._memory_bus)
+        identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Get CIRIS export
         try:
@@ -231,12 +257,15 @@ class DSAROrchestrator:
             from ciris_engine.schemas.consent.core import DSARExportPackage
 
             ciris_export = DSARExportPackage(
-                request_id=request_id,
                 user_id=user_identifier,
-                export_format=export_format.value if hasattr(export_format, "value") else str(export_format),
-                data={},
-                total_size_bytes=0,
-                generated_at=self._now().isoformat(),
+                request_id=request_id,
+                export_format=export_format if not hasattr(export_format, "value") else export_format,
+                generated_at=self._now(),
+                file_path=None,
+                file_size_bytes=0,
+                record_counts={},
+                checksum="",
+                includes_readme=True,
             )
 
         # Step 3: Discover and export from SQL connectors
@@ -260,7 +289,7 @@ class DSAROrchestrator:
                 )
 
         # Step 4: Calculate total size
-        total_size_bytes = ciris_export.total_size_bytes + sum(
+        total_size_bytes = ciris_export.file_size_bytes + sum(
             len(json.dumps(src.data).encode("utf-8")) for src in external_exports
         )
         total_records = sum(src.total_records for src in external_exports)
@@ -337,7 +366,7 @@ class DSAROrchestrator:
         logger.info(f"Starting multi-source deletion request {request_id} for {user_identifier}")
 
         # Step 1: Resolve user identity
-        identity_node = await resolve_user_identity(user_identifier, self._memory_bus)
+        identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
         # TODO: This requires ConsentService.revoke_consent() access
@@ -345,12 +374,15 @@ class DSAROrchestrator:
         from ciris_engine.schemas.consent.core import DSARDeletionStatus
 
         ciris_deletion = DSARDeletionStatus(
+            ticket_id=request_id,
             user_id=user_identifier,
-            deletion_requested_at=self._now().isoformat(),
-            decay_start=self._now().isoformat(),
-            estimated_completion=self._now().isoformat(),  # TODO: Add 90 days
-            status="pending",  # Should be "decay_initiated" after consent revocation
-            notes="Multi-source deletion initiated. CIRIS 90-day decay requires ConsentService integration.",
+            decay_started=self._now(),
+            current_phase="pending",
+            completion_percentage=0.0,
+            estimated_completion=self._now() + timedelta(days=90),
+            milestones_completed=[],
+            next_milestone="identity_severed",
+            safety_patterns_retained=0,
         )
 
         # Step 3: Delete from SQL connectors with verification
@@ -448,7 +480,7 @@ class DSAROrchestrator:
         logger.info(f"Starting multi-source correction request {request_id} for {user_identifier}")
 
         # Step 1: Resolve user identity
-        identity_node = await resolve_user_identity(user_identifier, self._memory_bus)
+        identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Apply CIRIS corrections
         corrections_by_source: Dict[str, Dict[str, Any]] = {}
@@ -457,7 +489,22 @@ class DSAROrchestrator:
 
         try:
             # Apply corrections to CIRIS via DSARAutomationService
-            ciris_result = await self._dsar_automation.handle_correction_request(user_identifier, corrections)
+            from ciris_engine.schemas.consent.core import DSARCorrectionRequest
+
+            # Build correction requests for each field
+            for field_name, new_value in corrections.items():
+                correction_req = DSARCorrectionRequest(
+                    user_id=user_identifier,
+                    field_name=field_name,
+                    current_value=None,  # Could query current value first
+                    new_value=str(new_value),
+                    reason="Multi-source DSAR correction request",
+                )
+                ciris_result = await self._dsar_automation.handle_correction_request(
+                    correction_req,
+                    request_id
+                )
+
             # Track CIRIS corrections
             corrections_by_source["ciris"] = corrections
             total_corrections_applied += len(corrections)
@@ -616,16 +663,20 @@ class DSAROrchestrator:
         try:
             # Call SQL export tool via ToolBus
             tool_name = f"{connector_id}_export_user"
-            result = await self._tool_bus.call_tool(tool_name, {"user_identifier": user_identifier})
+            exec_result = await self._tool_bus.execute_tool(
+                tool_name=tool_name,
+                parameters={"user_identifier": user_identifier},
+                handler_name="default"
+            )
 
-            # Parse export result
-            if isinstance(result, dict):
-                data = result.get("data", {})
-                tables = result.get("tables_scanned", [])
-                total_records = result.get("total_records", 0)
+            # Parse export result from ToolExecutionResult
+            if exec_result.data and isinstance(exec_result.data, dict):
+                data = exec_result.data.get("data", {})
+                tables = exec_result.data.get("tables_scanned", [])
+                total_records = exec_result.data.get("total_records", 0)
             else:
                 # Fallback: treat result as data
-                data = {"export": str(result)}
+                data = {"export": str(exec_result.data) if exec_result.data else ""}
                 tables = []
                 total_records = 0
 
@@ -671,16 +722,20 @@ class DSAROrchestrator:
         try:
             # Call SQL delete tool via ToolBus
             tool_name = f"{connector_id}_delete_user"
-            delete_result = await self._tool_bus.call_tool(tool_name, {"user_identifier": user_identifier})
+            exec_result = await self._tool_bus.execute_tool(
+                tool_name=tool_name,
+                parameters={"user_identifier": user_identifier},
+                handler_name="default"
+            )
 
-            # Parse deletion result
-            if isinstance(delete_result, dict):
-                success = delete_result.get("success", False)
-                tables_affected = delete_result.get("tables_affected", [])
-                total_records_deleted = delete_result.get("total_records_deleted", 0)
+            # Parse deletion result from ToolExecutionResult
+            if exec_result.data and isinstance(exec_result.data, dict):
+                success = exec_result.data.get("success", False)
+                tables_affected = exec_result.data.get("tables_affected", [])
+                total_records_deleted = exec_result.data.get("total_records_deleted", 0)
             else:
                 # Fallback: assume success if no error
-                success = True
+                success = exec_result.success
                 tables_affected = []
                 total_records_deleted = 0
 
@@ -725,17 +780,21 @@ class DSAROrchestrator:
         try:
             # Call SQL verify_deletion tool via ToolBus
             tool_name = f"{connector_id}_verify_deletion"
-            verify_result = await self._tool_bus.call_tool(tool_name, {"user_identifier": user_identifier})
+            exec_result = await self._tool_bus.execute_tool(
+                tool_name=tool_name,
+                parameters={"user_identifier": user_identifier},
+                handler_name="default"
+            )
 
-            # Parse verification result
-            if isinstance(verify_result, dict):
-                zero_data_confirmed = verify_result.get("zero_data_confirmed", False)
+            # Parse verification result from ToolExecutionResult
+            if exec_result.data and isinstance(exec_result.data, dict):
+                zero_data_confirmed = bool(exec_result.data.get("zero_data_confirmed", False))
                 return zero_data_confirmed
-            elif isinstance(verify_result, bool):
-                return verify_result
+            elif isinstance(exec_result.data, bool):
+                return exec_result.data
             else:
                 # Fallback: assume not verified if unexpected result
-                logger.warning(f"Unexpected verification result from {connector_id}: {verify_result}")
+                logger.warning(f"Unexpected verification result from {connector_id}: {exec_result.data}")
                 return False
 
         except Exception as e:

@@ -130,7 +130,7 @@ async def test_interact_allows_when_credit_available() -> None:
         _response_events.clear()
         _message_responses.clear()
 
-    assert response.data.response == "Acknowledged"
+    assert response.data.response == "Acknowledged\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
     assert len(monitor.calls) == 1  # check_credit called
     assert len(monitor.spend_calls) == 1  # spend_credit called after check passes
 
@@ -204,7 +204,7 @@ async def test_interact_skips_credit_when_provider_missing() -> None:
         _response_events.clear()
         _message_responses.clear()
 
-    assert response.data.response == "Acknowledged"
+    assert response.data.response == "Acknowledged\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
     # No credit calls recorded when provider absent
     assert len(monitor.calls) == 0
     assert len(monitor.spend_calls) == 0
@@ -234,7 +234,7 @@ async def test_interact_admin_bypasses_credit_check() -> None:
         _message_responses.clear()
 
     # Should succeed despite credit check failure because ADMIN bypasses
-    assert response.data.response == "Acknowledged"
+    assert response.data.response == "Acknowledged\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
     # No credit calls should be made for ADMIN users
     assert len(monitor.calls) == 0
     assert len(monitor.spend_calls) == 0
@@ -263,6 +263,6 @@ async def test_interact_authority_bypasses_credit_check() -> None:
         _message_responses.clear()
 
     # Should succeed despite credit check failure
-    assert response.data.response == "Acknowledged"
+    assert response.data.response == "Acknowledged\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
     assert len(monitor.calls) == 0
     assert len(monitor.spend_calls) == 0

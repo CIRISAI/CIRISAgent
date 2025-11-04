@@ -7,11 +7,12 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class RSASignatureService:
             key_size: RSA key size in bits (default 2048)
         """
         self._key_size = key_size
-        self._current_key_pair: Optional[tuple] = None
+        self._current_key_pair: Optional[Tuple[RSAPrivateKey, RSAPublicKey]] = None
         self._public_key_id = ""
         self._key_created_at: Optional[datetime] = None
 
@@ -86,11 +87,11 @@ class RSASignatureService:
 
         _, public_key = self._current_key_pair
 
-        pem = public_key.public_bytes(
+        pem_bytes = public_key.public_bytes(
             encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
 
-        return pem.decode("utf-8")
+        return pem_bytes.decode("utf-8")
 
     def get_public_key_id(self) -> str:
         """Get current public key ID.
@@ -232,9 +233,7 @@ class RSASignatureService:
                 )
 
                 # Signature is valid
-                total_records = sum(
-                    source.get("total_records_deleted", 0) for source in proof.sources_deleted.values()
-                )
+                total_records = sum(source.get("total_records_deleted", 0) for source in proof.sources_deleted.values())
 
                 logger.info(f"Deletion proof verified successfully: {proof.deletion_id}")
 

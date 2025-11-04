@@ -153,9 +153,7 @@ def client_with_auth(test_db, mock_orchestrator):
     app.state.auth_service = auth_service
 
     # Mock services needed for orchestrator
-    with patch(
-        "ciris_engine.logic.adapters.api.routes.dsar_multi_source._initialize_orchestrator"
-    ) as mock_init:
+    with patch("ciris_engine.logic.adapters.api.routes.dsar_multi_source._initialize_orchestrator") as mock_init:
         mock_init.return_value = mock_orchestrator
         client = TestClient(app)
         client.mock_orchestrator = mock_orchestrator
@@ -443,9 +441,7 @@ class TestMultiSourceDSARIntegration:
         assert status_response.status_code == status.HTTP_200_OK
 
         # 3. Get partial results
-        partial_response = client_with_auth.get(
-            f"/v1/dsar/multi-source/{ticket_id}/partial", headers=headers
-        )
+        partial_response = client_with_auth.get(f"/v1/dsar/multi-source/{ticket_id}/partial", headers=headers)
         assert partial_response.status_code == status.HTTP_200_OK
 
     def test_orchestrator_called_with_correct_parameters(self, client_with_auth):

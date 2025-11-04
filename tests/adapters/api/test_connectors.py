@@ -65,9 +65,7 @@ class TestRegisterSQLConnector:
             },
         }
 
-        response = client_with_auth.post(
-            "/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers
-        )
+        response = client_with_auth.post("/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -88,9 +86,7 @@ class TestRegisterSQLConnector:
             },
         }
 
-        response = client_with_auth.post(
-            "/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers
-        )
+        response = client_with_auth.post("/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -109,9 +105,7 @@ class TestRegisterSQLConnector:
             },
         }
 
-        response = client_with_auth.post(
-            "/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers
-        )
+        response = client_with_auth.post("/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -142,9 +136,7 @@ class TestRegisterSQLConnector:
             "config": {"connector_name": "REST API", "base_url": "https://api.example.com"},
         }
 
-        response = client_with_auth.post(
-            "/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers
-        )
+        response = client_with_auth.post("/v1/connectors/sql", json=request_data, headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -257,9 +249,7 @@ class TestTestConnector:
 
     def test_test_nonexistent_connector_fails(self, client_with_auth):
         """Test testing non-existent connector."""
-        response = client_with_auth.post(
-            "/v1/connectors/nonexistent/test", headers=client_with_auth.auth_headers
-        )
+        response = client_with_auth.post("/v1/connectors/nonexistent/test", headers=client_with_auth.auth_headers)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 

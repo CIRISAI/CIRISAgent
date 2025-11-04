@@ -297,9 +297,7 @@ class TestVerificationIntegration:
         )
 
         # 2. Verify the deletion proof
-        verify_response = client.post(
-            "/v1/verification/deletion", json={"deletion_proof": proof.model_dump()}
-        )
+        verify_response = client.post("/v1/verification/deletion", json={"deletion_proof": proof.model_dump()})
         assert verify_response.status_code == status.HTTP_200_OK
         assert verify_response.json()["data"]["valid"] is True
 
@@ -344,9 +342,7 @@ class TestVerificationIntegration:
         assert public_page_response.status_code == status.HTTP_200_OK
 
         # User submits proof for verification
-        verify_response = client.post(
-            "/v1/verification/deletion", json={"deletion_proof": proof.model_dump()}
-        )
+        verify_response = client.post("/v1/verification/deletion", json={"deletion_proof": proof.model_dump()})
         assert verify_response.status_code == status.HTTP_200_OK
 
         # Verification result confirms deletion

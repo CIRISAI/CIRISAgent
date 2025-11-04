@@ -37,9 +37,7 @@ class SQLConnectorConfig(BaseModel):
 class ConnectorRegistrationRequest(BaseModel):
     """Request to register a new connector."""
 
-    connector_type: str = Field(
-        ..., description="Connector type: sql, rest, or hl7", pattern="^(sql|rest|hl7)$"
-    )
+    connector_type: str = Field(..., description="Connector type: sql, rest, or hl7", pattern="^(sql|rest|hl7)$")
     config: Dict[str, Any] = Field(..., description="Connector-specific configuration")
 
 
@@ -203,7 +201,9 @@ async def register_sql_connector(
     # if tool_bus:
     #     await tool_bus.register_sql_connector(connector_id, request.config)
 
-    logger.info(f"SQL connector registered: {connector_id} ({request.config['connector_name']}) by {current_user.username}")
+    logger.info(
+        f"SQL connector registered: {connector_id} ({request.config['connector_name']}) by {current_user.username}"
+    )
 
     response_data = ConnectorRegistrationResponse(
         connector_id=connector_id,
@@ -244,9 +244,11 @@ async def list_connectors(
         )
 
     # Filter by type if specified
-    connectors = _connector_registry.values()
+    connectors_iter = _connector_registry.values()
     if connector_type:
-        connectors = [c for c in connectors if c["connector_type"] == connector_type]
+        connectors = [c for c in connectors_iter if c["connector_type"] == connector_type]
+    else:
+        connectors = list(connectors_iter)
 
     # Build response
     connector_list = [

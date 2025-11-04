@@ -342,9 +342,14 @@ async def submit_dsar(
     if not persistence_success:
         import logging
 
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_email, sanitize_for_log
+
         logger = logging.getLogger(__name__)
+        # Sanitize user-controlled data before logging to prevent log injection
+        safe_email = sanitize_email(request.email)
+        safe_type = sanitize_for_log(request.request_type, max_length=50)
         logger.error(
-            f"CRITICAL: Failed to persist DSAR ticket {ticket_id} - request_type={request.request_type}, email={request.email}"
+            f"CRITICAL: Failed to persist DSAR ticket {ticket_id} - request_type={safe_type}, email={safe_email}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

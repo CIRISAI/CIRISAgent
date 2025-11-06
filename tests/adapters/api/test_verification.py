@@ -33,6 +33,18 @@ def signature_service():
 
 
 @pytest.fixture
+def client(signature_service):
+    """Create test client with injected signature service.
+
+    IMPORTANT: This fixture depends on signature_service to ensure the service
+    is injected BEFORE the app is created. This prevents the app from creating
+    its own signature service with different keys.
+    """
+    app = create_app()
+    return TestClient(app)
+
+
+@pytest.fixture
 def valid_deletion_proof(signature_service):
     """Create a valid deletion proof."""
     return signature_service.sign_deletion(
@@ -44,13 +56,6 @@ def valid_deletion_proof(signature_service):
         },
         deleted_at=datetime.now(timezone.utc),
     )
-
-
-@pytest.fixture
-def client():
-    """Create test client (no auth required for verification endpoints)."""
-    app = create_app()
-    return TestClient(app)
 
 
 class TestVerifyDeletionProof:
@@ -209,6 +214,8 @@ class TestManualSignatureVerification:
         request_data = {
             "deletion_id": valid_deletion_proof.deletion_id,
             "user_identifier": valid_deletion_proof.user_identifier,
+            "sources_deleted": valid_deletion_proof.sources_deleted,
+            "deleted_at": valid_deletion_proof.deleted_at,
             "verification_hash": valid_deletion_proof.verification_hash,
             "signature": valid_deletion_proof.signature,
             "public_key_id": valid_deletion_proof.public_key_id,
@@ -227,6 +234,8 @@ class TestManualSignatureVerification:
         request_data = {
             "deletion_id": valid_deletion_proof.deletion_id,
             "user_identifier": valid_deletion_proof.user_identifier,
+            "sources_deleted": valid_deletion_proof.sources_deleted,
+            "deleted_at": valid_deletion_proof.deleted_at,
             "verification_hash": "0" * 64,  # Wrong hash
             "signature": valid_deletion_proof.signature,
             "public_key_id": valid_deletion_proof.public_key_id,
@@ -244,6 +253,8 @@ class TestManualSignatureVerification:
         request_data = {
             "deletion_id": valid_deletion_proof.deletion_id,
             "user_identifier": valid_deletion_proof.user_identifier,
+            "sources_deleted": valid_deletion_proof.sources_deleted,
+            "deleted_at": valid_deletion_proof.deleted_at,
             "verification_hash": valid_deletion_proof.verification_hash,
             "signature": valid_deletion_proof.signature,
             "public_key_id": valid_deletion_proof.public_key_id,
@@ -316,6 +327,8 @@ class TestVerificationIntegration:
             json={
                 "deletion_id": proof.deletion_id,
                 "user_identifier": proof.user_identifier,
+                "sources_deleted": proof.sources_deleted,
+                "deleted_at": proof.deleted_at,
                 "verification_hash": proof.verification_hash,
                 "signature": proof.signature,
                 "public_key_id": proof.public_key_id,
@@ -331,8 +344,8 @@ class TestVerificationIntegration:
             deletion_id="USER-WORKFLOW-001",
             user_identifier="user@example.com",
             sources_deleted={
-                "ciris": {"records_deleted": 15, "decay_started": True},
-                "sql_db": {"records_deleted": 8, "verified": True},
+                "ciris": {"total_records_deleted": 15, "decay_started": True},
+                "sql_db": {"total_records_deleted": 8, "verified": True},
             },
             deleted_at=datetime.now(timezone.utc),
         )
@@ -374,6 +387,8 @@ class TestVerificationIntegration:
             json={
                 "deletion_id": proof.deletion_id,
                 "user_identifier": proof.user_identifier,
+                "sources_deleted": proof.sources_deleted,
+                "deleted_at": proof.deleted_at,
                 "verification_hash": proof.verification_hash,
                 "signature": proof.signature,
                 "public_key_id": proof.public_key_id,

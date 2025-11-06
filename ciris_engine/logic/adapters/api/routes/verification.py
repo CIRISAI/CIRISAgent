@@ -52,7 +52,9 @@ class ManualSignatureVerificationRequest(BaseModel):
 
     deletion_id: str = Field(..., description="Deletion request ID")
     user_identifier: str = Field(..., description="User identifier")
-    verification_hash: str = Field(..., description="SHA-256 hash")
+    sources_deleted: dict = Field(..., description="Sources and records deleted (for hash computation)")
+    deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
+    verification_hash: str = Field(..., description="SHA-256 hash to verify")
     signature: str = Field(..., description="Base64-encoded RSA signature")
     public_key_id: str = Field(..., description="Public key ID used for signing")
 
@@ -299,12 +301,12 @@ async def manual_signature_verification(
 
     signature_service = _get_signature_service(req)
 
-    # Build minimal deletion proof for verification
+    # Build deletion proof for verification with provided data
     deletion_proof = DeletionProof(
         deletion_id=request.deletion_id,
         user_identifier=request.user_identifier,
-        sources_deleted={},  # Not needed for signature check
-        deleted_at=datetime.now(timezone.utc).isoformat(),
+        sources_deleted=request.sources_deleted,
+        deleted_at=request.deleted_at,
         verification_hash=request.verification_hash,
         signature=request.signature,
         public_key_id=request.public_key_id,

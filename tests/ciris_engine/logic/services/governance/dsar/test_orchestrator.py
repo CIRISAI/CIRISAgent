@@ -18,11 +18,12 @@ class TestOrchestratorInitialization:
     """Test orchestrator initialization."""
 
     def test_init_sets_dependencies(
-        self, orchestrator, mock_time_service, mock_dsar_automation, mock_tool_bus, mock_memory_bus
+        self, orchestrator, mock_time_service, mock_dsar_automation, mock_consent_service, mock_tool_bus, mock_memory_bus
     ):
         """Test that init properly sets all dependencies."""
         assert orchestrator._time_service == mock_time_service
         assert orchestrator._dsar_automation == mock_dsar_automation
+        assert orchestrator._consent_service == mock_consent_service
         assert orchestrator._tool_bus == mock_tool_bus
         assert orchestrator._memory_bus == mock_memory_bus
 

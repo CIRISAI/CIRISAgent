@@ -145,6 +145,7 @@ def mock_dsar_automation(sample_dsar_access_package, sample_dsar_export_package,
     service.handle_access_request.return_value = sample_dsar_access_package
     service.handle_export_request.return_value = sample_dsar_export_package
     service.handle_deletion_request.return_value = sample_dsar_deletion_status
+    service.get_deletion_status.return_value = sample_dsar_deletion_status  # Added for new ConsentService integration
     service.handle_correction_request.return_value = {
         "corrections_applied": 1,
         "fields_updated": ["email"],
@@ -192,13 +193,22 @@ def mock_memory_bus():
 
 
 @pytest.fixture
-def orchestrator(mock_time_service, mock_dsar_automation, mock_tool_bus, mock_memory_bus):
+def mock_consent_service(sample_decay_status):
+    """Mock consent service with decay status."""
+    service = AsyncMock()
+    service.revoke_consent.return_value = sample_decay_status
+    return service
+
+
+@pytest.fixture
+def orchestrator(mock_time_service, mock_dsar_automation, mock_consent_service, mock_tool_bus, mock_memory_bus):
     """Create DSAR orchestrator instance with all dependencies mocked."""
     from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator
 
     return DSAROrchestrator(
         time_service=mock_time_service,
         dsar_automation=mock_dsar_automation,
+        consent_service=mock_consent_service,
         tool_bus=mock_tool_bus,
         memory_bus=mock_memory_bus,
     )

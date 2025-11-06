@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 9fa6c7a4757e
-Build Time: 2025-11-02T22:31:49.360348
-Git Commit: 76596a5b2a61e7422130dce9119bbe08f1bd3786
-Git Branch: 1.5.8
+Code Hash: ddc2e4cc7758
+Build Time: 2025-11-06T16:54:43.397432
+Git Commit: 7156566f7fdf7508298efb524d1aa53cee9c02f1
+Git Branch: multi-source-dsar-orchestration
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

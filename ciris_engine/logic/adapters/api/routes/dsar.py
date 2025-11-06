@@ -16,6 +16,13 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.persistence.models.dsar import (
+    create_dsar_ticket,
+    get_dsar_ticket,
+    list_dsar_tickets_by_email,
+    list_dsar_tickets_by_status,
+    update_dsar_ticket_status,
+)
 from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.schemas.consent.core import (
@@ -65,10 +72,6 @@ class DSARStatus(BaseModel):
     request_type: str
     last_updated: str
     notes: Optional[str] = None
-
-
-# In-memory storage for pilot (replace with database in production)
-_dsar_requests = {}
 
 
 def _initialize_services(req: Request) -> tuple[ConsentService, DSARAutomationService]:
@@ -219,49 +222,6 @@ def _calculate_estimated_completion(is_automated: bool, urgent: bool, submitted_
     return submitted_at + timedelta(days=days_to_complete)
 
 
-def _build_dsar_record(
-    ticket_id: str,
-    request: DSARRequest,
-    request_status: str,
-    submitted_at: datetime,
-    estimated_completion: datetime,
-    is_automated: bool,
-    access_package: Optional[DSARAccessPackage],
-    export_package: Optional[DSARExportPackage],
-) -> dict[str, Any]:
-    """Build DSAR record dictionary.
-
-    Args:
-        ticket_id: Unique ticket identifier
-        request: The DSAR request
-        request_status: Status of the request
-        submitted_at: Submission timestamp
-        estimated_completion: Estimated completion timestamp
-        is_automated: Whether automated
-        access_package: Access package if any
-        export_package: Export package if any
-
-    Returns:
-        DSAR record dictionary
-    """
-    return {
-        "ticket_id": ticket_id,
-        "request_type": request.request_type,
-        "email": request.email,
-        "user_identifier": request.user_identifier,
-        "details": request.details,
-        "urgent": request.urgent,
-        "status": request_status,
-        "submitted_at": submitted_at.isoformat(),
-        "estimated_completion": estimated_completion.isoformat(),
-        "last_updated": submitted_at.isoformat(),
-        "notes": None,
-        "automated": is_automated,
-        "access_package": access_package.model_dump() if access_package else None,
-        "export_package": export_package.model_dump() if export_package else None,
-    }
-
-
 def _build_response_message(
     request_type: str,
     urgent: bool,
@@ -361,17 +321,40 @@ async def submit_dsar(
 
     # Store request (mark automated requests as completed instantly)
     request_status = "completed" if is_automated and (access_package or export_package) else "pending_review"
-    dsar_record = _build_dsar_record(
-        ticket_id,
-        request,
-        request_status,
-        submitted_at,
-        estimated_completion,
-        is_automated,
-        access_package,
-        export_package,
+
+    # Store in database - CRITICAL: must succeed for GDPR compliance
+    persistence_success = create_dsar_ticket(
+        ticket_id=ticket_id,
+        request_type=request.request_type,
+        email=request.email,
+        status=request_status,
+        submitted_at=submitted_at,
+        estimated_completion=estimated_completion,
+        automated=is_automated,
+        user_identifier=request.user_identifier,
+        details=request.details,
+        urgent=request.urgent,
+        access_package=access_package.model_dump(mode="json") if access_package else None,
+        export_package=export_package.model_dump(mode="json") if export_package else None,
     )
-    _dsar_requests[ticket_id] = dsar_record
+
+    # P1: Fail the request if persistence fails (GDPR tracking requirement)
+    if not persistence_success:
+        import logging
+
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_email, sanitize_for_log
+
+        logger = logging.getLogger(__name__)
+        # Sanitize user-controlled data before logging to prevent log injection
+        safe_email = sanitize_email(request.email)
+        safe_type = sanitize_for_log(request.request_type, max_length=50)
+        logger.error(
+            f"CRITICAL: Failed to persist DSAR ticket {ticket_id} - request_type={safe_type}, email={safe_email}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist DSAR request. Request was not recorded and cannot proceed.",
+        )
 
     # Log for audit trail
     import logging
@@ -428,13 +411,12 @@ async def check_dsar_status(ticket_id: str) -> StandardResponse:
 
     Anyone with the ticket ID can check status (like a tracking number).
     """
-    if ticket_id not in _dsar_requests:
+    record = get_dsar_ticket(ticket_id)
+    if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DSAR ticket {ticket_id} not found",
         )
-
-    record = _dsar_requests[ticket_id]
 
     status_data = DSARStatus(
         ticket_id=ticket_id,
@@ -470,7 +452,13 @@ async def list_dsar_requests(
             detail="Only administrators can list DSAR requests",
         )
 
-    # Filter to show only pending requests
+    # Get pending and in-progress requests from database
+    all_pending = []
+    for status_filter in ["pending_review", "in_progress"]:
+        tickets = list_dsar_tickets_by_status(status_filter)
+        all_pending.extend(tickets)
+
+    # Format for response
     pending_requests = [
         {
             "ticket_id": r["ticket_id"],
@@ -479,8 +467,7 @@ async def list_dsar_requests(
             "urgent": r["urgent"],
             "status": r["status"],
         }
-        for r in _dsar_requests.values()
-        if r["status"] in ["pending_review", "in_progress"]
+        for r in all_pending
     ]
 
     return StandardResponse(
@@ -512,7 +499,9 @@ async def update_dsar_status(
             detail="Only administrators can update DSAR status",
         )
 
-    if ticket_id not in _dsar_requests:
+    # Check if ticket exists
+    record = get_dsar_ticket(ticket_id)
+    if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DSAR ticket {ticket_id} not found",
@@ -525,11 +514,8 @@ async def update_dsar_status(
             detail=f"Invalid status. Must be one of: {valid_statuses}",
         )
 
-    # Update the record
-    _dsar_requests[ticket_id]["status"] = new_status
-    _dsar_requests[ticket_id]["last_updated"] = datetime.now(timezone.utc).isoformat()
-    if notes:
-        _dsar_requests[ticket_id]["notes"] = notes
+    # Update the record in database
+    update_dsar_ticket_status(ticket_id, new_status, notes)
 
     # Log the update
     import logging
@@ -569,13 +555,13 @@ async def get_deletion_status(
     Anyone with the ticket ID can check status (like a tracking number).
     """
     # Verify ticket exists and is a deletion request
-    if ticket_id not in _dsar_requests:
+    record = get_dsar_ticket(ticket_id)
+    if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DSAR ticket {ticket_id} not found",
         )
 
-    record = _dsar_requests[ticket_id]
     if record["request_type"] != "delete":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

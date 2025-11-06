@@ -26,6 +26,10 @@ except ImportError:
     logger.debug("psycopg2 not available - PostgreSQL support disabled")
 
 
+# Test database path override - set by test fixtures
+_test_db_path: Optional[str] = None
+
+
 # Custom datetime adapter and converter for SQLite
 def adapt_datetime(ts: datetime) -> str:
     """Convert datetime to ISO 8601 string."""
@@ -326,7 +330,11 @@ def get_db_connection(
     """
     # Default to SQLite for backward compatibility
     if db_path is None:
-        db_path = get_sqlite_db_full_path()
+        # Check for test override first
+        if _test_db_path is not None:
+            db_path = _test_db_path
+        else:
+            db_path = get_sqlite_db_full_path()
 
     # Initialize dialect adapter based on connection string
     adapter = init_dialect(db_path)

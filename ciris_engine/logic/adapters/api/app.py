@@ -20,8 +20,10 @@ from .routes import (
     auth,
     billing,
     config,
+    connectors,
     consent,
     dsar,
+    dsar_multi_source,
     emergency,
     memory,
     partnership,
@@ -30,6 +32,7 @@ from .routes import (
     telemetry,
     transparency,
     users,
+    verification,
     wa,
 )
 
@@ -161,7 +164,10 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         auth.router,  # Authentication
         users.router,  # User management
         consent.router,  # Consent management (Consensual Evolution Protocol)
-        dsar.router,  # Data Subject Access Requests (GDPR compliance)
+        dsar.router,  # Data Subject Access Requests (GDPR compliance - single source)
+        dsar_multi_source.router,  # Multi-source DSAR (CIRIS + external databases)
+        connectors.router,  # External data connector management (SQL, REST, HL7)
+        verification.router,  # Deletion proof verification (public, no auth)
         partnership.router,  # Partnership management dashboard (admin only)
         transparency.router,  # Public transparency feed (no auth)
     ]

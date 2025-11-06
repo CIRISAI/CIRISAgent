@@ -11,8 +11,10 @@ from . import (
     auth,
     billing,
     config,
+    connectors,
     consent,
     dsar,
+    dsar_multi_source,
     emergency,
     memory,
     partnership,
@@ -21,6 +23,7 @@ from . import (
     telemetry,
     transparency,
     users,
+    verification,
     wa,
 )
 
@@ -30,8 +33,10 @@ __all__ = [
     "auth",
     "billing",
     "config",
+    "connectors",
     "consent",
     "dsar",
+    "dsar_multi_source",
     "emergency",
     "memory",
     "partnership",
@@ -40,5 +45,6 @@ __all__ = [
     "telemetry",
     "transparency",
     "users",
+    "verification",
     "wa",
 ]

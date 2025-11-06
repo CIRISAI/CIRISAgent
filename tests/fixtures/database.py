@@ -12,6 +12,8 @@ from ciris_engine.logic.persistence import initialize_database
 @pytest.fixture
 def test_db():
     """Create a temporary test database for each test."""
+    from ciris_engine.logic.persistence.db import core
+
     # Create a temporary database file
     fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
@@ -22,7 +24,11 @@ def test_db():
     # Initialize the database
     initialize_database(db_path)
 
-    # Set the persistence module to use our test database
+    # Set the core module-level test override
+    original_test_db_path = core._test_db_path
+    core._test_db_path = db_path
+
+    # Also set legacy persistence module paths for backward compatibility
     original_db_path = persistence._db_path if hasattr(persistence, "_db_path") else None
     persistence._db_path = db_path
 
@@ -38,7 +44,8 @@ def test_db():
     except:
         pass
 
-    # Restore original database path
+    # Restore original database paths
+    core._test_db_path = original_test_db_path
     if original_db_path:
         persistence._db_path = original_db_path
         if hasattr(persistence, "_init_db"):
@@ -60,6 +67,7 @@ def clean_db(test_db):
         conn.execute("DELETE FROM graph_nodes")
         conn.execute("DELETE FROM feedback_mappings")
         conn.execute("DELETE FROM audit_log")
+        conn.execute("DELETE FROM dsar_tickets")
         conn.commit()
 
     return test_db

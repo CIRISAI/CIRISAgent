@@ -2,14 +2,17 @@
 
 import hashlib
 import json
+import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from ciris_engine.logic.audit.signature_manager import AuditSignatureManager
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import TimeServiceProtocol, ToolService
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -30,6 +33,8 @@ from .schemas import (
     SQLStatsResult,
     SQLVerificationResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SQLToolService(BaseService, ToolService):
@@ -78,6 +83,11 @@ class SQLToolService(BaseService, ToolService):
         self._schema_loader = PrivacySchemaLoader()
         self._privacy_schema_path = privacy_schema_path
 
+        # Signature manager for GDPR deletion verification (RSA-PSS signatures)
+        self._signature_manager: Optional[AuditSignatureManager] = None
+        self._signature_key_path = Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "sql_deletion_keys"
+        self._signature_db_path = str(Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "ciris.db")
+
         # Result tracking and tool metadata
         self._results: Dict[str, ToolExecutionResult] = {}
         self._tool_schemas: Dict[str, ToolParameterSchema] = {}
@@ -116,6 +126,23 @@ class SQLToolService(BaseService, ToolService):
         )
         self._logger.info(f"SQLToolService has {len(self._tool_schemas)} tool schemas ready")
         self._logger.info(f"SQLToolService has {len(self._tool_info)} tool info objects ready")
+
+        # Initialize signature manager for GDPR deletion verification
+        if self._time_service:
+            try:
+                self._signature_manager = AuditSignatureManager(
+                    key_path=str(self._signature_key_path),
+                    db_path=self._signature_db_path,
+                    time_service=self._time_service,
+                )
+                self._signature_manager.initialize()
+                logger.info(f"Initialized deletion signature manager with key ID: {self._signature_manager.key_id}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize signature manager: {e}. Signatures will not be available.")
+                self._signature_manager = None
+        else:
+            logger.warning("Time service not available - deletion verification signatures unavailable")
+            self._signature_manager = None
 
         if self._config:
             # Initialize dialect
@@ -983,11 +1010,31 @@ class SQLToolService(BaseService, ToolService):
 
                 timestamp = datetime.utcnow().isoformat() + "Z"
 
-            # TODO: Generate Ed25519 signature via AuditService
-            # When implemented, sign: user_identifier, timestamp, zero_data_confirmed
+            # Generate RSA-PSS signature for GDPR Article 17 deletion verification
             cryptographic_proof = None
             if sign and zero_data_confirmed:
-                cryptographic_proof = "TODO:Ed25519_signature"
+                if self._signature_manager:
+                    try:
+                        # Create deterministic hash of verification data
+                        verification_data = (
+                            f"{user_identifier}|{timestamp}|{zero_data_confirmed}|{','.join(sorted(tables_scanned))}"
+                        )
+                        data_hash = hashlib.sha256(verification_data.encode("utf-8")).hexdigest()
+
+                        # Sign the hash using RSA-PSS
+                        signature = self._signature_manager.sign_entry(data_hash)
+                        key_id = self._signature_manager.key_id or "unknown"
+                        cryptographic_proof = f"rsa-pss:{key_id}:{signature}"
+
+                        logger.info(
+                            f"Generated deletion verification signature for {user_identifier} "
+                            f"(key: {key_id[:8]}...)"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to generate deletion verification signature: {e}")
+                        cryptographic_proof = None
+                else:
+                    logger.warning("Signature manager not available - deletion verification signature unavailable")
 
             verification_result = SQLVerificationResult(
                 success=True,

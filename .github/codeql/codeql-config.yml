@@ -1,0 +1,52 @@
+# CodeQL Configuration for GitHub Code Quality
+# This configuration limits code quality analysis to production code directories
+# Mirrors SonarCloud configuration scope: ciris_engine/ and ciris_modular_services/
+
+name: "CIRIS Code Quality Config"
+
+# Include only production code directories
+paths:
+  - ciris_engine
+  - ciris_modular_services
+
+# Exclude test files, tools, documentation, and other non-production code
+# This matches the SonarCloud exclusion pattern
+paths-ignore:
+  - tests
+  - tools
+  - CIRISGUI
+  - CIRISVoice
+  - FSD
+  - ciris_adk
+  - ciris_mypy_toolkit
+  - ciris_profiles
+  - ciris_sdk
+  - config
+  - data_archive
+  - docker
+  - docs
+  - htmlcov
+  - logs
+  - scripts
+  - deployment
+  - wyoming
+  - homeassistant-ciris
+  - '**/*.test.py'
+  - '**/*_test.py'
+  - '**/*.md'
+  - '**/*.txt'
+  - '**/*.yaml'
+  - '**/*.yml'
+  - '**/*.json'
+  - '**/*.ini'
+  - '**/*.sh'
+  - '**/*.lock'
+  - '**/*.toml'
+  - '**/Dockerfile'
+  - '**/docker-compose.yml'
+  - '**/*.sql'
+  - 'vulture_whitelist.py'
+
+# Use default CodeQL query suites for quality analysis
+queries:
+  - uses: security-and-quality

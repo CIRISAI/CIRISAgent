@@ -177,7 +177,8 @@ class TestInteractEndpoint:
             # The actual response structure from the API
             assert "data" in data
             assert "metadata" in data
-            assert data["data"]["response"] == "Hello! How can I help you?"
+            expected_response = "Hello! How can I help you?\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+            assert data["data"]["response"] == expected_response
             assert data["data"]["state"] == "WORK"
             assert "message_id" in data["data"]
             assert "processing_time_ms" in data["data"]

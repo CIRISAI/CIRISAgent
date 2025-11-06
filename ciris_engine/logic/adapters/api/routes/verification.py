@@ -4,7 +4,7 @@ Provides public verification of DSAR deletion proofs using RSA signatures.
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -52,7 +52,7 @@ class ManualSignatureVerificationRequest(BaseModel):
 
     deletion_id: str = Field(..., description="Deletion request ID")
     user_identifier: str = Field(..., description="User identifier")
-    sources_deleted: dict = Field(..., description="Sources and records deleted (for hash computation)")
+    sources_deleted: Dict[str, Any] = Field(..., description="Sources and records deleted (for hash computation)")
     deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
     verification_hash: str = Field(..., description="SHA-256 hash to verify")
     signature: str = Field(..., description="Base64-encoded RSA signature")

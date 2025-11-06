@@ -201,9 +201,14 @@ async def register_sql_connector(
     # if tool_bus:
     #     await tool_bus.register_sql_connector(connector_id, request.config)
 
-    logger.info(
-        f"SQL connector registered: {connector_id} ({request.config['connector_name']}) by {current_user.username}"
-    )
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
+
+    # Sanitize user-controlled data before logging
+    safe_connector_id = sanitize_for_log(connector_id, max_length=100)
+    safe_connector_name = sanitize_for_log(request.config.get('connector_name', 'unknown'), max_length=100)
+    safe_username = sanitize_username(current_user.username)
+
+    logger.info(f"SQL connector registered: {safe_connector_id} ({safe_connector_name}) by {safe_username}")
 
     response_data = ConnectorRegistrationResponse(
         connector_id=connector_id,
@@ -338,7 +343,10 @@ async def test_connector(
             message = f"Testing not implemented for {connector['connector_type']}"
 
     except Exception as e:
-        logger.error(f"Connector test failed for {connector_id}: {e}")
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+        safe_connector_id = sanitize_for_log(connector_id, max_length=100)
+        logger.error(f"Connector test failed for {safe_connector_id}: {e}")
         success = False
         message = f"Connection test failed: {str(e)}"
 
@@ -358,7 +366,12 @@ async def test_connector(
         tested_at=tested_at,
     )
 
-    logger.info(f"Connector {connector_id} tested by {current_user.username}: {result.message}")
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
+
+    safe_connector_id = sanitize_for_log(connector_id, max_length=100)
+    safe_username = sanitize_username(current_user.username)
+    safe_message = sanitize_for_log(result.message, max_length=200)
+    logger.info(f"Connector {safe_connector_id} tested by {safe_username}: {safe_message}")
 
     return StandardResponse(
         success=success,
@@ -415,7 +428,11 @@ async def update_connector(
     connector["last_updated"] = datetime.now(timezone.utc).isoformat()
     connector["last_updated_by"] = current_user.username
 
-    logger.info(f"Connector {connector_id} updated by {current_user.username}")
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
+
+    safe_connector_id = sanitize_for_log(connector_id, max_length=100)
+    safe_username = sanitize_username(current_user.username)
+    logger.info(f"Connector {safe_connector_id} updated by {safe_username}")
 
     return StandardResponse(
         success=True,
@@ -473,7 +490,12 @@ async def delete_connector(
     # if tool_bus:
     #     await tool_bus.unregister_connector(connector_id)
 
-    logger.warning(f"Connector {connector_id} ({connector_name}) deleted by {current_user.username}")
+    from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log, sanitize_username
+
+    safe_connector_id = sanitize_for_log(connector_id, max_length=100)
+    safe_connector_name = sanitize_for_log(connector_name, max_length=100)
+    safe_username = sanitize_username(current_user.username)
+    logger.warning(f"Connector {safe_connector_id} ({safe_connector_name}) deleted by {safe_username}")
 
     return StandardResponse(
         success=True,

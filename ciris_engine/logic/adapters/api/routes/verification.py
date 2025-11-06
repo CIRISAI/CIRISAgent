@@ -117,12 +117,17 @@ async def public_verification_page(
 
     Provides a human-readable page showing deletion proof verification.
     """
+    import html
+
+    # Sanitize user input to prevent XSS
+    safe_deletion_id = html.escape(deletion_id)
+
     # Build HTML page
     html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>DSAR Deletion Verification - {deletion_id}</title>
+        <title>DSAR Deletion Verification - {safe_deletion_id}</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
@@ -189,7 +194,7 @@ async def public_verification_page(
             <h1>🔐 GDPR Deletion Verification</h1>
 
             <div class="info">
-                <p><strong>Deletion Request ID:</strong> <code>{deletion_id}</code></p>
+                <p><strong>Deletion Request ID:</strong> <code>{safe_deletion_id}</code></p>
                 <p>This page provides cryptographic verification that your data deletion request was processed.</p>
             </div>
 
@@ -315,7 +320,10 @@ async def manual_signature_verification(
     try:
         verification_result = signature_service.verify_deletion(deletion_proof)
 
-        logger.info(f"Manual signature verification: {request.deletion_id} - Valid: {verification_result.valid}")
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+
+        safe_deletion_id = sanitize_for_log(request.deletion_id, max_length=100)
+        logger.info(f"Manual signature verification: {safe_deletion_id} - Valid: {verification_result.valid}")
 
         return StandardResponse(
             success=verification_result.valid,

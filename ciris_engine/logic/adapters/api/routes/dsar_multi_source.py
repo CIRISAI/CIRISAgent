@@ -272,9 +272,13 @@ async def submit_multi_source_dsar(
     )
 
     if not persistence_success:
+        from ciris_engine.logic.utils.log_sanitizer import sanitize_email, sanitize_for_log
+
+        safe_email = sanitize_email(request.email)
+        safe_type = sanitize_for_log(request.request_type, max_length=50)
         logger.error(
             f"CRITICAL: Failed to persist multi-source DSAR ticket {ticket_id} - "
-            f"request_type={request.request_type}, email={request.email}"
+            f"request_type={safe_type}, email={safe_email}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

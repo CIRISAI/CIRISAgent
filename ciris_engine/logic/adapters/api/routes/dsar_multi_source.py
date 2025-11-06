@@ -10,10 +10,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.persistence.models.dsar import (
-    create_dsar_ticket,
-    get_dsar_ticket,
-)
+from ciris_engine.logic.persistence.models.dsar import create_dsar_ticket, get_dsar_ticket
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator

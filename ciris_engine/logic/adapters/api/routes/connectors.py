@@ -205,7 +205,7 @@ async def register_sql_connector(
 
     # Sanitize user-controlled data before logging
     safe_connector_id = sanitize_for_log(connector_id, max_length=100)
-    safe_connector_name = sanitize_for_log(request.config.get('connector_name', 'unknown'), max_length=100)
+    safe_connector_name = sanitize_for_log(request.config.get("connector_name", "unknown"), max_length=100)
     safe_username = sanitize_username(current_user.username)
 
     logger.info(f"SQL connector registered: {safe_connector_id} ({safe_connector_name}) by {safe_username}")

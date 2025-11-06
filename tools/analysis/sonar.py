@@ -702,6 +702,19 @@ def main():
                     for sev in ["BLOCKER", "CRITICAL", "MAJOR", "MINOR", "INFO"]:
                         if sev in by_severity:
                             print(f"    {sev}: {by_severity[sev]}")
+
+                    # Show detailed issues for BLOCKER and CRITICAL
+                    print("\n📋 Critical Issues:")
+                    for issue in issues_data["issues"]:
+                        if issue["severity"] in ["BLOCKER", "CRITICAL"]:
+                            severity = issue["severity"]
+                            msg = issue.get("message", "No message")
+                            file_path = issue.get("component", "").split(":")[-1]
+                            line = issue.get("line", "?")
+                            rule = issue.get("rule", "")
+                            print(f"\n  [{severity}] {rule}")
+                            print(f"    {msg}")
+                            print(f"    {file_path}:{line}")
             except Exception as e:
                 print(f"\n❌ Issues: Could not retrieve issues ({e})")
 

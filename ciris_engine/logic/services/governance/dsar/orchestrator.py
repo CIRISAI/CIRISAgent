@@ -14,8 +14,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, cast
 
+from fastapi import HTTPException, status
+
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
+from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -44,6 +47,7 @@ class DSAROrchestrator:
 
     Coordinates multi-source data subject access requests using:
     - DSARAutomationService for CIRIS internal data
+    - ConsentService for initiating decay protocol
     - ToolBus for discovering SQL/REST/HL7 connectors
     - Identity resolution for mapping users across systems
     """
@@ -52,6 +56,7 @@ class DSAROrchestrator:
         self,
         time_service: TimeServiceProtocol,
         dsar_automation: DSARAutomationService,
+        consent_service: ConsentService,
         tool_bus: ToolBus,
         memory_bus: MemoryBus,
     ):
@@ -60,11 +65,13 @@ class DSAROrchestrator:
         Args:
             time_service: Time service for consistent timestamps
             dsar_automation: CIRIS-only DSAR automation service
+            consent_service: Consent service for revoking consent and initiating decay
             tool_bus: Tool bus for discovering external connectors
             memory_bus: Memory bus for identity resolution
         """
         self._time_service = time_service
         self._dsar_automation = dsar_automation
+        self._consent_service = consent_service
         self._tool_bus = tool_bus
         self._memory_bus = memory_bus
 
@@ -376,27 +383,38 @@ class DSAROrchestrator:
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
-        # TODO Phase 2: Integrate ConsentService.revoke_consent()
-        # This requires architectural change to DSAROrchestrator constructor
-        # Implementation:
-        # 1. Add consent_service: ConsentService parameter to __init__
-        # 2. Call await consent_service.revoke_consent(user_identifier, reason="GDPR Article 17 deletion")
-        # 3. Get actual deletion status from consent service
-        # 4. Remove placeholder status creation below
-        # For now, create a placeholder deletion status
-        from ciris_engine.schemas.consent.core import DSARDeletionStatus
+        try:
+            # Revoke consent to initiate decay protocol
+            await self._consent_service.revoke_consent(
+                user_id=user_identifier,
+                reason=f"GDPR Article 17 - Multi-source deletion request {request_id}",
+            )
+            logger.info(f"Initiated consent revocation and decay protocol for {user_identifier}")
 
-        ciris_deletion = DSARDeletionStatus(
-            ticket_id=request_id,
-            user_id=user_identifier,
-            decay_started=self._now(),
-            current_phase="pending",
-            completion_percentage=0.0,
-            estimated_completion=self._now() + timedelta(days=90),
-            milestones_completed=[],
-            next_milestone="identity_severed",
-            safety_patterns_retained=0,
-        )
+            # Get actual deletion status from DSAR automation
+            ciris_deletion = await self._dsar_automation.get_deletion_status(user_identifier, request_id)
+
+            # If no status found yet, create initial status
+            if ciris_deletion is None:
+                from ciris_engine.schemas.consent.core import DSARDeletionStatus
+
+                ciris_deletion = DSARDeletionStatus(
+                    ticket_id=request_id,
+                    user_id=user_identifier,
+                    decay_started=self._now(),
+                    current_phase="identity_severed",  # First phase of decay
+                    completion_percentage=0.0,
+                    estimated_completion=self._now() + timedelta(days=90),
+                    milestones_completed=[],
+                    next_milestone="interaction_history_purged",
+                    safety_patterns_retained=0,
+                )
+        except Exception as e:
+            logger.exception(f"Failed to initiate consent revocation for {user_identifier}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to initiate CIRIS deletion: {str(e)}",
+            ) from e
 
         # Step 3: Delete from SQL connectors with verification
         external_deletions: List[DataSourceDeletion] = []
@@ -687,8 +705,14 @@ class DSAROrchestrator:
             sources_failed=sources_failed,
             total_records_deleted=total_records_deleted,
             all_verified=all_verified,
-            initiated_at=ciris_deletion.decay_started.isoformat() if ciris_deletion.decay_started else self._now().isoformat(),
-            completed_at=self._now().isoformat() if sources_failed == 0 and ciris_deletion.completion_percentage >= 100.0 else None,
+            initiated_at=(
+                ciris_deletion.decay_started.isoformat() if ciris_deletion.decay_started else self._now().isoformat()
+            ),
+            completed_at=(
+                self._now().isoformat()
+                if sources_failed == 0 and ciris_deletion.completion_percentage >= 100.0
+                else None
+            ),
             processing_time_seconds=processing_time,
         )
 

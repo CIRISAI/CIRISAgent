@@ -105,11 +105,11 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     # Get or create services
     time_service = TimeService()
 
-    # Get or create consent manager
+    # Get or create consent service
     if hasattr(req.app.state, "consent_manager") and req.app.state.consent_manager:
-        consent_manager = req.app.state.consent_manager
+        consent_service = req.app.state.consent_manager
     else:
-        consent_manager = ConsentService(time_service=time_service)
+        consent_service = ConsentService(time_service=time_service)
 
     # Get or create DSAR automation service
     if hasattr(req.app.state, "dsar_automation") and req.app.state.dsar_automation:
@@ -117,7 +117,7 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     else:
         memory_bus = getattr(req.app.state, "memory_bus", None)
         dsar_automation = DSARAutomationService(
-            time_service=time_service, consent_service=consent_manager, memory_bus=memory_bus
+            time_service=time_service, consent_service=consent_service, memory_bus=memory_bus
         )
 
     # Get tool bus and memory bus
@@ -135,10 +135,11 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
             detail="Memory bus not available - multi-source DSAR requires memory bus",
         )
 
-    # Create orchestrator
+    # Create orchestrator with consent service
     return DSAROrchestrator(
         time_service=time_service,
         dsar_automation=dsar_automation,
+        consent_service=consent_service,
         tool_bus=tool_bus,
         memory_bus=memory_bus,
     )

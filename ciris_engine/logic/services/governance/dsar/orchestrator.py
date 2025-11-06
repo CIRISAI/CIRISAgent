@@ -175,7 +175,12 @@ class DSAROrchestrator:
                 )
 
         # Step 4: Discover and query REST connectors (future)
-        # TODO: Implement REST connector discovery and export
+        # TODO Phase 2: Implement REST connector discovery and export
+        # Implementation:
+        # 1. Call _discover_rest_connectors() to find REST API connectors
+        # 2. For each connector, call _export_from_rest(connector_id, user_identifier)
+        # 3. Aggregate REST exports into external_sources list
+        # 4. Handle errors gracefully (similar to SQL connector pattern above)
 
         # Step 5: Calculate totals
         total_records = sum(src.total_records for src in external_sources)
@@ -371,7 +376,13 @@ class DSAROrchestrator:
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
-        # TODO: This requires ConsentService.revoke_consent() access
+        # TODO Phase 2: Integrate ConsentService.revoke_consent()
+        # This requires architectural change to DSAROrchestrator constructor
+        # Implementation:
+        # 1. Add consent_service: ConsentService parameter to __init__
+        # 2. Call await consent_service.revoke_consent(user_identifier, reason="GDPR Article 17 deletion")
+        # 3. Get actual deletion status from consent service
+        # 4. Remove placeholder status creation below
         # For now, create a placeholder deletion status
         from ciris_engine.schemas.consent.core import DSARDeletionStatus
 
@@ -519,7 +530,16 @@ class DSAROrchestrator:
         sql_connectors = await self._discover_sql_connectors()
         for connector_id in sql_connectors:
             try:
-                # TODO: Implement SQL UPDATE via tool_bus
+                # TODO Phase 2: Implement SQL UPDATE via tool_bus
+                # Implementation:
+                # 1. Create sql_update_user tool that accepts corrections dict
+                # 2. Call await tool_bus.execute_tool("sql_update_user", {
+                #        "connector_id": connector_id,
+                #        "user_identifier": user_identifier,
+                #        "corrections": corrections
+                #    })
+                # 3. Parse result to determine which corrections were applied/rejected
+                # 4. Update corrections_by_source and counters accordingly
                 # For now, mark as rejected
                 corrections_by_source[connector_id] = {}
                 total_corrections_rejected += len(corrections)
@@ -574,20 +594,111 @@ class DSAROrchestrator:
 
         Returns:
             Current deletion status across all sources
-
-        TODO Implementation Steps:
-        1. Resolve user identity
-        2. Get CIRIS deletion status
-           - Call dsar_automation.get_deletion_status()
-        3. Check SQL deletion verification
-           - Use tool:sql:verify_deletion
-        4. Check REST deletion status
-           - Use tool:rest:get_deletion_status (if available)
-        5. Aggregate status
-        6. Return MultiSourceDSARDeletionResult
         """
-        # TODO: Implement multi-source deletion status checking
-        raise NotImplementedError("Multi-source DSAR deletion status checking not yet implemented")
+        import time
+
+        from ciris_engine.logic.utils.identity_resolution import resolve_user_identity
+
+        # Start timer
+        start_time = time.time()
+
+        logger.info(f"Checking multi-source deletion status for {request_id} - {user_identifier}")
+
+        # Step 1: Resolve user identity
+        identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
+
+        # Step 2: Get CIRIS deletion status
+        try:
+            ciris_deletion = await self._dsar_automation.get_deletion_status(user_identifier, request_id)
+        except Exception as e:
+            logger.exception(f"Failed to get CIRIS deletion status for {user_identifier}: {e}")
+            ciris_deletion = None
+
+        # Create fallback if no status found
+        if ciris_deletion is None:
+            from ciris_engine.schemas.consent.core import DSARDeletionStatus
+
+            ciris_deletion = DSARDeletionStatus(
+                ticket_id=request_id,
+                user_id=user_identifier,
+                decay_started=self._now(),
+                current_phase="unknown",
+                completion_percentage=0.0,
+                estimated_completion=self._now() + timedelta(days=90),
+                milestones_completed=[],
+                next_milestone="unknown",
+                safety_patterns_retained=0,
+            )
+
+        # Step 3: Check SQL deletion verification for all connectors
+        external_deletions: List[DataSourceDeletion] = []
+        sql_connectors = await self._discover_sql_connectors()
+
+        for connector_id in sql_connectors:
+            try:
+                # Verify deletion for this connector
+                verification_passed = await self._verify_deletion_sql(connector_id, user_identifier)
+
+                # Create deletion status entry
+                external_deletions.append(
+                    DataSourceDeletion(
+                        source_id=connector_id,
+                        source_type="sql",
+                        source_name=connector_id,
+                        success=verification_passed,  # If verification passed, deletion was successful
+                        total_records_deleted=0,  # Unknown - already deleted
+                        verification_passed=verification_passed,
+                        deletion_timestamp=self._now().isoformat(),
+                        errors=[] if verification_passed else ["Deletion verification failed - data still present"],
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Failed to verify deletion from SQL connector {connector_id}: {e}")
+                external_deletions.append(
+                    DataSourceDeletion(
+                        source_id=connector_id,
+                        source_type="sql",
+                        source_name=connector_id,
+                        success=False,
+                        verification_passed=False,
+                        deletion_timestamp=self._now().isoformat(),
+                        errors=[str(e)],
+                    )
+                )
+
+        # Step 4: Calculate aggregated status
+        sources_completed = sum(1 for d in external_deletions if d.success and d.verification_passed)
+        sources_failed = sum(1 for d in external_deletions if not d.success)
+        total_records_deleted = sum(d.total_records_deleted for d in external_deletions)
+        all_verified = all(d.verification_passed for d in external_deletions if d.success)
+
+        # Step 5: Calculate processing time
+        processing_time = time.time() - start_time
+
+        # Step 6: Build deletion result
+        result = MultiSourceDSARDeletionResult(
+            request_id=request_id,
+            user_identifier=user_identifier,
+            ciris_deletion=ciris_deletion,
+            external_deletions=external_deletions,
+            identity_node=identity_node,
+            total_sources=1 + len(external_deletions),
+            sources_completed=sources_completed,
+            sources_failed=sources_failed,
+            total_records_deleted=total_records_deleted,
+            all_verified=all_verified,
+            initiated_at=ciris_deletion.decay_started.isoformat() if ciris_deletion.decay_started else self._now().isoformat(),
+            completed_at=self._now().isoformat() if sources_failed == 0 and ciris_deletion.completion_percentage >= 100.0 else None,
+            processing_time_seconds=processing_time,
+        )
+
+        logger.info(
+            f"Deletion status check complete for {request_id}: "
+            f"{sources_completed}/{result.total_sources} verified, "
+            f"CIRIS at {ciris_deletion.completion_percentage:.1f}%"
+        )
+
+        return result
 
     async def _discover_sql_connectors(self) -> List[str]:
         """Discover all registered SQL connectors via ToolBus.
@@ -624,10 +735,13 @@ class DSAROrchestrator:
         Returns:
             List of REST connector IDs
 
-        TODO:
-        - Query tool_bus for tools with capability "tool:rest"
-        - Extract unique connector IDs
-        - Return list
+        TODO Phase 2: Implement REST connector discovery
+        Implementation:
+        1. Query tool_bus for tools with metadata:
+           - data_source=True, data_source_type="rest"
+        2. Extract connector_id from each service's metadata
+        3. Return list of connector IDs
+        4. Similar pattern to _discover_sql_connectors()
         """
         # TODO: Implement REST connector discovery
         raise NotImplementedError("REST connector discovery not yet implemented")
@@ -638,10 +752,15 @@ class DSAROrchestrator:
         Returns:
             List of HL7 connector IDs
 
-        TODO:
-        - Query tool_bus for tools with capability "tool:hl7"
-        - Extract unique connector IDs
-        - Return list
+        TODO Phase 2+: Implement HL7 connector discovery
+        Implementation:
+        1. Query tool_bus for tools with metadata:
+           - data_source=True, data_source_type="hl7"
+        2. Extract connector_id from each service's metadata
+        3. Return list of connector IDs
+        4. Similar pattern to _discover_sql_connectors()
+
+        Note: HL7 is a future feature and lower priority than REST
         """
         # TODO: Implement HL7 connector discovery
         raise NotImplementedError("HL7 connector discovery not yet implemented")

@@ -7,6 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2025-11-07
+
+### Added - Multi-Source DSAR Infrastructure (Phase 2)
+
+- **Message Bus Integration for DSAR Orchestration** - Tool and memory bus access in API adapter
+  - **Purpose**: Enable multi-source DSAR operations to discover and query external SQL connectors
+  - **Implementation**:
+    - Added `bus_manager` to API service configuration with special handler
+    - Created `_handle_bus_manager()` method to inject tool_bus and memory_bus into app.state
+    - Added bus placeholders in app.py for documentation
+  - **Impact**: DSAROrchestrator can now discover SQL connectors via tool_bus metadata queries
+  - **Files**:
+    - `ciris_engine/logic/adapters/api/service_configuration.py` (bus_manager mapping)
+    - `ciris_engine/logic/adapters/api/adapter.py` (_handle_bus_manager method)
+    - `ciris_engine/logic/adapters/api/app.py` (bus placeholders)
+
+- **QA Runner Automatic Module Loading** - Auto-configure adapters for multi-source tests
+  - **Purpose**: Ensure external_data_sql module loads automatically for DSAR multi-source tests
+  - **Implementation**: Added adapter auto-configuration for DSAR_MULTI_SOURCE module
+  - **Impact**: Tests now pass with proper module loading (61.5% → from 15.4%)
+  - **Files**: `tools/qa_runner/runner.py`
+
+- **Comprehensive DSAR Multi-Source QA Tests** - Full lifecycle testing for multi-source operations
+  - **Purpose**: Validate DSAR operations across CIRIS + external SQL databases
+  - **Test Coverage**:
+    - SQL connector registration and management (CRUD)
+    - Multi-source access requests (GDPR Article 15)
+    - Multi-source export requests (GDPR Article 20 - JSON/CSV formats)
+    - Multi-source deletion requests (GDPR Article 17)
+    - Connector configuration updates
+    - Test data setup with privacy schema
+  - **Files**:
+    - `tools/qa_runner/modules/dsar_multi_source_tests.py` (573 lines, 13 tests)
+    - `tools/qa_runner/test_data/dsar_multi_source_privacy_schema.yaml`
+    - `tools/qa_runner/config.py` (DSAR_MULTI_SOURCE module enum)
+
+### Fixed
+
+- **DSAR Multi-Source Test Infrastructure** - Critical fixes for test execution
+  - **Problem**: Tests failed with 401 token errors and missing module loading
+  - **Root Cause**:
+    - QA runner not loading external_data_sql module automatically
+    - Authentication token handling issues in SDK tests
+  - **Solution**:
+    - Auto-configure adapter to include `external_data_sql` for DSAR tests
+    - Fixed token refresh logic in test harness
+  - **Impact**: Test success rate improved from 15.4% (2/13) to 61.5% (8/13)
+  - **Files**: `tools/qa_runner/runner.py`, `tools/qa_runner/config.py`
+
+- **API Adapter Infrastructure Integration** - Bus availability for orchestrator
+  - **Problem**: Multi-source DSAR operations failed with "Tool bus not available" (503 errors)
+  - **Root Cause**: API adapter not injecting tool_bus and memory_bus from runtime
+  - **Solution**: Special handler extracts buses from bus_manager and injects into app.state
+  - **Impact**: Orchestrator can now discover SQL connectors and execute tool operations
+  - **Files**: `ciris_engine/logic/adapters/api/adapter.py`, `service_configuration.py`
+
+### Changed
+
+- **Authentication Service Token Validation** - Enhanced token handling with better error logging
+  - Added detailed logging for token validation failures
+  - Improved error messages for debugging authentication issues
+  - Files: `ciris_engine/logic/services/infrastructure/authentication/service.py`
+
+- **API Auth Module** - Enhanced system admin token support
+  - Improved system admin authentication flow
+  - Better token lifetime management for admin users
+  - Files: `ciris_engine/logic/adapters/api/auth.py`
+
+### Known Issues
+
+- **DSAR Multi-Source Operations Require CIRIS User** - 5/13 tests fail for users not in CIRIS
+  - **Issue**: Operations fail when user exists ONLY in external databases (not in CIRIS)
+  - **Symptom**: `ConsentNotFoundError` when trying to fetch CIRIS data
+  - **Current Behavior**: Orchestrator fails entire operation if user not in consent system
+  - **Expected Behavior**: Should continue with external-only DSAR (Sage needs to find PII everywhere)
+  - **Proposed Solution**: Task-based asynchronous DSAR processing (see `/tmp/dsar_task_based_architecture_proposal.md`)
+  - **Workaround**: Users must exist in CIRIS consent system before multi-source DSAR
+  - **Target Fix**: v1.7.0 (task-based architecture)
+
+### Technical Improvements
+
+- **Test Results Analysis**:
+  - Before Phase 2: 15.4% passing (2/13 tests)
+    - Token validation failures
+    - Module loading failures
+    - Connector registration broken
+  - After Phase 2: 61.5% passing (8/13 tests)
+    - ✅ Connector CRUD operations working
+    - ✅ Authentication working
+    - ✅ Module auto-loading working
+    - ✅ Bus integration successful
+    - ❌ 5 tests fail due to missing CIRIS user (not infrastructure issue)
+
+- **Infrastructure Validation**:
+  - ✅ Tool bus and memory bus available in API adapter
+  - ✅ No more 503 "Service not available" errors
+  - ✅ Connector registration and management functional
+  - ✅ SQL tool discovery via tool_bus metadata working
+  - ✅ Multi-source endpoints executing (reaching business logic)
+
+### Documentation
+
+- **Phase 2 Success Analysis**: Detailed analysis at `/tmp/phase2_success_analysis.md`
+- **DSAR Task-Based Architecture Proposal**: Future implementation plan at `/tmp/dsar_task_based_architecture_proposal.md`
+  - Proposed task chains for each DSAR type (ACCESS, EXPORT, DELETE, CORRECT)
+  - Asynchronous processing to handle partial failures gracefully
+  - Migration path for v1.7.0 implementation
+
+### Migration Notes
+
+- **No Breaking Changes**: All changes are additive infrastructure improvements
+- **Test Requirements**: DSAR multi-source tests require `external_data_sql` module (auto-configured)
+- **Deployment**: No configuration changes required
+
 ## [1.5.9] - 2025-11-03
 
 ### Added - GDPR Compliance Bot (Pilot Ready)

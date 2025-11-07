@@ -634,38 +634,49 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     ) -> Optional[Tuple[AuthorizationContext, Optional[datetime]]]:
         """Verify any JWT token and return auth context and expiration (internal method)."""
         try:
+            logger.debug(f"[TOKEN_VERIFY] Starting verification for token (first 20 chars): {token[:20]}...")
+
             # Decode header to get kid
             header = jwt.get_unverified_header(token)
             kid = header.get("kid")
+            logger.debug(f"[TOKEN_VERIFY] Extracted kid from header: {kid}")
 
             if not kid:
+                logger.warning("[TOKEN_VERIFY] No kid found in token header")
                 return None
 
             # Get WA by kid
             wa = await self._get_wa_by_kid(kid)
+            logger.debug(f"[TOKEN_VERIFY] WA lookup by kid result: {wa is not None}, wa_id={wa.wa_id if wa else None}")
             if not wa:
+                logger.warning(f"[TOKEN_VERIFY] No WA found for kid: {kid}")
                 return None
 
             # Try to verify with different keys/algorithms based on the issuer (kid)
             decoded = None
 
+            logger.debug("[TOKEN_VERIFY] Attempting gateway-signed token verification (HS256)")
             # First try gateway-signed tokens (most common)
             try:
                 decoded = jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
-            except jwt.InvalidTokenError:
-                pass
+                logger.debug("[TOKEN_VERIFY] Gateway verification succeeded")
+            except jwt.InvalidTokenError as e:
+                logger.debug(f"[TOKEN_VERIFY] Gateway verification failed: {type(e).__name__}")
 
             # If gateway verification failed, try WA-signed tokens
             if not decoded:
+                logger.debug("[TOKEN_VERIFY] Attempting WA-signed token verification (EdDSA)")
                 try:
                     public_key_bytes = self._decode_public_key(wa.pubkey)
                     public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
                     decoded = jwt.decode(token, public_key, algorithms=["EdDSA"])
-                except jwt.InvalidTokenError:
-                    pass
+                    logger.debug("[TOKEN_VERIFY] WA verification succeeded")
+                except jwt.InvalidTokenError as e:
+                    logger.info(f"[TOKEN_VERIFY] WA verification failed: {type(e).__name__}")
 
             # If no verification succeeded, token is invalid
             if not decoded:
+                logger.warning("[TOKEN_VERIFY] Both gateway and WA verification failed - token invalid")
                 return None
 
             # Validate sub_type and algorithm after verification
@@ -734,9 +745,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             return (context, expiration)
 
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            logger.debug(f"[TOKEN_VERIFY] JWT InvalidTokenError: {type(e).__name__}: {str(e)}")
             return None
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[TOKEN_VERIFY] Unexpected exception: {type(e).__name__}: {str(e)}", exc_info=True)
             return None
 
     # WACrypto Protocol Implementation

@@ -214,6 +214,7 @@ class QARunner:
         sdk_modules = [
             QAModule.CONSENT,
             QAModule.DSAR,
+            QAModule.DSAR_MULTI_SOURCE,
             QAModule.PARTNERSHIP,
             QAModule.BILLING,
             QAModule.BILLING_INTEGRATION,
@@ -723,6 +724,7 @@ class QARunner:
 
         from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
+        from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
 
@@ -732,6 +734,7 @@ class QARunner:
         module_map = {
             QAModule.CONSENT: ConsentTests,
             QAModule.DSAR: DSARTests,
+            QAModule.DSAR_MULTI_SOURCE: DSARMultiSourceTests,
             QAModule.PARTNERSHIP: PartnershipTests,
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,

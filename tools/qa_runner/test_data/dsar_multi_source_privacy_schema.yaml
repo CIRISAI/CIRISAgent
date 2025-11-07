@@ -1,0 +1,28 @@
+tables:
+  - table_name: users
+    identifier_column: user_id
+    cascade_deletes:
+      - orders
+    columns:
+      - column_name: email
+        data_type: email
+        is_identifier: true
+        anonymization_strategy: pseudonymize
+      - column_name: name
+        data_type: name
+        is_identifier: false
+        anonymization_strategy: pseudonymize
+      - column_name: phone
+        data_type: phone
+        is_identifier: false
+        anonymization_strategy: hash
+
+  - table_name: orders
+    identifier_column: user_id
+    columns:
+      - column_name: shipping_address
+        data_type: address
+        is_identifier: false
+        anonymization_strategy: delete
+
+global_identifier_column: user_id

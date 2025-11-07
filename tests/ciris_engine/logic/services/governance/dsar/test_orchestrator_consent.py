@@ -8,10 +8,7 @@ import pytest
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator
-from ciris_engine.logic.services.governance.dsar.schemas import (
-    DataSourceDeletion,
-    MultiSourceDSARDeletionResult,
-)
+from ciris_engine.logic.services.governance.dsar.schemas import DataSourceDeletion, MultiSourceDSARDeletionResult
 from ciris_engine.schemas.consent.core import ConsentDecayStatus, DSARDeletionStatus
 
 
@@ -97,9 +94,7 @@ class TestDSAROrchestratorConsentIntegration:
         self, orchestrator, mock_consent_service, mock_dsar_automation
     ):
         """Test that deletion request properly calls revoke_consent."""
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.handle_deletion_request_multi_source(
@@ -123,9 +118,7 @@ class TestDSAROrchestratorConsentIntegration:
     @pytest.mark.asyncio
     async def test_deletion_request_no_fake_data(self, orchestrator, mock_consent_service, mock_dsar_automation):
         """Test that deletion request never creates fake placeholder status."""
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.handle_deletion_request_multi_source(
@@ -145,9 +138,7 @@ class TestDSAROrchestratorConsentIntegration:
         # Make get_deletion_status return None
         mock_dsar_automation.get_deletion_status.return_value = None
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.handle_deletion_request_multi_source(
@@ -184,9 +175,7 @@ class TestDSAROrchestratorConsentIntegration:
 
         mock_tool_bus.execute_tool = AsyncMock(side_effect=mock_execute_tool)
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.handle_deletion_request_multi_source(
@@ -212,9 +201,7 @@ class TestDSAROrchestratorConsentIntegration:
         # Make revoke_consent fail
         mock_consent_service.revoke_consent.side_effect = Exception("Consent revocation failed")
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             # Verify HTTPException is raised
@@ -231,16 +218,12 @@ class TestGetDeletionStatusMultiSource:
     """Test get_deletion_status_multi_source implementation."""
 
     @pytest.mark.asyncio
-    async def test_get_deletion_status_returns_current_state(
-        self, orchestrator, mock_dsar_automation, mock_tool_bus
-    ):
+    async def test_get_deletion_status_returns_current_state(self, orchestrator, mock_dsar_automation, mock_tool_bus):
         """Test that get_deletion_status returns current deletion state."""
         # Mock no SQL connectors
         mock_tool_bus.get_tools_by_metadata.return_value = []
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.get_deletion_status_multi_source(
@@ -269,9 +252,7 @@ class TestGetDeletionStatusMultiSource:
         mock_verification_result.success = True
         mock_tool_bus.execute_tool = AsyncMock(return_value=mock_verification_result)
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.get_deletion_status_multi_source(
@@ -301,9 +282,7 @@ class TestGetDeletionStatusMultiSource:
         mock_verification_result.success = True
         mock_tool_bus.execute_tool = AsyncMock(return_value=mock_verification_result)
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.get_deletion_status_multi_source(
@@ -326,9 +305,7 @@ class TestGetDeletionStatusMultiSource:
         mock_dsar_automation.get_deletion_status.return_value = None
         mock_tool_bus.get_tools_by_metadata.return_value = []
 
-        with patch(
-            "ciris_engine.logic.utils.identity_resolution.resolve_user_identity"
-        ) as mock_resolve:
+        with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity") as mock_resolve:
             mock_resolve.return_value = None  # identity_node is Optional
 
             result = await orchestrator.get_deletion_status_multi_source(

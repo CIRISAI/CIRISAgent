@@ -219,6 +219,13 @@ class ApiPlatform(Service):
         self.app.state.auth_service = APIAuthService(auth_service)
         logger.info("Initialized APIAuthService with authentication service for persistence")
 
+    def _handle_bus_manager(self, bus_manager: Any) -> None:
+        """Special handler for bus manager - inject individual buses into app.state."""
+        # Inject tool_bus and memory_bus for DSAR multi-source operations
+        self.app.state.tool_bus = bus_manager.tool
+        self.app.state.memory_bus = bus_manager.memory
+        logger.info("Injected tool_bus and memory_bus from bus_manager for multi-source DSAR operations")
+
     def _setup_message_handling(self) -> None:
         """Set up message handling and correlation tracking."""
         # Store message ID to channel mapping for response routing

@@ -48,6 +48,14 @@ class QARunner:
                     "[dim]Auto-configured adapter: api,external_data_sql for SQL external data tests[/dim]"
                 )
 
+        if modules and QAModule.DSAR_MULTI_SOURCE in modules:
+            # DSAR multi-source tests need both api and external_data_sql adapters
+            if "external_data_sql" not in self.config.adapter:
+                self.config.adapter = "api,external_data_sql"
+                self.console.print(
+                    "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
+                )
+
         # Determine database backends to test
         if self.config.database_backends is None:
             self.database_backends = ["sqlite"]  # Default to SQLite only

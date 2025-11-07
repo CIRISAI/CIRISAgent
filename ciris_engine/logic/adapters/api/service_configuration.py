@@ -112,6 +112,11 @@ class ApiServiceConfiguration:
     # Infrastructure Components - Required by API endpoints but not official services
     INFRASTRUCTURE_COMPONENTS = [
         ServiceMapping("service_registry", description="Service registry for health checks and service discovery"),
+        ServiceMapping(
+            "bus_manager",
+            special_handler="_handle_bus_manager",
+            description="Bus manager for message buses (tool_bus, memory_bus, etc.)",
+        ),
     ]
 
     @classmethod

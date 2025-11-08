@@ -37,6 +37,10 @@ ToolParameters = JSONDict
 
 logger = logging.getLogger(__name__)
 
+# Error message constants to avoid duplication
+ERROR_TICKET_ID_REQUIRED = "ticket_id (str) is required"
+ERROR_FILTER_NOT_EXPOSED = "Filter operations not currently exposed"
+
 
 class CoreToolService(BaseService, ToolService):
     """Service providing core system tools (secrets, tickets, guidance)."""
@@ -153,13 +157,6 @@ class CoreToolService(BaseService, ToolService):
             if not secret_uuid_val:
                 return ToolResult(success=False, error="secret_uuid is required")
 
-            # Create context for audit
-            context = SecretContext(
-                operation="recall",
-                request_id=f"recall_{secret_uuid_val}_{self._now().timestamp()}",
-                metadata={"purpose": purpose},
-            )
-
             # Retrieve the secret
             if decrypt:
                 value = await self.secrets_service.retrieve_secret(secret_uuid_val)
@@ -193,12 +190,11 @@ class CoreToolService(BaseService, ToolService):
 
             if operation == "add_pattern":
                 pattern = params.get("pattern")
-                pattern_type = params.get("pattern_type", "regex")
                 if not pattern:
                     return ToolResult(success=False, error="pattern is required for add_pattern")
 
                 # Filter operations not directly accessible - would need to be exposed
-                return ToolResult(success=False, error="Filter operations not currently exposed")
+                return ToolResult(success=False, error=ERROR_FILTER_NOT_EXPOSED)
 
             elif operation == "remove_pattern":
                 pattern = params.get("pattern")
@@ -206,7 +202,7 @@ class CoreToolService(BaseService, ToolService):
                     return ToolResult(success=False, error="pattern is required for remove_pattern")
 
                 # Filter operations not directly accessible
-                return ToolResult(success=False, error="Filter operations not currently exposed")
+                return ToolResult(success=False, error=ERROR_FILTER_NOT_EXPOSED)
 
             elif operation == "list_patterns":
                 # Filter operations not directly accessible
@@ -214,9 +210,8 @@ class CoreToolService(BaseService, ToolService):
                 result_data.update({"patterns": patterns})
 
             elif operation == "enable":
-                enabled = params.get("enabled", True)
                 # Filter operations not directly accessible
-                return ToolResult(success=False, error="Filter operations not currently exposed")
+                return ToolResult(success=False, error=ERROR_FILTER_NOT_EXPOSED)
 
             else:
                 return ToolResult(success=False, error=f"Unknown operation: {operation}")
@@ -264,7 +259,7 @@ class CoreToolService(BaseService, ToolService):
 
             ticket_id = params.get("ticket_id")
             if not ticket_id or not isinstance(ticket_id, str):
-                return ToolResult(success=False, error="ticket_id (str) is required")
+                return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s START ticket_id={ticket_id}")
 
@@ -374,7 +369,7 @@ class CoreToolService(BaseService, ToolService):
 
             ticket_id = params.get("ticket_id")
             if not ticket_id or not isinstance(ticket_id, str):
-                return ToolResult(success=False, error="ticket_id (str) is required")
+                return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             # Use self._db_path to respect provided path or current config
             ticket = get_ticket(ticket_id, db_path=self._db_path)
@@ -405,7 +400,7 @@ class CoreToolService(BaseService, ToolService):
 
             ticket_id = params.get("ticket_id")
             if not ticket_id or not isinstance(ticket_id, str):
-                return ToolResult(success=False, error="ticket_id (str) is required")
+                return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             # Get current ticket - use self._db_path to respect provided path or current config
             current_ticket = get_ticket(ticket_id, db_path=self._db_path)

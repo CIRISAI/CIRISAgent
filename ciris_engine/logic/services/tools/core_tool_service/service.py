@@ -49,14 +49,17 @@ class CoreToolService(BaseService, ToolService):
     ) -> None:
         """Initialize with secrets service, time service, and optional db path.
 
-        NOTE: db_path is accepted for backwards compatibility but is ignored.
-        The service always uses the current database configuration from
-        get_db_connection(), which respects _test_db_path and essential_config.
+        Args:
+            secrets_service: Service for secrets management
+            time_service: Service for time operations
+            db_path: Optional database path override. When None (default),
+                    uses current config (_test_db_path or essential_config).
+                    When provided, uses this specific path for all operations.
         """
         super().__init__(time_service=time_service)
         self.secrets_service = secrets_service
-        # DO NOT store db_path - always use current config via get_db_connection(db_path=None)
-        # This ensures the service respects database changes (SQLite → PostgreSQL, test overrides, etc.)
+        # Store db_path for persistence calls - None means use current config
+        self._db_path = db_path
         self.adapter_name = "core_tools"
 
         # v1.4.3 metrics tracking
@@ -70,15 +73,13 @@ class CoreToolService(BaseService, ToolService):
         self._tool_failures = 0
 
     @property
-    def db_path(self) -> None:
-        """Backwards compatibility property for tests.
+    def db_path(self) -> Optional[str]:
+        """Get database path for persistence operations.
 
-        Returns None to ensure all persistence calls use current config.
-        Tests that access tool_service.db_path will get None, which causes
-        persistence functions to use get_db_connection(db_path=None), which
-        properly respects test database overrides via _test_db_path.
+        Returns the stored db_path if provided during initialization,
+        otherwise None to use current config (_test_db_path or essential_config).
         """
-        return None
+        return self._db_path
 
     def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
         """Track a metric with default value."""
@@ -268,8 +269,8 @@ class CoreToolService(BaseService, ToolService):
             logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s START ticket_id={ticket_id}")
 
             # Get current ticket to validate and merge metadata
-            # Use db_path=None to respect current database config (PostgreSQL, SQLite, test overrides)
-            current_ticket = get_ticket(ticket_id, db_path=None)
+            # Use self._db_path (None uses current config, otherwise uses provided path)
+            current_ticket = get_ticket(ticket_id, db_path=self._db_path)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -286,7 +287,7 @@ class CoreToolService(BaseService, ToolService):
                     return ToolResult(success=False, error="status must be a string")
                 notes = params.get("notes")
                 notes_str = str(notes) if notes is not None else None
-                success = update_ticket_status(ticket_id, new_status, notes=notes_str, db_path=None)
+                success = update_ticket_status(ticket_id, new_status, notes=notes_str, db_path=self._db_path)
                 if not success:
                     return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status")
                 result_data["updates"]["status"] = new_status
@@ -352,7 +353,7 @@ class CoreToolService(BaseService, ToolService):
 
                 logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s AFTER_MERGE merged={merged_metadata}")
 
-                success = update_ticket_metadata(ticket_id, merged_metadata, db_path=None)
+                success = update_ticket_metadata(ticket_id, merged_metadata, db_path=self._db_path)
                 logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DB_UPDATE_RESULT success={success}")
                 if not success:
                     return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} metadata")
@@ -375,8 +376,8 @@ class CoreToolService(BaseService, ToolService):
             if not ticket_id or not isinstance(ticket_id, str):
                 return ToolResult(success=False, error="ticket_id (str) is required")
 
-            # Use db_path=None to respect current database config
-            ticket = get_ticket(ticket_id, db_path=None)
+            # Use self._db_path to respect provided path or current config
+            ticket = get_ticket(ticket_id, db_path=self._db_path)
             if not ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -406,8 +407,8 @@ class CoreToolService(BaseService, ToolService):
             if not ticket_id or not isinstance(ticket_id, str):
                 return ToolResult(success=False, error="ticket_id (str) is required")
 
-            # Get current ticket - use db_path=None to respect current database config
-            current_ticket = get_ticket(ticket_id, db_path=None)
+            # Get current ticket - use self._db_path to respect provided path or current config
+            current_ticket = get_ticket(ticket_id, db_path=self._db_path)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
 
@@ -456,12 +457,14 @@ class CoreToolService(BaseService, ToolService):
                 return ToolResult(success=False, error="Must provide defer_until, defer_hours, or await_human=true")
 
             # Update ticket status to 'deferred' (prevents task generation)
-            status_success = update_ticket_status(ticket_id, "deferred", notes=f"Deferred: {reason}", db_path=None)
+            status_success = update_ticket_status(
+                ticket_id, "deferred", notes=f"Deferred: {reason}", db_path=self._db_path
+            )
             if not status_success:
                 return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status to deferred")
 
             # Update ticket metadata
-            success = update_ticket_metadata(ticket_id, current_metadata, db_path=None)
+            success = update_ticket_metadata(ticket_id, current_metadata, db_path=self._db_path)
             if not success:
                 return ToolResult(success=False, error=f"Failed to defer ticket {ticket_id}")
 
@@ -705,6 +708,9 @@ class CoreToolService(BaseService, ToolService):
                 "tickets_updated": float(self._tickets_updated),
                 "tickets_retrieved": float(self._tickets_retrieved),
                 "tickets_deferred": float(self._tickets_deferred),
+                # Backwards compatibility aliases for unit tests
+                "tickets_updated_total": float(self._tickets_updated),
+                "tickets_deferred_total": float(self._tickets_deferred),
                 "tools_enabled": 6.0,  # recall_secret, update_secrets_filter, self_help, update_ticket, get_ticket, defer_ticket
             }
         )

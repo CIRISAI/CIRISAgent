@@ -221,3 +221,136 @@ stewardship:
       result: 2
     public_key_fingerprint: sha256:c418e4f3a9cbc3b30172b76edb489e0fe50effcdf67091757c5acee9179430a8
     signature: ed25519:P0yufDewjRUZ7dKSAbEUBcML0ySlSUMMzqFFnxvW2oPc+PjAEWRebDT8VOCXeoigA9ZvWGPKRVVMUW86Bj09BA==
+tickets:
+  enabled: true
+  sops:
+  - sop: DSAR_ACCESS
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 8
+    description: GDPR Article 15 - Data Subject Access Request for user data export
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: ciris_data_collection
+      tools:
+      - dsar_automation_access
+      optional: true
+      description: Collect user data from CIRIS internal storage
+    - name: external_data_collection
+      tools:
+      - sql_find_user_data
+      - sql_export_user
+      parallel: true
+      optional: true
+      description: Collect user data from external SQL databases
+    - name: data_packaging
+      tools:
+      - package_dsar_response
+      description: Package all collected data for user delivery
+    - name: delivery
+      tools:
+      - send_email
+      description: Deliver DSAR package to user email
+  - sop: DSAR_DELETE
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 9
+    description: GDPR Article 17 - Right to Erasure (Right to be Forgotten)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: deletion_verification
+      tools:
+      - verify_deletion_eligibility
+      description: Verify user can be deleted (no legal holds, etc.)
+    - name: ciris_data_deletion
+      tools:
+      - dsar_automation_delete
+      optional: true
+      description: Delete user data from CIRIS internal storage
+    - name: external_data_deletion
+      tools:
+      - sql_delete_user
+      parallel: true
+      optional: true
+      description: Delete user data from external SQL databases
+    - name: deletion_confirmation
+      tools:
+      - send_email
+      description: Send deletion confirmation to user
+  - sop: DSAR_EXPORT
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 7
+    description: GDPR Article 20 - Right to Data Portability (machine-readable export)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: ciris_data_export
+      tools:
+      - dsar_automation_export
+      optional: true
+      description: Export user data from CIRIS in machine-readable format
+    - name: external_data_export
+      tools:
+      - sql_export_user
+      parallel: true
+      optional: true
+      description: Export user data from external SQL databases
+    - name: format_conversion
+      tools:
+      - convert_to_portable_format
+      description: Convert all data to portable format (JSON/CSV)
+    - name: delivery
+      tools:
+      - send_email
+      description: Deliver portable data package to user
+  - sop: DSAR_RECTIFY
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    - correction_details
+    deadline_days: 30
+    priority_default: 7
+    description: GDPR Article 16 - Right to Rectification (correct inaccurate data)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: data_verification
+      tools:
+      - verify_current_data
+      description: Retrieve current user data for verification
+    - name: ciris_data_correction
+      tools:
+      - update_user_data
+      optional: true
+      description: Apply corrections to CIRIS internal storage
+    - name: external_data_correction
+      tools:
+      - sql_update_user
+      parallel: true
+      optional: true
+      description: Apply corrections to external SQL databases
+    - name: correction_confirmation
+      tools:
+      - send_email
+      description: Send correction confirmation to user

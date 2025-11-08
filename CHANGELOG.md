@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Universal Ticket Status System
+
+- **Comprehensive Ticket Lifecycle Management** - Full status-based workflow control
+  - **Purpose**: Support multi-occurrence coordination and workflow state management for tickets
+  - **New Status Values**:
+    - `assigned` - Ticket claimed by specific occurrence (from PENDING)
+    - `blocked` - Requires external intervention (stops task generation)
+    - `deferred` - Postponed to future time (stops task generation)
+  - **Architecture**:
+    - Two-phase ticket discovery in WorkProcessor
+    - Phase 1: Atomic claiming of PENDING tickets with `__shared__` occurrence_id
+    - Phase 2: Continuation tasks for ASSIGNED/IN_PROGRESS tickets
+    - Status-based task generation control (BLOCKED/DEFERRED stop tasks)
+  - **Files**:
+    - `ciris_engine/logic/persistence/migrations/sqlite/009_add_ticket_status_columns.sql`
+    - `ciris_engine/logic/persistence/migrations/postgres/009_add_ticket_status_columns.sql`
+    - `ciris_engine/logic/processors/states/work_processor.py` (_discover_incomplete_tickets)
+    - `ciris_engine/logic/persistence/models/tickets.py` (update_ticket_status)
+    - `FSD/FSD_ticket_status_handling.md`
+
+- **Core Tool Service Status Management** - Enhanced ticket tools for agents
+  - **Purpose**: Provide agents with full ticket status control during task execution
+  - **Enhancements**:
+    - Updated `update_ticket` tool with 8 status values (pending/assigned/in_progress/blocked/deferred/completed/cancelled/failed)
+    - Deep merge for metadata.stages (preserves existing stage data)
+    - Automatic status="deferred" in `defer_ticket` tool
+  - **Impact**: Agents can now control task auto-generation via status changes
+  - **Files**:
+    - `ciris_engine/logic/services/tools/core_tool_service/service.py`
+
+- **Sage GDPR Agent Template Updates** - Professional DSAR automation guidance
+  - **Purpose**: Transform Sage from "wise questioner" to GDPR compliance automation agent
+  - **Changes**:
+    - Complete identity redesign for DSAR processing (Articles 15-20)
+    - Ticket processing guidance in action_selection_pdma_overrides.system_header
+    - Status management instructions (when to use blocked/deferred/completed)
+    - Task auto-generation behavior explanation
+    - Stage-based workflow processing guidance
+  - **Files**:
+    - `ciris_templates/sage.yaml`
+
+### Changed
+
+- **Multi-Occurrence Ticket Coordination** - Race-free ticket claiming
+  - **Enhancement**: PENDING tickets use `agent_occurrence_id="__shared__"` for atomic claiming
+  - **Mechanism**: WorkProcessor uses `try_claim_shared_task()` for race-free claiming
+  - **Behavior**: Only ONE occurrence successfully claims each PENDING ticket
+  - **Files**: `ciris_engine/logic/processors/states/work_processor.py`
+
+- **Ticket Status Constraint Expansion** - Support full lifecycle states
+  - **Before**: 5 states (pending/in_progress/completed/cancelled/failed)
+  - **After**: 8 states (added assigned/blocked/deferred)
+  - **Impact**: Fine-grained workflow control and task generation management
+  - **Files**: Migration 009 (both SQLite and PostgreSQL)
+
+### Documentation
+
+- **Ticket System Understanding Document** - Complete architecture reference
+  - **Purpose**: Comprehensive guide to ticket lifecycle, claiming, and status management
+  - **Content**: 7 status definitions, WorkProcessor flow, multi-occurrence coordination
+  - **Files**: `/tmp/ticket_system_understanding.md`
+
+- **Functional Specification** - Detailed implementation requirements
+  - **Purpose**: Complete technical specification for ticket status system
+  - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
+  - **Files**: `FSD/FSD_ticket_status_handling.md`
+
 ## [1.6.0] - 2025-11-07
 
 ### Added - Multi-Source DSAR Infrastructure (Phase 2)

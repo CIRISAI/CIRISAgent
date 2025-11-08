@@ -157,6 +157,8 @@ class ApiPlatform(Service):
 
         # Store adapter config for routes to access
         self.app.state.api_config = self.config
+        self.app.state.agent_template = getattr(self.runtime, "agent_template", None)
+        self.app.state.db_path = getattr(self.runtime.essential_config, "database_path", None)
         logger.info(f"Injected API config with interaction_timeout={self.config.interaction_timeout}s")
 
         # Get service mappings from declarative configuration

@@ -4,6 +4,7 @@ Main QA Runner implementation.
 
 import asyncio
 import json
+import logging
 import subprocess
 import sys
 import time
@@ -21,6 +22,8 @@ from rich.table import Table
 from .config import QAConfig, QAModule, QATestCase
 from .modules.filter_test_helper import FilterTestHelper
 from .server import APIServerManager
+
+logger = logging.getLogger(__name__)
 
 
 class QARunner:
@@ -223,6 +226,7 @@ class QARunner:
             QAModule.CONSENT,
             QAModule.DSAR,
             QAModule.DSAR_MULTI_SOURCE,
+            QAModule.DSAR_TICKET_WORKFLOW,
             QAModule.PARTNERSHIP,
             QAModule.BILLING,
             QAModule.BILLING_INTEGRATION,
@@ -382,6 +386,50 @@ class QARunner:
             logger.error(f"Error checking incidents log: {e}")
 
         return critical_errors
+
+    def _check_task_appending_warnings(self, test_name: str) -> List[str]:
+        """Check main log for task appending warnings during a specific test.
+
+        Returns list of task appending warnings found.
+        """
+        # Check database backend to determine correct log path
+        backend = getattr(self.server_manager, "database_backend", "sqlite")
+        main_log = Path(f"logs/{backend}/latest.log")
+
+        if not main_log.exists():
+            return []
+
+        warnings = []
+
+        try:
+            # Get file size to track new entries
+            current_size = main_log.stat().st_size
+
+            # Only read new entries since last check
+            if not hasattr(self, "_last_main_log_position"):
+                self._last_main_log_position = 0
+
+            if current_size > self._last_main_log_position:
+                with open(main_log, "r") as f:
+                    f.seek(self._last_main_log_position)
+
+                    for line in f:
+                        # Check for UPDATED_EXISTING_TASK pattern
+                        if "UPDATED_EXISTING_TASK" in line or "TASK UPDATE: Flagged existing task" in line:
+                            # Extract relevant info - show first 300 chars of the warning
+                            warning_msg = line.strip()[:300]
+                            warnings.append(
+                                f"[{test_name}] ⚠️ Message appended to existing active task instead of creating new task: {warning_msg}"
+                            )
+
+                self._last_main_log_position = current_size
+
+        except Exception as e:
+            # Don't fail the test run if we can't check logs
+            if self.config.verbose:
+                self.console.print(f"[yellow]⚠️  Error checking main log for task appending: {e}[/yellow]")
+
+        return warnings
 
     def _show_incidents_status(self, phase: str):
         """ALWAYS show incidents log status - prominent and mandatory."""
@@ -733,6 +781,7 @@ class QARunner:
         from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
+        from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
 
@@ -743,6 +792,7 @@ class QARunner:
             QAModule.CONSENT: ConsentTests,
             QAModule.DSAR: DSARTests,
             QAModule.DSAR_MULTI_SOURCE: DSARMultiSourceTests,
+            QAModule.DSAR_TICKET_WORKFLOW: DSARTicketWorkflowTests,
             QAModule.PARTNERSHIP: PartnershipTests,
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
@@ -807,6 +857,24 @@ class QARunner:
                     # Run with admin token
                     module_passed = asyncio.run(run_module(module))
 
+                # Check for task appending warnings after SDK module completes
+                task_warnings = self._check_task_appending_warnings(module.value)
+                if task_warnings:
+                    if self.config.verbose:
+                        self.console.print(
+                            f"[yellow]⚠️  Found {len(task_warnings)} task appending warnings during {module.value}[/yellow]"
+                        )
+                        for warning in task_warnings:
+                            self.console.print(f"[yellow]   {warning}[/yellow]")
+                    # Store warnings in the first test result for this module
+                    # (SDK modules may have multiple tests, but we track warnings at module level)
+                    module_tests = [k for k in self.results.keys() if k.startswith(f"{module.value}::")]
+                    if module_tests:
+                        first_test = module_tests[0]
+                        if "task_appending_warnings" not in self.results[first_test]:
+                            self.results[first_test]["task_appending_warnings"] = []
+                        self.results[first_test]["task_appending_warnings"].extend(task_warnings)
+
                 if not module_passed:
                     all_passed = False
             except Exception as e:
@@ -853,6 +921,17 @@ class QARunner:
                     result["incidents"] = incidents
                     if self.config.verbose:
                         self.console.print(f"[yellow]⚠️  Found {len(incidents)} incidents during {test.name}[/yellow]")
+
+                # Check for task appending warnings (messages appended to existing active tasks)
+                task_warnings = self._check_task_appending_warnings(test.name)
+                if task_warnings:
+                    result["task_appending_warnings"] = task_warnings
+                    if self.config.verbose:
+                        self.console.print(
+                            f"[yellow]⚠️  Found {len(task_warnings)} task appending warnings during {test.name}[/yellow]"
+                        )
+                        for warning in task_warnings:
+                            self.console.print(f"[yellow]   {warning}[/yellow]")
 
                 if not passed:
                     all_passed = False

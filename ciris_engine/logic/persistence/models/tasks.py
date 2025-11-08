@@ -571,7 +571,13 @@ def get_active_task_for_channel(
             cursor.execute(sql, (channel_id, TaskStatus.ACTIVE.value, occurrence_id))
             row = cursor.fetchone()
             if row:
-                return map_row_to_task(row)
+                task = map_row_to_task(row)
+                logger.info(
+                    f"[GET_ACTIVE_TASK] Found active task for channel {channel_id}: task_id={task.task_id}, description={task.description[:100] if task.description else 'N/A'}"
+                )
+                return task
+            else:
+                logger.info(f"[GET_ACTIVE_TASK] No active task found for channel {channel_id}")
             return None
     except Exception as e:
         logger.exception(f"Failed to get active task for channel {channel_id} occurrence {occurrence_id}: {e}")

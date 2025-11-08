@@ -69,6 +69,17 @@ class CoreToolService(BaseService, ToolService):
         self._tool_executions = 0
         self._tool_failures = 0
 
+    @property
+    def db_path(self) -> None:
+        """Backwards compatibility property for tests.
+
+        Returns None to ensure all persistence calls use current config.
+        Tests that access tool_service.db_path will get None, which causes
+        persistence functions to use get_db_connection(db_path=None), which
+        properly respects test database overrides via _test_db_path.
+        """
+        return None
+
     def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
         """Track a metric with default value."""
         return self._metrics_tracking.get(metric_name, default)

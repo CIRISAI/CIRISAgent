@@ -1,8 +1,10 @@
-"""DSAR Ticket Persistence Layer
+"""DSAR Ticket Persistence Layer - Compatibility Wrapper
 
-This module provides database operations for DSAR (Data Subject Access Request) tickets.
-It replaces the in-memory dict storage to ensure GDPR compliance by persisting tickets
-across server restarts.
+This module provides backwards-compatible wrappers for DSAR operations.
+As of migration 008, DSAR tickets are part of the universal tickets system.
+
+This module exists for backwards compatibility and delegates to tickets.py.
+New code should use tickets.py directly.
 
 GDPR Requirements:
 - Article 15 (Access): 30-day response window - tickets must survive restarts
@@ -11,20 +13,56 @@ GDPR Requirements:
 - Article 20 (Portability): Track export requests
 
 Architecture:
-- Uses get_db_connection for database-agnostic operations (SQLite/PostgreSQL)
-- Stores access_package and export_package as JSON text
-- Boolean fields stored as INTEGER (0/1) for SQLite compatibility
-- Timestamps stored as TEXT (ISO8601) for cross-database compatibility
+- DSAR is now part of the universal tickets system (migration 008)
+- This module provides backwards-compatible wrappers
+- Translates old DSAR API to new tickets API
 """
 
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.persistence.db import get_db_connection
+from .tickets import create_ticket, get_ticket, list_tickets, update_ticket_status
 
 logger = logging.getLogger(__name__)
+
+
+def _request_type_to_sop(request_type: str) -> str:
+    """Map old request_type to new SOP identifier."""
+    mapping = {
+        "access": "DSAR_ACCESS",
+        "delete": "DSAR_DELETE",
+        "export": "DSAR_EXPORT",
+        "correct": "DSAR_RECTIFY",
+    }
+    return mapping.get(request_type.lower(), "DSAR_ACCESS")
+
+
+def _old_status_to_new(old_status: str) -> str:
+    """Map old status names to new universal ticket status."""
+    mapping = {
+        "pending_review": "pending",
+        "in_progress": "in_progress",
+        "completed": "completed",
+        "rejected": "cancelled",
+    }
+    return mapping.get(old_status, "pending")
+
+
+def _new_status_to_old(new_status: str) -> str:
+    """Map new status names back to old DSAR status for compatibility."""
+    mapping = {
+        "pending": "pending_review",
+        "assigned": "in_progress",  # Map assigned to in_progress for backwards compat
+        "in_progress": "in_progress",
+        "completed": "completed",
+        "cancelled": "rejected",
+        "failed": "rejected",
+        "blocked": "in_progress",  # Map blocked to in_progress
+        "deferred": "pending_review",  # Map deferred to pending_review
+    }
+    return mapping.get(new_status, "pending_review")
 
 
 def create_dsar_ticket(
@@ -44,6 +82,8 @@ def create_dsar_ticket(
 ) -> bool:
     """Create a new DSAR ticket in the database.
 
+    Backwards-compatible wrapper that delegates to create_ticket().
+
     Args:
         ticket_id: Unique ticket identifier (format: DSAR-YYYYMMDD-XXXXXX)
         request_type: Type of request (access|delete|export|correct)
@@ -62,66 +102,74 @@ def create_dsar_ticket(
     Returns:
         True if ticket was created successfully, False otherwise
     """
-    sql = """
-        INSERT INTO dsar_tickets (
-            ticket_id, request_type, email, user_identifier, details, urgent,
-            status, submitted_at, estimated_completion, last_updated, automated,
-            access_package_json, export_package_json
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
+    # Map old parameters to new
+    sop = _request_type_to_sop(request_type)
+    new_status = _old_status_to_new(status)
+    priority = 9 if urgent else 5
 
-    params = (
-        ticket_id,
-        request_type,
-        email,
-        user_identifier,
-        details,
-        1 if urgent else 0,  # Convert bool to int for SQLite
-        status,
-        submitted_at.isoformat(),
-        estimated_completion.isoformat(),
-        submitted_at.isoformat(),  # last_updated = submitted_at initially
-        1 if automated else 0,  # Convert bool to int for SQLite
-        json.dumps(access_package) if access_package else None,
-        json.dumps(export_package) if export_package else None,
+    # Build metadata from legacy fields
+    metadata = {
+        "legacy_request_type": request_type,
+        "legacy_details": details or "",
+        "access_package": access_package,
+        "export_package": export_package,
+        "stages": {},
+    }
+
+    # Delegate to new API
+    return create_ticket(
+        ticket_id=ticket_id,
+        sop=sop,
+        ticket_type="dsar",
+        email=email,
+        status=new_status,
+        priority=priority,
+        user_identifier=user_identifier,
+        submitted_at=submitted_at,
+        deadline=estimated_completion,
+        metadata=metadata,
+        notes=details,
+        automated=automated,
+        db_path=db_path,
     )
-
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
-        logger.info(f"Created DSAR ticket {ticket_id} (type: {request_type}, status: {status})")
-        return True
-    except Exception as e:
-        logger.exception(f"Failed to create DSAR ticket {ticket_id}: {e}")
-        return False
 
 
 def get_dsar_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Retrieve a DSAR ticket by ID.
+
+    Backwards-compatible wrapper that delegates to get_ticket().
 
     Args:
         ticket_id: Unique ticket identifier
         db_path: Optional database path override
 
     Returns:
-        Dict containing ticket data, or None if not found
+        Dict containing ticket data in old format, or None if not found
     """
-    sql = "SELECT * FROM dsar_tickets WHERE ticket_id = ?"
-
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (ticket_id,))
-            row = cursor.fetchone()
-
-            if row:
-                return _row_to_dict(row)
-            return None
-    except Exception as e:
-        logger.exception(f"Failed to retrieve DSAR ticket {ticket_id}: {e}")
+    ticket = get_ticket(ticket_id, db_path=db_path)
+    if not ticket:
         return None
+
+    # Transform to old format
+    metadata = ticket.get("metadata", {})
+
+    return {
+        "ticket_id": ticket["ticket_id"],
+        "request_type": metadata.get("legacy_request_type", ticket["sop"].replace("DSAR_", "").lower()),
+        "email": ticket["email"],
+        "user_identifier": ticket.get("user_identifier"),
+        "details": metadata.get("legacy_details") or ticket.get("notes"),
+        "urgent": ticket.get("priority", 5) >= 9,
+        "status": _new_status_to_old(ticket["status"]),
+        "submitted_at": ticket["submitted_at"],
+        "estimated_completion": ticket.get("deadline"),
+        "last_updated": ticket["last_updated"],
+        "notes": ticket.get("notes"),
+        "automated": ticket.get("automated", False),
+        "access_package": metadata.get("access_package"),
+        "export_package": metadata.get("export_package"),
+        "created_at": ticket.get("created_at"),
+    }
 
 
 def update_dsar_ticket_status(
@@ -132,6 +180,8 @@ def update_dsar_ticket_status(
 ) -> bool:
     """Update the status and notes of a DSAR ticket.
 
+    Backwards-compatible wrapper that delegates to update_ticket_status().
+
     Args:
         ticket_id: Unique ticket identifier
         new_status: New status (pending_review|in_progress|completed|rejected)
@@ -141,37 +191,13 @@ def update_dsar_ticket_status(
     Returns:
         True if update was successful, False otherwise
     """
-    # Build SQL dynamically based on whether notes are provided
-    params: Tuple[str, ...]
-    if notes:
-        sql = """
-            UPDATE dsar_tickets
-            SET status = ?, notes = ?, last_updated = ?
-            WHERE ticket_id = ?
-        """
-        params = (new_status, notes, datetime.now(timezone.utc).isoformat(), ticket_id)
-    else:
-        sql = """
-            UPDATE dsar_tickets
-            SET status = ?, last_updated = ?
-            WHERE ticket_id = ?
-        """
-        params = (new_status, datetime.now(timezone.utc).isoformat(), ticket_id)
-
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-
-            if cursor.rowcount > 0:
-                logger.info(f"Updated DSAR ticket {ticket_id} status to {new_status}")
-                return True
-            else:
-                logger.warning(f"DSAR ticket {ticket_id} not found for status update")
-                return False
-    except Exception as e:
-        logger.exception(f"Failed to update DSAR ticket {ticket_id}: {e}")
-        return False
+    mapped_status = _old_status_to_new(new_status)
+    return update_ticket_status(
+        ticket_id=ticket_id,
+        new_status=mapped_status,
+        notes=notes,
+        db_path=db_path,
+    )
 
 
 def list_dsar_tickets_by_status(
@@ -180,30 +206,27 @@ def list_dsar_tickets_by_status(
 ) -> List[Dict[str, Any]]:
     """List DSAR tickets, optionally filtered by status.
 
+    Backwards-compatible wrapper that delegates to list_tickets().
+
     Args:
         status: Optional status filter (pending_review|in_progress|completed|rejected)
         db_path: Optional database path override
 
     Returns:
-        List of ticket dicts sorted by submission date (newest first)
+        List of ticket dicts in old format, sorted by submission date (newest first)
     """
-    params: Tuple[str, ...]
-    if status:
-        sql = "SELECT * FROM dsar_tickets WHERE status = ? ORDER BY submitted_at DESC"
-        params = (status,)
-    else:
-        sql = "SELECT * FROM dsar_tickets ORDER BY submitted_at DESC"
-        params = ()
+    # Map old status to new if provided
+    new_status = _old_status_to_new(status) if status else None
 
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            return [_row_to_dict(row) for row in rows]
-    except Exception as e:
-        logger.exception(f"Failed to list DSAR tickets (status={status}): {e}")
-        return []
+    # Get tickets from new API
+    tickets = list_tickets(
+        ticket_type="dsar",
+        status=new_status,
+        db_path=db_path,
+    )
+
+    # Transform each ticket to old format
+    return [_transform_ticket_to_old_format(t) for t in tickets]
 
 
 def list_dsar_tickets_by_email(
@@ -212,80 +235,53 @@ def list_dsar_tickets_by_email(
 ) -> List[Dict[str, Any]]:
     """List DSAR tickets for a specific email address.
 
+    Backwards-compatible wrapper that delegates to list_tickets().
+
     Args:
         email: Email address to search for
         db_path: Optional database path override
 
     Returns:
-        List of ticket dicts sorted by submission date (newest first)
+        List of ticket dicts in old format, sorted by submission date (newest first)
     """
-    sql = "SELECT * FROM dsar_tickets WHERE email = ? ORDER BY submitted_at DESC"
+    tickets = list_tickets(
+        ticket_type="dsar",
+        email=email,
+        db_path=db_path,
+    )
 
-    try:
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (email,))
-            rows = cursor.fetchall()
-            return [_row_to_dict(row) for row in rows]
-    except Exception as e:
-        logger.exception(f"Failed to list DSAR tickets for email {email}: {e}")
-        return []
+    return [_transform_ticket_to_old_format(t) for t in tickets]
+
+
+def _transform_ticket_to_old_format(ticket: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a ticket from new format to old DSAR format."""
+    metadata = ticket.get("metadata", {})
+
+    return {
+        "ticket_id": ticket["ticket_id"],
+        "request_type": metadata.get("legacy_request_type", ticket["sop"].replace("DSAR_", "").lower()),
+        "email": ticket["email"],
+        "user_identifier": ticket.get("user_identifier"),
+        "details": metadata.get("legacy_details") or ticket.get("notes"),
+        "urgent": ticket.get("priority", 5) >= 9,
+        "status": _new_status_to_old(ticket["status"]),
+        "submitted_at": ticket["submitted_at"],
+        "estimated_completion": ticket.get("deadline"),
+        "last_updated": ticket["last_updated"],
+        "notes": ticket.get("notes"),
+        "automated": ticket.get("automated", False),
+        "access_package": metadata.get("access_package"),
+        "export_package": metadata.get("export_package"),
+        "created_at": ticket.get("created_at"),
+    }
 
 
 def _row_to_dict(row: Any) -> Dict[str, Any]:
-    """Convert a database row to a dict matching the original _dsar_requests format.
+    """Deprecated - kept for backwards compatibility.
 
-    Args:
-        row: Database row from cursor.fetchone() or cursor.fetchall()
-            - SQLite: sqlite3.Row (supports both dict and int indexing)
-            - PostgreSQL: psycopg2.extras.RealDictRow (dict-only access)
-
-    Returns:
-        Dict with keys matching the original in-memory dict format
+    This function is no longer used as the module now delegates to tickets.py.
     """
-    # Handle both SQLite (Row) and PostgreSQL (RealDictRow)
-    # RealDictRow only supports dict-style access, so we use that for both
-    result: Dict[str, Any] = {}
-
-    # Standard column order (PostgreSQL RealDictRow will have all these keys)
-    columns = [
-        "ticket_id",
-        "request_type",
-        "email",
-        "user_identifier",
-        "details",
-        "urgent",
-        "status",
-        "submitted_at",
-        "estimated_completion",
-        "last_updated",
-        "notes",
-        "automated",
-        "access_package_json",
-        "export_package_json",
-        "created_at",
-    ]
-
-    for key in columns:
-        # Get value using dict-style access (works for both SQLite Row and PostgreSQL RealDictRow)
-        try:
-            value = row[key]
-        except (KeyError, IndexError):
-            value = None
-
-        # Convert JSON strings back to dicts
-        if key in ("access_package_json", "export_package_json") and value:
-            try:
-                result[key.replace("_json", "")] = json.loads(value)
-            except (json.JSONDecodeError, TypeError):
-                result[key.replace("_json", "")] = None
-        # Convert INTEGER booleans to Python bools
-        elif key in ("urgent", "automated"):
-            result[key] = bool(value) if value is not None else False
-        # Skip the _json and created_at fields (created_at is internal)
-        elif key.endswith("_json") or key == "created_at":
-            continue
-        else:
-            result[key] = value
-
-    return result
+    raise NotImplementedError(
+        "This function is deprecated. Use get_dsar_ticket() instead, "
+        "which delegates to the new tickets API."
+    )

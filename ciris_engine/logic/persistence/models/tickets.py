@@ -436,6 +436,16 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
         # Skip created_at (internal only)
         elif key == "created_at":
             continue
+        # Convert datetime objects to ISO strings (PostgreSQL TIMESTAMP → string for API)
+        elif key in ("submitted_at", "deadline", "last_updated", "completed_at"):
+            if value is None:
+                result[key] = None
+            elif isinstance(value, datetime):
+                # PostgreSQL returns datetime objects
+                result[key] = value.isoformat()
+            else:
+                # SQLite returns ISO strings already
+                result[key] = value
         else:
             result[key] = value
 

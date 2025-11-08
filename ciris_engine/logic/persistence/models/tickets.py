@@ -103,7 +103,7 @@ def create_ticket(
         submitted_at_str,  # last_updated = submitted_at initially
         json.dumps(metadata or {}),
         notes,
-        1 if automated else 0,  # Convert bool to int for SQLite
+        automated,  # Pass boolean directly - db adapter handles dialect conversion
         correlation_id,
         agent_occurrence_id,
     )

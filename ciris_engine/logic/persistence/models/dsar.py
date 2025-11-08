@@ -282,6 +282,5 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
     This function is no longer used as the module now delegates to tickets.py.
     """
     raise NotImplementedError(
-        "This function is deprecated. Use get_dsar_ticket() instead, "
-        "which delegates to the new tickets API."
+        "This function is deprecated. Use get_dsar_ticket() instead, " "which delegates to the new tickets API."
     )

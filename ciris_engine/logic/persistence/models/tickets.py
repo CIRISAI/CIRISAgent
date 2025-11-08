@@ -138,7 +138,15 @@ def get_ticket(ticket_id: str, db_path: Optional[str] = None) -> Optional[Dict[s
             row = cursor.fetchone()
 
             if row:
-                return _row_to_dict(row)
+                logger.debug(f"get_ticket: Retrieved row for {ticket_id}, row type: {type(row)}")
+                try:
+                    result = _row_to_dict(row)
+                    logger.debug(f"get_ticket: Converted to dict for {ticket_id}")
+                    return result
+                except Exception as convert_error:
+                    logger.exception(f"get_ticket: Failed to convert row to dict for {ticket_id}: {convert_error}")
+                    raise
+            logger.debug(f"get_ticket: No row found for {ticket_id}")
             return None
     except Exception as e:
         logger.exception(f"Failed to retrieve ticket {ticket_id}: {e}")
@@ -410,14 +418,17 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
     for key in columns:
         try:
             value = row[key]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError) as e:
+            logger.debug(f"_row_to_dict: Key {key} not found in row, using None. Error: {e}")
             value = None
 
         # Parse JSON metadata
         if key == "metadata" and value:
             try:
+                # PostgreSQL JSONB returns dict, SQLite returns string
                 result[key] = json.loads(value) if isinstance(value, str) else value
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"_row_to_dict: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}")
                 result[key] = {}
         # Convert INTEGER booleans to Python bools (SQLite)
         elif key == "automated":

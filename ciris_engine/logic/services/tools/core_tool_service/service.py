@@ -445,9 +445,7 @@ class CoreToolService(BaseService, ToolService):
                 return ToolResult(success=False, error="Must provide defer_until, defer_hours, or await_human=true")
 
             # Update ticket status to 'deferred' (prevents task generation)
-            status_success = update_ticket_status(
-                ticket_id, "deferred", notes=f"Deferred: {reason}", db_path=None
-            )
+            status_success = update_ticket_status(ticket_id, "deferred", notes=f"Deferred: {reason}", db_path=None)
             if not status_success:
                 return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status to deferred")
 

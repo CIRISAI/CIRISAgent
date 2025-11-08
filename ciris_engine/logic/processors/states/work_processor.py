@@ -425,7 +425,7 @@ class WorkProcessor(BaseProcessor):
                 # We check by task_id prefix instead of context since context may not contain ticket_id after serialization
                 from ciris_engine.logic.persistence.db import get_db_connection
 
-                sql = "SELECT COUNT(*) FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
+                sql = "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
                 task_prefix = f"TICKET-{ticket_id}-%"
 
                 try:
@@ -435,7 +435,10 @@ class WorkProcessor(BaseProcessor):
                             sql,
                             (task_prefix, self.agent_occurrence_id, TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
                         )
-                        count = cursor.fetchone()[0]
+                        row = cursor.fetchone()
+                        # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
+                        # Access by key for compatibility with both
+                        count = row['count'] if isinstance(row, dict) else row[0]
                         has_task = count > 0
                 except Exception as e:
                     logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")

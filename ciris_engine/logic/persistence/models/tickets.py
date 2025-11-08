@@ -428,7 +428,9 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
                 # PostgreSQL JSONB returns dict, SQLite returns string
                 result[key] = json.loads(value) if isinstance(value, str) else value
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"_row_to_dict: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}")
+                logger.warning(
+                    f"_row_to_dict: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}"
+                )
                 result[key] = {}
         # Convert INTEGER booleans to Python bools (SQLite)
         elif key == "automated":

@@ -39,6 +39,7 @@ class TestJWTAuthentication:
         """Test fallback to development mode when auth service not available."""
         request = Mock(spec=Request)
         request.app.state.authentication_service = None
+        request.app.state.auth_service = None  # Must also set API auth service to None
 
         result = await get_current_user(request, "test_token")
 
@@ -57,6 +58,8 @@ class TestJWTAuthentication:
             if hasattr(request.app.state, "authentication_service")
             else None
         )
+        # Also ensure auth_service is None (not a Mock)
+        request.app.state.auth_service = None
 
         result = await get_current_user(request, "test_token")
 

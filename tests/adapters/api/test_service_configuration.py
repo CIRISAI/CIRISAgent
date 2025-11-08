@@ -61,7 +61,7 @@ class TestApiServiceConfiguration:
         assert len(ApiServiceConfiguration.GOVERNANCE_SERVICES) == 4
         assert len(ApiServiceConfiguration.RUNTIME_SERVICES) == 2
         assert len(ApiServiceConfiguration.TOOL_SERVICES) == 1
-        assert len(ApiServiceConfiguration.INFRASTRUCTURE_COMPONENTS) == 1
+        assert len(ApiServiceConfiguration.INFRASTRUCTURE_COMPONENTS) == 2  # service_registry + bus_manager
 
     def test_get_current_mappings_as_tuples(self):
         """Test the get_current_mappings_as_tuples method."""
@@ -69,7 +69,7 @@ class TestApiServiceConfiguration:
 
         # Should return list of tuples
         assert isinstance(mappings, list)
-        assert len(mappings) == 23  # 22 core services + 1 infrastructure component (service_registry)
+        assert len(mappings) == 24  # 22 core services + 2 infrastructure components (service_registry, bus_manager)
 
         # Check tuple format
         for mapping in mappings:

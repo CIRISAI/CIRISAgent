@@ -438,7 +438,7 @@ class WorkProcessor(BaseProcessor):
                         row = cursor.fetchone()
                         # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
                         # Access by key for compatibility with both
-                        count = row['count'] if isinstance(row, dict) else row[0]
+                        count = row["count"] if isinstance(row, dict) else row[0]
                         has_task = count > 0
                 except Exception as e:
                     logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")

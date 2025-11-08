@@ -67,7 +67,7 @@ def clean_db(test_db):
         conn.execute("DELETE FROM graph_nodes")
         conn.execute("DELETE FROM feedback_mappings")
         conn.execute("DELETE FROM audit_log")
-        conn.execute("DELETE FROM dsar_tickets")
+        conn.execute("DELETE FROM tickets")  # Renamed from dsar_tickets in migration 008
         conn.commit()
 
     return test_db

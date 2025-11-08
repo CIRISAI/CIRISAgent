@@ -327,8 +327,6 @@ class WorkProcessor(BaseProcessor):
                 ticket_sop = ticket.get("sop", "UNKNOWN")
                 current_stage = ticket_metadata.get("current_stage", "starting")
 
-                seed_thought_content = f"TICKET {ticket_id} IS NOT COMPLETE (SOP: {ticket_sop}, Stage: {current_stage})"
-
                 task_context = {
                     "ticket_id": ticket_id,
                     "ticket_sop": ticket_sop,

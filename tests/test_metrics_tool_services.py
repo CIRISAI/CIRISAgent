@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from ciris_engine.logic.services.tools.secrets_tool_service import SecretsToolService
+from ciris_engine.logic.services.tools.core_tool_service import SecretsToolService
 from ciris_engine.schemas.adapters.tools import ToolResult
 from ciris_engine.schemas.services.core.secrets import SecretContext
 from tests.test_metrics_base import BaseMetricsTest

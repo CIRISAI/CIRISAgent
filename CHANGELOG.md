@@ -110,6 +110,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `tools/qa_runner/test_data/dsar_multi_source_privacy_schema.yaml`
     - `tools/qa_runner/config.py` (DSAR_MULTI_SOURCE module enum)
 
+- **Comprehensive DSAR Ticket Workflow QA Tests** - Complete ticket lifecycle testing
+  - **Purpose**: Validate DSAR ticket operations with status management, stage progression, and tool integration
+  - **Test Coverage** (14 tests, 100% pass rate):
+    - Ticket creation with SOP enforcement
+    - Status transitions (pending → assigned → in_progress → completed/blocked/deferred)
+    - Metadata updates with deep merging (preserves existing stage data)
+    - Stage-by-stage progression tracking (4 stages)
+    - Ticket blocking, deferral, completion, and failure tools
+    - Concurrent metadata updates (rapid sequential updates)
+    - Multi-stage workflow orchestration
+  - **Key Features**:
+    - Mock LLM `$tool` syntax for deterministic testing
+    - Polling pattern for database confirmation
+    - Race condition detection and prevention (15s+ delays between operations)
+    - Task appending warning detection in QA runner
+  - **Files**:
+    - `tools/qa_runner/modules/dsar_ticket_workflow_tests.py` (965 lines, 14 tests)
+    - `tools/qa_runner/runner.py` (_check_task_appending_warnings method)
+    - `ciris_engine/logic/services/tools/core_tool_service/service.py` (debug logging)
+    - `ciris_engine/logic/persistence/models/tickets.py` (debug logging)
+
 ### Fixed
 
 - **DSAR Multi-Source Test Infrastructure** - Critical fixes for test execution
@@ -130,6 +151,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Orchestrator can now discover SQL connectors and execute tool operations
   - **Files**: `ciris_engine/logic/adapters/api/adapter.py`, `service_configuration.py`
 
+- **DSAR Ticket Workflow Race Condition** - Messages appending to existing active tasks
+  - **Problem**: Sequential tool commands failed with 55-second timeout ("Still processing. Check back later")
+  - **Root Cause**: Messages appended to existing ACTIVE tasks as "observations" instead of creating new tasks
+    - Tasks take ~10.5 seconds to complete
+    - `get_active_task_for_channel()` finds active tasks and appends messages
+    - Returns `MessageHandlingStatus.UPDATED_EXISTING_TASK`
+    - New tool commands don't execute, causing timeout
+  - **Solution**:
+    - 15-second delay after `defer_ticket` execution (task takes ~10.5s)
+    - 20-second delay between stage progression iterations
+    - Added UPDATED_EXISTING_TASK warning detection in QA runner
+  - **Impact**: 100% test pass rate (14/14 tests)
+  - **Files**:
+    - `tools/qa_runner/modules/dsar_ticket_workflow_tests.py`
+    - `tools/qa_runner/runner.py`
+
+- **Type Annotation Issues in Tickets Routes** - Mypy type safety improvements
+  - **Problem**: 5 mypy errors in `ciris_engine/logic/adapters/api/routes/tickets.py`
+  - **Solution**:
+    - Added `Optional[TicketsConfig]` return type to `_get_agent_tickets_config()`
+    - Fixed `dict` → `Dict[str, Any]` type annotations in `deep_merge()`
+    - Added proper type: ignore comments
+  - **Impact**: Clean mypy across 592 source files
+  - **Files**: `ciris_engine/logic/adapters/api/routes/tickets.py`
+
 ### Changed
 
 - **Authentication Service Token Validation** - Enhanced token handling with better error logging
@@ -141,6 +187,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved system admin authentication flow
   - Better token lifetime management for admin users
   - Files: `ciris_engine/logic/adapters/api/auth.py`
+
+- **Debug Logging Configuration** - Production-ready logging levels
+  - Changed 17 verbose debug log statements from INFO → DEBUG level
+    - 12 in `ciris_engine/logic/services/tools/core_tool_service/service.py`
+    - 5 in `ciris_engine/logic/persistence/models/tickets.py`
+  - Logs include detailed timestamp tracking for ticket operations
+  - Debug logs only enabled when LOG_LEVEL=DEBUG
+  - Files:
+    - `ciris_engine/logic/services/tools/core_tool_service/service.py`
+    - `ciris_engine/logic/persistence/models/tickets.py`
 
 ### Known Issues
 

@@ -699,12 +699,12 @@ class CoreToolService(BaseService, ToolService):
         metrics.update(
             {
                 "core_tool_invocations": float(self._request_count),
-                "secrets_tool_retrieved": float(self._secrets_retrieved),
-                "secrets_tool_stored": 0.0,  # This service only retrieves, never stores
-                "tickets_updated_total": float(self._tickets_updated),
-                "tickets_retrieved_total": float(self._tickets_retrieved),
-                "tickets_deferred_total": float(self._tickets_deferred),
                 "core_tool_uptime_seconds": uptime_seconds,
+                "secrets_retrieved": float(self._secrets_retrieved),
+                "secrets_stored": 0.0,  # This service only retrieves, never stores
+                "tickets_updated": float(self._tickets_updated),
+                "tickets_retrieved": float(self._tickets_retrieved),
+                "tickets_deferred": float(self._tickets_deferred),
                 "tools_enabled": 6.0,  # recall_secret, update_secrets_filter, self_help, update_ticket, get_ticket, defer_ticket
             }
         )

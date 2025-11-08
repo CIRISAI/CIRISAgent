@@ -74,7 +74,14 @@ def create_ticket(
 
     # Handle both datetime objects and ISO strings
     submitted_at_str = submitted_at.isoformat() if isinstance(submitted_at, datetime) else submitted_at
-    deadline_str = deadline.isoformat() if isinstance(deadline, datetime) else deadline if deadline else None
+
+    # Convert deadline to string format
+    if deadline is None:
+        deadline_str = None
+    elif isinstance(deadline, datetime):
+        deadline_str = deadline.isoformat()
+    else:
+        deadline_str = deadline
 
     # Default agent_occurrence_id to __shared__ so tickets can be claimed
     if agent_occurrence_id is None:

@@ -7,6 +7,15 @@ from .correlations import (
     update_correlation,
 )
 from .deferral import get_deferral_report_context, save_deferral_report_mapping
+
+# Backwards compatibility - DSAR functions now use universal tickets table
+from .dsar import (
+    create_dsar_ticket,
+    get_dsar_ticket,
+    list_dsar_tickets_by_email,
+    list_dsar_tickets_by_status,
+    update_dsar_ticket_status,
+)
 from .graph import (
     add_graph_edge,
     add_graph_node,
@@ -53,6 +62,15 @@ from .thoughts import (
     get_thoughts_by_task_id,
     get_thoughts_older_than,
     update_thought_status,
+)
+from .tickets import (
+    create_ticket,
+    delete_ticket,
+    get_ticket,
+    get_tickets_by_correlation_id,
+    list_tickets,
+    update_ticket_metadata,
+    update_ticket_status,
 )
 
 __all__ = [
@@ -104,4 +122,18 @@ __all__ = [
     "get_identity_for_context",
     "get_queue_status",
     "QueueStatus",
+    # Universal tickets (new)
+    "create_ticket",
+    "get_ticket",
+    "update_ticket_status",
+    "update_ticket_metadata",
+    "list_tickets",
+    "delete_ticket",
+    "get_tickets_by_correlation_id",
+    # DSAR backwards compatibility (deprecated - use tickets)
+    "create_dsar_ticket",
+    "get_dsar_ticket",
+    "update_dsar_ticket_status",
+    "list_dsar_tickets_by_status",
+    "list_dsar_tickets_by_email",
 ]

@@ -384,7 +384,8 @@ class TestGDPRCompliance:
         # Simulate server restart by getting new connection
         with get_db_connection(db_path=temp_db) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM dsar_tickets WHERE ticket_id = ?", (ticket_id,))
+            # Query the new tickets table (dsar_tickets was renamed in migration 008)
+            cursor.execute("SELECT COUNT(*) FROM tickets WHERE ticket_id = ? AND ticket_type = 'dsar'", (ticket_id,))
             count = cursor.fetchone()[0]
 
         # Ticket must still exist

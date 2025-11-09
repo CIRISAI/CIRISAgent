@@ -27,6 +27,7 @@ class IdentityManager:
         self.config = config
         self.time_service = time_service
         self.agent_identity: Optional[AgentIdentityRoot] = None
+        self.agent_template: Optional[AgentTemplate] = None  # Store full template for API access
 
     async def initialize_identity(self) -> AgentIdentityRoot:
         """Initialize agent identity - create from template on first run, load from graph thereafter."""
@@ -37,6 +38,13 @@ class IdentityManager:
             # Identity exists - load it and use it
             logger.info("Loading existing agent identity from graph")
             self.agent_identity = AgentIdentityRoot.model_validate(identity_data)
+
+            # Also load template for API access (tickets config, etc.)
+            template_name = getattr(self.config, "default_template", "default")
+            template_path = Path(self.config.template_directory) / f"{template_name}.yaml"
+            self.agent_template = await self._load_template(template_path)
+            if not self.agent_template:
+                logger.warning(f"Template '{template_name}' not found")
         else:
             # First run - use template to create initial identity
             logger.info("No identity found, creating from template (first run only)")
@@ -54,6 +62,9 @@ class IdentityManager:
 
             if not initial_template:
                 raise RuntimeError("No template available for initial identity creation")
+
+            # Store template for API access (tickets config, etc.)
+            self.agent_template = initial_template
 
             # Create identity from template and save to graph
             self.agent_identity = self._create_identity_from_template(initial_template)

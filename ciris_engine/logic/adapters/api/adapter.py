@@ -157,6 +157,8 @@ class ApiPlatform(Service):
 
         # Store adapter config for routes to access
         self.app.state.api_config = self.config
+        self.app.state.agent_template = getattr(self.runtime, "agent_template", None)
+        self.app.state.db_path = getattr(self.runtime.essential_config, "database_path", None)
         logger.info(f"Injected API config with interaction_timeout={self.config.interaction_timeout}s")
 
         # Get service mappings from declarative configuration
@@ -218,6 +220,13 @@ class ApiPlatform(Service):
         # Initialize APIAuthService with the authentication service for persistence
         self.app.state.auth_service = APIAuthService(auth_service)
         logger.info("Initialized APIAuthService with authentication service for persistence")
+
+    def _handle_bus_manager(self, bus_manager: Any) -> None:
+        """Special handler for bus manager - inject individual buses into app.state."""
+        # Inject tool_bus and memory_bus for DSAR multi-source operations
+        self.app.state.tool_bus = bus_manager.tool
+        self.app.state.memory_bus = bus_manager.memory
+        logger.info("Injected tool_bus and memory_bus from bus_manager for multi-source DSAR operations")
 
     def _setup_message_handling(self) -> None:
         """Set up message handling and correlation tracking."""

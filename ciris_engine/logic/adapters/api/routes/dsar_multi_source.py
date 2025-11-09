@@ -145,7 +145,7 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     )
 
 
-@router.post("/", response_model=StandardResponse)
+@router.post("", response_model=StandardResponse)
 async def submit_multi_source_dsar(
     request: MultiSourceDSARRequest,
     req: Request,

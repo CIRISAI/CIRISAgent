@@ -716,6 +716,7 @@ class QueryManager:
                 cursor = conn.cursor()
 
                 # Check for any tsdb_summary nodes with matching period_start
+                # Backwards compatible: Accept summaries with consolidation_level='basic' OR no level (legacy)
                 # PostgreSQL: Use JSONB operators
                 # SQLite: Use json_extract() function
                 if adapter.is_postgresql():
@@ -724,7 +725,10 @@ class QueryManager:
                         FROM graph_nodes
                         WHERE node_type = 'tsdb_summary'
                           AND attributes_json->>'period_start' = {adapter.placeholder()}
-                          AND attributes_json->>'consolidation_level' = 'basic'
+                          AND (
+                              attributes_json->>'consolidation_level' = 'basic'
+                              OR attributes_json->>'consolidation_level' IS NULL
+                          )
                     """
                 else:
                     sql = f"""
@@ -732,7 +736,10 @@ class QueryManager:
                         FROM graph_nodes
                         WHERE node_type = 'tsdb_summary'
                           AND json_extract(attributes_json, '$.period_start') = {adapter.placeholder()}
-                          AND json_extract(attributes_json, '$.consolidation_level') = 'basic'
+                          AND (
+                              json_extract(attributes_json, '$.consolidation_level') = 'basic'
+                              OR json_extract(attributes_json, '$.consolidation_level') IS NULL
+                          )
                     """
 
                 cursor.execute(sql, (period_start.isoformat(),))

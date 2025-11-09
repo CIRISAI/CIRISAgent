@@ -30,6 +30,7 @@ from .routes import (
     system,
     system_extensions,
     telemetry,
+    tickets,
     transparency,
     users,
     verification,
@@ -149,6 +150,9 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         # Adapter-created services
         app.state.communication_service = None
         app.state.tool_service = None
+        # Message buses (injected from bus_manager)
+        app.state.tool_bus = None
+        app.state.memory_bus = None
 
     # Mount v1 API routes (all routes except emergency under /v1)
     v1_routers = [
@@ -167,6 +171,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         dsar.router,  # Data Subject Access Requests (GDPR compliance - single source)
         dsar_multi_source.router,  # Multi-source DSAR (CIRIS + external databases)
         connectors.router,  # External data connector management (SQL, REST, HL7)
+        tickets.router,  # Universal Ticket System (DSAR + custom workflows)
         verification.router,  # Deletion proof verification (public, no auth)
         partnership.router,  # Partnership management dashboard (admin only)
         transparency.router,  # Public transparency feed (no auth)

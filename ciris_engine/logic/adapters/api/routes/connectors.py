@@ -161,6 +161,9 @@ async def register_sql_connector(
 
     logger = logging.getLogger(__name__)
 
+    logger.debug(f"[CONNECTOR_REG] Request to register SQL connector: {request.config.get('connector_name')}")
+    logger.debug(f"[CONNECTOR_REG] Current user: {current_user.username}, Role: {current_user.role}")
+
     # Verify admin privileges
     if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
         raise HTTPException(

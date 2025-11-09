@@ -1,5 +1,5 @@
 """Tool services that implement ToolService protocol."""
 
-from .secrets_tool_service import SecretsToolService
+from .core_tool_service.service import CoreToolService
 
-__all__ = ["SecretsToolService"]
+__all__ = ["CoreToolService"]

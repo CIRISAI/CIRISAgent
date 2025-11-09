@@ -309,6 +309,11 @@ class CIRISRuntime:
         """Access to consent service - manages user consent, data retention, and DSAR automation."""
         return self.service_initializer.consent_service if self.service_initializer else None
 
+    @property
+    def agent_template(self) -> Optional[Any]:
+        """Access to full agent template - includes tickets config and all template data."""
+        return self.identity_manager.agent_template if self.identity_manager else None
+
     def _ensure_shutdown_event(self) -> None:
         """Ensure shutdown event is created when needed in async context."""
         if self._shutdown_event is None:

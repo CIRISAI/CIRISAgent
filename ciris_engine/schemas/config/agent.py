@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ciris_engine.schemas.config.tickets import TicketsConfig
+
 
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
@@ -73,6 +75,12 @@ class AgentTemplate(BaseModel):
 
     # Book VI Compliance
     stewardship: Optional["Stewardship"] = Field(None, description="Book VI Stewardship information")
+
+    # Ticket system configuration (DSAR always present for GDPR compliance)
+    tickets: Optional["TicketsConfig"] = Field(
+        None,
+        description="Ticket system configuration with SOPs (DSAR always present)",
+    )
 
     model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
 
@@ -145,6 +153,43 @@ class AgentTemplate(BaseModel):
         if isinstance(v, dict):
             return CLIAdapterOverrides(**v)
         return v  # type: ignore[no-any-return]  # Already a CLIAdapterOverrides instance
+
+    @field_validator("tickets", mode="before")
+    @classmethod
+    def convert_tickets_config(cls, v: Any) -> Optional[TicketsConfig]:
+        """Convert dict to TicketsConfig if needed.
+
+        Automatically adds universal DSAR SOPs to all agents for GDPR compliance.
+        """
+        if v is None:
+            # If no tickets config provided, create default with DSAR SOPs
+            from ciris_engine.schemas.config.default_dsar_sops import DEFAULT_DSAR_SOPS
+
+            return TicketsConfig(enabled=True, sops=DEFAULT_DSAR_SOPS)
+
+        if isinstance(v, dict):
+            tickets_config = TicketsConfig(**v)
+
+            # Ensure DSAR SOPs are present (GDPR compliance requirement)
+            from ciris_engine.schemas.config.default_dsar_sops import DEFAULT_DSAR_SOPS
+
+            existing_sop_names = {sop.sop for sop in tickets_config.sops}
+            for dsar_sop in DEFAULT_DSAR_SOPS:
+                if dsar_sop.sop not in existing_sop_names:
+                    tickets_config.sops.append(dsar_sop)
+
+            return tickets_config
+
+        # Already a TicketsConfig instance - ensure DSAR SOPs present
+        if isinstance(v, TicketsConfig):
+            from ciris_engine.schemas.config.default_dsar_sops import DEFAULT_DSAR_SOPS
+
+            existing_sop_names = {sop.sop for sop in v.sops}
+            for dsar_sop in DEFAULT_DSAR_SOPS:
+                if dsar_sop.sop not in existing_sop_names:
+                    v.sops.append(dsar_sop)
+
+        return v  # type: ignore[no-any-return]
 
 
 class DSDMAConfiguration(BaseModel):

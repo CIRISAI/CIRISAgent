@@ -13,21 +13,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from ciris_engine.logic.services.tools.secrets_tool_service import SecretsToolService
+from ciris_engine.logic.services.tools.core_tool_service import SecretsToolService
 from ciris_engine.schemas.adapters.tools import ToolResult
 from ciris_engine.schemas.services.core.secrets import SecretContext
 from tests.test_metrics_base import BaseMetricsTest
 
 
 class TestSecretsToolServiceMetrics(BaseMetricsTest):
-    """Test metrics for SecretsToolService."""
+    """Test metrics for SecretsToolService (now CoreToolService)."""
 
-    # Expected custom metrics for SecretsToolService (v1.4.3)
+    # Expected custom metrics for CoreToolService (v1.4.3+)
     EXPECTED_SECRETS_TOOL_METRICS = {
-        "secrets_tool_invocations",
-        "secrets_tool_retrieved",
-        "secrets_tool_stored",
-        "secrets_tool_uptime_seconds",
+        "core_tool_invocations",
+        "core_tool_uptime_seconds",
+        "secrets_retrieved",
+        "secrets_stored",
+        "tickets_updated",
+        "tickets_retrieved",
+        "tickets_deferred",
     }
 
     # Override the base test that uses generic 'service' fixture
@@ -69,10 +72,13 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         self.assert_metrics_exist(metrics, self.EXPECTED_SECRETS_TOOL_METRICS)
 
         # Check initial values
-        assert metrics["secrets_tool_invocations"] >= 0.0
-        assert metrics["secrets_tool_retrieved"] >= 0.0
-        assert metrics["secrets_tool_stored"] >= 0.0
-        assert metrics["secrets_tool_uptime_seconds"] >= 0.0
+        assert metrics["core_tool_invocations"] >= 0.0
+        assert metrics["core_tool_uptime_seconds"] >= 0.0
+        assert metrics["secrets_retrieved"] >= 0.0
+        assert metrics["secrets_stored"] >= 0.0
+        assert metrics["tickets_updated"] >= 0.0
+        assert metrics["tickets_retrieved"] >= 0.0
+        assert metrics["tickets_deferred"] >= 0.0
 
     @pytest.mark.asyncio
     async def test_tool_execution_metrics_increase(self, secrets_tool_service, mock_secrets_service):
@@ -88,8 +94,8 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         metrics = await self.get_service_metrics(secrets_tool_service)
 
         # Verify execution metrics increased
-        assert metrics["secrets_tool_invocations"] >= 1.0
-        assert metrics["secrets_tool_retrieved"] >= 1.0
+        assert metrics["core_tool_invocations"] >= 1.0
+        assert metrics["secrets_retrieved"] >= 1.0
 
     @pytest.mark.asyncio
     async def test_tool_error_metrics_increase(self, secrets_tool_service, mock_secrets_service):
@@ -234,18 +240,25 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
 
         # Check custom metadata
         assert capabilities.metadata is not None
-        assert capabilities.metadata.adapter == "secrets"
-        assert capabilities.metadata.tool_count == 3
+        assert capabilities.metadata.adapter == "core_tools"  # Updated from "secrets" to "core_tools"
+        assert (
+            capabilities.metadata.tool_count == 6
+        )  # Now includes ticket tools: update_ticket, get_ticket, defer_ticket
 
     @pytest.mark.asyncio
     async def test_tool_info_methods(self, secrets_tool_service):
         """Test that tool information methods work correctly."""
-        # Test get_available_tools
+        # Test get_available_tools - CoreToolService now has 6 tools (3 secrets + 3 tickets)
         tools = await secrets_tool_service.get_available_tools()
-        assert len(tools) == 3
+        assert len(tools) == 6
+        # Secrets tools
         assert "recall_secret" in tools
         assert "update_secrets_filter" in tools
         assert "self_help" in tools
+        # Ticket tools
+        assert "update_ticket" in tools
+        assert "get_ticket" in tools
+        assert "defer_ticket" in tools
 
         # Test get_tool_info for each tool
         for tool_name in tools:
@@ -257,7 +270,7 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
 
         # Test get_all_tool_info
         all_info = await secrets_tool_service.get_all_tool_info()
-        assert len(all_info) == 3
+        assert len(all_info) == 6  # 3 secrets tools + 3 ticket tools
 
     @pytest.mark.asyncio
     async def test_parameter_validation_methods(self, secrets_tool_service):
@@ -343,7 +356,7 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         """Test that all ToolServiceProtocol methods are implemented."""
         # Test list_tools (alias for get_available_tools)
         tools = await secrets_tool_service.list_tools()
-        assert len(tools) == 3
+        assert len(tools) == 6  # 3 secrets tools + 3 ticket tools
 
         # Test get_tool_schema
         schema = await secrets_tool_service.get_tool_schema("recall_secret")

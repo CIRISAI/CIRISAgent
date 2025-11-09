@@ -270,11 +270,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("SecretsService initialized")
 
-        # Create and register SecretsToolService
-        from ciris_engine.logic.services.tools import SecretsToolService
+        # Create and register CoreToolService
+        from ciris_engine.logic.services.tools import CoreToolService
 
-        self.secrets_tool_service = SecretsToolService(
-            secrets_service=self.secrets_service, time_service=self.time_service
+        self.secrets_tool_service = CoreToolService(
+            secrets_service=self.secrets_service,
+            time_service=self.time_service,
+            # Don't pass db_path - let persistence layer use current config
+            # This allows runtime database switching (SQLite → PostgreSQL via CIRIS_DB_URL)
         )
         await self.secrets_tool_service.start()
         self._services_started_count += 1

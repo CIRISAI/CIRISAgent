@@ -23,6 +23,8 @@ class QAModule(Enum):
     GUIDANCE = "guidance"
     CONSENT = "consent"
     DSAR = "dsar"  # DSAR automation testing
+    DSAR_MULTI_SOURCE = "dsar_multi_source"  # Multi-source DSAR orchestration testing
+    DSAR_TICKET_WORKFLOW = "dsar_ticket_workflow"  # DSAR ticket-based workflow testing
     PARTNERSHIP = "partnership"  # Partnership bilateral consent testing
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
@@ -161,6 +163,12 @@ class QAConfig:
         elif module == QAModule.DSAR:
             # DSAR tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.DSAR_MULTI_SOURCE:
+            # DSAR multi-source tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.DSAR_TICKET_WORKFLOW:
+            # DSAR ticket workflow tests use SDK client
+            return []  # Will be handled separately by runner
         elif module == QAModule.PARTNERSHIP:
             # Partnership tests use SDK client
             return []  # Will be handled separately by runner
@@ -259,6 +267,7 @@ class QAConfig:
                 QAModule.GUIDANCE,
                 QAModule.CONSENT,
                 QAModule.DSAR,
+                QAModule.DSAR_MULTI_SOURCE,
                 QAModule.PARTNERSHIP,
                 QAModule.BILLING,
                 QAModule.REDDIT,

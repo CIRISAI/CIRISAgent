@@ -469,7 +469,11 @@ class WorkProcessor(BaseProcessor):
 
                 seed_thought_content = f"TICKET {ticket_id} IS NOT COMPLETE (SOP: {ticket_sop}, Stage: {current_stage})"
 
+                # Determine channel_id for this ticket task
+                ticket_channel_id = self.startup_channel_id or "ticket_processing"
+
                 task_context = {
+                    "channel_id": ticket_channel_id,  # Required for thought dispatch
                     "ticket_id": ticket_id,
                     "ticket_sop": ticket_sop,
                     "ticket_type": ticket.get("ticket_type"),
@@ -485,7 +489,7 @@ class WorkProcessor(BaseProcessor):
                 now = self.time_service.now().isoformat()
                 task = Task(
                     task_id=continuation_task_id,
-                    channel_id=self.startup_channel_id or "ticket_processing",
+                    channel_id=ticket_channel_id,  # Use same channel as task context
                     agent_occurrence_id=self.agent_occurrence_id,
                     description=f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
                     status=TaskStatus.PENDING,

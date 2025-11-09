@@ -241,7 +241,9 @@ class TestSecretsToolServiceMetrics(BaseMetricsTest):
         # Check custom metadata
         assert capabilities.metadata is not None
         assert capabilities.metadata.adapter == "core_tools"  # Updated from "secrets" to "core_tools"
-        assert capabilities.metadata.tool_count == 6  # Now includes ticket tools: update_ticket, get_ticket, defer_ticket
+        assert (
+            capabilities.metadata.tool_count == 6
+        )  # Now includes ticket tools: update_ticket, get_ticket, defer_ticket
 
     @pytest.mark.asyncio
     async def test_tool_info_methods(self, secrets_tool_service):

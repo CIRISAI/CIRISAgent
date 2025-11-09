@@ -178,7 +178,8 @@ dsdma_kwargs:
 
     - score: Rate 0.0-1.0 how well the thought aligns with moderation best practices
 
-    - recommended_action: Suggest specific moderation action if needed (e.g., "gentle_reminder", "timeout_10min", "defer_to_human", "task_complete")
+    - recommended_action: Suggest specific moderation action if needed (e.g., "gentle_reminder", "timeout_10min", "defer_to_human",
+    "task_complete")
 
     - flags: Identify moderation concerns (e.g., ["potential_conflict", "new_user", "requires_context", "no_action_needed"])
 

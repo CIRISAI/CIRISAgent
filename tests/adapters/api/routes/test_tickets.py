@@ -28,8 +28,7 @@ from ciris_engine.logic.adapters.api.routes.tickets import (
     list_supported_sops,
     update_existing_ticket,
 )
-from ciris_engine.schemas.config.tickets import TicketSOPConfig, TicketStageConfig, TicketsConfig
-
+from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig, TicketStageConfig
 
 # ============================================================================
 # Test Fixtures
@@ -293,7 +292,13 @@ class TestCreateTicket:
     @patch("ciris_engine.logic.adapters.api.routes.tickets.create_ticket")
     @patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")
     async def test_create_ticket_success(
-        self, mock_get_ticket, mock_create_ticket, mock_request, sample_tickets_config, sample_ticket_data, mock_current_user
+        self,
+        mock_get_ticket,
+        mock_create_ticket,
+        mock_request,
+        sample_tickets_config,
+        sample_ticket_data,
+        mock_current_user,
     ):
         """Test creating a new ticket."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
@@ -369,7 +374,13 @@ class TestCreateTicket:
     @patch("ciris_engine.logic.adapters.api.routes.tickets.create_ticket")
     @patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")
     async def test_create_ticket_with_custom_priority(
-        self, mock_get_ticket, mock_create_ticket, mock_request, sample_tickets_config, sample_ticket_data, mock_current_user
+        self,
+        mock_get_ticket,
+        mock_create_ticket,
+        mock_request,
+        sample_tickets_config,
+        sample_ticket_data,
+        mock_current_user,
     ):
         """Test creating ticket with custom priority."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
@@ -397,7 +408,13 @@ class TestCreateTicket:
     @patch("ciris_engine.logic.adapters.api.routes.tickets.create_ticket")
     @patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")
     async def test_create_ticket_with_custom_metadata(
-        self, mock_get_ticket, mock_create_ticket, mock_request, sample_tickets_config, sample_ticket_data, mock_current_user
+        self,
+        mock_get_ticket,
+        mock_create_ticket,
+        mock_request,
+        sample_tickets_config,
+        sample_ticket_data,
+        mock_current_user,
     ):
         """Test creating ticket with custom metadata."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
@@ -456,7 +473,9 @@ class TestListTickets:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.tickets.list_tickets")
-    async def test_list_tickets_no_filters(self, mock_list_tickets, mock_request, sample_ticket_data, mock_current_user):
+    async def test_list_tickets_no_filters(
+        self, mock_list_tickets, mock_request, sample_ticket_data, mock_current_user
+    ):
         """Test listing all tickets without filters."""
         mock_list_tickets.return_value = [sample_ticket_data]
 
@@ -475,7 +494,9 @@ class TestListTickets:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.tickets.list_tickets")
-    async def test_list_tickets_with_filters(self, mock_list_tickets, mock_request, sample_ticket_data, mock_current_user):
+    async def test_list_tickets_with_filters(
+        self, mock_list_tickets, mock_request, sample_ticket_data, mock_current_user
+    ):
         """Test listing tickets with all filters."""
         mock_list_tickets.return_value = [sample_ticket_data]
 

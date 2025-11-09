@@ -6,6 +6,9 @@ These SOPs are automatically added to every agent's ticket configuration.
 
 from ciris_engine.schemas.config.tickets import TicketSOPConfig, TicketStageConfig
 
+# Stage descriptions used across multiple DSAR SOPs
+STAGE_DESC_IDENTITY_RESOLUTION = "Resolve user identity across all data sources"
+
 # GDPR Article 15 - Right of Access
 DSAR_ACCESS_SOP = TicketSOPConfig(
     sop="DSAR_ACCESS",
@@ -18,7 +21,7 @@ DSAR_ACCESS_SOP = TicketSOPConfig(
         TicketStageConfig(
             name="identity_resolution",
             tools=["identity_resolution_tool"],
-            description="Resolve user identity across all data sources",
+            description=STAGE_DESC_IDENTITY_RESOLUTION,
         ),
         TicketStageConfig(
             name="ciris_data_collection",
@@ -58,7 +61,7 @@ DSAR_DELETE_SOP = TicketSOPConfig(
         TicketStageConfig(
             name="identity_resolution",
             tools=["identity_resolution_tool"],
-            description="Resolve user identity across all data sources",
+            description=STAGE_DESC_IDENTITY_RESOLUTION,
         ),
         TicketStageConfig(
             name="deletion_verification",
@@ -98,7 +101,7 @@ DSAR_EXPORT_SOP = TicketSOPConfig(
         TicketStageConfig(
             name="identity_resolution",
             tools=["identity_resolution_tool"],
-            description="Resolve user identity across all data sources",
+            description=STAGE_DESC_IDENTITY_RESOLUTION,
         ),
         TicketStageConfig(
             name="ciris_data_export",
@@ -138,7 +141,7 @@ DSAR_RECTIFY_SOP = TicketSOPConfig(
         TicketStageConfig(
             name="identity_resolution",
             tools=["identity_resolution_tool"],
-            description="Resolve user identity across all data sources",
+            description=STAGE_DESC_IDENTITY_RESOLUTION,
         ),
         TicketStageConfig(
             name="data_verification",

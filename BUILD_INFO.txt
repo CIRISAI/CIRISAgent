@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 08a757d2439c
-Build Time: 2025-11-13T16:41:23.661158
-Git Commit: 6a0776279b31d1542cf2313b527aaed912c84ae6
-Git Branch: fix/task-count-blocking
+Code Hash: 0a5b3ef1e5c3
+Build Time: 2025-11-13T16:56:58.284497
+Git Commit: 3eca63cc2b035f2245cacd5159a24ba2e1f5898f
+Git Branch: release/1.6.1
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

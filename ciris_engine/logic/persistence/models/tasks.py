@@ -477,10 +477,11 @@ def count_tasks(
     Returns:
         Number of tasks matching the criteria
     """
-    adapter = get_adapter()
-
     try:
         with get_db_connection(db_path) as conn:
+            # Get adapter AFTER connection is established to ensure correct dialect
+            # (get_db_connection calls init_dialect which sets the global adapter)
+            adapter = get_adapter()
             cursor = conn.cursor()
 
             if status:

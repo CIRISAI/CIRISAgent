@@ -70,6 +70,7 @@ class RedditObserver(BaseObserver[RedditMessage]):
         self._error_handler = RedditErrorHandler()
         self._consecutive_errors = 0
         self._max_consecutive_errors = 5
+        self._startup_timestamp: Optional[datetime] = None  # Only process content created after this
         logger.info("RedditObserver configured for r/%s", self._subreddit)
 
     def _is_agent_message(self, msg: RedditMessage) -> bool:
@@ -86,8 +87,13 @@ class RedditObserver(BaseObserver[RedditMessage]):
     # ------------------------------------------------------------------
     async def start(self) -> None:
         await self._api_client.start()
+        # Record startup time - only process content created after this point
+        # Use 60s grace period to avoid missing content that's "in flight"
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        self._startup_timestamp = now - timedelta(seconds=60)
+        logger.info(f"RedditObserver started - will only process content created after {self._startup_timestamp.isoformat()}")
         self._poll_task = asyncio.create_task(self._poll_loop(), name="reddit-observer-poll")
-        logger.info("RedditObserver started")
 
     async def stop(self) -> None:
         if self._poll_task:
@@ -163,6 +169,13 @@ class RedditObserver(BaseObserver[RedditMessage]):
         for entry in posts:
             if self._mark_seen(self._seen_posts, entry.item_id):
                 continue
+            # CRITICAL: Only process content created after startup (prevent historical backfill)
+            if self._startup_timestamp and entry.created_at < self._startup_timestamp:
+                logger.debug(
+                    f"Reddit post {entry.item_id} created before startup "
+                    f"({entry.created_at.isoformat()} < {self._startup_timestamp.isoformat()}), skipping"
+                )
+                continue
             # Check persistent storage for existing task with this correlation_id
             if await self._already_handled(entry.item_id):
                 logger.debug(f"Reddit post {entry.item_id} already handled (found in task database), skipping")
@@ -173,6 +186,13 @@ class RedditObserver(BaseObserver[RedditMessage]):
         comments = await self._api_client.fetch_subreddit_comments(self._subreddit, limit=_PASSIVE_LIMIT)
         for entry in comments:
             if self._mark_seen(self._seen_comments, entry.item_id):
+                continue
+            # CRITICAL: Only process content created after startup (prevent historical backfill)
+            if self._startup_timestamp and entry.created_at < self._startup_timestamp:
+                logger.debug(
+                    f"Reddit comment {entry.item_id} created before startup "
+                    f"({entry.created_at.isoformat()} < {self._startup_timestamp.isoformat()}), skipping"
+                )
                 continue
             # Check persistent storage for existing task with this correlation_id
             if await self._already_handled(entry.item_id):

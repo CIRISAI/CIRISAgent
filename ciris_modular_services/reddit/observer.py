@@ -90,9 +90,12 @@ class RedditObserver(BaseObserver[RedditMessage]):
         # Record startup time - only process content created after this point
         # Use 60s grace period to avoid missing content that's "in flight"
         from datetime import timedelta
+
         now = datetime.now(timezone.utc)
         self._startup_timestamp = now - timedelta(seconds=60)
-        logger.info(f"RedditObserver started - will only process content created after {self._startup_timestamp.isoformat()}")
+        logger.info(
+            f"RedditObserver started - will only process content created after {self._startup_timestamp.isoformat()}"
+        )
         self._poll_task = asyncio.create_task(self._poll_loop(), name="reddit-observer-poll")
 
     async def stop(self) -> None:

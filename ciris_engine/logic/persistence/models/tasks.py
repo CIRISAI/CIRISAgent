@@ -3,6 +3,7 @@ import logging
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.logic.persistence.utils import map_row_to_task
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -462,10 +463,41 @@ def get_pending_tasks_for_activation(
 def count_tasks(
     status: Optional[TaskStatus] = None, occurrence_id: str = "default", db_path: Optional[str] = None
 ) -> int:
-    tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
-    if status:
-        return sum(1 for t in tasks_list if getattr(t, "status", None) == status)
-    return len(tasks_list)
+    """
+    Count tasks using SQL COUNT(*) for performance.
+
+    This function uses a SQL COUNT(*) query instead of loading all tasks into memory,
+    which prevents event loop blocking when counting large numbers of tasks.
+
+    Args:
+        status: Optional task status to filter by
+        occurrence_id: Agent occurrence ID (default: "default")
+        db_path: Optional database path
+
+    Returns:
+        Number of tasks matching the criteria
+    """
+    try:
+        with get_db_connection(db_path) as conn:
+            # Get adapter AFTER connection is established to ensure correct dialect
+            # (get_db_connection calls init_dialect which sets the global adapter)
+            adapter = get_adapter()
+            cursor = conn.cursor()
+
+            if status:
+                sql = adapter.translate_placeholders(
+                    "SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ? AND status = ?"
+                )
+                cursor.execute(sql, (occurrence_id, status.value))
+            else:
+                sql = adapter.translate_placeholders("SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ?")
+                cursor.execute(sql, (occurrence_id,))
+
+            result = cursor.fetchone()
+            return result[0] if result else 0
+    except Exception as e:
+        logger.exception(f"Failed to count tasks for occurrence {occurrence_id}: {e}")
+        return 0
 
 
 def delete_tasks_by_ids(task_ids: List[str], db_path: Optional[str] = None) -> bool:

@@ -489,9 +489,7 @@ def count_tasks(
                 )
                 cursor.execute(sql, (occurrence_id, status.value))
             else:
-                sql = adapter.translate_placeholders(
-                    "SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ?"
-                )
+                sql = adapter.translate_placeholders("SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ?")
                 cursor.execute(sql, (occurrence_id,))
 
             result = cursor.fetchone()

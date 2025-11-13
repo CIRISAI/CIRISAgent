@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 0058c5df5c91
-Build Time: 2025-11-13T14:11:38.633183
-Git Commit: bace77598b0ac44616c648126f3186fb50918026
-Git Branch: release/1.6.1
+Code Hash: ec995326001c
+Build Time: 2025-11-13T16:31:50.103918
+Git Commit: ae76b2ec3147e96c844c044e5cf33b4eef1d5036
+Git Branch: fix/tsdb-cleanup-blocking
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

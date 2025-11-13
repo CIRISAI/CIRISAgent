@@ -70,6 +70,9 @@ def query_basic_summaries_in_period(
             ORDER BY period_start
         """
 
+    # Translate placeholders for PostgreSQL
+    sql = adapter.translate_placeholders(sql)
+
     cursor.execute(
         sql,
         (summary_type, period_start.isoformat(), period_end.isoformat()),

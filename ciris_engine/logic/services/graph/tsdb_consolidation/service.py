@@ -340,13 +340,15 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                     compression_ratio = total_records_processed / max(total_summaries_created, 1)
                     logger.info(f"  - Compression ratio: {compression_ratio:.1f}:1")
 
-            # Cleanup old data
+            # Cleanup old data (run in thread to avoid blocking event loop)
             cleanup_start = self._now()
             logger.info("Starting cleanup of old consolidated data...")
             # Count nodes before cleanup (logged later)
             len(self._query_manager.query_all_nodes_in_period(now - timedelta(days=30), now))
 
-            nodes_deleted = self._cleanup_old_data()
+            # Run cleanup in thread executor to prevent Discord heartbeat blocking
+            loop = asyncio.get_event_loop()
+            nodes_deleted = await loop.run_in_executor(None, self._cleanup_old_data)
             cleanup_stats["nodes_deleted"] = nodes_deleted
 
             # Cleanup orphaned edges

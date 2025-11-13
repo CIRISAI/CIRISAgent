@@ -74,6 +74,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.1] - 2025-11-13
+
+### Fixed - Production Critical Issues
+
+- **TSDB Consolidation PostgreSQL Placeholder Bug** - Daily summaries resume on PostgreSQL
+  - **Problem**: `query_basic_summaries_in_period()` used SQLite `?` placeholders without translation
+  - **Impact**: Caused `Invalid isoformat string: 'period_start'` error every 6 hours on PostgreSQL
+  - **Result**: No daily summary nodes created since Nov 10 on Scout 001 & 002
+  - **Solution**: Added `adapter.translate_placeholders(sql)` for PostgreSQL `%s` compatibility
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/extensive_helpers.py`
+
+- **Reddit Adapter Historical Backfill Prevention** - Safe restart without spam
+  - **Problem**: On startup, Reddit adapter processed ALL recent posts/comments (up to 25 each)
+  - **Impact**: Restarting Scout 003 would reply to weeks of historical Reddit content
+  - **Solution**: Added `_startup_timestamp` filter (60s grace period) to skip old content
+  - **Behavior**: Only processes content created AFTER agent starts running
+  - **Files**: `ciris_modular_services/reddit/observer.py`
+
+- **Task Counting Event Loop Blocking** - 100-1000x performance improvement
+  - **Problem**: `count_tasks()` loaded ALL tasks into memory via `get_all_tasks()`, blocking event loop
+  - **Impact**: 1000+ tasks caused 500-1000ms blocking, triggering Discord heartbeat warnings
+  - **Solution**: Replaced with single SQL `COUNT(*)` query, O(n) → O(1) performance
+  - **Performance**: 10,000 tasks from 5-10s → <5ms (1000x faster)
+  - **Critical Fix**: Get adapter AFTER connection to prevent dialect contamination
+  - **Files**: `ciris_engine/logic/persistence/models/tasks.py`
+
+- **TSDB Cleanup Event Loop Blocking** - Discord heartbeat stability
+  - **Problem**: `_cleanup_old_data()` ran synchronously during consolidation, blocking 10-60+ seconds
+  - **Impact**: Discord heartbeat timeout warnings every 6 hours (consolidation interval)
+  - **Solution**: Run cleanup in thread executor via `asyncio.run_in_executor()`
+  - **Result**: Event loop remains responsive, no heartbeat warnings
+  - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py`
+
+### Changed
+
+- **Template Architecture** - Scout and Sage now independent
+  - **Removed**: Cross-references between Scout and Sage templates
+  - **Reason**: Sage repurposed for GDPR/DSAR automation in 1.6.0
+  - **Files**: `ciris_templates/scout.yaml`, regenerated `pre-approved-templates.json`
+
 ## [1.6.0] - 2025-11-07
 
 ### Added - Multi-Source DSAR Infrastructure (Phase 2)

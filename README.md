@@ -28,6 +28,7 @@ CIRIS wraps LLM calls with:
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths
 - **Identity system** - Agents have persistent identity across restarts
 - **Privacy compliance** - Built-in DSAR/GDPR tools for data discovery, export, and deletion
+- **Commons Credits** - Track non-monetary contributions that strengthen community (not currency, not scorekeeping)
 
 **Philosophy**: "No Untyped Dicts, No Bypass Patterns, No Exceptions" - See [CLAUDE.md](CLAUDE.md#core-philosophy-type-safety-first)
 

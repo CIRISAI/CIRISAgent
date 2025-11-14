@@ -484,18 +484,20 @@ const revokeConsent = async (reason: string) => {
 };
 ```
 
-### 5. Impact Report API
+### 5. Impact Report API (Commons Credits)
 
 ```typescript
 // GET /v1/consent/impact
+// Returns Commons Credits Report - user's contribution to collective learning
+// Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore.
 interface ConsentImpactReport {
   user_id: string;
-  total_interactions: number;
-  patterns_contributed: number;
-  users_helped: number;
+  total_interactions: number;      // Maintaining infrastructure
+  patterns_contributed: number;    // Sharing knowledge
+  users_helped: number;            // Supporting others
   categories_active: ConsentCategory[];
-  impact_score: number;
-  example_contributions: string[];
+  impact_score: number;            // Overall community impact
+  example_contributions: string[]; // Anonymized examples
 }
 
 const useImpactReport = () => {

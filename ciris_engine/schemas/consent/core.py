@@ -91,7 +91,18 @@ class ConsentDecayStatus(BaseModel):
 
 
 class ConsentImpactReport(BaseModel):
-    """Show users their contribution - REAL DATA ONLY."""
+    """
+    Show users their contribution - REAL DATA ONLY.
+
+    User-facing name: Commons Credits Report
+
+    Commons Credits track non-monetary contributions that strengthen the community:
+    - Sharing knowledge (patterns_contributed)
+    - Supporting others (users_helped)
+    - Maintaining infrastructure (interactions)
+
+    Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore.
+    """
 
     user_id: str = Field(..., description="User requesting report")
     total_interactions: int = Field(..., ge=0, description="Total interactions")

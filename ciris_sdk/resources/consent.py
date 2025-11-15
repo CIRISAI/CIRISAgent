@@ -363,20 +363,24 @@ class ConsentResource:
 
     async def get_impact_report(self) -> Dict[str, Any]:
         """
-        Get impact report showing contribution to collective learning.
+        Get Commons Credits report showing contribution to collective learning.
 
-        Shows:
-        - Patterns contributed
-        - Users helped
-        - Impact score
+        Commons Credits track non-monetary contributions that strengthen the community:
+        - Sharing knowledge (patterns_contributed)
+        - Supporting others (users_helped)
+        - Maintaining infrastructure (total_interactions)
+        - Overall impact score
         - Example contributions (anonymized)
 
+        Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore.
+
         Returns:
-            ConsentImpactReport object
+            ConsentImpactReport object (Commons Credits Report)
 
         Example:
             report = await client.consent.get_impact_report()
-            print(f"Impact score: {report['impact_score']}")
+            print(f"Commons Credits - Impact score: {report['impact_score']}")
+            print(f"You've helped {report['users_helped']} people")
         """
         result = await self._transport.request("GET", "/v1/consent/impact")
         assert isinstance(result, dict), "Expected dict response from transport"

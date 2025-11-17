@@ -945,24 +945,24 @@ main() {
 
     case "$init_system" in
         systemd)
-            echo "     ${CYAN}# Start as service${RESET}"
+            echo -e "     ${CYAN}# Start as service${RESET}"
             echo "     systemctl --user start $AGENT_SERVICE_NAME $GUI_SERVICE_NAME"
             echo ""
-            echo "     ${CYAN}# Check status${RESET}"
+            echo -e "     ${CYAN}# Check status${RESET}"
             echo "     systemctl --user status $AGENT_SERVICE_NAME $GUI_SERVICE_NAME"
             ;;
         launchd)
-            echo "     ${CYAN}# Services start automatically${RESET}"
+            echo -e "     ${CYAN}# Services start automatically${RESET}"
             echo "     launchctl list | grep ciris"
             ;;
     esac
 
     echo ""
-    echo "     ${CYAN}# Or start manually${RESET}"
+    echo -e "     ${CYAN}# Or start manually${RESET}"
     echo "     $INSTALL_DIR/scripts/start.sh"
     echo ""
     echo "  3. Open your browser to:"
-    echo "     ${BOLD}http://localhost:$GUI_PORT${RESET}"
+    echo -e "     ${BOLD}http://localhost:$GUI_PORT${RESET}"
     echo ""
     echo "Documentation: https://docs.ciris.ai"
     echo "Support: https://github.com/CIRISAI/CIRISAgent/issues"

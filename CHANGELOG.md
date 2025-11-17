@@ -107,12 +107,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Result**: Event loop remains responsive, no heartbeat warnings
   - **Files**: `ciris_engine/logic/services/graph/tsdb_consolidation/service.py`
 
+- **QA Runner Multi-Backend State Isolation** - Automatic parallel execution
+  - **Problem**: Running `--database-backends sqlite postgres` sequentially caused state contamination
+  - **Impact**: PostgreSQL tests inherited state from SQLite runs, causing failures and massive debug output
+  - **Solution**: Automatically use parallel execution when multiple backends specified
+  - **Result**: Proper isolation, no state contamination, cleaner test output
+  - **Files**: `tools/qa_runner/runner.py`, `tools/qa_runner/__main__.py`
+
+- **QA Runner Streaming Verification Output Spam** - Remove massive JSON dumps
+  - **Problem**: Debug code printed 10MB+ JSON dumps when `user_profiles` validation failed
+  - **Impact**: 7000+ lines of output spam during multi-backend testing, unreadable logs
+  - **Solution**: Replace `json.dumps()` with concise `logger.debug()` showing only key IDs
+  - **Result**: QA runner output readable, test performance improved
+  - **Files**: `tools/qa_runner/modules/streaming_verification.py`
+
 ### Changed
 
 - **Template Architecture** - Scout and Sage now independent
   - **Removed**: Cross-references between Scout and Sage templates
   - **Reason**: Sage repurposed for GDPR/DSAR automation in 1.6.0
   - **Files**: `ciris_templates/scout.yaml`, regenerated `pre-approved-templates.json`
+
+- **Terminology: Commons Credits** - User-facing name for contribution tracking
+  - **Purpose**: Align documentation with Labor Story video script
+  - **Changes**: Replace "contribution attestations" with "Commons Credits" in user-facing docs
+  - **Philosophy**: "Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore."
+  - **Implementation**: User-facing terminology only, no breaking API changes
+  - **Files**: `CIRIS_COMPREHENSIVE_GUIDE.md`, `README.md`, consent service docs, SDK docs
+  - **Analysis**: `LABOR_STORY_SCRIPT_ALIGNMENT.md` (comprehensive evaluation of script vs implementation)
 
 ## [1.6.0] - 2025-11-07
 

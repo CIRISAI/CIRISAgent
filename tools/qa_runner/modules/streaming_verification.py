@@ -296,12 +296,11 @@ class StreamingVerificationModule:
                                             issue_msg = "system_snapshot.user_profiles is empty list (should contain at least API user profile)"
                                             event_detail["issues"].append(issue_msg)
                                             errors.append(f"🐛 EMPTY LIST: {issue_msg}")
-                                            # Print the FULL event to debug why user_profiles is empty
-                                            print("\n" + "=" * 80)
-                                            logger.debug("FULL EVENT WITH EMPTY user_profiles")
-                                            print("=" * 80)
-                                            print(json.dumps(event, indent=2, default=str))
-                                            print("=" * 80 + "\n")
+                                            # Log concise info instead of massive JSON dump
+                                            logger.debug(
+                                                f"Empty user_profiles - thought={event.get('thought_id')}, "
+                                                f"task={event.get('task_id')}, channel={snapshot.get('channel_id')}"
+                                            )
                                         else:
                                             # Validate user profile structure for each profile
                                             user_profiles = snapshot.get("user_profiles", [])

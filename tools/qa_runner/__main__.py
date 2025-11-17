@@ -36,8 +36,8 @@ Examples:
   # Run in parallel with JSON output
   python -m tools.qa_runner --parallel --json --report-dir ./reports
 
-  # Run tests against both SQLite and PostgreSQL backends in parallel
-  python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-backends
+  # Run tests against both SQLite and PostgreSQL backends (automatically parallel)
+  python -m tools.qa_runner auth --database-backends sqlite postgres
 
 Available modules:
   auth            - Authentication endpoints
@@ -86,7 +86,7 @@ Available modules:
         nargs="+",
         choices=["sqlite", "postgres"],
         default=None,
-        help="Database backends to test (default: sqlite only). Specify multiple for sequential multi-backend testing.",
+        help="Database backends to test (default: sqlite only). Multiple backends run in parallel for proper state isolation.",
     )
     parser.add_argument(
         "--postgres-url",
@@ -102,7 +102,7 @@ Available modules:
     parser.add_argument(
         "--parallel-backends",
         action="store_true",
-        help="Run database backend tests in parallel (requires --database-backends with 2+ backends)",
+        help="(Deprecated: now automatic) Multiple backends always run in parallel for proper state isolation",
     )
 
     # Authentication

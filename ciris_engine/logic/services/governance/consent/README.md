@@ -97,7 +97,7 @@ ConsentStatus       # Current user consent state
 ConsentRequest      # Request for consent changes
 ConsentAuditEntry   # Immutable audit trail
 ConsentDecayStatus  # 90-day deletion tracking
-ConsentImpactReport # User contribution metrics
+ConsentImpactReport # User contribution metrics (Commons Credits Report)
 ```
 
 ## Consent Streams
@@ -230,12 +230,15 @@ async def revoke_consent(
     """
 ```
 
-### Impact Reporting
+### Impact Reporting (Commons Credits)
 ```python
 async def get_impact_report(self, user_id: str) -> ConsentImpactReport:
     """
-    Shows user their contribution to collective learning.
+    Shows user their Commons Credits - contributions to collective learning.
     REAL DATA ONLY - no fake metrics.
+
+    Tracks: knowledge sharing, supporting others, maintaining infrastructure.
+    Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore.
     """
 ```
 

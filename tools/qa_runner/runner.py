@@ -115,12 +115,10 @@ class QARunner:
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
-        # If testing multiple backends, run them sequentially or in parallel
+        # If testing multiple backends, always use parallel mode for proper state isolation
+        # (Sequential mode doesn't properly isolate database/server state between backends)
         if len(self.database_backends) > 1:
-            if self.config.parallel_backends:
-                return self._run_parallel_backends(modules)
-            else:
-                return self._run_multiple_backends(modules)
+            return self._run_parallel_backends(modules)
 
         # Single backend execution (original flow)
         start_time = time.time()

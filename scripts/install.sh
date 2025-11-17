@@ -364,14 +364,22 @@ setup_gui() {
     log_info "Installing Node.js dependencies (this may take 5-10 minutes)..."
     log_info "Installing packages for monorepo..."
 
-    # Run pnpm install and capture exit code
-    if pnpm install; then
-        log_info "Node.js dependencies installed successfully"
-    else
-        log_error "Failed to install Node.js dependencies"
+    # Install root dependencies first
+    if ! pnpm install; then
+        log_error "Failed to install root dependencies"
         log_warn "You can manually run: cd $INSTALL_DIR/CIRISGUI && pnpm install"
         return 1
     fi
+
+    # Install workspace dependencies (apps/agui needs its own node_modules)
+    log_info "Installing workspace dependencies..."
+    if ! pnpm install -r --filter ./apps/agui 2>/dev/null; then
+        # Fallback: install directly in apps/agui if workspace install fails
+        log_info "Installing agui dependencies directly..."
+        (cd apps/agui && pnpm install) || log_warn "Could not install agui dependencies"
+    fi
+
+    log_success "Node.js dependencies installed"
 
     # Build frontend for production
     if [ "$DEV_MODE" = false ]; then

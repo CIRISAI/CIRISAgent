@@ -74,6 +74,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.2] - 2025-11-17
+
+### Added - Standalone Installation
+
+- **One-Command Standalone Installer** - Docker-free installation for CIRISAgent + CIRISGUI
+  - **Purpose**: Make CIRIS accessible to users without Docker/containerization expertise
+  - **Features**:
+    - Automatic dependency detection and installation (Python 3.9+, Node.js 20+, pnpm)
+    - Cross-platform support (Linux, macOS, WSL2)
+    - Intelligent systemd/launchd service creation
+    - Environment configuration with auto-generated encryption keys
+    - Helper scripts for start/stop/status management
+  - **Installation Methods**:
+    - One-line curl installer: `curl -sSL https://ciris.ai/install.sh | bash`
+    - Custom install directory, skip service, dev mode, branch selection options
+    - Full uninstall support
+  - **Architecture**:
+    - Installs both CIRISAgent (Python) and CIRISGUI (Next.js) repositories
+    - Agent API on port 8080, Web UI on port 3000 (configurable)
+    - Creates unified `.env` file with all configuration
+    - Supports manual start or automatic service management
+  - **Files**:
+    - `scripts/install.sh` - Main installer script (685 lines)
+    - `docs/STANDALONE_INSTALL.md` - Comprehensive installation guide
+    - Updated `README.md` and `docs/README.md` with standalone installation instructions
+  - **Platform Coverage**:
+    - Package managers: apt, dnf, yum, brew, pacman
+    - Init systems: systemd (Linux), launchd (macOS)
+    - Full WSL2 support
+
 ## [1.6.1] - 2025-11-13
 
 ### Fixed - Production Critical Issues

@@ -14,6 +14,17 @@
 #
 
 set -e
+set -o pipefail
+
+# Cleanup on error
+cleanup_on_error() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        log_error "Installation failed with exit code $exit_code"
+        log_info "Check the error messages above for details"
+    fi
+}
+trap cleanup_on_error EXIT
 
 # ============================================================================
 # Configuration
@@ -305,24 +316,37 @@ clone_repositories() {
 setup_agent() {
     log_step "Setting up CIRISAgent"
 
-    cd "$INSTALL_DIR/CIRISAgent"
+    cd "$INSTALL_DIR/CIRISAgent" || {
+        log_error "Failed to enter CIRISAgent directory"
+        return 1
+    }
 
     # Create virtual environment
     if [ ! -d "venv" ]; then
         log_info "Creating Python virtual environment..."
-        python3 -m venv venv
+        python3 -m venv venv || {
+            log_error "Failed to create virtual environment"
+            return 1
+        }
     fi
 
     # Activate and install dependencies
-    log_info "Installing Python dependencies..."
+    log_info "Installing Python dependencies (this may take several minutes)..."
     # shellcheck disable=SC1091
-    . venv/bin/activate
-    pip install --upgrade pip setuptools wheel
-    pip install -r requirements.txt
+    . venv/bin/activate || {
+        log_error "Failed to activate virtual environment"
+        return 1
+    }
+
+    pip install --upgrade pip setuptools wheel -q || log_warn "Failed to upgrade pip tools"
+    pip install -r requirements.txt || {
+        log_error "Failed to install Python dependencies"
+        return 1
+    }
 
     if [ "$DEV_MODE" = true ]; then
         log_info "Installing development dependencies..."
-        pip install -r requirements-dev.txt
+        pip install -r requirements-dev.txt || log_warn "Failed to install dev dependencies"
     fi
 
     log_success "CIRISAgent setup complete"
@@ -331,17 +355,37 @@ setup_agent() {
 setup_gui() {
     log_step "Setting up CIRISGUI"
 
-    cd "$INSTALL_DIR/CIRISGUI"
+    cd "$INSTALL_DIR/CIRISGUI" || {
+        log_error "Failed to enter CIRISGUI directory"
+        return 1
+    }
 
-    # Install pnpm dependencies
-    log_info "Installing Node.js dependencies (this may take a few minutes)..."
-    pnpm install --frozen-lockfile
+    # Install pnpm dependencies (can take 5-10 minutes)
+    log_info "Installing Node.js dependencies (this may take 5-10 minutes)..."
+    log_info "Installing packages for monorepo..."
+
+    # Run pnpm install and capture exit code
+    if pnpm install; then
+        log_info "Node.js dependencies installed successfully"
+    else
+        log_error "Failed to install Node.js dependencies"
+        log_warn "You can manually run: cd $INSTALL_DIR/CIRISGUI && pnpm install"
+        return 1
+    fi
 
     # Build frontend for production
     if [ "$DEV_MODE" = false ]; then
         log_info "Building frontend for production..."
-        cd apps/agui
-        pnpm build
+        cd apps/agui || {
+            log_error "Failed to enter agui directory"
+            return 1
+        }
+
+        if ! pnpm build; then
+            log_warn "Failed to build frontend, will use dev mode instead"
+            cd ../..
+            return 0
+        fi
         cd ../..
     fi
 
@@ -359,9 +403,15 @@ create_env_file() {
 
     if [ -f "$env_file" ]; then
         log_warn "Environment file already exists at $env_file"
-        read -r -p "Overwrite? [y/N] " response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            log_info "Keeping existing .env file"
+        # Non-blocking: only prompt if stdin is a terminal
+        if [ -t 0 ]; then
+            read -r -p "Overwrite? [y/N] " response || response="N"
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                log_info "Keeping existing .env file"
+                return
+            fi
+        else
+            log_info "Keeping existing .env file (non-interactive mode)"
             return
         fi
     fi
@@ -372,9 +422,13 @@ create_env_file() {
     secrets_key=$(openssl rand -base64 32)
     telemetry_key=$(openssl rand -base64 32)
 
-    # Prompt for OpenAI API key
+    # Prompt for OpenAI API key only in interactive mode
     local openai_key=""
-    read -r -p "Enter your OpenAI API key (or press Enter to skip): " openai_key
+    if [ -t 0 ]; then
+        read -r -p "Enter your OpenAI API key (or press Enter to skip): " openai_key || openai_key=""
+    else
+        log_info "Skipping API key prompt (non-interactive mode)"
+    fi
 
     # Create .env file
     cat > "$env_file" << EOF
@@ -725,8 +779,14 @@ uninstall_ciris() {
     pkill -f "python.*main.py" || true
     pkill -f "pnpm.*start" || true
 
-    # Ask about data removal
-    read -r -p "Remove all data including databases and logs? [y/N] " response
+    # Ask about data removal (only in interactive mode)
+    local response="N"
+    if [ -t 0 ]; then
+        read -r -p "Remove all data including databases and logs? [y/N] " response || response="N"
+    else
+        log_info "Non-interactive mode: keeping data at $INSTALL_DIR"
+    fi
+
     if [[ "$response" =~ ^[Yy]$ ]]; then
         log_info "Removing installation at $INSTALL_DIR..."
         rm -rf "$INSTALL_DIR"
@@ -850,7 +910,15 @@ main() {
 
     clone_repositories
     setup_agent
-    setup_gui
+
+    # GUI setup is optional - don't fail installation if it doesn't work
+    if setup_gui; then
+        log_success "GUI setup completed successfully"
+    else
+        log_warn "GUI setup failed - you can set it up manually later"
+        log_info "To setup GUI: cd $INSTALL_DIR/CIRISGUI && pnpm install"
+    fi
+
     create_env_file
     create_helper_scripts
     install_services

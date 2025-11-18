@@ -283,6 +283,36 @@ DO UPDATE SET {updates}
             logger.debug(f"DEBUG translate_placeholders: {sql[:100]}... -> {translated[:100]}...")
         return translated
 
+    def extract_scalar(self, row):
+        """Extract scalar value from cursor fetchone() result.
+
+        Handles differences between SQLite and PostgreSQL row objects.
+
+        Args:
+            row: Result from cursor.fetchone()
+
+        Returns:
+            First column value from the row
+
+        Note:
+            - SQLite: Row objects support both integer and dict-like indexing
+            - PostgreSQL: Row objects may only support dict-like indexing
+        """
+        if row is None:
+            return None
+
+        # Try integer indexing first (works for SQLite and some PostgreSQL drivers)
+        try:
+            return row[0]
+        except (KeyError, TypeError):
+            # Fall back to dict-like access for PostgreSQL
+            # Get first column name and access by key
+            if hasattr(row, "keys"):
+                keys = row.keys()
+                if keys:
+                    return row[keys[0]]
+            return None
+
     def get_query_builder(self) -> "QueryBuilder":
         """Get a query builder for this dialect.
 

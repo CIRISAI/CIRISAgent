@@ -186,43 +186,24 @@ create_docker_compose_file() {
         return
     fi
 
-    # Create directories with permissions that allow container to write
-    # Container typically runs as uid 1000, but we make dirs world-writable for compatibility
+    # Create directories owned by current user
     mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
 
-    # Set permissions to allow container user to write
-    chmod 777 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/config" "$INSTALL_DIR/.ciris_keys"
+    # Get current user's UID and GID for running container as current user
+    local USER_ID=$(id -u)
+    local GROUP_ID=$(id -g)
 
-    # Create init_permissions.sh script for the agent container
+    # Create simple init script that just ensures directories exist
+    # No permission changes needed since container runs as current user
     cat > "$init_script" << 'INIT_SCRIPT'
 #!/bin/bash
-# Permission initialization for CIRIS Docker deployment
+# Directory initialization for CIRIS Docker deployment
 set -e
 
-echo "Initializing CIRIS directory permissions..."
+# Ensure directories exist (should already exist from volume mounts)
+mkdir -p /app/data /app/logs /app/.ciris_keys /app/config
 
-ensure_dir() {
-    local dir=$1
-    local perms=$2
-
-    mkdir -p "$dir" 2>/dev/null || true
-
-    if ! touch "$dir/.perm_test" 2>/dev/null; then
-        echo "WARNING: Cannot write to $dir"
-        chown -R $(id -u):$(id -g) "$dir" 2>/dev/null || true
-    else
-        rm -f "$dir/.perm_test"
-    fi
-
-    chmod "$perms" "$dir" 2>/dev/null || true
-}
-
-ensure_dir "/app/data" "755"
-ensure_dir "/app/logs" "755"
-ensure_dir "/app/.ciris_keys" "700"
-ensure_dir "/app/config" "755"
-
-echo "Permissions initialized. Starting CIRIS..."
+echo "Starting CIRIS agent..."
 exec "$@"
 INIT_SCRIPT
 
@@ -236,6 +217,7 @@ services:
     image: ghcr.io/cirisai/ciris-agent:latest
     container_name: ciris-agent
     platform: linux/amd64
+    user: "${USER_ID}:${GROUP_ID}"
     entrypoint: ["/init_permissions.sh"]
     command: ["python", "main.py", "--adapter", "api"]
     env_file:
@@ -301,7 +283,7 @@ networks:
 EOF
 
     log_success "Docker Compose file created at $compose_file"
-    log_success "Permission initialization script created"
+    log_info "Container will run as user ${USER_ID}:${GROUP_ID} (your current user)"
 }
 
 start_docker_stack() {

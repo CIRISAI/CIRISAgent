@@ -783,7 +783,34 @@ echo "  Web UI:    http://localhost:${CIRIS_GUI_PORT:-3000}"
 echo ""
 echo "Press Ctrl+C to stop"
 
-trap "echo 'Stopping...'; kill $AGENT_PID $GUI_PID 2>/dev/null || true" INT TERM
+# Graceful shutdown handler
+shutdown() {
+    echo ""
+    echo "Stopping CIRIS..."
+
+    # Send SIGTERM for graceful shutdown
+    kill -TERM $AGENT_PID 2>/dev/null || true
+    kill -TERM $GUI_PID 2>/dev/null || true
+
+    # Wait up to 10 seconds for graceful shutdown
+    local timeout=10
+    local elapsed=0
+    while kill -0 $AGENT_PID 2>/dev/null || kill -0 $GUI_PID 2>/dev/null; do
+        if [ $elapsed -ge $timeout ]; then
+            echo "Timeout waiting for graceful shutdown, forcing..."
+            kill -KILL $AGENT_PID 2>/dev/null || true
+            kill -KILL $GUI_PID 2>/dev/null || true
+            break
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    echo "✓ CIRIS stopped"
+    exit 0
+}
+
+trap shutdown INT TERM
 wait $AGENT_PID $GUI_PID
 EOF
     chmod +x "$scripts_dir/start.sh"

@@ -430,12 +430,39 @@ create_env_file() {
     secrets_key=$(openssl rand -base64 32)
     telemetry_key=$(openssl rand -base64 32)
 
-    # Prompt for OpenAI API key only in interactive mode
-    local openai_key=""
+    # LLM Configuration
+    local llm_provider="openai"
+    local llm_api_key=""
+    local llm_base_url=""
+    local llm_model=""
+
     if [ -t 0 ]; then
-        read -r -p "Enter your OpenAI API key (or press Enter to skip): " openai_key || openai_key=""
+        # Interactive mode - ask about LLM provider
+        echo ""
+        read -r -p "Will you be using OpenAI or a local/custom model? [openai/local] (default: openai): " provider_choice || provider_choice="openai"
+        provider_choice=${provider_choice:-openai}
+
+        if [[ "$provider_choice" =~ ^[Ll] ]]; then
+            # Local/custom model configuration
+            llm_provider="local"
+
+            read -r -p "Enter the LLM base URL (default: http://localhost:11434): " llm_base_url || llm_base_url="http://localhost:11434"
+            llm_base_url=${llm_base_url:-http://localhost:11434}
+
+            read -r -p "Enter the model name (e.g., llama3, mistral): " llm_model || llm_model="llama3"
+            llm_model=${llm_model:-llama3}
+
+            read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key || llm_api_key="local"
+            llm_api_key=${llm_api_key:-local}
+        else
+            # OpenAI configuration
+            llm_provider="openai"
+            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key || llm_api_key=""
+        fi
     else
-        log_info "Skipping API key prompt (non-interactive mode)"
+        # Non-interactive mode - default to OpenAI
+        log_info "Non-interactive mode: defaulting to OpenAI (configure manually in .env)"
+        llm_provider="openai"
     fi
 
     # Create .env file
@@ -444,13 +471,45 @@ create_env_file() {
 # Generated on $(date)
 
 # ============================================================================
-# Required Configuration
+# LLM Configuration
 # ============================================================================
 
-# OpenAI API Key (required for LLM functionality)
-OPENAI_API_KEY="${openai_key:-your_openai_api_key_here}"
+EOF
 
+    # Add LLM configuration based on provider choice
+    if [ "$llm_provider" = "local" ]; then
+        cat >> "$env_file" << EOF
+# Local/Custom LLM Configuration
+OPENAI_API_KEY="$llm_api_key"
+OPENAI_API_BASE="$llm_base_url"
+OPENAI_MODEL="$llm_model"
+
+# Examples for popular local LLM servers:
+# Ollama (default): http://localhost:11434
+# LM Studio: http://localhost:1234/v1
+# vLLM: http://localhost:8000/v1
+# LocalAI: http://localhost:8080/v1
+
+EOF
+    else
+        cat >> "$env_file" << EOF
+# OpenAI Configuration
+OPENAI_API_KEY="${llm_api_key:-your_openai_api_key_here}"
+
+# Optional: Use a different OpenAI model
+# OPENAI_MODEL="gpt-4"
+
+# Optional: Use OpenAI-compatible endpoint
+# OPENAI_API_BASE="https://api.openai.com/v1"
+
+EOF
+    fi
+
+    cat >> "$env_file" << EOF
+# ============================================================================
 # Security Keys (auto-generated)
+# ============================================================================
+
 SECRETS_MASTER_KEY="$secrets_key"
 TELEMETRY_ENCRYPTION_KEY="$telemetry_key"
 
@@ -501,8 +560,12 @@ EOF
 
     log_success "Environment file created at $env_file"
 
-    if [ -z "$openai_key" ]; then
-        log_warn "Don't forget to add your OpenAI API key to $env_file"
+    if [ -z "$llm_api_key" ]; then
+        if [ "$llm_provider" = "local" ]; then
+            log_warn "Don't forget to configure your local LLM in $env_file"
+        else
+            log_warn "Don't forget to add your OpenAI API key to $env_file"
+        fi
     fi
 }
 
@@ -936,7 +999,7 @@ main() {
     echo -e "${GREEN}${BOLD}✓ Installation Complete!${RESET}"
     echo ""
     echo "Next steps:"
-    echo "  1. Configure your OpenAI API key in: $INSTALL_DIR/.env"
+    echo "  1. Review/edit configuration in: $INSTALL_DIR/.env"
     echo "  2. Start CIRIS with one of these methods:"
     echo ""
 

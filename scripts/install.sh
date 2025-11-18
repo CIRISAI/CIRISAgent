@@ -1074,6 +1074,77 @@ EOF
 # Uninstallation
 # ============================================================================
 
+detect_installation_type() {
+    # Detect if existing installation is Docker or local
+    # Returns: "docker", "local", or "none"
+
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo "none"
+        return
+    fi
+
+    if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        echo "docker"
+    elif [ -d "$INSTALL_DIR/CIRISAgent" ] || [ -d "$INSTALL_DIR/CIRISGUI" ]; then
+        echo "local"
+    else
+        echo "unknown"
+    fi
+}
+
+check_existing_installation() {
+    # Check for existing installation and prompt user
+    # Sets UNINSTALL=true if user chooses to uninstall
+
+    local install_type
+    install_type=$(detect_installation_type)
+
+    if [ "$install_type" = "none" ]; then
+        return 0
+    fi
+
+    # Installation exists - prompt user
+    log_warn "Existing CIRIS installation detected at: $INSTALL_DIR"
+    log_info "Installation type: $install_type"
+
+    # In non-interactive mode, abort
+    if [ ! -t 1 ] || [ ! -r /dev/tty ]; then
+        log_error "Non-interactive mode: cannot prompt for action"
+        log_info "Use --uninstall to remove, or choose a different --install-dir"
+        exit 1
+    fi
+
+    echo ""
+    echo "What would you like to do?"
+    echo "  1) Re-install (remove existing and install fresh)"
+    echo "  2) Uninstall only (remove existing installation)"
+    echo "  3) Cancel (exit without changes)"
+    echo ""
+
+    local choice
+    read -r -p "Enter choice [1-3]: " choice </dev/tty || choice="3"
+
+    case "$choice" in
+        1)
+            log_info "Re-installing: removing existing installation..."
+            UNINSTALL=true
+            uninstall_ciris
+            UNINSTALL=false
+            log_success "Ready to install fresh"
+            ;;
+        2)
+            log_info "Uninstalling..."
+            UNINSTALL=true
+            uninstall_ciris
+            exit 0
+            ;;
+        3|*)
+            log_info "Installation cancelled"
+            exit 0
+            ;;
+    esac
+}
+
 uninstall_ciris() {
     log_step "Uninstalling CIRIS"
 
@@ -1082,37 +1153,66 @@ uninstall_ciris() {
         return
     fi
 
-    # Stop services
-    log_info "Stopping services..."
-    local init_system
-    init_system=$(detect_init_system)
+    # Detect installation type
+    local install_type
+    install_type=$(detect_installation_type)
 
-    case "$init_system" in
-        systemd)
-            systemctl --user stop "$AGENT_SERVICE_NAME" "$GUI_SERVICE_NAME" 2>/dev/null || true
-            systemctl --user disable "$AGENT_SERVICE_NAME" "$GUI_SERVICE_NAME" 2>/dev/null || true
-            rm -f "$HOME/.config/systemd/user/$AGENT_SERVICE_NAME.service"
-            rm -f "$HOME/.config/systemd/user/$GUI_SERVICE_NAME.service"
-            systemctl --user daemon-reload
-            ;;
-        launchd)
-            launchctl unload "$HOME/Library/LaunchAgents/ai.ciris.agent.plist" 2>/dev/null || true
-            launchctl unload "$HOME/Library/LaunchAgents/ai.ciris.gui.plist" 2>/dev/null || true
-            rm -f "$HOME/Library/LaunchAgents/ai.ciris.agent.plist"
-            rm -f "$HOME/Library/LaunchAgents/ai.ciris.gui.plist"
-            ;;
-    esac
+    if [ "$install_type" = "none" ]; then
+        log_warn "No installation found at $INSTALL_DIR"
+        return 0
+    fi
 
-    # Stop any running processes
-    pkill -f "python.*main.py" || true
-    pkill -f "pnpm.*start" || true
+    # Handle Docker installation
+    if [ "$install_type" = "docker" ]; then
+        log_info "Stopping Docker containers..."
+        if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+            (cd "$INSTALL_DIR" && docker compose down -v 2>/dev/null) || true
+        fi
+        # Also try to stop by container name in case compose file is corrupted
+        docker stop ciris-agent ciris-gui 2>/dev/null || true
+        docker rm ciris-agent ciris-gui 2>/dev/null || true
+    fi
 
-    # Ask about data removal (only in interactive mode)
+    # Handle local installation
+    if [ "$install_type" = "local" ]; then
+        # Stop services
+        log_info "Stopping services..."
+        local init_system
+        init_system=$(detect_init_system)
+
+        case "$init_system" in
+            systemd)
+                systemctl --user stop "$AGENT_SERVICE_NAME" "$GUI_SERVICE_NAME" 2>/dev/null || true
+                systemctl --user disable "$AGENT_SERVICE_NAME" "$GUI_SERVICE_NAME" 2>/dev/null || true
+                rm -f "$HOME/.config/systemd/user/$AGENT_SERVICE_NAME.service"
+                rm -f "$HOME/.config/systemd/user/$GUI_SERVICE_NAME.service"
+                systemctl --user daemon-reload
+                ;;
+            launchd)
+                launchctl unload "$HOME/Library/LaunchAgents/ai.ciris.agent.plist" 2>/dev/null || true
+                launchctl unload "$HOME/Library/LaunchAgents/ai.ciris.gui.plist" 2>/dev/null || true
+                rm -f "$HOME/Library/LaunchAgents/ai.ciris.agent.plist"
+                rm -f "$HOME/Library/LaunchAgents/ai.ciris.gui.plist"
+                ;;
+        esac
+
+        # Stop any running processes
+        pkill -f "python.*main.py" || true
+        pkill -f "pnpm.*start" || true
+    fi
+
+    # Ask about data removal (only in interactive mode and not during re-install)
     local response="N"
-    if [ -t 1 ] && [ -r /dev/tty ]; then
-        read -r -p "Remove all data including databases and logs? [y/N] " response </dev/tty || response="N"
+    if [ "$UNINSTALL" = true ]; then
+        # Full uninstall - ask about data
+        if [ -t 1 ] && [ -r /dev/tty ]; then
+            read -r -p "Remove all data including databases and logs? [y/N] " response </dev/tty || response="N"
+        else
+            log_info "Non-interactive mode: keeping data at $INSTALL_DIR"
+        fi
     else
-        log_info "Non-interactive mode: keeping data at $INSTALL_DIR"
+        # Re-install - always remove
+        response="Y"
     fi
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -1225,6 +1325,9 @@ main() {
         uninstall_ciris
         exit 0
     fi
+
+    # Check for existing installation and prompt user
+    check_existing_installation
 
     if [ "$DOCKER_MODE" = true ]; then
         log_info "Docker mode enabled: using GHCR images"

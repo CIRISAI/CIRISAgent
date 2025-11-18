@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - Standalone Installation
 
-- **One-Command Standalone Installer** - Docker-free installation for CIRISAgent + CIRISGUI
+- **One-Command Standalone Installer** - Docker-free installation for CIRISAgent + CIRISGUI with local LLM support
   - **Purpose**: Make CIRIS accessible to users without Docker/containerization expertise
   - **Features**:
     - Automatic dependency detection and installation (Python 3.9+, Node.js 20+, pnpm)
@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Intelligent systemd/launchd service creation
     - Environment configuration with auto-generated encryption keys
     - Helper scripts for start/stop/status management
+    - **Local LLM support**: Interactive configuration for Ollama, LM Studio, vLLM, LocalAI
+    - Choice between OpenAI or local/custom LLM during installation
   - **Installation Methods**:
     - One-line curl installer: `curl -sSL https://ciris.ai/install.sh | bash`
     - Custom install directory, skip service, dev mode, branch selection options

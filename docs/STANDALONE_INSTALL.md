@@ -74,15 +74,39 @@ curl -sSL https://ciris.ai/install.sh | bash
 
 ## Post-Installation
 
-### 1. Configure Your API Key
+### 1. LLM Configuration
 
-Edit `~/ciris/.env` and add your OpenAI API key:
+The installer prompts you to choose between OpenAI or a local/custom LLM:
 
+**Option 1: OpenAI (Default)**
+- Enter your OpenAI API key when prompted
+- Or edit `~/ciris/.env` later and set `OPENAI_API_KEY`
+
+**Option 2: Local/Custom LLM (Ollama, LM Studio, etc.)**
+During installation, you'll be prompted for:
+- Base URL (default: `http://localhost:11434` for Ollama)
+- Model name (e.g., `llama3`, `mistral`, `codellama`)
+- API key (default: `local` if no authentication required)
+
+The installer will configure `~/ciris/.env` automatically with:
+```bash
+OPENAI_API_KEY="local"
+OPENAI_API_BASE="http://localhost:11434"
+OPENAI_MODEL="llama3"
+```
+
+**Popular Local LLM Servers:**
+- **Ollama**: `http://localhost:11434` (recommended)
+- **LM Studio**: `http://localhost:1234/v1`
+- **vLLM**: `http://localhost:8000/v1`
+- **LocalAI**: `http://localhost:8080/v1`
+
+**To change LLM provider later:**
+
+Edit `~/ciris/.env`:
 ```bash
 nano ~/ciris/.env
 ```
-
-Replace `your_openai_api_key_here` with your actual key.
 
 ### 2. Start CIRIS
 
@@ -423,6 +447,56 @@ By default, CIRIS uses SQLite. For production, configure PostgreSQL:
    ```bash
    python main.py --adapter api --adapter reddit
    ```
+
+### Using Ollama (Local LLM)
+
+**Quick Start with Ollama:**
+
+1. **Install Ollama** (if not already installed):
+   ```bash
+   # Linux/macOS
+   curl https://ollama.ai/install.sh | sh
+
+   # Or download from https://ollama.ai
+   ```
+
+2. **Pull a model:**
+   ```bash
+   # Recommended models for CIRIS:
+   ollama pull llama3        # Fast, good quality (4.7GB)
+   ollama pull mistral       # Fast, efficient (4.1GB)
+   ollama pull codellama     # Good for coding tasks (3.8GB)
+   ollama pull llama3:70b    # Best quality, slower (39GB)
+   ```
+
+3. **Start Ollama server:**
+   ```bash
+   ollama serve
+   # Runs on http://localhost:11434 by default
+   ```
+
+4. **During CIRIS installation, choose:**
+   - Provider: `local`
+   - Base URL: `http://localhost:11434` (default)
+   - Model: `llama3` (or your chosen model)
+   - API Key: `local` (default)
+
+5. **Test it works:**
+   ```bash
+   curl http://localhost:11434/api/generate -d '{
+     "model": "llama3",
+     "prompt": "Hello!"
+   }'
+   ```
+
+**Switching models after installation:**
+
+Edit `~/ciris/.env` and change `OPENAI_MODEL`:
+```bash
+OPENAI_MODEL="mistral"  # or llama3, codellama, etc.
+```
+
+Then restart CIRIS.
 
 ## Getting Help
 

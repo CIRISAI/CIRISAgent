@@ -411,9 +411,9 @@ create_env_file() {
 
     if [ -f "$env_file" ]; then
         log_warn "Environment file already exists at $env_file"
-        # Non-blocking: only prompt if stdin is a terminal
-        if [ -t 0 ]; then
-            read -r -p "Overwrite? [y/N] " response || response="N"
+        # Prompt if we have a terminal (even when piped)
+        if [ -t 1 ] && [ -r /dev/tty ]; then
+            read -r -p "Overwrite? [y/N] " response </dev/tty || response="N"
             if [[ ! "$response" =~ ^[Yy]$ ]]; then
                 log_info "Keeping existing .env file"
                 return
@@ -436,28 +436,28 @@ create_env_file() {
     local llm_base_url=""
     local llm_model=""
 
-    if [ -t 0 ]; then
+    if [ -t 1 ] && [ -r /dev/tty ]; then
         # Interactive mode - ask about LLM provider
         echo ""
-        read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice || provider_choice="openai"
+        read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice </dev/tty || provider_choice="openai"
         provider_choice=${provider_choice:-openai}
 
         if [[ "$provider_choice" =~ ^[Oo] ]]; then
             # Other OpenAI-compatible provider configuration
             llm_provider="local"
 
-            read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url || llm_base_url="http://localhost:11434"
+            read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url </dev/tty || llm_base_url="http://localhost:11434"
             llm_base_url=${llm_base_url:-http://localhost:11434}
 
-            read -r -p "Enter the model name (e.g., llama3, mistral, meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo): " llm_model || llm_model="llama3"
+            read -r -p "Enter the model name (e.g., llama3, mistral, meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo): " llm_model </dev/tty || llm_model="llama3"
             llm_model=${llm_model:-llama3}
 
-            read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key || llm_api_key="local"
+            read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key </dev/tty || llm_api_key="local"
             llm_api_key=${llm_api_key:-local}
         else
             # OpenAI configuration
             llm_provider="openai"
-            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key || llm_api_key=""
+            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key </dev/tty || llm_api_key=""
         fi
     else
         # Non-interactive mode - default to OpenAI
@@ -887,8 +887,8 @@ uninstall_ciris() {
 
     # Ask about data removal (only in interactive mode)
     local response="N"
-    if [ -t 0 ]; then
-        read -r -p "Remove all data including databases and logs? [y/N] " response || response="N"
+    if [ -t 1 ] && [ -r /dev/tty ]; then
+        read -r -p "Remove all data including databases and logs? [y/N] " response </dev/tty || response="N"
     else
         log_info "Non-interactive mode: keeping data at $INSTALL_DIR"
     fi

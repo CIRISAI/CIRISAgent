@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import init_dialect
+from ciris_engine.logic.persistence.db.dialect import get_adapter, init_dialect
 from ciris_engine.logic.persistence.db.operations import (
     batch_insert_edges_if_not_exist,
     insert_edge_if_not_exists,
@@ -67,11 +67,13 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 # First, ensure the summary node exists
                 cursor.execute(
-                    """
-                    SELECT node_id FROM graph_nodes WHERE node_id = ?
+                    f"""
+                    SELECT node_id FROM graph_nodes WHERE node_id = {ph}
                 """,
                     (summary_node.id,),
                 )
@@ -150,9 +152,9 @@ class EdgeManager:
                     )
                     # Check if edges already exist
                     cursor.execute(
-                        """
+                        f"""
                         SELECT COUNT(*) as count FROM graph_edges
-                        WHERE source_node_id = ? AND relationship = ?
+                        WHERE source_node_id = {ph} AND relationship = {ph}
                     """,
                         (summary_node.id, relationship),
                     )
@@ -388,15 +390,17 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 # Create node ID pattern (same format for both daily and 6-hour summaries)
                 node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
 
                 cursor.execute(
-                    """
+                    f"""
                     SELECT node_id
                     FROM graph_nodes
-                    WHERE node_id = ?
+                    WHERE node_id = {ph}
                     LIMIT 1
                 """,
                     (node_id_pattern,),
@@ -465,6 +469,8 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 edge_data = []
 
@@ -473,9 +479,9 @@ class EdgeManager:
 
                     # Check if user node exists
                     cursor.execute(
-                        """
+                        f"""
                         SELECT node_id FROM graph_nodes
-                        WHERE node_type = 'user' AND node_id = ?
+                        WHERE node_type = 'user' AND node_id = {ph}
                         LIMIT 1
                     """,
                         (user_node_id,),
@@ -815,6 +821,8 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 # Calculate next period
                 next_period = period_start + timedelta(hours=6)
@@ -829,9 +837,9 @@ class EdgeManager:
 
                         # Check if next summary exists
                         cursor.execute(
-                            """
+                            f"""
                             SELECT node_id FROM graph_nodes
-                            WHERE node_id = ?
+                            WHERE node_id = {ph}
                             LIMIT 1
                         """,
                             (next_summary_id,),

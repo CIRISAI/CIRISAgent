@@ -186,21 +186,24 @@ create_docker_compose_file() {
         return
     fi
 
-    # Create directories owned by current user
+    # Create directories and set ownership for container user (ciris = UID 1000)
     mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
 
-    # Get current user's UID and GID for running container as current user
-    local USER_ID=$(id -u)
-    local GROUP_ID=$(id -g)
+    # Set ownership to UID 1000 (ciris user inside container)
+    # This allows the container's default user to write to these directories
+    chown -R 1000:1000 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
 
-    # Create simple init script that just ensures directories exist
-    # No permission changes needed since container runs as current user
+    # Set secure permissions
+    chmod 755 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/config"
+    chmod 700 "$INSTALL_DIR/.ciris_keys"
+
+    # Create simple init script
     cat > "$init_script" << 'INIT_SCRIPT'
 #!/bin/bash
 # Directory initialization for CIRIS Docker deployment
 set -e
 
-# Ensure directories exist (should already exist from volume mounts)
+# Ensure directories exist
 mkdir -p /app/data /app/logs /app/.ciris_keys /app/config
 
 echo "Starting CIRIS agent..."
@@ -208,6 +211,7 @@ exec "$@"
 INIT_SCRIPT
 
     chmod +x "$init_script"
+    chown 1000:1000 "$init_script"
 
     cat > "$compose_file" << EOF
 version: "3.8"
@@ -217,7 +221,6 @@ services:
     image: ghcr.io/cirisai/ciris-agent:latest
     container_name: ciris-agent
     platform: linux/amd64
-    user: "${USER_ID}:${GROUP_ID}"
     entrypoint: ["/init_permissions.sh"]
     command: ["python", "main.py", "--adapter", "api"]
     env_file:
@@ -283,7 +286,7 @@ networks:
 EOF
 
     log_success "Docker Compose file created at $compose_file"
-    log_info "Container will run as user ${USER_ID}:${GROUP_ID} (your current user)"
+    log_info "Container will run as 'ciris' user (UID 1000), directories configured for container access"
 }
 
 start_docker_stack() {

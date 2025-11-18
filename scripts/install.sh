@@ -101,18 +101,6 @@ log_step() {
     echo -e "${CYAN}${BOLD}▸ $1${RESET}"
 }
 
-run_cmd() {
-    local description="$1"
-    shift
-
-    if [ "$DRY_RUN" = true ]; then
-        log_info "[dry-run] $description"
-        return 0
-    fi
-
-    "$@"
-}
-
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
@@ -193,7 +181,7 @@ create_docker_compose_file() {
     local compose_file="$INSTALL_DIR/docker-compose.yml"
 
     if [ "$DRY_RUN" = true ]; then
-        log_info "[dry-run] Would write Docker Compose file to $compose_file using GHCR images and Cloudflare-hosted assets"
+        log_info "[dry-run] Would write Docker Compose file to $compose_file using GHCR images"
         return
     fi
 
@@ -225,7 +213,6 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_CIRIS_API_URL=http://localhost:${CIRIS_AGENT_PORT:-8080}
-      - NEXT_PUBLIC_STATIC_ASSETS_URL=${CIRIS_STATIC_ASSETS_URL:-https://static.ciris.ai}
     ports:
       - "${CIRIS_GUI_PORT:-3000}:3000"
     depends_on:
@@ -1081,7 +1068,6 @@ Environment Variables:
   CIRIS_INSTALL_DIR     Installation directory
   CIRIS_AGENT_PORT      Agent API port (default: 8080)
   CIRIS_GUI_PORT        Web UI port (default: 3000)
-  CIRIS_STATIC_ASSETS_URL  CDN base for GUI static assets (default: https://static.ciris.ai)
 
 Examples:
   # Default installation
@@ -1157,7 +1143,7 @@ main() {
     fi
 
     if [ "$DOCKER_MODE" = true ]; then
-        log_info "Docker mode enabled: using GHCR images and Cloudflare-hosted static assets"
+        log_info "Docker mode enabled: using GHCR images"
 
         ensure_docker
         mkdir -p "$INSTALL_DIR"

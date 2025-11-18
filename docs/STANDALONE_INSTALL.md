@@ -502,7 +502,7 @@ Then restart CIRIS.
 
 ## Getting Help
 
-- **Documentation**: https://docs.ciris.ai
+- **Documentation**: https://github.com/CIRISAI/CIRISAgent/blob/main/docs/README.md
 - **GitHub Issues**: https://github.com/CIRISAI/CIRISAgent/issues
 - **Community**: Discord (link in README)
 

@@ -1064,7 +1064,7 @@ main() {
     echo ""
     echo "     Default credentials: admin / ciris_admin_password"
     echo ""
-    echo "Documentation: https://docs.ciris.ai"
+    echo "Documentation: https://github.com/CIRISAI/CIRISAgent/blob/main/docs/README.md"
     echo "Support: https://github.com/CIRISAI/CIRISAgent/issues"
     echo ""
 }

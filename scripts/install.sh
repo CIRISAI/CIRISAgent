@@ -49,6 +49,8 @@ SKIP_SERVICE=false
 SKIP_DEPS=false
 DEV_MODE=false
 UNINSTALL=false
+DRY_RUN=false
+DOCKER_MODE=false
 
 # ============================================================================
 # Colors and Formatting
@@ -97,6 +99,18 @@ log_error() {
 log_step() {
     echo ""
     echo -e "${CYAN}${BOLD}▸ $1${RESET}"
+}
+
+run_cmd() {
+    local description="$1"
+    shift
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] $description"
+        return 0
+    fi
+
+    "$@"
 }
 
 command_exists() {
@@ -151,6 +165,94 @@ get_package_manager() {
 }
 
 # ============================================================================
+# Docker Installation
+# ============================================================================
+
+ensure_docker() {
+    log_step "Checking Docker availability"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would verify docker and docker compose availability"
+        return
+    fi
+
+    if ! command_exists docker; then
+        log_error "Docker is required for --docker installs. Please install Docker Desktop or docker-ce."
+        exit 1
+    fi
+
+    if ! docker compose version >/dev/null 2>&1; then
+        log_error "docker compose plugin is required. Please upgrade Docker to include 'docker compose'."
+        exit 1
+    fi
+}
+
+create_docker_compose_file() {
+    log_step "Preparing Docker Compose configuration"
+
+    local compose_file="$INSTALL_DIR/docker-compose.yml"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would write Docker Compose file to $compose_file using GHCR images and Cloudflare-hosted assets"
+        return
+    fi
+
+    mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys"
+
+    cat > "$compose_file" << EOF
+version: "3.8"
+
+services:
+  ciris-agent:
+    image: ghcr.io/cirisai/ciris-agent:latest
+    container_name: ciris-agent
+    env_file:
+      - $INSTALL_DIR/.env
+    environment:
+      - CIRIS_API_PORT=${CIRIS_AGENT_PORT:-8080}
+      - CIRIS_PORT=${CIRIS_AGENT_PORT:-8080}
+    ports:
+      - "${CIRIS_AGENT_PORT:-8080}:8080"
+    volumes:
+      - "$INSTALL_DIR/data:/app/data"
+      - "$INSTALL_DIR/logs:/app/logs"
+      - "$INSTALL_DIR/.ciris_keys:/app/.ciris_keys"
+    restart: unless-stopped
+
+  ciris-gui:
+    image: ghcr.io/cirisai/ciris-gui:latest
+    container_name: ciris-gui
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_CIRIS_API_URL=http://localhost:${CIRIS_AGENT_PORT:-8080}
+      - NEXT_PUBLIC_STATIC_ASSETS_URL=${CIRIS_STATIC_ASSETS_URL:-https://static.ciris.ai}
+    ports:
+      - "${CIRIS_GUI_PORT:-3000}:3000"
+    depends_on:
+      - ciris-agent
+    restart: unless-stopped
+EOF
+
+    log_success "Docker Compose file created at $compose_file"
+}
+
+start_docker_stack() {
+    log_step "Starting CIRIS with Docker"
+
+    local compose_file="$INSTALL_DIR/docker-compose.yml"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would pull GHCR images and run 'docker compose -f $compose_file up -d'"
+        return
+    fi
+
+    docker compose -f "$compose_file" pull
+    docker compose -f "$compose_file" up -d
+
+    log_success "Docker containers are running"
+}
+
+# ============================================================================
 # Dependency Installation
 # ============================================================================
 
@@ -161,6 +263,11 @@ install_dependencies() {
     os_type=$(detect_os)
     local pkg_mgr
     pkg_mgr=$(get_package_manager)
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would verify Python 3.9+, Node.js 18+, pnpm, git, and curl using $pkg_mgr"
+        return
+    fi
 
     # Check Python
     if ! command_exists python3; then
@@ -281,6 +388,11 @@ install_dependencies() {
 clone_repositories() {
     log_step "Cloning repositories"
 
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would create $INSTALL_DIR and clone CIRISAgent ($AGENT_BRANCH) and CIRISGUI ($GUI_BRANCH)"
+        return
+    fi
+
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
@@ -315,6 +427,11 @@ clone_repositories() {
 
 setup_agent() {
     log_step "Setting up CIRISAgent"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would create a virtual environment and install Python dependencies in $INSTALL_DIR/CIRISAgent"
+        return
+    fi
 
     cd "$INSTALL_DIR/CIRISAgent" || {
         log_error "Failed to enter CIRISAgent directory"
@@ -354,6 +471,11 @@ setup_agent() {
 
 setup_gui() {
     log_step "Setting up CIRISGUI"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would install Node dependencies and build the GUI in $INSTALL_DIR/CIRISGUI"
+        return
+    fi
 
     cd "$INSTALL_DIR/CIRISGUI" || {
         log_error "Failed to enter CIRISGUI directory"
@@ -417,6 +539,11 @@ create_env_file() {
     log_step "Creating environment configuration"
 
     local env_file="$INSTALL_DIR/.env"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would generate $env_file with LLM and system defaults"
+        return
+    fi
 
     if [ -f "$env_file" ]; then
         log_warn "Environment file already exists at $env_file"
@@ -726,6 +853,11 @@ install_services() {
         return
     fi
 
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would install system services for $AGENT_SERVICE_NAME and $GUI_SERVICE_NAME"
+        return
+    fi
+
     local init_system
     init_system=$(detect_init_system)
 
@@ -749,6 +881,11 @@ install_services() {
 
 create_helper_scripts() {
     log_step "Creating helper scripts"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would create start/stop/status scripts in $INSTALL_DIR/scripts"
+        return
+    fi
 
     local scripts_dir="$INSTALL_DIR/scripts"
     mkdir -p "$scripts_dir"
@@ -869,6 +1006,11 @@ EOF
 uninstall_ciris() {
     log_step "Uninstalling CIRIS"
 
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[dry-run] Would stop services and remove installation at $INSTALL_DIR"
+        return
+    fi
+
     # Stop services
     log_info "Stopping services..."
     local init_system
@@ -928,6 +1070,8 @@ Options:
   --skip-service        Skip systemd/launchd service installation
   --skip-deps           Skip dependency installation
   --dev                 Install development dependencies
+  --dry-run             Print the actions without executing them
+  --docker              Use Docker images from GHCR instead of local build
   --agent-branch NAME   CIRISAgent branch to install (default: main)
   --gui-branch NAME     CIRISGUI branch to install (default: main)
   --uninstall           Uninstall CIRIS
@@ -937,6 +1081,7 @@ Environment Variables:
   CIRIS_INSTALL_DIR     Installation directory
   CIRIS_AGENT_PORT      Agent API port (default: 8080)
   CIRIS_GUI_PORT        Web UI port (default: 3000)
+  CIRIS_STATIC_ASSETS_URL  CDN base for GUI static assets (default: https://static.ciris.ai)
 
 Examples:
   # Default installation
@@ -971,6 +1116,16 @@ main() {
                 DEV_MODE=true
                 shift
                 ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --docker)
+                DOCKER_MODE=true
+                SKIP_SERVICE=true
+                SKIP_DEPS=true
+                shift
+                ;;
             --agent-branch)
                 AGENT_BRANCH="$2"
                 shift 2
@@ -1001,6 +1156,29 @@ main() {
         exit 0
     fi
 
+    if [ "$DOCKER_MODE" = true ]; then
+        log_info "Docker mode enabled: using GHCR images and Cloudflare-hosted static assets"
+
+        ensure_docker
+        mkdir -p "$INSTALL_DIR"
+        create_env_file
+        create_docker_compose_file
+        start_docker_stack
+
+        if [ "$DRY_RUN" = true ]; then
+            log_success "Dry run complete. Docker commands were not executed."
+            return
+        fi
+
+        echo ""
+        echo -e "${GREEN}${BOLD}✓ Docker deployment Complete!${RESET}"
+        echo ""
+        echo "Agent API:  http://localhost:$AGENT_PORT"
+        echo "Web UI:     http://localhost:$GUI_PORT"
+        echo "Compose:    $INSTALL_DIR/docker-compose.yml"
+        return
+    fi
+
     # Show banner
     echo ""
     echo -e "${CYAN}${BOLD}"
@@ -1017,6 +1195,10 @@ main() {
     log_info "Installing CIRIS to $INSTALL_DIR"
     log_info "OS: $(detect_os)"
     log_info "Init: $(detect_init_system)"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_warn "Dry run enabled: no changes will be made"
+    fi
 
     # Installation steps
     if [ "$SKIP_DEPS" = false ]; then
@@ -1040,6 +1222,11 @@ main() {
 
     create_helper_scripts
     install_services
+
+    if [ "$DRY_RUN" = true ]; then
+        log_success "Dry run complete. No changes were made."
+        return
+    fi
 
     # Success message
     echo ""

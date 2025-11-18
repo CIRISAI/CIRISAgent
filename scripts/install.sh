@@ -439,17 +439,17 @@ create_env_file() {
     if [ -t 0 ]; then
         # Interactive mode - ask about LLM provider
         echo ""
-        read -r -p "Will you be using OpenAI or a local/custom model? [openai/local] (default: openai): " provider_choice || provider_choice="openai"
+        read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice || provider_choice="openai"
         provider_choice=${provider_choice:-openai}
 
-        if [[ "$provider_choice" =~ ^[Ll] ]]; then
-            # Local/custom model configuration
+        if [[ "$provider_choice" =~ ^[Oo] ]]; then
+            # Other OpenAI-compatible provider configuration
             llm_provider="local"
 
-            read -r -p "Enter the LLM base URL (default: http://localhost:11434): " llm_base_url || llm_base_url="http://localhost:11434"
+            read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url || llm_base_url="http://localhost:11434"
             llm_base_url=${llm_base_url:-http://localhost:11434}
 
-            read -r -p "Enter the model name (e.g., llama3, mistral): " llm_model || llm_model="llama3"
+            read -r -p "Enter the model name (e.g., llama3, mistral, meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo): " llm_model || llm_model="llama3"
             llm_model=${llm_model:-llama3}
 
             read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key || llm_api_key="local"
@@ -479,16 +479,24 @@ EOF
     # Add LLM configuration based on provider choice
     if [ "$llm_provider" = "local" ]; then
         cat >> "$env_file" << EOF
-# Local/Custom LLM Configuration
+# OpenAI-Compatible LLM Configuration
 OPENAI_API_KEY="$llm_api_key"
 OPENAI_API_BASE="$llm_base_url"
 OPENAI_MODEL="$llm_model"
 
-# Examples for popular local LLM servers:
-# Ollama (default): http://localhost:11434
-# LM Studio: http://localhost:1234/v1
-# vLLM: http://localhost:8000/v1
-# LocalAI: http://localhost:8080/v1
+# Popular OpenAI-compatible providers:
+#
+# Local Models:
+#   Ollama:    http://localhost:11434
+#   LM Studio: http://localhost:1234/v1
+#   vLLM:      http://localhost:8000/v1
+#   LocalAI:   http://localhost:8080/v1
+#
+# Commercial Providers:
+#   Together AI: https://api.together.xyz/v1
+#   Groq:        https://api.groq.com/openai/v1
+#   Fireworks:   https://api.fireworks.ai/inference/v1
+#   Anyscale:    https://api.endpoints.anyscale.com/v1
 
 EOF
     else

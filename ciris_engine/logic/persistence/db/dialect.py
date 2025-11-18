@@ -6,7 +6,7 @@ backends with a single connection string configuration.
 """
 
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import unquote, urlparse
 
 if TYPE_CHECKING:
@@ -283,7 +283,7 @@ DO UPDATE SET {updates}
             logger.debug(f"DEBUG translate_placeholders: {sql[:100]}... -> {translated[:100]}...")
         return translated
 
-    def extract_scalar(self, row):
+    def extract_scalar(self, row: Optional[Any]) -> Optional[Any]:
         """Extract scalar value from cursor fetchone() result.
 
         Handles differences between SQLite and PostgreSQL row objects.
@@ -292,7 +292,7 @@ DO UPDATE SET {updates}
             row: Result from cursor.fetchone()
 
         Returns:
-            First column value from the row
+            First column value from the row, or None if row is None
 
         Note:
             - SQLite: Row objects support both integer and dict-like indexing

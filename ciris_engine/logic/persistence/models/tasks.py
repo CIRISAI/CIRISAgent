@@ -494,7 +494,7 @@ def count_tasks(
                 cursor.execute(sql, (occurrence_id,))
 
             result = cursor.fetchone()
-            return adapter.extract_scalar(result) if result else 0
+            return adapter.extract_scalar(result) or 0
     except Exception as e:
         logger.exception(f"Failed to count tasks for occurrence {occurrence_id}: {e}")
         return 0

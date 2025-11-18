@@ -442,8 +442,8 @@ create_env_file() {
         read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice </dev/tty || provider_choice="openai"
         provider_choice=${provider_choice:-openai}
 
-        if [[ "$provider_choice" =~ ^[Oo] ]]; then
-            # Other OpenAI-compatible provider configuration
+        if [[ "$provider_choice" =~ ^[Oo]t ]]; then
+            # Other OpenAI-compatible provider configuration (starts with "ot" for "other")
             llm_provider="local"
 
             read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url </dev/tty || llm_base_url="http://localhost:11434"

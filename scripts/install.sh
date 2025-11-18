@@ -186,32 +186,49 @@ create_docker_compose_file() {
         return
     fi
 
-    # Create directories and set ownership for container user (ciris = UID 1000)
+    # Create directories for container (will be owned by ciris user inside container)
     mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
 
-    # Set ownership to UID 1000 (ciris user inside container)
-    # This allows the container's default user to write to these directories
-    chown -R 1000:1000 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
-
-    # Set secure permissions
-    chmod 755 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/config"
-    chmod 700 "$INSTALL_DIR/.ciris_keys"
-
-    # Create simple init script
+    # Create init script that runs as root, fixes permissions, then switches to ciris user
+    # This is the only robust way to handle arbitrary host UIDs
     cat > "$init_script" << 'INIT_SCRIPT'
 #!/bin/bash
-# Directory initialization for CIRIS Docker deployment
+# CIRIS Docker Init - runs as root, fixes permissions, switches to ciris user
 set -e
+
+echo "Initializing CIRIS directories..."
 
 # Ensure directories exist
 mkdir -p /app/data /app/logs /app/.ciris_keys /app/config
 
-echo "Starting CIRIS agent..."
-exec "$@"
+# Fix ownership to ciris user (UID 1000)
+chown -R ciris:ciris /app/data /app/logs /app/.ciris_keys /app/config
+
+# Set secure permissions (application enforces 755 for data/logs/config, 700 for keys)
+chmod 755 /app/data /app/logs /app/config
+chmod 700 /app/.ciris_keys
+
+echo "Starting CIRIS agent as user 'ciris'..."
+
+# Create a temporary script to run as ciris user with the exact command
+TMPSCRIPT=$(mktemp)
+{
+    echo '#!/bin/bash'
+    echo 'cd /app'
+    printf 'exec'
+    for arg in "$@"; do
+        printf ' %q' "$arg"
+    done
+    echo
+} > "$TMPSCRIPT"
+chmod +x "$TMPSCRIPT"
+chown ciris:ciris "$TMPSCRIPT"
+
+# Execute the script as ciris user
+exec su ciris -c "$TMPSCRIPT"
 INIT_SCRIPT
 
     chmod +x "$init_script"
-    chown 1000:1000 "$init_script"
 
     cat > "$compose_file" << EOF
 version: "3.8"
@@ -221,6 +238,7 @@ services:
     image: ghcr.io/cirisai/ciris-agent:latest
     container_name: ciris-agent
     platform: linux/amd64
+    user: "0:0"  # Run as root to fix permissions, init script switches to ciris user
     entrypoint: ["/init_permissions.sh"]
     command: ["python", "main.py", "--adapter", "api"]
     env_file:

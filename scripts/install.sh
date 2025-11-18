@@ -179,13 +179,50 @@ create_docker_compose_file() {
     log_step "Preparing Docker Compose configuration"
 
     local compose_file="$INSTALL_DIR/docker-compose.yml"
+    local init_script="$INSTALL_DIR/init_permissions.sh"
 
     if [ "$DRY_RUN" = true ]; then
         log_info "[dry-run] Would write Docker Compose file to $compose_file using GHCR images"
         return
     fi
 
-    mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys"
+    # Create directories (permissions will be handled by init script)
+    mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
+
+    # Create init_permissions.sh script for the agent container
+    cat > "$init_script" << 'INIT_SCRIPT'
+#!/bin/bash
+# Permission initialization for CIRIS Docker deployment
+set -e
+
+echo "Initializing CIRIS directory permissions..."
+
+ensure_dir() {
+    local dir=$1
+    local perms=$2
+
+    mkdir -p "$dir" 2>/dev/null || true
+
+    if ! touch "$dir/.perm_test" 2>/dev/null; then
+        echo "WARNING: Cannot write to $dir"
+        chown -R $(id -u):$(id -g) "$dir" 2>/dev/null || true
+    else
+        rm -f "$dir/.perm_test"
+    fi
+
+    chmod "$perms" "$dir" 2>/dev/null || true
+}
+
+ensure_dir "/app/data" "755"
+ensure_dir "/app/logs" "755"
+ensure_dir "/app/.ciris_keys" "700"
+ensure_dir "/app/config" "755"
+
+echo "Permissions initialized. Starting CIRIS..."
+exec "$@"
+INIT_SCRIPT
+
+    chmod +x "$init_script"
 
     cat > "$compose_file" << EOF
 version: "3.8"
@@ -194,10 +231,14 @@ services:
   ciris-agent:
     image: ghcr.io/cirisai/ciris-agent:latest
     container_name: ciris-agent
+    platform: linux/amd64
+    entrypoint: ["/init_permissions.sh"]
+    command: ["python", "main.py", "--adapter", "api"]
     env_file:
       - $INSTALL_DIR/.env
     environment:
-      - CIRIS_API_PORT=${CIRIS_AGENT_PORT:-8080}
+      - CIRIS_API_HOST=0.0.0.0
+      - CIRIS_API_PORT=8080
       - CIRIS_PORT=${CIRIS_AGENT_PORT:-8080}
     ports:
       - "${CIRIS_AGENT_PORT:-8080}:8080"
@@ -205,22 +246,58 @@ services:
       - "$INSTALL_DIR/data:/app/data"
       - "$INSTALL_DIR/logs:/app/logs"
       - "$INSTALL_DIR/.ciris_keys:/app/.ciris_keys"
+      - "$INSTALL_DIR/config:/app/config"
+      - "$INSTALL_DIR/init_permissions.sh:/init_permissions.sh:ro"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - ciris-network
 
   ciris-gui:
     image: ghcr.io/cirisai/ciris-gui:latest
     container_name: ciris-gui
+    platform: linux/amd64
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_CIRIS_API_URL=http://localhost:${CIRIS_AGENT_PORT:-8080}
+      - NEXT_PUBLIC_CIRIS_API_URL=http://ciris-agent:8080
     ports:
       - "${CIRIS_GUI_PORT:-3000}:3000"
     depends_on:
-      - ciris-agent
+      ciris-agent:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - ciris-network
+
+networks:
+  ciris-network:
+    name: ciris-standalone
+    driver: bridge
 EOF
 
     log_success "Docker Compose file created at $compose_file"
+    log_success "Permission initialization script created"
 }
 
 start_docker_stack() {

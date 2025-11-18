@@ -276,7 +276,7 @@ services:
     platform: linux/amd64
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_CIRIS_API_URL=http://ciris-agent:${CIRIS_AGENT_PORT:-8080}
+      - NEXT_PUBLIC_API_BASE_URL=http://ciris-agent:8080
     ports:
       - "${CIRIS_GUI_PORT:-3000}:3000"
     depends_on:

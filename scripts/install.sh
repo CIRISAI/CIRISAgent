@@ -442,9 +442,13 @@ create_env_file() {
         read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice </dev/tty || provider_choice="openai"
         provider_choice=${provider_choice:-openai}
 
-        if [[ "$provider_choice" =~ ^[Oo]t ]]; then
-            # Other OpenAI-compatible provider configuration (starts with "ot" for "other")
-            llm_provider="local"
+        if [[ "$provider_choice" =~ ^[Oo]penai$ ]] || [[ -z "$provider_choice" ]]; then
+            # OpenAI configuration (only if explicitly "openai" or empty)
+            llm_provider="openai"
+            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key </dev/tty || llm_api_key=""
+        else
+            # Any other provider (ollama, anthropic, groq, together, etc.)
+            llm_provider="$provider_choice"
 
             read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url </dev/tty || llm_base_url="http://localhost:11434"
             llm_base_url=${llm_base_url:-http://localhost:11434}
@@ -454,10 +458,6 @@ create_env_file() {
 
             read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key </dev/tty || llm_api_key="local"
             llm_api_key=${llm_api_key:-local}
-        else
-            # OpenAI configuration
-            llm_provider="openai"
-            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key </dev/tty || llm_api_key=""
         fi
     else
         # Non-interactive mode - default to OpenAI

@@ -522,7 +522,7 @@ LOG_LEVEL="INFO"
 
 # Ports
 CIRIS_AGENT_PORT=$AGENT_PORT
-NEXT_PUBLIC_CIRIS_API_URL="http://localhost:$AGENT_PORT"
+NEXT_PUBLIC_API_BASE_URL="http://localhost:$AGENT_PORT"
 
 # Database Paths
 CIRIS_DB_PATH="./data/ciris_engine.db"

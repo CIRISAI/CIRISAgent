@@ -291,7 +291,7 @@ tail -50 ~/ciris/logs/agent.err.log
 **Solution**:
 
 1. Check agent is running: `curl http://localhost:8080/v1/status`
-2. Check `.env` has correct `NEXT_PUBLIC_CIRIS_API_URL`
+2. Check `.env` has correct `NEXT_PUBLIC_API_BASE_URL`
 3. Check firewall isn't blocking localhost connections
 
 ### Python Version Too Old
@@ -366,7 +366,7 @@ SECRETS_MASTER_KEY="$(openssl rand -base64 32)"
 TELEMETRY_ENCRYPTION_KEY="$(openssl rand -base64 32)"
 LOG_LEVEL="INFO"
 CIRIS_AGENT_PORT=8080
-NEXT_PUBLIC_CIRIS_API_URL="http://localhost:8080"
+NEXT_PUBLIC_API_BASE_URL="http://localhost:8080"
 EOF
 ```
 

@@ -186,8 +186,12 @@ create_docker_compose_file() {
         return
     fi
 
-    # Create directories (permissions will be handled by init script)
+    # Create directories with permissions that allow container to write
+    # Container typically runs as uid 1000, but we make dirs world-writable for compatibility
     mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/.ciris_keys" "$INSTALL_DIR/config"
+
+    # Set permissions to allow container user to write
+    chmod 777 "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/config" "$INSTALL_DIR/.ciris_keys"
 
     # Create init_permissions.sh script for the agent container
     cat > "$init_script" << 'INIT_SCRIPT'

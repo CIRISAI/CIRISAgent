@@ -1070,6 +1070,7 @@ main() {
 }
 
 # Run main if not sourced
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+# Also run if piped (BASH_SOURCE will be /dev/fd/... or empty)
+if [ "${BASH_SOURCE[0]}" = "${0}" ] || [[ "${BASH_SOURCE[0]}" == /dev/fd/* ]] || [ -z "${BASH_SOURCE[0]}" ]; then
     main "$@"
 fi

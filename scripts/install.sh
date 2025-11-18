@@ -1035,6 +1035,8 @@ main() {
     echo "  3. Open your browser to:"
     echo -e "     ${BOLD}http://localhost:$GUI_PORT${RESET}"
     echo ""
+    echo "     Default credentials: admin / ciris_admin_password"
+    echo ""
     echo "Documentation: https://docs.ciris.ai"
     echo "Support: https://github.com/CIRISAI/CIRISAgent/issues"
     echo ""

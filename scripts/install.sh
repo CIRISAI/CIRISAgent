@@ -389,6 +389,15 @@ setup_gui() {
             return 1
         }
 
+        # Export environment variables from .env file for Next.js build
+        # Next.js embeds NEXT_PUBLIC_* variables at build time
+        if [ -f "$INSTALL_DIR/.env" ]; then
+            log_info "Loading environment variables for build..."
+            set -a
+            source "$INSTALL_DIR/.env"
+            set +a
+        fi
+
         if ! pnpm build; then
             log_warn "Failed to build frontend, will use dev mode instead"
             cd ../..
@@ -1017,6 +1026,10 @@ main() {
     clone_repositories
     setup_agent
 
+    # CRITICAL: Create .env file BEFORE building GUI
+    # Next.js embeds NEXT_PUBLIC_* variables at build time, not runtime
+    create_env_file
+
     # GUI setup is optional - don't fail installation if it doesn't work
     if setup_gui; then
         log_success "GUI setup completed successfully"
@@ -1025,7 +1038,6 @@ main() {
         log_info "To setup GUI: cd $INSTALL_DIR/CIRISGUI && pnpm install"
     fi
 
-    create_env_file
     create_helper_scripts
     install_services
 

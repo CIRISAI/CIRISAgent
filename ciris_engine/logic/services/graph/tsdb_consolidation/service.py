@@ -812,10 +812,12 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
 
         # Link to previous period summaries
         for summary in summaries:
+            # Extract summary type prefix (e.g., "tsdb_summary" or "tsdb_summary_daily")
             summary_type = summary.id.split("_")[0] + "_" + summary.id.split("_")[1]
-            previous_period = period_start - self._consolidation_interval
+
+            # Find the most recent previous summary (handles gaps in timeline)
             previous_id = self._edge_manager.get_previous_summary_id(
-                summary_type, previous_period.strftime("%Y%m%d_%H")
+                summary_type, summary.id
             )
 
             if previous_id:
@@ -823,6 +825,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
                 if created:
                     logger.debug(f"Created {created} temporal edges for {summary.id}")
                     total_created += created
+            else:
+                logger.debug(f"No previous summary found for {summary.id} - this may be the first summary")
 
         # Link to next period summaries
         edges_to_next = self._edge_manager.update_next_period_edges(period_start, summaries)

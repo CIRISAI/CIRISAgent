@@ -376,16 +376,19 @@ class EdgeManager:
 
         return edges_created
 
-    def get_previous_summary_id(self, node_type_prefix: str, previous_period_id: str) -> Optional[str]:
+    def get_previous_summary_id(self, node_type_prefix: str, current_node_id: str) -> Optional[str]:
         """
-        Get the ID of a summary node from the previous period.
+        Get the ID of the most recent summary node before the current one.
+
+        This handles gaps in the timeline by finding the most recent summary
+        regardless of how much time has passed, rather than assuming a fixed interval.
 
         Args:
             node_type_prefix: Prefix like "tsdb_summary", "conversation_summary", or "tsdb_summary_daily"
-            previous_period_id: Period ID like "20250702_00" or "20250714" for daily summaries
+            current_node_id: Current summary's full node_id (e.g., "tsdb_summary_20251117_18")
 
         Returns:
-            Node ID if found, None otherwise
+            Node ID of most recent previous summary if found, None otherwise
         """
         try:
             with get_db_connection(db_path=self._db_path) as conn:
@@ -393,25 +396,27 @@ class EdgeManager:
                 adapter = get_adapter()
                 ph = adapter.placeholder()
 
-                # Create node ID pattern (same format for both daily and 6-hour summaries)
-                node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
-
+                # Find the most recent summary with the same prefix that comes before current_node_id
+                # Using string comparison works because node IDs are in YYYYMMDD_HH or YYYYMMDD format
                 cursor.execute(
                     f"""
                     SELECT node_id
                     FROM graph_nodes
-                    WHERE node_id = {ph}
+                    WHERE node_id LIKE {ph}
+                    AND node_id < {ph}
+                    ORDER BY node_id DESC
                     LIMIT 1
                 """,
-                    (node_id_pattern,),
+                    (f"{node_type_prefix}_%", current_node_id),
                 )
 
                 row = cursor.fetchone()
                 if row:
-                    logger.debug(f"Found previous summary: {row['node_id']}")
-                    return str(row["node_id"])
+                    prev_id = str(row["node_id"]) if isinstance(row, dict) else str(row[0])
+                    logger.debug(f"Found previous summary: {prev_id} (before {current_node_id})")
+                    return prev_id
                 else:
-                    logger.debug(f"No previous summary found for pattern: {node_id_pattern}")
+                    logger.debug(f"No previous summary found before {current_node_id}")
                     return None
 
         except Exception as e:

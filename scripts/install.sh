@@ -486,7 +486,7 @@ create_env_file() {
 EOF
 
     # Add LLM configuration based on provider choice
-    if [ "$llm_provider" = "local" ]; then
+    if [ "$llm_provider" != "openai" ]; then
         cat >> "$env_file" << EOF
 # OpenAI-Compatible LLM Configuration
 OPENAI_API_KEY="$llm_api_key"

@@ -413,17 +413,18 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     # Initialize last export timestamp if not present
                     if not hasattr(telemetry_service, "_last_trace_export_time"):
                         from datetime import datetime, timezone
+
                         # Start from "now" so we only export NEW traces going forward
                         telemetry_service._last_trace_export_time = datetime.now(timezone.utc)
-                        logger.info(f"Initialized trace export timestamp filter at {telemetry_service._last_trace_export_time}")
+                        logger.info(
+                            f"Initialized trace export timestamp filter at {telemetry_service._last_trace_export_time}"
+                        )
 
                     # Filter to only traces created AFTER last export
                     from datetime import datetime, timezone
+
                     last_export = telemetry_service._last_trace_export_time
-                    new_correlations = [
-                        c for c in telemetry_service._recent_correlations
-                        if c.timestamp > last_export
-                    ]
+                    new_correlations = [c for c in telemetry_service._recent_correlations if c.timestamp > last_export]
 
                     # Return up to limit newest traces
                     correlations = new_correlations[-limit:] if new_correlations else []
@@ -431,7 +432,9 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
                     # Update last export time to the newest trace we're returning
                     if correlations:
                         telemetry_service._last_trace_export_time = max(c.timestamp for c in correlations)
-                        logger.debug(f"Retrieved {len(correlations)} NEW traces (after {last_export}), updated export time to {telemetry_service._last_trace_export_time}")
+                        logger.debug(
+                            f"Retrieved {len(correlations)} NEW traces (after {last_export}), updated export time to {telemetry_service._last_trace_export_time}"
+                        )
                     else:
                         logger.debug(f"No new traces since last export at {last_export}")
 

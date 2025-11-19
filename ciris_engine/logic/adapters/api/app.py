@@ -207,7 +207,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     else:
         # No GUI - API-only mode
         @app.get("/")
-        def root():
+        def root() -> dict[str, str]:
             return {
                 "name": "CIRIS API",
                 "version": "1.0.0",

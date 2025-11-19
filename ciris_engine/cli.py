@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 
-def main():
+def main() -> None:
     """
     Entry point for the ciris-agent CLI command.
 

@@ -14,7 +14,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 
@@ -32,7 +32,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     """Setup signal handlers for graceful shutdown."""
     shutdown_initiated = {"value": False}  # Use dict to allow modification in nested function
 
-    def signal_handler(signum, frame):
+    def signal_handler(signum: int, frame: Any) -> None:
         if shutdown_initiated["value"]:
             logger.warning(f"Signal {signum} received again, forcing immediate exit")
             # Don't call sys.exit() in async context - just raise to let Python handle it
@@ -55,7 +55,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
 def setup_global_exception_handler() -> None:
     """Setup global exception handler to catch all uncaught exceptions."""
 
-    def handle_exception(exc_type, exc_value, exc_traceback):
+    def handle_exception(exc_type: type[BaseException], exc_value: BaseException, exc_traceback: Any) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             # Let KeyboardInterrupt be handled by signal handlers
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -82,6 +82,8 @@ def _create_thought() -> Thought:
 
 
 async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional[str]) -> None:
+    if not runtime.agent_processor:
+        raise RuntimeError("Agent processor not initialized")
     handler_type = HandlerActionType[handler.upper()]
     dispatcher = runtime.agent_processor.action_dispatcher
     handler_instance = dispatcher.handlers.get(handler_type)
@@ -94,7 +96,26 @@ async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional
         rationale="manual trigger",
     )
     thought = _create_thought()
-    await handler_instance.handle(result, thought, {"channel_id": runtime.startup_channel_id})
+    # Create a proper DispatchContext
+    from ciris_engine.schemas.runtime.contexts import DispatchContext
+    from ciris_engine.schemas.runtime.system_context import ChannelContext
+
+    dispatch_context = DispatchContext(
+        channel_context=ChannelContext(
+            channel_id=runtime.startup_channel_id, channel_type="CLI", created_at=datetime.now(timezone.utc)
+        ),
+        author_id="system",
+        author_name="System",
+        origin_service="main",
+        handler_name=handler,
+        action_type=handler_type,
+        thought_id=thought.thought_id,
+        task_id=thought.source_task_id,
+        source_task_id=thought.source_task_id,
+        event_summary=f"Manual trigger: {handler}",
+        event_timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    await handler_instance.handle(result, thought, dispatch_context)
 
 
 async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds: Optional[int] = None) -> None:
@@ -216,7 +237,9 @@ def main(
 
         # Check for CIRIS_MOCK_LLM environment variable first
         if not mock_llm and get_env_var("CIRIS_MOCK_LLM"):
-            mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "").lower()
+            mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
+            if mock_llm_env:
+                mock_llm_env = mock_llm_env.lower()
             if mock_llm_env in ("true", "1", "yes", "on"):
                 logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
                 mock_llm = True
@@ -339,7 +362,7 @@ def main(
                 raise SystemExit(1)
 
             # Create CLI overrides including the template parameter
-            cli_overrides = {}
+            cli_overrides: dict[str, Any] = {}
             if template and template != "default":
                 cli_overrides["default_template"] = template
 
@@ -355,8 +378,8 @@ def main(
             sys.stdout.flush()
             sys.stderr.flush()
             # Also flush logging handlers
-            for handler in logger.handlers:
-                handler.flush()
+            for log_handler in logger.handlers:
+                log_handler.flush()
             # Give a tiny bit of time for output to be written
             import time
 
@@ -501,7 +524,7 @@ def main(
             # Store the event on the runtime so shutdown() can set it
             runtime._shutdown_event = shutdown_event
 
-            async def monitor_shutdown():
+            async def monitor_shutdown() -> None:
                 """Monitor for shutdown completion and force exit for CLI mode."""
                 # Wait for the shutdown event to be set by the shutdown() method
                 await shutdown_event.wait()
@@ -511,7 +534,7 @@ def main(
                 await asyncio.sleep(0.2)  # Brief pause for final log entries
 
                 # Flush all output in parallel
-                async def flush_handler(handler):
+                async def flush_handler(handler: Any) -> None:
                     """Flush a single handler."""
                     try:
                         await asyncio.to_thread(handler.flush)
@@ -525,8 +548,8 @@ def main(
                 ]
 
                 # Add tasks for each log handler
-                for handler in logging.getLogger().handlers:
-                    flush_tasks.append(asyncio.create_task(flush_handler(handler)))
+                for log_handler in logging.getLogger().handlers:
+                    flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
 
                 # Wait for all flush operations to complete
                 await asyncio.gather(*flush_tasks, return_exceptions=True)
@@ -561,7 +584,7 @@ def main(
             await asyncio.sleep(0.5)  # Give time for final logs to flush
 
             # Flush all output in parallel
-            async def flush_handler(handler):
+            async def flush_handler(handler: Any) -> None:
                 """Flush a single handler."""
                 try:
                     await asyncio.to_thread(handler.flush)
@@ -575,8 +598,8 @@ def main(
             ]
 
             # Add tasks for each log handler
-            for handler in logging.getLogger().handlers:
-                flush_tasks.append(asyncio.create_task(flush_handler(handler)))
+            for log_handler in logging.getLogger().handlers:
+                flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
 
             # Wait for all flush operations to complete
             await asyncio.gather(*flush_tasks, return_exceptions=True)
@@ -622,8 +645,8 @@ def main(
         # Ensure the log message is flushed
         sys.stdout.flush()
         sys.stderr.flush()
-        for handler in logging.getLogger().handlers:
-            handler.flush()
+        for log_handler in logging.getLogger().handlers:
+            log_handler.flush()
         import time
 
         time.sleep(0.1)  # Brief pause to ensure logs are written

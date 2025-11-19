@@ -45,7 +45,7 @@ class DocumentParser:
     def _check_dependencies(self) -> None:
         """Check if required dependencies are available."""
         try:
-            import pypdf  # type: ignore[import-not-found]  # noqa: F401
+            import pypdf  # noqa: F401
 
             self._pdf_available = True
         except ImportError:
@@ -53,7 +53,7 @@ class DocumentParser:
             self._pdf_available = False
 
         try:
-            import docx2txt  # type: ignore[import-not-found]  # noqa: F401
+            import docx2txt  # type: ignore[import-untyped]  # noqa: F401
 
             self._docx_available = True
         except ImportError:

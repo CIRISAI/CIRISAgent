@@ -244,11 +244,90 @@ def main(
                 logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
                 mock_llm = True
 
-        # Check for API key and auto-enable mock LLM if none is set
+        # Handle first-run setup if needed
+        from ciris_engine.logic.setup.first_run import check_macos_python, is_first_run, is_interactive_environment
+        from ciris_engine.logic.setup.wizard import run_setup_wizard
+
+        # Check macOS Python installation
+        python_valid, python_message = check_macos_python()
+        if not python_valid:
+            click.echo("=" * 70, err=True)
+            click.echo("❌ PYTHON INSTALLATION ISSUE", err=True)
+            click.echo("=" * 70, err=True)
+            click.echo(python_message, err=True)
+            click.echo("=" * 70, err=True)
+            sys.exit(1)
+
+        first_run = is_first_run()
+        if first_run and not adapter_types_list:
+            # First run detected and no adapter explicitly specified
+
+            # Check if we're in an interactive environment
+            if not is_interactive_environment():
+                # Non-interactive environment (Docker, systemd, CI, etc.)
+                # Don't run wizard - EXIT with instructions
+                click.echo("=" * 70, err=True)
+                click.echo("❌ CONFIGURATION REQUIRED", err=True)
+                click.echo("=" * 70, err=True)
+                click.echo("CIRIS is not configured. Please set environment variables:", err=True)
+                click.echo("", err=True)
+                click.echo("Required:", err=True)
+                click.echo("  OPENAI_API_KEY=your_api_key", err=True)
+                click.echo("", err=True)
+                click.echo("For local LLM (Ollama, LM Studio, etc.):", err=True)
+                click.echo("  OPENAI_API_KEY=local", err=True)
+                click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
+                click.echo("  OPENAI_MODEL=llama3", err=True)
+                click.echo("", err=True)
+                click.echo("Or mount a .env file at:", err=True)
+                click.echo("  ~/.ciris/.env", err=True)
+                click.echo("  ./.env", err=True)
+                click.echo("=" * 70, err=True)
+                sys.exit(1)
+            else:
+                # Interactive environment - run setup wizard
+                try:
+                    click.echo()
+                    click.echo("=" * 70)
+                    click.echo("First run detected - running setup wizard...")
+                    click.echo("=" * 70)
+                    config_path = run_setup_wizard()
+                    # Reload environment after setup
+                    try:
+                        from dotenv import load_dotenv
+
+                        load_dotenv(config_path)
+                        click.echo(f"✅ Configuration loaded from: {config_path}")
+                    except ImportError:
+                        pass  # dotenv is optional
+                except KeyboardInterrupt:
+                    click.echo("\nSetup cancelled by user")
+                    sys.exit(1)
+                except Exception as e:
+                    click.echo(f"\n❌ Setup failed: {e}", err=True)
+                    click.echo("You can configure manually by creating a .env file", err=True)
+                    sys.exit(1)
+
+        # Check for API key - NEVER default to mock LLM in production
         api_key = get_env_var("OPENAI_API_KEY")
         if not mock_llm and not api_key:
-            click.echo("no API key set, if using a local LLM set key as LOCAL, starting with mock LLM")
-            mock_llm = True
+            # No API key and not explicitly using mock LLM
+            click.echo("=" * 70, err=True)
+            click.echo("❌ LLM API KEY REQUIRED", err=True)
+            click.echo("=" * 70, err=True)
+            click.echo("No OPENAI_API_KEY found in environment.", err=True)
+            click.echo("", err=True)
+            click.echo("Options:", err=True)
+            click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
+            click.echo("  2. Add to .env file", err=True)
+            click.echo("  3. Use --mock-llm flag for testing only", err=True)
+            click.echo("", err=True)
+            click.echo("For local LLM:", err=True)
+            click.echo("  export OPENAI_API_KEY=local", err=True)
+            click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
+            click.echo("  export OPENAI_MODEL=llama3", err=True)
+            click.echo("=" * 70, err=True)
+            sys.exit(1)
 
         # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)
@@ -259,7 +338,11 @@ def main(
                 # Support comma-separated adapters (e.g., "api,discord")
                 final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
             else:
-                final_adapter_types_list = ["cli"]
+                # Default behavior change:
+                # - After setup wizard (first_run but now configured): start API
+                # - If .env exists (not first run): start API
+                # - This makes pip-installed CIRIS start web interface by default
+                final_adapter_types_list = ["api"]
 
         # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
         selected_adapter_types = list(final_adapter_types_list)

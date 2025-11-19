@@ -329,6 +329,7 @@ start_docker_stack() {
 
 check_macos_prerequisites() {
     # On macOS, check if we have either Homebrew or Command Line Tools
+    # CRITICAL: Avoid triggering macOS Python installation popup dialog
     local os_type
     os_type=$(detect_os)
 
@@ -342,8 +343,30 @@ check_macos_prerequisites() {
         return 0
     fi
 
-    # No Homebrew - check if Python 3 is already available (from CLT or python.org)
+    # No Homebrew - check if Python 3 is available without triggering popup
     if command_exists python3; then
+        # Get python3 path
+        local python_path
+        python_path=$(which python3 2>/dev/null)
+
+        # If it's the system stub, check Xcode CLT BEFORE running python3
+        if [ "$python_path" = "/usr/bin/python3" ]; then
+            # Check if Xcode Command Line Tools are installed
+            if ! xcode-select -p >/dev/null 2>&1; then
+                # CLT not installed - DO NOT run python3 (would trigger popup)
+                log_error "macOS system Python detected but Xcode Command Line Tools not installed."
+                echo ""
+                echo "Install Xcode Command Line Tools:"
+                echo "  xcode-select --install"
+                echo ""
+                echo "Or install Homebrew to manage dependencies:"
+                echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+                exit 1
+            fi
+            # CLT installed, safe to proceed
+        fi
+
+        # Safe to run python3 now (either not stub, or stub with CLT)
         local py_version
         py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
 
@@ -417,7 +440,7 @@ install_dependencies() {
                 ;;
         esac
     else
-        # Check Python version
+        # Check Python version (safe to run - already validated by check_macos_prerequisites)
         local py_version
         py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
         log_success "Python $py_version found"

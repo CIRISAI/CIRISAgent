@@ -189,7 +189,9 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # This enables serving the CIRISGUI frontend when bundled in the wheel
     from pathlib import Path
 
-    gui_static_dir = Path(__file__).parent.parent.parent / "gui_static"
+    # Path: ciris_engine/logic/adapters/api/app.py -> ciris_engine/gui_static
+    # Need 4 parent levels: api -> adapters -> logic -> ciris_engine
+    gui_static_dir = Path(__file__).resolve().parent.parent.parent.parent / "gui_static"
 
     if gui_static_dir.exists() and any(gui_static_dir.iterdir()):
         from fastapi.staticfiles import StaticFiles

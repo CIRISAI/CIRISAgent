@@ -205,7 +205,7 @@ class TestHelperFunctions:
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_inject_graph_audit_service(
-        self, root_logger, specific_logger, log_dir, mock_time_service, mock_graph_audit_service
+        self, root_logger, specific_logger, log_dir, mock_time_service, mock_graph_audit_service, clean_all_incident_handlers
     ):
         # Add handlers to multiple loggers
         handler1 = add_incident_capture_handler(
@@ -230,7 +230,7 @@ class TestHelperFunctions:
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_inject_graph_audit_service_no_handlers_found(
-        self, root_logger, mock_graph_audit_service, clean_logger_config, caplog
+        self, root_logger, mock_graph_audit_service, clean_logger_config, caplog, clean_all_incident_handlers
     ):
         # Ensure no IncidentCaptureHandlers exist
         root_logger.handlers = [logging.StreamHandler()]

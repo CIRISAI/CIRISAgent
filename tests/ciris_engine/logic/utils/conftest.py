@@ -97,3 +97,42 @@ def clean_logger_config():
         logger.handlers = config["handlers"]
         logger.setLevel(config["level"])
         logger.propagate = config["propagate"]
+
+
+@pytest.fixture
+def clean_all_incident_handlers():
+    """
+    Fixture that removes ALL IncidentCaptureHandler instances globally.
+
+    This is needed because inject_graph_audit_service_to_handlers() searches
+    ALL loggers in logging.Logger.manager.loggerDict, so handlers from previous
+    tests can interfere with count assertions.
+    """
+    from ciris_engine.logic.utils.incident_capture_handler import IncidentCaptureHandler
+
+    # Remove all IncidentCaptureHandler instances from ALL loggers
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        try:
+            logger = logging.getLogger(name)
+            # Remove any IncidentCaptureHandler instances
+            logger.handlers = [h for h in logger.handlers if not isinstance(h, IncidentCaptureHandler)]
+        except Exception:
+            # Skip loggers that cause issues
+            pass
+
+    # Also clean root logger
+    root = logging.getLogger()
+    root.handlers = [h for h in root.handlers if not isinstance(h, IncidentCaptureHandler)]
+
+    yield
+
+    # Cleanup after test - remove all IncidentCaptureHandler instances again
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        try:
+            logger = logging.getLogger(name)
+            logger.handlers = [h for h in logger.handlers if not isinstance(h, IncidentCaptureHandler)]
+        except Exception:
+            pass
+
+    root = logging.getLogger()
+    root.handlers = [h for h in root.handlers if not isinstance(h, IncidentCaptureHandler)]

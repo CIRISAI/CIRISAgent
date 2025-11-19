@@ -471,3 +471,309 @@ async def test_get_task_history_empty(visibility_service):
 
     assert isinstance(history, list)
     assert len(history) == 0
+
+
+# ============================================================================
+# Trace Export Filtering Tests (OTLP Integration)
+# ============================================================================
+
+
+def create_test_correlation(correlation_id: str, timestamp: datetime):
+    """Create a test ServiceCorrelation for trace export testing."""
+    from ciris_engine.schemas.telemetry.core import (
+        CorrelationType,
+        ServiceCorrelation,
+        ServiceCorrelationStatus,
+        TraceContext,
+    )
+
+    return ServiceCorrelation(
+        correlation_id=correlation_id,
+        service_type="test_service",
+        handler_name="test_handler",
+        action_type="test_action",
+        status=ServiceCorrelationStatus.COMPLETED,
+        timestamp=timestamp,
+        correlation_type=CorrelationType.TRACE_SPAN,
+        request_data=None,
+        response_data=None,
+        trace_context=TraceContext(
+            trace_id=f"trace-{correlation_id}",
+            span_id=f"span-{correlation_id}",
+            parent_span_id=None,
+            span_name=f"test-span-{correlation_id}",
+        ),
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_initializes_export_timestamp(visibility_service):
+    """Test that get_recent_traces initializes the export timestamp on first call."""
+    await visibility_service.start()
+
+    # Create mock telemetry service with correlations
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    mock_telemetry = type("MockTelemetry", (), {})()
+    mock_telemetry._recent_correlations = [
+        create_test_correlation("old-1", now - timedelta(hours=2)),
+        create_test_correlation("old-2", now - timedelta(hours=1)),
+    ]
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # First call should initialize timestamp to NOW
+    traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should have initialized the export timestamp
+    assert hasattr(mock_telemetry, "_last_trace_export_time")
+    assert isinstance(mock_telemetry._last_trace_export_time, datetime)
+
+    # Should return empty list because all traces are BEFORE the initialized timestamp
+    assert len(traces) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_returns_only_new_traces(visibility_service):
+    """Test that get_recent_traces returns only traces created after last export."""
+    await visibility_service.start()
+
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    export_time = now - timedelta(minutes=30)
+
+    # Create mock telemetry service with mixed old/new correlations
+    mock_telemetry = type("MockTelemetry", (), {})()
+    mock_telemetry._recent_correlations = [
+        create_test_correlation("old-1", export_time - timedelta(minutes=10)),  # Before last export
+        create_test_correlation("old-2", export_time - timedelta(minutes=5)),  # Before last export
+        create_test_correlation("new-1", export_time + timedelta(minutes=5)),  # After last export
+        create_test_correlation("new-2", export_time + timedelta(minutes=10)),  # After last export
+        create_test_correlation("new-3", export_time + timedelta(minutes=15)),  # After last export
+    ]
+    mock_telemetry._last_trace_export_time = export_time
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Get recent traces
+    traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should return only the 3 new traces
+    assert len(traces) == 3
+    assert all(t.correlation_id.startswith("new-") for t in traces)
+    assert traces[0].correlation_id == "new-1"
+    assert traces[2].correlation_id == "new-3"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_updates_export_timestamp(visibility_service):
+    """Test that get_recent_traces updates the export timestamp to newest trace returned."""
+    await visibility_service.start()
+
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    export_time = now - timedelta(minutes=30)
+
+    # Create mock telemetry service
+    mock_telemetry = type("MockTelemetry", (), {})()
+    new_trace_time = export_time + timedelta(minutes=15)  # Newest trace
+    mock_telemetry._recent_correlations = [
+        create_test_correlation("new-1", export_time + timedelta(minutes=5)),
+        create_test_correlation("new-2", export_time + timedelta(minutes=10)),
+        create_test_correlation("new-3", new_trace_time),  # Newest
+    ]
+    mock_telemetry._last_trace_export_time = export_time
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Get recent traces
+    traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Export timestamp should be updated to the newest trace
+    assert mock_telemetry._last_trace_export_time == new_trace_time
+    assert len(traces) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_respects_limit(visibility_service):
+    """Test that get_recent_traces respects the limit parameter."""
+    await visibility_service.start()
+
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    export_time = now - timedelta(minutes=30)
+
+    # Create mock telemetry service with many new traces
+    mock_telemetry = type("MockTelemetry", (), {})()
+    mock_telemetry._recent_correlations = [
+        create_test_correlation(f"new-{i}", export_time + timedelta(minutes=i)) for i in range(1, 11)
+    ]
+    mock_telemetry._last_trace_export_time = export_time
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Get recent traces with limit
+    traces = await visibility_service.get_recent_traces(limit=5)
+
+    # Should return only 5 most recent traces
+    assert len(traces) == 5
+    # Should be the LAST 5 (newest)
+    assert traces[-1].correlation_id == "new-10"
+    assert traces[0].correlation_id == "new-6"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_returns_empty_when_no_new_traces(visibility_service):
+    """Test that get_recent_traces returns empty list when no new traces exist."""
+    await visibility_service.start()
+
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    export_time = now - timedelta(minutes=10)
+
+    # Create mock telemetry service with only old traces
+    mock_telemetry = type("MockTelemetry", (), {})()
+    mock_telemetry._recent_correlations = [
+        create_test_correlation("old-1", export_time - timedelta(minutes=5)),
+        create_test_correlation("old-2", export_time - timedelta(minutes=3)),
+    ]
+    mock_telemetry._last_trace_export_time = export_time
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Get recent traces
+    traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should return empty list
+    assert len(traces) == 0
+
+    # Export timestamp should NOT change
+    assert mock_telemetry._last_trace_export_time == export_time
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_falls_back_to_database(visibility_service):
+    """Test that get_recent_traces falls back to database when in-memory cache unavailable."""
+    await visibility_service.start()
+
+    # Don't set _runtime, forcing fallback to database
+    visibility_service._runtime = None
+
+    # Mock the database fallback
+    mock_correlations = [
+        create_test_correlation("db-1", datetime.now(timezone.utc)),
+        create_test_correlation("db-2", datetime.now(timezone.utc)),
+    ]
+
+    with patch(
+        "ciris_engine.logic.persistence.models.correlations.get_recent_correlations",
+        return_value=mock_correlations,
+    ):
+        traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should return traces from database
+    assert len(traces) == 2
+    assert traces[0].correlation_id == "db-1"
+    assert traces[1].correlation_id == "db-2"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_handles_telemetry_service_without_correlations(visibility_service):
+    """Test graceful handling when telemetry service exists but has no _recent_correlations."""
+    await visibility_service.start()
+
+    # Create mock telemetry service WITHOUT _recent_correlations attribute
+    mock_telemetry = type("MockTelemetry", (), {})()
+    # Don't set _recent_correlations
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Mock the database fallback
+    mock_correlations = [create_test_correlation("db-fallback", datetime.now(timezone.utc))]
+
+    with patch(
+        "ciris_engine.logic.persistence.models.correlations.get_recent_correlations",
+        return_value=mock_correlations,
+    ):
+        traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should fall back to database
+    assert len(traces) == 1
+    assert traces[0].correlation_id == "db-fallback"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_handles_exceptions_gracefully(visibility_service):
+    """Test that get_recent_traces handles exceptions and returns empty list."""
+    await visibility_service.start()
+
+    # Create mock runtime that will cause an exception
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = None  # This will cause attribute error
+    visibility_service._runtime = mock_runtime
+
+    # Force database query to also fail
+    with patch(
+        "ciris_engine.logic.persistence.models.correlations.get_recent_correlations",
+        side_effect=Exception("Database connection failed"),
+    ):
+        traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should return empty list on error
+    assert len(traces) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_recent_traces_timestamp_edge_case_exact_match(visibility_service):
+    """Test that traces with timestamp exactly equal to last export are NOT included."""
+    await visibility_service.start()
+
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    export_time = now - timedelta(minutes=30)
+
+    # Create mock telemetry service with trace at exact export time
+    mock_telemetry = type("MockTelemetry", (), {})()
+    mock_telemetry._recent_correlations = [
+        create_test_correlation("exact", export_time),  # Exactly at export time (should be excluded)
+        create_test_correlation("after", export_time + timedelta(microseconds=1)),  # Just after (should be included)
+    ]
+    mock_telemetry._last_trace_export_time = export_time
+
+    # Create mock runtime
+    mock_runtime = type("MockRuntime", (), {})()
+    mock_runtime.telemetry_service = mock_telemetry
+    visibility_service._runtime = mock_runtime
+
+    # Get recent traces
+    traces = await visibility_service.get_recent_traces(limit=10)
+
+    # Should return only the trace AFTER export time (not equal to)
+    assert len(traces) == 1
+    assert traces[0].correlation_id == "after"

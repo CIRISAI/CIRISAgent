@@ -35,8 +35,8 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     def signal_handler(signum, frame):
         if shutdown_initiated["value"]:
             logger.warning(f"Signal {signum} received again, forcing immediate exit")
-            logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT signal_handler double signal")
-            sys.exit(1)
+            # Don't call sys.exit() in async context - just raise to let Python handle it
+            raise KeyboardInterrupt("Forced shutdown")
 
         shutdown_initiated["value"] = True
         logger.info(f"Received signal {signum}, requesting graceful shutdown...")
@@ -45,8 +45,8 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
             runtime.request_shutdown(f"Signal {signum}")
         except Exception as e:
             logger.error(f"Error during shutdown request: {e}")
-            logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT signal_handler error")
-            sys.exit(1)
+            # Don't call sys.exit() in async context - raise instead
+            raise KeyboardInterrupt("Shutdown error") from e
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)

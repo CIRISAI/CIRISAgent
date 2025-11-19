@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.6.1-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 1.6.2-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf
@@ -36,6 +36,20 @@ CIRIS wraps LLM calls with:
 
 ## Quick Start
 
+### One-Line Install (Agent + Web UI)
+
+Get CIRIS running in minutes without Docker:
+
+```bash
+curl -sSL https://ciris.ai/install.sh | bash
+```
+
+This installs both CIRISAgent and CIRISGUI with all dependencies, then opens the web interface at `http://localhost:3000`.
+
+**→ [Standalone Installation Guide](docs/STANDALONE_INSTALL.md)** - Full options, troubleshooting, and manual setup
+
+### Agent-Only Install (Python)
+
 ```bash
 # 1. Clone and install
 git clone https://github.com/CIRISAI/CIRISAgent.git
@@ -53,7 +67,7 @@ python main.py --adapter api --port 8000
 python main.py --adapter api --adapter reddit
 ```
 
-**First run?** → **[Complete Installation Guide](docs/INSTALLATION.md)**
+**→ [Complete Installation Guide](docs/INSTALLATION.md)** - Detailed setup, configuration, and deployment
 
 ## Available Adapters
 

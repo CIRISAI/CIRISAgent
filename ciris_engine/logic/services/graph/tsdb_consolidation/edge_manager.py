@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from uuid import uuid4
 
 from ciris_engine.logic.persistence.db.core import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import init_dialect
+from ciris_engine.logic.persistence.db.dialect import get_adapter, init_dialect
 from ciris_engine.logic.persistence.db.operations import (
     batch_insert_edges_if_not_exist,
     insert_edge_if_not_exists,
@@ -67,11 +67,13 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 # First, ensure the summary node exists
                 cursor.execute(
-                    """
-                    SELECT node_id FROM graph_nodes WHERE node_id = ?
+                    f"""
+                    SELECT node_id FROM graph_nodes WHERE node_id = {ph}
                 """,
                     (summary_node.id,),
                 )
@@ -150,9 +152,9 @@ class EdgeManager:
                     )
                     # Check if edges already exist
                     cursor.execute(
-                        """
+                        f"""
                         SELECT COUNT(*) as count FROM graph_edges
-                        WHERE source_node_id = ? AND relationship = ?
+                        WHERE source_node_id = {ph} AND relationship = {ph}
                     """,
                         (summary_node.id, relationship),
                     )
@@ -374,40 +376,47 @@ class EdgeManager:
 
         return edges_created
 
-    def get_previous_summary_id(self, node_type_prefix: str, previous_period_id: str) -> Optional[str]:
+    def get_previous_summary_id(self, node_type_prefix: str, current_node_id: str) -> Optional[str]:
         """
-        Get the ID of a summary node from the previous period.
+        Get the ID of the most recent summary node before the current one.
+
+        This handles gaps in the timeline by finding the most recent summary
+        regardless of how much time has passed, rather than assuming a fixed interval.
 
         Args:
             node_type_prefix: Prefix like "tsdb_summary", "conversation_summary", or "tsdb_summary_daily"
-            previous_period_id: Period ID like "20250702_00" or "20250714" for daily summaries
+            current_node_id: Current summary's full node_id (e.g., "tsdb_summary_20251117_18")
 
         Returns:
-            Node ID if found, None otherwise
+            Node ID of most recent previous summary if found, None otherwise
         """
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
-                # Create node ID pattern (same format for both daily and 6-hour summaries)
-                node_id_pattern = f"{node_type_prefix}_{previous_period_id}"
-
+                # Find the most recent summary with the same prefix that comes before current_node_id
+                # Using string comparison works because node IDs are in YYYYMMDD_HH or YYYYMMDD format
                 cursor.execute(
-                    """
+                    f"""
                     SELECT node_id
                     FROM graph_nodes
-                    WHERE node_id = ?
+                    WHERE node_id LIKE {ph}
+                    AND node_id < {ph}
+                    ORDER BY node_id DESC
                     LIMIT 1
                 """,
-                    (node_id_pattern,),
+                    (f"{node_type_prefix}_%", current_node_id),
                 )
 
                 row = cursor.fetchone()
                 if row:
-                    logger.debug(f"Found previous summary: {row['node_id']}")
-                    return str(row["node_id"])
+                    prev_id = str(row["node_id"]) if isinstance(row, dict) else str(row[0])
+                    logger.debug(f"Found previous summary: {prev_id} (before {current_node_id})")
+                    return prev_id
                 else:
-                    logger.debug(f"No previous summary found for pattern: {node_id_pattern}")
+                    logger.debug(f"No previous summary found before {current_node_id}")
                     return None
 
         except Exception as e:
@@ -465,6 +474,8 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 edge_data = []
 
@@ -473,9 +484,9 @@ class EdgeManager:
 
                     # Check if user node exists
                     cursor.execute(
-                        """
+                        f"""
                         SELECT node_id FROM graph_nodes
-                        WHERE node_type = 'user' AND node_id = ?
+                        WHERE node_type = 'user' AND node_id = {ph}
                         LIMIT 1
                     """,
                         (user_node_id,),
@@ -815,6 +826,8 @@ class EdgeManager:
         try:
             with get_db_connection(db_path=self._db_path) as conn:
                 cursor = conn.cursor()
+                adapter = get_adapter()
+                ph = adapter.placeholder()
 
                 # Calculate next period
                 next_period = period_start + timedelta(hours=6)
@@ -829,9 +842,9 @@ class EdgeManager:
 
                         # Check if next summary exists
                         cursor.execute(
-                            """
+                            f"""
                             SELECT node_id FROM graph_nodes
-                            WHERE node_id = ?
+                            WHERE node_id = {ph}
                             LIMIT 1
                         """,
                             (next_summary_id,),

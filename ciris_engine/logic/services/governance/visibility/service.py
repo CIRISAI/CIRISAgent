@@ -402,15 +402,39 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         Returns ServiceCorrelation objects that represent trace spans,
         always linked to their corresponding tasks/thoughts.
+
+        Only returns traces that haven't been exported yet (timestamp-based filtering).
         """
         try:
             # Get telemetry service from runtime if available
             if hasattr(self, "_runtime") and self._runtime:
                 telemetry_service = getattr(self._runtime, "telemetry_service", None)
                 if telemetry_service and hasattr(telemetry_service, "_recent_correlations"):
-                    # Return the most recent correlations
-                    correlations = telemetry_service._recent_correlations[-limit:]
-                    logger.debug(f"Retrieved {len(correlations)} traces from telemetry service")
+                    # Initialize last export timestamp if not present
+                    if not hasattr(telemetry_service, "_last_trace_export_time"):
+                        from datetime import datetime, timezone
+                        # Start from "now" so we only export NEW traces going forward
+                        telemetry_service._last_trace_export_time = datetime.now(timezone.utc)
+                        logger.info(f"Initialized trace export timestamp filter at {telemetry_service._last_trace_export_time}")
+
+                    # Filter to only traces created AFTER last export
+                    from datetime import datetime, timezone
+                    last_export = telemetry_service._last_trace_export_time
+                    new_correlations = [
+                        c for c in telemetry_service._recent_correlations
+                        if c.timestamp > last_export
+                    ]
+
+                    # Return up to limit newest traces
+                    correlations = new_correlations[-limit:] if new_correlations else []
+
+                    # Update last export time to the newest trace we're returning
+                    if correlations:
+                        telemetry_service._last_trace_export_time = max(c.timestamp for c in correlations)
+                        logger.debug(f"Retrieved {len(correlations)} NEW traces (after {last_export}), updated export time to {telemetry_service._last_trace_export_time}")
+                    else:
+                        logger.debug(f"No new traces since last export at {last_export}")
+
                     return list(correlations)
                 else:
                     logger.debug("Telemetry service found but _recent_correlations not available, will query database")

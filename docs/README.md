@@ -3,7 +3,9 @@
 Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and Signalling Gratitude) documentation.
 
 ## Getting Started
+- **[Standalone Installation](STANDALONE_INSTALL.md)** - One-command install for Agent + GUI (no Docker!)
 - [Quick Start Guide](QUICKSTART.md) - Get running in 5 minutes
+- [Complete Installation Guide](INSTALLATION.md) - Detailed setup, configuration, and deployment
 - [Deployment Guide](DEPLOYMENT.md) - Local development and production deployment
 
 ## Architecture & Design

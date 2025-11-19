@@ -11,6 +11,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
+from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WACertificate
 
 logger = logging.getLogger(__name__)
@@ -361,20 +362,21 @@ def get_certificate_counts(db_path: str) -> Dict[str, int]:
     counts: Dict[str, Any] = {"total": 0, "active": 0, "revoked": 0, "by_role": cast(Dict[str, int], {})}
 
     try:
+        adapter = get_adapter()
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
 
             # Total certificates
             cursor.execute("SELECT COUNT(*) FROM wa_cert")
-            counts["total"] = cursor.fetchone()[0]
+            counts["total"] = adapter.extract_scalar(cursor.fetchone()) or 0
 
             # Active certificates
             cursor.execute("SELECT COUNT(*) FROM wa_cert WHERE active = 1")
-            counts["active"] = cursor.fetchone()[0]
+            counts["active"] = adapter.extract_scalar(cursor.fetchone()) or 0
 
             # Revoked certificates
             cursor.execute("SELECT COUNT(*) FROM wa_cert WHERE active = 0")
-            counts["revoked"] = cursor.fetchone()[0]
+            counts["revoked"] = adapter.extract_scalar(cursor.fetchone()) or 0
 
             # Count by role
             cursor.execute("SELECT role, COUNT(*) FROM wa_cert WHERE active = 1 GROUP BY role")

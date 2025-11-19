@@ -1149,13 +1149,19 @@ class TestDailyConsolidationEdgeCreation:
                     previous_date.isoformat(),
                 ),
             )
+            # Commit so the data is visible to other cursors
+            mock_db_connection.commit()
 
-            # Test finding the previous summary
-            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", "20250714")
+            # Test finding the previous summary (from current date 2025-07-15)
+            # New signature expects current_node_id, finds most recent previous node
+            current_node_id = "tsdb_summary_daily_20250715"
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", current_node_id)
             assert result == previous_node_id
 
-            # Test non-existent summary
-            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", "20250713")
+            # Test non-existent summary (querying from date before any summaries exist)
+            # Should return None because no summary exists before 2025-07-13
+            early_node_id = "tsdb_summary_daily_20250713"
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", early_node_id)
             assert result is None
 
     def test_get_previous_summary_id_regular(self, edge_manager, mock_db_connection):
@@ -1189,10 +1195,78 @@ class TestDailyConsolidationEdgeCreation:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
+            # Commit so the data is visible to other cursors
+            mock_db_connection.commit()
 
-            # Test finding the previous summary
-            result = edge_manager.get_previous_summary_id("tsdb_summary", previous_period_id)
+            # Test finding the previous summary (from current period 12:00)
+            # New signature expects current_node_id, finds most recent previous node
+            # We're at 12:00, looking for the previous summary (06:00)
+            current_period_id = "20250714_12"
+            current_node_id = f"tsdb_summary_{current_period_id}"
+            result = edge_manager.get_previous_summary_id("tsdb_summary", current_node_id)
             assert result == previous_node_id
+
+    def test_get_previous_summary_id_with_multi_day_gap(self, edge_manager, mock_db_connection):
+        """Test get_previous_summary_id handles multi-day gaps in timeline.
+
+        This tests the production bug scenario where consolidation ran on Nov 7,
+        then Nov 9, then Nov 17 (9-day gap). The new logic should find Nov 9
+        when querying from Nov 17, not assume a 1-day interval.
+        """
+        with patch(
+            "ciris_engine.logic.services.graph.tsdb_consolidation.edge_manager.get_db_connection"
+        ) as mock_get_conn, patch("ciris_engine.logic.persistence.db.operations.get_db_connection") as mock_ops_conn:
+            # Ensure both mocks return the same mock_db_connection
+            mock_ops_conn.return_value.__enter__.return_value = mock_db_connection
+            mock_get_conn.return_value.__enter__.return_value = mock_db_connection
+            cursor = mock_db_connection.cursor()
+
+            # Create summaries with gaps: Nov 7, Nov 9, Nov 17 (production scenario)
+            node_nov7 = "tsdb_summary_daily_20251107"
+            node_nov9 = "tsdb_summary_daily_20251109"
+            node_nov17 = "tsdb_summary_daily_20251117"
+
+            for node_id, date_str in [
+                (node_nov7, "20251107"),
+                (node_nov9, "20251109"),
+            ]:
+                cursor.execute(
+                    """
+                    INSERT INTO graph_nodes
+                    (node_id, scope, node_type, attributes_json, version, updated_by, updated_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        node_id,
+                        "local",
+                        "tsdb_summary",
+                        json.dumps({"consolidation_level": "extensive"}),
+                        1,
+                        "test",
+                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+
+            # Commit so the data is visible to other cursors
+            mock_db_connection.commit()
+
+            # Test: Querying from Nov 17 should find Nov 9 (not Nov 16 which doesn't exist)
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", node_nov17)
+            assert result == node_nov9, "Should find Nov 9 despite 8-day gap"
+
+            # Test: Querying from Nov 9 should find Nov 7 (2-day gap)
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", node_nov9)
+            assert result == node_nov7, "Should find Nov 7 despite 2-day gap"
+
+            # Test: Querying from Nov 7 should return None (first summary)
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", node_nov7)
+            assert result is None, "Should return None for first summary"
+
+            # Test: Querying from a date before all summaries returns None
+            early_node = "tsdb_summary_daily_20251101"
+            result = edge_manager.get_previous_summary_id("tsdb_summary_daily", early_node)
+            assert result is None, "Should return None when no previous summaries exist"
 
     def test_daily_temporal_edge_creation_with_previous(self, edge_manager, mock_db_connection):
         """Test creating temporal edges when previous daily summary exists."""

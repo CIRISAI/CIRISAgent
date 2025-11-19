@@ -74,6 +74,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.2] - 2025-11-17
+
+### Added - Standalone Installation
+
+- **One-Command Standalone Installer** - Docker-free installation for CIRISAgent + CIRISGUI with local LLM support
+  - **Purpose**: Make CIRIS accessible to users without Docker/containerization expertise
+  - **Features**:
+    - Automatic dependency detection and installation (Python 3.9+, Node.js 20+, pnpm)
+    - Cross-platform support (Linux, macOS, WSL2)
+    - Intelligent systemd/launchd service creation
+    - Environment configuration with auto-generated encryption keys
+    - Helper scripts for start/stop/status management
+    - **Local LLM support**: Interactive configuration for Ollama, LM Studio, vLLM, LocalAI
+    - Choice between OpenAI or local/custom LLM during installation
+  - **Installation Methods**:
+    - One-line curl installer: `curl -sSL https://ciris.ai/install.sh | bash`
+    - Custom install directory, skip service, dev mode, branch selection options
+    - Full uninstall support
+  - **Architecture**:
+    - Installs both CIRISAgent (Python) and CIRISGUI (Next.js) repositories
+    - Agent API on port 8080, Web UI on port 3000 (configurable)
+    - Creates unified `.env` file with all configuration
+    - Supports manual start or automatic service management
+  - **Files**:
+    - `scripts/install.sh` - Main installer script (1070+ lines)
+    - `docs/STANDALONE_INSTALL.md` - Comprehensive installation guide
+    - Updated `README.md` and `docs/README.md` with standalone installation instructions
+  - **Platform Coverage**:
+    - Package managers: apt, dnf, yum, brew, pacman
+    - Init systems: systemd (Linux), launchd (macOS)
+    - Full WSL2 support
+
+### Fixed - Standalone Installer Critical Bugs
+
+- **GUI Unable to Connect to API** - NEXT_PUBLIC_API_BASE_URL embedded at build time
+  - **Problem**: GUI built BEFORE .env file was created, so NEXT_PUBLIC_API_BASE_URL was undefined
+  - **Impact**: Fresh installations showed "Cannot connect to agent" error
+  - **Root Cause**: Next.js embeds NEXT_PUBLIC_* variables at build time, not runtime
+  - **Solution**: Reordered installation steps to create .env BEFORE building GUI + source .env during build
+  - **Files**: `scripts/install.sh`
+
+- **Piped Installation Did Nothing** - curl | bash silently failed
+  - **Problem**: Script used `[ "${BASH_SOURCE[0]}" = "${0}" ]` check that fails when piped
+  - **Impact**: `curl -sSL https://ciris.ai/install.sh | bash` exited silently with no output
+  - **Root Cause**: When piped, BASH_SOURCE[0] = "/dev/fd/63" (pipe descriptor), not matching ${0} = "bash"
+  - **Solution**: Detect piped execution with `[[ "${BASH_SOURCE[0]}" == /dev/fd/* ]]`
+  - **Files**: `scripts/install.sh`
+
+- **No Interactive Prompts When Piped** - LLM provider selection skipped
+  - **Problem**: Used `[ -t 0 ]` (stdin is terminal) to detect interactivity, fails when piped from curl
+  - **Impact**: No LLM configuration prompts appeared, used defaults instead
+  - **Solution**: Use `/dev/tty` for user input and `[ -t 1 ] && [ -r /dev/tty ]` to detect terminal
+  - **Files**: `scripts/install.sh`
+
+- **LLM Provider Detection Too Strict** - Only "other" triggered custom config
+  - **Problem**: Regex `^[Oo]` matched both "openai" and "other", inverted logic
+  - **Impact**: Typing "anthropic", "groq", "ollama" was treated as OpenAI
+  - **Solution**: Invert logic - match "openai" specifically, else use custom config
+  - **Files**: `scripts/install.sh`
+
+- **Graceful Shutdown Errors on Ctrl+C** - Ugly traceback spam
+  - **Problem**: Signal handler called `sys.exit(1)` which abruptly killed asyncio event loop
+  - **Impact**: SystemExit(1) and asyncio.CancelledError tracebacks on shutdown
+  - **Solution**: Raise `KeyboardInterrupt()` instead to let Python handle shutdown gracefully
+  - **Files**: `main.py`, `scripts/install.sh` (start.sh graceful shutdown handler)
+
+### Fixed - PostgreSQL Compatibility
+
+- **PostgreSQL Row Indexing Bug** - Massive log spam on scout instances
+  - **Problem**: Used `result[0]` to access COUNT(*) results, fails with KeyError on PostgreSQL
+  - **Impact**: 10,881+ errors creating 6.6MB incident logs on Scout 001, 4.6MB on Scout 002
+  - **Root Cause**: PostgreSQL Row objects use dict-like access via `keys()`, not integer indexing
+  - **Solution**: Added `DialectAdapter.extract_scalar()` method that tries `row[0]` first, falls back to dict access
+  - **Files**:
+    - `ciris_engine/logic/persistence/db/dialect.py` (new `extract_scalar()` method)
+    - `ciris_engine/logic/persistence/models/tasks.py` (`count_tasks()`)
+    - `ciris_engine/logic/persistence/stores/authentication_store.py` (`get_certificate_counts()`)
+
 ## [1.6.1] - 2025-11-13
 
 ### Fixed - Production Critical Issues

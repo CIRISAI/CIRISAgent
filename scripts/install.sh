@@ -327,6 +327,49 @@ start_docker_stack() {
 # Dependency Installation
 # ============================================================================
 
+check_macos_prerequisites() {
+    # On macOS, check if we have either Homebrew or Command Line Tools
+    local os_type
+    os_type=$(detect_os)
+
+    if [ "$os_type" != "macos" ]; then
+        return 0  # Not macOS, nothing to check
+    fi
+
+    # Check if Homebrew is installed
+    if command_exists brew; then
+        log_success "Homebrew found"
+        return 0
+    fi
+
+    # No Homebrew - check if Python 3 is already available (from CLT or python.org)
+    if command_exists python3; then
+        local py_version
+        py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+
+        # Check if it meets minimum requirements (3.9+)
+        if python3 -c 'import sys; exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+            log_success "Python $py_version found (system)"
+            log_warn "Homebrew not found - using system Python. Some dependencies may need manual installation."
+            return 0
+        fi
+    fi
+
+    # No suitable Python and no Homebrew - bail out with helpful message
+    log_error "macOS requires Homebrew to install dependencies automatically."
+    echo ""
+    echo "Please install Homebrew first:"
+    echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    echo ""
+    echo "Alternatively, if you have Python 3.9+ installed manually:"
+    echo "  Run this script with --skip-deps and ensure you have:"
+    echo "    - Python 3.9+ (python3 --version)"
+    echo "    - Node.js 18+ (node --version)"
+    echo "    - pnpm (npm install -g pnpm)"
+    echo "    - git"
+    exit 1
+}
+
 install_dependencies() {
     log_step "Installing system dependencies"
 
@@ -334,6 +377,9 @@ install_dependencies() {
     os_type=$(detect_os)
     local pkg_mgr
     pkg_mgr=$(get_package_manager)
+
+    # Check macOS prerequisites first (brew or existing Python)
+    check_macos_prerequisites
 
     if [ "$DRY_RUN" = true ]; then
         log_info "[dry-run] Would verify Python 3.9+, Node.js 18+, pnpm, git, and curl using $pkg_mgr"
@@ -356,8 +402,17 @@ install_dependencies() {
             pacman)
                 sudo pacman -S --noconfirm python python-pip
                 ;;
-            *)
-                log_error "Cannot automatically install Python. Please install Python 3.9+ manually."
+            none|*)
+                if [ "$os_type" = "macos" ]; then
+                    log_error "Cannot install Python without Homebrew or system Python."
+                    echo ""
+                    echo "Please either:"
+                    echo "  1. Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+                    echo "  2. Install Python from python.org: https://www.python.org/downloads/macos/"
+                    echo "  3. Run with --skip-deps if you already have Python 3.9+ installed"
+                else
+                    log_error "Cannot automatically install Python. Please install Python 3.9+ manually."
+                fi
                 exit 1
                 ;;
         esac
@@ -392,8 +447,17 @@ install_dependencies() {
             pacman)
                 sudo pacman -S --noconfirm nodejs npm
                 ;;
-            *)
-                log_error "Cannot automatically install Node.js. Please install Node.js 18+ manually from https://nodejs.org"
+            none|*)
+                if [ "$os_type" = "macos" ]; then
+                    log_error "Cannot install Node.js without Homebrew."
+                    echo ""
+                    echo "Please either:"
+                    echo "  1. Install Homebrew first, then re-run this script"
+                    echo "  2. Install Node.js manually from https://nodejs.org/en/download/package-manager"
+                    echo "  3. Run with --skip-deps if you already have Node.js 18+ installed"
+                else
+                    log_error "Cannot automatically install Node.js. Please install Node.js 18+ manually from https://nodejs.org"
+                fi
                 exit 1
                 ;;
         esac

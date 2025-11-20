@@ -19,9 +19,9 @@ class RequestData(BaseModel):
     author_id: Optional[str] = Field(None, description="Author ID")
     author_name: Optional[str] = Field(None, description="Author name")
     content: Optional[str] = Field(None, description="Message content")
-    parameters: Optional[JSONDict] = Field(default_factory=dict, description="Request parameters")
-    headers: Optional[Dict[str, str]] = Field(default_factory=dict, description="Request headers")
-    metadata: Optional[Dict[str, str]] = Field(default_factory=dict, description="Request metadata")
+    parameters: Optional[JSONDict] = Field(default_factory=lambda: {}, description="Request parameters")
+    headers: Optional[Dict[str, str]] = Field(default_factory=lambda: {}, description="Request headers")
+    metadata: Optional[Dict[str, str]] = Field(default_factory=lambda: {}, description="Request metadata")
 
 
 class ResponseData(BaseModel):
@@ -32,8 +32,8 @@ class ResponseData(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     error_type: Optional[str] = Field(None, description="Type of error")
     result: Optional[JSONValue] = Field(None, description="Response result")
-    resource_usage: Optional[Dict[str, float]] = Field(default_factory=dict, description="Resource usage metrics")
-    metadata: Optional[Dict[str, str]] = Field(default_factory=dict, description="Response metadata")
+    resource_usage: Optional[Dict[str, float]] = Field(default_factory=lambda: {}, description="Resource usage metrics")
+    metadata: Optional[Dict[str, str]] = Field(default_factory=lambda: {}, description="Response metadata")
 
 
 class InteractionContext(BaseModel):

@@ -74,3 +74,8 @@ ciris_audit_report.json
 package-lock.json
 package.json
 dict_any_audit_results.json
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/

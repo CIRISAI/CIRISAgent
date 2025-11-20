@@ -308,16 +308,33 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
             logger.critical(f"Sending SIGKILL to process {pid}")
 
             try:
-                # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-                os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
-            except OSError as e:
-                logger.error(f"Failed to force kill process: {e}")
-                # If SIGKILL fails, try SIGTERM as fallback
-                try:
+                # Use platform-specific signals
+                # SIGKILL doesn't exist on Windows - use SIGTERM or sys.exit
+                if hasattr(signal, 'SIGKILL'):
+                    # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+                    os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
+                elif hasattr(signal, 'SIGTERM'):
                     # NOSONAR: Safe - only sending signal to our own process (os.getpid())
                     os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
-                except OSError:
-                    pass
+                else:
+                    # Windows fallback - just exit
+                    import sys
+                    sys.exit(1)
+            except (OSError, AttributeError) as e:
+                logger.error(f"Failed to force kill process: {e}")
+                # If primary signal fails, try SIGTERM as fallback
+                try:
+                    if hasattr(signal, 'SIGTERM'):
+                        # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+                        os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
+                    else:
+                        # Windows fallback
+                        import sys
+                        sys.exit(1)
+                except (OSError, AttributeError):
+                    # Last resort
+                    import sys
+                    sys.exit(1)
 
         # Start force kill timer
         self._force_kill_task = asyncio.create_task(force_kill())

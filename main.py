@@ -1,8 +1,21 @@
 # Load environment variables from .env if present
+# Load from all standard config paths in priority order
 try:
+    from pathlib import Path
+
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # Priority order: ./env (highest), ~/.ciris/.env, /etc/ciris/.env (lowest)
+    config_paths = [
+        Path.cwd() / ".env",
+        Path.home() / ".ciris" / ".env",
+        Path("/etc/ciris/.env"),
+    ]
+
+    for config_path in config_paths:
+        if config_path.exists():
+            load_dotenv(config_path, override=False)  # Don't override already-set vars
+
 except ImportError:
     pass  # dotenv is optional; skip if not installed
 import asyncio
@@ -14,7 +27,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 
@@ -32,7 +45,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     """Setup signal handlers for graceful shutdown."""
     shutdown_initiated = {"value": False}  # Use dict to allow modification in nested function
 
-    def signal_handler(signum, frame):
+    def signal_handler(signum: int, frame: Any) -> None:
         if shutdown_initiated["value"]:
             logger.warning(f"Signal {signum} received again, forcing immediate exit")
             # Don't call sys.exit() in async context - just raise to let Python handle it
@@ -55,7 +68,7 @@ def setup_signal_handlers(runtime: CIRISRuntime) -> None:
 def setup_global_exception_handler() -> None:
     """Setup global exception handler to catch all uncaught exceptions."""
 
-    def handle_exception(exc_type, exc_value, exc_traceback):
+    def handle_exception(exc_type: type[BaseException], exc_value: BaseException, exc_traceback: Any) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             # Let KeyboardInterrupt be handled by signal handlers
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -82,6 +95,8 @@ def _create_thought() -> Thought:
 
 
 async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional[str]) -> None:
+    if not runtime.agent_processor:
+        raise RuntimeError("Agent processor not initialized")
     handler_type = HandlerActionType[handler.upper()]
     dispatcher = runtime.agent_processor.action_dispatcher
     handler_instance = dispatcher.handlers.get(handler_type)
@@ -94,7 +109,26 @@ async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional
         rationale="manual trigger",
     )
     thought = _create_thought()
-    await handler_instance.handle(result, thought, {"channel_id": runtime.startup_channel_id})
+    # Create a proper DispatchContext
+    from ciris_engine.schemas.runtime.contexts import DispatchContext
+    from ciris_engine.schemas.runtime.system_context import ChannelContext
+
+    dispatch_context = DispatchContext(
+        channel_context=ChannelContext(
+            channel_id=runtime.startup_channel_id, channel_type="CLI", created_at=datetime.now(timezone.utc)
+        ),
+        author_id="system",
+        author_name="System",
+        origin_service="main",
+        handler_name=handler,
+        action_type=handler_type,
+        thought_id=thought.thought_id,
+        task_id=thought.source_task_id,
+        source_task_id=thought.source_task_id,
+        event_summary=f"Manual trigger: {handler}",
+        event_timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    await handler_instance.handle(result, thought, dispatch_context)
 
 
 async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds: Optional[int] = None) -> None:
@@ -214,18 +248,109 @@ def main(
         nonlocal mock_llm, handler, params, task, num_rounds
         from ciris_engine.logic.config.env_utils import get_env_var
 
-        # Check for CIRIS_MOCK_LLM environment variable first
+        # Check for CIRIS_MOCK_LLM environment variable
         if not mock_llm and get_env_var("CIRIS_MOCK_LLM"):
-            mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "").lower()
+            mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
+            if mock_llm_env:
+                mock_llm_env = mock_llm_env.lower()
             if mock_llm_env in ("true", "1", "yes", "on"):
                 logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
                 mock_llm = True
 
-        # Check for API key and auto-enable mock LLM if none is set
+        # Handle first-run setup if needed
+        from ciris_engine.logic.setup.first_run import check_macos_python, is_first_run, is_interactive_environment
+        from ciris_engine.logic.setup.wizard import run_setup_wizard
+
+        # Check macOS Python installation
+        python_valid, python_message = check_macos_python()
+        if not python_valid:
+            click.echo("=" * 70, err=True)
+            click.echo("❌ PYTHON INSTALLATION ISSUE", err=True)
+            click.echo("=" * 70, err=True)
+            click.echo(python_message, err=True)
+            click.echo("=" * 70, err=True)
+            sys.exit(1)
+
+        first_run = is_first_run()
+        # When running in import/CI mode, bypass interactive first-run gating so
+        # CLI smoke tests can execute without configuration prompts or exits.
+        if os.environ.get("CIRIS_IMPORT_MODE") == "true":
+            first_run = False
+        if first_run and not adapter_types_list:
+            # First run detected and no adapter explicitly specified via CLI
+
+            # Check if CIRIS_ADAPTER is set in environment BEFORE checking interactivity
+            # This allows Docker/CI deployments to specify adapter via environment
+            env_adapter = get_env_var("CIRIS_ADAPTER")
+            if env_adapter:
+                # Adapter specified via environment - skip wizard, continue to normal startup
+                pass
+            elif not is_interactive_environment():
+                # Non-interactive environment (Docker, systemd, CI, etc.)
+                # No adapter in CLI or environment - EXIT with instructions
+                click.echo("=" * 70, err=True)
+                click.echo("❌ CONFIGURATION REQUIRED", err=True)
+                click.echo("=" * 70, err=True)
+                click.echo("CIRIS is not configured. Please set environment variables:", err=True)
+                click.echo("", err=True)
+                click.echo("Required:", err=True)
+                click.echo("  OPENAI_API_KEY=your_api_key", err=True)
+                click.echo("  CIRIS_ADAPTER=api", err=True)
+                click.echo("", err=True)
+                click.echo("For local LLM (Ollama, LM Studio, etc.):", err=True)
+                click.echo("  OPENAI_API_KEY=local", err=True)
+                click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
+                click.echo("  OPENAI_MODEL=llama3", err=True)
+                click.echo("", err=True)
+                click.echo("Or mount a .env file at:", err=True)
+                click.echo("  ~/.ciris/.env", err=True)
+                click.echo("  ./.env", err=True)
+                click.echo("=" * 70, err=True)
+                sys.exit(1)
+            else:
+                # Interactive environment - run setup wizard
+                try:
+                    click.echo()
+                    click.echo("=" * 70)
+                    click.echo("First run detected - running setup wizard...")
+                    click.echo("=" * 70)
+                    config_path = run_setup_wizard()
+                    # Reload environment after setup
+                    try:
+                        from dotenv import load_dotenv
+
+                        load_dotenv(config_path)
+                        click.echo(f"✅ Configuration loaded from: {config_path}")
+                    except ImportError:
+                        pass  # dotenv is optional
+                except KeyboardInterrupt:
+                    click.echo("\nSetup cancelled by user")
+                    sys.exit(1)
+                except Exception as e:
+                    click.echo(f"\n❌ Setup failed: {e}", err=True)
+                    click.echo("You can configure manually by creating a .env file", err=True)
+                    sys.exit(1)
+
+        # Check for API key - NEVER default to mock LLM in production
         api_key = get_env_var("OPENAI_API_KEY")
         if not mock_llm and not api_key:
-            click.echo("no API key set, if using a local LLM set key as LOCAL, starting with mock LLM")
-            mock_llm = True
+            # No API key and not explicitly using mock LLM
+            click.echo("=" * 70, err=True)
+            click.echo("❌ LLM API KEY REQUIRED", err=True)
+            click.echo("=" * 70, err=True)
+            click.echo("No OPENAI_API_KEY found in environment.", err=True)
+            click.echo("", err=True)
+            click.echo("Options:", err=True)
+            click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
+            click.echo("  2. Add to .env file", err=True)
+            click.echo("  3. Use --mock-llm flag for testing only", err=True)
+            click.echo("", err=True)
+            click.echo("For local LLM:", err=True)
+            click.echo("  export OPENAI_API_KEY=local", err=True)
+            click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
+            click.echo("  export OPENAI_MODEL=llama3", err=True)
+            click.echo("=" * 70, err=True)
+            sys.exit(1)
 
         # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)
@@ -236,7 +361,11 @@ def main(
                 # Support comma-separated adapters (e.g., "api,discord")
                 final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
             else:
-                final_adapter_types_list = ["cli"]
+                # Default behavior change:
+                # - After setup wizard (first_run but now configured): start API
+                # - If .env exists (not first run): start API
+                # - This makes pip-installed CIRIS start web interface by default
+                final_adapter_types_list = ["api"]
 
         # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
         selected_adapter_types = list(final_adapter_types_list)
@@ -339,7 +468,7 @@ def main(
                 raise SystemExit(1)
 
             # Create CLI overrides including the template parameter
-            cli_overrides = {}
+            cli_overrides: dict[str, Any] = {}
             if template and template != "default":
                 cli_overrides["default_template"] = template
 
@@ -355,8 +484,8 @@ def main(
             sys.stdout.flush()
             sys.stderr.flush()
             # Also flush logging handlers
-            for handler in logger.handlers:
-                handler.flush()
+            for log_handler in logger.handlers:
+                log_handler.flush()
             # Give a tiny bit of time for output to be written
             import time
 
@@ -501,7 +630,7 @@ def main(
             # Store the event on the runtime so shutdown() can set it
             runtime._shutdown_event = shutdown_event
 
-            async def monitor_shutdown():
+            async def monitor_shutdown() -> None:
                 """Monitor for shutdown completion and force exit for CLI mode."""
                 # Wait for the shutdown event to be set by the shutdown() method
                 await shutdown_event.wait()
@@ -511,7 +640,7 @@ def main(
                 await asyncio.sleep(0.2)  # Brief pause for final log entries
 
                 # Flush all output in parallel
-                async def flush_handler(handler):
+                async def flush_handler(handler: Any) -> None:
                     """Flush a single handler."""
                     try:
                         await asyncio.to_thread(handler.flush)
@@ -525,8 +654,8 @@ def main(
                 ]
 
                 # Add tasks for each log handler
-                for handler in logging.getLogger().handlers:
-                    flush_tasks.append(asyncio.create_task(flush_handler(handler)))
+                for log_handler in logging.getLogger().handlers:
+                    flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
 
                 # Wait for all flush operations to complete
                 await asyncio.gather(*flush_tasks, return_exceptions=True)
@@ -561,7 +690,7 @@ def main(
             await asyncio.sleep(0.5)  # Give time for final logs to flush
 
             # Flush all output in parallel
-            async def flush_handler(handler):
+            async def flush_handler(handler: Any) -> None:
                 """Flush a single handler."""
                 try:
                     await asyncio.to_thread(handler.flush)
@@ -575,12 +704,11 @@ def main(
             ]
 
             # Add tasks for each log handler
-            for handler in logging.getLogger().handlers:
-                flush_tasks.append(asyncio.create_task(flush_handler(handler)))
+            for log_handler in logging.getLogger().handlers:
+                flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
 
             # Wait for all flush operations to complete
             await asyncio.gather(*flush_tasks, return_exceptions=True)
-            import os
 
             logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI runtime completed")
             os._exit(0)
@@ -609,8 +737,6 @@ def main(
 
     # For API mode subprocess tests, ensure immediate exit
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
-        import os
-
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
         os._exit(0)
 
@@ -622,12 +748,11 @@ def main(
         # Ensure the log message is flushed
         sys.stdout.flush()
         sys.stderr.flush()
-        for handler in logging.getLogger().handlers:
-            handler.flush()
+        for log_handler in logging.getLogger().handlers:
+            log_handler.flush()
         import time
 
         time.sleep(0.1)  # Brief pause to ensure logs are written
-        import os
 
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI mode force exit")
         os._exit(0)

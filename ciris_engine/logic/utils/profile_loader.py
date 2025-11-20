@@ -26,14 +26,32 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
 
     This coroutine should be awaited so file I/O does not block the event loop.
 
+    Template Search Order (if template_path is None):
+    1. CWD/ciris_templates/ (development mode)
+    2. CIRIS_HOME/ciris_templates/ (if CIRIS_HOME set)
+    3. ~/ciris/ciris_templates/ (user templates)
+    4. <package>/ciris_templates/ (bundled templates)
+
     Args:
-        template_path: Path to the YAML template file.
+        template_path: Path to the YAML template file. If None, searches for default.yaml.
 
     Returns:
         An AgentTemplate instance if loading is successful, otherwise None.
     """
     if template_path is None:
-        template_path = DEFAULT_TEMPLATE_PATH
+        # First check if DEFAULT_TEMPLATE_PATH exists (for tests/backwards compatibility)
+        if DEFAULT_TEMPLATE_PATH.exists():
+            template_path = DEFAULT_TEMPLATE_PATH
+        else:
+            # Search for default template in multiple locations
+            from ciris_engine.logic.utils.path_resolution import find_template_file
+
+            resolved_path = find_template_file("default")
+            if resolved_path is None:
+                # Fallback to DEFAULT_TEMPLATE_PATH for error message
+                template_path = DEFAULT_TEMPLATE_PATH
+            else:
+                template_path = resolved_path
 
     if not template_path.exists() or not template_path.is_file():
         # FAIL instead of falling back to default template

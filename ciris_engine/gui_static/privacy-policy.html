@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS Privacy Policy</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #e4e4e7;
+        }
+        h1, h2 {
+            color: #f4f4f5;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 0.5rem;
+        }
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .update-date {
+            color: #a1a1aa;
+            font-size: 0.9rem;
+        }
+        .highlight {
+            background: #18181b;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>CIRIS Privacy Policy</h1>
+    <p class="update-date">Last Updated: August 7, 2025</p>
+
+    <div class="highlight">
+        <strong>Key Commitments:</strong>
+        <ul>
+            <li>We do NOT train on your content</li>
+            <li>Message content retained for 14 days only (pilot)</li>
+            <li>After 14 days, only hashes kept for safety</li>
+            <li>You can request your data or deletion anytime</li>
+            <li>We only store what's necessary for moderation</li>
+        </ul>
+    </div>
+
+    <h2>1. What We Collect</h2>
+    <p>When you interact with CIRIS agents:</p>
+    <ul>
+        <li><strong>Message Context:</strong> Message IDs and minimal context needed for moderation decisions</li>
+        <li><strong>Decision Logs:</strong> PDMA (Perceive-Decide-Memorize-Act) rationales for transparency</li>
+        <li><strong>Metadata:</strong> Timestamps, channel IDs, and action outcomes</li>
+        <li><strong>OAuth Data:</strong> Basic profile information if you authenticate (name, email)</li>
+    </ul>
+
+    <h2>2. How We Use It</h2>
+    <ul>
+        <li><strong>Moderation:</strong> To provide reasoned, auditable moderation recommendations</li>
+        <li><strong>Transparency:</strong> To explain decisions through PDMA logs</li>
+        <li><strong>Safety:</strong> To detect and prevent harmful patterns</li>
+        <li><strong>Improvement:</strong> To analyze system performance (NOT to train on your content)</li>
+    </ul>
+
+    <h2>3. Data Retention</h2>
+    <ul>
+        <li><strong>Message Content:</strong> 14 days (pilot phase)</li>
+        <li><strong>Moderation Logs:</strong> 14 days, then hashed</li>
+        <li><strong>Audit Trail:</strong> 90 days for compliance</li>
+        <li><strong>Incident Reports:</strong> 90 days for safety incidents</li>
+        <li><strong>System Metrics:</strong> Aggregated indefinitely (no personal data)</li>
+    </ul>
+
+    <h2>4. Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+        <li><strong>Access:</strong> Request a copy of your data</li>
+        <li><strong>Delete:</strong> Request deletion of your data</li>
+        <li><strong>Correct:</strong> Request corrections to inaccurate data</li>
+        <li><strong>Export:</strong> Receive your data in a portable format</li>
+    </ul>
+
+    <div class="highlight">
+        <strong>Data Subject Access Request (DSAR):</strong><br>
+        Email: privacy@ciris.ai<br>
+        API Endpoint: <code>POST /v1/dsr</code><br>
+        Response Time: Within 30 days
+    </div>
+
+    <h2>5. Data Security</h2>
+    <ul>
+        <li>End-to-end encryption for sensitive data</li>
+        <li>Ed25519 signatures for authentication</li>
+        <li>Zero attack surface architecture</li>
+        <li>Regular security audits</li>
+    </ul>
+
+    <h2>6. Third Parties</h2>
+    <p>We do NOT:</p>
+    <ul>
+        <li>Sell your data</li>
+        <li>Share data with advertisers</li>
+        <li>Use your content for AI training</li>
+    </ul>
+    <p>We MAY share data:</p>
+    <ul>
+        <li>When required by law</li>
+        <li>To prevent imminent harm</li>
+        <li>With your explicit consent</li>
+    </ul>
+
+    <h2>7. Discord-Specific</h2>
+    <p>For Discord moderation:</p>
+    <ul>
+        <li>We only access channels where explicitly invited</li>
+        <li>Server admins control our permissions</li>
+        <li>We respect Discord's Terms of Service</li>
+        <li>Guild-specific data stays within that guild</li>
+    </ul>
+
+    <h2>8. Changes</h2>
+    <p>We'll notify you of significant changes via:</p>
+    <ul>
+        <li>In-app notifications</li>
+        <li>Email (if you've provided one)</li>
+        <li>30-day notice for material changes</li>
+    </ul>
+
+    <h2>9. Contact</h2>
+    <p>Questions or concerns?</p>
+    <ul>
+        <li>Email: <a href="mailto:privacy@ciris.ai">privacy@ciris.ai</a></li>
+        <li>GitHub: <a href="https://github.com/CIRISAI/CIRISAgent/issues">CIRISAI/CIRISAgent</a></li>
+        <li>DSAR: <code>POST /v1/dsr</code></li>
+    </ul>
+
+    <h2>10. Covenant Commitment</h2>
+    <p>This privacy policy is governed by the CIRIS Covenant principles:</p>
+    <ul>
+        <li>Respect for persons</li>
+        <li>Beneficence and non-maleficence</li>
+        <li>Justice and fairness</li>
+        <li>Respect for autonomy</li>
+        <li>Veracity and transparency</li>
+    </ul>
+
+    <p style="margin-top: 3rem; text-align: center; color: #a1a1aa;">
+        CIRIS - Ethical AI by Design<br>
+        Version 1.2.1
+    </p>
+</body>
+</html>

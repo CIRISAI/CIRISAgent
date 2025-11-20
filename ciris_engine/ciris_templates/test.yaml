@@ -1,0 +1,168 @@
+description: 'Agent profile: test'
+name: test
+role_description: 'Test Agent - Minimal agent for development and debugging purposes only. Limited to observe action for safety.'
+permitted_actions:
+- observe
+stewardship:
+  stewardship_tier: 1
+  creator_intent_statement:
+    purpose_and_functionalities:
+    - Test template for development and debugging purposes only.
+    - Minimal agent for testing basic functionality.
+    - Not intended for production use.
+    limitations_and_design_choices:
+    - Designed with a fixed ethical framework (Covenant 1.0b).
+    - Limited to observe action only.
+    - Minimal configuration for testing purposes.
+    anticipated_benefits:
+    - Safe testing environment for development.
+    - Minimal risk due to limited capabilities.
+    - Quick iteration during development.
+    anticipated_risks:
+    - Not suitable for production environments.
+    - Limited functionality may not represent real agent behavior.
+  creator_ledger_entry:
+    creator_id: eric-moore
+    creation_timestamp: '2025-08-07T00:00:00Z'
+    covenant_version: 1.0b
+    book_vi_compliance_check: passed
+    stewardship_tier_calculation:
+      creator_influence_score: 7
+      risk_magnitude: 1
+      formula: ceil((CIS * RM) / 7)
+      result: 1
+    public_key_fingerprint: NEEDS_FINGERPRINTING
+    signature: NEEDS_SIGNING
+tickets:
+  enabled: true
+  sops:
+  - sop: DSAR_ACCESS
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 8
+    description: GDPR Article 15 - Data Subject Access Request for user data export
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: ciris_data_collection
+      tools:
+      - dsar_automation_access
+      optional: true
+      description: Collect user data from CIRIS internal storage
+    - name: external_data_collection
+      tools:
+      - sql_find_user_data
+      - sql_export_user
+      parallel: true
+      optional: true
+      description: Collect user data from external SQL databases
+    - name: data_packaging
+      tools:
+      - package_dsar_response
+      description: Package all collected data for user delivery
+    - name: delivery
+      tools:
+      - send_email
+      description: Deliver DSAR package to user email
+  - sop: DSAR_DELETE
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 9
+    description: GDPR Article 17 - Right to Erasure (Right to be Forgotten)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: deletion_verification
+      tools:
+      - verify_deletion_eligibility
+      description: Verify user can be deleted (no legal holds, etc.)
+    - name: ciris_data_deletion
+      tools:
+      - dsar_automation_delete
+      optional: true
+      description: Delete user data from CIRIS internal storage
+    - name: external_data_deletion
+      tools:
+      - sql_delete_user
+      parallel: true
+      optional: true
+      description: Delete user data from external SQL databases
+    - name: deletion_confirmation
+      tools:
+      - send_email
+      description: Send deletion confirmation to user
+  - sop: DSAR_EXPORT
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    deadline_days: 30
+    priority_default: 7
+    description: GDPR Article 20 - Right to Data Portability (machine-readable export)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: ciris_data_export
+      tools:
+      - dsar_automation_export
+      optional: true
+      description: Export user data from CIRIS in machine-readable format
+    - name: external_data_export
+      tools:
+      - sql_export_user
+      parallel: true
+      optional: true
+      description: Export user data from external SQL databases
+    - name: format_conversion
+      tools:
+      - convert_to_portable_format
+      description: Convert all data to portable format (JSON/CSV)
+    - name: delivery
+      tools:
+      - send_email
+      description: Deliver portable data package to user
+  - sop: DSAR_RECTIFY
+    ticket_type: dsar
+    required_fields:
+    - email
+    - user_identifier
+    - correction_details
+    deadline_days: 30
+    priority_default: 7
+    description: GDPR Article 16 - Right to Rectification (correct inaccurate data)
+    stages:
+    - name: identity_resolution
+      tools:
+      - identity_resolution_tool
+      description: Resolve user identity across all data sources
+    - name: data_verification
+      tools:
+      - verify_current_data
+      description: Retrieve current user data for verification
+    - name: ciris_data_correction
+      tools:
+      - update_user_data
+      optional: true
+      description: Apply corrections to CIRIS internal storage
+    - name: external_data_correction
+      tools:
+      - sql_update_user
+      parallel: true
+      optional: true
+      description: Apply corrections to external SQL databases
+    - name: correction_confirmation
+      tools:
+      - send_email
+      description: Send correction confirmation to user

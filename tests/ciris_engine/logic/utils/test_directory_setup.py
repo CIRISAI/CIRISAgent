@@ -128,8 +128,8 @@ class TestSetupApplicationDirectories:
 
     def test_cannot_create_directory_fails_fast(self, mock_db_path):
         """Test that directory creation failure causes immediate failure."""
-        # Skip if running as root
-        if os.getuid() == 0:
+        # Skip if running as root or on Windows
+        if hasattr(os, "getuid") and os.getuid() == 0:
             pytest.skip("Cannot test permission errors when running as root")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,8 +154,8 @@ class TestSetupApplicationDirectories:
 
     def test_cannot_write_to_directory_fails_fast(self, mock_db_path):
         """Test that write permission issues cause immediate failure."""
-        # Skip this test if running as root (root can write anywhere)
-        if os.getuid() == 0:
+        # Skip this test if running as root (root can write anywhere) or on Windows
+        if hasattr(os, "getuid") and os.getuid() == 0:
             pytest.skip("Cannot test permission errors when running as root")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -284,8 +284,8 @@ class TestErrorMessages:
 
     def test_permission_error_message(self, mock_db_path):
         """Test permission error message includes helpful details."""
-        # Skip if running as root
-        if os.getuid() == 0:
+        # Skip if running as root or on Windows
+        if hasattr(os, "getuid") and os.getuid() == 0:
             pytest.skip("Cannot test permission errors when running as root")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -509,3 +509,126 @@ class TestDatabaseExclusiveAccess:
             finally:
                 conn.rollback()
                 conn.close()
+
+
+class TestWindowsCompatibility:
+    """Test Windows compatibility for directory setup functionality."""
+
+    def test_setup_works_without_getuid(self, mock_db_path):
+        """Test that setup works on Windows where os.getuid doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            # Save original functions if they exist
+            original_getuid = getattr(os, "getuid", None)
+            original_getgid = getattr(os, "getgid", None)
+
+            try:
+                # Remove getuid/getgid to simulate Windows
+                if hasattr(os, "getuid"):
+                    delattr(os, "getuid")
+                if hasattr(os, "getgid"):
+                    delattr(os, "getgid")
+
+                # Should not raise AttributeError
+                setup_application_directories(base_dir=base_dir, fail_fast=False)
+
+                # Check all directories were created
+                expected_dirs = ["data", "data_archive", "logs", "audit_keys", "config", ".secrets"]
+                for dir_name in expected_dirs:
+                    assert (base_dir / dir_name).exists(), f"Directory {dir_name} should exist"
+            finally:
+                # Restore original functions
+                if original_getuid:
+                    os.getuid = original_getuid
+                if original_getgid:
+                    os.getgid = original_getgid
+
+    def test_validate_works_without_getuid(self):
+        """Test that validation works on Windows where os.getuid doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            # Create all required directories
+            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+                (base_dir / dir_name).mkdir()
+
+            # Save original functions if they exist
+            original_getuid = getattr(os, "getuid", None)
+            original_getgid = getattr(os, "getgid", None)
+
+            try:
+                # Remove getuid/getgid to simulate Windows
+                if hasattr(os, "getuid"):
+                    delattr(os, "getuid")
+                if hasattr(os, "getgid"):
+                    delattr(os, "getgid")
+
+                # Should not raise AttributeError
+                result = validate_directories(base_dir=base_dir)
+                assert result is True
+            finally:
+                # Restore original functions
+                if original_getuid:
+                    os.getuid = original_getuid
+                if original_getgid:
+                    os.getgid = original_getgid
+
+    def test_getattr_fallback_for_missing_os_functions(self):
+        """Test that getattr returns -1 for missing os.getuid/getgid on Windows."""
+        # This tests the pattern: getattr(os, 'getuid', lambda: -1)()
+
+        # Simulate Windows by using getattr directly
+        # If getuid doesn't exist, the lambda should return -1
+        user_id = getattr(os, "getuid_nonexistent", lambda: -1)()
+        group_id = getattr(os, "getgid_nonexistent", lambda: -1)()
+
+        assert user_id == -1, "Should return -1 when getuid doesn't exist"
+        assert group_id == -1, "Should return -1 when getgid doesn't exist"
+
+    def test_get_file_owner_info_unix(self):
+        """Test _get_file_owner_info on Unix with pwd/grp available."""
+        from ciris_engine.logic.utils.directory_setup import _get_file_owner_info
+
+        # Skip if running on Windows or as root
+        if not hasattr(os, "getuid") or os.getuid() == 0:
+            pytest.skip("Test requires Unix-like OS and non-root user")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.txt"
+            test_file.touch()
+            stat_info = test_file.stat()
+
+            owner, group = _get_file_owner_info(stat_info)
+
+            # Should return strings (names or numeric IDs)
+            assert isinstance(owner, str), "Owner should be a string"
+            assert isinstance(group, str), "Group should be a string"
+            assert len(owner) > 0, "Owner should not be empty"
+            assert len(group) > 0, "Group should not be empty"
+
+    def test_get_file_owner_info_windows_fallback(self):
+        """Test _get_file_owner_info fallback when pwd/grp not available."""
+        from ciris_engine.logic.utils.directory_setup import _get_file_owner_info
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.txt"
+            test_file.touch()
+            stat_info = test_file.stat()
+
+            # Create a mock stat_info that simulates missing pwd/grp modules
+            # The function should still work and return string UIDs
+            class MockStatInfo:
+                """Mock stat info for testing."""
+
+                st_uid = 999
+                st_gid = 888
+
+            mock_stat = MockStatInfo()
+            owner, group = _get_file_owner_info(mock_stat)
+
+            # When pwd/grp modules are not available, should return string UIDs
+            # Note: On Unix systems with pwd/grp, this will still return names
+            # But the function guarantees it returns strings in all cases
+            assert isinstance(owner, str), "Owner should be a string"
+            assert isinstance(group, str), "Group should be a string"

@@ -205,7 +205,13 @@ class TestHelperFunctions:
 
     @pytest.mark.xdist_group(name="incident_handler_injection")
     def test_inject_graph_audit_service(
-        self, root_logger, specific_logger, log_dir, mock_time_service, mock_graph_audit_service, clean_all_incident_handlers
+        self,
+        root_logger,
+        specific_logger,
+        log_dir,
+        mock_time_service,
+        mock_graph_audit_service,
+        clean_all_incident_handlers,
     ):
         # Add handlers to multiple loggers
         handler1 = add_incident_capture_handler(

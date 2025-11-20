@@ -329,6 +329,7 @@ start_docker_stack() {
 
 check_macos_prerequisites() {
     # On macOS, check if we have either Homebrew or Command Line Tools
+    # CRITICAL: Avoid triggering macOS Python installation popup dialog
     local os_type
     os_type=$(detect_os)
 
@@ -342,13 +343,35 @@ check_macos_prerequisites() {
         return 0
     fi
 
-    # No Homebrew - check if Python 3 is already available (from CLT or python.org)
+    # No Homebrew - check if Python 3 is available without triggering popup
     if command_exists python3; then
+        # Get python3 path
+        local python_path
+        python_path=$(which python3 2>/dev/null)
+
+        # If it's the system stub, check Xcode CLT BEFORE running python3
+        if [ "$python_path" = "/usr/bin/python3" ]; then
+            # Check if Xcode Command Line Tools are installed
+            if ! xcode-select -p >/dev/null 2>&1; then
+                # CLT not installed - DO NOT run python3 (would trigger popup)
+                log_error "macOS system Python detected but Xcode Command Line Tools not installed."
+                echo ""
+                echo "Install Xcode Command Line Tools:"
+                echo "  xcode-select --install"
+                echo ""
+                echo "Or install Homebrew to manage dependencies:"
+                echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+                exit 1
+            fi
+            # CLT installed, safe to proceed
+        fi
+
+        # Safe to run python3 now (either not stub, or stub with CLT)
         local py_version
         py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
 
-        # Check if it meets minimum requirements (3.9+)
-        if python3 -c 'import sys; exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+        # Check if it meets minimum requirements (3.10+ required for PEP 604 union types)
+        if python3 -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
             log_success "Python $py_version found (system)"
             log_warn "Homebrew not found - using system Python. Some dependencies may need manual installation."
             return 0
@@ -361,13 +384,58 @@ check_macos_prerequisites() {
     echo "Please install Homebrew first:"
     echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
     echo ""
-    echo "Alternatively, if you have Python 3.9+ installed manually:"
+    echo "Alternatively, if you have Python 3.10+ installed manually:"
     echo "  Run this script with --skip-deps and ensure you have:"
-    echo "    - Python 3.9+ (python3 --version)"
+    echo "    - Python 3.10+ (python3 --version) - Required for PEP 604 union types"
     echo "    - Node.js 18+ (node --version)"
     echo "    - pnpm (npm install -g pnpm)"
     echo "    - git"
     exit 1
+}
+
+get_best_python() {
+    # On macOS, prefer Homebrew Python over system Python
+    # Returns the path to the best Python 3.10+ available
+    local os_type
+    os_type=$(detect_os)
+
+    if [ "$os_type" != "macos" ]; then
+        echo "python3"
+        return
+    fi
+
+    # Try Homebrew Python locations first (supports both Intel and Apple Silicon)
+    local homebrew_pythons=(
+        "/opt/homebrew/bin/python3"      # Apple Silicon
+        "/opt/homebrew/bin/python3.12"
+        "/opt/homebrew/bin/python3.11"
+        "/opt/homebrew/bin/python3.10"
+        "/usr/local/bin/python3"         # Intel Mac
+        "/usr/local/bin/python3.12"
+        "/usr/local/bin/python3.11"
+        "/usr/local/bin/python3.10"
+    )
+
+    for py in "${homebrew_pythons[@]}"; do
+        if [ -x "$py" ]; then
+            # Check if it's 3.10+
+            if "$py" -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+                echo "$py"
+                return
+            fi
+        fi
+    done
+
+    # Fall back to system Python if it's 3.10+
+    if command_exists python3; then
+        if python3 -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+            echo "python3"
+            return
+        fi
+    fi
+
+    # No suitable Python found
+    echo ""
 }
 
 install_dependencies() {
@@ -382,12 +450,15 @@ install_dependencies() {
     check_macos_prerequisites
 
     if [ "$DRY_RUN" = true ]; then
-        log_info "[dry-run] Would verify Python 3.9+, Node.js 18+, pnpm, git, and curl using $pkg_mgr"
+        log_info "[dry-run] Would verify Python 3.10+, Node.js 18+, pnpm, git, and curl using $pkg_mgr"
         return
     fi
 
-    # Check Python
-    if ! command_exists python3; then
+    # Check Python - prefer Homebrew on macOS
+    local python_cmd
+    python_cmd=$(get_best_python)
+
+    if [ -z "$python_cmd" ]; then
         log_warn "Python 3 not found, installing..."
         case "$pkg_mgr" in
             apt)
@@ -408,10 +479,10 @@ install_dependencies() {
                     echo ""
                     echo "Please either:"
                     echo "  1. Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-                    echo "  2. Install Python from python.org: https://www.python.org/downloads/macos/"
-                    echo "  3. Run with --skip-deps if you already have Python 3.9+ installed"
+                    echo "  2. Install Python 3.10+ from python.org: https://www.python.org/downloads/macos/"
+                    echo "  3. Run with --skip-deps if you already have Python 3.10+ installed"
                 else
-                    log_error "Cannot automatically install Python. Please install Python 3.9+ manually."
+                    log_error "Cannot automatically install Python. Please install Python 3.10+ manually."
                 fi
                 exit 1
                 ;;
@@ -419,14 +490,15 @@ install_dependencies() {
     else
         # Check Python version
         local py_version
-        py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        log_success "Python $py_version found"
+        py_version=$("$python_cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 
-        # Verify minimum version (3.9)
-        if ! python3 -c 'import sys; exit(0 if sys.version_info >= (3, 9) else 1)'; then
-            log_error "Python 3.9+ required, found $py_version"
-            exit 1
+        if [ "$python_cmd" != "python3" ]; then
+            log_success "Python $py_version found at $python_cmd (Homebrew)"
+        else
+            log_success "Python $py_version found"
         fi
+
+        # Version already verified by get_best_python()
     fi
 
     # Check Node.js
@@ -434,15 +506,15 @@ install_dependencies() {
         log_warn "Node.js not found, installing..."
         case "$pkg_mgr" in
             apt)
-                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
                 sudo apt-get install -y nodejs
                 ;;
             dnf|yum)
-                curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+                curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
                 sudo "$pkg_mgr" install -y nodejs
                 ;;
             brew)
-                brew install node@20
+                brew install node
                 ;;
             pacman)
                 sudo pacman -S --noconfirm nodejs npm
@@ -573,10 +645,19 @@ setup_agent() {
         return 1
     }
 
+    # Get best Python (prefer Homebrew on macOS)
+    local python_cmd
+    python_cmd=$(get_best_python)
+
+    if [ -z "$python_cmd" ]; then
+        log_error "No suitable Python 3.10+ found"
+        return 1
+    fi
+
     # Create virtual environment
     if [ ! -d "venv" ]; then
-        log_info "Creating Python virtual environment..."
-        python3 -m venv venv || {
+        log_info "Creating Python virtual environment with $python_cmd..."
+        "$python_cmd" -m venv venv || {
             log_error "Failed to create virtual environment"
             return 1
         }
@@ -932,7 +1013,7 @@ install_launchd_service() {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>$INSTALL_DIR/CIRISAgent/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>$INSTALL_DIR/CIRISAgent/venv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
     <key>StandardOutPath</key>
     <string>$INSTALL_DIR/logs/agent.log</string>
@@ -946,7 +1027,7 @@ install_launchd_service() {
 </plist>
 EOF
 
-    # GUI service
+    # GUI service - needs PATH with Homebrew for node/pnpm
     cat > "$launch_agents_dir/ai.ciris.gui.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -963,6 +1044,11 @@ EOF
     </array>
     <key>WorkingDirectory</key>
     <string>$INSTALL_DIR/CIRISGUI/apps/agui</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>$INSTALL_DIR/logs/gui.log</string>
     <key>StandardErrorPath</key>

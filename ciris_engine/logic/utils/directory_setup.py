@@ -46,7 +46,7 @@ class OwnershipError(DirectorySetupError):
     pass
 
 
-def _get_file_owner_info(stat_info) -> Tuple[str, str]:
+def _get_file_owner_info(stat_info: os.stat_result) -> Tuple[str, str]:
     """Get owner and group names from file stat info (cross-platform).
 
     Args:

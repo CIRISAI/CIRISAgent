@@ -457,15 +457,15 @@ install_dependencies() {
         log_warn "Node.js not found, installing..."
         case "$pkg_mgr" in
             apt)
-                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
                 sudo apt-get install -y nodejs
                 ;;
             dnf|yum)
-                curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+                curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
                 sudo "$pkg_mgr" install -y nodejs
                 ;;
             brew)
-                brew install node@20
+                brew install node
                 ;;
             pacman)
                 sudo pacman -S --noconfirm nodejs npm

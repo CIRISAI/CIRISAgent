@@ -112,7 +112,6 @@ def create_env_file(
     llm_base_url: str,
     llm_model: str,
     agent_port: int = 8080,
-    gui_port: int = 3000,
 ) -> None:
     """Create .env configuration file.
 
@@ -123,7 +122,6 @@ def create_env_file(
         llm_base_url: Base URL for OpenAI-compatible endpoint
         llm_model: Model name
         agent_port: Port for agent API (default: 8080)
-        gui_port: Port for GUI (default: 3000)
     """
     # Generate encryption keys
     secrets_key = generate_encryption_key()
@@ -291,9 +289,9 @@ def run_setup_wizard(save_path: Optional[Path] = None) -> Path:
     print("Starting CIRIS Agent...")
     print()
     print("Once started, you can access:")
-    print(f"  🌐 Web Interface: http://localhost:8080")
-    print(f"  📡 API Endpoint:  http://localhost:8080/v1/")
-    print(f"  📚 API Docs:      http://localhost:8080/docs")
+    print("  🌐 Web Interface: http://localhost:8080")
+    print("  📡 API Endpoint:  http://localhost:8080/v1/")
+    print("  📚 API Docs:      http://localhost:8080/docs")
     print()
     print("Default credentials:")
     print("  Username: admin")

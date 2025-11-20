@@ -118,7 +118,7 @@ def check_macos_python() -> tuple[bool, str]:
 
         return (True, "")
 
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+    except Exception:
         # If we can't check, assume it's okay and let Python itself fail later
         return (True, "")
 

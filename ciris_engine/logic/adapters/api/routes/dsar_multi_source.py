@@ -145,7 +145,10 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     )
 
 
-@router.post("", response_model=StandardResponse)
+# Explicit trailing slash support for TestClient (httpx follow_redirects=True still returns
+# 405 for POST when only the non-slash variant exists). Defining the route with an explicit
+# slash ensures both "/dsar/multi-source" and "/dsar/multi-source/" resolve correctly.
+@router.post("/", response_model=StandardResponse)
 async def submit_multi_source_dsar(
     request: MultiSourceDSARRequest,
     req: Request,

@@ -271,6 +271,10 @@ def main(
             sys.exit(1)
 
         first_run = is_first_run()
+        # When running in import/CI mode, bypass interactive first-run gating so
+        # CLI smoke tests can execute without configuration prompts or exits.
+        if os.environ.get("CIRIS_IMPORT_MODE") == "true":
+            first_run = False
         if first_run and not adapter_types_list:
             # First run detected and no adapter explicitly specified via CLI
 

@@ -239,6 +239,14 @@ jobs:
           path: dist/*.whl
           retention-days: 30
 
+      - name: Publish to PyPI
+        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m twine upload dist/*.whl
+
   build:
     name: Build Docker Images
     needs: test

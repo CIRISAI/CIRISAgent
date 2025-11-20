@@ -160,6 +160,10 @@ class TestInteractiveDetection:
         """Test interactive detection when TTY available."""
         # Clear all non-interactive indicators
         monkeypatch.delenv("CI", raising=False)
+        monkeypatch.delenv("CONTINUOUS_INTEGRATION", raising=False)
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+        monkeypatch.delenv("GITLAB_CI", raising=False)
+        monkeypatch.delenv("CIRCLECI", raising=False)
         monkeypatch.delenv("DOCKER", raising=False)
         monkeypatch.delenv("INVOCATION_ID", raising=False)
 

@@ -1,8 +1,20 @@
 # Load environment variables from .env if present
+# Load from all standard config paths in priority order
 try:
     from dotenv import load_dotenv
+    from pathlib import Path
 
-    load_dotenv()
+    # Priority order: ./env (highest), ~/.ciris/.env, /etc/ciris/.env (lowest)
+    config_paths = [
+        Path.cwd() / ".env",
+        Path.home() / ".ciris" / ".env",
+        Path("/etc/ciris/.env"),
+    ]
+
+    for config_path in config_paths:
+        if config_path.exists():
+            load_dotenv(config_path, override=False)  # Don't override already-set vars
+
 except ImportError:
     pass  # dotenv is optional; skip if not installed
 import asyncio
@@ -260,12 +272,17 @@ def main(
 
         first_run = is_first_run()
         if first_run and not adapter_types_list:
-            # First run detected and no adapter explicitly specified
+            # First run detected and no adapter explicitly specified via CLI
 
-            # Check if we're in an interactive environment
-            if not is_interactive_environment():
+            # Check if CIRIS_ADAPTER is set in environment BEFORE checking interactivity
+            # This allows Docker/CI deployments to specify adapter via environment
+            env_adapter = get_env_var("CIRIS_ADAPTER")
+            if env_adapter:
+                # Adapter specified via environment - skip wizard, continue to normal startup
+                pass
+            elif not is_interactive_environment():
                 # Non-interactive environment (Docker, systemd, CI, etc.)
-                # Don't run wizard - EXIT with instructions
+                # No adapter in CLI or environment - EXIT with instructions
                 click.echo("=" * 70, err=True)
                 click.echo("❌ CONFIGURATION REQUIRED", err=True)
                 click.echo("=" * 70, err=True)
@@ -273,6 +290,7 @@ def main(
                 click.echo("", err=True)
                 click.echo("Required:", err=True)
                 click.echo("  OPENAI_API_KEY=your_api_key", err=True)
+                click.echo("  CIRIS_ADAPTER=api", err=True)
                 click.echo("", err=True)
                 click.echo("For local LLM (Ollama, LM Studio, etc.):", err=True)
                 click.echo("  OPENAI_API_KEY=local", err=True)

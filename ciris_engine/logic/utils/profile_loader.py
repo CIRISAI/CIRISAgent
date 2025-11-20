@@ -39,14 +39,19 @@ async def load_template(template_path: Optional[Path]) -> Optional[AgentTemplate
         An AgentTemplate instance if loading is successful, otherwise None.
     """
     if template_path is None:
-        # Search for default template in multiple locations
-        from ciris_engine.logic.utils.path_resolution import find_template_file
-        resolved_path = find_template_file("default")
-        if resolved_path is None:
-            # Fallback to old behavior for backward compatibility
+        # First check if DEFAULT_TEMPLATE_PATH exists (for tests/backwards compatibility)
+        if DEFAULT_TEMPLATE_PATH.exists():
             template_path = DEFAULT_TEMPLATE_PATH
         else:
-            template_path = resolved_path
+            # Search for default template in multiple locations
+            from ciris_engine.logic.utils.path_resolution import find_template_file
+
+            resolved_path = find_template_file("default")
+            if resolved_path is None:
+                # Fallback to DEFAULT_TEMPLATE_PATH for error message
+                template_path = DEFAULT_TEMPLATE_PATH
+            else:
+                template_path = resolved_path
 
     if not template_path.exists() or not template_path.is_file():
         # FAIL instead of falling back to default template

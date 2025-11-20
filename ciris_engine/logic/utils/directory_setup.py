@@ -240,6 +240,7 @@ def setup_application_directories(
     """
     if base_dir is None:
         from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
         base_dir = get_ciris_home()
 
     if user_id is None:

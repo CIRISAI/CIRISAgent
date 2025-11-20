@@ -94,6 +94,7 @@ def get_package_root() -> Path:
         Path to ciris_engine package directory
     """
     import ciris_engine
+
     return Path(ciris_engine.__file__).parent
 
 

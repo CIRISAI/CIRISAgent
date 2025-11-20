@@ -58,6 +58,13 @@ setup(
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data
         ],
+        "ciris_engine.logic.dma": [
+            "prompts/*.yml",  # DMA prompt templates
+        ],
+        "ciris_engine.logic.persistence": [
+            "migrations/sqlite/*.sql",  # SQLite database migrations
+            "migrations/postgres/*.sql",  # PostgreSQL database migrations
+        ],
         "ciris_engine": [
             "gui_static/**/*",  # GUI assets (if present, bundled by CI)
             "ciris_templates/*.yaml",  # Bundled agent identity templates

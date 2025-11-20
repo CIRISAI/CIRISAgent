@@ -41,8 +41,11 @@ class IdentityManager:
 
             # Also load template for API access (tickets config, etc.)
             template_name = getattr(self.config, "default_template", "default")
-            template_path = Path(self.config.template_directory) / f"{template_name}.yaml"
-            self.agent_template = await self._load_template(template_path)
+            from ciris_engine.logic.utils.path_resolution import find_template_file
+
+            template_path = find_template_file(template_name)
+            if template_path:
+                self.agent_template = await self._load_template(template_path)
             if not self.agent_template:
                 logger.warning(f"Template '{template_name}' not found")
         else:
@@ -51,14 +54,20 @@ class IdentityManager:
 
             # Load template ONLY for initial identity creation
             # Use default_template from config as the template name
+            from ciris_engine.logic.utils.path_resolution import find_template_file
+
             template_name = getattr(self.config, "default_template", "default")
-            template_path = Path(self.config.template_directory) / f"{template_name}.yaml"
-            initial_template = await self._load_template(template_path)
+            template_path = find_template_file(template_name)
+            if template_path:
+                initial_template = await self._load_template(template_path)
+            else:
+                initial_template = None
 
             if not initial_template:
                 logger.warning(f"Template '{template_name}' not found, using default")
-                default_path = Path(self.config.template_directory) / "default.yaml"
-                initial_template = await self._load_template(default_path)
+                default_path = find_template_file("default")
+                if default_path:
+                    initial_template = await self._load_template(default_path)
 
             if not initial_template:
                 raise RuntimeError("No template available for initial identity creation")

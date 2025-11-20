@@ -36,7 +36,7 @@ from ciris_engine.schemas.consent.core import (
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
 
-router = APIRouter(prefix="/dsr", tags=["DSAR"])
+router = APIRouter(prefix="/dsar", tags=["DSAR"])
 
 
 class DSARRequest(BaseModel):

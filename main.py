@@ -1,8 +1,9 @@
 # Load environment variables from .env if present
 # Load from all standard config paths in priority order
 try:
-    from dotenv import load_dotenv
     from pathlib import Path
+
+    from dotenv import load_dotenv
 
     # Priority order: ./env (highest), ~/.ciris/.env, /etc/ciris/.env (lowest)
     config_paths = [
@@ -247,7 +248,7 @@ def main(
         nonlocal mock_llm, handler, params, task, num_rounds
         from ciris_engine.logic.config.env_utils import get_env_var
 
-        # Check for CIRIS_MOCK_LLM environment variable first
+        # Check for CIRIS_MOCK_LLM environment variable
         if not mock_llm and get_env_var("CIRIS_MOCK_LLM"):
             mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
             if mock_llm_env:
@@ -708,7 +709,6 @@ def main(
 
             # Wait for all flush operations to complete
             await asyncio.gather(*flush_tasks, return_exceptions=True)
-            import os
 
             logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI runtime completed")
             os._exit(0)
@@ -737,8 +737,6 @@ def main(
 
     # For API mode subprocess tests, ensure immediate exit
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
-        import os
-
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
         os._exit(0)
 
@@ -755,7 +753,6 @@ def main(
         import time
 
         time.sleep(0.1)  # Brief pause to ensure logs are written
-        import os
 
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI mode force exit")
         os._exit(0)

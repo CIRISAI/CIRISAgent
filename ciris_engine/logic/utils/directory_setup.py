@@ -228,7 +228,7 @@ def setup_application_directories(
     or permissions cannot be set correctly.
 
     Args:
-        base_dir: Base directory for the application (defaults to current working directory)
+        base_dir: Base directory for the application (defaults to CIRIS home directory)
         user_id: User ID to own the directories (defaults to current user)
         group_id: Group ID to own the directories (defaults to current group)
         fail_fast: If True, exit immediately on any error (default True)
@@ -239,7 +239,8 @@ def setup_application_directories(
         DirectorySetupError: If any directory setup fails
     """
     if base_dir is None:
-        base_dir = Path.cwd()
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+        base_dir = get_ciris_home()
 
     if user_id is None:
         user_id = os.getuid()

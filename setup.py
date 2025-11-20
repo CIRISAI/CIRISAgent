@@ -57,6 +57,7 @@ setup(
         ],
         "ciris_engine": [
             "gui_static/**/*",  # GUI assets (if present, bundled by CI)
+            "ciris_templates/*.yaml",  # Bundled agent identity templates
         ],
     },
     entry_points={

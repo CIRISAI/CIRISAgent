@@ -97,35 +97,58 @@ jobs:
           repository: CIRISAI/CIRISGUI
           path: cirisgui
 
+      - name: Find Next.js app directory
+        id: find_app
+        run: |
+          # Find the directory containing package.json and next.config.mjs
+          GUI_DIR=$(find cirisgui -name "package.json" -type f -exec dirname {} \; | head -1)
+          if [ -z "$GUI_DIR" ]; then
+            echo "❌ Could not find package.json in CIRISGUI repo"
+            exit 1
+          fi
+          echo "Found Next.js app in: $GUI_DIR"
+          echo "gui_dir=$GUI_DIR" >> $GITHUB_OUTPUT
+
+          # Verify next.config.mjs exists
+          if [ ! -f "$GUI_DIR/next.config.mjs" ]; then
+            echo "⚠️  Warning: next.config.mjs not found in $GUI_DIR"
+          else
+            echo "✅ next.config.mjs found"
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: cirisgui/package-lock.json
+          cache-dependency-path: ${{ steps.find_app.outputs.gui_dir }}/package-lock.json
 
       - name: Configure for static export
         run: |
-          cd cirisgui
+          cd ${{ steps.find_app.outputs.gui_dir }}
           # Ensure next.config.mjs has output: 'export'
-          if ! grep -q "output.*:.*['\"]export['\"]" next.config.mjs 2>/dev/null; then
-            echo "⚠️  Warning: next.config.mjs may need output: 'export' configuration"
-            echo "Attempting to add it..."
-            # Backup original
-            cp next.config.mjs next.config.mjs.bak
-            # Add output export if not present (simple approach)
-            sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.mjs || true
+          if [ -f next.config.mjs ]; then
+            if ! grep -q "output.*:.*['\"]export['\"]" next.config.mjs 2>/dev/null; then
+              echo "⚠️  Warning: next.config.mjs may need output: 'export' configuration"
+              echo "Attempting to add it..."
+              # Backup original
+              cp next.config.mjs next.config.mjs.bak
+              # Add output export if not present (simple approach)
+              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.mjs || true
+            fi
+            echo "✅ Static export configuration verified"
+          else
+            echo "⚠️  Skipping next.config.mjs configuration (file not found)"
           fi
-          echo "✅ Static export configuration verified"
 
       - name: Install dependencies
         run: |
-          cd cirisgui
+          cd ${{ steps.find_app.outputs.gui_dir }}
           npm ci
 
       - name: Build static assets
         run: |
-          cd cirisgui
+          cd ${{ steps.find_app.outputs.gui_dir }}
           npm run build
           echo "✅ GUI build complete"
           ls -la out/
@@ -134,7 +157,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gui-static-assets
-          path: cirisgui/out/
+          path: ${{ steps.find_app.outputs.gui_dir }}/out/
           retention-days: 7
 
   build-wheel:

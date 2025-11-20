@@ -182,11 +182,20 @@ def _fix_directory_permissions(dir_path: Path, mode: int, fail_fast: bool) -> No
 
 def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail_fast: bool) -> None:
     """Check and fix directory ownership."""
+    # Skip ownership check on Windows (user_id/group_id will be -1)
+    if user_id == -1 or group_id == -1:
+        return
+
     stat = dir_path.stat()
     if stat.st_uid != user_id or stat.st_gid != group_id:
         try:
-            os.chown(dir_path, user_id, group_id)
-            print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+            # os.chown is Unix-only
+            if hasattr(os, 'chown'):
+                os.chown(dir_path, user_id, group_id)
+                print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+            else:
+                # Windows doesn't have chown
+                return
         except Exception:
             error_msg = (
                 f"WRONG OWNER on {dir_path}: Has {stat.st_uid}:{stat.st_gid}, needs {user_id}:{group_id} - CANNOT FIX"

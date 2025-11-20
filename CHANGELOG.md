@@ -154,6 +154,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Critical Windows Compatibility** - Package now works on Windows, macOS, and Linux
+  - **Issue**: `AttributeError: module 'os' has no attribute 'getuid'` on Windows installation
+  - **Root Cause**: Unix-only functions (`os.getuid()`, `os.getgid()`, `os.chown()`) and modules (`pwd`, `grp`) used without platform checks
+  - **Fix**: Comprehensive platform compatibility layer
+    - Wrapped Unix-only os functions with `getattr(os, 'function', lambda: -1)()` fallback
+    - Added ImportError handling for Unix-only module imports (pwd, grp)
+    - Conditional ownership operations (skipped on Windows where user_id/group_id = -1)
+    - Platform-specific signal handling (SIGKILL → SIGTERM → sys.exit fallback chain)
+  - **Files**:
+    - `ciris_engine/logic/utils/directory_setup.py` - Fixed 6 Unix-only calls
+    - `ciris_engine/logic/services/lifecycle/shutdown/service.py` - Signal handling
+    - `tests/ciris_engine/logic/utils/test_directory_setup.py` - Added 3 Windows compatibility tests
+  - **Impact**: Package now installs and runs successfully on all platforms
+  - **Testing**: All 511 unit tests pass on Windows
+
+- **CI/CD Next.js 15 Build Compatibility** - Robust build output detection
+  - **Issue**: `ls: cannot access 'out/'` - Next.js 15 changed default output location
+  - **Fix**: Dynamic build output detection with fallback chain (out/ → .next/standalone → .next/static)
+  - **Files**: `.github/workflows/build.yml`
+  - **Impact**: GUI builds succeed regardless of Next.js version or configuration
+
+- **Code Quality Issues** - SonarCloud findings addressed
+  - Removed redundant exception types in first_run.py
+  - Removed unused `gui_port` parameter in wizard.py
+  - Replaced unnecessary f-strings with regular strings
+  - **Files**: `ciris_engine/logic/setup/first_run.py`, `ciris_engine/logic/setup/wizard.py`
+
 - **PEP 440 Version Compliance** - Version strings now properly strip suffixes
   - **Issue**: `packaging.version.InvalidVersion: Invalid version: '1.6.3-stable'`
   - **Fix**: Automatic stripping of "-stable" and other suffixes in setup.py

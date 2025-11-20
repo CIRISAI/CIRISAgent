@@ -248,13 +248,18 @@ def main(
         from ciris_engine.logic.config.env_utils import get_env_var
 
         # Check for CIRIS_MOCK_LLM environment variable first
-        if not mock_llm and get_env_var("CIRIS_MOCK_LLM"):
+        import_mode = os.environ.get("CIRIS_IMPORT_MODE", "").lower() == "true"
+
+        if (import_mode or get_env_var("CIRIS_MOCK_LLM")) and not mock_llm:
             mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
             if mock_llm_env:
                 mock_llm_env = mock_llm_env.lower()
             if mock_llm_env in ("true", "1", "yes", "on"):
                 logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
                 mock_llm = True
+        elif import_mode and not mock_llm:
+            # Ensure deterministic mock mode when running in import-only environments
+            mock_llm = True
 
         # Handle first-run setup if needed
         from ciris_engine.logic.setup.first_run import check_macos_python, is_first_run, is_interactive_environment
@@ -270,8 +275,8 @@ def main(
             click.echo("=" * 70, err=True)
             sys.exit(1)
 
-        first_run = is_first_run()
-        if first_run and not adapter_types_list:
+        first_run = False if import_mode else is_first_run()
+        if not import_mode and first_run and not adapter_types_list:
             # First run detected and no adapter explicitly specified via CLI
 
             # Check if CIRIS_ADAPTER is set in environment BEFORE checking interactivity
@@ -328,7 +333,7 @@ def main(
 
         # Check for API key - NEVER default to mock LLM in production
         api_key = get_env_var("OPENAI_API_KEY")
-        if not mock_llm and not api_key:
+        if not mock_llm and not api_key and not import_mode:
             # No API key and not explicitly using mock LLM
             click.echo("=" * 70, err=True)
             click.echo("❌ LLM API KEY REQUIRED", err=True)
@@ -704,7 +709,6 @@ def main(
 
             # Wait for all flush operations to complete
             await asyncio.gather(*flush_tasks, return_exceptions=True)
-            import os
 
             logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI runtime completed")
             os._exit(0)
@@ -733,8 +737,6 @@ def main(
 
     # For API mode subprocess tests, ensure immediate exit
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
-        import os
-
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
         os._exit(0)
 
@@ -751,7 +753,6 @@ def main(
         import time
 
         time.sleep(0.1)  # Brief pause to ensure logs are written
-        import os
 
         logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI mode force exit")
         os._exit(0)

@@ -55,6 +55,9 @@ setup(
         "ciris_engine.data": [
             "covenant_1.0b.txt",  # Covenant text file
         ],
+        "ciris_engine.config": [
+            "*.json",  # Pricing and configuration data
+        ],
         "ciris_engine": [
             "gui_static/**/*",  # GUI assets (if present, bundled by CI)
             "ciris_templates/*.yaml",  # Bundled agent identity templates

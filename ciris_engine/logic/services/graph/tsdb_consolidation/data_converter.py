@@ -94,9 +94,9 @@ class RawCorrelationData(BaseModel):
     span_id: Optional[str] = None
     parent_span_id: Optional[str] = None
     timestamp: datetime
-    request_data: Optional[JSONDict] = Field(default_factory=dict)
-    response_data: Optional[JSONDict] = Field(default_factory=dict)
-    tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=dict)
+    request_data: Optional[JSONDict] = Field(default_factory=lambda: {})
+    response_data: Optional[JSONDict] = Field(default_factory=lambda: {})
+    tags: Optional[Dict[str, str | int | float | bool]] = Field(default_factory=lambda: {})
     context: Optional[JSONDict] = Field(default=None)
 
     @field_validator("request_data", "response_data", "tags", mode="before")

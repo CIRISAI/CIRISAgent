@@ -40,7 +40,7 @@ class TestDSAREndpoint:
             "urgent": False,
         }
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -54,7 +54,7 @@ class TestDSAREndpoint:
         """Test submitting an urgent DSAR request."""
         request_data = {"request_type": "delete", "email": "urgent@example.com", "urgent": True}
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -67,14 +67,14 @@ class TestDSAREndpoint:
         for request_type in valid_types:
             request_data = {"request_type": request_type, "email": f"{request_type}@example.com"}
 
-            response = client.post("/v1/dsr/", json=request_data)
+            response = client.post("/v1/dsar/", json=request_data)
             assert response.status_code == status.HTTP_200_OK
 
     def test_invalid_dsar_request_type(self, client, test_db):
         """Test invalid DSAR request type."""
         request_data = {"request_type": "invalid_type", "email": "user@example.com"}
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_check_dsar_status(self, client, test_db):
@@ -82,11 +82,11 @@ class TestDSAREndpoint:
         # First submit a request
         request_data = {"request_type": "access", "email": "status@example.com"}
 
-        submit_response = client.post("/v1/dsr/", json=request_data)
+        submit_response = client.post("/v1/dsar/", json=request_data)
         ticket_id = submit_response.json()["data"]["ticket_id"]
 
         # Check status
-        status_response = client.get(f"/v1/dsr/{ticket_id}")
+        status_response = client.get(f"/v1/dsar/{ticket_id}")
 
         assert status_response.status_code == status.HTTP_200_OK
         data = status_response.json()
@@ -97,7 +97,7 @@ class TestDSAREndpoint:
 
     def test_check_nonexistent_dsar_status(self, client, test_db):
         """Test checking status of non-existent DSAR."""
-        response = client.get("/v1/dsr/DSAR-NONEXISTENT")
+        response = client.get("/v1/dsar/DSAR-NONEXISTENT")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "not found" in response.json()["detail"]
@@ -111,10 +111,10 @@ class TestDSAREndpoint:
         # Submit some requests first
         for i in range(3):
             request_data = {"request_type": "access", "email": f"user{i}@example.com"}
-            client.post("/v1/dsr/", json=request_data)
+            client.post("/v1/dsar/", json=request_data)
 
         # List requests
-        response = client.get("/v1/dsr/", headers={"Authorization": "Bearer admin_token"})
+        response = client.get("/v1/dsar/", headers={"Authorization": "Bearer admin_token"})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -128,7 +128,7 @@ class TestDSAREndpoint:
         # When proper auth is implemented, this should test 403 for non-admins
 
         # For now, test that the endpoint exists and requires some auth
-        response = client.get("/v1/dsr/", headers={"Authorization": "Bearer user_token"})
+        response = client.get("/v1/dsar/", headers={"Authorization": "Bearer user_token"})
 
         # Currently returns 200 because mock auth always returns SYSTEM_ADMIN
         assert response.status_code == status.HTTP_200_OK
@@ -143,12 +143,12 @@ class TestDSAREndpoint:
 
         # Submit a request first
         request_data = {"request_type": "delete", "email": "update@example.com"}
-        submit_response = client.post("/v1/dsr/", json=request_data)
+        submit_response = client.post("/v1/dsar/", json=request_data)
         ticket_id = submit_response.json()["data"]["ticket_id"]
 
         # Update status
         update_response = client.put(
-            f"/v1/dsr/{ticket_id}/status",
+            f"/v1/dsar/{ticket_id}/status",
             params={"new_status": "in_progress", "notes": "Processing request"},
             headers={"Authorization": "Bearer admin_token"},
         )
@@ -167,12 +167,12 @@ class TestDSAREndpoint:
 
         # Submit a request first
         request_data = {"request_type": "access", "email": "invalid@example.com"}
-        submit_response = client.post("/v1/dsr/", json=request_data)
+        submit_response = client.post("/v1/dsar/", json=request_data)
         ticket_id = submit_response.json()["data"]["ticket_id"]
 
         # Try invalid status
         update_response = client.put(
-            f"/v1/dsr/{ticket_id}/status",
+            f"/v1/dsar/{ticket_id}/status",
             params={"new_status": "invalid_status"},
             headers={"Authorization": "Bearer admin_token"},
         )
@@ -185,7 +185,7 @@ class TestDSAREndpoint:
         # Use 'correct' type which triggers manual processing with 14-day timeline
         request_data = {"request_type": "correct", "email": "retention@example.com", "urgent": False}
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
         data = response.json()
 
         # Manual processing should return date-only format with 14-day timeline
@@ -268,7 +268,7 @@ class TestDSARAutomation:
             "user_identifier": "discord_123",
         }
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -310,7 +310,7 @@ class TestDSARAutomation:
             "user_identifier": "discord_456",
         }
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -329,11 +329,11 @@ class TestDSARAutomation:
             "user_identifier": "discord_789",
         }
 
-        submit_response = client.post("/v1/dsr/", json=request_data)
+        submit_response = client.post("/v1/dsar/", json=request_data)
         ticket_id = submit_response.json()["data"]["ticket_id"]
 
         # Check deletion status endpoint exists (even if no active decay)
-        status_response = client.get(f"/v1/dsr/{ticket_id}/deletion-status")
+        status_response = client.get(f"/v1/dsar/{ticket_id}/deletion-status")
 
         # Should either return 200 with status or appropriate error
         assert status_response.status_code in [
@@ -349,7 +349,7 @@ class TestDSARAutomation:
             "user_identifier": "discord_999",
         }
 
-        response = client.post("/v1/dsr/", json=request_data)
+        response = client.post("/v1/dsar/", json=request_data)
 
         if response.status_code == status.HTTP_200_OK:
             data = response.json()

@@ -18,7 +18,7 @@ def setup_basic_logging(
     logger_instance: Optional[logging.Logger] = None,
     prefix: Optional[str] = None,
     log_to_file: bool = True,
-    log_dir: str = "logs",
+    log_dir: Optional[str] = None,
     console_output: bool = False,
     enable_incident_capture: bool = True,
     time_service: Optional[TimeServiceProtocol] = None,
@@ -39,6 +39,12 @@ def setup_basic_logging(
     """
 
     from ciris_engine.logic.config.env_utils import get_env_var
+
+    # Use path resolution if no log_dir specified
+    if log_dir is None:
+        from ciris_engine.logic.utils.path_resolution import get_logs_dir
+
+        log_dir = str(get_logs_dir())
 
     # Allow log directory override via environment variable (for parallel backend testing)
     env_log_dir = get_env_var("CIRIS_LOG_DIR")

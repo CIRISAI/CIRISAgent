@@ -816,9 +816,7 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             summary_type = summary.id.split("_")[0] + "_" + summary.id.split("_")[1]
 
             # Find the most recent previous summary (handles gaps in timeline)
-            previous_id = self._edge_manager.get_previous_summary_id(
-                summary_type, summary.id
-            )
+            previous_id = self._edge_manager.get_previous_summary_id(summary_type, summary.id)
 
             if previous_id:
                 created = self._edge_manager.create_temporal_edges(summary, previous_id)

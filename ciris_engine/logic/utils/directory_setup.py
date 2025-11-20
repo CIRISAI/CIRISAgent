@@ -46,6 +46,29 @@ class OwnershipError(DirectorySetupError):
     pass
 
 
+def _get_file_owner_info(stat_info: os.stat_result) -> Tuple[str, str]:
+    """Get owner and group names from file stat info (cross-platform).
+
+    Args:
+        stat_info: os.stat_result object
+
+    Returns:
+        Tuple of (owner, group) as strings
+    """
+    # pwd/grp are Unix-only, not available on Windows
+    try:
+        import grp
+        import pwd
+
+        owner = pwd.getpwuid(stat_info.st_uid).pw_name
+        group = grp.getgrgid(stat_info.st_gid).gr_name
+    except (ImportError, KeyError, OSError):
+        owner = str(stat_info.st_uid)
+        group = str(stat_info.st_gid)
+
+    return owner, group
+
+
 class WriteTestError(DirectorySetupError):
     """Raised when write test fails."""
 
@@ -182,11 +205,20 @@ def _fix_directory_permissions(dir_path: Path, mode: int, fail_fast: bool) -> No
 
 def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail_fast: bool) -> None:
     """Check and fix directory ownership."""
+    # Skip ownership check on Windows (user_id/group_id will be -1)
+    if user_id == -1 or group_id == -1:
+        return
+
     stat = dir_path.stat()
     if stat.st_uid != user_id or stat.st_gid != group_id:
         try:
-            os.chown(dir_path, user_id, group_id)
-            print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+            # os.chown is Unix-only
+            if hasattr(os, "chown"):
+                os.chown(dir_path, user_id, group_id)
+                print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+            else:
+                # Windows doesn't have chown
+                return
         except Exception:
             error_msg = (
                 f"WRONG OWNER on {dir_path}: Has {stat.st_uid}:{stat.st_gid}, needs {user_id}:{group_id} - CANNOT FIX"
@@ -228,7 +260,7 @@ def setup_application_directories(
     or permissions cannot be set correctly.
 
     Args:
-        base_dir: Base directory for the application (defaults to current working directory)
+        base_dir: Base directory for the application (defaults to CIRIS home directory)
         user_id: User ID to own the directories (defaults to current user)
         group_id: Group ID to own the directories (defaults to current group)
         fail_fast: If True, exit immediately on any error (default True)
@@ -239,13 +271,17 @@ def setup_application_directories(
         DirectorySetupError: If any directory setup fails
     """
     if base_dir is None:
-        base_dir = Path.cwd()
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+        base_dir = get_ciris_home()
 
     if user_id is None:
-        user_id = os.getuid()
+        # getuid/getgid are Unix-only, not available on Windows
+        user_id = getattr(os, "getuid", lambda: -1)()
 
     if group_id is None:
-        group_id = os.getgid()
+        # getuid/getgid are Unix-only, not available on Windows
+        group_id = getattr(os, "getgid", lambda: -1)()
 
     # First, ensure exclusive database access (before any other checks)
     if check_database_access:
@@ -332,15 +368,7 @@ def setup_application_directories(
             except (PermissionError, IOError) as e:
                 # Get file stats for debugging
                 stat = file_path.stat()
-                import grp
-                import pwd
-
-                try:
-                    owner = pwd.getpwuid(stat.st_uid).pw_name
-                    group = grp.getgrgid(stat.st_gid).gr_name
-                except (KeyError, OSError):
-                    owner = str(stat.st_uid)
-                    group = str(stat.st_gid)
+                owner, group = _get_file_owner_info(stat)
 
                 error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
                 print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
@@ -391,18 +419,11 @@ def _validate_file_permissions(file_path: Path) -> None:
     except (PermissionError, IOError):
         # Get file stats for debugging
         stat = file_path.stat()
-        import grp
-        import pwd
+        owner, group = _get_file_owner_info(stat)
 
-        try:
-            owner = pwd.getpwuid(stat.st_uid).pw_name
-            group = grp.getgrgid(stat.st_gid).gr_name
-        except (KeyError, OSError):
-            owner = str(stat.st_uid)
-            group = str(stat.st_gid)
-
-        current_uid = os.getuid()
-        current_gid = os.getgid()
+        # getuid/getgid are Unix-only, not available on Windows
+        current_uid = getattr(os, "getuid", lambda: -1)()
+        current_gid = getattr(os, "getgid", lambda: -1)()
 
         error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
@@ -456,18 +477,21 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
             except (PermissionError, IOError):
                 # Get file stats for debugging
                 stat = file_path.stat()
-                import grp
-                import pwd
 
+                # pwd/grp are Unix-only, not available on Windows
                 try:
+                    import grp
+                    import pwd
+
                     owner = pwd.getpwuid(stat.st_uid).pw_name
                     group = grp.getgrgid(stat.st_gid).gr_name
-                except (KeyError, OSError):
+                except (ImportError, KeyError, OSError):
                     owner = str(stat.st_uid)
                     group = str(stat.st_gid)
 
-                current_uid = os.getuid()
-                current_gid = os.getgid()
+                # getuid/getgid are Unix-only, not available on Windows
+                current_uid = getattr(os, "getuid", lambda: -1)()
+                current_gid = getattr(os, "getgid", lambda: -1)()
 
                 error_msg = f"CANNOT WRITE TO CRITICAL FILE: {file_path}"
                 print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)

@@ -17,7 +17,7 @@ class StandardResponse(BaseModel):
     data: Optional[Any] = Field(None, description="Response data")
     message: Optional[str] = Field(None, description="Human-readable message")
     error: Optional[str] = Field(None, description="Error message if success is False")
-    metadata: Optional[JSONDict] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Optional[JSONDict] = Field(default_factory=lambda: {}, description="Additional metadata")
 
 
 class TokenData(BaseModel):

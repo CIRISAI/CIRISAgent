@@ -576,7 +576,7 @@ class CIRISRuntime:
                     console_output=False,  # Already logging to console from main.py
                     enable_incident_capture=True,
                     time_service=time_service,
-                    log_dir="logs",
+                    # log_dir defaults to None, which uses path_resolution.get_logs_dir()
                 )
                 logger.info("[_initialize_infrastructure] File logging initialized successfully")
             except Exception as e:

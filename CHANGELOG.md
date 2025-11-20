@@ -74,6 +74,118 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.3] - 2025-11-19
+
+### Added - PyPI Package Distribution & GUI Integration
+
+- **pip-installable Package** - CIRIS Agent is now available as a Python wheel package
+  - **Purpose**: Enable easy installation via `pip install ciris-agent` with optional GUI bundling
+  - **Features**:
+    - Complete setuptools configuration with PEP 440 compliant versioning
+    - Entry point: `ciris-agent` command-line tool
+    - Thin CLI wrapper preserving all existing Click functionality
+    - Package data support for covenant text and static assets
+  - **Architecture**:
+    - Version sync from `ciris_engine/constants.py` with automatic suffix stripping
+    - Covenant file bundled in `ciris_engine/data/` using importlib.resources
+    - GUI static assets support in `ciris_engine/gui_static/`
+    - Graceful fallback for development vs. installed modes
+  - **Files**:
+    - `setup.py` - Complete package configuration
+    - `MANIFEST.in` - Non-Python file inclusion rules
+    - `ciris_engine/cli.py` - Entry point wrapper
+    - `ciris_engine/data/covenant_1.0b.txt` - Bundled covenant text
+
+- **GUI CI Build Automation** - Automated CIRISGUI static asset bundling in CI/CD
+  - **Purpose**: Inject pre-built GUI into Python wheel during CI builds
+  - **Workflow**:
+    - `build-gui` job: Checkout CIRISGUI, configure Next.js for static export, build & upload artifacts
+    - `build-wheel` job: Download GUI artifacts, inject into `ciris_engine/gui_static/`, build wheel
+    - Wheel artifact uploaded with 30-day retention for deployment
+  - **Features**:
+    - Automatic Next.js static export configuration
+    - GUI asset verification (file count checks)
+    - Wheel content inspection and validation
+  - **Files**: `.github/workflows/build.yml`
+
+- **FastAPI GUI Serving** - Serve bundled GUI at root path while preserving API routes
+  - **Purpose**: Enable single-server deployment with both GUI and API functionality
+  - **Features**:
+    - GUI served at `/` with HTML mode enabled
+    - Route priority: `/v1/*` API routes > `/docs` > `/*` GUI catch-all
+    - Graceful fallback to API-only mode when GUI assets not present
+    - Helpful message directing users to PyPI package for full experience
+  - **Architecture**:
+    - StaticFiles middleware mounted as lowest priority
+    - Dynamic detection of `ciris_engine/gui_static/` directory
+    - Works for both development and pip-installed modes
+  - **Files**: `ciris_engine/logic/adapters/api/app.py`
+
+- **Python Package Structure Fixes** - Created 22 missing `__init__.py` files
+  - **Purpose**: Enable proper package discovery by setuptools.find_packages()
+  - **Impact**: Fixes ModuleNotFoundError issues after pip installation
+  - **Locations**:
+    - `ciris_engine/data/__init__.py`
+    - `ciris_engine/logic/adapters/api/{dependencies,endpoints,services}/__init__.py`
+    - `ciris_engine/logic/handlers/{control,external,memory,terminal}/__init__.py`
+    - `ciris_engine/logic/infrastructure/sub_services/__init__.py`
+    - `ciris_engine/logic/processors/{core,states,support}/__init__.py`
+    - `ciris_engine/logic/services/infrastructure/__init__.py`
+    - `ciris_engine/logic/utils/consent/__init__.py`
+    - `ciris_engine/schemas/{api,consent,persistence/{postgres,sqlite},services/infrastructure}/__init__.py`
+    - `ciris_engine/utils/__init__.py`
+
+### Changed
+
+- **Covenant Loading Mechanism** - Migrated from file path to importlib.resources
+  - **Before**: `Path(__file__).resolve().parents[3] / "covenant_1.0b.txt"`
+  - **After**: `importlib.resources.files("ciris_engine.data").joinpath("covenant_1.0b.txt")`
+  - **Benefits**:
+    - Works for both development (editable install) and pip-installed packages
+    - Python 3.9+ preferred method with 3.7-3.8 fallback
+    - Proper resource loading best practices
+  - **Files**: `ciris_engine/logic/utils/constants.py`
+
+- **GUI Static Path Resolution** - Fixed incorrect path calculation in API adapter
+  - **Before**: 3 parent levels → `ciris_engine/logic/gui_static` (incorrect)
+  - **After**: 4 parent levels → `ciris_engine/gui_static` (correct)
+  - **Impact**: GUI now correctly serves when bundled in package
+  - **Files**: `ciris_engine/logic/adapters/api/app.py:194`
+
+### Fixed
+
+- **Critical Windows Compatibility** - Package now works on Windows, macOS, and Linux
+  - **Issue**: `AttributeError: module 'os' has no attribute 'getuid'` on Windows installation
+  - **Root Cause**: Unix-only functions (`os.getuid()`, `os.getgid()`, `os.chown()`) and modules (`pwd`, `grp`) used without platform checks
+  - **Fix**: Comprehensive platform compatibility layer
+    - Wrapped Unix-only os functions with `getattr(os, 'function', lambda: -1)()` fallback
+    - Added ImportError handling for Unix-only module imports (pwd, grp)
+    - Conditional ownership operations (skipped on Windows where user_id/group_id = -1)
+    - Platform-specific signal handling (SIGKILL → SIGTERM → sys.exit fallback chain)
+  - **Files**:
+    - `ciris_engine/logic/utils/directory_setup.py` - Fixed 6 Unix-only calls
+    - `ciris_engine/logic/services/lifecycle/shutdown/service.py` - Signal handling
+    - `tests/ciris_engine/logic/utils/test_directory_setup.py` - Added 3 Windows compatibility tests
+  - **Impact**: Package now installs and runs successfully on all platforms
+  - **Testing**: All 511 unit tests pass on Windows
+
+- **CI/CD Next.js 15 Build Compatibility** - Robust build output detection
+  - **Issue**: `ls: cannot access 'out/'` - Next.js 15 changed default output location
+  - **Fix**: Dynamic build output detection with fallback chain (out/ → .next/standalone → .next/static)
+  - **Files**: `.github/workflows/build.yml`
+  - **Impact**: GUI builds succeed regardless of Next.js version or configuration
+
+- **Code Quality Issues** - SonarCloud findings addressed
+  - Removed redundant exception types in first_run.py
+  - Removed unused `gui_port` parameter in wizard.py
+  - Replaced unnecessary f-strings with regular strings
+  - **Files**: `ciris_engine/logic/setup/first_run.py`, `ciris_engine/logic/setup/wizard.py`
+
+- **PEP 440 Version Compliance** - Version strings now properly strip suffixes
+  - **Issue**: `packaging.version.InvalidVersion: Invalid version: '1.6.3-stable'`
+  - **Fix**: Automatic stripping of "-stable" and other suffixes in setup.py
+  - **Impact**: Wheels now build successfully with compliant version numbers
+
 ## [1.6.2] - 2025-11-17
 
 ### Added - Standalone Installation

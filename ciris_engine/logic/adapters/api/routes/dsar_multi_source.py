@@ -145,7 +145,10 @@ def _initialize_orchestrator(req: Request) -> DSAROrchestrator:
     )
 
 
+# Register both slash and non-slash variants to support clients with and without
+# redirect handling. The non-slash variant is the canonical route.
 @router.post("", response_model=StandardResponse)
+@router.post("/", response_model=StandardResponse)
 async def submit_multi_source_dsar(
     request: MultiSourceDSARRequest,
     req: Request,

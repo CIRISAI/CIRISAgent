@@ -185,6 +185,41 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # This is special - requires signed commands, no auth
     app.include_router(emergency.router)
 
+    # Mount GUI static assets (if available) - MUST be LAST for proper route priority
+    # This enables serving the CIRISGUI frontend when bundled in the wheel
+    from pathlib import Path
+
+    # Path: ciris_engine/logic/adapters/api/app.py -> ciris_engine/gui_static
+    # Need 4 parent levels: api -> adapters -> logic -> ciris_engine
+    gui_static_dir = Path(__file__).resolve().parent.parent.parent.parent / "gui_static"
+
+    if gui_static_dir.exists() and any(gui_static_dir.iterdir()):
+        from fastapi.staticfiles import StaticFiles
+
+        # Serve GUI at root (/) - catch-all, lowest priority
+        # This works because FastAPI matches routes in order:
+        # 1. /v1/* routes (highest priority)
+        # 2. /emergency/* routes
+        # 3. /docs, /redoc, /openapi.json (FastAPI built-ins)
+        # 4. /* GUI static files (lowest priority, catch-all)
+        app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
+        print(f"✅ GUI enabled at / (static assets: {gui_static_dir})")
+    else:
+        # No GUI - API-only mode
+        @app.get("/")
+        def root() -> dict[str, str]:
+            return {
+                "name": "CIRIS API",
+                "version": "1.0.0",
+                "docs": "/docs",
+                "redoc": "/redoc",
+                "openapi": "/openapi.json",
+                "gui": "not_available",
+                "message": "Install from PyPI for the full package with GUI: pip install ciris-agent",
+            }
+
+        print("ℹ️  API-only mode (no GUI assets found)")
+
     return app
 
 

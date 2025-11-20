@@ -1,0 +1,30 @@
+# MANIFEST.in - Specifies non-Python files to include in the wheel
+# This is CRITICAL for bundling GUI static assets
+
+# Documentation
+include README.md
+include LICENSE
+include CHANGELOG.md
+include BUILD_INFO.txt
+
+# Configuration files
+include requirements.txt
+include requirements-dev.txt
+
+# Package data files
+recursive-include ciris_engine/data *
+
+# GUI static assets (will be populated by CI)
+# These will be copied to ciris_engine/gui_static/ during the build process
+recursive-include ciris_engine/gui_static *
+
+# Exclude test and build artifacts
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .DS_Store
+prune tests
+prune tools/test_*
+prune .github
+prune docker
+prune deployment

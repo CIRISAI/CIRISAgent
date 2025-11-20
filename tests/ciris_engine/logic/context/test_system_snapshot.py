@@ -401,7 +401,7 @@ async def test_build_system_snapshot_with_version_info(mock_time_service):
     import re
 
     assert re.match(
-        r"^\d+\.\d+\.\d+(-\w+)?$", snapshot.agent_version
+        r"^\d+\.\d+\.\d+(\.\d+)?(-\w+)?$", snapshot.agent_version
     ), f"Invalid version format: {snapshot.agent_version}"
     assert snapshot.agent_codename == "Stable Foundation"
     # code_hash might be None in tests

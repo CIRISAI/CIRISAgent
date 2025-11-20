@@ -147,17 +147,39 @@ jobs:
           npm ci
 
       - name: Build static assets
+        id: build_gui
         run: |
           cd ${{ steps.find_app.outputs.gui_dir }}
           npm run build
           echo "✅ GUI build complete"
-          ls -la out/
+
+          # Check for static export first, fallback to .next/standalone
+          if [ -d "out" ]; then
+            echo "Using static export from out/"
+            ls -la out/ | head -20
+            BUILD_OUTPUT="out"
+          elif [ -d ".next/standalone" ]; then
+            echo "Using standalone build from .next/standalone"
+            ls -la .next/standalone/ | head -20
+            BUILD_OUTPUT=".next/standalone"
+          elif [ -d ".next/static" ]; then
+            echo "Using static build from .next/static"
+            ls -la .next/static/ | head -20
+            BUILD_OUTPUT=".next/static"
+          else
+            echo "❌ No build output found (checked: out/, .next/standalone, .next/static)"
+            ls -la
+            exit 1
+          fi
+
+          echo "build_output=$BUILD_OUTPUT" >> $GITHUB_OUTPUT
 
       - name: Upload GUI artifacts
+        id: upload_gui
         uses: actions/upload-artifact@v4
         with:
           name: gui-static-assets
-          path: ${{ steps.find_app.outputs.gui_dir }}/out/
+          path: ${{ steps.find_app.outputs.gui_dir }}/${{ steps.build_gui.outputs.build_output }}/
           retention-days: 7
 
   build-wheel:

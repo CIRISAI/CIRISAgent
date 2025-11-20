@@ -133,10 +133,14 @@ class ServiceSelectionExplanation(BaseModel):
 
     overview: str = Field(..., description="Overview of selection logic")
     priority_groups: Dict[int, str] = Field(..., description="Priority group explanations")
-    priorities: Optional[Dict[str, ConfigDict]] = Field(default_factory=lambda: {}, description="Priority level details")
+    priorities: Optional[Dict[str, ConfigDict]] = Field(
+        default_factory=lambda: {}, description="Priority level details"
+    )
     selection_strategies: Dict[str, str] = Field(..., description="Strategy explanations")
     selection_flow: Optional[List[str]] = Field(default_factory=lambda: [], description="Selection flow steps")
-    circuit_breaker_info: Optional[ConfigDict] = Field(default_factory=lambda: {}, description="Circuit breaker information")
+    circuit_breaker_info: Optional[ConfigDict] = Field(
+        default_factory=lambda: {}, description="Circuit breaker information"
+    )
     examples: List[ConfigDict] = Field(..., description="Example scenarios")
     configuration_tips: List[str] = Field(..., description="Configuration recommendations")
 

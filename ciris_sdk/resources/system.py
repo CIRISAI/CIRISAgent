@@ -257,14 +257,14 @@ class SystemResource:
         assert result is not None, "Services endpoint returned None"
         return ServicesStatusResponse(**result)
 
-    async def shutdown(self, reason: str, grace_period_seconds: int = 30, force: bool = False) -> ShutdownResponse:
+    async def shutdown(self, reason: str, force: bool = False, confirm: bool = True) -> ShutdownResponse:
         """
         Request graceful system shutdown.
 
         Args:
             reason: Reason for shutdown
-            grace_period_seconds: Time to wait before shutdown (default: 30)
-            force: Whether to force immediate shutdown
+            force: Whether to force immediate shutdown (default: False)
+            confirm: Confirmation flag - must be True (default: True)
 
         Requires: ADMIN role
 
@@ -274,7 +274,7 @@ class SystemResource:
         result = await self._transport.request(
             "POST",
             "/v1/system/shutdown",
-            json={"reason": reason, "grace_period_seconds": grace_period_seconds, "force": force},
+            json={"reason": reason, "force": force, "confirm": confirm},
         )
         assert result is not None, "Shutdown endpoint returned None"
         return ShutdownResponse(**result)

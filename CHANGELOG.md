@@ -74,6 +74,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.4] - 2025-11-21
+
+### Fixed - Authentication Permissions and API Integration
+
+- **SYSTEM_ADMIN Role Permissions** - Explicit deferral resolution capability
+  - **Issue**: SYSTEM_ADMIN role had implicit permission shortcut but missing explicit RESOLVE_DEFERRALS permission
+  - **Root Cause**: `ROLE_PERMISSIONS` mapping only included high-level permissions (FULL_ACCESS, EMERGENCY_SHUTDOWN)
+  - **Fix**: Added all permissions explicitly to SYSTEM_ADMIN role including:
+    - All observer permissions (view_*, send_messages)
+    - All admin permissions (manage_*, runtime_control)
+    - All authority permissions (resolve_deferrals, provide_guidance, grant_permissions)
+    - System-level permissions (full_access, emergency_shutdown, manage_sensitive_config)
+  - **Impact**: SYSTEM_ADMIN can now resolve deferrals in practice, not just in theory
+  - **Files**: `ciris_engine/schemas/api/auth.py`
+
+- **SDK Shutdown Method** - Fixed missing confirm parameter
+  - **Issue**: UI forced shutdown button failing with "Confirmation required (confirm=true)" error
+  - **Root Cause**: SDK `shutdown()` method not sending required `confirm` parameter to API
+  - **Fix**: Updated SDK method signature and payload:
+    - Removed unsupported `grace_period_seconds` parameter
+    - Added `confirm` parameter (defaults to `True`)
+    - Updated JSON payload to match API expectations: `{"reason": str, "force": bool, "confirm": bool}`
+  - **Impact**: Forced shutdown button in UI now works correctly
+  - **Files**: `ciris_sdk/resources/system.py`
+
 ## [1.6.3.2] - 2025-11-20
 
 ### Fixed - Critical Schema and Windows Compatibility

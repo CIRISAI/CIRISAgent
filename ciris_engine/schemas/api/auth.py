@@ -127,6 +127,27 @@ ROLE_PERMISSIONS: Dict[UserRole, Set[Permission]] = {
         Permission.MANAGE_USER_PERMISSIONS,
     },
     UserRole.SYSTEM_ADMIN: {
+        # System admin has all permissions explicitly
+        # (includes all lower role permissions plus system-level permissions)
+        Permission.VIEW_MESSAGES,
+        Permission.VIEW_TELEMETRY,
+        Permission.VIEW_REASONING,
+        Permission.VIEW_CONFIG,
+        Permission.VIEW_MEMORY,
+        Permission.VIEW_AUDIT,
+        Permission.VIEW_TOOLS,
+        Permission.VIEW_LOGS,
+        Permission.SEND_MESSAGES,
+        Permission.MANAGE_CONFIG,
+        Permission.RUNTIME_CONTROL,
+        Permission.MANAGE_INCIDENTS,
+        Permission.MANAGE_TASKS,
+        Permission.MANAGE_FILTERS,
+        Permission.TRIGGER_ANALYSIS,
+        Permission.RESOLVE_DEFERRALS,  # SYSTEM_ADMIN can resolve deferrals
+        Permission.PROVIDE_GUIDANCE,
+        Permission.GRANT_PERMISSIONS,
+        Permission.MANAGE_USER_PERMISSIONS,
         Permission.FULL_ACCESS,
         Permission.EMERGENCY_SHUTDOWN,
         Permission.MANAGE_SENSITIVE_CONFIG,

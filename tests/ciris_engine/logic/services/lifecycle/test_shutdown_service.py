@@ -212,3 +212,169 @@ def test_shutdown_service_thread_safety():
     # Handler should only be called once due to thread safety
     assert call_count == 1
     assert service.is_shutdown_requested() is True
+
+
+@pytest.mark.asyncio
+async def test_is_force_shutdown_initially_false():
+    """Test is_force_shutdown() returns False initially."""
+    service = ShutdownService()
+
+    assert service.is_force_shutdown() is False
+
+
+@pytest.mark.asyncio
+async def test_is_force_shutdown_false_after_normal_shutdown():
+    """Test is_force_shutdown() returns False after normal shutdown."""
+    service = ShutdownService()
+    await service.start()
+
+    # Request normal shutdown
+    await service.request_shutdown("Normal shutdown")
+
+    # Should not be force shutdown
+    assert service.is_shutdown_requested() is True
+    assert service.is_force_shutdown() is False
+
+
+@pytest.mark.asyncio
+async def test_is_force_shutdown_true_after_emergency_shutdown():
+    """Test is_force_shutdown() returns True after emergency shutdown."""
+    service = ShutdownService()
+    await service.start()
+
+    # Track if sys.exit was called
+    exit_called = False
+
+    def mock_exit(code):
+        nonlocal exit_called
+        exit_called = True
+        # Don't actually exit during test
+        raise SystemExit(code)
+
+    # Mock sys.exit to prevent actual termination
+    import sys
+    original_exit = sys.exit
+    sys.exit = mock_exit
+
+    try:
+        # Request emergency shutdown (will raise SystemExit)
+        with pytest.raises(SystemExit):
+            await service.emergency_shutdown("Emergency test", timeout_seconds=1)
+
+        # Should be marked as force shutdown
+        assert service.is_shutdown_requested() is True
+        assert service.is_force_shutdown() is True
+        assert exit_called is True
+
+        # Reason should have EMERGENCY prefix
+        assert "EMERGENCY:" in service.get_shutdown_reason()
+
+    finally:
+        # Restore original sys.exit
+        sys.exit = original_exit
+
+
+@pytest.mark.asyncio
+async def test_emergency_shutdown_executes_handlers():
+    """Test emergency_shutdown() executes both sync and async handlers."""
+    service = ShutdownService()
+    await service.start()
+
+    # Track handler calls
+    sync_called = False
+    async_called = False
+
+    def sync_handler():
+        nonlocal sync_called
+        sync_called = True
+    sync_handler.__name__ = "sync_handler"
+
+    async def async_handler():
+        nonlocal async_called
+        async_called = True
+    async_handler.__name__ = "async_handler"
+
+    # Register handlers
+    service.register_shutdown_handler(sync_handler)
+    service._register_async_shutdown_handler(async_handler)
+
+    # Mock sys.exit to prevent actual termination
+    import sys
+    original_exit = sys.exit
+    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
+
+    try:
+        # Request emergency shutdown (will raise SystemExit)
+        with pytest.raises(SystemExit):
+            await service.emergency_shutdown("Handler test", timeout_seconds=1)
+
+        # Both handlers should have been called
+        assert sync_called is True
+        assert async_called is True
+
+    finally:
+        # Restore original sys.exit
+        sys.exit = original_exit
+
+
+@pytest.mark.asyncio
+async def test_emergency_shutdown_timeout_handling():
+    """Test emergency_shutdown() handles handler timeout correctly."""
+    service = ShutdownService()
+    await service.start()
+
+    # Create a slow async handler that will timeout
+    async def slow_handler():
+        await asyncio.sleep(10)  # Sleep longer than timeout
+    slow_handler.__name__ = "slow_handler"
+
+    service._register_async_shutdown_handler(slow_handler)
+
+    # Mock sys.exit to prevent actual termination
+    import sys
+    original_exit = sys.exit
+    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
+
+    try:
+        # Request emergency shutdown with short timeout
+        with pytest.raises(SystemExit):
+            await service.emergency_shutdown("Timeout test", timeout_seconds=1)
+
+        # Should still complete despite handler timeout
+        assert service.is_force_shutdown() is True
+
+    finally:
+        # Restore original sys.exit
+        sys.exit = original_exit
+
+
+@pytest.mark.asyncio
+async def test_emergency_shutdown_metrics():
+    """Test emergency_shutdown() updates metrics correctly."""
+    service = ShutdownService()
+    await service.start()
+
+    # Get initial metrics
+    initial_metrics = await service.get_metrics()
+    assert initial_metrics["shutdown_requests_total"] == 0.0
+    assert initial_metrics["shutdown_emergency_total"] == 0.0
+
+    # Mock sys.exit to prevent actual termination
+    import sys
+    original_exit = sys.exit
+    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
+
+    try:
+        # Request emergency shutdown (will raise SystemExit)
+        with pytest.raises(SystemExit):
+            await service.emergency_shutdown("Metrics test", timeout_seconds=1)
+
+        # Check metrics updated
+        final_metrics = await service.get_metrics()
+        assert final_metrics["shutdown_requests_total"] == 1.0
+        assert final_metrics["shutdown_emergency_total"] == 1.0
+        assert final_metrics["shutdown_graceful_total"] == 0.0
+
+    finally:
+        # Restore original sys.exit
+        sys.exit = original_exit

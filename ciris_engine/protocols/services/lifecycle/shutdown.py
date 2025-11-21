@@ -20,6 +20,11 @@ class ShutdownServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
+    def is_force_shutdown(self) -> bool:
+        """Check if this is a forced/emergency shutdown."""
+        ...
+
+    @abstractmethod
     def get_shutdown_reason(self) -> Optional[str]:
         """Get the reason for shutdown."""
         ...

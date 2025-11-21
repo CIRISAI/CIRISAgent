@@ -140,6 +140,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: GUI loads without rate limiting errors in standalone/pip-installed mode
   - **Files**: `ciris_engine/logic/adapters/api/middleware/rate_limiter.py`
 
+- **Forced Shutdown Generating Thoughts** - Emergency shutdown now bypasses thought processing
+  - **Issue**: UI forced shutdown button (`force=true`) still generated shutdown thoughts instead of immediate termination
+  - **Root Cause**: API endpoint called `runtime.request_shutdown()` for both normal and forced shutdowns, which always created tasks and generated thoughts
+  - **Details**: Shutdown processor would always call `generate_seed_thoughts()` and process shutdown through normal cognitive flow even when `force=true` was set
+  - **Fix**: Updated shutdown flow to use emergency path for forced shutdowns:
+    - Added `is_force_shutdown()` method to `ShutdownService` to expose emergency mode flag
+    - Updated `ShutdownServiceProtocol` to include `is_force_shutdown()` abstract method
+    - Modified `/v1/system/shutdown` API endpoint to call `emergency_shutdown()` instead of `request_shutdown()` when `force=true`
+    - Emergency shutdown calls `sys.exit(1)` immediately after executing handlers, bypassing task/thought generation entirely
+  - **Impact**: Forced shutdown now terminates immediately without creating tasks or generating thoughts
+  - **Files**:
+    - `ciris_engine/logic/services/lifecycle/shutdown/service.py` (lines 206-209)
+    - `ciris_engine/protocols/services/lifecycle/shutdown.py` (lines 22-25)
+    - `ciris_engine/logic/adapters/api/routes/system.py` (lines 948-955)
+  - **Tests**: Added 20 comprehensive unit tests:
+    - `tests/ciris_engine/logic/services/lifecycle/test_shutdown_service.py` (6 new tests for `is_force_shutdown()` and emergency shutdown behavior)
+    - `tests/adapters/api/test_shutdown_endpoint_force_parameter.py` (14 new tests for API endpoint force parameter handling)
+
 ## [1.6.3.2] - 2025-11-20
 
 ### Fixed - Critical Schema and Windows Compatibility

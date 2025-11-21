@@ -945,9 +945,14 @@ async def shutdown_system(
             # Using _ prefix to indicate we're intentionally not awaiting
             _audit_task = asyncio.create_task(audit_service.log_event("system_shutdown_request", audit_event))
 
-        # Execute shutdown through runtime to ensure proper state transition
-        # The runtime's request_shutdown will call the shutdown service AND set global flags
-        runtime.request_shutdown(reason)
+        # Execute shutdown - use emergency_shutdown for force=true to skip thought processing
+        if body.force:
+            # Forced shutdown: bypass thought processing, immediate termination
+            await shutdown_service.emergency_shutdown(reason, timeout_seconds=5)
+        else:
+            # Normal shutdown: allow thoughtful consideration via runtime
+            # The runtime's request_shutdown will call the shutdown service AND set global flags
+            runtime.request_shutdown(reason)
 
         response = ShutdownResponse(
             status="initiated",

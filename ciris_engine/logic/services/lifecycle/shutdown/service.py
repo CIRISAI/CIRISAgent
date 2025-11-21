@@ -203,6 +203,11 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         """Check if shutdown has been requested."""
         return self._shutdown_requested
 
+    def is_force_shutdown(self) -> bool:
+        """Check if this is a forced/emergency shutdown."""
+        with self._lock:
+            return self._emergency_mode
+
     async def _wait_for_shutdown(self) -> None:
         """Wait for shutdown signal (async) - internal method."""
         if not self._shutdown_event:

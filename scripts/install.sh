@@ -1008,7 +1008,7 @@ fi
 
 # Start the agent with venv Python
 cd "$INSTALL_DIR/CIRISAgent"
-exec "$INSTALL_DIR/CIRISAgent/venv/bin/python" main.py --adapter api --port "${CIRIS_API_PORT:-8080}"
+exec "$INSTALL_DIR/CIRISAgent/venv/bin/python" main.py --adapter api --port "${CIRIS_AGENT_PORT:-8080}"
 WRAPPER_EOF
     chmod +x "$INSTALL_DIR/scripts/launchd-agent-wrapper.sh"
 

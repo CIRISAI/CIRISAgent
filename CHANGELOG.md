@@ -89,6 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `ciris_modular_services/__init__.py` (new)
     - `MANIFEST.in`
 
+- **macOS launchd Port Configuration** - Fix hardcoded port in wrapper script
+  - **Issue**: macOS launchd service always starts on port 8080 (or CIRIS_API_PORT) instead of user-configured CIRIS_AGENT_PORT from .env
+  - **Root Cause**: Wrapper script referenced wrong environment variable (`CIRIS_API_PORT` instead of `CIRIS_AGENT_PORT`)
+  - **Fix**: Changed wrapper to use `${CIRIS_AGENT_PORT:-8080}` matching installer's .env configuration
+  - **Impact**: macOS installations now correctly honor custom port configuration from interactive setup
+  - **Files**: `scripts/install.sh` (launchd-agent-wrapper.sh)
+
 - **SYSTEM_ADMIN Role Permissions** - Explicit deferral resolution capability
   - **Issue**: SYSTEM_ADMIN role had implicit permission shortcut but missing explicit RESOLVE_DEFERRALS permission
   - **Root Cause**: `ROLE_PERMISSIONS` mapping only included high-level permissions (FULL_ACCESS, EMERGENCY_SHUTDOWN)

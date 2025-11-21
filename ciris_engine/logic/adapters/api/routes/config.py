@@ -30,6 +30,11 @@ def wrap_config_value(value: Any) -> ConfigValueWrapper:
     The TypeScript SDK expects values in a wrapped format with typed fields:
     { string_value: "foo", int_value: null, ... }
     """
+    # Handle ConfigValue objects by extracting their primitive value
+    if isinstance(value, ConfigValueWrapper):
+        # Already wrapped, return as-is
+        return value
+
     if value is None:
         return ConfigValueWrapper()
     elif isinstance(value, str):
@@ -45,7 +50,7 @@ def wrap_config_value(value: Any) -> ConfigValueWrapper:
     elif isinstance(value, dict):
         return ConfigValueWrapper(dict_value=value)
     else:
-        # Fallback: convert to string
+        # Fallback: convert to string (e.g., for custom objects)
         return ConfigValueWrapper(string_value=str(value))
 
 
@@ -153,8 +158,9 @@ async def get_config(
         if config_node is None:
             raise HTTPException(status_code=404, detail=f"Configuration key '{key}' not found")
 
-        # Extract the actual value from the ConfigNode
-        actual_value = config_node.value
+        # Extract the actual primitive value from ConfigNode.value.value
+        # config_node.value is a ConfigValue wrapper, .value property extracts the primitive
+        actual_value = config_node.value.value
 
         # Apply role-based filtering
         is_sensitive = ConfigSecurity.is_sensitive(key)

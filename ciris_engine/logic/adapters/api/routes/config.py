@@ -5,7 +5,7 @@ Simplified configuration management with role-based filtering.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field, field_serializer
@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_serializer
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.api.config_security import ConfigSecurity
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.services.nodes import ConfigValue as ConfigValueWrapper
 
 from ..constants import DESC_CONFIGURATION_KEY, ERROR_CONFIG_SERVICE_NOT_AVAILABLE
 from ..dependencies.auth import AuthContext, get_auth_context, require_admin, require_observer
@@ -22,11 +23,37 @@ router = APIRouter(prefix="/config", tags=["config"])
 # Request/Response schemas
 
 
+def wrap_config_value(value: Any) -> ConfigValueWrapper:
+    """
+    Wrap a raw value into ConfigValueWrapper format for TypeScript SDK compatibility.
+
+    The TypeScript SDK expects values in a wrapped format with typed fields:
+    { string_value: "foo", int_value: null, ... }
+    """
+    if value is None:
+        return ConfigValueWrapper()
+    elif isinstance(value, str):
+        return ConfigValueWrapper(string_value=value)
+    elif isinstance(value, bool):  # Check bool before int (bool is subclass of int)
+        return ConfigValueWrapper(bool_value=value)
+    elif isinstance(value, int):
+        return ConfigValueWrapper(int_value=value)
+    elif isinstance(value, float):
+        return ConfigValueWrapper(float_value=value)
+    elif isinstance(value, list):
+        return ConfigValueWrapper(list_value=value)
+    elif isinstance(value, dict):
+        return ConfigValueWrapper(dict_value=value)
+    else:
+        # Fallback: convert to string
+        return ConfigValueWrapper(string_value=str(value))
+
+
 class ConfigItemResponse(BaseModel):
     """Configuration item in API response."""
 
     key: str = Field(..., description=DESC_CONFIGURATION_KEY)
-    value: Any = Field(..., description="Configuration value (may be redacted)")
+    value: ConfigValueWrapper = Field(..., description="Configuration value (may be redacted)")
     updated_at: datetime = Field(..., description="Last update time")
     updated_by: str = Field(..., description="Who updated this config")
     is_sensitive: bool = Field(False, description="Whether value contains sensitive data")
@@ -83,10 +110,13 @@ async def list_configs(
             is_sensitive = ConfigSecurity.is_sensitive(key)
             filtered_value = ConfigSecurity.filter_value(key, value, auth.role)
 
+            # Wrap value for TypeScript SDK compatibility
+            wrapped_value = wrap_config_value(filtered_value)
+
             config_list.append(
                 ConfigItemResponse(
                     key=key,
-                    value=filtered_value,
+                    value=wrapped_value,
                     updated_at=datetime.now(timezone.utc),  # Would get from graph
                     updated_by="system",  # Would get from graph
                     is_sensitive=is_sensitive,
@@ -130,9 +160,12 @@ async def get_config(
         is_sensitive = ConfigSecurity.is_sensitive(key)
         filtered_value = ConfigSecurity.filter_value(key, actual_value, auth.role)
 
+        # Wrap value for TypeScript SDK compatibility
+        wrapped_value = wrap_config_value(filtered_value)
+
         config = ConfigItemResponse(
             key=key,
-            value=filtered_value,
+            value=wrapped_value,
             updated_at=config_node.updated_at,
             updated_by=config_node.updated_by,
             is_sensitive=is_sensitive,
@@ -184,9 +217,12 @@ async def update_config(
         await config_service.set_config(key=key, value=body.value, updated_by=auth.user_id)
 
         # Return updated config (show actual value since user has permission to update)
+        # Wrap value for TypeScript SDK compatibility
+        wrapped_value = wrap_config_value(body.value)
+
         config = ConfigItemResponse(
             key=key,
-            value=body.value,
+            value=wrapped_value,
             updated_at=datetime.now(timezone.utc),
             updated_by=auth.user_id,
             is_sensitive=is_sensitive,

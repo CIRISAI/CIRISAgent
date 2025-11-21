@@ -117,6 +117,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Forced shutdown button in UI now works correctly
   - **Files**: `ciris_sdk/resources/system.py`
 
+- **Config Values Not Displaying in UI** - Fixed TypeScript SDK compatibility
+  - **Issue**: Config view in UI showing keys but not values (all values displaying as null/empty)
+  - **Root Cause**: API returning unwrapped values but TypeScript SDK expecting wrapped ConfigValue format with typed fields
+  - **Details**: TypeScript SDK's `unwrapConfigValue()` expects `{string_value: "foo", int_value: null, ...}` structure but API was returning direct primitive values like `"foo"` or `{key: value}`
+  - **Fix**: Updated config API endpoints to wrap values for SDK compatibility:
+    - Added `wrap_config_value()` helper function to wrap values in ConfigValueWrapper format
+    - Updated `ConfigItemResponse.value` field type from `Any` to `ConfigValueWrapper`
+    - Wrapped values in all config endpoints (list_configs, get_config, update_config)
+    - Imported ConfigValue from `ciris_engine.schemas.services.nodes` for type consistency
+  - **Impact**: Config values now display correctly in UI after TypeScript SDK unwrapping
+  - **Files**: `ciris_engine/logic/adapters/api/routes/config.py`
+
 ## [1.6.3.2] - 2025-11-20
 
 ### Fixed - Critical Schema and Windows Compatibility

@@ -1239,7 +1239,7 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
             "The system must be properly initialized with a time service."
         )
 
-    from datetime import datetime, timedelta, timezone as dt_timezone
+    from datetime import datetime, timedelta, timezone as dt_timezone, tzinfo
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
     # Get current UTC time from time service
@@ -1252,6 +1252,7 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
 
     # Define timezone objects using zoneinfo with Windows fallback
     # Windows may not have IANA timezone database, use fixed UTC offsets as fallback
+    london_tz: tzinfo
     try:
         london_tz = ZoneInfo("Europe/London")
     except ZoneInfoNotFoundError:
@@ -1259,6 +1260,7 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
         london_tz = dt_timezone(timedelta(hours=0))
         logger.warning("Europe/London timezone not found, using UTC+0 fallback")
 
+    chicago_tz: tzinfo
     try:
         chicago_tz = ZoneInfo("America/Chicago")
     except ZoneInfoNotFoundError:
@@ -1266,6 +1268,7 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
         chicago_tz = dt_timezone(timedelta(hours=-6))
         logger.warning("America/Chicago timezone not found, using UTC-6 fallback")
 
+    tokyo_tz: tzinfo
     try:
         tokyo_tz = ZoneInfo("Asia/Tokyo")
     except ZoneInfoNotFoundError:

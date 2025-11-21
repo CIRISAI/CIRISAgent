@@ -1239,7 +1239,9 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
             "The system must be properly initialized with a time service."
         )
 
-    from datetime import datetime, timedelta, timezone as dt_timezone, tzinfo
+    from datetime import datetime, timedelta
+    from datetime import timezone as dt_timezone
+    from datetime import tzinfo
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
     # Get current UTC time from time service

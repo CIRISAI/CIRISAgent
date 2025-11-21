@@ -991,7 +991,28 @@ install_launchd_service() {
     local launch_agents_dir="$HOME/Library/LaunchAgents"
     mkdir -p "$launch_agents_dir"
 
-    # Agent service
+    # Create wrapper script that loads .env before starting agent
+    cat > "$INSTALL_DIR/scripts/launchd-agent-wrapper.sh" << 'WRAPPER_EOF'
+#!/bin/bash
+# Wrapper script for launchd to load .env file before starting CIRIS agent
+
+INSTALL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$INSTALL_DIR/.env"
+
+# Load environment variables from .env if it exists
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
+# Start the agent with venv Python
+cd "$INSTALL_DIR/CIRISAgent"
+exec "$INSTALL_DIR/CIRISAgent/venv/bin/python" main.py --adapter api --port "${CIRIS_API_PORT:-8080}"
+WRAPPER_EOF
+    chmod +x "$INSTALL_DIR/scripts/launchd-agent-wrapper.sh"
+
+    # Agent service - use wrapper script
     cat > "$launch_agents_dir/ai.ciris.agent.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1001,15 +1022,10 @@ install_launchd_service() {
     <string>ai.ciris.agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$INSTALL_DIR/CIRISAgent/venv/bin/python</string>
-        <string>main.py</string>
-        <string>--adapter</string>
-        <string>api</string>
-        <string>--port</string>
-        <string>$AGENT_PORT</string>
+        <string>$INSTALL_DIR/scripts/launchd-agent-wrapper.sh</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>$INSTALL_DIR/CIRISAgent</string>
+    <string>$INSTALL_DIR</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

@@ -78,6 +78,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed - Authentication Permissions and API Integration
 
+- **Modular Services Packaging** - Fix missing directory in pip installs
+  - **Issue**: `ciris_modular_services` directory not found on Windows and other pip installations
+  - **Root Cause**: Missing top-level `__init__.py` file prevented `find_packages()` from discovering the package
+  - **Fix**:
+    - Added `ciris_modular_services/__init__.py` to make it a proper Python package
+    - Updated `MANIFEST.in` to explicitly include all modular service files (*.py, *.json, *.yaml, *.md, *.txt)
+  - **Impact**: Modular services (mock_llm, reddit, geo_wisdom, weather_wisdom, sensor_wisdom, external_data_sql) now properly packaged in wheel distributions
+  - **Files**:
+    - `ciris_modular_services/__init__.py` (new)
+    - `MANIFEST.in`
+
 - **SYSTEM_ADMIN Role Permissions** - Explicit deferral resolution capability
   - **Issue**: SYSTEM_ADMIN role had implicit permission shortcut but missing explicit RESOLVE_DEFERRALS permission
   - **Root Cause**: `ROLE_PERMISSIONS` mapping only included high-level permissions (FULL_ACCESS, EMERGENCY_SHUTDOWN)

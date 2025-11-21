@@ -129,6 +129,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Config values now display correctly in UI after TypeScript SDK unwrapping
   - **Files**: `ciris_engine/logic/adapters/api/routes/config.py`
 
+- **GUI Static Assets Rate Limiting** - Exempt static files from rate limiting
+  - **Issue**: 429 Too Many Requests errors when loading GUI in standalone mode with bundled Next.js assets
+  - **Root Cause**: Rate limiter applying 60 req/min limit to all requests including static JS/CSS chunks
+  - **Details**: GUI page loads require dozens of static file requests (`/_next/static/chunks/*.js`, fonts, images) which quickly exceeded the rate limit
+  - **Fix**: Updated rate limiter middleware to exempt static files:
+    - Added `exempt_extensions` set with common static file extensions (.js, .css, .map, .woff, .png, .svg, .html, etc.)
+    - Added check for `/_next/*` path prefix (Next.js internal routes)
+    - Static file requests now bypass rate limiting entirely
+  - **Impact**: GUI loads without rate limiting errors in standalone/pip-installed mode
+  - **Files**: `ciris_engine/logic/adapters/api/middleware/rate_limiter.py`
+
 ## [1.6.3.2] - 2025-11-20
 
 ### Fixed - Critical Schema and Windows Compatibility

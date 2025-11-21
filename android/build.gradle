@@ -1,0 +1,28 @@
+// Top-level build file for CIRIS Android
+
+buildscript {
+    ext.kotlin_version = "1.9.0"
+    ext.chaquopy_version = "15.0.1"
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.1.0"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.chaquo.python:gradle:$chaquopy_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

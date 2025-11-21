@@ -1,0 +1,105 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "ai.ciris.mobile"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "ai.ciris.mobile"
+        minSdk 24  // Android 7.0+ required for Python 3.10
+        targetSdk 34
+        versionCode 1
+        versionName "1.6.3.2"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // Include architectures for Chaquopy
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+python {
+    // Use system Python 3.10+ for building
+    buildPython "/usr/bin/python3"
+
+    pip {
+        // Core FastAPI dependencies
+        install "fastapi==0.115.0"
+        install "uvicorn[standard]==0.30.0"
+        install "httpx==0.27.0"
+
+        // Pydantic for validation
+        install "pydantic==2.8.0"
+        install "pydantic-settings==2.3.0"
+
+        // Database
+        install "aiosqlite==0.20.0"
+
+        // Configuration
+        install "pyyaml==6.0.1"
+        install "python-dotenv==1.0.1"
+
+        // Authentication
+        install "python-jose[cryptography]==3.3.0"
+        install "passlib[bcrypt]==1.7.4"
+        install "python-multipart==0.0.9"
+
+        // Keep dependencies lean - no GPU, BLAS, or heavy ML libs
+        // All LLM inference is remote
+    }
+
+    // Include CIRIS Python source
+    sourceSets {
+        main {
+            python {
+                srcDirs = ["../../ciris_engine", "../../"]
+            }
+        }
+    }
+}
+
+dependencies {
+    // AndroidX core
+    implementation "androidx.core:core-ktx:1.12.0"
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "com.google.android.material:material:1.11.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+
+    // WebView for bundled UI
+    implementation "androidx.webkit:webkit:1.9.0"
+
+    // Testing
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
+}

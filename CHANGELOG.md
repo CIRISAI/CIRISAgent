@@ -74,6 +74,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.3.2] - 2025-11-20
+
+### Fixed - Critical Schema and Windows Compatibility
+
+- **Action Parameter Schema Enhancement** - Allow list values in context fields
+  - **Issue**: LLM responses with authorization lists (e.g., `["wa-system-admin", "service-account"]`) were failing Pydantic validation
+  - **Root Cause**: `context` field type was `Dict[str, str]` but LLMs needed to pass `Dict[str, Union[str, List[str]]]`
+  - **Fix**: Updated three parameter schemas to support both string and list values:
+    - `ObserveParams.context`
+    - `DeferParams.context`
+    - `TaskCompleteParams.context`
+  - **Impact**: Resolves validation errors preventing agent task completion
+  - **Files**: `ciris_engine/schemas/actions/parameters.py`
+
+- **Windows Timezone Compatibility** - Graceful fallback for timezone databases
+  - **Issue**: Windows systems may not have IANA timezone database (tzdata)
+  - **Fix**: Added UTC offset fallbacks when `ZoneInfo` raises `ZoneInfoNotFoundError`
+    - London: UTC+0 fallback (normally Europe/London with DST)
+    - Chicago: UTC-6 fallback (normally America/Chicago with DST)
+    - Tokyo: UTC+9 fallback (normally Asia/Tokyo, no DST)
+  - **Behavior**: Logs warnings when fallback is used, recommends installing tzdata
+  - **Testing**: Added comprehensive tests for fallback scenarios and DST boundaries
+  - **Files**:
+    - `ciris_engine/logic/context/system_snapshot_helpers.py`
+    - `tests/ciris_engine/logic/context/test_system_snapshot_localized_times.py`
+
 ## [1.6.3] - 2025-11-19
 
 ### Added - PyPI Package Distribution & GUI Integration

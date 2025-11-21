@@ -174,7 +174,7 @@ class TestTransparencyEndpoint:
         assert data["links"]["privacy"] == "/privacy-policy.html"
         assert data["links"]["terms"] == "/terms-of-service.html"
         assert data["links"]["when_we_pause"] == "/when-we-pause.html"
-        assert data["links"]["dsar"] == "/v1/dsr"
+        assert data["links"]["dsar"] == "/v1/dsar"
 
     def test_transparency_system_status(self, client):
         """Test system status endpoint."""

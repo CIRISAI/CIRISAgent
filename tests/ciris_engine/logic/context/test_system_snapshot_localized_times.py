@@ -218,3 +218,154 @@ class TestSystemSnapshotLocalizedTimes:
         assert "+01:00" in snapshot.current_time_london
         assert "-05:00" in snapshot.current_time_chicago
         assert "+09:00" in snapshot.current_time_tokyo
+
+    @pytest.mark.asyncio
+    async def test_windows_timezone_fallback_london(self):
+        """Test that Windows timezone fallback works correctly for London (UTC+0)."""
+        from unittest.mock import patch
+        from zoneinfo import ZoneInfoNotFoundError
+
+        # Create a fixed UTC time for testing
+        fixed_utc_time = datetime(2025, 9, 27, 19, 30, 0, tzinfo=timezone.utc)
+
+        # Mock time service
+        time_service = Mock()
+        time_service.now.return_value = fixed_utc_time
+
+        # Mock required services
+        resource_monitor = Mock()
+        resource_monitor.get_resource_alerts.return_value = []
+
+        secrets_service = Mock()
+        secrets_service.get_secrets_stats = AsyncMock(
+            return_value={"total_secrets_stored": 0, "secrets_filter_version": 1}
+        )
+
+        # Patch ZoneInfo at the zoneinfo module level to simulate Windows environment
+        with patch("zoneinfo.ZoneInfo") as mock_zoneinfo:
+            # Make ZoneInfo raise ZoneInfoNotFoundError for all timezones
+            mock_zoneinfo.side_effect = ZoneInfoNotFoundError("No time zone found")
+
+            # Build snapshot - should use UTC offset fallbacks
+            snapshot = await build_system_snapshot(
+                task=None,
+                thought=None,
+                resource_monitor=resource_monitor,
+                time_service=time_service,
+                secrets_service=secrets_service,
+            )
+
+            # Verify all localized time fields exist
+            assert hasattr(snapshot, "current_time_utc")
+            assert hasattr(snapshot, "current_time_london")
+            assert hasattr(snapshot, "current_time_chicago")
+            assert hasattr(snapshot, "current_time_tokyo")
+
+            # Verify UTC offset fallbacks are used:
+            # London: UTC+0
+            # Chicago: UTC-6
+            # Tokyo: UTC+9
+            assert "+00:00" in snapshot.current_time_london
+            assert "-06:00" in snapshot.current_time_chicago
+            assert "+09:00" in snapshot.current_time_tokyo
+
+    @pytest.mark.asyncio
+    async def test_windows_timezone_fallback_warnings_logged(self, caplog):
+        """Test that warnings are logged when timezone fallback occurs."""
+        from unittest.mock import patch
+        from zoneinfo import ZoneInfoNotFoundError
+        import logging
+
+        # Enable logging capture
+        caplog.set_level(logging.WARNING)
+
+        # Create a fixed UTC time for testing
+        fixed_utc_time = datetime(2025, 9, 27, 19, 30, 0, tzinfo=timezone.utc)
+
+        # Mock time service
+        time_service = Mock()
+        time_service.now.return_value = fixed_utc_time
+
+        # Mock required services
+        resource_monitor = Mock()
+        resource_monitor.get_resource_alerts.return_value = []
+
+        secrets_service = Mock()
+        secrets_service.get_secrets_stats = AsyncMock(
+            return_value={"total_secrets_stored": 0, "secrets_filter_version": 1}
+        )
+
+        # Patch ZoneInfo at the zoneinfo module level to simulate Windows environment
+        with patch("zoneinfo.ZoneInfo") as mock_zoneinfo:
+            mock_zoneinfo.side_effect = ZoneInfoNotFoundError("No time zone found")
+
+            # Build snapshot
+            await build_system_snapshot(
+                task=None,
+                thought=None,
+                resource_monitor=resource_monitor,
+                time_service=time_service,
+                secrets_service=secrets_service,
+            )
+
+            # Verify warnings were logged for each timezone fallback
+            warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
+
+            assert any("Europe/London" in msg and "fallback" in msg for msg in warning_messages), \
+                "Expected warning for London timezone fallback"
+            assert any("America/Chicago" in msg and "fallback" in msg for msg in warning_messages), \
+                "Expected warning for Chicago timezone fallback"
+            assert any("Asia/Tokyo" in msg and "fallback" in msg for msg in warning_messages), \
+                "Expected warning for Tokyo timezone fallback"
+
+    @pytest.mark.asyncio
+    async def test_windows_timezone_partial_fallback(self):
+        """Test mixed scenario where some timezones are available and others need fallback."""
+        from unittest.mock import patch
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        # Create a fixed UTC time for testing
+        fixed_utc_time = datetime(2025, 9, 27, 19, 30, 0, tzinfo=timezone.utc)
+
+        # Mock time service
+        time_service = Mock()
+        time_service.now.return_value = fixed_utc_time
+
+        # Mock required services
+        resource_monitor = Mock()
+        resource_monitor.get_resource_alerts.return_value = []
+
+        secrets_service = Mock()
+        secrets_service.get_secrets_stats = AsyncMock(
+            return_value={"total_secrets_stored": 0, "secrets_filter_version": 1}
+        )
+
+        # Create a custom ZoneInfo that only works for Tokyo
+        def mock_zoneinfo(tz_name):
+            if tz_name == "Asia/Tokyo":
+                return ZoneInfo("Asia/Tokyo")  # Use real ZoneInfo for Tokyo
+            else:
+                raise ZoneInfoNotFoundError(f"No time zone found with key {tz_name}")
+
+        # Patch ZoneInfo at the zoneinfo module level to simulate partial availability
+        with patch("zoneinfo.ZoneInfo", side_effect=mock_zoneinfo):
+            # Build snapshot - should use fallbacks for London and Chicago, real timezone for Tokyo
+            snapshot = await build_system_snapshot(
+                task=None,
+                thought=None,
+                resource_monitor=resource_monitor,
+                time_service=time_service,
+                secrets_service=secrets_service,
+            )
+
+            # Verify all fields exist and have timezone info
+            assert hasattr(snapshot, "current_time_london")
+            assert hasattr(snapshot, "current_time_chicago")
+            assert hasattr(snapshot, "current_time_tokyo")
+
+            # London and Chicago should use UTC offset fallbacks
+            assert "+00:00" in snapshot.current_time_london
+            assert "-06:00" in snapshot.current_time_chicago
+
+            # Tokyo should use proper timezone (JST in September = +09:00)
+            assert "+09:00" in snapshot.current_time_tokyo

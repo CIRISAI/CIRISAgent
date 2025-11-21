@@ -258,7 +258,7 @@ async def get_transparency_policy() -> TransparencyPolicy:
             "privacy": "/privacy-policy.html",
             "terms": "/terms-of-service.html",
             "when_we_pause": "/when-we-pause.html",
-            "dsar": "/v1/dsr",
+            "dsar": "/v1/dsar",
             "source": "https://github.com/CIRISAI/CIRISAgent",
         },
     )

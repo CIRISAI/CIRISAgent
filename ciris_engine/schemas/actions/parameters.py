@@ -19,7 +19,7 @@ class ObserveParams(BaseModel):
     channel_id: Optional[str] = Field(None, description="Channel ID for observation")
     channel_context: Optional[ChannelContext] = None
     active: bool = True  # Always active - agent should always create follow-up thoughts
-    context: Optional[Dict[str, str]] = Field(default=None)
+    context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -73,7 +73,7 @@ class DeferParams(BaseModel):
 
     channel_id: Optional[str] = Field(None, description="Channel ID for context")
     reason: str
-    context: Optional[Dict[str, str]] = Field(default=None)
+    context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
     defer_until: Optional[str] = Field(
         None, description="ISO timestamp to reactivate task (e.g., '2025-01-20T15:00:00Z')"
     )
@@ -127,7 +127,7 @@ class TaskCompleteParams(BaseModel):
 
     channel_id: Optional[str] = Field(None, description="Channel ID for context")
     completion_reason: str = "Task completed successfully"
-    context: Optional[Dict[str, str]] = Field(default=None)
+    context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
     positive_moment: Optional[str] = Field(None, description="Optional note about positive vibes/joy from this task")
 
     model_config = ConfigDict(extra="forbid")

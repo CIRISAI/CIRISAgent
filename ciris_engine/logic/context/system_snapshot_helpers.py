@@ -1229,6 +1229,9 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
     """Get current time localized to LONDON, CHICAGO, and TOKYO timezones.
 
     FAILS FAST AND LOUD if time_service is None.
+
+    Cross-platform compatible: Falls back to UTC offsets on Windows where
+    IANA timezone database may not be available.
     """
     if time_service is None:
         raise RuntimeError(
@@ -1236,8 +1239,8 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
             "The system must be properly initialized with a time service."
         )
 
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta, timezone as dt_timezone, tzinfo
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
     # Get current UTC time from time service
     utc_time = time_service.now()
@@ -1247,10 +1250,31 @@ def _get_localized_times(time_service: TimeServiceProtocol) -> LocalizedTimeData
             f"Time service is not properly configured."
         )
 
-    # Define timezone objects using zoneinfo (Python 3.9+ standard library)
-    london_tz = ZoneInfo("Europe/London")
-    chicago_tz = ZoneInfo("America/Chicago")
-    tokyo_tz = ZoneInfo("Asia/Tokyo")
+    # Define timezone objects using zoneinfo with Windows fallback
+    # Windows may not have IANA timezone database, use fixed UTC offsets as fallback
+    london_tz: tzinfo
+    try:
+        london_tz = ZoneInfo("Europe/London")
+    except ZoneInfoNotFoundError:
+        # GMT/BST: UTC+0/+1 - use UTC+0 as conservative fallback
+        london_tz = dt_timezone(timedelta(hours=0))
+        logger.warning("Europe/London timezone not found, using UTC+0 fallback")
+
+    chicago_tz: tzinfo
+    try:
+        chicago_tz = ZoneInfo("America/Chicago")
+    except ZoneInfoNotFoundError:
+        # CST/CDT: UTC-6/-5 - use UTC-6 as conservative fallback
+        chicago_tz = dt_timezone(timedelta(hours=-6))
+        logger.warning("America/Chicago timezone not found, using UTC-6 fallback")
+
+    tokyo_tz: tzinfo
+    try:
+        tokyo_tz = ZoneInfo("Asia/Tokyo")
+    except ZoneInfoNotFoundError:
+        # JST: UTC+9 (no DST)
+        tokyo_tz = dt_timezone(timedelta(hours=9))
+        logger.warning("Asia/Tokyo timezone not found, using UTC+9 fallback")
 
     # Convert to localized times
     utc_iso = utc_time.isoformat()

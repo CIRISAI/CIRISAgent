@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS Setup Wizard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .wizard-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .wizard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .wizard-header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .wizard-header p {
+            opacity: 0.9;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .wizard-content {
+            padding: 40px;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .step h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .step p {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group small {
+            display: block;
+            color: #999;
+            margin-top: 5px;
+            font-size: 13px;
+        }
+
+        .provider-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .provider-option {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .provider-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .provider-option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+
+        .wizard-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+
+        .alert-success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+
+        .features-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+
+        .features-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+        }
+
+        .features-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .completion-icon {
+            text-align: center;
+            font-size: 64px;
+            margin: 20px 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <div class="wizard-header">
+            <h1>🌟 Welcome to CIRIS</h1>
+            <p id="step-title">Let's get you started</p>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress"></div>
+        </div>
+
+        <div class="wizard-content">
+            <div id="alert-container"></div>
+
+            <!-- Step 1: Welcome -->
+            <div class="step active" id="step-1">
+                <h2>Welcome to CIRIS Agent!</h2>
+                <p>CIRIS is an ethical AI platform designed with Core Identity, Integrity, Resilience, Incompleteness, and Gratitude at its heart.</p>
+
+                <ul class="features-list">
+                    <li><strong>Autonomous Agent</strong> - Self-directed task processing with cognitive states</li>
+                    <li><strong>Wise Authority</strong> - Built-in ethical guidance system</li>
+                    <li><strong>Privacy-First</strong> - Your data stays on your machine</li>
+                    <li><strong>Multi-LLM Support</strong> - OpenAI, local models, or any OpenAI-compatible provider</li>
+                    <li><strong>Production Ready</strong> - Used in production at agents.ciris.ai</li>
+                </ul>
+
+                <p>This wizard will help you configure CIRIS in 2 simple steps.</p>
+            </div>
+
+            <!-- Step 2: LLM Configuration -->
+            <div class="step" id="step-2">
+                <h2>Configure Your LLM</h2>
+                <p>CIRIS needs an LLM (Large Language Model) to function. Choose your provider:</p>
+
+                <div class="provider-options">
+                    <div class="provider-option" data-provider="openai" onclick="selectProvider('openai')">
+                        <div style="font-size: 24px; margin-bottom: 5px;">🤖</div>
+                        <div>OpenAI</div>
+                    </div>
+                    <div class="provider-option" data-provider="local" onclick="selectProvider('local')">
+                        <div style="font-size: 24px; margin-bottom: 5px;">💻</div>
+                        <div>Local LLM</div>
+                    </div>
+                    <div class="provider-option" data-provider="other" onclick="selectProvider('other')">
+                        <div style="font-size: 24px; margin-bottom: 5px;">🌐</div>
+                        <div>Other Provider</div>
+                    </div>
+                </div>
+
+                <div id="openai-config" class="hidden">
+                    <div class="form-group">
+                        <label for="openai-key">OpenAI API Key *</label>
+                        <input type="password" id="openai-key" placeholder="sk-...">
+                        <small>Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a></small>
+                    </div>
+                </div>
+
+                <div id="local-config" class="hidden">
+                    <div class="form-group">
+                        <label for="local-url">LLM Base URL *</label>
+                        <input type="text" id="local-url" value="http://localhost:11434" placeholder="http://localhost:11434">
+                        <small>Ollama: http://localhost:11434 | LM Studio: http://localhost:1234/v1</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="local-model">Model Name *</label>
+                        <input type="text" id="local-model" value="llama3" placeholder="llama3">
+                        <small>The name of your local model (e.g., llama3, mistral, etc.)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="local-key">API Key</label>
+                        <input type="text" id="local-key" value="local" placeholder="local">
+                        <small>Leave as "local" if no authentication required</small>
+                    </div>
+                </div>
+
+                <div id="other-config" class="hidden">
+                    <div class="form-group">
+                        <label for="other-url">API Base URL *</label>
+                        <input type="text" id="other-url" placeholder="https://api.together.xyz/v1">
+                        <small>Together AI, Groq, Fireworks, or any OpenAI-compatible endpoint</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="other-model">Model Name *</label>
+                        <input type="text" id="other-model" placeholder="meta-llama/Llama-3-70b-chat-hf">
+                        <small>The specific model you want to use</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="other-key">API Key *</label>
+                        <input type="password" id="other-key" placeholder="Your API key">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Admin Setup -->
+            <div class="step" id="step-3">
+                <h2>Create Admin Account</h2>
+                <p>Set up your administrator account to access the CIRIS dashboard and API.</p>
+
+                <div class="form-group">
+                    <label for="admin-username">Username</label>
+                    <input type="text" id="admin-username" value="admin" readonly>
+                    <small>Default admin username (cannot be changed in wizard)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="admin-password">Password *</label>
+                    <input type="password" id="admin-password" placeholder="Enter a secure password (min 8 characters)">
+                    <small>Choose a strong password you'll remember</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="admin-password-confirm">Confirm Password *</label>
+                    <input type="password" id="admin-password-confirm" placeholder="Re-enter your password">
+                </div>
+
+                <div class="form-group">
+                    <label for="admin-email">Email (Optional)</label>
+                    <input type="email" id="admin-email" placeholder="your@email.com">
+                    <small>For password recovery and notifications (optional)</small>
+                </div>
+            </div>
+
+            <!-- Step 4: Complete -->
+            <div class="step" id="step-4">
+                <div class="completion-icon">🎉</div>
+                <h2 style="text-align: center;">Setup Complete!</h2>
+                <p style="text-align: center;">CIRIS is now configured and ready to use.</p>
+
+                <h3 style="margin-top: 30px; margin-bottom: 15px;">Understanding CIRIS</h3>
+                <ul class="features-list">
+                    <li><strong>Cognitive States</strong> - CIRIS operates in 6 states: WAKEUP, WORK, PLAY, SOLITUDE, DREAM, and SHUTDOWN</li>
+                    <li><strong>Wise Authority</strong> - A built-in guidance system that helps CIRIS make ethical decisions</li>
+                    <li><strong>Memory Graph</strong> - CIRIS remembers conversations and builds a knowledge graph</li>
+                    <li><strong>Self-Observation</strong> - CIRIS monitors its own behavior and performance</li>
+                    <li><strong>Adaptive Learning</strong> - The system improves over time through experience</li>
+                </ul>
+
+                <h3 style="margin-top: 25px; margin-bottom: 15px;">Next Steps</h3>
+                <p>1. Click "Start CIRIS" below to begin</p>
+                <p>2. Login with your admin credentials</p>
+                <p>3. Explore the dashboard and start interacting with your agent</p>
+                <p>4. Check out the documentation at <a href="/docs" target="_blank">/docs</a></p>
+            </div>
+
+            <!-- Wizard Actions -->
+            <div class="wizard-actions">
+                <button class="btn btn-secondary" id="btn-back" onclick="previousStep()">Back</button>
+                <button class="btn btn-primary" id="btn-next" onclick="nextStep()">Next</button>
+                <button class="btn btn-primary hidden" id="btn-finish" onclick="finishSetup()">Start CIRIS</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let selectedProvider = null;
+        const totalSteps = 4;
+
+        function updateProgress() {
+            const progress = ((currentStep - 1) / (totalSteps - 1)) * 100;
+            document.getElementById('progress').style.width = progress + '%';
+
+            const titles = [
+                'Let\'s get you started',
+                'Step 1: Configure LLM',
+                'Step 2: Admin Account',
+                'Setup Complete!'
+            ];
+            document.getElementById('step-title').textContent = titles[currentStep - 1];
+
+            // Update button visibility
+            document.getElementById('btn-back').style.display = currentStep === 1 ? 'none' : 'block';
+            document.getElementById('btn-next').style.display = currentStep === totalSteps ? 'none' : 'block';
+            document.getElementById('btn-finish').classList.toggle('hidden', currentStep !== totalSteps);
+        }
+
+        function showStep(step) {
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            document.getElementById('step-' + step).classList.add('active');
+            currentStep = step;
+            updateProgress();
+        }
+
+        function nextStep() {
+            if (currentStep === 2 && !validateLLMConfig()) {
+                return;
+            }
+            if (currentStep === 3 && !validateAdminConfig()) {
+                return;
+            }
+            if (currentStep < totalSteps) {
+                showStep(currentStep + 1);
+            }
+        }
+
+        function previousStep() {
+            if (currentStep > 1) {
+                showStep(currentStep - 1);
+            }
+        }
+
+        function selectProvider(provider) {
+            selectedProvider = provider;
+            document.querySelectorAll('.provider-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelector(`[data-provider="${provider}"]`).classList.add('selected');
+
+            // Hide all config sections
+            document.getElementById('openai-config').classList.add('hidden');
+            document.getElementById('local-config').classList.add('hidden');
+            document.getElementById('other-config').classList.add('hidden');
+
+            // Show selected config
+            document.getElementById(provider + '-config').classList.remove('hidden');
+        }
+
+        function validateLLMConfig() {
+            if (!selectedProvider) {
+                showAlert('Please select an LLM provider', 'error');
+                return false;
+            }
+
+            let isValid = true;
+            let message = '';
+
+            if (selectedProvider === 'openai') {
+                const key = document.getElementById('openai-key').value.trim();
+                if (!key || key.length < 10) {
+                    message = 'Please enter a valid OpenAI API key';
+                    isValid = false;
+                }
+            } else if (selectedProvider === 'local') {
+                const url = document.getElementById('local-url').value.trim();
+                const model = document.getElementById('local-model').value.trim();
+                if (!url || !model) {
+                    message = 'Please fill in all required fields';
+                    isValid = false;
+                }
+            } else if (selectedProvider === 'other') {
+                const url = document.getElementById('other-url').value.trim();
+                const model = document.getElementById('other-model').value.trim();
+                const key = document.getElementById('other-key').value.trim();
+                if (!url || !model || !key) {
+                    message = 'Please fill in all required fields';
+                    isValid = false;
+                }
+            }
+
+            if (!isValid) {
+                showAlert(message, 'error');
+                return false;
+            }
+
+            // Save LLM config via API
+            saveLLMConfig();
+            return true;
+        }
+
+        function validateAdminConfig() {
+            const password = document.getElementById('admin-password').value;
+            const confirm = document.getElementById('admin-password-confirm').value;
+
+            if (password.length < 8) {
+                showAlert('Password must be at least 8 characters', 'error');
+                return false;
+            }
+
+            if (password !== confirm) {
+                showAlert('Passwords do not match', 'error');
+                return false;
+            }
+
+            // Save admin config via API
+            saveAdminConfig();
+            return true;
+        }
+
+        async function saveLLMConfig() {
+            const config = {
+                provider: selectedProvider,
+                api_key: '',
+                base_url: '',
+                model: ''
+            };
+
+            if (selectedProvider === 'openai') {
+                config.api_key = document.getElementById('openai-key').value.trim();
+            } else if (selectedProvider === 'local') {
+                config.api_key = document.getElementById('local-key').value.trim();
+                config.base_url = document.getElementById('local-url').value.trim();
+                config.model = document.getElementById('local-model').value.trim();
+            } else if (selectedProvider === 'other') {
+                config.api_key = document.getElementById('other-key').value.trim();
+                config.base_url = document.getElementById('other-url').value.trim();
+                config.model = document.getElementById('other-model').value.trim();
+            }
+
+            try {
+                const response = await fetch('/v1/system/setup/llm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to save LLM configuration');
+                }
+
+                showAlert('LLM configuration saved successfully!', 'success');
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function saveAdminConfig() {
+            const config = {
+                username: document.getElementById('admin-username').value,
+                password: document.getElementById('admin-password').value,
+                email: document.getElementById('admin-email').value || null
+            };
+
+            try {
+                const response = await fetch('/v1/system/setup/admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to save admin configuration');
+                }
+
+                const result = await response.json();
+                showAlert('Admin account created successfully!', 'success');
+
+                // Store access token for auto-login
+                if (result.access_token) {
+                    localStorage.setItem('ciris_setup_token', result.access_token);
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+                throw error;
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(alert);
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 3000);
+            }
+        }
+
+        function finishSetup() {
+            const token = localStorage.getItem('ciris_setup_token');
+            if (token) {
+                // Auto-login and redirect to dashboard
+                window.location.href = '/';
+            } else {
+                // Redirect to login page
+                window.location.href = '/login';
+            }
+        }
+
+        // Check setup status on load
+        async function checkSetupStatus() {
+            try {
+                const response = await fetch('/v1/system/setup-status');
+                const status = await response.json();
+
+                if (!status.needs_setup) {
+                    // Already set up, redirect to login
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('Failed to check setup status:', error);
+            }
+        }
+
+        // Initialize
+        updateProgress();
+        checkSetupStatus();
+    </script>
+</body>
+</html>

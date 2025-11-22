@@ -308,33 +308,33 @@ def main(
                 click.echo("=" * 70, err=True)
                 sys.exit(1)
             else:
-                # Interactive environment - run setup wizard
-                try:
-                    click.echo()
-                    click.echo("=" * 70)
-                    click.echo("First run detected - running setup wizard...")
-                    click.echo("=" * 70)
-                    config_path = run_setup_wizard()
-                    # Reload environment after setup
-                    try:
-                        from dotenv import load_dotenv
+                # Interactive environment - direct user to web setup wizard
+                click.echo()
+                click.echo("=" * 70)
+                click.echo("🌟 WELCOME TO CIRIS!")
+                click.echo("=" * 70)
+                click.echo()
+                click.echo("This is your first time running CIRIS.")
+                click.echo("We'll start the web interface so you can complete setup.")
+                click.echo()
+                click.echo("Setup wizard will open at: http://localhost:8080")
+                click.echo()
+                click.echo("Press Ctrl+C to exit if you prefer CLI setup.")
+                click.echo("For CLI setup, run: python main.py --help")
+                click.echo("=" * 70)
+                click.echo()
 
-                        load_dotenv(config_path)
-                        click.echo(f"✅ Configuration loaded from: {config_path}")
-                    except ImportError:
-                        pass  # dotenv is optional
-                except KeyboardInterrupt:
-                    click.echo("\nSetup cancelled by user")
-                    sys.exit(1)
-                except Exception as e:
-                    click.echo(f"\n❌ Setup failed: {e}", err=True)
-                    click.echo("You can configure manually by creating a .env file", err=True)
-                    sys.exit(1)
+                # Set default adapter to API for first-run web setup
+                # This will be overridden below if not already set
+                if not env_adapter:
+                    # Will default to API adapter below
+                    pass
 
         # Check for API key - NEVER default to mock LLM in production
+        # Skip this check on first run - user will configure via web wizard
         api_key = get_env_var("OPENAI_API_KEY")
-        if not mock_llm and not api_key:
-            # No API key and not explicitly using mock LLM
+        if not mock_llm and not api_key and not first_run:
+            # No API key and not explicitly using mock LLM and not first run
             click.echo("=" * 70, err=True)
             click.echo("❌ LLM API KEY REQUIRED", err=True)
             click.echo("=" * 70, err=True)
@@ -351,6 +351,11 @@ def main(
             click.echo("  export OPENAI_MODEL=llama3", err=True)
             click.echo("=" * 70, err=True)
             sys.exit(1)
+        elif first_run and not api_key:
+            # First run without API key - use mock LLM until setup is complete
+            mock_llm = True
+            click.echo("💡 Using mock LLM for setup wizard - configure real LLM in the wizard")
+            click.echo()
 
         # Handle adapter types - check environment variable if none specified
         final_adapter_types_list = list(adapter_types_list)

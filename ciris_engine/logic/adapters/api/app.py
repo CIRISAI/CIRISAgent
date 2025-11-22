@@ -10,8 +10,9 @@ from typing import Any, AsyncIterator, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import rate limiting middleware
+# Import middleware
 from .middleware.rate_limiter import RateLimitMiddleware
+from .middleware.setup_redirect import SetupRedirectMiddleware
 
 # Import all route modules from adapter
 from .routes import (
@@ -27,6 +28,7 @@ from .routes import (
     emergency,
     memory,
     partnership,
+    setup_wizard,
     system,
     system_extensions,
     telemetry,
@@ -84,6 +86,10 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add setup wizard redirect middleware (redirects to /setup-wizard.html on first run)
+    app.add_middleware(SetupRedirectMiddleware)
+    print("✨ Setup wizard redirect middleware enabled")
 
     # Add rate limiting middleware if enabled in config
     if adapter_config and getattr(adapter_config, "rate_limit_enabled", False):
@@ -156,6 +162,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
     # Mount v1 API routes (all routes except emergency under /v1)
     v1_routers = [
+        setup_wizard.router,  # First-run setup wizard (no auth required)
         agent.router,  # Agent interaction
         billing.router,  # Billing & credits (frontend proxy)
         memory.router,  # Memory operations

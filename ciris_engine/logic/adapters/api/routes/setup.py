@@ -5,6 +5,7 @@ Provides GUI-based setup wizard accessible at /v1/setup/*.
 Replaces the CLI wizard for pip-installed CIRIS agents.
 """
 
+import json
 import os
 import secrets
 from datetime import datetime, timezone
@@ -104,9 +105,12 @@ class SetupCompleteRequest(BaseModel):
     enabled_adapters: List[str] = Field(default=["api"], description="List of enabled adapters")
     adapter_config: Dict[str, Any] = Field(default_factory=dict, description="Adapter-specific configuration")
 
-    # User Configuration
-    admin_username: str = Field(default="admin", description="Admin username")
-    admin_password: str = Field(..., description="Admin password (min 8 characters)")
+    # User Configuration - Dual Password Support
+    admin_username: str = Field(default="admin", description="New user's username")
+    admin_password: str = Field(..., description="New user's password (min 8 characters)")
+    system_admin_password: Optional[str] = Field(
+        None, description="System admin password to replace default (min 8 characters, optional)"
+    )
 
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
@@ -397,6 +401,37 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
+def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
+    """Save pending user creation info for initialization service.
+
+    Args:
+        setup: Setup configuration with user info
+        config_dir: Directory where .env file is saved
+    """
+    pending_users_file = config_dir / ".ciris_pending_users.json"
+
+    # Prepare user creation data
+    users_data = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "new_user": {
+            "username": setup.admin_username,
+            "password": setup.admin_password,  # Will be hashed by auth service
+            "role": "ADMIN",  # New user gets admin role
+        },
+    }
+
+    # Add system admin password update if provided
+    if setup.system_admin_password:
+        users_data["system_admin"] = {
+            "username": "admin",  # Default system admin username
+            "password": setup.system_admin_password,  # Will be hashed by auth service
+        }
+
+    # Save to JSON file
+    with open(pending_users_file, "w") as f:
+        json.dump(users_data, f, indent=2)
+
+
 def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
     """Save setup configuration to .env file.
 
@@ -420,8 +455,22 @@ def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
         agent_port=setup.agent_port,
     )
 
-    # TODO: Add template ID, adapter config to .env
-    # TODO: Store admin username/password (needs auth service integration)
+    # Append template and adapter configuration
+    with open(config_path, "a") as f:
+        # Template selection
+        f.write(f"\n# Agent Template\n")
+        f.write(f"CIRIS_TEMPLATE={setup.template_id}\n")
+
+        # Adapter configuration
+        f.write(f"\n# Enabled Adapters\n")
+        adapters_str = ",".join(setup.enabled_adapters)
+        f.write(f"CIRIS_ADAPTER={adapters_str}\n")
+
+        # Adapter-specific environment variables
+        if setup.adapter_config:
+            f.write(f"\n# Adapter-Specific Configuration\n")
+            for key, value in setup.adapter_config.items():
+                f.write(f"{key}={value}\n")
 
 
 # ============================================================================
@@ -509,27 +558,44 @@ async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[st
             detail="Setup already completed. Use PUT /v1/setup/config to update configuration.",
         )
 
-    # Validate password strength
+    # Validate new user password strength
     if len(setup.admin_password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+        )
+
+    # Validate system admin password strength if provided
+    if setup.system_admin_password and len(setup.system_admin_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
+        )
 
     try:
         # Get config path
         config_path = get_default_config_path()
+        config_dir = config_path.parent
+
+        # Ensure directory exists
+        config_dir.mkdir(parents=True, exist_ok=True)
 
         # Save configuration
         _save_setup_config(setup, config_path)
 
-        # TODO: Create admin user via auth service
-        # TODO: Store template selection
-        # TODO: Configure adapters
+        # Save pending user creation (will be processed on next startup)
+        _save_pending_users(setup, config_dir)
+
+        # Build next steps message
+        next_steps = "Restart the agent to apply configuration and create user accounts"
+        if setup.system_admin_password:
+            next_steps += ". The default admin password will be updated."
 
         return SuccessResponse(
             data={
                 "status": "completed",
                 "message": "Setup completed successfully",
                 "config_path": str(config_path),
-                "next_steps": "Restart the agent to apply configuration",
+                "username": setup.admin_username,
+                "next_steps": next_steps,
             }
         )
 
@@ -538,17 +604,25 @@ async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[st
 
 
 @router.get("/config", response_model=SuccessResponse[SetupConfigResponse])
-async def get_current_config(
-    auth: Optional[AuthContext] = Depends(get_auth_context) if not _is_setup_allowed_without_auth() else None,
-) -> SuccessResponse[SetupConfigResponse]:
+async def get_current_config(request: Request) -> SuccessResponse[SetupConfigResponse]:
     """Get current configuration.
 
     Returns current setup configuration for editing.
     Requires authentication if setup is already completed.
     """
     # If not first-run, require authentication
-    if not _is_setup_allowed_without_auth() and auth is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    if not _is_setup_allowed_without_auth():
+        # Manually get auth context from request
+        try:
+            from ..dependencies.auth import get_auth_context
+
+            auth = await get_auth_context(request)
+            if auth is None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
     # Read current config from environment
     config = SetupConfigResponse(

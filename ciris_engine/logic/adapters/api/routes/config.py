@@ -31,8 +31,35 @@ def wrap_config_value(value: Any) -> ConfigValueWrapper:
     { string_value: "foo", int_value: null, ... }
     """
     # Handle ConfigValue objects by extracting their primitive value
+    # This is a defensive check - normally callers should extract .value before calling this function
     if isinstance(value, ConfigValueWrapper):
-        # Already wrapped, return as-is
+        # Check if it's already properly wrapped (has at least one typed field set)
+        has_typed_field = (
+            value.string_value is not None
+            or value.int_value is not None
+            or value.float_value is not None
+            or value.bool_value is not None
+            or value.list_value is not None
+            or value.dict_value is not None
+        )
+
+        if has_typed_field:
+            # Already properly wrapped with typed fields, return as-is (preserves identity)
+            return value
+
+        # All typed fields are None - might be an improperly passed ConfigValue object
+        # Try to extract the primitive value and wrap it properly
+        if hasattr(value, "value"):
+            try:
+                primitive_value = value.value
+                # If .value returns a non-None primitive, wrap it
+                if primitive_value is not None and not isinstance(primitive_value, ConfigValueWrapper):
+                    return wrap_config_value(primitive_value)
+            except Exception:
+                # If extraction fails, fall through to return the object as-is
+                pass
+
+        # All fields are None, return as-is (represents None/empty value)
         return value
 
     if value is None:

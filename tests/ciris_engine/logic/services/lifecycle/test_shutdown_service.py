@@ -253,6 +253,7 @@ async def test_is_force_shutdown_true_after_emergency_shutdown():
 
     # Mock sys.exit to prevent actual termination
     import sys
+
     original_exit = sys.exit
     sys.exit = mock_exit
 
@@ -287,11 +288,13 @@ async def test_emergency_shutdown_executes_handlers():
     def sync_handler():
         nonlocal sync_called
         sync_called = True
+
     sync_handler.__name__ = "sync_handler"
 
     async def async_handler():
         nonlocal async_called
         async_called = True
+
     async_handler.__name__ = "async_handler"
 
     # Register handlers
@@ -300,6 +303,7 @@ async def test_emergency_shutdown_executes_handlers():
 
     # Mock sys.exit to prevent actual termination
     import sys
+
     original_exit = sys.exit
     sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
 
@@ -326,12 +330,14 @@ async def test_emergency_shutdown_timeout_handling():
     # Create a slow async handler that will timeout
     async def slow_handler():
         await asyncio.sleep(10)  # Sleep longer than timeout
+
     slow_handler.__name__ = "slow_handler"
 
     service._register_async_shutdown_handler(slow_handler)
 
     # Mock sys.exit to prevent actual termination
     import sys
+
     original_exit = sys.exit
     sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
 
@@ -361,6 +367,7 @@ async def test_emergency_shutdown_metrics():
 
     # Mock sys.exit to prevent actual termination
     import sys
+
     original_exit = sys.exit
     sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
 

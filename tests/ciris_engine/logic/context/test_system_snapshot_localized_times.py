@@ -272,9 +272,9 @@ class TestSystemSnapshotLocalizedTimes:
     @pytest.mark.asyncio
     async def test_windows_timezone_fallback_warnings_logged(self, caplog):
         """Test that warnings are logged when timezone fallback occurs."""
+        import logging
         from unittest.mock import patch
         from zoneinfo import ZoneInfoNotFoundError
-        import logging
 
         # Enable logging capture
         caplog.set_level(logging.WARNING)
@@ -311,12 +311,15 @@ class TestSystemSnapshotLocalizedTimes:
             # Verify warnings were logged for each timezone fallback
             warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
 
-            assert any("Europe/London" in msg and "fallback" in msg for msg in warning_messages), \
-                "Expected warning for London timezone fallback"
-            assert any("America/Chicago" in msg and "fallback" in msg for msg in warning_messages), \
-                "Expected warning for Chicago timezone fallback"
-            assert any("Asia/Tokyo" in msg and "fallback" in msg for msg in warning_messages), \
-                "Expected warning for Tokyo timezone fallback"
+            assert any(
+                "Europe/London" in msg and "fallback" in msg for msg in warning_messages
+            ), "Expected warning for London timezone fallback"
+            assert any(
+                "America/Chicago" in msg and "fallback" in msg for msg in warning_messages
+            ), "Expected warning for Chicago timezone fallback"
+            assert any(
+                "Asia/Tokyo" in msg and "fallback" in msg for msg in warning_messages
+            ), "Expected warning for Tokyo timezone fallback"
 
     @pytest.mark.asyncio
     async def test_windows_timezone_partial_fallback(self):

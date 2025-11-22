@@ -203,6 +203,11 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         """Check if shutdown has been requested."""
         return self._shutdown_requested
 
+    def is_force_shutdown(self) -> bool:
+        """Check if this is a forced/emergency shutdown."""
+        with self._lock:
+            return self._emergency_mode
+
     async def _wait_for_shutdown(self) -> None:
         """Wait for shutdown signal (async) - internal method."""
         if not self._shutdown_event:
@@ -310,30 +315,33 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
             try:
                 # Use platform-specific signals
                 # SIGKILL doesn't exist on Windows - use SIGTERM or sys.exit
-                if hasattr(signal, 'SIGKILL'):
+                if hasattr(signal, "SIGKILL"):
                     # NOSONAR: Safe - only sending signal to our own process (os.getpid())
                     os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
-                elif hasattr(signal, 'SIGTERM'):
+                elif hasattr(signal, "SIGTERM"):
                     # NOSONAR: Safe - only sending signal to our own process (os.getpid())
                     os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
                 else:
                     # Windows fallback - just exit
                     import sys
+
                     sys.exit(1)
             except (OSError, AttributeError) as e:
                 logger.error(f"Failed to force kill process: {e}")
                 # If primary signal fails, try SIGTERM as fallback
                 try:
-                    if hasattr(signal, 'SIGTERM'):
+                    if hasattr(signal, "SIGTERM"):
                         # NOSONAR: Safe - only sending signal to our own process (os.getpid())
                         os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
                     else:
                         # Windows fallback
                         import sys
+
                         sys.exit(1)
                 except (OSError, AttributeError):
                     # Last resort
                     import sys
+
                     sys.exit(1)
 
         # Start force kill timer

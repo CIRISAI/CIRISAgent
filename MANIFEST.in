@@ -14,6 +14,13 @@ include requirements-dev.txt
 # Package data files
 recursive-include ciris_engine/data *
 
+# Modular services (optional adapters and tools)
+recursive-include ciris_modular_services *.py
+recursive-include ciris_modular_services *.md
+recursive-include ciris_modular_services *.json
+recursive-include ciris_modular_services *.yaml
+recursive-include ciris_modular_services *.txt
+
 # GUI static assets (will be populated by CI)
 # These will be copied to ciris_engine/gui_static/ during the build process
 recursive-include ciris_engine/gui_static *

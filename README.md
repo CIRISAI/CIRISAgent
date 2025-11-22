@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.6.3.2-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 1.6.4-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf
@@ -50,6 +50,22 @@ This installs both CIRISAgent and CIRISGUI with all dependencies, then opens the
 
 ### Agent-Only Install (Python)
 
+**Via pip (Recommended):**
+```bash
+# Install from PyPI
+pip install ciris-agent
+
+# Start with API adapter and built-in web UI
+ciris-agent --adapter api --port 8000
+
+# Or use Discord adapter
+ciris-agent --adapter discord --guild-id YOUR_GUILD_ID
+
+# Load multiple adapters together
+ciris-agent --adapter api --adapter reddit
+```
+
+**From Source (Development):**
 ```bash
 # 1. Clone and install
 git clone https://github.com/CIRISAI/CIRISAgent.git
@@ -57,10 +73,10 @@ cd CIRISAgent
 pip install -r requirements.txt
 # For development: pip install -r requirements-dev.txt
 
-# 2. Start with Discord adapter (easiest)
+# 2. Start with Discord adapter
 python main.py --adapter discord --guild-id YOUR_GUILD_ID
 
-# 3. Or start API mode for development
+# 3. Or start API mode
 python main.py --adapter api --port 8000
 
 # 4. Load multiple adapters together

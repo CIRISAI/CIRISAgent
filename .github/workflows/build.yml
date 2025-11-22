@@ -91,10 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
     steps:
-      - name: Checkout CIRISGUI
+      - name: Checkout CIRISGUI-Standalone
         uses: actions/checkout@v4
         with:
-          repository: CIRISAI/CIRISGUI
+          repository: CIRISAI/CIRISGUI-Standalone
           path: cirisgui
 
       - name: Find Next.js app directory
@@ -103,7 +103,7 @@ jobs:
           # Find the directory containing package.json and next.config.mjs
           GUI_DIR=$(find cirisgui -name "package.json" -type f -exec dirname {} \; | head -1)
           if [ -z "$GUI_DIR" ]; then
-            echo "❌ Could not find package.json in CIRISGUI repo"
+            echo "❌ Could not find package.json in CIRISGUI-Standalone repo"
             exit 1
           fi
           echo "Found Next.js app in: $GUI_DIR"

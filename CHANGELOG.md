@@ -74,6 +74,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
 
+## [1.6.4] - 2025-11-21
+
+### Fixed - Authentication Permissions and API Integration
+
+- **Modular Services Packaging** - Fix missing directory in pip installs
+  - **Issue**: `ciris_modular_services` directory not found on Windows and other pip installations
+  - **Root Cause**: Missing top-level `__init__.py` file prevented `find_packages()` from discovering the package
+  - **Fix**:
+    - Added `ciris_modular_services/__init__.py` to make it a proper Python package
+    - Updated `MANIFEST.in` to explicitly include all modular service files (*.py, *.json, *.yaml, *.md, *.txt)
+  - **Impact**: Modular services (mock_llm, reddit, geo_wisdom, weather_wisdom, sensor_wisdom, external_data_sql) now properly packaged in wheel distributions
+  - **Files**:
+    - `ciris_modular_services/__init__.py` (new)
+    - `MANIFEST.in`
+
+- **macOS launchd Port Configuration** - Fix hardcoded port in wrapper script
+  - **Issue**: macOS launchd service always starts on port 8080 (or CIRIS_API_PORT) instead of user-configured CIRIS_AGENT_PORT from .env
+  - **Root Cause**: Wrapper script referenced wrong environment variable (`CIRIS_API_PORT` instead of `CIRIS_AGENT_PORT`)
+  - **Fix**: Changed wrapper to use `${CIRIS_AGENT_PORT:-8080}` matching installer's .env configuration
+  - **Impact**: macOS installations now correctly honor custom port configuration from interactive setup
+  - **Files**: `scripts/install.sh` (launchd-agent-wrapper.sh)
+
+- **SYSTEM_ADMIN Role Permissions** - Explicit deferral resolution capability
+  - **Issue**: SYSTEM_ADMIN role had implicit permission shortcut but missing explicit RESOLVE_DEFERRALS permission
+  - **Root Cause**: `ROLE_PERMISSIONS` mapping only included high-level permissions (FULL_ACCESS, EMERGENCY_SHUTDOWN)
+  - **Fix**: Added all permissions explicitly to SYSTEM_ADMIN role including:
+    - All observer permissions (view_*, send_messages)
+    - All admin permissions (manage_*, runtime_control)
+    - All authority permissions (resolve_deferrals, provide_guidance, grant_permissions)
+    - System-level permissions (full_access, emergency_shutdown, manage_sensitive_config)
+  - **Impact**: SYSTEM_ADMIN can now resolve deferrals in practice, not just in theory
+  - **Files**: `ciris_engine/schemas/api/auth.py`
+
+- **SDK Shutdown Method** - Fixed missing confirm parameter
+  - **Issue**: UI forced shutdown button failing with "Confirmation required (confirm=true)" error
+  - **Root Cause**: SDK `shutdown()` method not sending required `confirm` parameter to API
+  - **Fix**: Updated SDK method signature and payload:
+    - Removed unsupported `grace_period_seconds` parameter
+    - Added `confirm` parameter (defaults to `True`)
+    - Updated JSON payload to match API expectations: `{"reason": str, "force": bool, "confirm": bool}`
+  - **Impact**: Forced shutdown button in UI now works correctly
+  - **Files**: `ciris_sdk/resources/system.py`
+
+- **Config Values Not Displaying in UI** - Fixed TypeScript SDK compatibility
+  - **Issue**: Config view in UI showing keys but not values (all values displaying as null/empty)
+  - **Root Cause**: API returning unwrapped values but TypeScript SDK expecting wrapped ConfigValue format with typed fields
+  - **Details**: TypeScript SDK's `unwrapConfigValue()` expects `{string_value: "foo", int_value: null, ...}` structure but API was returning direct primitive values like `"foo"` or `{key: value}`
+  - **Fix**: Updated config API endpoints to wrap values for SDK compatibility:
+    - Added `wrap_config_value()` helper function to wrap values in ConfigValueWrapper format
+    - Updated `ConfigItemResponse.value` field type from `Any` to `ConfigValueWrapper`
+    - Wrapped values in all config endpoints (list_configs, get_config, update_config)
+    - Imported ConfigValue from `ciris_engine.schemas.services.nodes` for type consistency
+  - **Impact**: Config values now display correctly in UI after TypeScript SDK unwrapping
+  - **Files**: `ciris_engine/logic/adapters/api/routes/config.py`
+
+- **GUI Static Assets Rate Limiting** - Exempt static files from rate limiting
+  - **Issue**: 429 Too Many Requests errors when loading GUI in standalone mode with bundled Next.js assets
+  - **Root Cause**: Rate limiter applying 60 req/min limit to all requests including static JS/CSS chunks
+  - **Details**: GUI page loads require dozens of static file requests (`/_next/static/chunks/*.js`, fonts, images) which quickly exceeded the rate limit
+  - **Fix**: Updated rate limiter middleware to exempt static files:
+    - Added `exempt_extensions` set with common static file extensions (.js, .css, .map, .woff, .png, .svg, .html, etc.)
+    - Added check for `/_next/*` path prefix (Next.js internal routes)
+    - Static file requests now bypass rate limiting entirely
+  - **Impact**: GUI loads without rate limiting errors in standalone/pip-installed mode
+  - **Files**: `ciris_engine/logic/adapters/api/middleware/rate_limiter.py`
+
+- **Forced Shutdown Generating Thoughts** - Emergency shutdown now bypasses thought processing
+  - **Issue**: UI forced shutdown button (`force=true`) still generated shutdown thoughts instead of immediate termination
+  - **Root Cause**: API endpoint called `runtime.request_shutdown()` for both normal and forced shutdowns, which always created tasks and generated thoughts
+  - **Details**: Shutdown processor would always call `generate_seed_thoughts()` and process shutdown through normal cognitive flow even when `force=true` was set
+  - **Fix**: Updated shutdown flow to use emergency path for forced shutdowns:
+    - Added `is_force_shutdown()` method to `ShutdownService` to expose emergency mode flag
+    - Updated `ShutdownServiceProtocol` to include `is_force_shutdown()` abstract method
+    - Modified `/v1/system/shutdown` API endpoint to call `emergency_shutdown()` instead of `request_shutdown()` when `force=true`
+    - Emergency shutdown calls `sys.exit(1)` immediately after executing handlers, bypassing task/thought generation entirely
+  - **Impact**: Forced shutdown now terminates immediately without creating tasks or generating thoughts
+  - **Files**:
+    - `ciris_engine/logic/services/lifecycle/shutdown/service.py` (lines 206-209)
+    - `ciris_engine/protocols/services/lifecycle/shutdown.py` (lines 22-25)
+    - `ciris_engine/logic/adapters/api/routes/system.py` (lines 948-955)
+  - **Tests**: Added 20 comprehensive unit tests:
+    - `tests/ciris_engine/logic/services/lifecycle/test_shutdown_service.py` (6 new tests for `is_force_shutdown()` and emergency shutdown behavior)
+    - `tests/adapters/api/test_shutdown_endpoint_force_parameter.py` (14 new tests for API endpoint force parameter handling)
+
 ## [1.6.3.2] - 2025-11-20
 
 ### Fixed - Critical Schema and Windows Compatibility

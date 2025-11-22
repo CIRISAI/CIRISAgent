@@ -142,6 +142,28 @@ class RateLimitMiddleware:
             "/emergency/shutdown",  # Emergency endpoints bypass rate limiting
             "/v1/system/health",  # Health checks should not be rate limited
         }
+        # Static file extensions that should be exempt from rate limiting
+        self.exempt_extensions = {
+            ".js",
+            ".css",
+            ".map",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+            ".eot",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".ico",
+            ".webp",
+            ".mp4",
+            ".webm",
+            ".txt",
+            ".html",  # Static HTML pages from Next.js export
+        }
 
     def _get_gateway_secret(self, request: Request) -> Optional[bytes]:
         """
@@ -210,6 +232,12 @@ class RateLimitMiddleware:
         """Process request through rate limiter."""
         # Check if path is exempt
         if request.url.path in self.exempt_paths:
+            response = await call_next(request)
+            return cast(Response, response)
+
+        # Check if request is for a static file (by extension or path prefix)
+        path = request.url.path
+        if path.startswith("/_next/") or any(path.endswith(ext) for ext in self.exempt_extensions):
             response = await call_next(request)
             return cast(Response, response)
 

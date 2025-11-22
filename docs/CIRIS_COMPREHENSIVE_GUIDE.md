@@ -530,9 +530,46 @@ response = await client.agent.interact(message)
 
 ## Deployment
 
-### Local Development
+### Self-Sovereign Install (pip)
+
+CIRIS now supports self-sovereign deployment via pip, allowing anyone to run their own agent instance without Docker or manual source installation:
 
 ```bash
+# Install from PyPI (includes built-in GUI)
+pip install ciris-agent
+
+# Start API server with web interface
+ciris-agent --adapter api --port 8000
+
+# Start with Discord adapter
+ciris-agent --adapter discord --guild-id YOUR_GUILD_ID
+
+# Use mock LLM for testing (no API keys required)
+ciris-agent --adapter api --mock-llm --port 8000
+```
+
+**Key Features:**
+- **Self-contained**: Includes all dependencies and built-in web GUI
+- **No Docker required**: Direct Python installation
+- **Cross-platform**: Windows, macOS, Linux support via PyPI
+- **System integration**: Includes systemd service configuration for Linux
+- **Data sovereignty**: All data stored locally in `~/.ciris/`
+
+**Configuration:**
+- Config file: `~/.ciris/.env`
+- Data directory: `~/.ciris/data/`
+- Database: `~/.ciris/data/ciris.db`
+
+### Local Development (Source)
+
+```bash
+# Clone repository
+git clone https://github.com/CIRISAI/CIRISAgent.git
+cd CIRISAgent
+
+# Install dependencies
+pip install -r requirements.txt
+
 # Start API server
 python main.py --adapter api --mock-llm --port 8000
 

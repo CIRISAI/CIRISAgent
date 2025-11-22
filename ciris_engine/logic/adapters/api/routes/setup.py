@@ -460,16 +460,8 @@ async def _create_setup_users(setup: SetupCompleteRequest) -> None:
     await auth_service.start()
 
     try:
-        # Create new user
-        role_map = {
-            "ADMIN": WARole.AUTHORITY,
-            "AUTHORITY": WARole.AUTHORITY,
-            "OBSERVER": WARole.OBSERVER,
-            "USER": WARole.OBSERVER,
-        }
-        wa_role = role_map.get(setup.admin_username.upper(), WARole.OBSERVER)
-        if setup.admin_username.lower() == "admin":
-            wa_role = WARole.AUTHORITY
+        # Create new user with AUTHORITY role (setup wizard always creates admin)
+        wa_role = WARole.AUTHORITY
 
         logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
 

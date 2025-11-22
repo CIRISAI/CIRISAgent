@@ -42,10 +42,15 @@ def is_first_run() -> bool:
     A first run is detected when:
     - No .env file exists in any of the standard config locations
     - No CIRIS_CONFIGURED environment variable is set
+    - OR CIRIS_FORCE_FIRST_RUN is set (for testing)
 
     Returns:
         True if this appears to be a first run, False otherwise.
     """
+    # FORCE first-run mode for testing (e.g., QA runner setup tests)
+    if os.environ.get("CIRIS_FORCE_FIRST_RUN"):
+        return True
+
     # Quick check: If CIRIS_CONFIGURED env var is set, not first run
     if os.environ.get("CIRIS_CONFIGURED"):
         return False

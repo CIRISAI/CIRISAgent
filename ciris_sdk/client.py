@@ -13,6 +13,7 @@ from .resources.consent import ConsentResource
 from .resources.emergency import EmergencyResource
 from .resources.jobs import JobsResource
 from .resources.memory import MemoryResource
+from .resources.setup import SetupResource
 from .resources.system import SystemResource
 from .resources.telemetry import TelemetryResource
 from .resources.wa import WiseAuthorityResource
@@ -80,6 +81,7 @@ class CIRISClient:
         self.system = SystemResource(self._transport)  # NEW: Consolidated system ops
         self.telemetry = TelemetryResource(self._transport)
         self.auth = AuthResource(self._transport)
+        self.setup = SetupResource(self._transport)  # NEW: First-run setup wizard
         self.wa = WiseAuthorityResource(self._transport)
         self.config = ConfigResource(self._transport)
         self.consent = ConsentResource(self._transport)  # NEW: Consent management

@@ -1042,6 +1042,8 @@ class CIRISRuntime:
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
+        from ciris_engine.logic.setup.first_run import is_first_run
+
         from .ciris_runtime_helpers import (
             create_adapter_lifecycle_tasks,
             log_adapter_configuration_details,
@@ -1052,7 +1054,40 @@ class CIRISRuntime:
         # Log adapter configuration details
         log_adapter_configuration_details(self.adapters)
 
-        # Create agent processor task and adapter lifecycle tasks
+        # Check if this is first-run - skip agent processor if so
+        first_run = is_first_run()
+        if first_run:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("🔧 FIRST RUN DETECTED - Setup Wizard Mode")
+            logger.info("=" * 70)
+            logger.info("")
+            logger.info("The agent processor will NOT start in first-run mode.")
+            logger.info("Only the API server is running to provide the setup wizard.")
+            logger.info("")
+            logger.info("📋 Next Steps:")
+            logger.info("  1. Open your browser to: http://localhost:8080")
+            logger.info("  2. Complete the setup wizard")
+            logger.info("  3. Restart the agent with: ciris-agent")
+            logger.info("")
+            logger.info("After restart, the full agent will start normally.")
+            logger.info("=" * 70)
+            logger.info("")
+
+            # Only wait for adapters to be ready, but don't start agent processor
+            adapters_ready = await wait_for_adapter_readiness(self.adapters)
+            if not adapters_ready:
+                raise RuntimeError("Adapters failed to become ready within timeout")
+
+            # No agent processor task in first-run mode
+            self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task=None)
+
+            # Skip service registration and processor - API will handle setup
+            logger.info("✅ Setup wizard ready at http://localhost:8080")
+            logger.info("Waiting for setup completion... (Press CTRL+C to exit)")
+            return
+
+        # Normal mode - create agent processor task and adapter lifecycle tasks
         agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
         self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
@@ -1153,13 +1188,22 @@ class CIRISRuntime:
         try:
             # Set up runtime monitoring tasks
             agent_task, adapter_tasks, all_tasks = setup_runtime_monitoring_tasks(self)
-            if not agent_task:
+            if not all_tasks:
+                logger.error("No tasks to monitor - exiting")
                 return
 
-            # Keep monitoring until agent task completes
+            # Keep monitoring until shutdown or agent task completes (if it exists)
             shutdown_logged = False
-            while not agent_task.done():
-                done, pending = await asyncio.wait(all_tasks, return_when=asyncio.FIRST_COMPLETED)
+            while True:
+                # Check exit conditions
+                if agent_task and agent_task.done():
+                    break
+                if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
+                    if not shutdown_logged:
+                        shutdown_logged = True
+                    break
+
+                done, pending = await asyncio.wait(all_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0)
 
                 # Remove completed tasks from all_tasks to avoid re-processing
                 all_tasks = [t for t in all_tasks if t not in done]
@@ -1169,9 +1213,9 @@ class CIRISRuntime:
 
                 # Handle task completion based on type
                 if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    # Continue loop - let graceful shutdown process handle everything
-                    continue
-                elif agent_task in done:
+                    # Break loop - let graceful shutdown process handle everything
+                    break
+                elif agent_task and agent_task in done:
                     handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
                     break  # Exit the while loop
                 else:
@@ -1182,7 +1226,7 @@ class CIRISRuntime:
                     handle_runtime_task_failures(self, done, excluded_tasks)
 
             # Finalize execution
-            await finalize_runtime_execution(self, pending)
+            await finalize_runtime_execution(self, set(pending) if "pending" in locals() else set())
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal. Requesting shutdown.")

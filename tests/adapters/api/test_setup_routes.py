@@ -118,28 +118,38 @@ class TestTemplatesEndpoint:
     """Test GET /v1/setup/templates endpoint."""
 
     def test_list_templates(self, client):
-        """Test listing agent templates."""
+        """Test listing agent templates from ciris_templates directory."""
         response = client.get("/v1/setup/templates")
 
         assert response.status_code == status.HTTP_200_OK
         templates = response.json()["data"]
         assert isinstance(templates, list)
-        assert len(templates) == 5  # general, moderator, researcher, developer, custom
+        assert len(templates) >= 1  # At least one template should exist
 
-        # Check general template
-        general = next(t for t in templates if t["id"] == "general")
-        assert general["name"] == "General Purpose Assistant"
-        assert "versatile" in general["description"].lower()
+        # All templates should have required fields
+        for template in templates:
+            assert "id" in template
+            assert "name" in template
+            assert "description" in template
+            assert "identity" in template
+            assert "supported_sops" in template
+            assert "stewardship_tier" in template
+            assert "creator_id" in template
+            assert "signature" in template
 
-        # Check moderator template
-        moderator = next(t for t in templates if t["id"] == "moderator")
-        assert moderator["name"] == "Community Moderator"
-        assert len(moderator["example_use_cases"]) > 0
+            # Stewardship tier should be 1-5
+            assert 1 <= template["stewardship_tier"] <= 5
 
-        # Check custom template
-        custom = next(t for t in templates if t["id"] == "custom")
-        assert custom["name"] == "Custom Identity"
-        assert custom["identity"] == ""  # Empty for user to fill
+            # All templates should have DSAR SOPs
+            assert "DSAR_ACCESS" in template["supported_sops"]
+            assert "DSAR_DELETE" in template["supported_sops"]
+            assert "DSAR_EXPORT" in template["supported_sops"]
+            assert "DSAR_RECTIFY" in template["supported_sops"]
+
+        # Check default template exists
+        default = next((t for t in templates if t["id"] == "default"), None)
+        assert default is not None
+        assert default["name"] == "Datum"
 
     def test_templates_no_auth_required(self, client):
         """Test that templates list doesn't require authentication."""
@@ -486,11 +496,17 @@ class TestHelperFunctions:
         assert openai.requires_api_key is True
 
     def test_get_agent_templates(self):
-        """Test _get_agent_templates helper."""
+        """Test _get_agent_templates helper loads from ciris_templates directory."""
         templates = _get_agent_templates()
 
-        assert len(templates) == 5
-        assert all(t.id in ["general", "moderator", "researcher", "developer", "custom"] for t in templates)
+        assert len(templates) >= 1  # At least one template should exist
+        # All templates should have stewardship info
+        assert all(t.stewardship_tier >= 1 and t.stewardship_tier <= 5 for t in templates)
+        assert all(t.creator_id is not None for t in templates)
+        assert all(t.signature is not None for t in templates)
+        # All templates should have DSAR SOPs
+        assert all("DSAR_ACCESS" in t.supported_sops for t in templates)
+        assert all("DSAR_DELETE" in t.supported_sops for t in templates)
 
     def test_get_available_adapters(self):
         """Test _get_available_adapters helper."""

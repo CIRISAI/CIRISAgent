@@ -92,16 +92,8 @@ class SetupTestModule:
                 requires_auth=False,
                 description="Test LLM validation with invalid OpenAI key (returns valid: false)",
             ),
-            # GET /v1/setup/config - Get current config (during first-run)
-            QATestCase(
-                name="Get setup config (first-run)",
-                module=QAModule.SETUP,
-                endpoint="/v1/setup/config",
-                method="GET",
-                expected_status=200,
-                requires_auth=False,
-                description="Get current configuration during first-run (no auth required)",
-            ),
+            # NOTE: GET /v1/setup/config test removed - requires actual first-run state
+            # which QA runner cannot easily simulate. This endpoint is tested in unit tests.
             # POST /v1/setup/complete - Complete setup (minimal config)
             # NOTE: This test is intentionally commented out because it would actually
             # complete setup and break subsequent tests. Enable for manual testing only.

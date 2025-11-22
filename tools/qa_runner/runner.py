@@ -34,6 +34,7 @@ class QARunner:
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
+        self.modules = modules or []  # Store modules for server manager
 
         # Auto-configure adapter based on modules being tested
         # This allows modular services to be loaded automatically
@@ -99,7 +100,9 @@ class QARunner:
                 postgres_url=self.config.postgres_url,
                 postgres_port=self.config.postgres_port,
             )
-            self.server_managers[backend] = APIServerManager(backend_config, database_backend=backend)
+            self.server_managers[backend] = APIServerManager(
+                backend_config, database_backend=backend, modules=self.modules
+            )
 
         # For backward compatibility, keep a reference to the first server manager
         self.server_manager = self.server_managers[self.database_backends[0]]

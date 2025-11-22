@@ -50,6 +50,16 @@ class AgentTemplate(BaseModel):
     description: str = Field(..., description="Template description")
     identity: str = Field(..., description="Agent identity/purpose")
     example_use_cases: List[str] = Field(default_factory=list, description="Example use cases")
+    supported_sops: List[str] = Field(
+        default_factory=list, description="Supported Standard Operating Procedures (SOPs) for ticket workflows"
+    )
+
+    # Book VI Stewardship (REQUIRED for all templates)
+    stewardship_tier: int = Field(
+        ..., ge=1, le=5, description="Book VI Stewardship Tier (1-5, higher = more oversight)"
+    )
+    creator_id: str = Field(..., description="Creator/team identifier who signed this template")
+    signature: str = Field(..., description="Cryptographic signature verifying template authenticity")
 
 
 class AdapterConfig(BaseModel):
@@ -92,11 +102,16 @@ class LLMValidationResponse(BaseModel):
 class SetupCompleteRequest(BaseModel):
     """Request to complete setup."""
 
-    # LLM Configuration
+    # Primary LLM Configuration
     llm_provider: str = Field(..., description="LLM provider ID")
     llm_api_key: str = Field(..., description="LLM API key")
     llm_base_url: Optional[str] = Field(None, description="LLM base URL")
     llm_model: Optional[str] = Field(None, description="LLM model name")
+
+    # Backup/Secondary LLM Configuration (Optional)
+    backup_llm_api_key: Optional[str] = Field(None, description="Backup LLM API key (CIRIS_OPENAI_API_KEY_2)")
+    backup_llm_base_url: Optional[str] = Field(None, description="Backup LLM base URL (CIRIS_OPENAI_API_BASE_2)")
+    backup_llm_model: Optional[str] = Field(None, description="Backup LLM model name (CIRIS_OPENAI_MODEL_NAME_2)")
 
     # Template Selection
     template_id: str = Field(default="general", description="Agent template ID")
@@ -119,11 +134,16 @@ class SetupCompleteRequest(BaseModel):
 class SetupConfigResponse(BaseModel):
     """Current setup configuration."""
 
-    # LLM Configuration
+    # Primary LLM Configuration
     llm_provider: Optional[str] = Field(None, description="Current LLM provider")
     llm_base_url: Optional[str] = Field(None, description="Current LLM base URL")
     llm_model: Optional[str] = Field(None, description="Current LLM model")
     llm_api_key_set: bool = Field(False, description="Whether API key is configured")
+
+    # Backup/Secondary LLM Configuration
+    backup_llm_base_url: Optional[str] = Field(None, description="Backup LLM base URL")
+    backup_llm_model: Optional[str] = Field(None, description="Backup LLM model")
+    backup_llm_api_key_set: bool = Field(False, description="Whether backup API key is configured")
 
     # Template
     template_id: Optional[str] = Field(None, description="Current template ID")
@@ -216,64 +236,73 @@ def _get_llm_providers() -> List[LLMProvider]:
 
 
 def _get_agent_templates() -> List[AgentTemplate]:
-    """Get list of available agent templates."""
-    return [
-        AgentTemplate(
-            id="general",
-            name="General Purpose Assistant",
-            description="Versatile AI assistant for general tasks",
-            identity="I am a helpful AI assistant designed to support you with various tasks.",
-            example_use_cases=[
-                "Personal productivity",
-                "Information lookup",
-                "General conversation",
-            ],
-        ),
-        AgentTemplate(
-            id="moderator",
-            name="Community Moderator",
-            description="AI moderator for Discord/Reddit communities",
-            identity="I am a community moderator focused on maintaining healthy, respectful discussions.",
-            example_use_cases=[
-                "Discord server moderation",
-                "Reddit community management",
-                "Content policy enforcement",
-            ],
-        ),
-        AgentTemplate(
-            id="researcher",
-            name="Research Assistant",
-            description="AI assistant specialized in research and analysis",
-            identity="I am a research assistant focused on helping you find, analyze, and synthesize information.",
-            example_use_cases=[
-                "Literature review",
-                "Data analysis",
-                "Fact-checking",
-            ],
-        ),
-        AgentTemplate(
-            id="developer",
-            name="Developer Assistant",
-            description="AI assistant for software development",
-            identity="I am a developer assistant focused on helping with code, documentation, and technical tasks.",
-            example_use_cases=[
-                "Code review",
-                "Documentation writing",
-                "Debugging assistance",
-            ],
-        ),
-        AgentTemplate(
-            id="custom",
-            name="Custom Identity",
-            description="Define your own agent identity and purpose",
-            identity="",
-            example_use_cases=[
-                "Specialized domain expert",
-                "Custom workflow automation",
-                "Unique use case",
-            ],
-        ),
-    ]
+    """Get list of available agent templates from ciris_templates directory.
+
+    Returns template metadata for GUI display including:
+    - 4 default DSAR SOPs for GDPR compliance
+    - Book VI Stewardship information with creator signature
+    """
+    import yaml
+
+    from ciris_engine.logic.utils.path_resolution import get_template_directory
+    from ciris_engine.schemas.config.agent import AgentTemplate as ConfigAgentTemplate
+
+    templates: List[AgentTemplate] = []
+    template_dir = get_template_directory()
+
+    # Skip test.yaml and backup files
+    skip_templates = {"test.yaml", "CIRIS_TEMPLATE_GUIDE.md"}
+
+    for template_file in template_dir.glob("*.yaml"):
+        if template_file.name in skip_templates or template_file.name.endswith(".backup"):
+            continue
+
+        try:
+            with open(template_file, "r") as f:
+                template_data = yaml.safe_load(f)
+
+            # Load and validate template
+            config_template = ConfigAgentTemplate(**template_data)
+
+            # Extract SOP names from tickets config
+            supported_sops: List[str] = []
+            if config_template.tickets and config_template.tickets.sops:
+                supported_sops = [sop.sop for sop in config_template.tickets.sops]
+
+            # Extract stewardship info
+            stewardship_tier = 3  # Default medium risk
+            creator_id = "Unknown"
+            signature = "unsigned"
+
+            if config_template.stewardship:
+                stewardship_tier = config_template.stewardship.stewardship_tier
+                creator_id = config_template.stewardship.creator_ledger_entry.creator_id
+                signature = config_template.stewardship.creator_ledger_entry.signature
+
+            # Create API response template
+            template = AgentTemplate(
+                id=template_file.stem,  # Use filename without .yaml as ID
+                name=config_template.name,
+                description=config_template.description,
+                identity=config_template.role_description,
+                example_use_cases=[],  # Can be added to template schema later
+                supported_sops=supported_sops,
+                stewardship_tier=stewardship_tier,
+                creator_id=creator_id,
+                signature=signature,
+            )
+
+            templates.append(template)
+
+        except Exception as e:
+            # Log but don't fail - skip invalid templates
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to load template {template_file}: {e}")
+            continue
+
+    return templates
 
 
 def _get_available_adapters() -> List[AdapterConfig]:
@@ -401,6 +430,78 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
+async def _create_setup_users(setup: SetupCompleteRequest) -> None:
+    """Create users immediately during setup completion.
+
+    This is called during setup completion to create users without waiting for restart.
+    Creates users directly in the database using authentication store functions.
+    """
+    from ciris_engine.logic.config import EssentialConfig, get_audit_db_full_path
+    from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
+    from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    logger.info("Creating setup users immediately...")
+
+    # Get database path
+    essential_config = EssentialConfig()
+    auth_db_path = get_audit_db_full_path(essential_config)
+
+    # Create temporary authentication service for user creation
+    time_service = TimeService()
+    await time_service.start()
+
+    auth_service = AuthenticationService(
+        db_path=auth_db_path, time_service=time_service, key_dir=None  # Use default ~/.ciris/
+    )
+    await auth_service.start()
+
+    try:
+        # Create new user
+        role_map = {
+            "ADMIN": WARole.AUTHORITY,
+            "AUTHORITY": WARole.AUTHORITY,
+            "OBSERVER": WARole.OBSERVER,
+            "USER": WARole.OBSERVER,
+        }
+        wa_role = role_map.get(setup.admin_username.upper(), WARole.OBSERVER)
+        if setup.admin_username.lower() == "admin":
+            wa_role = WARole.AUTHORITY
+
+        logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
+
+        # Create WA certificate
+        wa_cert = await auth_service.create_wa(
+            name=setup.admin_username,
+            email=f"{setup.admin_username}@local",
+            scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
+            role=wa_role,
+        )
+
+        # Hash password and update WA
+        password_hash = auth_service.hash_password(setup.admin_password)
+        await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
+
+        logger.info(f"✅ Created user: {setup.admin_username} (WA: {wa_cert.wa_id})")
+
+        # Update default admin password if specified
+        if setup.system_admin_password:
+            logger.info("Updating default admin password...")
+            all_was = await auth_service.list_was(active_only=True)
+            admin_wa = next((wa for wa in all_was if wa.name == "admin" and wa.wa_id != wa_cert.wa_id), None)
+
+            if admin_wa:
+                admin_password_hash = auth_service.hash_password(setup.system_admin_password)
+                await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
+                logger.info(f"✅ Updated admin password")
+            else:
+                logger.warning("⚠️  Default admin WA not found")
+
+    finally:
+        await auth_service.stop()
+        await time_service.stop()
+
+
 def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
     """Save pending user creation info for initialization service.
 
@@ -471,6 +572,15 @@ def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
             f.write(f"\n# Adapter-Specific Configuration\n")
             for key, value in setup.adapter_config.items():
                 f.write(f"{key}={value}\n")
+
+        # Backup/Secondary LLM Configuration (Optional)
+        if setup.backup_llm_api_key:
+            f.write(f"\n# Backup/Secondary LLM Configuration\n")
+            f.write(f'CIRIS_OPENAI_API_KEY_2="{setup.backup_llm_api_key}"\n')
+            if setup.backup_llm_base_url:
+                f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
+            if setup.backup_llm_model:
+                f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
 
 
 # ============================================================================
@@ -581,18 +691,24 @@ async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[st
         # Save configuration
         _save_setup_config(setup, config_path)
 
-        # Save pending user creation (will be processed on next startup)
-        _save_pending_users(setup, config_dir)
+        # Reload environment variables from the new .env file
+        from dotenv import load_dotenv
+
+        load_dotenv(config_path, override=True)
+        logger.info(f"Reloaded environment variables from {config_path}")
+
+        # Create users immediately (don't wait for restart)
+        await _create_setup_users(setup)
 
         # Build next steps message
-        next_steps = "Restart the agent to apply configuration and create user accounts"
+        next_steps = "Configuration completed. You can now log in with your credentials."
         if setup.system_admin_password:
-            next_steps += ". The default admin password will be updated."
+            next_steps += " The default admin password has been updated."
 
         return SuccessResponse(
             data={
                 "status": "completed",
-                "message": "Setup completed successfully",
+                "message": "Setup completed successfully. You can now log in.",
                 "config_path": str(config_path),
                 "username": setup.admin_username,
                 "next_steps": next_steps,
@@ -600,6 +716,7 @@ async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[st
         )
 
     except Exception as e:
+        logger.error(f"Setup completion failed: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
@@ -630,6 +747,9 @@ async def get_current_config(request: Request) -> SuccessResponse[SetupConfigRes
         llm_base_url=os.getenv("OPENAI_API_BASE"),
         llm_model=os.getenv("OPENAI_MODEL"),
         llm_api_key_set=bool(os.getenv("OPENAI_API_KEY")),
+        backup_llm_base_url=os.getenv("CIRIS_OPENAI_API_BASE_2"),
+        backup_llm_model=os.getenv("CIRIS_OPENAI_MODEL_NAME_2"),
+        backup_llm_api_key_set=bool(os.getenv("CIRIS_OPENAI_API_KEY_2")),
         template_id=os.getenv("CIRIS_TEMPLATE", "general"),
         enabled_adapters=os.getenv("CIRIS_ADAPTER", "api").split(","),
         agent_port=int(os.getenv("CIRIS_API_PORT", "8080")),

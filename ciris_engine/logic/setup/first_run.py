@@ -3,11 +3,23 @@
 Determines if this is a first-time run by checking for configuration files.
 """
 
+import logging
 import os
 import platform
 import subprocess
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def is_development_mode() -> bool:
+    """Check if running in development mode (git repository).
+
+    Returns:
+        True if current directory is a git repository
+    """
+    return (Path.cwd() / ".git").exists()
 
 
 def get_config_paths() -> list[Path]:
@@ -15,20 +27,25 @@ def get_config_paths() -> list[Path]:
 
     Returns:
         List of paths to check for .env files, in priority order:
-        1. Current directory .env (development/local override)
-        2. ~/.ciris/.env (user-specific config)
-        3. /etc/ciris/.env (system-wide config, Linux/Unix)
+        - Development mode (git repo):
+          1. Current directory .env (development/local override)
+          2. ~/.ciris/.env (user-specific config)
+          3. /etc/ciris/.env (system-wide config, Linux/Unix)
+        - Installed mode (pip install):
+          1. ~/.ciris/.env (user-specific config)
+          2. /etc/ciris/.env (system-wide config, Linux/Unix)
     """
     paths = []
 
-    # 1. Current directory (highest priority)
-    paths.append(Path.cwd() / ".env")
+    # Development mode: check current directory first
+    if is_development_mode():
+        paths.append(Path.cwd() / ".env")
 
-    # 2. User config directory
+    # User config directory (both modes)
     user_ciris_dir = Path.home() / ".ciris"
     paths.append(user_ciris_dir / ".env")
 
-    # 3. System config (Unix/Linux only)
+    # System config (Unix/Linux only, both modes)
     system_config = Path("/etc/ciris/.env")
     if system_config.parent.exists():  # Only add if /etc/ciris exists
         paths.append(system_config)
@@ -47,21 +64,36 @@ def is_first_run() -> bool:
     Returns:
         True if this appears to be a first run, False otherwise.
     """
+    logger.info("Checking first-run status...")
+
+    # Log mode detection
+    dev_mode = is_development_mode()
+    logger.info(f"Running in {'DEVELOPMENT' if dev_mode else 'INSTALLED'} mode (git repo: {dev_mode})")
+
     # FORCE first-run mode for testing (e.g., QA runner setup tests)
-    if os.environ.get("CIRIS_FORCE_FIRST_RUN"):
+    force_first_run = os.environ.get("CIRIS_FORCE_FIRST_RUN")
+    logger.info(f"CIRIS_FORCE_FIRST_RUN env var: {force_first_run}")
+    if force_first_run:
+        logger.info("CIRIS_FORCE_FIRST_RUN is set - forcing first-run mode")
         return True
 
     # Quick check: If CIRIS_CONFIGURED env var is set, not first run
-    if os.environ.get("CIRIS_CONFIGURED"):
+    ciris_configured = os.environ.get("CIRIS_CONFIGURED")
+    logger.info(f"CIRIS_CONFIGURED env var: {ciris_configured}")
+    if ciris_configured:
+        logger.info("CIRIS_CONFIGURED is set - not first run")
         return False
 
     # Check all possible config locations
     config_paths = get_config_paths()
+    logger.info(f"Checking config paths: {[str(p) for p in config_paths]}")
     for path in config_paths:
         if path.exists() and path.is_file():
             # Found a config file - not first run
+            logger.info(f"Found config file at {path} - NOT first run")
             return False
 
+    logger.info("No config files found - IS first run")
     return True
 
 
@@ -168,12 +200,9 @@ def get_default_config_path() -> Path:
         - Current directory if it's a git repo (development)
         - ~/.ciris/.env otherwise (user install)
     """
-    cwd = Path.cwd()
-
-    # Check if current directory is a git repo
-    if (cwd / ".git").exists():
-        # Development mode - save in current directory
-        return cwd / ".env"
+    # Development mode - save in current directory
+    if is_development_mode():
+        return Path.cwd() / ".env"
 
     # Production/user install - save in ~/.ciris/
     user_ciris_dir = Path.home() / ".ciris"

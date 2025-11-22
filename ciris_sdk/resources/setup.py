@@ -7,7 +7,7 @@ The API interfaces may change without notice.
 Provides first-run setup wizard endpoints for GUI-based configuration.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ..transport import Transport
 
@@ -117,7 +117,7 @@ class SetupResource:
         """
         response = await self._transport.request("GET", "/v1/setup/providers")
         assert response is not None
-        return [LLMProvider(p) for p in response]
+        return [LLMProvider(p) for p in cast(List[Dict[str, Any]], response)]
 
     async def list_templates(self) -> List[AgentTemplate]:
         """
@@ -131,7 +131,7 @@ class SetupResource:
         """
         response = await self._transport.request("GET", "/v1/setup/templates")
         assert response is not None
-        return [AgentTemplate(t) for t in response]
+        return [AgentTemplate(t) for t in cast(List[Dict[str, Any]], response)]
 
     async def list_adapters(self) -> List[AdapterConfig]:
         """
@@ -145,7 +145,7 @@ class SetupResource:
         """
         response = await self._transport.request("GET", "/v1/setup/adapters")
         assert response is not None
-        return [AdapterConfig(a) for a in response]
+        return [AdapterConfig(a) for a in cast(List[Dict[str, Any]], response)]
 
     async def validate_llm(
         self, provider: str, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None

@@ -105,7 +105,7 @@ class PageIterator(Generic[T]):
                 self._current_page = response
 
             # Check if we should continue
-            if not self._current_page.has_more:
+            if self._current_page is None or not self._current_page.has_more:
                 self._exhausted = True
 
         except Exception as e:

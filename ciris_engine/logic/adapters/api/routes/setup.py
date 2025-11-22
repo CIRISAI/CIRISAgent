@@ -6,6 +6,7 @@ Replaces the CLI wizard for pip-installed CIRIS agents.
 """
 
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from ..dependencies.auth import AuthContext, get_auth_context
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Request/Response Schemas
@@ -436,9 +438,10 @@ async def _create_setup_users(setup: SetupCompleteRequest) -> None:
     This is called during setup completion to create users without waiting for restart.
     Creates users directly in the database using authentication store functions.
     """
-    from ciris_engine.logic.config import EssentialConfig, get_audit_db_full_path
+    from ciris_engine.logic.config.db_paths import get_audit_db_full_path
     from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
+    from ciris_engine.schemas.config.essential import EssentialConfig
     from ciris_engine.schemas.services.authority_core import WARole
 
     logger.info("Creating setup users immediately...")

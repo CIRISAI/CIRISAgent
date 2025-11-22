@@ -29,11 +29,13 @@ def get_config_paths() -> list[Path]:
         List of paths to check for .env files, in priority order:
         - Development mode (git repo):
           1. Current directory .env (development/local override)
-          2. ~/.ciris/.env (user-specific config)
+          2. ~/ciris/.env (user-specific config)
           3. /etc/ciris/.env (system-wide config, Linux/Unix)
         - Installed mode (pip install):
-          1. ~/.ciris/.env (user-specific config)
+          1. ~/ciris/.env (user-specific config)
           2. /etc/ciris/.env (system-wide config, Linux/Unix)
+
+        Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
     """
     paths = []
 
@@ -41,8 +43,9 @@ def get_config_paths() -> list[Path]:
     if is_development_mode():
         paths.append(Path.cwd() / ".env")
 
-    # User config directory (both modes)
-    user_ciris_dir = Path.home() / ".ciris"
+    # User config directory (both modes) - ~/ciris/ NOT ~/.ciris/
+    # ~/.ciris/ is for secrets/keys only
+    user_ciris_dir = Path.home() / "ciris"
     paths.append(user_ciris_dir / ".env")
 
     # System config (Unix/Linux only, both modes)
@@ -198,13 +201,16 @@ def get_default_config_path() -> Path:
     Returns:
         Path to save .env file:
         - Current directory if it's a git repo (development)
-        - ~/.ciris/.env otherwise (user install)
+        - ~/ciris/.env otherwise (user install)
+
+        Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
     # Development mode - save in current directory
     if is_development_mode():
         return Path.cwd() / ".env"
 
-    # Production/user install - save in ~/.ciris/
-    user_ciris_dir = Path.home() / ".ciris"
+    # Production/user install - save in ~/ciris/ (NOT ~/.ciris/)
+    # ~/.ciris/ is for secrets/keys only
+    user_ciris_dir = Path.home() / "ciris"
     user_ciris_dir.mkdir(parents=True, exist_ok=True)
     return user_ciris_dir / ".env"

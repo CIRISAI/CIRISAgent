@@ -39,7 +39,7 @@ class TestSetupStatusEndpoint:
     def test_get_setup_status_first_run(self, mock_config_path, mock_first_run, client):
         """Test status endpoint when this is first run."""
         mock_first_run.return_value = True
-        mock_config_path.return_value = Path("/home/user/.ciris/.env")
+        mock_config_path.return_value = Path("/home/user/ciris/.env")
 
         response = client.get("/v1/setup/status")
 

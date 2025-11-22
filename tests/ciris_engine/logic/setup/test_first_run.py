@@ -249,11 +249,11 @@ class TestConfigPaths:
 
         paths = get_config_paths()
 
-        # Should be: cwd/.env, ~/.ciris/.env, possibly /etc/ciris/.env
+        # Should be: cwd/.env, ~/ciris/.env, possibly /etc/ciris/.env
         assert paths[0].name == ".env"
         assert paths[0] == tmp_path / ".env"  # Current directory
 
-        assert paths[1].parts[-2:] == (".ciris", ".env")
+        assert paths[1].parts[-2:] == ("ciris", ".env")
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
         """Test config paths in installed mode (no git repo)."""
@@ -268,7 +268,7 @@ class TestConfigPaths:
 
         # Should NOT include current directory - only user and system paths
         assert all(p != work_dir / ".env" for p in paths)
-        assert paths[0].parts[-2:] == (".ciris", ".env")
+        assert paths[0].parts[-2:] == ("ciris", ".env")
 
     def test_get_default_config_path_git_repo(self, tmp_path, monkeypatch):
         """Test default path is cwd/.env in git repo."""
@@ -282,7 +282,7 @@ class TestConfigPaths:
         assert path == tmp_path / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):
-        """Test default path is ~/.ciris/.env for user install."""
+        """Test default path is ~/ciris/.env for user install."""
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "some" / "other" / "dir"
         work_dir.mkdir(parents=True)
@@ -291,7 +291,7 @@ class TestConfigPaths:
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         path = get_default_config_path()
-        assert path == tmp_path / ".ciris" / ".env"
+        assert path == tmp_path / "ciris" / ".env"
 
 
 class TestSetupWizard:

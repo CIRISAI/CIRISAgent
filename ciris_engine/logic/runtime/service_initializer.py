@@ -1037,14 +1037,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Service registry not initialized")
                 return False
 
-            # Check critical services
+            # Check critical services (LLM service is optional during first-run)
+            from ciris_engine.logic.setup.first_run import is_first_run
+
             critical_services = [
                 self.telemetry_service,
-                self.llm_service,
                 self.memory_service,
                 self.secrets_service,
                 self.adaptive_filter_service,
             ]
+
+            # Only require LLM service if not in first-run mode
+            if not is_first_run():
+                critical_services.append(self.llm_service)
+            elif not self.llm_service:
+                logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
             for service in critical_services:
                 if not service:

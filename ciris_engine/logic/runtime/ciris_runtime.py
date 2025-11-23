@@ -1222,7 +1222,9 @@ class CIRISRuntime:
             secrets_service=self.secrets_service,
         )
 
-    def _should_exit_runtime_loop(self, agent_task, shutdown_logged: bool) -> tuple[bool, bool]:
+    def _should_exit_runtime_loop(
+        self, agent_task: Optional[asyncio.Task[Any]], shutdown_logged: bool
+    ) -> tuple[bool, bool]:
         """Check if runtime loop should exit.
 
         Returns:
@@ -1235,7 +1237,11 @@ class CIRISRuntime:
         return False, shutdown_logged
 
     def _handle_completed_runtime_tasks(
-        self, done: set, agent_task, adapter_tasks, all_tasks: list
+        self,
+        done: set[asyncio.Task[Any]],
+        agent_task: Optional[asyncio.Task[Any]],
+        adapter_tasks: List[asyncio.Task[Any]],
+        all_tasks: list[asyncio.Task[Any]],
     ) -> tuple[bool, bool]:
         """Handle completed runtime tasks.
 

@@ -1146,6 +1146,12 @@ class CIRISRuntime:
             await self.service_initializer._initialize_llm_services(config, self.modules_to_load)
             logger.info("✓ LLM service initialized")
 
+        # Build cognitive components now that LLM is available
+        # This was skipped during first-run due to missing OPENAI_API_KEY
+        logger.info("Building cognitive components with LLM service...")
+        await self._build_components()
+        logger.info("✓ Cognitive components built")
+
         # CRITICAL: Adapters are ALREADY RUNNING from first-run mode
         # DO NOT restart them - just create the agent processor task
         # Adapters will continue running with their existing lifecycle tasks

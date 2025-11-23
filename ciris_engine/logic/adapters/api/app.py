@@ -201,6 +201,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # Skip GUI in managed/Docker mode - manager provides its own frontend
     if is_managed():
         print("ℹ️  GUI disabled in managed mode (manager provides frontend)")
+
         # API-only mode for managed deployments
         @app.get("/")
         def root() -> dict[str, str]:
@@ -213,6 +214,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
                 "gui": "managed_mode",
                 "message": "Running in managed mode - GUI provided by CIRIS Manager",
             }
+
     elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
         from fastapi.staticfiles import StaticFiles
 

@@ -32,19 +32,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.6.5.1] - 2025-11-23
 
-### Fixed - Critical First-Run Startup Issue
+### Fixed - Critical First-Run Startup and Resume Issues
 
 - **Startup Crash Before Setup Wizard** - Fixed agent crashing on first startup without LLM configuration
   - **Issue**: Agent would crash during initialization before the setup wizard could run, making initial configuration impossible
   - **Root Cause**: Component building (`_build_components`) required LLM service and failed before API adapter could serve the setup wizard
   - **Fix**: Made cognitive component building optional - agent now starts gracefully in API-only mode without LLM
-  - **Behavior**:
-    - Without LLM: Agent starts in API-only mode, serves setup wizard, handles API requests
-    - With LLM: Full autonomous cognitive processing enabled
+  - **Split-State Bug**: On 1.6.5, behavior was different with/without OPENAI_API_KEY:
+    - Without key: Crash before wizard (BROKEN)
+    - With key: Wizard shows correctly
+  - **Unified Behavior**: Now consistent regardless of OPENAI_API_KEY presence - wizard always shows on first run
   - **Files**:
-    - `ciris_engine/logic/runtime/ciris_runtime.py:1022-1026` (skip component building)
-    - `ciris_engine/logic/runtime/ciris_runtime.py:1175-1178` (skip agent processor startup)
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1022-1028` (skip component building gracefully)
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1175-1180` (skip agent processor startup gracefully)
   - **Impact**: Users can now complete initial setup on Linux/pip installations without pre-configuring LLM
+
+- **Post-Wizard Agent Startup** - Fixed agent not starting after setup wizard completion
+  - **Issue**: After completing setup wizard, agent logged "agent processor running" but didn't actually start
+  - **Root Cause**: `resume_from_first_run()` initialized LLM service but never called `_build_components()` to create agent_processor
+  - **Fix**: Added component building step in resume flow after LLM initialization
+  - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:1149-1153`
+  - **Impact**: Agent now starts automatically in the same process after wizard completion (no manual restart needed)
 
 ## [1.6.5] - 2025-11-23
 

@@ -1038,9 +1038,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 return False
 
             # Check critical services (LLM service is optional during first-run)
+            from typing import Any, List
             from ciris_engine.logic.setup.first_run import is_first_run
 
-            critical_services = [
+            critical_services: List[Any] = [
                 self.telemetry_service,
                 self.memory_service,
                 self.secrets_service,

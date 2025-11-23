@@ -728,15 +728,17 @@ class TestAgentProcessorInitialization:
 
     @pytest.mark.asyncio
     async def test_create_agent_processor_when_ready_no_agent_processor(self, runtime_with_mocked_agent_processor):
-        """Test error when agent processor is not initialized."""
+        """Test graceful handling when agent processor is not initialized (API-only mode)."""
         runtime = runtime_with_mocked_agent_processor
 
-        # Ensure agent processor is None
+        # Ensure agent processor is None (simulates API-only mode without LLM)
         runtime.agent_processor = None
 
-        # Should raise RuntimeError
-        with pytest.raises(RuntimeError, match="Agent processor not initialized"):
-            await runtime._create_agent_processor_when_ready()
+        # Should return gracefully without raising (changed in v1.6.5.1 for API-only mode)
+        await runtime._create_agent_processor_when_ready()
+
+        # Agent processor should still be None after return
+        assert runtime.agent_processor is None
 
     @pytest.mark.asyncio
     async def test_create_agent_processor_when_ready_service_timeout(self, runtime_with_mocked_agent_processor):

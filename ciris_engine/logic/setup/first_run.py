@@ -47,8 +47,10 @@ def get_config_paths() -> list[Path]:
 
     # User config directory (both modes) - ~/ciris/ NOT ~/.ciris/
     # ~/.ciris/ is for secrets/keys only
-    ciris_home = get_ciris_home()
-    paths.append(ciris_home / ".env")
+    # NOTE: We use Path.home() / "ciris" directly, NOT get_ciris_home()
+    # get_ciris_home() returns cwd in dev mode, which would duplicate the first path
+    user_ciris_dir = Path.home() / "ciris"
+    paths.append(user_ciris_dir / ".env")
 
     # System config (Unix/Linux only, both modes)
     system_config = Path("/etc/ciris/.env")

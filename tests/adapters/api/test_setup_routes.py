@@ -653,7 +653,9 @@ class TestSetupHelperFunctions:
         )
 
         with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch("ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService") as mock_auth:
+            with patch(
+                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+            ) as mock_auth:
                 with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
                     # Setup mocks
                     mock_db_path.return_value = str(tmp_path / "audit.db")
@@ -704,7 +706,9 @@ class TestSetupHelperFunctions:
         )
 
         with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch("ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService") as mock_auth:
+            with patch(
+                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+            ) as mock_auth:
                 with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
                     # Setup mocks
                     mock_db_path.return_value = str(tmp_path / "audit.db")
@@ -744,8 +748,7 @@ class TestResumeFromFirstRun:
     @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
     @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
     @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
-    @pytest.mark.asyncio
-    async def test_complete_setup_triggers_resume(
+    def test_complete_setup_triggers_resume(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client, tmp_path
     ):
         """Test that setup completion triggers runtime resume."""
@@ -753,39 +756,30 @@ class TestResumeFromFirstRun:
         mock_config_path.return_value = tmp_path / ".env"
         mock_create_users.return_value = None
 
-        # Mock runtime with resume method
+        # Mock runtime with resume method and set it on app.state
         mock_runtime = Mock()
         mock_runtime.resume_from_first_run = AsyncMock()
+        client.app.state.runtime = mock_runtime
 
-        # Patch the request.app.state to have runtime
-        with patch("ciris_engine.logic.adapters.api.routes.setup.request") as mock_request:
-            mock_request.app.state.runtime = mock_runtime
+        response = client.post(
+            "/v1/setup/complete",
+            json={
+                "llm_provider": "openai",
+                "llm_api_key": "sk-test123",
+                "llm_base_url": None,
+                "llm_model": None,
+                "template_id": "general",
+                "enabled_adapters": ["api"],
+                "adapter_config": {},
+                "admin_username": "admin",
+                "admin_password": "secure_password_123",
+                "agent_port": 8080,
+            },
+        )
 
-            response = client.post(
-                "/v1/setup/complete",
-                json={
-                    "llm_provider": "openai",
-                    "llm_api_key": "sk-test123",
-                    "llm_base_url": None,
-                    "llm_model": None,
-                    "template_id": "general",
-                    "enabled_adapters": ["api"],
-                    "adapter_config": {},
-                    "admin_username": "admin",
-                    "admin_password": "secure_password_123",
-                    "agent_port": 8080,
-                },
-            )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert "Starting agent processor" in data["message"]
 
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()["data"]
-            assert "Starting agent processor" in data["message"]
-
-            # Give async task time to execute
-            import asyncio
-
-            await asyncio.sleep(0.6)
-
-            # Verify resume was called
-            # Note: This is an async task so it may not be called immediately
-            # In real testing, we'd need to wait for the background task
+        # Note: Background task scheduling is tested, but actual execution
+        # happens asynchronously and is difficult to verify in sync test

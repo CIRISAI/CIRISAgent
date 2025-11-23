@@ -25,6 +25,9 @@ from ..dependencies.auth import AuthContext, get_auth_context
 router = APIRouter(prefix="/setup", tags=["setup"])
 logger = logging.getLogger(__name__)
 
+# Constants
+FIELD_DESC_DISPLAY_NAME = "Display name"
+
 # ============================================================================
 # Request/Response Schemas
 # ============================================================================
@@ -34,7 +37,7 @@ class LLMProvider(BaseModel):
     """LLM provider configuration."""
 
     id: str = Field(..., description="Provider ID (openai, local, other)")
-    name: str = Field(..., description="Display name")
+    name: str = Field(..., description=FIELD_DESC_DISPLAY_NAME)
     description: str = Field(..., description="Provider description")
     requires_api_key: bool = Field(..., description="Whether API key is required")
     requires_base_url: bool = Field(..., description="Whether base URL is required")
@@ -48,7 +51,7 @@ class AgentTemplate(BaseModel):
     """Agent identity template."""
 
     id: str = Field(..., description="Template ID")
-    name: str = Field(..., description="Display name")
+    name: str = Field(..., description=FIELD_DESC_DISPLAY_NAME)
     description: str = Field(..., description="Template description")
     identity: str = Field(..., description="Agent identity/purpose")
     example_use_cases: List[str] = Field(default_factory=list, description="Example use cases")
@@ -68,7 +71,7 @@ class AdapterConfig(BaseModel):
     """Adapter configuration."""
 
     id: str = Field(..., description="Adapter ID (api, cli, discord, reddit)")
-    name: str = Field(..., description="Display name")
+    name: str = Field(..., description=FIELD_DESC_DISPLAY_NAME)
     description: str = Field(..., description="Adapter description")
     enabled_by_default: bool = Field(False, description="Whether enabled by default")
     required_env_vars: List[str] = Field(default_factory=list, description="Required environment variables")
@@ -350,6 +353,60 @@ def _get_available_adapters() -> List[AdapterConfig]:
     ]
 
 
+def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLMValidationResponse]:
+    """Validate API key based on provider type.
+
+    Returns:
+        LLMValidationResponse if validation fails, None if valid
+    """
+    if config.provider == "openai":
+        if not config.api_key or config.api_key == "your_openai_api_key_here":
+            return LLMValidationResponse(
+                valid=False,
+                message="Invalid API key",
+                error="OpenAI requires a valid API key starting with 'sk-'",
+            )
+    elif config.provider != "local" and not config.api_key:
+        # Other non-local providers need API key
+        return LLMValidationResponse(
+            valid=False, message="API key required", error="This provider requires an API key"
+        )
+    return None
+
+
+def _classify_llm_connection_error(error: Exception, base_url: Optional[str]) -> LLMValidationResponse:
+    """Classify and format LLM connection errors.
+
+    Args:
+        error: The exception that occurred
+        base_url: The base URL being connected to
+
+    Returns:
+        Formatted error response
+    """
+    error_str = str(error)
+
+    if "401" in error_str or "Unauthorized" in error_str:
+        return LLMValidationResponse(
+            valid=False,
+            message="Authentication failed",
+            error="Invalid API key. Please check your credentials.",
+        )
+    if "404" in error_str or "Not Found" in error_str:
+        return LLMValidationResponse(
+            valid=False,
+            message="Endpoint not found",
+            error=f"Could not reach {base_url}. Please check the URL.",
+        )
+    if "timeout" in error_str.lower():
+        return LLMValidationResponse(
+            valid=False,
+            message="Connection timeout",
+            error="Could not connect to LLM server. Please check if it's running.",
+        )
+    return LLMValidationResponse(valid=False, message="Connection failed", error=f"Error: {error_str}")
+
+
 async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidationResponse:
     """Validate LLM configuration by attempting a connection.
 
@@ -360,40 +417,24 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         Validation response with success/failure status
     """
     try:
+        # Validate API key for provider type
+        api_key_error = _validate_api_key_for_provider(config)
+        if api_key_error:
+            return api_key_error
+
         # Import OpenAI client
         from openai import AsyncOpenAI
 
         # Build client configuration
-        client_kwargs: Dict[str, Any] = {}
-
+        client_kwargs: Dict[str, Any] = {
+            "api_key": config.api_key or "local"  # Local LLMs can use placeholder
+        }
         if config.base_url:
             client_kwargs["base_url"] = config.base_url
 
-        # For local LLMs, api_key can be "local" or any placeholder
-        # For OpenAI/commercial, validate format
-        if config.provider == "openai":
-            if not config.api_key or config.api_key == "your_openai_api_key_here":
-                return LLMValidationResponse(
-                    valid=False,
-                    message="Invalid API key",
-                    error="OpenAI requires a valid API key starting with 'sk-'",
-                )
-        elif config.provider == "local":
-            # Local LLM doesn't require real API key
-            client_kwargs["api_key"] = config.api_key or "local"
-        else:
-            # Other providers need API key
-            if not config.api_key:
-                return LLMValidationResponse(
-                    valid=False, message="API key required", error="This provider requires an API key"
-                )
-
-        client_kwargs["api_key"] = config.api_key
-
-        # Create client
+        # Create client and test connection
         client = AsyncOpenAI(**client_kwargs)
 
-        # Attempt to list models (lightweight check)
         try:
             models = await client.models.list()
             model_count = len(models.data) if hasattr(models, "data") else 0
@@ -404,29 +445,7 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
                 error=None,
             )
         except Exception as e:
-            error_str = str(e)
-
-            # Check for common errors
-            if "401" in error_str or "Unauthorized" in error_str:
-                return LLMValidationResponse(
-                    valid=False,
-                    message="Authentication failed",
-                    error="Invalid API key. Please check your credentials.",
-                )
-            elif "404" in error_str or "Not Found" in error_str:
-                return LLMValidationResponse(
-                    valid=False,
-                    message="Endpoint not found",
-                    error=f"Could not reach {config.base_url}. Please check the URL.",
-                )
-            elif "timeout" in error_str.lower():
-                return LLMValidationResponse(
-                    valid=False,
-                    message="Connection timeout",
-                    error="Could not connect to LLM server. Please check if it's running.",
-                )
-            else:
-                return LLMValidationResponse(valid=False, message="Connection failed", error=f"Error: {error_str}")
+            return _classify_llm_connection_error(e, config.base_url)
 
     except Exception as e:
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
@@ -488,7 +507,7 @@ async def _create_setup_users(setup: SetupCompleteRequest) -> None:
             if admin_wa:
                 admin_password_hash = auth_service.hash_password(setup.system_admin_password)
                 await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
-                logger.info(f"✅ Updated admin password")
+                logger.info("✅ Updated admin password")
             else:
                 logger.warning("⚠️  Default admin WA not found")
 
@@ -554,23 +573,23 @@ def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
     # Append template and adapter configuration
     with open(config_path, "a") as f:
         # Template selection
-        f.write(f"\n# Agent Template\n")
+        f.write("\n# Agent Template\n")
         f.write(f"CIRIS_TEMPLATE={setup.template_id}\n")
 
         # Adapter configuration
-        f.write(f"\n# Enabled Adapters\n")
+        f.write("\n# Enabled Adapters\n")
         adapters_str = ",".join(setup.enabled_adapters)
         f.write(f"CIRIS_ADAPTER={adapters_str}\n")
 
         # Adapter-specific environment variables
         if setup.adapter_config:
-            f.write(f"\n# Adapter-Specific Configuration\n")
+            f.write("\n# Adapter-Specific Configuration\n")
             for key, value in setup.adapter_config.items():
                 f.write(f"{key}={value}\n")
 
         # Backup/Secondary LLM Configuration (Optional)
         if setup.backup_llm_api_key:
-            f.write(f"\n# Backup/Secondary LLM Configuration\n")
+            f.write("\n# Backup/Secondary LLM Configuration\n")
             f.write(f'CIRIS_OPENAI_API_KEY_2="{setup.backup_llm_api_key}"\n')
             if setup.backup_llm_base_url:
                 f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
@@ -717,7 +736,9 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                     # If resume fails, fall back to restart
                     runtime.request_shutdown("Resume failed - restarting to apply configuration")
 
-            asyncio.create_task(_resume_runtime())
+            # Store task to prevent garbage collection
+            resume_task = asyncio.create_task(_resume_runtime())
+            # Task will run in background - errors are logged within the task
         else:
             logger.warning("Runtime not available - manual restart required")
             next_steps = "Configuration completed. Please restart the agent manually to complete setup."

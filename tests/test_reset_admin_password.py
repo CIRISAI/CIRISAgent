@@ -10,7 +10,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import bcrypt
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools" / "ops"))
@@ -49,16 +48,28 @@ class TestPasswordResetUtility:
         assert password1 != password2
 
     def test_hash_password(self):
-        """Test password hashing."""
+        """Test password hashing using PBKDF2."""
+        import base64
+        import hmac
+
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
         password = "test_password_123"
         hashed = hash_password(password)
 
-        # Check it's a valid bcrypt hash
-        assert hashed.startswith("$2b$")
-        assert len(hashed) == 60
+        # Check it's a valid PBKDF2 hash (base64 encoded, 88 chars for 32 byte salt + 32 byte key)
+        assert len(hashed) == 88
+        # Verify it's valid base64
+        decoded = base64.b64decode(hashed)
+        assert len(decoded) == 64  # 32 byte salt + 32 byte key
 
         # Verify the hash works
-        assert bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+        salt = decoded[:32]
+        stored_key = decoded[32:]
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+        key = kdf.derive(password.encode())
+        assert hmac.compare_digest(key, stored_key)
 
         # Different passwords produce different hashes
         hashed2 = hash_password("different_password")

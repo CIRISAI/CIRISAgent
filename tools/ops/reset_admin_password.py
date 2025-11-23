@@ -21,9 +21,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    import bcrypt
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 except ImportError:
-    print("Error: bcrypt not installed. Run: pip install bcrypt")
+    print("Error: cryptography not installed. Run: pip install cryptography")
     sys.exit(1)
 
 from ciris_engine.logic.config import get_sqlite_db_full_path
@@ -62,10 +63,22 @@ def generate_secure_password(length: int = 16) -> str:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed.decode("utf-8")
+    """Hash a password using PBKDF2 (matches infrastructure AuthenticationService)."""
+    import base64
+    import secrets
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    salt = secrets.token_bytes(32)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = kdf.derive(password.encode())
+    return base64.b64encode(salt + key).decode()
 
 
 def update_admin_password(password: str, db_path: str = None) -> bool:
@@ -208,7 +221,25 @@ def verify_password(username: str, password: str, db_path: str = None) -> bool:
         row = cursor.fetchone()
         if row and row[0]:
             password_hash = row[0]
-            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+            # Use PBKDF2 verification (matches infrastructure AuthenticationService)
+            import base64
+            import hmac
+
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+            decoded = base64.b64decode(password_hash)
+            salt = decoded[:32]
+            stored_key = decoded[32:]
+
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = kdf.derive(password.encode())
+            return hmac.compare_digest(key, stored_key)
 
         return False
     except Exception as e:

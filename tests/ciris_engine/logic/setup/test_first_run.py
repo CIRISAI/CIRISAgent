@@ -31,7 +31,11 @@ class TestFirstRunDetection:
         assert is_first_run() is False
 
     def test_is_first_run_with_cwd_env(self, tmp_path, monkeypatch):
-        """Test not first run when .env exists in current directory."""
+        """Test not first run when .env exists in current directory (development mode)."""
+        # Create .git directory to simulate development mode
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
         env_file = tmp_path / ".env"
         env_file.write_text("CIRIS_CONFIGURED=true")
         monkeypatch.chdir(tmp_path)
@@ -42,10 +46,10 @@ class TestFirstRunDetection:
         assert is_first_run() is False
 
     def test_is_first_run_with_user_env(self, tmp_path, monkeypatch):
-        """Test not first run when .env exists in ~/.ciris/."""
+        """Test not first run when .env exists in ~/ciris/."""
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
-        ciris_dir = tmp_path / ".ciris"
+        ciris_dir = tmp_path / "ciris"
         ciris_dir.mkdir()
         env_file = ciris_dir / ".env"
         env_file.write_text("CIRIS_CONFIGURED=true")
@@ -233,19 +237,38 @@ class TestConfigPaths:
     """Tests for config path detection."""
 
     def test_get_config_paths_priority(self, tmp_path, monkeypatch):
-        """Test config paths returned in correct priority order."""
+        """Test config paths returned in correct priority order (development mode)."""
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
+
+        # Create .git directory to simulate development mode
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
 
         from ciris_engine.logic.setup.first_run import get_config_paths
 
         paths = get_config_paths()
 
-        # Should be: cwd/.env, ~/.ciris/.env, possibly /etc/ciris/.env
+        # Should be: cwd/.env, ~/ciris/.env, possibly /etc/ciris/.env
         assert paths[0].name == ".env"
         assert paths[0] == tmp_path / ".env"  # Current directory
 
-        assert paths[1].parts[-2:] == (".ciris", ".env")
+        assert paths[1].parts[-2:] == ("ciris", ".env")
+
+    def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
+        """Test config paths in installed mode (no git repo)."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        paths = get_config_paths()
+
+        # Should NOT include current directory - only user and system paths
+        assert all(p != work_dir / ".env" for p in paths)
+        assert paths[0].parts[-2:] == ("ciris", ".env")
 
     def test_get_default_config_path_git_repo(self, tmp_path, monkeypatch):
         """Test default path is cwd/.env in git repo."""
@@ -259,7 +282,7 @@ class TestConfigPaths:
         assert path == tmp_path / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):
-        """Test default path is ~/.ciris/.env for user install."""
+        """Test default path is ~/ciris/.env for user install."""
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "some" / "other" / "dir"
         work_dir.mkdir(parents=True)
@@ -268,7 +291,7 @@ class TestConfigPaths:
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         path = get_default_config_path()
-        assert path == tmp_path / ".ciris" / ".env"
+        assert path == tmp_path / "ciris" / ".env"
 
 
 class TestSetupWizard:

@@ -39,7 +39,7 @@ class MemoryQueryRequest(BaseModel):
     text: Optional[str] = Field(None, description="Full-text search in node content")
 
     # Advanced/custom filters
-    filters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional custom filters")
+    filters: Optional[Dict[str, Any]] = Field(default_factory=lambda: {}, description="Additional custom filters")
 
     # Cursor-based pagination
     cursor: Optional[str] = Field(None, description="Pagination cursor from previous response")

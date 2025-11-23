@@ -136,7 +136,7 @@ class ServiceMetrics(BaseModel):
     requests_total: Optional[int] = None
     requests_failed: Optional[int] = None
     average_latency_ms: Optional[float] = None
-    custom_metrics: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    custom_metrics: Optional[Dict[str, Any]] = Field(default_factory=lambda: {})
 
 
 class ServiceStatus(BaseModel):

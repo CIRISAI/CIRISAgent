@@ -859,8 +859,11 @@ class TestAgentProcessorInitialization:
         # Mock the shutdown method to avoid complex shutdown logic
         runtime.shutdown = AsyncMock()
 
+        # Mock is_first_run to return False so error path is taken
         # Mock asyncio.all_tasks to return no matching task
-        with patch("asyncio.all_tasks", return_value=[]):
+        with patch("asyncio.all_tasks", return_value=[]), patch(
+            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
+        ):
             # The RuntimeError gets caught and logged, but doesn't propagate
             await runtime.run()
 

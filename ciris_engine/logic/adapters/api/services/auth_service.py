@@ -433,16 +433,45 @@ class APIAuthService:
     # ========== User Management Methods ==========
 
     def _hash_password(self, password: str) -> str:
-        """Hash a password for storage using bcrypt."""
-        # Generate a salt and hash the password
-        salt = bcrypt.gensalt(rounds=12)  # 12 rounds is a good default
-        hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-        return hashed.decode("utf-8")
+        """Hash a password for storage using PBKDF2."""
+        import base64
+        import secrets
+
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+        salt = secrets.token_bytes(32)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = kdf.derive(password.encode())
+        return base64.b64encode(salt + key).decode()
 
     def _verify_password(self, password: str, password_hash: str) -> bool:
-        """Verify a password against its hash."""
+        """Verify a password against its hash using PBKDF2."""
         try:
-            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+            import base64
+            import hmac
+
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+            decoded = base64.b64decode(password_hash)
+            salt = decoded[:32]
+            stored_key = decoded[32:]
+
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = kdf.derive(password.encode())
+            # Use constant-time comparison to prevent timing attacks
+            return hmac.compare_digest(key, stored_key)
         except Exception:
             # If verification fails (e.g., invalid hash format), return False
             return False

@@ -19,15 +19,17 @@ from .config import QAConfig
 class APIServerManager:
     """Manages the API server lifecycle for testing."""
 
-    def __init__(self, config: QAConfig, database_backend: str = "sqlite"):
+    def __init__(self, config: QAConfig, database_backend: str = "sqlite", modules: Optional[list] = None):
         """Initialize server manager.
 
         Args:
             config: QA runner configuration
             database_backend: Database backend to use ("sqlite" or "postgres")
+            modules: Optional list of QAModule enums being tested
         """
         self.config = config
         self.database_backend = database_backend
+        self.modules = modules or []
         self.console = Console()
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
@@ -55,6 +57,13 @@ class APIServerManager:
         # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
         # This allows loading modular services like Reddit alongside built-in adapters
         env["CIRIS_ADAPTER"] = self.config.adapter
+
+        # Force first-run mode for SETUP module tests
+        from .config import QAModule
+
+        if any(m == QAModule.SETUP for m in self.modules):
+            env["CIRIS_FORCE_FIRST_RUN"] = "1"
+            self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for SETUP module tests[/dim]")
 
         # Set backend-specific log directory to avoid symlink collisions
         # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)

@@ -498,26 +498,33 @@ class ApiPlatform(Service):
 
         return metrics
 
-    async def run_lifecycle(self, agent_run_task: asyncio.Task[Any]) -> None:
+    async def run_lifecycle(self, agent_run_task: Optional[asyncio.Task[Any]]) -> None:
         """Run the adapter lifecycle - API runs until agent stops."""
         logger.info("API adapter running lifecycle")
 
         try:
-            # Wait for either the agent task or server task to complete
+            # In first-run mode, agent_run_task is None - just keep server running
+            if agent_run_task is None:
+                logger.info("First-run mode: API server will run until manually stopped")
+                # Just wait for server task to complete (or CTRL+C)
+                if self._server_task:
+                    await self._server_task
+                return
+
+            # Normal mode: Wait for either the agent task or server task to complete
             while not agent_run_task.done():
                 # Check if server is still running
-                if not self._server_task or not self._server_task.done():
-                    await asyncio.sleep(0.1)
-                    continue
+                if not self._server_task or self._server_task.done():
+                    # Server stopped unexpectedly
+                    if self._server_task:
+                        exc = self._server_task.exception()
+                        if exc:
+                            logger.error(f"API server stopped with error: {exc}")
+                            raise exc
+                    logger.warning("API server stopped unexpectedly")
+                    break
 
-                # Server stopped unexpectedly
-                exc = self._server_task.exception()
-                if exc:
-                    logger.error(f"API server stopped with error: {exc}")
-                    raise exc
-
-                logger.warning("API server stopped unexpectedly")
-                break
+                await asyncio.sleep(0.1)
 
         except asyncio.CancelledError:
             logger.info("API adapter lifecycle cancelled")

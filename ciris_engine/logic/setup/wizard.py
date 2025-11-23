@@ -189,11 +189,11 @@ CIRIS_AGENT_PORT={agent_port}
 CIRIS_API_PORT={agent_port}
 NEXT_PUBLIC_API_BASE_URL="http://localhost:{agent_port}"
 
-# Database Paths (relative to working directory)
-CIRIS_DB_PATH="./data/ciris_engine.db"
-CIRIS_DATA_DIR="./data"
-SECRETS_DB_PATH="./secrets.db"
-AUDIT_LOG_PATH="./audit_logs.jsonl"
+# Database Paths (using ~/ciris as base directory)
+CIRIS_DB_PATH="~/ciris/data/ciris_engine.db"
+CIRIS_DATA_DIR="~/ciris/data"
+SECRETS_DB_PATH="~/ciris/data/secrets.db"
+AUDIT_LOG_PATH="~/ciris/data/audit_logs.jsonl"
 
 # Mark as configured
 CIRIS_CONFIGURED="true"

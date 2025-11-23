@@ -649,7 +649,7 @@ async def validate_llm(config: LLMValidationRequest) -> SuccessResponse[LLMValid
 
 
 @router.post("/complete", response_model=SuccessResponse[Dict[str, str]])
-async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[str, str]]:
+async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
     Saves configuration and creates initial admin user.
@@ -696,14 +696,30 @@ async def complete_setup(setup: SetupCompleteRequest) -> SuccessResponse[Dict[st
         await _create_setup_users(setup)
 
         # Build next steps message
-        next_steps = "Configuration completed. You can now log in with your credentials."
+        next_steps = "Configuration completed. The agent will now restart automatically. You can log in after restart."
         if setup.system_admin_password:
-            next_steps += " The default admin password has been updated."
+            next_steps += " Both user passwords have been configured."
+
+        # Trigger runtime restart to exit first-run mode and start agent processor
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime:
+            logger.info("Setup complete - requesting runtime restart to start agent processor")
+            # Schedule shutdown in background to allow response to be sent first
+            import asyncio
+
+            async def _restart_runtime():
+                await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
+                runtime.request_shutdown("Setup completed - restarting to apply configuration")
+
+            asyncio.create_task(_restart_runtime())
+        else:
+            logger.warning("Runtime not available - manual restart required")
+            next_steps = "Configuration completed. Please restart the agent manually to complete setup."
 
         return SuccessResponse(
             data={
                 "status": "completed",
-                "message": "Setup completed successfully. You can now log in.",
+                "message": "Setup completed successfully. Restarting agent...",
                 "config_path": str(config_path),
                 "username": setup.admin_username,
                 "next_steps": next_steps,

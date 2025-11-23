@@ -218,6 +218,8 @@ def get_default_config_path() -> Path:
 
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
+    from ciris_engine.logic.utils.path_resolution import is_development_mode
+
     # Development mode - save in current directory
     if is_development_mode():
         return Path.cwd() / ".env"

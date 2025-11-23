@@ -1141,7 +1141,8 @@ class CIRISRuntime:
         # DO NOT restart them - just create the agent processor task
         # Adapters will continue running with their existing lifecycle tasks
         logger.info("Creating agent processor task (adapters already running from first-run mode)...")
-        agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
+        # Task stored to prevent premature garbage collection - runs in background
+        self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
 
         # No need to verify adapter readiness - they're already running and serving the setup wizard!
         # No need to re-register services - they were registered during first-run startup
@@ -1221,12 +1222,46 @@ class CIRISRuntime:
             secrets_service=self.secrets_service,
         )
 
+    def _should_exit_runtime_loop(self, agent_task, shutdown_logged: bool) -> tuple[bool, bool]:
+        """Check if runtime loop should exit.
+
+        Returns:
+            Tuple of (should_exit, shutdown_logged)
+        """
+        if agent_task and agent_task.done():
+            return True, shutdown_logged
+        if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
+            return True, True
+        return False, shutdown_logged
+
+    def _handle_completed_runtime_tasks(
+        self, done: set, agent_task, adapter_tasks, all_tasks: list
+    ) -> tuple[bool, bool]:
+        """Handle completed runtime tasks.
+
+        Returns:
+            Tuple of (should_break, is_shutdown)
+        """
+        from .ciris_runtime_helpers import handle_runtime_agent_task_completion, handle_runtime_task_failures
+
+        # Check for shutdown signal
+        if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
+            return True, True
+
+        # Check if agent task completed
+        if agent_task and agent_task in done:
+            handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
+            return True, False
+
+        # Handle other task failures
+        excluded_tasks = {t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]}
+        handle_runtime_task_failures(self, done, excluded_tasks)
+        return False, False
+
     async def run(self, _: Optional[int] = None) -> None:
         """Run the agent processing loop with shutdown monitoring."""
         from .ciris_runtime_helpers import (
             finalize_runtime_execution,
-            handle_runtime_agent_task_completion,
-            handle_runtime_task_failures,
             monitor_runtime_shutdown_signals,
             setup_runtime_monitoring_tasks,
         )
@@ -1241,15 +1276,12 @@ class CIRISRuntime:
                 logger.error("No tasks to monitor - exiting")
                 return
 
-            # Keep monitoring until shutdown or agent task completes (if it exists)
+            # Keep monitoring until shutdown or agent task completes
             shutdown_logged = False
             while True:
                 # Check exit conditions
-                if agent_task and agent_task.done():
-                    break
-                if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    if not shutdown_logged:
-                        shutdown_logged = True
+                should_exit, shutdown_logged = self._should_exit_runtime_loop(agent_task, shutdown_logged)
+                if should_exit:
                     break
 
                 done, pending = await asyncio.wait(all_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0)
@@ -1260,19 +1292,10 @@ class CIRISRuntime:
                 # Monitor shutdown signals
                 shutdown_logged = monitor_runtime_shutdown_signals(self, shutdown_logged)
 
-                # Handle task completion based on type
-                if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    # Break loop - let graceful shutdown process handle everything
+                # Handle task completion
+                should_break, _ = self._handle_completed_runtime_tasks(done, agent_task, adapter_tasks, all_tasks)
+                if should_break:
                     break
-                elif agent_task and agent_task in done:
-                    handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
-                    break  # Exit the while loop
-                else:
-                    # Handle other task completions/failures
-                    excluded_tasks = {
-                        t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]
-                    }
-                    handle_runtime_task_failures(self, done, excluded_tasks)
 
             # Finalize execution
             await finalize_runtime_execution(self, set(pending) if "pending" in locals() else set())

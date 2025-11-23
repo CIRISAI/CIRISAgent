@@ -889,9 +889,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.info("Processing pending users from setup wizard")
             logger.info("=" * 80)
 
-            # Read pending users data
-            with open(pending_users_file, "r") as f:
-                users_data = json.load(f)
+            # Read pending users data asynchronously
+            async with aiofiles.open(pending_users_file, "r") as f:
+                content = await f.read()
+                users_data = json.loads(content)
 
             logger.info(f"Loaded pending users file created at: {users_data.get('created_at')}")
 

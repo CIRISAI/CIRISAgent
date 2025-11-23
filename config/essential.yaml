@@ -1,4 +1,6 @@
 # Essential Configuration for CIRIS Bootstrap
+cirisagent/config/essential.yaml
+
 # This replaces the complex base.yaml with only mission-critical settings
 
 # Core database paths
@@ -44,6 +46,7 @@ workflow:
   round_timeout_seconds: 300.0
   enable_auto_defer: true
 
-# Runtime settings
+# Runtime settings (Combined)
 log_level: "INFO"
 debug_mode: false
+

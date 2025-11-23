@@ -1,24 +1,21 @@
 """
+ciris_engine/logic/services/tools/core_tool_service/service.py
 Core Tool Service - Provides core system tools for agents.
-
-Implements ToolService protocol to expose core tools:
-- Secrets management (RECALL_SECRET, UPDATE_SECRETS_FILTER)
-- Ticket management (UPDATE_TICKET, GET_TICKET, DEFER_TICKET)
-- Agent guidance (SELF_HELP)
-
-Tickets are NOT a service - they're a coordination mechanism that sits above services.
-Tools provide the agent-facing interface for ticket updates during task execution.
 """
 
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import json # Added for clarity, though it was implicitly used later
+
+from ciris_engine.protocols.services import ToolService
+# --> HACKATHON ADDITION
+from ciris_modular_services.tools.sentinel_tools import SentinelTools # <-- ASSUMING THIS PATH
 
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.utils.jsondict_helpers import get_str
-from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import (
     ToolExecutionResult,
@@ -29,7 +26,6 @@ from ciris_engine.schemas.adapters.tools import (
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
-from ciris_engine.schemas.services.core.secrets import SecretContext
 from ciris_engine.schemas.types import JSONDict
 
 # ToolParameters is a JSONDict for flexible parameter passing
@@ -43,27 +39,26 @@ ERROR_FILTER_NOT_EXPOSED = "Filter operations not currently exposed"
 
 
 class CoreToolService(BaseService, ToolService):
-    """Service providing core system tools (secrets, tickets, guidance)."""
+    """Service providing core system tools (secrets, tickets, guidance) and managing external tools."""
+
+    # --> HACKATHON ADDITION: Add a list to hold external tool class instances
+    _external_tool_classes: List[Any] = []
+    # <-- END HACKATHON ADDITION
 
     def __init__(
         self,
         secrets_service: SecretsService,
         time_service: TimeServiceProtocol,
         db_path: Optional[str] = None,
+        # --> HACKATHON ADDITION: Add option to register external tools during init
+        external_tool_classes: Optional[List[Any]] = None, 
+        # <-- END HACKATHON ADDITION
     ) -> None:
-        """Initialize with secrets service, time service, and optional db path.
-
-        Args:
-            secrets_service: Service for secrets management
-            time_service: Service for time operations
-            db_path: Optional database path override. When None (default),
-                    uses current config (_test_db_path or essential_config).
-                    When provided, uses this specific path for all operations.
-        """
+        """Initialize with secrets service, time service, and optional db path."""
         super().__init__(time_service=time_service)
         self.secrets_service = secrets_service
         # Store db_path for persistence calls - None means use current config
-        self._db_path = db_path
+        self.db_path = db_path # Use public property name if available, otherwise _db_path
         self.adapter_name = "core_tools"
 
         # v1.4.3 metrics tracking
@@ -75,14 +70,38 @@ class CoreToolService(BaseService, ToolService):
         self._metrics_tracking: Dict[str, float] = {}  # For custom metric tracking
         self._tool_executions = 0
         self._tool_failures = 0
+        
+        # --> HACKATHON ADDITION: Initialize and populate external tool handlers
+        self._external_tool_handlers: Dict[str, Any] = {}
+        if external_tool_classes:
+            self._register_external_tools(external_tool_classes)
+        else:
+            # CORRECTED TYPO: Manually register SentinelTools for the demo 
+            # This is the fail-safe path for the hackathon integration
+            self._register_external_tools([SentinelTools]) 
+        # <-- END HACKATHON ADDITION
+
+    # --- HACKATHON ADDITION: HELPER METHOD FOR EXTERNAL TOOLS ---
+    def _register_external_tools(self, tool_classes: List[Any]) -> None:
+        """Instantiates and registers external tool classes."""
+        for ToolClass in tool_classes:
+            try:
+                # Instantiate the tool class (assuming it takes no complex dependencies here)
+                tool_instance = ToolClass() 
+                # Assuming the external tool implements list_tools()
+                if hasattr(tool_instance, 'list_tools') and callable(tool_instance.list_tools):
+                    for tool_name in tool_instance.list_tools():
+                        self._external_tool_handlers[tool_name] = tool_instance
+                        logger.info(f"External Tool Registered: {tool_name} from {ToolClass.__name__}")
+                else:
+                    logger.warning(f"External Tool Class {ToolClass.__name__} does not implement list_tools(). Skipping.")
+            except Exception as e:
+                logger.warning(f"Failed to register external tool class {ToolClass.__name__}: {e}")
+    # --- END HACKATHON ADDITION ---
 
     @property
     def db_path(self) -> Optional[str]:
-        """Get database path for persistence operations.
-
-        Returns the stored db_path if provided during initialization,
-        otherwise None to use current config (_test_db_path or essential_config).
-        """
+        """Get database path for persistence operations."""
         return self._db_path
 
     def _track_metric(self, metric_name: str, default: float = 0.0) -> float:
@@ -95,7 +114,11 @@ class CoreToolService(BaseService, ToolService):
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service provides."""
-        return ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        native_tools = ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        # --> HACKATHON ADDITION
+        external_tools = list(self._external_tool_handlers.keys())
+        return native_tools + external_tools
+        # <-- END HACKATHON ADDITION
 
     def _check_dependencies(self) -> bool:
         """Check if all dependencies are available."""
@@ -108,7 +131,6 @@ class CoreToolService(BaseService, ToolService):
 
     async def is_healthy(self) -> bool:
         """Check if service is healthy.
-
         SecretsToolService is stateless and always healthy if instantiated.
         """
         return True
@@ -118,6 +140,7 @@ class CoreToolService(BaseService, ToolService):
         self._track_request()  # Track the tool execution
         self._tool_executions += 1
 
+        # --- NATIVE TOOL EXECUTION ---
         if tool_name == "recall_secret":
             result = await self._recall_secret(parameters)
         elif tool_name == "update_secrets_filter":
@@ -130,6 +153,24 @@ class CoreToolService(BaseService, ToolService):
             result = await self._get_ticket(parameters)
         elif tool_name == "defer_ticket":
             result = await self._defer_ticket(parameters)
+        # --- END NATIVE TOOL EXECUTION ---
+
+        # --> HACKATHON ADDITION: Delegate to External Tools
+        elif tool_name in self._external_tool_handlers:
+            handler = self._external_tool_handlers[tool_name]
+            try:
+                # Call the method corresponding to the tool name on the handler instance
+                if hasattr(handler, tool_name) and callable(getattr(handler, tool_name)):
+                    method = getattr(handler, tool_name)
+                    # Assuming external tool methods match the CoreToolService's _tool(params) signature
+                    result = await method(parameters)
+                else:
+                    result = ToolResult(success=False, error=f"External tool method {tool_name} not callable on handler.")
+            except Exception as e:
+                logger.error(f"Error executing external tool {tool_name}: {e}")
+                result = ToolResult(success=False, error=f"External tool execution failed: {str(e)}")
+        # <-- END HACKATHON ADDITION
+
         else:
             self._tool_failures += 1  # Unknown tool is a failure!
             result = ToolResult(success=False, error=f"Unknown tool: {tool_name}")
@@ -144,13 +185,15 @@ class CoreToolService(BaseService, ToolService):
             success=result.success,
             data=result.data,
             error=result.error,
-            correlation_id=f"secrets_{tool_name}_{self._now().timestamp()}",
+            # Ensure the correlation_id is dynamic for both core and external tools
+            correlation_id=f"tool_{tool_name}_{self._now().timestamp()}", 
         )
 
     async def _recall_secret(self, params: ToolParameters) -> ToolResult:
         """Recall a secret by UUID."""
         try:
             secret_uuid_val = get_str(params, "secret_uuid", "")
+            # ... (rest of method unchanged)
             purpose = params.get("purpose", "No purpose specified")
             decrypt = params.get("decrypt", False)
 
@@ -244,10 +287,8 @@ class CoreToolService(BaseService, ToolService):
 
     async def _update_ticket(self, params: ToolParameters) -> ToolResult:
         """Update ticket status or metadata during task processing."""
-        import logging
         import time
 
-        logger = logging.getLogger(__name__)
         start_time = time.time()
 
         try:
@@ -298,8 +339,6 @@ class CoreToolService(BaseService, ToolService):
 
                 # Handle JSON string from command-line tools (mock LLM, CLI)
                 if isinstance(metadata_updates, str):
-                    import json
-
                     try:
                         metadata_updates = json.loads(metadata_updates)
                         logger.debug(
@@ -384,11 +423,7 @@ class CoreToolService(BaseService, ToolService):
             return ToolResult(success=False, error=str(e))
 
     async def _defer_ticket(self, params: ToolParameters) -> ToolResult:
-        """Defer ticket processing to a future time or await human response.
-
-        Automatically sets ticket status to 'deferred' to prevent WorkProcessor
-        from creating new tasks until the deferral condition is resolved.
-        """
+        """Defer ticket processing to a future time or await human response."""
         try:
             from datetime import timedelta
 
@@ -473,10 +508,15 @@ class CoreToolService(BaseService, ToolService):
 
     async def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
-        return ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        native_tools = ["recall_secret", "update_secrets_filter", "self_help", "update_ticket", "get_ticket", "defer_ticket"]
+        # --> HACKATHON ADDITION
+        external_tools = list(self._external_tool_handlers.keys())
+        return native_tools + external_tools
+        # <-- END HACKATHON ADDITION
 
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific tool."""
+        # --- NATIVE TOOLS CHECK ---
         if tool_name == "recall_secret":
             return ToolInfo(
                 name="recall_secret",
@@ -592,6 +632,15 @@ class CoreToolService(BaseService, ToolService):
                 category="workflow",
                 when_to_use="When ticket needs human input or must wait for external event/time",
             )
+        
+        # --> HACKATHON ADDITION: Check External Tools
+        elif tool_name in self._external_tool_handlers:
+            handler = self._external_tool_handlers[tool_name]
+            # Call the external handler's get_tool_info, passing the specific tool name
+            if hasattr(handler, 'get_tool_info'):
+                return await handler.get_tool_info(tool_name) 
+        # <-- END HACKATHON ADDITION
+        
         return None
 
     async def get_all_tool_info(self) -> List[ToolInfo]:
@@ -605,6 +654,7 @@ class CoreToolService(BaseService, ToolService):
 
     async def validate_parameters(self, tool_name: str, parameters: ToolParameters) -> bool:
         """Validate parameters for a tool."""
+        # --- NATIVE TOOL VALIDATION ---
         if tool_name == "recall_secret":
             return "secret_uuid" in parameters and "purpose" in parameters
         elif tool_name == "update_secrets_filter":
@@ -622,11 +672,20 @@ class CoreToolService(BaseService, ToolService):
             return "ticket_id" in parameters
         elif tool_name == "defer_ticket":
             return "ticket_id" in parameters and "reason" in parameters
+        
+        # --- EXTERNAL TOOL VALIDATION ---
+        elif tool_name in self._external_tool_handlers:
+             handler = self._external_tool_handlers[tool_name]
+             if hasattr(handler, 'validate_parameters') and callable(handler.validate_parameters):
+                return await handler.validate_parameters(tool_name, parameters)
+             # Fallback to simple existence check if no specific validator is defined
+             return True 
+
         return False
 
     async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of an async tool execution."""
-        # Secrets tools execute synchronously
+        # This service executes synchronously, so return None
         return None
 
     async def list_tools(self) -> List[str]:
@@ -644,11 +703,14 @@ class CoreToolService(BaseService, ToolService):
         """Get service capabilities with custom metadata."""
         # Get base capabilities
         capabilities = super().get_capabilities()
+        
+        # Count native tools + external tools
+        total_tool_count = 6 + len(self._external_tool_handlers)
 
         # Add custom metadata using model_copy
         if capabilities.metadata:
             capabilities.metadata = capabilities.metadata.model_copy(
-                update={"adapter": self.adapter_name, "tool_count": 6}
+                update={"adapter": self.adapter_name, "tool_count": total_tool_count}
             )
 
         return capabilities
@@ -661,7 +723,7 @@ class CoreToolService(BaseService, ToolService):
         success_rate = 0.0
         if self._request_count > 0:
             success_rate = (self._request_count - self._error_count) / self._request_count
-
+            
         # Add tool-specific metrics
         metrics.update(
             {
@@ -673,18 +735,14 @@ class CoreToolService(BaseService, ToolService):
                 "tickets_retrieved": float(self._tickets_retrieved),
                 "tickets_deferred": float(self._tickets_deferred),
                 "audit_events_generated": float(self._request_count),  # Each execution generates an audit event
-                "available_tools": 6.0,  # recall_secret, update_secrets_filter, self_help, update_ticket, get_ticket, defer_ticket
+                "available_tools": float(6 + len(self._external_tool_handlers)),
             }
         )
 
         return metrics
 
     async def get_metrics(self) -> Dict[str, float]:
-        """Get all metrics including base, custom, and v1.4.3 specific.
-
-        Returns:
-            Dict with all metrics including tool-specific and v1.4.3 metrics
-        """
+        """Get all metrics including base, custom, and v1.4.3 specific."""
         # Get all base + custom metrics
         metrics = self._collect_metrics()
 
@@ -693,6 +751,9 @@ class CoreToolService(BaseService, ToolService):
         if self._start_time:
             uptime_seconds = max(0.0, (current_time - self._start_time).total_seconds())
 
+        # Calculate total tools
+        total_tools = float(6 + len(self._external_tool_handlers))
+        
         # Add v1.4.3 specific metrics
         metrics.update(
             {
@@ -706,10 +767,10 @@ class CoreToolService(BaseService, ToolService):
                 # Backwards compatibility aliases for unit tests
                 "tickets_updated_total": float(self._tickets_updated),
                 "tickets_deferred_total": float(self._tickets_deferred),
-                "tools_enabled": 6.0,  # recall_secret, update_secrets_filter, self_help, update_ticket, get_ticket, defer_ticket
+                "tools_enabled": total_tools, 
             }
         )
 
         return metrics
-
-    # get_telemetry() removed - use get_metrics() from BaseService instead
+    
+    

@@ -5,6 +5,21 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5.3] - 2025-11-23
+
+### Fixed - Setup User Creation Cache Bug
+
+- **Setup User Creation Failure** - Fixed newly created users not being visible for login after setup completion
+  - **Issue**: Users created by setup wizard appeared in logs as "✅ Created user: X" but couldn't log in (401 Unauthorized)
+  - **Root Cause**: `APIAuthService` loads users from database once and caches them in memory (`_users_loaded` flag). When setup wizard created users via temporary `AuthenticationService`, the cached auth service never saw the new users
+  - **Fix**:
+    - Added `reload_users_from_db()` method to `APIAuthService` to invalidate cache and reload users
+    - Setup completion now calls this method after creating users
+  - **Files**:
+    - `ciris_engine/logic/adapters/api/services/auth_service.py:142-148` (new reload method)
+    - `ciris_engine/logic/adapters/api/routes/setup.py:713-718` (call reload after user creation)
+  - **Impact**: Setup wizard now works end-to-end - users can immediately log in with newly created accounts
+
 ## [1.6.5.2] - 2025-11-23
 
 ### Fixed - Managed Mode First-Run and GUI Issues

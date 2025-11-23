@@ -710,6 +710,13 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         # Create users immediately (don't wait for restart)
         await _create_setup_users(setup)
 
+        # Reload user cache in APIAuthService to pick up newly created users
+        auth_service = getattr(request.app.state, "auth_service", None)
+        if auth_service:
+            logger.info("Reloading user cache after setup user creation...")
+            await auth_service.reload_users_from_db()
+            logger.info("✅ User cache reloaded - new users now visible to authentication")
+
         # Build next steps message
         next_steps = "Configuration completed. The agent is now starting. You can log in immediately."
         if setup.system_admin_password:

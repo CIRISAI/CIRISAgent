@@ -1104,6 +1104,65 @@ class CIRISRuntime:
         # Final verification with the existing wait method
         await self._wait_for_critical_services(timeout=5.0)
 
+    async def resume_from_first_run(self) -> None:
+        """Resume initialization after setup wizard completes.
+
+        This continues from the point where first-run mode paused (line 1088).
+        It executes the same steps as normal mode initialization.
+        """
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("🔄 RESUMING FROM FIRST-RUN MODE")
+        logger.info("=" * 70)
+        logger.info("")
+        logger.info("Setup wizard completed - starting agent processor...")
+        logger.info("")
+
+        # Reload environment variables to pick up new config
+        from dotenv import load_dotenv
+        from ciris_engine.logic.setup.first_run import get_default_config_path
+
+        config_path = get_default_config_path()
+        if config_path.exists():
+            load_dotenv(config_path, override=True)
+            logger.info(f"✓ Reloaded environment from {config_path}")
+
+        from .ciris_runtime_helpers import (
+            create_adapter_lifecycle_tasks,
+            verify_adapter_service_registration,
+            wait_for_adapter_readiness,
+        )
+
+        # Cancel old adapter lifecycle tasks (created without agent processor)
+        if hasattr(self, '_adapter_tasks') and self._adapter_tasks:
+            logger.info(f"Cancelling {len(self._adapter_tasks)} old adapter tasks...")
+            for task in self._adapter_tasks:
+                if not task.done():
+                    task.cancel()
+            self._adapter_tasks = []
+
+        # NOW RESUME FROM LINE 1090 - Create agent processor task and adapter lifecycle tasks
+        agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
+        self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
+
+        # Adapters should already be ready from first-run, but verify
+        adapters_ready = await wait_for_adapter_readiness(self.adapters)
+        if not adapters_ready:
+            raise RuntimeError("Adapters failed to become ready within timeout")
+
+        # Register services and verify availability
+        services_available = await verify_adapter_service_registration(self)
+        if not services_available:
+            raise RuntimeError("Failed to establish adapter connections within timeout")
+
+        # Final verification with the existing wait method
+        await self._wait_for_critical_services(timeout=5.0)
+
+        logger.info("")
+        logger.info("✅ Agent processor started successfully!")
+        logger.info("=" * 70)
+        logger.info("")
+
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready.
 

@@ -696,22 +696,28 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         await _create_setup_users(setup)
 
         # Build next steps message
-        next_steps = "Configuration completed. The agent will now restart automatically. You can log in after restart."
+        next_steps = "Configuration completed. The agent is now starting. You can log in immediately."
         if setup.system_admin_password:
             next_steps += " Both user passwords have been configured."
 
-        # Trigger runtime restart to exit first-run mode and start agent processor
+        # Resume initialization from first-run mode to start agent processor
         runtime = getattr(request.app.state, "runtime", None)
         if runtime:
-            logger.info("Setup complete - requesting runtime restart to start agent processor")
-            # Schedule shutdown in background to allow response to be sent first
+            logger.info("Setup complete - resuming initialization to start agent processor")
+            # Schedule resume in background to allow response to be sent first
             import asyncio
 
-            async def _restart_runtime():
+            async def _resume_runtime() -> None:
                 await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
-                runtime.request_shutdown("Setup completed - restarting to apply configuration")
+                try:
+                    await runtime.resume_from_first_run()
+                    logger.info("✅ Successfully resumed from first-run mode - agent processor running")
+                except Exception as e:
+                    logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
+                    # If resume fails, fall back to restart
+                    runtime.request_shutdown("Resume failed - restarting to apply configuration")
 
-            asyncio.create_task(_restart_runtime())
+            asyncio.create_task(_resume_runtime())
         else:
             logger.warning("Runtime not available - manual restart required")
             next_steps = "Configuration completed. Please restart the agent manually to complete setup."
@@ -719,7 +725,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         return SuccessResponse(
             data={
                 "status": "completed",
-                "message": "Setup completed successfully. Restarting agent...",
+                "message": "Setup completed successfully. Starting agent processor...",
                 "config_path": str(config_path),
                 "username": setup.admin_username,
                 "next_steps": next_steps,

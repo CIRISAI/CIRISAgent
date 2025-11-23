@@ -429,6 +429,71 @@ class TestServiceInitializer:
         assert calls.index("security") < calls.index("services")
         assert calls.index("services") < calls.index("verify")
 
+    @pytest.mark.asyncio
+    async def test_initialize_llm_services_with_api_key(self, service_initializer, mock_essential_config):
+        """Test LLM services initialization when API key is present."""
+        # Add services attribute to mock config
+        mock_services = Mock()
+        mock_services.llm_endpoint = "http://localhost:11434/v1"
+        mock_services.llm_model = "test-model"
+        mock_services.llm_max_retries = 3
+        mock_services.llm_timeout = 30
+        mock_essential_config.services = mock_services
+
+        # Mock OpenAI API key present
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}):
+            # Initialize prerequisites
+            await service_initializer.initialize_infrastructure_services()
+
+            # Initialize LLM services
+            await service_initializer._initialize_llm_services(mock_essential_config, [])
+
+            # Should create LLM service
+            assert service_initializer.llm_service is not None
+
+    @pytest.mark.asyncio
+    async def test_initialize_llm_services_no_api_key(self, service_initializer, mock_essential_config):
+        """Test LLM service initialization skipped when no API key present."""
+        # Add services attribute to mock config
+        mock_services = Mock()
+        mock_services.llm_endpoint = "http://localhost:11434/v1"
+        mock_services.llm_model = "test-model"
+        mock_essential_config.services = mock_services
+
+        # No API key in environment
+        with patch.dict(os.environ, {}, clear=True):
+            # Initialize prerequisites
+            await service_initializer.initialize_infrastructure_services()
+
+            # Initialize LLM services - should be skipped
+            await service_initializer._initialize_llm_services(mock_essential_config, [])
+
+            # LLM service should still be None
+            assert service_initializer.llm_service is None
+
+    @pytest.mark.asyncio
+    async def test_initialize_llm_services_mock_mode(self, service_initializer, mock_essential_config):
+        """Test LLM service initialization in mock mode."""
+        # Add services attribute to mock config
+        mock_services = Mock()
+        mock_services.llm_endpoint = "http://localhost:11434/v1"
+        mock_services.llm_model = "test-model"
+        mock_services.llm_max_retries = 3
+        mock_services.llm_timeout = 30
+        mock_essential_config.services = mock_services
+
+        service_initializer._mock_llm = True
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}):
+            # Initialize prerequisites
+            await service_initializer.initialize_infrastructure_services()
+
+            # Initialize LLM services in mock mode
+            await service_initializer._initialize_llm_services(mock_essential_config, [])
+
+            # Should create LLM service even in mock mode
+            assert service_initializer.llm_service is not None
+
 
 class TestModularServiceLoading:
     """Test cases for modular service loading integration."""

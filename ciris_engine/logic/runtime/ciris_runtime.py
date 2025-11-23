@@ -1120,6 +1120,7 @@ class CIRISRuntime:
 
         # Reload environment variables to pick up new config
         from dotenv import load_dotenv
+
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         config_path = get_default_config_path()
@@ -1134,7 +1135,7 @@ class CIRISRuntime:
         )
 
         # Cancel old adapter lifecycle tasks (created without agent processor)
-        if hasattr(self, '_adapter_tasks') and self._adapter_tasks:
+        if hasattr(self, "_adapter_tasks") and self._adapter_tasks:
             logger.info(f"Cancelling {len(self._adapter_tasks)} old adapter tasks...")
             for task in self._adapter_tasks:
                 if not task.done():

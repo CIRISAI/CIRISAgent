@@ -277,6 +277,7 @@ class TestAdapterLifecycle:
         runtime = runtime_with_full_initialization_mocks
 
         # Mock the helper functions - they're imported from ciris_runtime_helpers
+        # Mock is_first_run to return False so normal mode path is taken
         with patch(
             "ciris_engine.logic.runtime.ciris_runtime_helpers.log_adapter_configuration_details"
         ) as mock_log, patch(
@@ -285,7 +286,9 @@ class TestAdapterLifecycle:
             "ciris_engine.logic.runtime.ciris_runtime_helpers.wait_for_adapter_readiness", return_value=True
         ) as mock_wait, patch(
             "ciris_engine.logic.runtime.ciris_runtime_helpers.verify_adapter_service_registration", return_value=True
-        ) as mock_verify:
+        ) as mock_verify, patch(
+            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
+        ):
 
             await runtime._start_adapter_connections()
 
@@ -315,12 +318,15 @@ class TestAdapterLifecycle:
         runtime = runtime_with_full_initialization_mocks
 
         # Mock services not available
+        # Mock is_first_run to return False so normal mode path is taken
         with patch("ciris_engine.logic.runtime.ciris_runtime_helpers.log_adapter_configuration_details"), patch(
             "ciris_engine.logic.runtime.ciris_runtime_helpers.create_adapter_lifecycle_tasks", return_value=[]
         ), patch(
             "ciris_engine.logic.runtime.ciris_runtime_helpers.wait_for_adapter_readiness", return_value=True
         ), patch(
             "ciris_engine.logic.runtime.ciris_runtime_helpers.verify_adapter_service_registration", return_value=False
+        ), patch(
+            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
         ):
 
             with pytest.raises(RuntimeError, match="Failed to establish adapter connections"):

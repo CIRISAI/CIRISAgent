@@ -5,10 +5,11 @@ try:
 
     from dotenv import load_dotenv
 
-    # Priority order: ./env (highest), ~/.ciris/.env, /etc/ciris/.env (lowest)
+    # Priority order: ./env (highest), ~/ciris/.env, /etc/ciris/.env (lowest)
+    # Note: ~/.ciris/ is for keys/secrets only, NOT config!
     config_paths = [
         Path.cwd() / ".env",
-        Path.home() / ".ciris" / ".env",
+        Path.home() / "ciris" / ".env",
         Path("/etc/ciris/.env"),
     ]
 
@@ -276,17 +277,29 @@ def main(
         # CLI smoke tests can execute without configuration prompts or exits.
         if os.environ.get("CIRIS_IMPORT_MODE") == "true":
             first_run = False
+
+        # Handle adapter selection FIRST (before first-run wizard logic)
+        # This allows us to determine which adapter will handle first-run setup
+        final_adapter_types_list = list(adapter_types_list)
+        if not final_adapter_types_list:
+            # Check CIRIS_ADAPTER environment variable
+            env_adapter = get_env_var("CIRIS_ADAPTER")
+            if env_adapter:
+                # Support comma-separated adapters (e.g., "api,discord")
+                final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
+            else:
+                # Default to API adapter (GUI setup wizard)
+                final_adapter_types_list = ["api"]
+
+        # Check if we're running in CLI mode explicitly
+        is_cli_mode = any(adapter.startswith("cli") for adapter in final_adapter_types_list)
+
+        # First-run handling: only run CLI wizard if explicitly in CLI mode
         if first_run and not adapter_types_list:
             # First run detected and no adapter explicitly specified via CLI
 
-            # Check if CIRIS_ADAPTER is set in environment BEFORE checking interactivity
-            # This allows Docker/CI deployments to specify adapter via environment
-            env_adapter = get_env_var("CIRIS_ADAPTER")
-            if env_adapter:
-                # Adapter specified via environment - skip wizard, continue to normal startup
-                pass
-            elif not is_interactive_environment():
-                # Non-interactive environment (Docker, systemd, CI, etc.)
+            if is_cli_mode and not is_interactive_environment():
+                # CLI mode but non-interactive environment (Docker, systemd, CI, etc.)
                 # No adapter in CLI or environment - EXIT with instructions
                 click.echo("=" * 70, err=True)
                 click.echo("❌ CONFIGURATION REQUIRED", err=True)
@@ -307,12 +320,12 @@ def main(
                 click.echo("  ./.env", err=True)
                 click.echo("=" * 70, err=True)
                 sys.exit(1)
-            else:
-                # Interactive environment - run setup wizard
+            elif is_cli_mode and is_interactive_environment():
+                # CLI mode in interactive environment - run CLI setup wizard
                 try:
                     click.echo()
                     click.echo("=" * 70)
-                    click.echo("First run detected - running setup wizard...")
+                    click.echo("First run detected - running CLI setup wizard...")
                     click.echo("=" * 70)
                     config_path = run_setup_wizard()
                     # Reload environment after setup
@@ -330,10 +343,12 @@ def main(
                     click.echo(f"\n❌ Setup failed: {e}", err=True)
                     click.echo("You can configure manually by creating a .env file", err=True)
                     sys.exit(1)
+            # else: API mode (default) - let API adapter handle GUI setup wizard
 
         # Check for API key - NEVER default to mock LLM in production
+        # Skip this check during first-run (API adapter will handle setup)
         api_key = get_env_var("OPENAI_API_KEY")
-        if not mock_llm and not api_key:
+        if not mock_llm and not api_key and not first_run:
             # No API key and not explicitly using mock LLM
             click.echo("=" * 70, err=True)
             click.echo("❌ LLM API KEY REQUIRED", err=True)
@@ -351,21 +366,6 @@ def main(
             click.echo("  export OPENAI_MODEL=llama3", err=True)
             click.echo("=" * 70, err=True)
             sys.exit(1)
-
-        # Handle adapter types - check environment variable if none specified
-        final_adapter_types_list = list(adapter_types_list)
-        if not final_adapter_types_list:
-            # Check CIRIS_ADAPTER environment variable
-            env_adapter = get_env_var("CIRIS_ADAPTER")
-            if env_adapter:
-                # Support comma-separated adapters (e.g., "api,discord")
-                final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
-            else:
-                # Default behavior change:
-                # - After setup wizard (first_run but now configured): start API
-                # - If .env exists (not first run): start API
-                # - This makes pip-installed CIRIS start web interface by default
-                final_adapter_types_list = ["api"]
 
         # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
         selected_adapter_types = list(final_adapter_types_list)

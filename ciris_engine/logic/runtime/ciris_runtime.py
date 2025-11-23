@@ -1042,6 +1042,8 @@ class CIRISRuntime:
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
+        from ciris_engine.logic.setup.first_run import is_first_run
+
         from .ciris_runtime_helpers import (
             create_adapter_lifecycle_tasks,
             log_adapter_configuration_details,
@@ -1052,7 +1054,40 @@ class CIRISRuntime:
         # Log adapter configuration details
         log_adapter_configuration_details(self.adapters)
 
-        # Create agent processor task and adapter lifecycle tasks
+        # Check if this is first-run - skip agent processor if so
+        first_run = is_first_run()
+        if first_run:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("🔧 FIRST RUN DETECTED - Setup Wizard Mode")
+            logger.info("=" * 70)
+            logger.info("")
+            logger.info("The agent processor will NOT start in first-run mode.")
+            logger.info("Only the API server is running to provide the setup wizard.")
+            logger.info("")
+            logger.info("📋 Next Steps:")
+            logger.info("  1. Open your browser to: http://localhost:8080")
+            logger.info("  2. Complete the setup wizard")
+            logger.info("  3. Restart the agent with: ciris-agent")
+            logger.info("")
+            logger.info("After restart, the full agent will start normally.")
+            logger.info("=" * 70)
+            logger.info("")
+
+            # Only wait for adapters to be ready, but don't start agent processor
+            adapters_ready = await wait_for_adapter_readiness(self.adapters)
+            if not adapters_ready:
+                raise RuntimeError("Adapters failed to become ready within timeout")
+
+            # No agent processor task in first-run mode
+            self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task=None)
+
+            # Skip service registration and processor - API will handle setup
+            logger.info("✅ Setup wizard ready at http://localhost:8080")
+            logger.info("Waiting for setup completion... (Press CTRL+C to exit)")
+            return
+
+        # Normal mode - create agent processor task and adapter lifecycle tasks
         agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
         self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
@@ -1068,6 +1103,56 @@ class CIRISRuntime:
 
         # Final verification with the existing wait method
         await self._wait_for_critical_services(timeout=5.0)
+
+    async def resume_from_first_run(self) -> None:
+        """Resume initialization after setup wizard completes.
+
+        This continues from the point where first-run mode paused (line 1088).
+        It executes the same steps as normal mode initialization.
+        """
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("🔄 RESUMING FROM FIRST-RUN MODE")
+        logger.info("=" * 70)
+        logger.info("")
+        logger.info("Setup wizard completed - starting agent processor...")
+        logger.info("")
+
+        # Reload environment variables to pick up new config
+        from dotenv import load_dotenv
+
+        from ciris_engine.logic.setup.first_run import get_default_config_path
+
+        config_path = get_default_config_path()
+        if config_path.exists():
+            load_dotenv(config_path, override=True)
+            logger.info(f"✓ Reloaded environment from {config_path}")
+
+        # Initialize LLM service now that environment variables are loaded
+        # This is critical because LLM service initialization was skipped during first-run
+        # due to missing OPENAI_API_KEY
+        logger.info("Initializing LLM service with loaded configuration...")
+        if self.service_initializer:
+            config = self._ensure_config()
+            await self.service_initializer._initialize_llm_services(config, self.modules_to_load)
+            logger.info("✓ LLM service initialized")
+
+        # CRITICAL: Adapters are ALREADY RUNNING from first-run mode
+        # DO NOT restart them - just create the agent processor task
+        # Adapters will continue running with their existing lifecycle tasks
+        logger.info("Creating agent processor task (adapters already running from first-run mode)...")
+        # Task stored to prevent premature garbage collection - runs in background
+        self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
+
+        # No need to verify adapter readiness - they're already running and serving the setup wizard!
+        # No need to re-register services - they were registered during first-run startup
+        # Just wait for critical services to ensure everything is still healthy
+        await self._wait_for_critical_services(timeout=5.0)
+
+        logger.info("")
+        logger.info("✅ Agent processor started successfully!")
+        logger.info("=" * 70)
+        logger.info("")
 
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready.
@@ -1137,12 +1222,52 @@ class CIRISRuntime:
             secrets_service=self.secrets_service,
         )
 
+    def _should_exit_runtime_loop(
+        self, agent_task: Optional[asyncio.Task[Any]], shutdown_logged: bool
+    ) -> tuple[bool, bool]:
+        """Check if runtime loop should exit.
+
+        Returns:
+            Tuple of (should_exit, shutdown_logged)
+        """
+        if agent_task and agent_task.done():
+            return True, shutdown_logged
+        if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
+            return True, True
+        return False, shutdown_logged
+
+    def _handle_completed_runtime_tasks(
+        self,
+        done: set[asyncio.Task[Any]],
+        agent_task: Optional[asyncio.Task[Any]],
+        adapter_tasks: List[asyncio.Task[Any]],
+        all_tasks: list[asyncio.Task[Any]],
+    ) -> tuple[bool, bool]:
+        """Handle completed runtime tasks.
+
+        Returns:
+            Tuple of (should_break, is_shutdown)
+        """
+        from .ciris_runtime_helpers import handle_runtime_agent_task_completion, handle_runtime_task_failures
+
+        # Check for shutdown signal
+        if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
+            return True, True
+
+        # Check if agent task completed
+        if agent_task and agent_task in done:
+            handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
+            return True, False
+
+        # Handle other task failures
+        excluded_tasks = {t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]}
+        handle_runtime_task_failures(self, done, excluded_tasks)
+        return False, False
+
     async def run(self, _: Optional[int] = None) -> None:
         """Run the agent processing loop with shutdown monitoring."""
         from .ciris_runtime_helpers import (
             finalize_runtime_execution,
-            handle_runtime_agent_task_completion,
-            handle_runtime_task_failures,
             monitor_runtime_shutdown_signals,
             setup_runtime_monitoring_tasks,
         )
@@ -1153,13 +1278,19 @@ class CIRISRuntime:
         try:
             # Set up runtime monitoring tasks
             agent_task, adapter_tasks, all_tasks = setup_runtime_monitoring_tasks(self)
-            if not agent_task:
+            if not all_tasks:
+                logger.error("No tasks to monitor - exiting")
                 return
 
-            # Keep monitoring until agent task completes
+            # Keep monitoring until shutdown or agent task completes
             shutdown_logged = False
-            while not agent_task.done():
-                done, pending = await asyncio.wait(all_tasks, return_when=asyncio.FIRST_COMPLETED)
+            while True:
+                # Check exit conditions
+                should_exit, shutdown_logged = self._should_exit_runtime_loop(agent_task, shutdown_logged)
+                if should_exit:
+                    break
+
+                done, pending = await asyncio.wait(all_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0)
 
                 # Remove completed tasks from all_tasks to avoid re-processing
                 all_tasks = [t for t in all_tasks if t not in done]
@@ -1167,22 +1298,13 @@ class CIRISRuntime:
                 # Monitor shutdown signals
                 shutdown_logged = monitor_runtime_shutdown_signals(self, shutdown_logged)
 
-                # Handle task completion based on type
-                if (self._shutdown_event and self._shutdown_event.is_set()) or is_global_shutdown_requested():
-                    # Continue loop - let graceful shutdown process handle everything
-                    continue
-                elif agent_task in done:
-                    handle_runtime_agent_task_completion(self, agent_task, adapter_tasks)
-                    break  # Exit the while loop
-                else:
-                    # Handle other task completions/failures
-                    excluded_tasks = {
-                        t for t in all_tasks if t.get_name() in ["ShutdownEventWait", "GlobalShutdownWait"]
-                    }
-                    handle_runtime_task_failures(self, done, excluded_tasks)
+                # Handle task completion
+                should_break, _ = self._handle_completed_runtime_tasks(done, agent_task, adapter_tasks, all_tasks)
+                if should_break:
+                    break
 
             # Finalize execution
-            await finalize_runtime_execution(self, pending)
+            await finalize_runtime_execution(self, set(pending) if "pending" in locals() else set())
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal. Requesting shutdown.")

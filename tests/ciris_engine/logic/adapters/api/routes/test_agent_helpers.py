@@ -130,7 +130,10 @@ class TestChannelHelpers:
 
         assert f"api_{auth.user_id}" in channels
         assert "api_localhost_8080" in channels
-        assert len(channels) >= 5  # user channel + 4 admin channels
+        # After deduplication: user channel + 3 unique admin channels (localhost appears twice in raw list)
+        assert len(channels) == 4
+        # Verify no duplicates
+        assert len(channels) == len(set(channels))
 
     def test_build_channels_to_query_for_observer(self):
         """Test building channel list for observer user."""

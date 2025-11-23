@@ -578,6 +578,8 @@ def initialize_runtime_execution_context(runtime: Any) -> None:
 
 def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[Any], List[Any]]:
     """Set up monitoring tasks for agent and adapters."""
+    from ciris_engine.logic.setup.first_run import is_first_run
+
     # Get adapter tasks
     adapter_tasks = getattr(runtime, "_adapter_tasks", [])
     if not adapter_tasks:
@@ -593,8 +595,13 @@ def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[An
             agent_task = task
             break
 
-    if not agent_task:
+    # In first-run mode, there is no agent task - just monitor adapters
+    first_run = is_first_run()
+    if not agent_task and not first_run:
         raise RuntimeError("Agent processor task not found - initialization may have failed")
+
+    if first_run and not agent_task:
+        logger.info("First-run mode: Monitoring adapters only (no agent processor)")
 
     # Set up monitoring tasks
     runtime._ensure_shutdown_event()
@@ -603,7 +610,11 @@ def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[An
         shutdown_event_task = asyncio.create_task(runtime._shutdown_event.wait(), name="ShutdownEventWait")
 
     global_shutdown_task = asyncio.create_task(wait_for_global_shutdown_async(), name="GlobalShutdownWait")
-    all_tasks = [agent_task, *adapter_tasks, global_shutdown_task]
+
+    # Build task list - only include agent_task if it exists
+    all_tasks = [*adapter_tasks, global_shutdown_task]
+    if agent_task:
+        all_tasks.insert(0, agent_task)
     if shutdown_event_task:
         all_tasks.append(shutdown_event_task)
 

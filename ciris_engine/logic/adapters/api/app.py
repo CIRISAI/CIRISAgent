@@ -27,6 +27,7 @@ from .routes import (
     emergency,
     memory,
     partnership,
+    setup,
     system,
     system_extensions,
     telemetry,
@@ -156,6 +157,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
     # Mount v1 API routes (all routes except emergency under /v1)
     v1_routers = [
+        setup.router,  # Setup wizard (first-run + reconfiguration) - MUST be first for first-run detection
         agent.router,  # Agent interaction
         billing.router,  # Billing & credits (frontend proxy)
         memory.router,  # Memory operations

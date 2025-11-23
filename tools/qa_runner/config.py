@@ -32,6 +32,7 @@ class QAModule(Enum):
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
     REDDIT = "reddit"  # Reddit adapter testing
     SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
+    SETUP = "setup"  # Setup wizard testing (first-run configuration)
 
     # Handler modules
     HANDLERS = "handlers"
@@ -136,6 +137,7 @@ class QAConfig:
         from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
         from .modules.filter_tests import FilterTestModule
         from .modules.multi_occurrence_tests import MultiOccurrenceTestModule
+        from .modules.setup_tests import SetupTestModule
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
         # API test modules
@@ -157,6 +159,8 @@ class QAConfig:
             return APITestModule.get_task_tests()
         elif module == QAModule.GUIDANCE:
             return APITestModule.get_guidance_tests()
+        elif module == QAModule.SETUP:
+            return SetupTestModule.get_setup_tests()
         elif module == QAModule.CONSENT:
             # Consent tests use SDK client
             return []  # Will be handled separately by runner

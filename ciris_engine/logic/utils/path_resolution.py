@@ -2,22 +2,29 @@
 CIRIS Path Resolution Utility.
 
 Resolves paths for data, logs, templates, and configuration files.
-Supports both development mode (git repo) and installed mode (pip install).
+Supports development mode, installed mode, and CIRIS Manager mode.
 
 Path Resolution Strategy:
-1. Development Mode (git repo detected):
+1. CIRIS Manager Mode (managed deployment):
+   - Detected via CIRIS_MANAGED=true or volume mounts at /app/data
+   - Use /app/ for all paths
+   - Templates: /app/ciris_templates/
+   - Data: /app/data/
+   - Logs: /app/logs/
+
+2. Development Mode (git repo detected):
    - Use current working directory for everything
    - Templates: ./ciris_templates/
    - Data: ./data/
    - Logs: ./logs/
 
-2. Installed Mode (pip install):
+3. Installed Mode (pip install):
    - Use CIRIS_HOME env var if set, otherwise ~/ciris/
    - Templates: Check multiple locations (user overrides, then bundled)
    - Data: CIRIS_HOME/data/ or ~/ciris/data/
    - Logs: CIRIS_HOME/logs/ or ~/ciris/logs/
 
-3. Template Search Order:
+4. Template Search Order:
    a. Current working directory (if in git repo)
    b. CIRIS_HOME/ciris_templates/ (if CIRIS_HOME set)
    c. ~/ciris/ciris_templates/ (user custom templates)
@@ -27,6 +34,36 @@ Path Resolution Strategy:
 import os
 from pathlib import Path
 from typing import Optional
+
+
+def is_managed() -> bool:
+    """Detect if running under CIRIS Manager using multiple signals.
+
+    Returns True if majority of indicators suggest managed environment.
+
+    Checks:
+    - CIRIS_MANAGED environment variable
+    - Volume mounts at /app/data and /app/logs
+    - Service token presence
+    - Docker environment with /app structure
+    """
+    indicators = []
+
+    # 1. Check for explicit manager flag
+    indicators.append(os.getenv("CIRIS_MANAGED", "").lower() == "true")
+
+    # 2. Check for volume mounts (most reliable for Docker deployments)
+    indicators.append(os.path.ismount("/app/data"))
+    indicators.append(os.path.ismount("/app/logs"))
+
+    # 3. Check for service token (only set by manager)
+    indicators.append(bool(os.getenv("CIRIS_SERVICE_TOKEN")))
+
+    # 4. Check for Docker environment with /app structure
+    indicators.append(Path("/.dockerenv").exists() and Path("/app/data").exists() and Path("/app/logs").exists())
+
+    # Return True if majority indicate managed (at least 2 out of 5)
+    return sum(indicators) >= 2
 
 
 def is_development_mode() -> bool:
@@ -43,20 +80,25 @@ def get_ciris_home() -> Path:
 
     Returns:
         Path to CIRIS home directory:
+        - /app/ if managed by CIRIS Manager (highest priority)
         - Current directory if in git repo (development)
         - CIRIS_HOME env var if set
         - ~/ciris/ otherwise (installed mode)
     """
-    # Development mode: use current directory
+    # Priority 1: CIRIS Manager mode - use /app/
+    if is_managed():
+        return Path("/app")
+
+    # Priority 2: Development mode - use current directory
     if is_development_mode():
         return Path.cwd()
 
-    # Check CIRIS_HOME environment variable
+    # Priority 3: CIRIS_HOME environment variable
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
         return Path(env_home).expanduser().resolve()
 
-    # Default: ~/ciris/ for pip-installed package
+    # Priority 4: Default installed mode - ~/ciris/
     return Path.home() / "ciris"
 
 
@@ -102,10 +144,11 @@ def find_template_file(template_name: str) -> Optional[Path]:
     """Find a template file by searching multiple locations.
 
     Search order:
-    1. CWD/ciris_templates/ (development mode only)
-    2. CIRIS_HOME/ciris_templates/ (if CIRIS_HOME is set)
-    3. ~/ciris/ciris_templates/ (user custom templates)
-    4. <package_root>/ciris_templates/ (bundled templates)
+    1. /app/ciris_templates/ (managed mode only)
+    2. CWD/ciris_templates/ (development mode only)
+    3. CIRIS_HOME/ciris_templates/ (if CIRIS_HOME is set)
+    4. ~/ciris/ciris_templates/ (user custom templates)
+    5. <package_root>/ciris_templates/ (bundled templates)
 
     Args:
         template_name: Name of template (with or without .yaml extension)
@@ -119,19 +162,23 @@ def find_template_file(template_name: str) -> Optional[Path]:
 
     search_paths = []
 
-    # 1. Development mode: check CWD first
+    # 1. Managed mode: check /app/ciris_templates/ first
+    if is_managed():
+        search_paths.append(Path("/app") / "ciris_templates" / template_name)
+
+    # 2. Development mode: check CWD
     if is_development_mode():
         search_paths.append(Path.cwd() / "ciris_templates" / template_name)
 
-    # 2. CIRIS_HOME if set (custom location)
+    # 3. CIRIS_HOME if set (custom location)
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
         search_paths.append(Path(env_home).expanduser() / "ciris_templates" / template_name)
 
-    # 3. User home directory (~/ciris/ciris_templates/)
+    # 4. User home directory (~/ciris/ciris_templates/)
     search_paths.append(Path.home() / "ciris" / "ciris_templates" / template_name)
 
-    # 4. Installed package location
+    # 5. Installed package location (bundled)
     search_paths.append(get_package_root() / "ciris_templates" / template_name)
 
     # Return first existing path
@@ -146,14 +193,21 @@ def get_template_directory() -> Path:
     """Get the template directory path.
 
     Returns the first existing template directory from:
-    1. CWD/ciris_templates/ (development)
-    2. CIRIS_HOME/ciris_templates/ (if set)
-    3. ~/ciris/ciris_templates/ (user)
-    4. <package_root>/ciris_templates/ (bundled)
+    1. /app/ciris_templates/ (managed mode)
+    2. CWD/ciris_templates/ (development)
+    3. CIRIS_HOME/ciris_templates/ (if set)
+    4. ~/ciris/ciris_templates/ (user)
+    5. <package_root>/ciris_templates/ (bundled)
 
     Returns:
         Path to template directory
     """
+    # Managed mode
+    if is_managed():
+        managed_templates = Path("/app") / "ciris_templates"
+        if managed_templates.exists():
+            return managed_templates
+
     # Development mode
     if is_development_mode():
         dev_templates = Path.cwd() / "ciris_templates"

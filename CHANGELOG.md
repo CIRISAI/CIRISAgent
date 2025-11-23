@@ -5,6 +5,35 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5] - 2025-11-23
+
+### Fixed - Installation & First-Run Experience
+
+- **Smoother Setup Wizard** - First-run setup no longer requires LLM configuration to complete
+  - Setup wizard now completes successfully even without configured LLM endpoint
+  - Allows users to configure services after initial installation
+
+- **Correct Database Paths** - Fixed path resolution across deployment modes
+  - Development mode: `<git_repo>/data/`
+  - Installed mode: `~/ciris/data/` (not `~/data/`)
+  - Managed/Docker mode: `/app/data/`
+  - Commit: 593c8c4f
+
+- **No More Duplicate Messages** - Fixed channel deduplication in API routes
+  - Eliminated duplicate messages when same channel appeared in multiple contexts
+  - Commit: 506ef7a6
+
+### Changed
+
+- **Updated GUI** - Latest CIRISGUI-Standalone build with UI improvements
+  - Build ID: -ogodW1xrmhwB2oFgbOo2
+  - Commits: aa3feb71, f9b6d05f
+
+- **Enhanced Test Coverage** - Expanded test suite with 6,713 passing tests
+  - Channel deduplication test coverage added
+  - Full mypy compliance across 621 source files
+  - Commit: ed4cb028
+
 ## [Unreleased]
 
 ### Added - Universal Ticket Status System
@@ -73,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Purpose**: Complete technical specification for ticket status system
   - **Content**: 12 functional requirements, technical specs, success criteria, rollout plan
   - **Files**: `FSD/FSD_ticket_status_handling.md`
+
 
 ## [1.6.4] - 2025-11-21
 

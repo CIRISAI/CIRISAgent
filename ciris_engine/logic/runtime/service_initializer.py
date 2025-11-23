@@ -404,6 +404,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         logger.info("AuthenticationService initialized")
 
+        # Process pending users from setup wizard if file exists
+        await self._process_pending_users_from_setup()
+
         # Initialize WA authentication system with TimeService and AuthService
         # Use the main database path - WiseAuthority needs access to tasks table
         self.wa_auth_system = WiseAuthorityService(
@@ -865,6 +868,98 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         logger.info(f"Secondary LLM service initialized: {model_name}")
 
+    async def _process_pending_users_from_setup(self) -> None:
+        """Process pending user creation from setup wizard.
+
+        Checks for ~/.ciris/.ciris_pending_users.json file and creates users if found.
+        This file is created by the setup wizard during first-run configuration.
+        """
+        import json
+        from pathlib import Path
+
+        # Check for pending users file in ~/.ciris directory
+        pending_users_file = Path.home() / ".ciris" / ".ciris_pending_users.json"
+
+        if not pending_users_file.exists():
+            logger.debug("No pending users file found - skipping user creation")
+            return
+
+        try:
+            logger.info("=" * 80)
+            logger.info("Processing pending users from setup wizard")
+            logger.info("=" * 80)
+
+            # Read pending users data asynchronously
+            async with aiofiles.open(pending_users_file, "r") as f:
+                content = await f.read()
+                users_data = json.loads(content)
+
+            logger.info(f"Loaded pending users file created at: {users_data.get('created_at')}")
+
+            # Process new user if specified
+            if "new_user" in users_data:
+                from ciris_engine.schemas.services.authority_core import WARole
+
+                new_user = users_data["new_user"]
+                username = new_user["username"]
+                password = new_user["password"]
+                role_str = new_user.get("role", "OBSERVER")
+
+                # Map role string to WARole enum
+                role_map = {
+                    "ADMIN": WARole.AUTHORITY,
+                    "AUTHORITY": WARole.AUTHORITY,
+                    "OBSERVER": WARole.OBSERVER,
+                    "USER": WARole.OBSERVER,
+                }
+                wa_role = role_map.get(role_str.upper(), WARole.OBSERVER)
+
+                logger.info(f"Creating new user: {username} with role: {wa_role}")
+
+                # Create WA certificate for the user
+                wa_cert = await self.auth_service.create_wa(
+                    name=username,
+                    email=f"{username}@local",  # Placeholder email for local users
+                    scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
+                    role=wa_role,
+                )
+
+                # Hash password and update the WA
+                password_hash = self.auth_service.hash_password(password)
+                await self.auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
+
+                logger.info(f"✅ Successfully created user: {username} (WA: {wa_cert.wa_id})")
+
+            # Process system admin password update if specified
+            if "system_admin" in users_data:
+                admin_data = users_data["system_admin"]
+                admin_username = admin_data["username"]
+                new_password = admin_data["password"]
+
+                logger.info(f"Updating system admin password for: {admin_username}")
+
+                # Find the admin WA by username
+                all_was = await self.auth_service.list_was(active_only=True)
+                admin_wa = next((wa for wa in all_was if wa.name == admin_username), None)
+
+                if admin_wa:
+                    # Hash new password and update
+                    password_hash = self.auth_service.hash_password(new_password)
+                    await self.auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=password_hash)
+                    logger.info(f"✅ Successfully updated admin password for {admin_username}")
+                else:
+                    logger.warning(f"⚠️  Admin user '{admin_username}' not found")
+
+            # Delete the pending users file after processing
+            pending_users_file.unlink()
+            logger.info("Deleted pending users file after successful processing")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"Error processing pending users file: {e}", exc_info=True)
+            # Don't delete the file if processing failed - allow retry on next startup
+            raise
+
     async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
         """Initialize the consolidated audit service with three storage backends.
 
@@ -942,14 +1037,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Service registry not initialized")
                 return False
 
-            # Check critical services
-            critical_services = [
+            # Check critical services (LLM service is optional during first-run)
+            from typing import Any, List
+
+            from ciris_engine.logic.setup.first_run import is_first_run
+
+            critical_services: List[Any] = [
                 self.telemetry_service,
-                self.llm_service,
                 self.memory_service,
                 self.secrets_service,
                 self.adaptive_filter_service,
             ]
+
+            # Only require LLM service if not in first-run mode
+            if not is_first_run():
+                critical_services.append(self.llm_service)
+            elif not self.llm_service:
+                logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
             for service in critical_services:
                 if not service:

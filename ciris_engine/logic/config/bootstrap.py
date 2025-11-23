@@ -109,6 +109,50 @@ class ConfigBootstrap:
         return config_data
 
     @staticmethod
+    def _resolve_database_paths(config_data: ConfigDict) -> ConfigDict:
+        """Resolve relative database paths to use proper data directory.
+
+        If database paths are relative (not absolute), resolve them against
+        get_data_dir() to ensure they use the correct location based on
+        runtime environment (development/installed/managed mode).
+        """
+        from typing import cast
+
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        db_section = cast(JSONDict, config_data.get("database", {}))
+        data_dir = get_data_dir()
+
+        # Set or resolve main_db
+        if "main_db" not in db_section:
+            # Use schema default but resolved to proper data directory
+            db_section["main_db"] = str(data_dir / "ciris_engine.db")
+        else:
+            main_db = Path(str(db_section["main_db"]))
+            if not main_db.is_absolute():
+                # For relative paths, use just the filename (strip any data/ prefix)
+                db_section["main_db"] = str(data_dir / main_db.name)
+
+        # Set or resolve secrets_db
+        if "secrets_db" not in db_section:
+            db_section["secrets_db"] = str(data_dir / "secrets.db")
+        else:
+            secrets_db = Path(str(db_section["secrets_db"]))
+            if not secrets_db.is_absolute():
+                db_section["secrets_db"] = str(data_dir / secrets_db.name)
+
+        # Set or resolve audit_db
+        if "audit_db" not in db_section:
+            db_section["audit_db"] = str(data_dir / "ciris_audit.db")
+        else:
+            audit_db = Path(str(db_section["audit_db"]))
+            if not audit_db.is_absolute():
+                db_section["audit_db"] = str(data_dir / audit_db.name)
+
+        config_data["database"] = db_section
+        return config_data
+
+    @staticmethod
     async def load_essential_config(
         config_path: Optional[Path] = None, cli_overrides: Optional[ConfigDict] = None
     ) -> EssentialConfig:
@@ -149,6 +193,13 @@ class ConfigBootstrap:
         # Apply CLI overrides (highest priority)
         if cli_overrides:
             config_data = ConfigBootstrap._deep_merge(config_data, cli_overrides)
+
+        # Ensure database section exists with schema defaults if not present
+        if "database" not in config_data:
+            config_data["database"] = {}
+
+        # Resolve relative database paths to use proper data directory
+        config_data = ConfigBootstrap._resolve_database_paths(config_data)
 
         # Create and validate config
         try:

@@ -34,6 +34,7 @@ class QARunner:
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
+        self.modules = modules or []  # Store modules for server manager
 
         # Auto-configure adapter based on modules being tested
         # This allows modular services to be loaded automatically
@@ -99,7 +100,9 @@ class QARunner:
                 postgres_url=self.config.postgres_url,
                 postgres_port=self.config.postgres_port,
             )
-            self.server_managers[backend] = APIServerManager(backend_config, database_backend=backend)
+            self.server_managers[backend] = APIServerManager(
+                backend_config, database_backend=backend, modules=self.modules
+            )
 
         # For backward compatibility, keep a reference to the first server manager
         self.server_manager = self.server_managers[self.database_backends[0]]
@@ -599,8 +602,6 @@ class QARunner:
             import sqlite3
             from datetime import datetime, timezone
 
-            import bcrypt
-
             # Find database - MUST use auth database where authentication service stores users
             db_path = Path("data/ciris_engine_auth.db")
             if not db_path.exists():
@@ -645,8 +646,17 @@ class QARunner:
                 # Generate password hash for test user (allows login via /v1/auth/login)
                 # This enables us to authenticate as the OAuth user and create API keys
                 test_password = "qa_test_oauth_password_temp"
-                salt = bcrypt.gensalt(rounds=12)
-                password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
+                # Use PBKDF2 (matches infrastructure AuthenticationService)
+                import base64
+                import secrets
+
+                from cryptography.hazmat.primitives import hashes
+                from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+                salt = secrets.token_bytes(32)
+                kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+                key = kdf.derive(test_password.encode())
+                password_hash = base64.b64encode(salt + key).decode()
 
                 # Store OAuth profile with email in oauth_links_json
                 # This makes the email available for billing purchase requests
@@ -702,8 +712,17 @@ class QARunner:
 
                 # Generate password hash for login capability
                 test_password = "qa_test_oauth_password_temp"
-                salt = bcrypt.gensalt(rounds=12)
-                password_hash = bcrypt.hashpw(test_password.encode("utf-8"), salt).decode("utf-8")
+                # Use PBKDF2 (matches infrastructure AuthenticationService)
+                import base64
+                import secrets
+
+                from cryptography.hazmat.primitives import hashes
+                from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+                salt = secrets.token_bytes(32)
+                kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+                key = kdf.derive(test_password.encode())
+                password_hash = base64.b64encode(salt + key).decode()
 
                 # Store OAuth profile with email in oauth_links_json
                 oauth_profile = json.dumps(

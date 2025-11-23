@@ -44,7 +44,7 @@ class ConsentRequest(BaseModel):
     scope: Optional[ConsentScope] = Field(None, description="Scope of consent")
     purpose: Optional[str] = Field(None, description="Purpose of consent")
     duration_hours: Optional[int] = Field(None, description="Duration in hours")
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=lambda: {}, description="Additional metadata")
 
 
 class ConsentRecord(BaseModel):

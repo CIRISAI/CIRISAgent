@@ -368,9 +368,7 @@ def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLM
             )
     elif config.provider != "local" and not config.api_key:
         # Other non-local providers need API key
-        return LLMValidationResponse(
-            valid=False, message="API key required", error="This provider requires an API key"
-        )
+        return LLMValidationResponse(valid=False, message="API key required", error="This provider requires an API key")
     return None
 
 
@@ -426,9 +424,7 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         from openai import AsyncOpenAI
 
         # Build client configuration
-        client_kwargs: Dict[str, Any] = {
-            "api_key": config.api_key or "local"  # Local LLMs can use placeholder
-        }
+        client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}  # Local LLMs can use placeholder
         if config.base_url:
             client_kwargs["base_url"] = config.base_url
 
@@ -736,9 +732,9 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                     # If resume fails, fall back to restart
                     runtime.request_shutdown("Resume failed - restarting to apply configuration")
 
-            # Store task to prevent garbage collection
+            # Store task to prevent garbage collection and log task creation
             resume_task = asyncio.create_task(_resume_runtime())
-            # Task will run in background - errors are logged within the task
+            logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
         else:
             logger.warning("Runtime not available - manual restart required")
             next_steps = "Configuration completed. Please restart the agent manually to complete setup."

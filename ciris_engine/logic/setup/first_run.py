@@ -13,20 +13,15 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def is_development_mode() -> bool:
-    """Check if running in development mode (git repository).
-
-    Returns:
-        True if current directory is a git repository
-    """
-    return (Path.cwd() / ".git").exists()
-
-
 def get_config_paths() -> list[Path]:
     """Get possible configuration file locations in priority order.
 
+    Uses path_resolution module to detect deployment mode and check appropriate locations.
+
     Returns:
         List of paths to check for .env files, in priority order:
+        - Managed mode (Docker/CIRIS Manager):
+          1. /app/.env (manager-provided config)
         - Development mode (git repo):
           1. Current directory .env (development/local override)
           2. ~/ciris/.env (user-specific config)
@@ -37,7 +32,14 @@ def get_config_paths() -> list[Path]:
 
         Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
     """
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_development_mode, is_managed
+
     paths = []
+
+    # Managed mode: only check /app/.env
+    if is_managed():
+        paths.append(Path("/app/.env"))
+        return paths
 
     # Development mode: check current directory first
     if is_development_mode():
@@ -45,8 +47,8 @@ def get_config_paths() -> list[Path]:
 
     # User config directory (both modes) - ~/ciris/ NOT ~/.ciris/
     # ~/.ciris/ is for secrets/keys only
-    user_ciris_dir = Path.home() / "ciris"
-    paths.append(user_ciris_dir / ".env")
+    ciris_home = get_ciris_home()
+    paths.append(ciris_home / ".env")
 
     # System config (Unix/Linux only, both modes)
     system_config = Path("/etc/ciris/.env")
@@ -64,12 +66,23 @@ def is_first_run() -> bool:
     - No CIRIS_CONFIGURED environment variable is set
     - OR CIRIS_FORCE_FIRST_RUN is set (for testing)
 
+    In managed/Docker mode: NEVER first-run (manager handles configuration)
+
     Returns:
         True if this appears to be a first run, False otherwise.
     """
+    from ciris_engine.logic.utils.path_resolution import is_managed
+
     logger.info("Checking first-run status...")
 
+    # Managed mode: NEVER first-run (manager handles configuration)
+    if is_managed():
+        logger.info("Running in MANAGED mode - not first run (manager handles configuration)")
+        return False
+
     # Log mode detection
+    from ciris_engine.logic.utils.path_resolution import is_development_mode
+
     dev_mode = is_development_mode()
     logger.info(f"Running in {'DEVELOPMENT' if dev_mode else 'INSTALLED'} mode (git repo: {dev_mode})")
 

@@ -1021,7 +1021,9 @@ class CIRISRuntime:
         # Check if LLM service is available - if not, skip cognitive component building
         if not self.llm_service:
             logger.warning("[_build_components] LLM service not available - skipping cognitive component building")
-            logger.warning("[_build_components] Agent will run in API-only mode without autonomous cognitive processing")
+            logger.warning(
+                "[_build_components] Agent will run in API-only mode without autonomous cognitive processing"
+            )
             logger.info("[_build_components] Component building skipped (API-only mode)")
             return
 

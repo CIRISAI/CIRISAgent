@@ -5,6 +5,31 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5.2] - 2025-11-23
+
+### Fixed - Managed Mode First-Run and GUI Issues
+
+- **Managed/Docker Mode First-Run Detection** - Fixed false first-run detection in managed deployments
+  - **Issue**: Managed agents were incorrectly detected as first-run because path detection checked `~/ciris/.env` instead of `/app/.env`
+  - **Root Cause**: `first_run.py` had its own path detection logic that didn't use the centralized `path_resolution` module
+  - **Fix**: Updated first-run detection to use `is_managed()` and check `/app/.env` in managed mode
+  - **Behavior**:
+    - Managed mode: NEVER first-run (manager handles configuration), checks `/app/.env`
+    - Development mode: Checks `./.env`, `~/ciris/.env`, `/etc/ciris/.env`
+    - Installed mode: Checks `~/ciris/.env`, `/etc/ciris/.env`
+  - **Files**: `ciris_engine/logic/setup/first_run.py:39-81`
+  - **Impact**: Managed agents no longer trigger setup wizard incorrectly
+
+- **GUI Serving in Managed Mode** - Disabled GUI in managed/Docker deployments
+  - **Issue**: GUI was being served in managed mode when manager provides its own frontend
+  - **Root Cause**: GUI mounting didn't check deployment mode
+  - **Fix**: Added `is_managed()` check to skip GUI mounting in managed/Docker mode
+  - **Behavior**:
+    - Managed mode: API-only, no GUI mounted (manager provides frontend)
+    - Installed/standalone mode: Full GUI served at `/`
+  - **Files**: `ciris_engine/logic/adapters/api/app.py:202-215`
+  - **Impact**: Managed agents serve API-only, avoiding conflicts with manager's frontend
+
 ## [1.6.5.1] - 2025-11-23
 
 ### Fixed - Critical First-Run Startup Issue

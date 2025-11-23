@@ -5,6 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5.1] - 2025-11-23
+
+### Fixed - Critical First-Run Startup Issue
+
+- **Startup Crash Before Setup Wizard** - Fixed agent crashing on first startup without LLM configuration
+  - **Issue**: Agent would crash during initialization before the setup wizard could run, making initial configuration impossible
+  - **Root Cause**: Component building (`_build_components`) required LLM service and failed before API adapter could serve the setup wizard
+  - **Fix**: Made cognitive component building optional - agent now starts gracefully in API-only mode without LLM
+  - **Behavior**:
+    - Without LLM: Agent starts in API-only mode, serves setup wizard, handles API requests
+    - With LLM: Full autonomous cognitive processing enabled
+  - **Files**:
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1022-1026` (skip component building)
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1175-1178` (skip agent processor startup)
+  - **Impact**: Users can now complete initial setup on Linux/pip installations without pre-configuring LLM
+
 ## [1.6.5] - 2025-11-23
 
 ### Fixed - Installation & First-Run Experience

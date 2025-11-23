@@ -1018,6 +1018,13 @@ class CIRISRuntime:
                 f"[_build_components] service_initializer.service_registry: {self.service_initializer.service_registry}"
             )
 
+        # Check if LLM service is available - if not, skip cognitive component building
+        if not self.llm_service:
+            logger.warning("[_build_components] LLM service not available - skipping cognitive component building")
+            logger.warning("[_build_components] Agent will run in API-only mode without autonomous cognitive processing")
+            logger.info("[_build_components] Component building skipped (API-only mode)")
+            return
+
         try:
             self.component_builder = ComponentBuilder(self)
             logger.info("[_build_components] ComponentBuilder created successfully")
@@ -1164,9 +1171,11 @@ class CIRISRuntime:
         # Wait for all critical services to be available
         await self._wait_for_critical_services(timeout=30.0)
 
-        # Ensure agent processor is built
+        # Check if agent processor is built (may be None in API-only mode without LLM)
         if not self.agent_processor:
-            raise RuntimeError("Agent processor not initialized - build components first")
+            logger.warning("Agent processor not initialized - running in API-only mode without autonomous processing")
+            logger.info("Agent will respond to API requests but won't process cognitive tasks autonomously")
+            return
 
         # Start the multi-service sink if available
         if self.bus_manager:

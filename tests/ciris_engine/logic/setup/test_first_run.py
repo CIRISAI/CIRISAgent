@@ -46,10 +46,10 @@ class TestFirstRunDetection:
         assert is_first_run() is False
 
     def test_is_first_run_with_user_env(self, tmp_path, monkeypatch):
-        """Test not first run when .env exists in ~/.ciris/."""
+        """Test not first run when .env exists in ~/ciris/."""
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
-        ciris_dir = tmp_path / ".ciris"
+        ciris_dir = tmp_path / "ciris"
         ciris_dir.mkdir()
         env_file = ciris_dir / ".env"
         env_file.write_text("CIRIS_CONFIGURED=true")

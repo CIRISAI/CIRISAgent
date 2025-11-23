@@ -68,6 +68,12 @@ from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.operations import InitializationPhase
 
+# 1. Add this import to the top of the file:
+from ciris_engine.logic.dma.anticipatory_dma import AnticipatoryDMA 
+# You may also need to import the DMAResult if not globally available
+from ciris_engine.schemas.dma.results import DMAResult
+
+
 from .component_builder import ComponentBuilder
 from .identity_manager import IdentityManager
 from .service_initializer import ServiceInitializer
@@ -97,6 +103,8 @@ class CIRISRuntime:
         adapter_configs: Optional[Dict[str, AdapterConfig]] = None,
         **kwargs: Any,
     ) -> None:
+        
+        
         # CRITICAL: Prevent runtime creation during module imports
         import os
 
@@ -124,6 +132,26 @@ class CIRISRuntime:
         self._parse_bootstrap_config(
             bootstrap, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
         )
+
+        # In ciris_engine/logic/runtime/ciris_runtime.py, inside CIRISRuntime.__init__
+
+        # ... (lines after self._parse_bootstrap_config(...) up to self._load_adapters_from_bootstrap())
+
+        # CRITICAL HACKATHON OVERRIDE: Force CLI adapter loading
+        if self.bootstrap.adapters and self.bootstrap.adapters[0].adapter_type != "cli":
+             # We assume only one adapter is requested for the demo
+             # We must mutate the internal structure to force 'cli'
+             self.bootstrap.adapters[0].adapter_type = "cli"
+             # Reset the config entry which may hold 'api' data
+             self.bootstrap.adapter_overrides = {} 
+             logger.warning("FORCING ADAPTER TO 'cli' for interactive demo mode.")
+        # End HACKATHON OVERRIDE
+
+        # Load adapters from bootstrap config
+        self._load_adapters_from_bootstrap() 
+        # ... (rest of __init__)
+
+
 
         self.adapters: List[BaseAdapterProtocol] = []
 
@@ -1005,40 +1033,85 @@ class CIRISRuntime:
             except Exception as e:
                 logger.error(f"Error registering services for adapter {adapter.__class__.__name__}: {e}", exc_info=True)
 
+
+
+
     async def _build_components(self) -> None:
-        """Build all processing components."""
-        logger.info("[_build_components] Starting component building...")
-        logger.info(f"[_build_components] llm_service: {self.llm_service}")
-        logger.info(f"[_build_components] service_registry: {self.service_registry}")
-        logger.info(f"[_build_components] service_initializer: {self.service_initializer}")
+            """Build all processing components."""
+            logger.info("[_build_components] Starting component building...")
+            logger.info(f"[_build_components] llm_service: {self.llm_service}")
+            logger.info(f"[_build_components] service_registry: {self.service_registry}")
+            logger.info(f"[_build_components] service_initializer: {self.service_initializer}")
 
-        if self.service_initializer:
-            logger.info(f"[_build_components] service_initializer.llm_service: {self.service_initializer.llm_service}")
-            logger.info(
-                f"[_build_components] service_initializer.service_registry: {self.service_initializer.service_registry}"
-            )
+            if self.service_initializer:
+                logger.info(f"[_build_components] service_initializer.llm_service: {self.service_initializer.llm_service}")
+                logger.info(
+                    f"[_build_components] service_initializer.service_registry: {self.service_initializer.service_registry}"
+                )
 
-        try:
-            self.component_builder = ComponentBuilder(self)
-            logger.info("[_build_components] ComponentBuilder created successfully")
+            try:
+                self.component_builder = ComponentBuilder(self)
+                logger.info("[_build_components] ComponentBuilder created successfully")
 
-            self.agent_processor = self.component_builder.build_all_components()
-            logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
+                # -----------------------------------------------------
+                # HACKATHON ADDITION: REGISTER AE-DMA IMMEDIATELY AFTER BUILDER CREATION
+                # This ensures the DMA is in the orchestrator before the AgentProcessor uses it.
+                # -----------------------------------------------------
+                
+                # NOTE: We assume ComponentBuilder has a property 'dma_orchestrator' available here.
+                if hasattr(self.component_builder, 'dma_orchestrator'):
+                    orchestrator = self.component_builder.dma_orchestrator
+                    
+                    # We need to build the dependencies manually if they aren't exposed
+                    # If ComponentBuilder exposes a public method for dependencies, use that:
+                    # E.g., dependencies = self.component_builder.get_dependencies()
+                    
+                    # Assuming the constructor for ComponentBuilder (ComponentBuilder(self)) 
+                    # already initialized its internal state, we can proceed with registration checks.
+                    
+                    # Check 1: If the list of DMAs is a mutable list property
+                    if hasattr(orchestrator, 'dmas') and isinstance(orchestrator.dmas, list):
+                        # NOTE: We must instantiate AnticipatoryDMA with correct dependencies.
+                        # As a fallback, we use None or assume the orchestrator uses its own dependencies later.
+                        # For a demo, passing None/a mock may suffice if dependencies are complex.
+                        dependencies_for_dma = getattr(self.component_builder, 'dependencies', None) # Attempt to get dependencies
+                        
+                        orchestrator.dmas.append(AnticipatoryDMA(dependencies=dependencies_for_dma))
+                        logger.info("  ✓ AE-DMA registered directly to orchestrator.dmas list.")
+                        
+                    # Check 2: If the orchestrator has a register method
+                    elif hasattr(orchestrator, 'register_dma'):
+                        dependencies_for_dma = getattr(self.component_builder, 'dependencies', None)
+                        orchestrator.register_dma(AnticipatoryDMA(dependencies=dependencies_for_dma))
+                        logger.info("  ✓ AE-DMA registered via orchestrator.register_dma().")
+                    else:
+                        logger.warning("  ⚠ Could not find standard DMA registration method (dmas or register_dma). Skipping manual registration.")
 
-            # Set up thought tracking callback now that agent_processor exists
-            # This avoids the race condition where RuntimeControlService tried to access
-            # agent_processor during Phase 5 (SERVICES) before it was created in Phase 6 (COMPONENTS)
-            if self.runtime_control_service:
-                self.runtime_control_service.setup_thought_tracking()  # type: ignore[attr-defined]
-                logger.debug("Thought tracking callback set up after agent_processor creation")
+                else:
+                    logger.warning("  ⚠ DMA Orchestrator not directly accessible on ComponentBuilder. Proceeding without manual registration.")
+                # -----------------------------------------------------
 
-        except Exception as e:
-            logger.error(f"[_build_components] Failed to build components: {e}", exc_info=True)
-            raise
+                self.agent_processor = self.component_builder.build_all_components()
+                logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
 
-        # Register core services after components are built
-        self._register_core_services()
-        logger.info("[_build_components] Component building completed")
+                # Set up thought tracking callback now that agent_processor exists
+                # This avoids the race condition where RuntimeControlService tried to access
+                # agent_processor during Phase 5 (SERVICES) before it was created in Phase 6 (COMPONENTS)
+                if self.runtime_control_service:
+                    self.runtime_control_service.setup_thought_tracking()  # type: ignore[attr-defined]
+                    logger.debug("Thought tracking callback set up after agent_processor creation")
+
+            except Exception as e:
+                logger.error(f"[_build_components] Failed to build components: {e}", exc_info=True)
+                raise
+
+            # Register core services after components are built
+            self._register_core_services()
+            logger.info("[_build_components] Component building completed")
+            
+
+
+
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
@@ -1393,6 +1466,7 @@ class CIRISRuntime:
                 essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
             )
 
+
     def _create_bootstrap_from_legacy(
         self,
         essential_config: Optional[EssentialConfig],
@@ -1427,6 +1501,9 @@ class CIRISRuntime:
             debug=self.debug,
             preload_tasks=self._preload_tasks,
         )
+
+
+
 
     def _check_mock_llm(self) -> None:
         """Check for mock LLM environment variable and add to modules if needed."""
@@ -1467,3 +1544,33 @@ class CIRISRuntime:
                 logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
             except Exception as e:
                 logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
+
+
+# 2. Find the setup method (e.g., inside CIRISRuntime or a dedicated setup class):
+def _setup_dma_system(self, dependencies, config):
+    # Assuming the orchestrator is created here
+    self.dma_orchestrator = DMAOrchestrator(dependencies=dependencies, config=config)
+    
+    # --- HACKATHON ADDITION: MANUAL AE-DMA REGISTRATION ---
+    
+    # Check 1: If the list of DMAs is a public attribute of the orchestrator
+    if hasattr(self.dma_orchestrator, 'dmas'):
+        self.dma_orchestrator.dmas.append(
+            AnticipatoryDMA(dependencies=dependencies)
+        )
+    
+    # Check 2: If the orchestrator has a register method
+    elif hasattr(self.dma_orchestrator, 'register_dma'):
+        self.dma_orchestrator.register_dma(
+            AnticipatoryDMA(dependencies=dependencies)
+        )
+        
+    else:
+        # Fallback (Requires manual tracing): Log a warning and proceed without manual registration
+        logger.warning("Could not find list or register method on DMAOrchestrator. Check code structure.")
+        
+    logger.info("DMA System Setup: AnticipatoryDMA registered successfully.")
+    
+    return self.dma_orchestrator
+
+

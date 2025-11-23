@@ -884,7 +884,14 @@ def _build_channels_to_query(auth: AuthContext, request: Request) -> List[str]:
     channel_id = f"api_{auth.user_id}"
     channels_to_query = [channel_id]
     channels_to_query.extend(_get_admin_channels(auth, request))
-    return channels_to_query
+    # Remove duplicates while preserving order
+    seen = set()
+    deduped = []
+    for channel in channels_to_query:
+        if channel not in seen:
+            seen.add(channel)
+            deduped.append(channel)
+    return deduped
 
 
 def _convert_timestamp(timestamp: Any) -> datetime:

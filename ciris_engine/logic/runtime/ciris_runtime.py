@@ -1128,35 +1128,24 @@ class CIRISRuntime:
             load_dotenv(config_path, override=True)
             logger.info(f"✓ Reloaded environment from {config_path}")
 
-        from .ciris_runtime_helpers import (
-            create_adapter_lifecycle_tasks,
-            verify_adapter_service_registration,
-            wait_for_adapter_readiness,
-        )
+        # Initialize LLM service now that environment variables are loaded
+        # This is critical because LLM service initialization was skipped during first-run
+        # due to missing OPENAI_API_KEY
+        logger.info("Initializing LLM service with loaded configuration...")
+        if self.service_initializer:
+            config = self._ensure_config()
+            await self.service_initializer._initialize_llm_services(config, self.modules_to_load)
+            logger.info("✓ LLM service initialized")
 
-        # Cancel old adapter lifecycle tasks (created without agent processor)
-        if hasattr(self, "_adapter_tasks") and self._adapter_tasks:
-            logger.info(f"Cancelling {len(self._adapter_tasks)} old adapter tasks...")
-            for task in self._adapter_tasks:
-                if not task.done():
-                    task.cancel()
-            self._adapter_tasks = []
-
-        # NOW RESUME FROM LINE 1090 - Create agent processor task and adapter lifecycle tasks
+        # CRITICAL: Adapters are ALREADY RUNNING from first-run mode
+        # DO NOT restart them - just create the agent processor task
+        # Adapters will continue running with their existing lifecycle tasks
+        logger.info("Creating agent processor task (adapters already running from first-run mode)...")
         agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
-        self._adapter_tasks = create_adapter_lifecycle_tasks(self.adapters, agent_task)
 
-        # Adapters should already be ready from first-run, but verify
-        adapters_ready = await wait_for_adapter_readiness(self.adapters)
-        if not adapters_ready:
-            raise RuntimeError("Adapters failed to become ready within timeout")
-
-        # Register services and verify availability
-        services_available = await verify_adapter_service_registration(self)
-        if not services_available:
-            raise RuntimeError("Failed to establish adapter connections within timeout")
-
-        # Final verification with the existing wait method
+        # No need to verify adapter readiness - they're already running and serving the setup wizard!
+        # No need to re-register services - they were registered during first-run startup
+        # Just wait for critical services to ensure everything is still healthy
         await self._wait_for_critical_services(timeout=5.0)
 
         logger.info("")

@@ -11,12 +11,33 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def _get_default_main_db() -> Path:
+    """Get default main database path using central path resolution."""
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    return get_data_dir() / "ciris_engine.db"
+
+
+def _get_default_secrets_db() -> Path:
+    """Get default secrets database path using central path resolution."""
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    return get_data_dir() / "secrets.db"
+
+
+def _get_default_audit_db() -> Path:
+    """Get default audit database path using central path resolution."""
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    return get_data_dir() / "ciris_audit.db"
+
+
 class DatabaseConfig(BaseModel):
     """Core database paths configuration."""
 
-    main_db: Path = Field(Path("data/ciris_engine.db"), description="Main SQLite database for persistence")
-    secrets_db: Path = Field(Path("data/secrets.db"), description="Encrypted secrets storage database")
-    audit_db: Path = Field(Path("data/ciris_audit.db"), description="Audit trail database with signatures")
+    main_db: Path = Field(default_factory=_get_default_main_db, description="Main SQLite database for persistence")
+    secrets_db: Path = Field(default_factory=_get_default_secrets_db, description="Encrypted secrets storage database")
+    audit_db: Path = Field(default_factory=_get_default_audit_db, description="Audit trail database with signatures")
     database_url: Optional[str] = Field(
         None,
         description="Database connection string. If set, overrides main_db path. "

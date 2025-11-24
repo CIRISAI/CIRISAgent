@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.config.db_paths import get_audit_db_full_path
 from ciris_engine.logic.setup.first_run import get_default_config_path, is_first_run
 from ciris_engine.logic.setup.wizard import create_env_file, generate_encryption_key
 from ciris_engine.schemas.api.responses import SuccessResponse
@@ -714,8 +715,9 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                 detail="Runtime not available - cannot complete setup",
             )
 
-        # Get audit database path from runtime's essential config
-        auth_db_path = str(runtime.essential_config.database.audit_db)
+        # Get audit database path using same resolution as AuthenticationService
+        # This handles both SQLite and PostgreSQL (adds _auth suffix to database name)
+        auth_db_path = get_audit_db_full_path(runtime.essential_config)
         logger.info(f"Using runtime audit database: {auth_db_path}")
 
         # Create users immediately (don't wait for restart)

@@ -715,7 +715,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
             )
 
         # Get audit database path from runtime's essential config
-        auth_db_path = runtime.essential_config.database.audit_db
+        auth_db_path = str(runtime.essential_config.database.audit_db)
         logger.info(f"Using runtime audit database: {auth_db_path}")
 
         # Create users immediately (don't wait for restart)

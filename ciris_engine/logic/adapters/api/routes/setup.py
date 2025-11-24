@@ -447,23 +447,21 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
-async def _create_setup_users(setup: SetupCompleteRequest) -> None:
+async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) -> None:
     """Create users immediately during setup completion.
 
     This is called during setup completion to create users without waiting for restart.
     Creates users directly in the database using authentication store functions.
+
+    Args:
+        setup: Setup configuration with user details
+        auth_db_path: Path to the audit database (from running application)
     """
-    from ciris_engine.logic.config.db_paths import get_audit_db_full_path
     from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
-    from ciris_engine.schemas.config.essential import EssentialConfig
     from ciris_engine.schemas.services.authority_core import WARole
 
     logger.info("Creating setup users immediately...")
-
-    # Get database path
-    essential_config = EssentialConfig()
-    auth_db_path = get_audit_db_full_path(essential_config)
     logger.info(f"📁 [SETUP DEBUG] Using auth database path: {auth_db_path}")
 
     # Create temporary authentication service for user creation
@@ -708,8 +706,20 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         load_dotenv(config_path, override=True)
         logger.info(f"Reloaded environment variables from {config_path}")
 
+        # Get runtime and database path from the running application
+        runtime = getattr(request.app.state, "runtime", None)
+        if not runtime:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Runtime not available - cannot complete setup",
+            )
+
+        # Get audit database path from runtime's essential config
+        auth_db_path = runtime.essential_config.database.audit_db
+        logger.info(f"Using runtime audit database: {auth_db_path}")
+
         # Create users immediately (don't wait for restart)
-        await _create_setup_users(setup)
+        await _create_setup_users(setup, auth_db_path)
 
         # Reload user cache in APIAuthService to pick up newly created users
         auth_service = getattr(request.app.state, "auth_service", None)
@@ -724,28 +734,23 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
             next_steps += " Both user passwords have been configured."
 
         # Resume initialization from first-run mode to start agent processor
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime:
-            logger.info("Setup complete - resuming initialization to start agent processor")
-            # Schedule resume in background to allow response to be sent first
-            import asyncio
+        logger.info("Setup complete - resuming initialization to start agent processor")
+        # Schedule resume in background to allow response to be sent first
+        import asyncio
 
-            async def _resume_runtime() -> None:
-                await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
-                try:
-                    await runtime.resume_from_first_run()
-                    logger.info("✅ Successfully resumed from first-run mode - agent processor running")
-                except Exception as e:
-                    logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
-                    # If resume fails, fall back to restart
-                    runtime.request_shutdown("Resume failed - restarting to apply configuration")
+        async def _resume_runtime() -> None:
+            await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
+            try:
+                await runtime.resume_from_first_run()
+                logger.info("✅ Successfully resumed from first-run mode - agent processor running")
+            except Exception as e:
+                logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
+                # If resume fails, fall back to restart
+                runtime.request_shutdown("Resume failed - restarting to apply configuration")
 
-            # Store task to prevent garbage collection and log task creation
-            resume_task = asyncio.create_task(_resume_runtime())
-            logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
-        else:
-            logger.warning("Runtime not available - manual restart required")
-            next_steps = "Configuration completed. Please restart the agent manually to complete setup."
+        # Store task to prevent garbage collection and log task creation
+        resume_task = asyncio.create_task(_resume_runtime())
+        logger.info(f"Scheduled background resume task: {resume_task.get_name()}")
 
         return SuccessResponse(
             data={

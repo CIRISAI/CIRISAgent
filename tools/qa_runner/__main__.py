@@ -71,9 +71,9 @@ Available modules:
 
     # Server configuration
     parser.add_argument(
-        "--url", default="http://localhost:8000", help="Base URL of the API server (default: http://localhost:8000)"
+        "--url", default="http://localhost:8080", help="Base URL of the API server (default: http://localhost:8080)"
     )
-    parser.add_argument("--port", type=int, default=8000, help="API server port (default: 8000)")
+    parser.add_argument("--port", type=int, default=8080, help="API server port (default: 8080)")
     parser.add_argument("--no-auto-start", action="store_true", help="Don't automatically start the API server")
     parser.add_argument("--no-mock-llm", action="store_true", help="Don't use mock LLM (requires real LLM)")
     parser.add_argument(

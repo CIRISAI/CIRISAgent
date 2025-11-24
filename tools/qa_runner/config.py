@@ -85,8 +85,8 @@ class QAConfig:
     """Configuration for QA runner."""
 
     # Server configuration
-    base_url: str = "http://localhost:8000"
-    api_port: int = 8000
+    base_url: str = "http://localhost:8080"  # Matches DEFAULT_API_PORT in constants.py
+    api_port: int = 8080  # Default API port (matches DEFAULT_API_PORT in constants.py)
 
     # Authentication
     admin_username: str = "admin"

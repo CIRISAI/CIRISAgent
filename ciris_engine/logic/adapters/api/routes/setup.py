@@ -464,6 +464,7 @@ async def _create_setup_users(setup: SetupCompleteRequest) -> None:
     # Get database path
     essential_config = EssentialConfig()
     auth_db_path = get_audit_db_full_path(essential_config)
+    logger.info(f"📁 [SETUP DEBUG] Using auth database path: {auth_db_path}")
 
     # Create temporary authentication service for user creation
     time_service = TimeService()

@@ -4,6 +4,8 @@ Setup wizard test module.
 Tests the first-run setup wizard API endpoints.
 """
 
+import os
+import sqlite3
 from typing import List
 
 from ..config import QAModule, QATestCase
@@ -95,30 +97,42 @@ class SetupTestModule:
             # NOTE: GET /v1/setup/config test removed - requires actual first-run state
             # which QA runner cannot easily simulate. This endpoint is tested in unit tests.
             # POST /v1/setup/complete - Complete setup (minimal config)
-            # NOTE: This test is intentionally commented out because it would actually
-            # complete setup and break subsequent tests. Enable for manual testing only.
-            # QATestCase(
-            #     name="Complete setup (minimal config)",
-            #     module=QAModule.SETUP,
-            #     endpoint="/v1/setup/complete",
-            #     method="POST",
-            #     payload={
-            #         "llm_provider": "openai",
-            #         "llm_api_key": "sk-test_qa_key_12345",
-            #         "llm_base_url": None,
-            #         "llm_model": None,
-            #         "template_id": "general",
-            #         "enabled_adapters": ["api"],
-            #         "adapter_config": {},
-            #         "admin_username": "qa_test_user",
-            #         "admin_password": "qa_test_password_12345",
-            #         "system_admin_password": "new_admin_password_12345",
-            #         "agent_port": 8080,
-            #     },
-            #     expected_status=200,
-            #     requires_auth=False,
-            #     description="Complete initial setup with minimal configuration",
-            # ),
+            QATestCase(
+                name="Complete setup (minimal config)",
+                module=QAModule.SETUP,
+                endpoint="/v1/setup/complete",
+                method="POST",
+                payload={
+                    "llm_provider": "openai",
+                    "llm_api_key": "sk-test_qa_key_12345",
+                    "llm_base_url": None,
+                    "llm_model": None,
+                    "template_id": "general",
+                    "enabled_adapters": ["api"],
+                    "adapter_config": {},
+                    "admin_username": "qa_test_user",
+                    "admin_password": "qa_test_password_12345",
+                    "system_admin_password": "new_admin_password_12345",
+                    "agent_port": 8080,
+                },
+                expected_status=200,
+                requires_auth=False,
+                description="Complete initial setup with minimal configuration",
+            ),
+            # POST /v1/auth/login - Verify user creation after setup
+            QATestCase(
+                name="Login as created setup user",
+                module=QAModule.SETUP,
+                endpoint="/v1/auth/login",
+                method="POST",
+                payload={
+                    "username": "qa_test_user",
+                    "password": "qa_test_password_12345",
+                },
+                expected_status=200,
+                requires_auth=False,
+                description="Verify that the user created during setup can log in successfully",
+            ),
         ]
 
     @staticmethod

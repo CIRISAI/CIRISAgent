@@ -39,6 +39,7 @@ def client_with_runtime(client, tmp_path):
     mock_config = MagicMock()
     mock_db_config = MagicMock()
     mock_db_config.audit_db = tmp_path / "audit.db"
+    mock_db_config.database_url = None  # SQLite mode (no PostgreSQL URL)
     mock_config.database = mock_db_config
     mock_runtime.essential_config = mock_config
 
@@ -781,6 +782,13 @@ class TestResumeFromFirstRun:
         # Mock runtime with resume method and set it on app.state
         mock_runtime = Mock()
         mock_runtime.resume_from_first_run = AsyncMock()
+        # Mock essential_config for get_audit_db_full_path()
+        mock_config = Mock()
+        mock_db_config = Mock()
+        mock_db_config.audit_db = tmp_path / "audit.db"
+        mock_db_config.database_url = None  # SQLite mode
+        mock_config.database = mock_db_config
+        mock_runtime.essential_config = mock_config
         client.app.state.runtime = mock_runtime
 
         response = client.post(

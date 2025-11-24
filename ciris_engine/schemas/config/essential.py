@@ -35,15 +35,9 @@ def _get_default_audit_db() -> Path:
 class DatabaseConfig(BaseModel):
     """Core database paths configuration."""
 
-    main_db: Path = Field(
-        default_factory=_get_default_main_db, description="Main SQLite database for persistence"
-    )
-    secrets_db: Path = Field(
-        default_factory=_get_default_secrets_db, description="Encrypted secrets storage database"
-    )
-    audit_db: Path = Field(
-        default_factory=_get_default_audit_db, description="Audit trail database with signatures"
-    )
+    main_db: Path = Field(default_factory=_get_default_main_db, description="Main SQLite database for persistence")
+    secrets_db: Path = Field(default_factory=_get_default_secrets_db, description="Encrypted secrets storage database")
+    audit_db: Path = Field(default_factory=_get_default_audit_db, description="Audit trail database with signatures")
     database_url: Optional[str] = Field(
         None,
         description="Database connection string. If set, overrides main_db path. "

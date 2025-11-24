@@ -189,13 +189,33 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
     # Mount GUI static assets (if available) - MUST be LAST for proper route priority
     # This enables serving the CIRISGUI frontend when bundled in the wheel
+    # ONLY in installed/standalone mode - NOT in managed/Docker mode
     from pathlib import Path
+
+    from ciris_engine.logic.utils.path_resolution import is_managed
 
     # Path: ciris_engine/logic/adapters/api/app.py -> ciris_engine/gui_static
     # Need 4 parent levels: api -> adapters -> logic -> ciris_engine
     gui_static_dir = Path(__file__).resolve().parent.parent.parent.parent / "gui_static"
 
-    if gui_static_dir.exists() and any(gui_static_dir.iterdir()):
+    # Skip GUI in managed/Docker mode - manager provides its own frontend
+    if is_managed():
+        print("ℹ️  GUI disabled in managed mode (manager provides frontend)")
+
+        # API-only mode for managed deployments
+        @app.get("/")
+        def root() -> dict[str, str]:
+            return {
+                "name": "CIRIS API",
+                "version": "1.0.0",
+                "docs": "/docs",
+                "redoc": "/redoc",
+                "openapi": "/openapi.json",
+                "gui": "managed_mode",
+                "message": "Running in managed mode - GUI provided by CIRIS Manager",
+            }
+
+    elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
         from fastapi.staticfiles import StaticFiles
 
         # Serve GUI at root (/) - catch-all, lowest priority

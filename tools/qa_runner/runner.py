@@ -199,12 +199,15 @@ class QARunner:
                 self.console.print("[red]❌ Failed to start API server[/red]")
                 return False
 
-        # Get authentication token
-        if not self._authenticate():
-            self.console.print("[red]❌ Authentication failed[/red]")
-            if self.config.auto_start_server:
-                self.server_manager.stop()
-            return False
+        # Get authentication token (skip for SETUP module - first-run has no users)
+        if QAModule.SETUP not in modules:
+            if not self._authenticate():
+                self.console.print("[red]❌ Authentication failed[/red]")
+                if self.config.auto_start_server:
+                    self.server_manager.stop()
+                return False
+        else:
+            self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
 
         # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
         # Both now use async /agent/message endpoint + SSE streaming

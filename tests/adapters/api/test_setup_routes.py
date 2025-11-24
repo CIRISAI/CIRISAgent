@@ -31,6 +31,22 @@ from ciris_engine.logic.adapters.api.routes.setup import (
 from ciris_engine.schemas.api.auth import UserRole
 
 
+@pytest.fixture
+def client_with_runtime(client, tmp_path):
+    """Add mock runtime to client for tests that need it."""
+    # Create mock runtime with essential config
+    mock_runtime = MagicMock()
+    mock_config = MagicMock()
+    mock_db_config = MagicMock()
+    mock_db_config.audit_db = tmp_path / "audit.db"
+    mock_config.database = mock_db_config
+    mock_runtime.essential_config = mock_config
+
+    # Inject into app state
+    client.app.state.runtime = mock_runtime
+    return client
+
+
 class TestSetupStatusEndpoint:
     """Test GET /v1/setup/status endpoint."""
 
@@ -303,12 +319,16 @@ class TestCompleteSetupEndpoint:
     @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
     @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
     @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
-    def test_complete_setup_success(self, mock_save, mock_config_path, mock_first_run, client, tmp_path):
+    @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
+    def test_complete_setup_success(
+        self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
+    ):
         """Test successful setup completion."""
         mock_first_run.return_value = True
         mock_config_path.return_value = tmp_path / ".env"
+        mock_create_users.return_value = None  # Async function that returns None
 
-        response = client.post(
+        response = client_with_runtime.post(
             "/v1/setup/complete",
             json={
                 "llm_provider": "openai",
@@ -537,14 +557,16 @@ class TestDualPasswordSupport:
     @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
     @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
     @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
     def test_setup_creates_new_user_and_updates_admin(
-        self, mock_save, mock_config_path, mock_first_run, client, tmp_path
+        self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
     ):
         """Test that setup creates new user and updates system admin password."""
         mock_first_run.return_value = True
         mock_config_path.return_value = tmp_path / ".env"
+        mock_create_users.return_value = None  # Async function that returns None
 
-        response = client.post(
+        response = client_with_runtime.post(
             "/v1/setup/complete",
             json={
                 "llm_provider": "openai",
@@ -670,7 +692,7 @@ class TestSetupHelperFunctions:
                     mock_auth_instance.create_wa.return_value = mock_wa_cert
 
                     # Call function
-                    await _create_setup_users(setup)
+                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
 
                     # Verify auth service was created and started
                     mock_auth.assert_called_once()
@@ -729,7 +751,7 @@ class TestSetupHelperFunctions:
                     mock_auth_instance.list_was.return_value = [mock_admin_wa, mock_new_wa]
 
                     # Call function
-                    await _create_setup_users(setup)
+                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
 
                     # Verify new user was created
                     mock_auth_instance.create_wa.assert_called_once()

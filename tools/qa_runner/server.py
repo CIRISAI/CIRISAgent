@@ -198,6 +198,8 @@ class APIServerManager:
 
     def _wait_for_server(self) -> bool:
         """Wait for server to be ready and reach WORK state."""
+        from .config import QAModule
+
         start_time = time.time()
 
         # First, wait for server to respond to health checks
@@ -217,6 +219,11 @@ class APIServerManager:
         else:
             # Timeout waiting for health check
             return False
+
+        # SETUP module: Skip WORK state check (first-run mode doesn't reach WORK)
+        if QAModule.SETUP in self.modules:
+            self.console.print("[green]✅ Server ready for SETUP tests (first-run mode)[/green]")
+            return True
 
         # Now wait for agent to reach WORK state
         self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")

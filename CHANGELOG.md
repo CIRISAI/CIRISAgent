@@ -5,6 +5,70 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5.3] - 2025-11-23
+
+### Fixed - Setup User Creation Cache Bug
+
+- **Setup User Creation Failure** - Fixed newly created users not being visible for login after setup completion
+  - **Issue**: Users created by setup wizard appeared in logs as "✅ Created user: X" but couldn't log in (401 Unauthorized)
+  - **Root Cause**: `APIAuthService` loads users from database once and caches them in memory (`_users_loaded` flag). When setup wizard created users via temporary `AuthenticationService`, the cached auth service never saw the new users
+  - **Fix**:
+    - Added `reload_users_from_db()` method to `APIAuthService` to invalidate cache and reload users
+    - Setup completion now calls this method after creating users
+  - **Files**:
+    - `ciris_engine/logic/adapters/api/services/auth_service.py:142-148` (new reload method)
+    - `ciris_engine/logic/adapters/api/routes/setup.py:713-718` (call reload after user creation)
+  - **Impact**: Setup wizard now works end-to-end - users can immediately log in with newly created accounts
+
+## [1.6.5.2] - 2025-11-23
+
+### Fixed - Managed Mode First-Run and GUI Issues
+
+- **Managed/Docker Mode First-Run Detection** - Fixed false first-run detection in managed deployments
+  - **Issue**: Managed agents were incorrectly detected as first-run because path detection checked `~/ciris/.env` instead of `/app/.env`
+  - **Root Cause**: `first_run.py` had its own path detection logic that didn't use the centralized `path_resolution` module
+  - **Fix**: Updated first-run detection to use `is_managed()` and check `/app/.env` in managed mode
+  - **Behavior**:
+    - Managed mode: NEVER first-run (manager handles configuration), checks `/app/.env`
+    - Development mode: Checks `./.env`, `~/ciris/.env`, `/etc/ciris/.env`
+    - Installed mode: Checks `~/ciris/.env`, `/etc/ciris/.env`
+  - **Files**: `ciris_engine/logic/setup/first_run.py:39-81`
+  - **Impact**: Managed agents no longer trigger setup wizard incorrectly
+
+- **GUI Serving in Managed Mode** - Disabled GUI in managed/Docker deployments
+  - **Issue**: GUI was being served in managed mode when manager provides its own frontend
+  - **Root Cause**: GUI mounting didn't check deployment mode
+  - **Fix**: Added `is_managed()` check to skip GUI mounting in managed/Docker mode
+  - **Behavior**:
+    - Managed mode: API-only, no GUI mounted (manager provides frontend)
+    - Installed/standalone mode: Full GUI served at `/`
+  - **Files**: `ciris_engine/logic/adapters/api/app.py:202-215`
+  - **Impact**: Managed agents serve API-only, avoiding conflicts with manager's frontend
+
+## [1.6.5.1] - 2025-11-23
+
+### Fixed - Critical First-Run Startup and Resume Issues
+
+- **Startup Crash Before Setup Wizard** - Fixed agent crashing on first startup without LLM configuration
+  - **Issue**: Agent would crash during initialization before the setup wizard could run, making initial configuration impossible
+  - **Root Cause**: Component building (`_build_components`) required LLM service and failed before API adapter could serve the setup wizard
+  - **Fix**: Made cognitive component building optional - agent now starts gracefully in API-only mode without LLM
+  - **Split-State Bug**: On 1.6.5, behavior was different with/without OPENAI_API_KEY:
+    - Without key: Crash before wizard (BROKEN)
+    - With key: Wizard shows correctly
+  - **Unified Behavior**: Now consistent regardless of OPENAI_API_KEY presence - wizard always shows on first run
+  - **Files**:
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1022-1028` (skip component building gracefully)
+    - `ciris_engine/logic/runtime/ciris_runtime.py:1175-1180` (skip agent processor startup gracefully)
+  - **Impact**: Users can now complete initial setup on Linux/pip installations without pre-configuring LLM
+
+- **Post-Wizard Agent Startup** - Fixed agent not starting after setup wizard completion
+  - **Issue**: After completing setup wizard, agent logged "agent processor running" but didn't actually start
+  - **Root Cause**: `resume_from_first_run()` initialized LLM service but never called `_build_components()` to create agent_processor
+  - **Fix**: Added component building step in resume flow after LLM initialization
+  - **Files**: `ciris_engine/logic/runtime/ciris_runtime.py:1149-1153`
+  - **Impact**: Agent now starts automatically in the same process after wizard completion (no manual restart needed)
+
 ## [1.6.5] - 2025-11-23
 
 ### Fixed - Installation & First-Run Experience

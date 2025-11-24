@@ -139,6 +139,14 @@ class APIAuthService:
         await self._load_users_from_db()
         self._users_loaded = True
 
+    async def reload_users_from_db(self) -> None:
+        """Force reload users from database, invalidating cache.
+
+        Use this after external changes to the user database (e.g., setup wizard).
+        """
+        self._users_loaded = False
+        await self._ensure_users_loaded()
+
     def _update_existing_oauth_user(self, oauth_user_id: str, wa: "WACertificate") -> None:
         """Update existing OAuth user record with WA info."""
         existing_user = self._users[oauth_user_id]

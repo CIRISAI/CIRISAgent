@@ -28,6 +28,7 @@ TEMPLATES = {
     "default": "Datum - baseline agent template",
     "sage": "Sage - wise questioning agent",
     "scout": "Scout - direct action demonstrator",
+    "ally": "Ally - personal thriving assistant",
     "echo": "Echo - base moderation template",
     "echo-core": "Echo-Core - general community moderation",
     "echo-speculative": "Echo-Speculative - speculative discussion moderation",
@@ -129,8 +130,8 @@ def main():
     os.chdir(project_root)
     print(f"Working in project root: {project_root}")
 
-    # Check templates directory exists
-    templates_dir = Path("ciris_templates")
+    # Check templates directory exists (consolidated to engine folder)
+    templates_dir = Path("ciris_engine/ciris_templates")
     if not templates_dir.exists():
         print(f"Error: Templates directory not found at {templates_dir}")
         print(f"Expected path: {project_root / templates_dir}")

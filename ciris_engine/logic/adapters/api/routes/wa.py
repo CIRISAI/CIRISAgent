@@ -6,7 +6,7 @@ Manages human-in-the-loop deferrals and permissions.
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -60,21 +60,10 @@ async def get_deferrals(
     wa_service: WiseAuthorityServiceProtocol = request.app.state.wise_authority_service
 
     try:
-        # Get pending deferrals
+        # Get pending deferrals (UI fields now included in PendingDeferral schema)
         deferrals = await wa_service.get_pending_deferrals(wa_id=wa_id)
 
-        # Transform PendingDeferral to include question from reason for UI compatibility
-        # The TypeScript SDK expects a 'question' field
-        transformed_deferrals = []
-        for d in deferrals:
-            # Create a dict representation and add the question field
-            deferral_dict = d.model_dump()
-            deferral_dict["question"] = d.reason  # Use reason as the question
-            deferral_dict["context"] = {}  # Add empty context for compatibility
-            deferral_dict["timeout_at"] = (d.created_at + timedelta(days=7)).isoformat()  # Default 7 day timeout
-            transformed_deferrals.append(deferral_dict)
-
-        response = DeferralListResponse(deferrals=transformed_deferrals, total=len(transformed_deferrals))
+        response = DeferralListResponse(deferrals=deferrals, total=len(deferrals))
 
         return SuccessResponse(
             data=response,

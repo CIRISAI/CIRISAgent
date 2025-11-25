@@ -280,7 +280,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             outcome=outcome,
         )
 
-        logger.info(f"DEBUG: Created AuditRequest with details.parameters={entry.details.get('parameters')}")
+        logger.debug(f"Created AuditRequest with details.parameters={entry.details.get('parameters')}")
 
         # Add to hash chain FIRST (REQUIRED in production)
         hash_chain_data = await self._add_to_hash_chain(entry)
@@ -861,18 +861,18 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         }
 
         # Include any additional parameters from the audit context (e.g., tool_name, follow_up_thought_id)
-        logger.info(f"DEBUG: entry.details keys: {entry.details.keys()}")
+        logger.debug(f"entry.details keys: {entry.details.keys()}")
         if "parameters" in entry.details and entry.details["parameters"]:
-            logger.info(f"DEBUG: Found parameters in entry.details: {entry.details['parameters']}")
+            logger.debug(f"Found parameters in entry.details: {entry.details['parameters']}")
             try:
                 # Deserialize JSON string back to dict
                 params_dict = json.loads(entry.details["parameters"])
                 additional_data.update(params_dict)
-                logger.info(f"DEBUG: Updated additional_data: {additional_data}")
+                logger.debug(f"Updated additional_data: {additional_data}")
             except json.JSONDecodeError as e:
-                logger.warning(f"DEBUG: Failed to parse parameters JSON: {e}")
+                logger.warning(f"Failed to parse parameters JSON: {e}")
         else:
-            logger.info("DEBUG: No 'parameters' key in entry.details or empty")
+            logger.debug("No 'parameters' key in entry.details or empty")
 
         node = AuditEntryNode(
             id=f"audit_{action_type.value}_{entry.entry_id}",

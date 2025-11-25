@@ -493,10 +493,10 @@ def main(
             # Force immediate exit to avoid hanging in subprocess
             # Use os._exit only when running under coverage
             if sys.gettrace() is not None or "coverage" in sys.modules:
-                logger.info("DEBUG: EXITING NOW VIA os._exit(1) AT _handle_precommit_wrapper coverage")
+                logger.debug("EXITING NOW VIA os._exit(1) AT _handle_precommit_wrapper coverage")
                 os._exit(1)
             else:
-                logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT _handle_precommit_wrapper")
+                logger.debug("EXITING NOW VIA sys.exit(1) AT _handle_precommit_wrapper")
                 sys.exit(1)
 
         # Handle mock LLM as a module to load
@@ -710,20 +710,20 @@ def main(
             # Wait for all flush operations to complete
             await asyncio.gather(*flush_tasks, return_exceptions=True)
 
-            logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI runtime completed")
+            logger.debug("EXITING NOW VIA os._exit(0) AT CLI runtime completed")
             os._exit(0)
 
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
         logger.info("Interrupted by user, exiting...")
-        logger.info("DEBUG: EXITING NOW VIA sys.exit(0) AT KeyboardInterrupt in main")
+        logger.debug("EXITING NOW VIA sys.exit(0) AT KeyboardInterrupt in main")
         sys.exit(0)
     except SystemExit:
         raise  # Re-raise SystemExit to exit with the correct code
     except Exception as e:
         logger.error(f"Fatal error in main: {e}", exc_info=True)
-        logger.info("DEBUG: EXITING NOW VIA sys.exit(1) AT Fatal error in main")
+        logger.debug("EXITING NOW VIA sys.exit(1) AT Fatal error in main")
         sys.exit(1)
 
     # Ensure clean exit after successful run
@@ -737,7 +737,7 @@ def main(
 
     # For API mode subprocess tests, ensure immediate exit
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
-        logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
+        logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
         os._exit(0)
 
     # For CLI mode, force exit to handle blocking input thread
@@ -754,10 +754,10 @@ def main(
 
         time.sleep(0.1)  # Brief pause to ensure logs are written
 
-        logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT CLI mode force exit")
+        logger.debug("EXITING NOW VIA os._exit(0) AT CLI mode force exit")
         os._exit(0)
 
-    logger.info("DEBUG: EXITING NOW VIA sys.exit(0) AT end of main")
+    logger.debug("EXITING NOW VIA sys.exit(0) AT end of main")
     sys.exit(0)
 
 

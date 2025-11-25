@@ -463,7 +463,7 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     from ciris_engine.schemas.services.authority_core import WARole
 
     logger.info("Creating setup users immediately...")
-    logger.info(f"📁 [SETUP DEBUG] Using auth database path: {auth_db_path}")
+    logger.debug(f"Using auth database path: {auth_db_path}")
 
     # Create temporary authentication service for user creation
     time_service = TimeService()

@@ -114,6 +114,120 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             "list_permissions",
         ]
 
+    # ========== Deferral Helper Methods ==========
+
+    def _parse_deferral_context(self, context_json: Optional[str]) -> tuple:
+        """Parse context JSON and extract deferral info.
+
+        Args:
+            context_json: JSON string containing context data
+
+        Returns:
+            Tuple of (context_dict, deferral_info_dict)
+        """
+        context: Dict[str, object] = {}
+        deferral_info: Dict[str, object] = {}
+        if context_json:
+            try:
+                context = json.loads(context_json)
+                deferral_info = context.get("deferral", {})  # type: ignore[assignment]
+            except json.JSONDecodeError:
+                pass
+        return context, deferral_info
+
+    def _priority_to_string(self, priority: Optional[int]) -> str:
+        """Convert integer priority to string representation.
+
+        Args:
+            priority: Integer priority value (can be None or string from DB)
+
+        Returns:
+            String priority: 'high', 'medium', or 'low'
+        """
+        priority_int = int(priority) if priority else 0
+        if priority_int > 5:
+            return "high"
+        elif priority_int > 0:
+            return "medium"
+        return "low"
+
+    def _build_ui_context(self, description: Optional[str], deferral_info: Dict[str, object]) -> Dict[str, str]:
+        """Build UI context dictionary from description and deferral info.
+
+        Args:
+            description: Task description
+            deferral_info: Dictionary containing deferral-specific data
+
+        Returns:
+            Dictionary with string keys and values for UI display
+        """
+        ui_context: Dict[str, str] = {
+            "task_description": (description[:500] if description else ""),
+        }
+        # Add deferral-specific context fields (converted to strings for UI)
+        deferral_context = deferral_info.get("context", {})
+        if isinstance(deferral_context, dict):
+            for key, value in deferral_context.items():
+                if value is not None:
+                    ui_context[key] = str(value)[:200]
+        # Include original message if available
+        original_message = deferral_info.get("original_message")
+        if original_message:
+            ui_context["original_message"] = str(original_message)[:500]
+        return ui_context
+
+    def _create_pending_deferral(
+        self,
+        task_id: str,
+        channel_id: str,
+        updated_at: Optional[str],
+        deferral_info: Dict[str, object],
+        priority_str: str,
+        ui_context: Dict[str, str],
+        description: Optional[str],
+    ) -> PendingDeferral:
+        """Create a PendingDeferral object from parsed data.
+
+        Args:
+            task_id: The task ID
+            channel_id: Channel where deferral originated
+            updated_at: Timestamp of last update
+            deferral_info: Parsed deferral information
+            priority_str: String priority ('high', 'medium', 'low')
+            ui_context: UI-formatted context dictionary
+            description: Task description
+
+        Returns:
+            PendingDeferral object
+        """
+        deferral_id = str(deferral_info.get("deferral_id", f"defer_{task_id}"))
+        thought_id = str(deferral_info.get("thought_id", ""))
+        reason = str(deferral_info.get("reason", description or ""))[:200]
+
+        deferral_context = deferral_info.get("context", {})
+        user_id = deferral_context.get("user_id") if isinstance(deferral_context, dict) else None
+
+        created_at_dt = datetime.fromisoformat(updated_at.replace(" ", "T")) if updated_at else self._now()
+        timeout_dt = created_at_dt + timedelta(days=7)
+
+        return PendingDeferral(
+            deferral_id=deferral_id,
+            created_at=created_at_dt,
+            deferred_by="ciris_agent",
+            task_id=task_id,
+            thought_id=thought_id,
+            reason=reason,
+            channel_id=channel_id,
+            user_id=str(user_id) if user_id else None,
+            priority=priority_str,
+            assigned_wa_id=None,
+            requires_role=None,
+            status="pending",
+            question=reason,
+            context=ui_context,
+            timeout_at=timeout_dt.isoformat(),
+        )
+
     # ========== Authorization Operations ==========
 
     async def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
@@ -328,98 +442,37 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:
         """Get pending deferrals from the tasks table."""
-        result = []
+        result: List[PendingDeferral] = []
 
         try:
-            # Query deferred tasks from database
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
-            # Get all deferred tasks with their deferral data
             cursor.execute(
                 """
-                SELECT
-                    task_id,
-                    channel_id,
-                    description,
-                    priority,
-                    created_at,
-                    updated_at,
-                    context_json
+                SELECT task_id, channel_id, description, priority, created_at, updated_at, context_json
                 FROM tasks
                 WHERE status = 'deferred'
                 ORDER BY updated_at DESC
             """
             )
 
-            rows = cursor.fetchall()
-
-            for row in rows:
+            for row in cursor.fetchall():
                 task_id, channel_id, description, priority, created_at, updated_at, context_json = row
 
-                # Parse context to get deferral info
-                context = {}
-                deferral_info = {}
-                if context_json:
-                    try:
-                        context = json.loads(context_json)
-                        deferral_info = context.get("deferral", {})
-                    except json.JSONDecodeError:
-                        pass
+                _, deferral_info = self._parse_deferral_context(context_json)
+                priority_str = self._priority_to_string(priority)
+                ui_context = self._build_ui_context(description, deferral_info)
 
-                # Extract deferral details
-                deferral_id = deferral_info.get("deferral_id", f"defer_{task_id}")
-                thought_id = deferral_info.get("thought_id", "")
-                reason = deferral_info.get("reason", description)[:200]  # Limit to 200 chars
-                user_id = deferral_info.get("context", {}).get("user_id")
-
-                # Convert priority to int (database may return string in some cases)
-                priority_int = int(priority) if priority else 0
-
-                # Convert integer priority to string for PendingDeferral
-                if priority_int > 5:
-                    priority_str = "high"
-                elif priority_int > 0:
-                    priority_str = "medium"
-                else:
-                    priority_str = "low"
-
-                # Create PendingDeferral with UI-compatible fields
-                created_at_dt = datetime.fromisoformat(updated_at.replace(" ", "T")) if updated_at else self._now()
-                timeout_dt = created_at_dt + timedelta(days=7)
-
-                # Build rich context for UI from available deferral data
-                deferral_context = deferral_info.get("context", {})
-                ui_context: Dict[str, str] = {
-                    "task_description": description[:500] if description else "",
-                }
-                # Add deferral-specific context fields (converted to strings for UI)
-                for key, value in deferral_context.items():
-                    if value is not None:
-                        ui_context[key] = str(value)[:200]  # Limit string length
-                # Include original message if available
-                if deferral_info.get("original_message"):
-                    ui_context["original_message"] = str(deferral_info["original_message"])[:500]
-
-                deferral = PendingDeferral(
-                    deferral_id=deferral_id,
-                    created_at=created_at_dt,
-                    deferred_by="ciris_agent",
+                deferral = self._create_pending_deferral(
                     task_id=task_id,
-                    thought_id=thought_id,
-                    reason=reason,
                     channel_id=channel_id,
-                    user_id=user_id,
-                    priority=priority_str,  # Convert to string
-                    assigned_wa_id=None,  # Not assigned in current implementation
-                    requires_role=None,  # Not specified in current implementation
-                    status="pending",
-                    # UI compatibility fields
-                    question=reason,  # Use reason as the question for UI display
-                    context=ui_context,  # Rich context from task and deferral data
-                    timeout_at=timeout_dt.isoformat(),  # Default 7 day timeout
+                    updated_at=updated_at,
+                    deferral_info=deferral_info,
+                    priority_str=priority_str,
+                    ui_context=ui_context,
+                    description=description,
                 )
-
                 result.append(deferral)
 
             conn.close()

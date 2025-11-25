@@ -541,3 +541,227 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
 
     # Resolution with modification should succeed
     # The actual defer_until modification is handled during resolution
+
+
+# ========== Helper Method Tests ==========
+
+
+class TestDeferralHelperMethods:
+    """Tests for the deferral helper methods extracted for reduced cognitive complexity."""
+
+    def test_parse_deferral_context_valid_json(self, wise_authority_service):
+        """Test parsing valid context JSON."""
+        context_json = '{"deferral": {"deferral_id": "defer_123", "reason": "Test reason"}}'
+        context, deferral_info = wise_authority_service._parse_deferral_context(context_json)
+
+        assert context == {"deferral": {"deferral_id": "defer_123", "reason": "Test reason"}}
+        assert deferral_info == {"deferral_id": "defer_123", "reason": "Test reason"}
+
+    def test_parse_deferral_context_invalid_json(self, wise_authority_service):
+        """Test parsing invalid context JSON returns empty dicts."""
+        context_json = "not valid json {"
+        context, deferral_info = wise_authority_service._parse_deferral_context(context_json)
+
+        assert context == {}
+        assert deferral_info == {}
+
+    def test_parse_deferral_context_none(self, wise_authority_service):
+        """Test parsing None context returns empty dicts."""
+        context, deferral_info = wise_authority_service._parse_deferral_context(None)
+
+        assert context == {}
+        assert deferral_info == {}
+
+    def test_parse_deferral_context_no_deferral_key(self, wise_authority_service):
+        """Test parsing context without deferral key."""
+        context_json = '{"other_key": "value"}'
+        context, deferral_info = wise_authority_service._parse_deferral_context(context_json)
+
+        assert context == {"other_key": "value"}
+        assert deferral_info == {}
+
+    def test_priority_to_string_high(self, wise_authority_service):
+        """Test priority > 5 returns 'high'."""
+        assert wise_authority_service._priority_to_string(6) == "high"
+        assert wise_authority_service._priority_to_string(10) == "high"
+        assert wise_authority_service._priority_to_string(100) == "high"
+
+    def test_priority_to_string_medium(self, wise_authority_service):
+        """Test priority 1-5 returns 'medium'."""
+        assert wise_authority_service._priority_to_string(1) == "medium"
+        assert wise_authority_service._priority_to_string(3) == "medium"
+        assert wise_authority_service._priority_to_string(5) == "medium"
+
+    def test_priority_to_string_low(self, wise_authority_service):
+        """Test priority 0 or None returns 'low'."""
+        assert wise_authority_service._priority_to_string(0) == "low"
+        assert wise_authority_service._priority_to_string(None) == "low"
+        assert wise_authority_service._priority_to_string(-1) == "low"
+
+    def test_build_ui_context_basic(self, wise_authority_service):
+        """Test building UI context with basic inputs."""
+        description = "Test task description"
+        deferral_info: dict = {"context": {}}
+
+        ui_context = wise_authority_service._build_ui_context(description, deferral_info)
+
+        assert ui_context["task_description"] == description
+        assert len(ui_context) == 1
+
+    def test_build_ui_context_with_deferral_context(self, wise_authority_service):
+        """Test building UI context includes deferral context fields."""
+        description = "Test task"
+        deferral_info: dict = {
+            "context": {
+                "user_id": "user123",
+                "channel": "general",
+            }
+        }
+
+        ui_context = wise_authority_service._build_ui_context(description, deferral_info)
+
+        assert ui_context["task_description"] == description
+        assert ui_context["user_id"] == "user123"
+        assert ui_context["channel"] == "general"
+
+    def test_build_ui_context_with_original_message(self, wise_authority_service):
+        """Test building UI context includes original message."""
+        description = "Test task"
+        deferral_info: dict = {
+            "context": {},
+            "original_message": "Hello, I need help!",
+        }
+
+        ui_context = wise_authority_service._build_ui_context(description, deferral_info)
+
+        assert ui_context["original_message"] == "Hello, I need help!"
+
+    def test_build_ui_context_truncates_long_values(self, wise_authority_service):
+        """Test that UI context truncates long values."""
+        long_description = "x" * 600
+        long_value = "y" * 300
+        deferral_info: dict = {
+            "context": {"long_field": long_value},
+            "original_message": "z" * 600,
+        }
+
+        ui_context = wise_authority_service._build_ui_context(long_description, deferral_info)
+
+        assert len(ui_context["task_description"]) == 500
+        assert len(ui_context["long_field"]) == 200
+        assert len(ui_context["original_message"]) == 500
+
+    def test_build_ui_context_none_description(self, wise_authority_service):
+        """Test building UI context with None description."""
+        ui_context = wise_authority_service._build_ui_context(None, {"context": {}})
+
+        assert ui_context["task_description"] == ""
+
+    def test_build_ui_context_skips_none_values(self, wise_authority_service):
+        """Test that None values in deferral context are skipped."""
+        deferral_info: dict = {
+            "context": {
+                "valid_field": "value",
+                "none_field": None,
+            }
+        }
+
+        ui_context = wise_authority_service._build_ui_context("desc", deferral_info)
+
+        assert "valid_field" in ui_context
+        assert "none_field" not in ui_context
+
+    def test_create_pending_deferral_basic(self, wise_authority_service):
+        """Test creating a PendingDeferral with basic inputs."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-123",
+            channel_id="channel-456",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={"deferral_id": "defer_abc", "thought_id": "thought_xyz", "reason": "Need review"},
+            priority_str="medium",
+            ui_context={"task_description": "Test"},
+            description="Test description",
+        )
+
+        assert deferral.deferral_id == "defer_abc"
+        assert deferral.task_id == "task-123"
+        assert deferral.thought_id == "thought_xyz"
+        assert deferral.reason == "Need review"
+        assert deferral.channel_id == "channel-456"
+        assert deferral.priority == "medium"
+        assert deferral.status == "pending"
+        assert deferral.question == "Need review"
+        assert deferral.context == {"task_description": "Test"}
+
+    def test_create_pending_deferral_default_deferral_id(self, wise_authority_service):
+        """Test that deferral_id defaults to defer_{task_id}."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-999",
+            channel_id="channel-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={},  # No deferral_id provided
+            priority_str="low",
+            ui_context={},
+            description="Desc",
+        )
+
+        assert deferral.deferral_id == "defer_task-999"
+
+    def test_create_pending_deferral_uses_description_as_reason(self, wise_authority_service):
+        """Test that description is used as reason when not in deferral_info."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={},  # No reason provided
+            priority_str="low",
+            ui_context={},
+            description="The task description",
+        )
+
+        assert deferral.reason == "The task description"
+        assert deferral.question == "The task description"
+
+    def test_create_pending_deferral_extracts_user_id(self, wise_authority_service):
+        """Test that user_id is extracted from deferral context."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={"context": {"user_id": "user-abc"}},
+            priority_str="high",
+            ui_context={},
+            description="Desc",
+        )
+
+        assert deferral.user_id == "user-abc"
+
+    def test_create_pending_deferral_calculates_timeout(self, wise_authority_service):
+        """Test that timeout_at is calculated as 7 days from updated_at."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={},
+            priority_str="low",
+            ui_context={},
+            description="Desc",
+        )
+
+        # timeout should be 7 days after 2025-01-15T10:00:00
+        assert deferral.timeout_at == "2025-01-22T10:00:00"
+
+    def test_create_pending_deferral_truncates_long_reason(self, wise_authority_service):
+        """Test that reason is truncated to 200 characters."""
+        long_reason = "x" * 300
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={"reason": long_reason},
+            priority_str="low",
+            ui_context={},
+            description="Desc",
+        )
+
+        assert len(deferral.reason) == 200

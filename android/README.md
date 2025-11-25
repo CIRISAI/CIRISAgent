@@ -212,6 +212,72 @@ Persisted settings in `SettingsActivity`:
 
 - `openai_api_base`: User-configured LLM endpoint
 - `openai_api_key`: User-configured API key
+- `billing_api_url`: CIRISBilling server URL
+- `google_user_id`: User's Google account ID (for billing)
+
+## Google Play Billing Integration
+
+The app supports in-app purchases via Google Play for buying CIRIS credits.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Android Device                          │
+├─────────────────────────────────────────────────────────────┤
+│  CIRIS Agent (on-device)     │  Google Play Billing Client  │
+│  - FastAPI @ localhost:8000  │  - BillingClient SDK 6.1.0   │
+│  - Python via Chaquopy       │  - Purchase flow UI          │
+│  - SQLite DB                 │  - Returns purchaseToken     │
+└──────────────┬───────────────┴───────────────┬──────────────┘
+               │                               │
+               │ LLM Requests                  │ Verify Token
+               ▼                               ▼
+┌──────────────────────────┐   ┌──────────────────────────────┐
+│   Remote LLM Provider    │   │      CIRISBilling API        │
+│   (OpenAI-compatible)    │   │   POST /google-play/verify   │
+└──────────────────────────┘   └──────────────────────────────┘
+```
+
+### Available Products
+
+Products must be configured in Google Play Console with these exact IDs:
+
+| Product ID   | Credits | Description |
+|--------------|---------|-------------|
+| credits_100  | 100     | 100 Credits |
+| credits_250  | 250     | 250 Credits |
+| credits_600  | 600     | 600 Credits |
+
+### Purchase Flow
+
+1. User taps "Buy Credits" in the app menu
+2. User selects a credit package
+3. Google Play purchase flow launches
+4. On success, app sends `purchaseToken` to CIRISBilling server
+5. Server verifies token with Google Play Developer API
+6. Server grants credits to user's account (idempotent)
+7. Server acknowledges purchase with Google
+8. App displays new balance
+
+### Key Files
+
+- `billing/BillingManager.kt`: Google Play Billing client wrapper
+- `billing/BillingApiClient.kt`: HTTP client for CIRISBilling API
+- `PurchaseActivity.kt`: Credit purchase UI
+
+### Setup for Production
+
+1. **Google Play Console**: Create products matching the IDs above
+2. **CIRISBilling Server**: Deploy with Google Play credentials
+3. **App Config**: Set `billing_api_url` to your CIRISBilling URL
+
+### Testing Purchases
+
+Use Google Play's license testing:
+1. Add test accounts in Google Play Console
+2. Test with sandbox purchases (no real charges)
+3. Verify idempotency by re-submitting tokens
 
 ## Troubleshooting
 
@@ -257,6 +323,25 @@ Persisted settings in `SettingsActivity`:
 4. Disable unnecessary adapters in startup
 5. Profile with Android Profiler
 
+### Billing Issues
+
+**Symptom**: Purchase fails or credits not added
+
+**Solutions**:
+1. Check Google account is signed in
+2. Verify billing endpoint in logs: `adb logcat -s CIRISBillingAPI`
+3. Test server connectivity: `curl https://billing.ciris.ai/health`
+4. Check purchase wasn't already processed (idempotent)
+5. For test purchases, use license testers in Play Console
+
+**Symptom**: Products not loading
+
+**Solutions**:
+1. Verify products exist in Google Play Console with exact IDs
+2. Check Play Billing connection: `adb logcat -s CIRISBilling`
+3. Ensure app is signed with correct certificate
+4. Wait 24h after creating products for propagation
+
 ## Security Considerations
 
 ### API Key Storage
@@ -293,6 +378,10 @@ In `proguard-rules.pro`:
 - [ ] Test offline capability (LLM remote but UI/logic on-device)
 - [ ] Document LLM endpoint setup for users
 - [ ] Prepare Google Play Store assets
+- [ ] Configure in-app products in Google Play Console
+- [ ] Deploy CIRISBilling server with Google Play credentials
+- [ ] Test sandbox purchases with license testers
+- [ ] Verify purchase verification flow end-to-end
 
 ## License
 

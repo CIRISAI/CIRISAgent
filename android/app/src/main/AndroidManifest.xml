@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Google Play Billing permission -->
+    <uses-permission android:name="com.android.vending.BILLING" />
+
     <!-- Storage for on-device database and logs -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"
@@ -39,6 +42,13 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="@string/settings_title"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- Purchase activity for buying credits via Google Play -->
+        <activity
+            android:name=".PurchaseActivity"
+            android:exported="false"
+            android:label="@string/purchase_title"
             android:parentActivityName=".MainActivity" />
     </application>
 </manifest>

@@ -37,3 +37,22 @@
     public static *** v(...);
     public static *** i(...);
 }
+
+# Google Play Billing
+-keep class com.android.vending.billing.** { *; }
+
+# OkHttp (for billing API)
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+
+# Gson (for JSON parsing in billing)
+-keepattributes Signature
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
+# Keep billing data classes for Gson serialization
+-keep class ai.ciris.mobile.billing.** { *; }

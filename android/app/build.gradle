@@ -94,9 +94,23 @@ dependencies {
     implementation "androidx.appcompat:appcompat:1.6.1"
     implementation "com.google.android.material:material:1.11.0"
     implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    implementation "androidx.cardview:cardview:1.0.0"
+    implementation "androidx.recyclerview:recyclerview:1.3.2"
 
     // WebView for bundled UI
     implementation "androidx.webkit:webkit:1.9.0"
+
+    // Google Play Billing for in-app purchases
+    implementation "com.android.billingclient:billing-ktx:6.1.0"
+
+    // Lifecycle for billing client connection
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
+
+    // OkHttp for billing API calls
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    // Gson for JSON parsing
+    implementation "com.google.code.gson:gson:2.10.1"
 
     // Testing
     testImplementation "junit:junit:4.13.2"

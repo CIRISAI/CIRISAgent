@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.types import JSONDict
+
 
 class PermissionEntry(BaseModel):
     """A single permission entry for a WA."""
@@ -85,6 +87,11 @@ class PendingDeferral(BaseModel):
     status: str = Field("pending", description="Current status")
     resolution: Optional[str] = Field(None, description="Resolution if completed")
     resolved_at: Optional[datetime] = Field(None, description="Resolution time")
+
+    # UI compatibility fields
+    question: Optional[str] = Field(None, description="Question/description for UI display")
+    context: JSONDict = Field(default_factory=dict, description="Additional context for UI")
+    timeout_at: Optional[str] = Field(None, description="When deferral times out (ISO format)")
 
 
 class DeferralResolution(BaseModel):

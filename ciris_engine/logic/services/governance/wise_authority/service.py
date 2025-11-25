@@ -384,10 +384,26 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 else:
                     priority_str = "low"
 
-                # Create PendingDeferral
+                # Create PendingDeferral with UI-compatible fields
+                created_at_dt = datetime.fromisoformat(updated_at.replace(" ", "T")) if updated_at else self._now()
+                timeout_dt = created_at_dt + timedelta(days=7)
+
+                # Build rich context for UI from available deferral data
+                deferral_context = deferral_info.get("context", {})
+                ui_context: Dict[str, str] = {
+                    "task_description": description[:500] if description else "",
+                }
+                # Add deferral-specific context fields (converted to strings for UI)
+                for key, value in deferral_context.items():
+                    if value is not None:
+                        ui_context[key] = str(value)[:200]  # Limit string length
+                # Include original message if available
+                if deferral_info.get("original_message"):
+                    ui_context["original_message"] = str(deferral_info["original_message"])[:500]
+
                 deferral = PendingDeferral(
                     deferral_id=deferral_id,
-                    created_at=datetime.fromisoformat(updated_at.replace(" ", "T")) if updated_at else self._now(),
+                    created_at=created_at_dt,
                     deferred_by="ciris_agent",
                     task_id=task_id,
                     thought_id=thought_id,
@@ -398,6 +414,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     assigned_wa_id=None,  # Not assigned in current implementation
                     requires_role=None,  # Not specified in current implementation
                     status="pending",
+                    # UI compatibility fields
+                    question=reason,  # Use reason as the question for UI display
+                    context=ui_context,  # Rich context from task and deferral data
+                    timeout_at=timeout_dt.isoformat(),  # Default 7 day timeout
                 )
 
                 result.append(deferral)

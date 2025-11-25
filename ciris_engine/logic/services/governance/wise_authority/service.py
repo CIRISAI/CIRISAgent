@@ -116,7 +116,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     # ========== Deferral Helper Methods ==========
 
-    def _parse_deferral_context(self, context_json: Optional[str]) -> tuple:
+    def _parse_deferral_context(self, context_json: Optional[str]) -> tuple[Dict[str, object], Dict[str, object]]:
         """Parse context JSON and extract deferral info.
 
         Args:

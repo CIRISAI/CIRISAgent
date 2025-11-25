@@ -310,7 +310,8 @@ DO UPDATE SET {updates}
             if hasattr(row, "keys"):
                 keys = row.keys()
                 if keys:
-                    return row[keys[0]]
+                    # Convert keys to list since dict_keys/odict_keys don't support indexing
+                    return row[list(keys)[0]]
             return None
 
     def get_query_builder(self) -> "QueryBuilder":

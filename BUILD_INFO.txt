@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 39d5fa3029ce
-Build Time: 2025-11-23T20:28:47.366020
-Git Commit: 98aed22eba81664cadd2d0b27cec747f9e119b90
-Git Branch: release/1.6.5.1
+Code Hash: 06a3abce3c1e
+Build Time: 2025-11-25T11:45:24.008123
+Git Commit: 6d39f8e0b2730c902e173ccbc133555def4465dc
+Git Branch: bugfix/issue-521-postgres-dialect
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

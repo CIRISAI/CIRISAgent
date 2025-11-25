@@ -6,9 +6,47 @@ Tests the first-run setup wizard API endpoints.
 
 import os
 import sqlite3
-from typing import List
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import QAModule, QATestCase
+
+
+def _validate_templates_response(response: Dict[str, Any]) -> bool:
+    """Validate that templates response contains required templates.
+
+    Args:
+        response: The JSON response from /v1/setup/templates
+
+    Returns:
+        True if valid, raises AssertionError if not
+    """
+    data = response.get("data", [])
+    assert data, "No templates returned in response"
+
+    # Extract template IDs
+    template_ids = [t.get("id") for t in data]
+
+    # Required templates that must be present
+    required_templates = ["default", "ally"]  # default.yaml=Datum, ally.yaml=Ally
+
+    missing = [t for t in required_templates if t not in template_ids]
+    assert not missing, f"Missing required templates: {missing}. Found: {template_ids}"
+
+    # Verify default template has name "Datum"
+    default_template = next((t for t in data if t.get("id") == "default"), None)
+    assert default_template, "Default template not found in response"
+    assert default_template.get("name") == "Datum", f"Default template should have name 'Datum', got: {default_template.get('name')}"
+
+    # Verify ally template has name "Ally"
+    ally_template = next((t for t in data if t.get("id") == "ally"), None)
+    assert ally_template, "Ally template not found in response"
+    assert ally_template.get("name") == "Ally", f"Ally template should have name 'Ally', got: {ally_template.get('name')}"
+
+    # Verify minimum expected templates
+    expected_min_count = 5  # default, sage, scout, echo, ally at minimum
+    assert len(data) >= expected_min_count, f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}"
+
+    return True
 
 
 class SetupTestModule:
@@ -50,7 +88,8 @@ class SetupTestModule:
                 method="GET",
                 expected_status=200,
                 requires_auth=False,
-                description="Get list of agent identity templates (general, moderator, researcher, etc.)",
+                description="Get list of agent identity templates - must include default (Datum) and ally",
+                custom_validation=_validate_templates_response,
             ),
             # GET /v1/setup/adapters - List available adapters
             QATestCase(

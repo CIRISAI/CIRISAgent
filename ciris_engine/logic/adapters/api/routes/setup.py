@@ -256,14 +256,22 @@ def _get_agent_templates() -> List[AgentTemplate]:
     templates: List[AgentTemplate] = []
     template_dir = get_template_directory()
 
+    logger.info(f"[SETUP TEMPLATES] Loading templates from: {template_dir}")
+    logger.info(f"[SETUP TEMPLATES] Directory exists: {template_dir.exists()}")
+
     # Skip test.yaml and backup files
     skip_templates = {"test.yaml", "CIRIS_TEMPLATE_GUIDE.md"}
 
-    for template_file in template_dir.glob("*.yaml"):
+    yaml_files = list(template_dir.glob("*.yaml"))
+    logger.info(f"[SETUP TEMPLATES] Found {len(yaml_files)} .yaml files: {[f.name for f in yaml_files]}")
+
+    for template_file in yaml_files:
         if template_file.name in skip_templates or template_file.name.endswith(".backup"):
+            logger.info(f"[SETUP TEMPLATES] Skipping: {template_file.name}")
             continue
 
         try:
+            logger.info(f"[SETUP TEMPLATES] Loading: {template_file.name}")
             with open(template_file, "r") as f:
                 template_data = yaml.safe_load(f)
 
@@ -299,15 +307,14 @@ def _get_agent_templates() -> List[AgentTemplate]:
             )
 
             templates.append(template)
+            logger.info(f"[SETUP TEMPLATES] Loaded: id={template.id}, name={template.name}")
 
         except Exception as e:
-            # Log but don't fail - skip invalid templates
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Failed to load template {template_file}: {e}")
+            logger.warning(f"[SETUP TEMPLATES] Failed to load template {template_file}: {e}")
             continue
 
+    logger.info(f"[SETUP TEMPLATES] Total templates loaded: {len(templates)}")
+    logger.info(f"[SETUP TEMPLATES] Template IDs: {[t.id for t in templates]}")
     return templates
 
 

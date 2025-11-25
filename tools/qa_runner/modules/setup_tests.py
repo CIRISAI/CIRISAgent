@@ -11,17 +11,29 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..config import QAModule, QATestCase
 
 
-def _validate_templates_response(response: Dict[str, Any]) -> bool:
+def _validate_templates_response(response: Any, config: Any) -> Dict[str, Any]:
     """Validate that templates response contains required templates.
 
     Args:
-        response: The JSON response from /v1/setup/templates
+        response: The requests.Response from /v1/setup/templates
+        config: QA runner config (unused but required by runner)
 
     Returns:
-        True if valid, raises AssertionError if not
+        Dict with {"passed": bool, "errors": list}
     """
-    data = response.get("data", [])
-    assert data, "No templates returned in response"
+    errors: List[str] = []
+
+    # Response is a requests.Response object, need to parse JSON
+    try:
+        json_data = response.json() if hasattr(response, "json") else response
+    except Exception as e:
+        return {"passed": False, "errors": [f"Failed to parse response JSON: {e}"]}
+
+    data = json_data.get("data", [])
+
+    if not data:
+        errors.append(f"No templates returned in response. Got: {response}")
+        return {"passed": False, "errors": errors}
 
     # Extract template IDs
     template_ids = [t.get("id") for t in data]
@@ -30,23 +42,29 @@ def _validate_templates_response(response: Dict[str, Any]) -> bool:
     required_templates = ["default", "ally"]  # default.yaml=Datum, ally.yaml=Ally
 
     missing = [t for t in required_templates if t not in template_ids]
-    assert not missing, f"Missing required templates: {missing}. Found: {template_ids}"
+    if missing:
+        errors.append(f"Missing required templates: {missing}. Found: {template_ids}")
 
     # Verify default template has name "Datum"
     default_template = next((t for t in data if t.get("id") == "default"), None)
-    assert default_template, "Default template not found in response"
-    assert default_template.get("name") == "Datum", f"Default template should have name 'Datum', got: {default_template.get('name')}"
+    if not default_template:
+        errors.append("Default template not found in response")
+    elif default_template.get("name") != "Datum":
+        errors.append(f"Default template should have name 'Datum', got: {default_template.get('name')}")
 
     # Verify ally template has name "Ally"
     ally_template = next((t for t in data if t.get("id") == "ally"), None)
-    assert ally_template, "Ally template not found in response"
-    assert ally_template.get("name") == "Ally", f"Ally template should have name 'Ally', got: {ally_template.get('name')}"
+    if not ally_template:
+        errors.append("Ally template not found in response")
+    elif ally_template.get("name") != "Ally":
+        errors.append(f"Ally template should have name 'Ally', got: {ally_template.get('name')}")
 
     # Verify minimum expected templates
     expected_min_count = 5  # default, sage, scout, echo, ally at minimum
-    assert len(data) >= expected_min_count, f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}"
+    if len(data) < expected_min_count:
+        errors.append(f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}")
 
-    return True
+    return {"passed": len(errors) == 0, "errors": errors}
 
 
 class SetupTestModule:

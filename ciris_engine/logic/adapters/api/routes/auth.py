@@ -153,7 +153,9 @@ async def logout(
 
 
 @router.get("/auth/me", response_model=UserInfo)
-async def get_current_user(auth: AuthContext = Depends(get_auth_context)) -> UserInfo:
+async def get_current_user(
+    auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
+) -> UserInfo:
     """
     Get current authenticated user information.
 
@@ -163,9 +165,9 @@ async def get_current_user(auth: AuthContext = Depends(get_auth_context)) -> Use
     # Use permissions from the auth context which includes custom permissions
     permissions = [p.value for p in auth.permissions]
 
-    # For API key auth, we don't have a traditional username
-    # Use the user_id as username
-    username = auth.user_id
+    # Fetch actual username from auth service
+    user = auth_service.get_user(auth.user_id)
+    username = user.name if user else auth.user_id  # Fallback to user_id if not found
 
     return UserInfo(
         user_id=auth.user_id,

@@ -255,17 +255,17 @@ class ActionDispatcher:
                     audit_parameters["tool_name"] = final_action_result.action_parameters.name
                     # JSON-serialize tool parameters for AuditActionContext (Dict[str, str] requirement)
                     audit_parameters["tool_parameters"] = json.dumps(final_action_result.action_parameters.parameters)
-                    logger.info(
-                        f"DEBUG: Added tool info to audit: name={audit_parameters['tool_name']}, params={final_action_result.action_parameters.parameters}"
+                    logger.debug(
+                        f"Added tool info to audit: name={audit_parameters['tool_name']}, params={final_action_result.action_parameters.parameters}"
                     )
                 else:
-                    logger.info(
-                        f"DEBUG: action_parameters is not ToolParams, type: {type(final_action_result.action_parameters)}"
+                    logger.debug(
+                        f"action_parameters is not ToolParams, type: {type(final_action_result.action_parameters)}"
                     )
             elif action_type == HandlerActionType.TOOL:
-                logger.info("DEBUG: TOOL action but no 'name' attribute on action_parameters")
+                logger.debug("TOOL action but no 'name' attribute on action_parameters")
 
-            logger.info(f"DEBUG: Creating audit context with parameters: {audit_parameters}")
+            logger.debug(f"Creating audit context with parameters: {audit_parameters}")
 
             audit_context = AuditActionContext(
                 thought_id=thought.thought_id,

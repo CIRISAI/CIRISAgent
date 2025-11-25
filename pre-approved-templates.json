@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "created_at": "2025-11-09T04:33:17.929660Z",
+  "created_at": "2025-11-25T16:17:35.654376Z",
   "templates": {
     "default": {
       "checksum": "sha256:b806aff077fd778c66fafcd5aa589fae2ef5f826275cdc8ffff3f9b2609a20c6",
@@ -13,6 +13,10 @@
     "scout": {
       "checksum": "sha256:aaf87e7d7f921763c9db307e2941cbd1ef56910bd5830d64f406cd39fd262c89",
       "description": "Scout - direct action demonstrator"
+    },
+    "ally": {
+      "checksum": "sha256:381e5e96e5a6612d0f3ff225c20101c431e832c4dbe2dd04c00302a070001f8c",
+      "description": "Ally - personal thriving assistant"
     },
     "echo-core": {
       "checksum": "sha256:91fa6d3e89f4a45bc1e7b690cd68bf40a8b6da6417b92d7f7259468737277fa5",
@@ -27,6 +31,6 @@
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "KXrXePI1EQGlCKx8BLaIZXOkGvu873nw8UIbg9xPBeNZkTkkuvV8uK8UjuOrZkzlxe5u+/ixvHWCTB0pzn5VAw==",
+  "root_signature": "Sr4Fc4KRLFieAaFy6zkCogl62nG93bzfAtzcYpdQa+K7FmmVPHnSustmM4LQ+5ZFRq+21Ms0SwJSc+Yr6gObCg==",
   "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
 }

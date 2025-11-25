@@ -87,14 +87,14 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                     # Find the Original Thought section and show what comes after it
                     ot_index = content.find("Original Thought:")
                     sample = content[ot_index : ot_index + 300] if ot_index != -1 else ""
-                    logger.info(f"[MOCK_LLM DEBUG] Original Thought section: {sample}")
+                    logger.debug(f"[MOCK_LLM] Original Thought section: {sample}")
 
                     # Use a more robust regex that handles nested quotes
                     # Match everything up to the LAST quote before a newline (greedy match)
                     thought_match = re.search(r'Original Thought:\s*"(.*)"(?:\n|$)', content, re.DOTALL)
                     if thought_match:
                         actual_thought_content = thought_match.group(1)
-                        logger.info(f"[MOCK_LLM DEBUG] Matched thought length: {len(actual_thought_content)}")
+                        logger.debug(f"[MOCK_LLM] Matched thought length: {len(actual_thought_content)}")
                         logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
 
                         # Check if this is a passive observation

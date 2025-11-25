@@ -110,11 +110,11 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
 
         # Debug logging to trace metadata propagation
         if additional_data:
-            logger.info(f"DEBUG: _convert_audit_entry - additional_data keys: {additional_data.keys()}")
+            logger.debug(f"_convert_audit_entry - additional_data keys: {additional_data.keys()}")
             if "tool_name" in additional_data:
-                logger.info(f"DEBUG: _convert_audit_entry - Found tool_name={additional_data['tool_name']}")
+                logger.debug(f"_convert_audit_entry - Found tool_name={additional_data['tool_name']}")
         else:
-            logger.info("DEBUG: _convert_audit_entry - No additional_data in ctx_dict")
+            logger.debug("_convert_audit_entry - No additional_data in ctx_dict")
 
         context = AuditContext(
             entity_id=ctx_dict.get("entity_id"),
@@ -132,7 +132,7 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         )
     else:
         # If it's not an AuditEntryContext, create a minimal AuditContext
-        logger.info("DEBUG: _convert_audit_entry - ctx doesn't have model_dump, using str(ctx)")
+        logger.debug("_convert_audit_entry - ctx doesn't have model_dump, using str(ctx)")
         context = AuditContext(description=str(ctx) if ctx else None)
 
     return AuditEntryResponse(

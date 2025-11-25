@@ -5,6 +5,58 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.6] - 2025-11-25
+
+### Fixed - PostgreSQL Support & Log Noise Reduction
+
+- **PostgreSQL Dialect Error** (#521, #522) - Fixed critical `odict_keys` subscript error causing massive log spam
+  - **Issue**: `extract_scalar` in dialect.py failed with `TypeError: 'odict_keys' object is not subscriptable`
+  - **Impact**: Scout agents on PostgreSQL generated 59-61 MB incident logs due to repeated errors
+  - **Root Cause**: `row.keys()` returns `odict_keys` view object which doesn't support `[0]` indexing
+  - **Fix**: Convert keys to list before indexing: `list(keys)[0]`
+  - **Files**: `ciris_engine/logic/persistence/db/dialect.py:313`
+
+- **Deferral UI Fields Empty** (#517) - Fixed pending deferrals showing empty context in UI
+  - **Issue**: `/v1/wa/deferrals` returned deferrals with empty `question` and `context` fields
+  - **Root Cause**: Service method wasn't populating UI-compatible fields from deferral data
+  - **Fix**: Build rich context from task description, deferral context, and original message
+  - **Files**: `ciris_engine/logic/services/governance/wise_authority/service.py:387-421`
+
+- **DEBUG Info at INFO Level** - Reduced log noise by moving debug messages to DEBUG level
+  - Changed 39 log statements across 10 files from INFO to DEBUG level
+  - **Files affected**:
+    - `graph.py` - add_graph_node debug messages
+    - `memory_service.py` - LocalGraphMemoryService init
+    - `audit_service/service.py` - audit entry creation
+    - `action_dispatcher.py` - tool audit parameters
+    - `wakeup_processor.py` - wakeup step processing
+    - `setup.py` - auth database path
+    - `audit.py` routes - audit entry conversion
+    - `mock_llm/responses*.py` - message processing
+    - `main.py` - exit point tracking
+
+### Changed
+
+- **Template Consolidation** (#519) - Moved all templates to single location
+  - Templates now in `ciris_engine/ciris_templates/` (removed root `ciris_templates/`)
+  - Added `ally` template to manifest generators
+  - All 7 templates signed: default (Datum), ally, sage, scout, echo, echo-core, echo-speculative
+
+### Improved
+
+- **Wise Authority Service Refactoring** - Reduced cognitive complexity from 24 to ~10
+  - Extracted 4 helper methods for better maintainability:
+    - `_parse_deferral_context()` - Parse context JSON
+    - `_priority_to_string()` - Convert int priority to string
+    - `_build_ui_context()` - Build UI context dictionary
+    - `_create_pending_deferral()` - Create PendingDeferral from data
+  - Added 19 unit tests covering all helper methods
+
+- **QA Runner Setup Tests** - Added template validation to setup module
+  - Validates `default` (Datum) and `ally` templates are present
+  - Verifies minimum template count and correct naming
+  - Added debug logging to template loading for troubleshooting
+
 ## [1.6.5.3] - 2025-11-23
 
 ### Fixed - Setup User Creation Cache Bug

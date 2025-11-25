@@ -59,17 +59,18 @@ class ApiPlatform(Service):
         # Load environment variables first (provides defaults)
         self.config.load_env_vars()
 
-        # Then apply user-provided configuration (takes precedence)
+        # Then apply user-provided configuration (takes precedence over env vars)
+        # NOTE: Do NOT call load_env_vars() after this - the config dict already
+        # represents the final desired config with CLI args taking precedence.
+        # Calling load_env_vars() would override CLI args with .env values.
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             if isinstance(kwargs["adapter_config"], APIAdapterConfig):
                 self.config = kwargs["adapter_config"]
-                # Still load env vars to allow env overrides
-                self.config.load_env_vars()
+                # Don't call load_env_vars() - config object already has correct values
             elif isinstance(kwargs["adapter_config"], dict):
-                # Merge user config over env-loaded config
+                # Create config from dict - this contains final merged values
                 self.config = APIAdapterConfig(**kwargs["adapter_config"])
-                # Load env vars after to allow env overrides
-                self.config.load_env_vars()
+                # Don't call load_env_vars() - dict already has correct values from main.py
             # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
 
         # Create FastAPI app - services will be injected later in start()

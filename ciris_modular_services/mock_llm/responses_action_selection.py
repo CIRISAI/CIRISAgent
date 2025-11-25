@@ -677,7 +677,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     user_content = msg.get("content", "")
 
                     # Debug logging
-                    logger.info(f"[MOCK_LLM DEBUG] Processing user message: {user_content[:200]}...")
+                    logger.debug(f"[MOCK_LLM] Processing user message: {user_content[:200]}...")
 
                     # Try to extract the actual user input after various patterns:
                     # - "User @username said:" or "@username said:"
@@ -689,7 +689,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     api_match = re.search(r"@\w+\s*\([^)]+\):\s*(.+)", user_content, re.IGNORECASE | re.DOTALL)
                     if api_match:
                         actual_user_input = api_match.group(1).strip()
-                        logger.info(f"[MOCK_LLM DEBUG] Extracted via API pattern: {actual_user_input[:100]}")
+                        logger.debug(f"[MOCK_LLM] Extracted via API pattern: {actual_user_input[:100]}")
                     else:
                         # Then try "User said:" or "@username said:" format
                         user_match = re.search(
@@ -697,11 +697,11 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                         )
                         if user_match:
                             actual_user_input = user_match.group(1).strip()
-                            logger.info(f"[MOCK_LLM DEBUG] Extracted via User said pattern: {actual_user_input[:100]}")
+                            logger.debug(f"[MOCK_LLM] Extracted via User said pattern: {actual_user_input[:100]}")
                         else:
                             # If no pattern matches, use the content as-is
                             actual_user_input = user_content.strip()
-                            logger.info(f"[MOCK_LLM DEBUG] Using content as-is: {actual_user_input[:100]}")
+                            logger.debug(f"[MOCK_LLM] Using content as-is: {actual_user_input[:100]}")
 
                     # Check if it starts with a command
                     if actual_user_input.startswith("$"):

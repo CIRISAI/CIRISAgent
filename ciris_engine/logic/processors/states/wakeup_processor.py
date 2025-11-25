@@ -239,24 +239,22 @@ class WakeupProcessor(BaseProcessor):
             if non_blocking:
                 processed_any = False
 
-                logger.info(
-                    f"[WAKEUP DEBUG] Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation"
-                )
+                logger.debug(f"[WAKEUP] Checking {len(self.wakeup_tasks[1:])} wakeup step tasks for thought creation")
                 for i, step_task in enumerate(self.wakeup_tasks[1:]):
                     # Use helper to validate task state
                     is_valid, status_str = self._validate_task_state(step_task)
-                    logger.info(f"[WAKEUP DEBUG] Step {i+1}: task_id={step_task.task_id}, status={status_str}")
+                    logger.debug(f"[WAKEUP] Step {i+1}: task_id={step_task.task_id}, status={status_str}")
 
                     if not is_valid:
-                        logger.info(f"[WAKEUP DEBUG] Skipping step {i+1} - not ACTIVE (status: {status_str})")
+                        logger.debug(f"[WAKEUP] Skipping step {i+1} - not ACTIVE (status: {status_str})")
                         continue
 
                     # Use helper to get thought summary
                     thought_summary = self._get_task_thoughts_summary(step_task.task_id, step_task.agent_occurrence_id)
                     existing_thoughts = thought_summary["thoughts"]
-                    logger.info(f"[WAKEUP DEBUG] Step {i+1} has {thought_summary['total']} existing thoughts")
-                    logger.info(
-                        f"[WAKEUP DEBUG] Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}"
+                    logger.debug(f"[WAKEUP] Step {i+1} has {thought_summary['total']} existing thoughts")
+                    logger.debug(
+                        f"[WAKEUP] Step {i+1} thought counts - pending: {thought_summary['pending']}, processing: {thought_summary['processing']}, completed: {thought_summary['completed']}"
                     )
 
                     if thought_summary["pending"] > 0:
@@ -275,14 +273,14 @@ class WakeupProcessor(BaseProcessor):
                     # Use helper to determine if new thought is needed
                     current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
                     if self._needs_new_thought(existing_thoughts, current_task):
-                        logger.info(
-                            f"[WAKEUP DEBUG] Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
+                        logger.debug(
+                            f"[WAKEUP] Step {i+1} needs new thought (existing: {len(existing_thoughts)}, task active: {current_task.status == TaskStatus.ACTIVE if current_task else False})"
                         )
                         thought, processing_context = self._create_step_thought(step_task, round_number)
-                        logger.info(f"[WAKEUP DEBUG] Created new thought {thought.thought_id} for step {i+1}")
+                        logger.debug(f"[WAKEUP] Created new thought {thought.thought_id} for step {i+1}")
                         processed_any = True
                     else:
-                        logger.info(f"[WAKEUP DEBUG] Step {i+1} does not need new thought, skipping")
+                        logger.debug(f"[WAKEUP] Step {i+1} does not need new thought, skipping")
 
                 # Use helper to collect steps status
                 steps_status = self._collect_steps_status()

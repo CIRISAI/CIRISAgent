@@ -59,10 +59,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         import logging
 
         logger_temp = logging.getLogger(__name__)
-        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - received db_path: {db_path!r}")
+        logger_temp.debug(f"LocalGraphMemoryService.__init__ - received db_path: {db_path!r}")
 
         self.db_path = db_path or get_sqlite_db_full_path()
-        logger_temp.info(f"DEBUG LocalGraphMemoryService.__init__ - self.db_path set to: {self.db_path!r}")
+        logger_temp.debug(f"LocalGraphMemoryService.__init__ - self.db_path set to: {self.db_path!r}")
 
         initialize_database(db_path=self.db_path)
         self.secrets_service = secrets_service  # Must be provided, not created here

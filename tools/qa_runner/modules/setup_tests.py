@@ -6,9 +6,65 @@ Tests the first-run setup wizard API endpoints.
 
 import os
 import sqlite3
-from typing import List
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import QAModule, QATestCase
+
+
+def _validate_templates_response(response: Any, config: Any) -> Dict[str, Any]:
+    """Validate that templates response contains required templates.
+
+    Args:
+        response: The requests.Response from /v1/setup/templates
+        config: QA runner config (unused but required by runner)
+
+    Returns:
+        Dict with {"passed": bool, "errors": list}
+    """
+    errors: List[str] = []
+
+    # Response is a requests.Response object, need to parse JSON
+    try:
+        json_data = response.json() if hasattr(response, "json") else response
+    except Exception as e:
+        return {"passed": False, "errors": [f"Failed to parse response JSON: {e}"]}
+
+    data = json_data.get("data", [])
+
+    if not data:
+        errors.append(f"No templates returned in response. Got: {response}")
+        return {"passed": False, "errors": errors}
+
+    # Extract template IDs
+    template_ids = [t.get("id") for t in data]
+
+    # Required templates that must be present
+    required_templates = ["default", "ally"]  # default.yaml=Datum, ally.yaml=Ally
+
+    missing = [t for t in required_templates if t not in template_ids]
+    if missing:
+        errors.append(f"Missing required templates: {missing}. Found: {template_ids}")
+
+    # Verify default template has name "Datum"
+    default_template = next((t for t in data if t.get("id") == "default"), None)
+    if not default_template:
+        errors.append("Default template not found in response")
+    elif default_template.get("name") != "Datum":
+        errors.append(f"Default template should have name 'Datum', got: {default_template.get('name')}")
+
+    # Verify ally template has name "Ally"
+    ally_template = next((t for t in data if t.get("id") == "ally"), None)
+    if not ally_template:
+        errors.append("Ally template not found in response")
+    elif ally_template.get("name") != "Ally":
+        errors.append(f"Ally template should have name 'Ally', got: {ally_template.get('name')}")
+
+    # Verify minimum expected templates
+    expected_min_count = 5  # default, sage, scout, echo, ally at minimum
+    if len(data) < expected_min_count:
+        errors.append(f"Expected at least {expected_min_count} templates, got {len(data)}: {template_ids}")
+
+    return {"passed": len(errors) == 0, "errors": errors}
 
 
 class SetupTestModule:
@@ -50,7 +106,8 @@ class SetupTestModule:
                 method="GET",
                 expected_status=200,
                 requires_auth=False,
-                description="Get list of agent identity templates (general, moderator, researcher, etc.)",
+                description="Get list of agent identity templates - must include default (Datum) and ally",
+                custom_validation=_validate_templates_response,
             ),
             # GET /v1/setup/adapters - List available adapters
             QATestCase(
@@ -112,7 +169,7 @@ class SetupTestModule:
                     "adapter_config": {},
                     "admin_username": "qa_test_user",
                     "admin_password": "qa_test_password_12345",
-                    "system_admin_password": "new_admin_password_12345",
+                    "system_admin_password": "ciris_admin_password",  # Keep default to not break other tests
                     "agent_port": 8080,
                 },
                 expected_status=200,

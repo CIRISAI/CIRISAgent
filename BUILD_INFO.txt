@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 0ba4082fd4e1
-Build Time: 2025-11-24T19:39:31.220745
-Git Commit: 1b61879470b757e40c3065c7ae486cff5a108157
-Git Branch: bugfix/issue-514-deferral-ui
+Code Hash: 2cea756c7c4f
+Build Time: 2025-11-25T13:57:09.262831
+Git Commit: 1c4e9023d3a89113dbbd6014875803a2a2c3f7ba
+Git Branch: release/1.6.6
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

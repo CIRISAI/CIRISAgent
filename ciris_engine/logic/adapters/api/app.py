@@ -3,6 +3,7 @@ FastAPI application for CIRIS API v1.
 
 This module creates and configures the FastAPI application with all routes.
 """
+from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable
@@ -99,60 +100,63 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
         print(f"Rate limiting enabled: {rate_limit} requests per minute")
 
+    # Initialize auth service - ALWAYS required for API functionality
+    # Even without a full runtime, APIAuthService creates a default admin user
+    app.state.auth_service = APIAuthService()
+
     # Store runtime in app state for access in routes
     if runtime:
         app.state.runtime = runtime
+    else:
+        app.state.runtime = None
 
-        # Initialize auth service - will be properly initialized later with authentication service
-        app.state.auth_service = APIAuthService()
+    # Services will be injected later in ApiPlatform.start() after they're initialized
+    # For now, just set placeholders to None (these work regardless of runtime)
 
-        # Services will be injected later in ApiPlatform.start() after they're initialized
-        # For now, just set placeholders to None
+    # === THE 21 CORE CIRIS SERVICES ===
+    # Graph Services (6)
+    app.state.memory_service = None
+    app.state.consent_manager = None  # Consent manager for Consensual Evolution Protocol (includes DSAR automation)
+    app.state.config_service = None
+    app.state.telemetry_service = None
+    app.state.audit_service = None
+    app.state.incident_management_service = None
+    app.state.tsdb_consolidation_service = None
 
-        # === THE 21 CORE CIRIS SERVICES ===
-        # Graph Services (6)
-        app.state.memory_service = None
-        app.state.consent_manager = None  # Consent manager for Consensual Evolution Protocol (includes DSAR automation)
-        app.state.config_service = None
-        app.state.telemetry_service = None
-        app.state.audit_service = None
-        app.state.incident_management_service = None
-        app.state.tsdb_consolidation_service = None
+    # Infrastructure Services (7)
+    app.state.time_service = None
+    app.state.shutdown_service = None
+    app.state.initialization_service = None
+    app.state.authentication_service = None
+    app.state.resource_monitor = None
+    app.state.database_maintenance_service = None
+    app.state.secrets_service = None
 
-        # Infrastructure Services (7)
-        app.state.time_service = None
-        app.state.shutdown_service = None
-        app.state.initialization_service = None
-        app.state.authentication_service = None
-        app.state.resource_monitor = None
-        app.state.database_maintenance_service = None
-        app.state.secrets_service = None
+    # Governance Services (4)
+    app.state.wise_authority_service = None
+    app.state.wa_service = None  # Alias for wise_authority_service
+    app.state.adaptive_filter_service = None
+    app.state.visibility_service = None
+    app.state.self_observation_service = None
 
-        # Governance Services (4)
-        app.state.wise_authority_service = None
-        app.state.wa_service = None  # Alias for wise_authority_service
-        app.state.adaptive_filter_service = None
-        app.state.visibility_service = None
-        app.state.self_observation_service = None
+    # Runtime Services (3)
+    app.state.llm_service = None
+    app.state.runtime_control_service = None
+    app.state.task_scheduler = None
 
-        # Runtime Services (3)
-        app.state.llm_service = None
-        app.state.runtime_control_service = None
-        app.state.task_scheduler = None
+    # Tool Services (1)
+    app.state.secrets_tool_service = None
 
-        # Tool Services (1)
-        app.state.secrets_tool_service = None
-
-        # === INFRASTRUCTURE COMPONENTS (not part of the 22 services) ===
-        app.state.service_registry = None
-        app.state.agent_processor = None
-        app.state.message_handler = None
-        # Adapter-created services
-        app.state.communication_service = None
-        app.state.tool_service = None
-        # Message buses (injected from bus_manager)
-        app.state.tool_bus = None
-        app.state.memory_bus = None
+    # === INFRASTRUCTURE COMPONENTS (not part of the 22 services) ===
+    app.state.service_registry = None
+    app.state.agent_processor = None
+    app.state.message_handler = None
+    # Adapter-created services
+    app.state.communication_service = None
+    app.state.tool_service = None
+    # Message buses (injected from bus_manager)
+    app.state.tool_bus = None
+    app.state.memory_bus = None
 
     # Mount v1 API routes (all routes except emergency under /v1)
     v1_routers = [

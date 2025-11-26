@@ -9,6 +9,7 @@ Implements session management endpoints:
 
 Note: OAuth endpoints are in api_auth_v2.py
 """
+from __future__ import annotations
 
 import logging
 import os
@@ -17,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -134,7 +135,7 @@ async def login(
     )
 
 
-@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def logout(
     auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
 ) -> None:
@@ -1038,7 +1039,7 @@ async def list_api_keys(
     return APIKeyListResponse(api_keys=api_keys, total=len(api_keys))
 
 
-@router.delete("/auth/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/auth/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 async def delete_api_key(
     key_id: str,
     auth: AuthContext = Depends(get_auth_context),

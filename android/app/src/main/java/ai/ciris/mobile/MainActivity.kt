@@ -37,10 +37,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var serverStarted = false
 
-    // Google user info passed from LoginActivity
+    // User info passed from LoginActivity
+    private var authMethod: String? = null
     private var googleUserId: String? = null
     private var userEmail: String? = null
     private var userName: String? = null
+    private var showSetup: Boolean = false
 
     companion object {
         private const val TAG = "CIRISMobile"
@@ -56,15 +58,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Get Google user info from LoginActivity
+        // Get user info from LoginActivity
+        authMethod = intent.getStringExtra("auth_method") ?: "api_key"
         googleUserId = intent.getStringExtra("google_user_id")
         userEmail = intent.getStringExtra("user_email")
         userName = intent.getStringExtra("user_name")
+        showSetup = intent.getBooleanExtra("show_setup", true)
 
         // Store globally for LLM proxy access
         currentGoogleUserId = googleUserId
 
-        Log.i(TAG, "Logged in as: $userName ($userEmail), Google ID: $googleUserId")
+        Log.i(TAG, "Auth method: $authMethod, User: $userName ($userEmail), Setup: $showSetup")
 
         // Initialize Python runtime
         if (!Python.isStarted()) {
@@ -111,6 +115,15 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     // Keep navigation within WebView
                     return false
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    // Inject auth data after the real page loads (not on data: URLs)
+                    if (url?.startsWith("http") == true) {
+                        Log.i(TAG, "Page loaded: $url - injecting auth data")
+                        injectAuthData()
+                    }
                 }
             }
 
@@ -287,7 +300,43 @@ class MainActivity : AppCompatActivity() {
     private fun loadUI() {
         val url = "$SERVER_URL$UI_PATH"
         Log.i(TAG, "Loading UI from $url")
+        // Auth data is injected in onPageFinished after page loads
         webView.loadUrl(url)
+    }
+
+    private fun injectAuthData() {
+        // Inject auth data into localStorage for the web UI
+        // The web app will check for this and use it for authentication
+        val authJson = """
+            {
+                "provider": "${authMethod ?: "api_key"}",
+                "googleUserId": "${googleUserId ?: ""}",
+                "email": "${userEmail ?: ""}",
+                "displayName": "${userName ?: ""}",
+                "isNativeApp": true,
+                "showSetup": $showSetup
+            }
+        """.trimIndent().replace("\n", "")
+
+        val script = """
+            (function() {
+                localStorage.setItem('ciris_native_auth', '$authJson');
+                localStorage.setItem('ciris_auth_method', '${authMethod ?: "api_key"}');
+                localStorage.setItem('ciris_google_user_id', '${googleUserId ?: ""}');
+                localStorage.setItem('ciris_user_email', '${userEmail ?: ""}');
+                localStorage.setItem('ciris_user_name', '${userName ?: ""}');
+                localStorage.setItem('ciris_show_setup', '${showSetup}');
+                localStorage.setItem('isNativeApp', 'true');
+                console.log('[Native] Auth data injected - method: ${authMethod ?: "api_key"}, showSetup: $showSetup');
+
+                // Dispatch event to notify web app of native auth
+                window.dispatchEvent(new CustomEvent('ciris_native_auth_ready', { detail: $authJson }));
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(script) { result ->
+            Log.i(TAG, "Auth injection result: $result")
+        }
     }
 
     private fun retryLoadUI() {

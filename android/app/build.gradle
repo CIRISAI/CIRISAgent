@@ -1,6 +1,6 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
+    id "org.jetbrains.kotlin.android"
     id "com.chaquo.python"
 }
 
@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId "ai.ciris.mobile"
-        minSdk 24  // Android 7.0+ required for Python 3.10
+        minSdk 24  // Android 7.0+
         targetSdk 34
         versionCode 1
         versionName "1.6.3.2"
@@ -18,8 +18,67 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            // Include architectures for Chaquopy
-            abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+            // Start with x86_64 only for emulator testing
+            abiFilters "x86_64"
+        }
+
+        // Chaquopy Python configuration (inside defaultConfig for Chaquopy 15+)
+        python {
+            // Use Python 3.12 - Chaquopy 16 supports 3.8-3.13
+            version "3.12"
+
+            // Use system Python 3.10+ for build-time operations
+            buildPython "/usr/bin/python3"
+
+            // Extract pydantic_core to filesystem for native .so loading
+            extractPackages "pydantic_core"
+
+            pip {
+                // Use local wheels directory for cross-compiled pydantic-core
+                options "--find-links", "wheels"
+
+                // Install pydantic-core from local wheel FIRST (before pydantic pulls it from PyPI)
+                install "pydantic-core==2.23.4"
+
+                // Pydantic 2.x (will use our local pydantic-core)
+                install "pydantic==2.9.2"
+
+                // Core FastAPI dependencies
+                install "fastapi==0.115.0"
+                install "uvicorn==0.30.0"
+                install "httpx==0.27.0"
+
+                // Database
+                install "aiosqlite==0.20.0"
+                install "aiofiles==23.2.1"
+
+                // Configuration
+                install "pyyaml==6.0.1"
+                install "python-dotenv==1.0.1"
+
+                // Authentication and encryption
+                install "cryptography==42.0.8"
+                install "bcrypt==3.2.2"
+                install "PyJWT==2.8.0"
+                install "python-jose==3.3.0"
+                install "passlib==1.7.4"
+                install "python-multipart==0.0.9"
+
+                // LLM client (remote inference only)
+                // Use older versions that don't require jiter (native Rust extension)
+                install "openai==1.12.0"
+                install "instructor==1.2.6"
+
+                // Keep dependencies lean - no GPU, BLAS, or heavy ML libs
+                // All LLM inference is remote via API
+            }
+        }
+    }
+
+    // Include CIRIS Python source
+    sourceSets {
+        main {
+            python.srcDirs = ["src/main/python"]
         }
     }
 
@@ -48,41 +107,52 @@ android {
     }
 }
 
-python {
-    // Use system Python 3.10+ for building
-    buildPython "/usr/bin/python3"
+// Task to move pydantic-core native .so from common to x86_64 after pip install
+// Chaquopy puts it in common because pip removes WHEEL file during install
+android.applicationVariants.all { variant ->
+    def variantName = variant.name.capitalize()
 
-    pip {
-        // Core FastAPI dependencies
-        install "fastapi==0.115.0"
-        install "uvicorn[standard]==0.30.0"
-        install "httpx==0.27.0"
+    tasks.whenTaskAdded { task ->
+        if (task.name == "generate${variantName}PythonRequirementsAssets") {
+            task.doFirst {
+                def commonDir = file("${buildDir}/python/pip/${variant.name}/common")
+                def x86_64Dir = file("${buildDir}/python/pip/${variant.name}/x86_64")
+                def commonPydanticCore = file("${commonDir}/pydantic_core")
+                def commonDistInfo = file("${commonDir}/pydantic_core-2.23.4.dist-info")
 
-        // Pydantic for validation
-        install "pydantic==2.8.0"
-        install "pydantic-settings==2.3.0"
+                if (commonPydanticCore.exists()) {
+                    println "Moving pydantic_core from common to x86_64 for native lib support..."
 
-        // Database
-        install "aiosqlite==0.20.0"
+                    // Create x86_64 directories
+                    x86_64Dir.mkdirs()
+                    def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
 
-        // Configuration
-        install "pyyaml==6.0.1"
-        install "python-dotenv==1.0.1"
+                    // Copy pydantic_core package
+                    copy {
+                        from commonPydanticCore
+                        into x86_64PydanticCore
+                    }
 
-        // Authentication
-        install "python-jose[cryptography]==3.3.0"
-        install "passlib[bcrypt]==1.7.4"
-        install "python-multipart==0.0.9"
+                    // Copy dist-info
+                    copy {
+                        from commonDistInfo
+                        into x86_64DistInfo
+                    }
 
-        // Keep dependencies lean - no GPU, BLAS, or heavy ML libs
-        // All LLM inference is remote
-    }
+                    // Add WHEEL file to x86_64 dist-info
+                    file("${x86_64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp312-cp312-android_24_x86_64
+"""
 
-    // Include CIRIS Python source
-    sourceSets {
-        main {
-            python {
-                srcDirs = ["../../ciris_engine", "../../"]
+                    // Delete from common
+                    delete commonPydanticCore
+                    delete commonDistInfo
+
+                    println "pydantic_core moved to ${x86_64Dir}"
+                }
             }
         }
     }
@@ -111,6 +181,12 @@ dependencies {
 
     // Gson for JSON parsing
     implementation "com.google.code.gson:gson:2.10.1"
+
+    // Google Sign-In for OAuth authentication
+    implementation "com.google.android.gms:play-services-auth:20.7.0"
+
+    // Coroutines for async operations
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
 
     // Testing
     testImplementation "junit:junit:4.13.2"

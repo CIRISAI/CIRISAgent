@@ -25,17 +25,23 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
-        <!-- Main activity launches Python server and WebView UI -->
+        <!-- Login activity with Google Sign-In (LAUNCHER) -->
         <activity
-            android:name=".MainActivity"
+            android:name=".auth.LoginActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.CIRIS.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Main activity launches Python server and WebView UI -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Settings activity for LLM endpoint configuration -->
         <activity

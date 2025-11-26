@@ -37,15 +37,34 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var serverStarted = false
 
+    // Google user info passed from LoginActivity
+    private var googleUserId: String? = null
+    private var userEmail: String? = null
+    private var userName: String? = null
+
     companion object {
         private const val TAG = "CIRISMobile"
         private const val SERVER_URL = "http://127.0.0.1:8080"  // Match GUI SDK default
         private const val UI_PATH = "/index.html"
+
+        // Static reference to current Google user ID for LLM proxy calls
+        var currentGoogleUserId: String? = null
+            private set
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Get Google user info from LoginActivity
+        googleUserId = intent.getStringExtra("google_user_id")
+        userEmail = intent.getStringExtra("user_email")
+        userName = intent.getStringExtra("user_name")
+
+        // Store globally for LLM proxy access
+        currentGoogleUserId = googleUserId
+
+        Log.i(TAG, "Logged in as: $userName ($userEmail), Google ID: $googleUserId")
 
         // Initialize Python runtime
         if (!Python.isStarted()) {

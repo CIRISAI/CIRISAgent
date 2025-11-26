@@ -1,12 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Main CIRIS theme with action bar -->
     <style name="Theme.CIRIS" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
-        <item name="colorPrimary">#6200EE</item>
-        <item name="colorPrimaryVariant">#3700B3</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#03DAC6</item>
-        <item name="colorSecondaryVariant">#018786</item>
-        <item name="colorOnSecondary">#000000</item>
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+        <item name="colorPrimary">@color/ciris_primary</item>
+        <item name="colorPrimaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ciris_accent</item>
+        <item name="colorSecondaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">@color/ciris_secondary</item>
+    </style>
+
+    <!-- No action bar theme for login screen -->
+    <style name="Theme.CIRIS.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ciris_primary</item>
+        <item name="colorPrimaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ciris_accent</item>
+        <item name="colorSecondaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">@color/ciris_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

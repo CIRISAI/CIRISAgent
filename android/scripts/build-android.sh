@@ -136,18 +136,26 @@ build_web_assets() {
 copy_web_assets() {
     log_info "Copying web assets to Android..."
 
-    ASSETS_DIR="$ANDROID_DIR/app/src/main/assets/public"
+    # Use separate android_gui_static folder to avoid conflicts with ciris_engine/gui_static
+    GUI_STATIC_DIR="$CIRISAGENT_DIR/android_gui_static"
+    ASSETS_LINK="$ANDROID_DIR/app/src/main/assets/public"
 
     # Clean previous assets
-    rm -rf "$ASSETS_DIR"
-    mkdir -p "$ASSETS_DIR"
+    rm -rf "$GUI_STATIC_DIR"
+    mkdir -p "$GUI_STATIC_DIR"
 
-    # Copy built web assets
-    cp -r "$WEB_SOURCE/out/"* "$ASSETS_DIR/"
+    # Copy built web assets to android_gui_static
+    cp -r "$WEB_SOURCE/out/"* "$GUI_STATIC_DIR/"
+
+    # Create symlink from Android assets to android_gui_static
+    rm -rf "$ASSETS_LINK"
+    mkdir -p "$(dirname "$ASSETS_LINK")"
+    ln -sf "../../../../../android_gui_static" "$ASSETS_LINK"
 
     # Count files
-    FILE_COUNT=$(find "$ASSETS_DIR" -type f | wc -l)
-    log_info "Copied $FILE_COUNT files to $ASSETS_DIR"
+    FILE_COUNT=$(find "$GUI_STATIC_DIR" -type f | wc -l)
+    log_info "Copied $FILE_COUNT files to $GUI_STATIC_DIR"
+    log_info "Created symlink: $ASSETS_LINK -> android_gui_static"
 }
 
 # Build Android APK

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="LLM Endpoint Configuration"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="API Base URL"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp" />
+
+    <EditText
+        android:id="@+id/apiBaseInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="https://api.openai.com/v1"
+        android:inputType="textUri"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="API Key"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp" />
+
+    <EditText
+        android:id="@+id/apiKeyInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="sk-..."
+        android:inputType="textPassword"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/saveButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Save Settings" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Examples:\n• OpenAI: https://api.openai.com/v1\n• Together.ai: https://api.together.ai/v1\n• Local: http://192.168.1.100:8080/v1"
+        android:textSize="12sp"
+        android:layout_marginTop="16dp"
+        android:textColor="#666666" />
+
+</LinearLayout>

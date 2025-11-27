@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="150" viewBox="0 0 1200 150">
+  <title>Numbers 1–11, vector segments</title>
+  <style>
+    .seg { stroke:#000; stroke-width:8; stroke-linecap:round; fill:none; }
+    /* Example: animate a whole number group
+    #num-1 { transition: transform 300ms ease; }
+    #num-1:hover { transform: scale(1.15); transform-origin: 25px 50px; }
+    */
+  </style>
+
+  <!-- Seven-seg coordinates for a single digit cell: 50x80 units -->
+  <defs>
+    <!-- Digit cell origin is (0,0), segments sized for 50x80 -->
+    <line id="seg-a" class="seg" x1="10" y1="10" x2="40" y2="10" />
+    <line id="seg-b" class="seg" x1="40" y1="10" x2="40" y2="40" />
+    <line id="seg-c" class="seg" x1="40" y1="40" x2="40" y2="70" />
+    <line id="seg-d" class="seg" x1="10" y1="70" x2="40" y2="70" />
+    <line id="seg-e" class="seg" x1="10" y1="40" x2="10" y2="70" />
+    <line id="seg-f" class="seg" x1="10" y1="10" x2="10" y2="40" />
+    <line id="seg-g" class="seg" x1="10" y1="40" x2="40" y2="40" />
+  </defs>
+
+  <!-- Helper: a single-digit block with chosen segments -->
+  <!-- Usage: copy the needed <use> elements for each digit -->
+  <!-- Digit -> segments:
+       0: a b c d e f
+       1:   b c
+       2: a b   d e   g
+       3: a b c d     g
+       4:   b c     f g
+       5: a   c d   f g
+       6: a   c d e f g
+       7: a b c
+       8: a b c d e f g
+       9: a b c d   f g
+  -->
+
+  <!-- row baseline y=35 to center vertically -->
+  <!-- Each cell is 60 units wide (50 cell + 10 gap) -->
+
+  <!-- 1 -->
+  <g id="num-1" transform="translate(0,35)">
+    <use href="#seg-b"/><use href="#seg-c"/>
+  </g>
+
+  <!-- 2 -->
+  <g id="num-2" transform="translate(100,35)">
+    <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-d"/><use href="#seg-e"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 3 -->
+  <g id="num-3" transform="translate(200,35)">
+    <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 4 -->
+  <g id="num-4" transform="translate(300,35)">
+    <use href="#seg-b"/><use href="#seg-c"/><use href="#seg-f"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 5 -->
+  <g id="num-5" transform="translate(400,35)">
+    <use href="#seg-a"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-f"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 6 -->
+  <g id="num-6" transform="translate(500,35)">
+    <use href="#seg-a"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-e"/><use href="#seg-f"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 7 -->
+  <g id="num-7" transform="translate(600,35)">
+    <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-c"/>
+  </g>
+
+  <!-- 8 -->
+  <g id="num-8" transform="translate(700,35)">
+    <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-e"/><use href="#seg-f"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 9 -->
+  <g id="num-9" transform="translate(800,35)">
+    <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-f"/><use href="#seg-g"/>
+  </g>
+
+  <!-- 10 (two digits: "1" + "0") -->
+  <g id="num-10" transform="translate(900,35)">
+    <!-- "1" -->
+    <g transform="translate(0,0)">
+      <use href="#seg-b"/><use href="#seg-c"/>
+    </g>
+    <!-- "0" -->
+    <g transform="translate(60,0)">
+      <use href="#seg-a"/><use href="#seg-b"/><use href="#seg-c"/><use href="#seg-d"/><use href="#seg-e"/><use href="#seg-f"/>
+    </g>
+  </g>
+
+  <!-- 11 (two digits: "1" + "1") -->
+  <g id="num-11" transform="translate(1050,35)">
+    <g transform="translate(0,0)">
+      <use href="#seg-b"/><use href="#seg-c"/>
+    </g>
+    <g transform="translate(60,0)">
+      <use href="#seg-b"/><use href="#seg-c"/>
+    </g>
+  </g>
+</svg>

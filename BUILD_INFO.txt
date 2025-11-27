@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: c69dd195e35e
-Build Time: 2025-11-20T13:04:22.951709
-Git Commit: c46e43d1e907d963e4ba82419966bc823532cdb9
-Git Branch: release/1.6.3
+Code Hash: 28e63cd8eaa9
+Build Time: 2025-11-26T20:14:30.769624
+Git Commit: f4831fd5a9b466702496890b0d8cfa9ef5fd8b32
+Git Branch: android/on-device-packaging
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

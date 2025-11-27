@@ -679,17 +679,17 @@ class StepResultRoundComplete(BaseModel):
 
 
 # Union type for all step results
-StepResultUnion = (
-    StepResultGatherContext
-    | StepResultPerformDMAs
-    | StepResultPerformASPDMA
-    | StepResultConscienceExecution
-    | StepResultRecursiveASPDMA
-    | StepResultRecursiveConscience
-    | StepResultFinalizeAction
-    | StepResultPerformAction
-    | StepResultActionComplete
-)
+StepResultUnion = Union[
+    StepResultGatherContext,
+    StepResultPerformDMAs,
+    StepResultPerformASPDMA,
+    StepResultConscienceExecution,
+    StepResultRecursiveASPDMA,
+    StepResultRecursiveConscience,
+    StepResultFinalizeAction,
+    StepResultPerformAction,
+    StepResultActionComplete,
+]
 
 
 # Step Data Schemas for type-safe step processing
@@ -826,19 +826,19 @@ class RoundCompleteStepData(BaseStepData):
 
 
 # Union type for all step data
-StepDataUnion = (
-    StartRoundStepData
-    | GatherContextStepData
-    | PerformDMAsStepData
-    | PerformASPDMAStepData
-    | ConscienceExecutionStepData
-    | RecursiveASPDMAStepData
-    | RecursiveConscienceStepData
-    | FinalizeActionStepData
-    | PerformActionStepData
-    | ActionCompleteStepData
-    | RoundCompleteStepData
-)
+StepDataUnion = Union[
+    StartRoundStepData,
+    GatherContextStepData,
+    PerformDMAsStepData,
+    PerformASPDMAStepData,
+    ConscienceExecutionStepData,
+    RecursiveASPDMAStepData,
+    RecursiveConscienceStepData,
+    FinalizeActionStepData,
+    PerformActionStepData,
+    ActionCompleteStepData,
+    RoundCompleteStepData,
+]
 
 
 class StepResultData(BaseModel):

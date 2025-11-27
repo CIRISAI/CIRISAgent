@@ -65,8 +65,9 @@ def setup_android_environment():
 
 async def start_mobile_server():
     """Start the CIRIS FastAPI server for Android."""
-    from ciris_engine.logic.adapters.api.app import app
     import uvicorn
+
+    from ciris_engine.logic.adapters.api.app import app
 
     logger.info("Starting CIRIS on-device server...")
     logger.info(f"API endpoint: http://127.0.0.1:8000")

@@ -3,7 +3,6 @@ FastAPI application for CIRIS API v1.
 
 This module creates and configures the FastAPI application with all routes.
 """
-from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable

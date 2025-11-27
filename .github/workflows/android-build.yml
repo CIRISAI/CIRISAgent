@@ -1,0 +1,190 @@
+name: Android Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      cirisgui_branch:
+        description: 'CIRISGUI-Android branch'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-web-assets:
+    name: Build Web Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CIRISAgent
+        uses: actions/checkout@v4
+
+      - name: Checkout CIRISGUI-Android
+        uses: actions/checkout@v4
+        with:
+          repository: CIRISAI/CIRISGUI-Android
+          path: cirisgui-android
+          ref: ${{ github.event.inputs.cirisgui_branch || 'main' }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cirisgui-android/apps/agui/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd cirisgui-android/apps/agui
+          npm ci || npm install
+
+      - name: Build Next.js static export
+        run: |
+          cd cirisgui-android/apps/agui
+          npm run build
+
+          # Verify build output
+          if [ ! -d "out" ]; then
+            echo "Error: 'out' directory not found after build"
+            exit 1
+          fi
+
+          FILE_COUNT=$(find out -type f | wc -l)
+          echo "Built $FILE_COUNT files"
+
+      - name: Upload web assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-assets
+          path: cirisgui-android/apps/agui/out/
+          retention-days: 7
+
+  build-android:
+    name: Build Android APK
+    needs: build-web-assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CIRISAgent
+        uses: actions/checkout@v4
+
+      - name: Download web assets
+        uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: android/app/src/main/assets/public/
+
+      - name: Verify web assets
+        run: |
+          ls -la android/app/src/main/assets/public/ | head -20
+          FILE_COUNT=$(find android/app/src/main/assets/public -type f | wc -l)
+          echo "Web assets: $FILE_COUNT files"
+
+          if [ "$FILE_COUNT" -lt 5 ]; then
+            echo "Warning: Very few web asset files found"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Determine build type
+        id: build_type
+        run: |
+          if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+            echo "type=release" >> $GITHUB_OUTPUT
+            echo "task=assembleRelease" >> $GITHUB_OUTPUT
+            echo "apk_path=android/app/build/outputs/apk/release/app-release.apk" >> $GITHUB_OUTPUT
+          else
+            echo "type=debug" >> $GITHUB_OUTPUT
+            echo "task=assembleDebug" >> $GITHUB_OUTPUT
+            echo "apk_path=android/app/build/outputs/apk/debug/app-debug.apk" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build APK (Debug)
+        if: steps.build_type.outputs.type == 'debug'
+        run: |
+          cd android
+          ./gradlew clean assembleDebug --no-daemon
+
+      - name: Build APK (Release)
+        if: steps.build_type.outputs.type == 'release'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew clean assembleRelease --no-daemon
+
+      - name: Verify APK
+        run: |
+          APK_PATH="${{ steps.build_type.outputs.apk_path }}"
+          if [ -f "$APK_PATH" ]; then
+            echo "APK built successfully: $APK_PATH"
+            ls -lh "$APK_PATH"
+          else
+            echo "Error: APK not found at $APK_PATH"
+            find android -name "*.apk" -type f
+            exit 1
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ciris-agent-${{ steps.build_type.outputs.type }}-apk
+          path: ${{ steps.build_type.outputs.apk_path }}
+          retention-days: 30
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## Android Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type**: ${{ steps.build_type.outputs.type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CIRISGUI Branch**: ${{ github.event.inputs.cirisgui_branch || 'main' }}" >> $GITHUB_STEP_SUMMARY
+
+          APK_PATH="${{ steps.build_type.outputs.apk_path }}"
+          if [ -f "$APK_PATH" ]; then
+            APK_SIZE=$(ls -lh "$APK_PATH" | awk '{print $5}')
+            echo "- **APK Size**: $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Download the APK from the **Artifacts** section below." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: Build failed - APK not found" >> $GITHUB_STEP_SUMMARY
+          fi

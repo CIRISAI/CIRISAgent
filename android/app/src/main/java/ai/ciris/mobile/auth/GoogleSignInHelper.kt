@@ -23,9 +23,8 @@ class GoogleSignInHelper(private val context: Context) {
         private const val TAG = "GoogleSignInHelper"
         const val RC_SIGN_IN = 9001
 
-        // Web client ID from Google Cloud Console
-        // TODO: Move to BuildConfig or strings.xml
-        private const val WEB_CLIENT_ID = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+        // Web client ID from Google Cloud Console (CIRIS Mobile)
+        private const val WEB_CLIENT_ID = "265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com"
     }
 
     private val googleSignInClient: GoogleSignInClient

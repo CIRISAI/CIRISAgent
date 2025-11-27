@@ -5,8 +5,6 @@ This module provides typed replacements for all Dict[str, Any] usage
 in the CIRIS codebase, ensuring type safety and validation throughout.
 """
 
-# Re-export all schemas for convenience
-
 from .actions import DeferParams as DeferParameters
 from .actions import ForgetParams as ForgetParameters
 from .actions import MemorizeParams as MemorizeParameters
@@ -48,6 +46,9 @@ from .services.requests import (
     ToolExecutionRequest,
     ToolExecutionResponse,
 )
+
+# Re-export all schemas for convenience
+
 
 # Faculty assessments removed - merged into consciences
 

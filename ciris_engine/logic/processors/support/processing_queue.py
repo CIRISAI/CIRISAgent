@@ -1,6 +1,6 @@
 import collections
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Deque, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -91,4 +91,4 @@ class ProcessingQueueItem(BaseModel):
         )
 
 
-ProcessingQueue = collections.deque[ProcessingQueueItem]
+ProcessingQueue = Deque[ProcessingQueueItem]

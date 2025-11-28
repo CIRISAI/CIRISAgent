@@ -154,7 +154,11 @@ class ServiceInitializer:
             google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
             is_android = "ANDROID_DATA" in os.environ
 
-            if google_id_token or is_android:
+            # Check if using CIRIS LLM proxy (billing only required for proxy users)
+            llm_base_url = os.getenv("OPENAI_API_BASE", "")
+            using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+
+            if google_id_token:
                 # JWT auth mode - Android uses Google ID token from .env file
                 # Token is refreshed by TokenRefreshManager which signals via file
                 logger.info("Using JWT auth mode for billing (Android/mobile)")
@@ -166,6 +170,25 @@ class ServiceInitializer:
                     fail_open=fail_open,
                 )
                 logger.info("Using CIRISBillingProvider with JWT auth (URL: %s)", base_url)
+            elif is_android and not using_ciris_proxy:
+                # Android but not using CIRIS proxy - no billing needed
+                # User is using local LLM or their own API key
+                from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+
+                logger.info("Android detected but not using CIRIS proxy - skipping billing")
+                free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
+                credit_provider = SimpleCreditProvider(free_uses=free_uses)
+                billing_enabled = False  # Override to skip billing provider setup
+            elif is_android and using_ciris_proxy and not google_id_token:
+                # Android using CIRIS proxy but no token yet - need to sign in first
+                logger.warning(
+                    "Android using CIRIS proxy without Google ID token - "
+                    "user needs to sign in with Google to use LLM features"
+                )
+                from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+
+                credit_provider = SimpleCreditProvider(free_uses=0)
+                billing_enabled = False
             else:
                 # API key auth mode - server-to-server
                 api_key = os.getenv("CIRIS_BILLING_API_KEY")

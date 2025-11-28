@@ -134,14 +134,28 @@ class ServiceInitializer:
         # Create default resource budget
         budget = ResourceBudget()  # Uses defaults from schema
 
-        # Credit provider: Always enabled for OAuth user credit gating
-        # - If CIRIS_BILLING_ENABLED=true: Use full billing backend (paid credits, purchases)
-        # - If CIRIS_BILLING_ENABLED=false: Use simple provider (1 free credit per OAuth user)
+        # Credit provider: Controls billing for CIRIS LLM proxy usage
+        # - Server: CIRIS_BILLING_API_KEY set → API key auth
+        # - Android: Using CIRIS proxy + Google ID token → JWT auth
+        # - Not using CIRIS proxy → No billing (credit_provider = None)
+        from typing import Optional
+
         from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 
-        credit_provider: CreditGateProtocol
-        billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
-        if billing_enabled:
+        credit_provider: Optional[CreditGateProtocol] = None
+        is_android = "ANDROID_DATA" in os.environ
+
+        # Check if using CIRIS LLM proxy (Android only - billing required for proxy)
+        llm_base_url = os.getenv("OPENAI_API_BASE", "")
+        using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+
+        # Server: Simple API key check
+        api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
+        # Android: Google ID token for JWT auth with CIRIS proxy
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+
+        if api_key and not is_android:
+            # Server with API key - use API key auth
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
             base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
@@ -149,19 +163,26 @@ class ServiceInitializer:
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
 
-            # Check for Android JWT auth mode (uses Google ID token instead of API key)
-            # On Android, the token is stored in .env file and refreshed via token_refresh_signal
-            google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            is_android = "ANDROID_DATA" in os.environ
+            credit_provider = CIRISBillingProvider(
+                api_key=api_key,
+                base_url=base_url,
+                timeout_seconds=timeout,
+                cache_ttl_seconds=cache_ttl,
+                fail_open=fail_open,
+            )
+            logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
 
-            # Check if using CIRIS LLM proxy (billing only required for proxy users)
-            llm_base_url = os.getenv("OPENAI_API_BASE", "")
-            using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+        elif is_android and using_ciris_proxy:
+            # Android using CIRIS LLM proxy - requires billing
+            if google_id_token:
+                # Have Google ID token - use JWT auth
+                from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            if google_id_token and using_ciris_proxy:
-                # JWT auth mode - ONLY for Android using CIRIS LLM proxy
-                # Token is refreshed by TokenRefreshManager which signals via file
-                logger.info("Using JWT auth mode for billing (CIRIS LLM proxy)")
+                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+                timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+                cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+                fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+
                 credit_provider = CIRISBillingProvider(
                     google_id_token=google_id_token,
                     base_url=base_url,
@@ -169,49 +190,23 @@ class ServiceInitializer:
                     cache_ttl_seconds=cache_ttl,
                     fail_open=fail_open,
                 )
-                logger.info("Using CIRISBillingProvider with JWT auth (URL: %s)", base_url)
-            elif is_android and not using_ciris_proxy:
-                # Android but not using CIRIS proxy - no billing needed
-                # User is using local LLM or their own API key
-                from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
-
-                logger.info("Android detected but not using CIRIS proxy - skipping billing")
-                free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
-                credit_provider = SimpleCreditProvider(free_uses=free_uses)
-                billing_enabled = False  # Override to skip billing provider setup
-            elif is_android and using_ciris_proxy and not google_id_token:
-                # Android using CIRIS proxy but no token yet - need to sign in first
+                logger.info("Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
+            else:
+                # No token yet - user needs to sign in with Google
                 logger.warning(
-                    "Android using CIRIS proxy without Google ID token - "
+                    "Android using CIRIS LLM proxy without Google ID token - "
                     "user needs to sign in with Google to use LLM features"
                 )
-                from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+                # credit_provider stays None - LLM calls will fail until signed in
 
-                credit_provider = SimpleCreditProvider(free_uses=0)
-                billing_enabled = False
-            else:
-                # API key auth mode - server-to-server
-                api_key = os.getenv("CIRIS_BILLING_API_KEY")
-                if not api_key:
-                    raise ValueError(
-                        "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true "
-                        "(or set CIRIS_BILLING_GOOGLE_ID_TOKEN for JWT auth mode)"
-                    )
-                credit_provider = CIRISBillingProvider(
-                    api_key=api_key,
-                    base_url=base_url,
-                    timeout_seconds=timeout,
-                    cache_ttl_seconds=cache_ttl,
-                    fail_open=fail_open,
-                )
-                logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
+        elif is_android and not using_ciris_proxy:
+            # Android but not using CIRIS proxy - no billing needed
+            logger.info("Android not using CIRIS proxy - no billing required")
+            # credit_provider stays None
+
         else:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
-
-            # Get free uses from environment (default: 0)
-            free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
-            credit_provider = SimpleCreditProvider(free_uses=free_uses)
-            logger.info(f"Using SimpleCreditProvider - {free_uses} free uses per OAuth user")
+            # Server without API key - no billing
+            logger.info("No billing configured (CIRIS_BILLING_API_KEY not set)")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,

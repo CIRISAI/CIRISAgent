@@ -53,7 +53,7 @@ class DocumentParser:
             self._pdf_available = False
 
         try:
-            import docx2txt  # noqa: F401
+            import docx2txt  # type: ignore[import-untyped]  # noqa: F401
 
             self._docx_available = True
         except ImportError:

@@ -146,7 +146,7 @@ def execute_with_retry(
         task_id = execute_with_retry(insert_task)
     """
 
-    @with_retry(max_retries=max_retries, base_delay=base_delay)  # type: ignore[misc, arg-type]
+    @with_retry(max_retries=max_retries, base_delay=base_delay)  # type: ignore
     def _execute() -> T:
         with get_db_connection_with_retry(db_path) as conn:
             return operation(conn)

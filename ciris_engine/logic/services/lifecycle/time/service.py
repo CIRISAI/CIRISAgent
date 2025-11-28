@@ -170,7 +170,7 @@ class TimeService(BaseInfrastructureService, TimeServiceProtocol):
         """Update NTP offset by querying NTP servers."""
         try:
             # Try to import ntplib  # type: ignore[import-not-found] (optional dependency)
-            import ntplib
+            import ntplib  # type: ignore[import-not-found]
         except ImportError:
             # ntplib not available, use simulated drift based on system clock precision
             self._simulate_drift()

@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Try to import psycopg2 for PostgreSQL support
 try:
-    import psycopg2
-    import psycopg2.extras
+    import psycopg2  # type: ignore[import-untyped]
+    import psycopg2.extras  # type: ignore[import-untyped]
 
     POSTGRES_AVAILABLE = True
 except ImportError:

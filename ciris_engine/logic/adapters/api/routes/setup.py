@@ -128,9 +128,16 @@ class SetupCompleteRequest(BaseModel):
 
     # User Configuration - Dual Password Support
     admin_username: str = Field(default="admin", description="New user's username")
-    admin_password: str = Field(..., description="New user's password (min 8 characters)")
+    admin_password: Optional[str] = Field(
+        None,
+        description="New user's password (min 8 characters). Optional for OAuth users - if not provided, a random password is generated and password auth is disabled for this user.",
+    )
     system_admin_password: Optional[str] = Field(
         None, description="System admin password to replace default (min 8 characters, optional)"
+    )
+    # OAuth indicator - frontend sets this when user authenticated via OAuth (Google, etc.)
+    oauth_provider: Optional[str] = Field(
+        None, description="OAuth provider used for authentication (e.g., 'google'). If set, local password is optional."
     )
 
     # Application Configuration
@@ -495,7 +502,8 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
             role=wa_role,
         )
 
-        # Hash password and update WA
+        # Hash password and update WA (admin_password is guaranteed set by validation above)
+        assert setup.admin_password is not None, "admin_password should be set by validation"
         password_hash = auth_service.hash_password(setup.admin_password)
         await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
 
@@ -678,6 +686,17 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     Only accessible during first-run (no authentication required).
     After setup, authentication is required for reconfiguration.
     """
+    # Log received configuration for debugging
+    logger.info("=" * 60)
+    logger.info("[Setup Complete] Received setup request")
+    logger.info(f"[Setup Complete] LLM Provider: {setup.llm_provider}")
+    logger.info(f"[Setup Complete] LLM API Key: {setup.llm_api_key[:20] if setup.llm_api_key else '(empty)'}...")
+    logger.info(f"[Setup Complete] LLM Base URL: {setup.llm_base_url}")
+    logger.info(f"[Setup Complete] LLM Model: {setup.llm_model}")
+    logger.info(f"[Setup Complete] Template: {setup.template_id}")
+    logger.info(f"[Setup Complete] Admin Username: {setup.admin_username}")
+    logger.info("=" * 60)
+
     # Only allow during first-run
     if not is_first_run():
         raise HTTPException(
@@ -685,8 +704,26 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
             detail="Setup already completed. Use PUT /v1/setup/config to update configuration.",
         )
 
-    # Validate new user password strength
-    if len(setup.admin_password) < 8:
+    # Determine if this is an OAuth user (password is optional for OAuth users)
+    is_oauth_user = bool(setup.oauth_provider)
+    logger.info(f"[Setup Complete] OAuth provider: {setup.oauth_provider}, is_oauth_user: {is_oauth_user}")
+
+    # For OAuth users without a password, generate a secure random password
+    # This allows the user account to exist but password auth is effectively disabled
+    # (they authenticate via OAuth instead)
+    if not setup.admin_password or len(setup.admin_password) == 0:
+        if is_oauth_user:
+            # Generate a secure random password for OAuth users
+            # They won't use this password - they'll authenticate via OAuth
+            setup.admin_password = secrets.token_urlsafe(32)
+            logger.info(f"[Setup Complete] Generated random password for OAuth user (password auth disabled)")
+        else:
+            # Non-OAuth users MUST provide a password
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+            )
+    elif len(setup.admin_password) < 8:
+        # If a password was provided, it must meet minimum requirements
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
         )
@@ -698,21 +735,50 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         )
 
     try:
-        # Get config path
+        # Get config path with detailed logging
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
+
+        logger.info("[Setup Complete] Path resolution:")
+        logger.info(f"[Setup Complete]   is_android(): {is_android()}")
+        logger.info(f"[Setup Complete]   is_development_mode(): {is_development_mode()}")
+        logger.info(f"[Setup Complete]   get_ciris_home(): {get_ciris_home()}")
+
         config_path = get_default_config_path()
         config_dir = config_path.parent
+        logger.info(f"[Setup Complete]   config_path: {config_path}")
+        logger.info(f"[Setup Complete]   config_dir: {config_dir}")
 
         # Ensure directory exists
         config_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"[Setup Complete] Directory ensured: {config_dir}")
 
         # Save configuration
+        logger.info(f"[Setup Complete] Saving configuration to: {config_path}")
         _save_setup_config(setup, config_path)
+        logger.info(f"[Setup Complete] Configuration saved successfully!")
+
+        # Verify the file was written
+        if config_path.exists():
+            file_size = config_path.stat().st_size
+            logger.info(f"[Setup Complete] Verified: .env exists ({file_size} bytes)")
+        else:
+            logger.error(f"[Setup Complete] ERROR: .env file NOT found at {config_path} after save!")
 
         # Reload environment variables from the new .env file
         from dotenv import load_dotenv
 
         load_dotenv(config_path, override=True)
-        logger.info(f"Reloaded environment variables from {config_path}")
+        logger.info(f"[Setup Complete] Reloaded environment variables from {config_path}")
+
+        # Verify key env vars were loaded
+        import os
+
+        openai_key = os.getenv("OPENAI_API_KEY")
+        openai_base = os.getenv("OPENAI_API_BASE")
+        logger.info(
+            f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}..."
+        )
+        logger.info(f"[Setup Complete] After reload - OPENAI_API_BASE: {openai_base}")
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

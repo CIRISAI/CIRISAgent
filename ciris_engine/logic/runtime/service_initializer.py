@@ -33,6 +33,7 @@ from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 # Import new infrastructure services
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient
+from ciris_engine.logic.utils.path_resolution import get_data_dir
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -143,25 +144,44 @@ class ServiceInitializer:
         if billing_enabled:
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            # Get API key from environment (required for CIRISBillingProvider)
-            api_key = os.getenv("CIRIS_BILLING_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true"
-                )
-
             base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
             timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
-            credit_provider = CIRISBillingProvider(
-                api_key=api_key,
-                base_url=base_url,
-                timeout_seconds=timeout,
-                cache_ttl_seconds=cache_ttl,
-                fail_open=fail_open,
-            )
-            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", base_url)
+
+            # Check for Android JWT auth mode (uses Google ID token instead of API key)
+            # On Android, the token is stored in .env file and refreshed via token_refresh_signal
+            google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+            is_android = "ANDROID_DATA" in os.environ
+
+            if google_id_token or is_android:
+                # JWT auth mode - Android uses Google ID token from .env file
+                # Token is refreshed by TokenRefreshManager which signals via file
+                logger.info("Using JWT auth mode for billing (Android/mobile)")
+                credit_provider = CIRISBillingProvider(
+                    google_id_token=google_id_token,
+                    base_url=base_url,
+                    timeout_seconds=timeout,
+                    cache_ttl_seconds=cache_ttl,
+                    fail_open=fail_open,
+                )
+                logger.info("Using CIRISBillingProvider with JWT auth (URL: %s)", base_url)
+            else:
+                # API key auth mode - server-to-server
+                api_key = os.getenv("CIRIS_BILLING_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true "
+                        "(or set CIRIS_BILLING_GOOGLE_ID_TOKEN for JWT auth mode)"
+                    )
+                credit_provider = CIRISBillingProvider(
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout_seconds=timeout,
+                    cache_ttl_seconds=cache_ttl,
+                    fail_open=fail_open,
+                )
+                logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
         else:
             from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
 
@@ -665,7 +685,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("TSDBConsolidationService registered in ServiceRegistry")
 
         # Initialize maintenance service AFTER consolidation
-        archive_dir = getattr(config, "data_archive_dir", "data_archive")
+        archive_dir_config = getattr(config, "data_archive_dir", "data_archive")
+        # Resolve relative paths to absolute (critical for Android where CWD is read-only)
+        archive_path = Path(archive_dir_config)
+        if not archive_path.is_absolute():
+            archive_path = get_data_dir() / archive_dir_config
+        archive_dir = str(archive_path)
         archive_hours = getattr(config, "archive_older_than_hours", 24)
         assert self.time_service is not None
         assert self.config_service is not None
@@ -774,12 +799,16 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         llm_config = OpenAIConfig(
             base_url=(
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
+                os.environ.get("OPENAI_API_BASE")
+                or (
+                    config.services.llm_endpoint if config and hasattr(config, "services") and config.services else None
+                )
+                or "http://localhost:11434/v1"
             ),
             model_name=(
-                config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2"
+                os.environ.get("OPENAI_MODEL")
+                or (config.services.llm_model if config and hasattr(config, "services") and config.services else None)
+                or "gpt-4o-mini"
             ),
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
@@ -809,7 +838,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Store reference
         self.llm_service = openai_service
-        logger.info(f"Primary LLM service initialized: {llm_config.model_name}")
+        logger.info(f"Primary LLM service initialized: model={llm_config.model_name}, base_url={llm_config.base_url}")
+
+        # Register token refresh signal handler for ciris.ai authentication
+        # This connects the LLM service to ResourceMonitor's signal bus
+        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", openai_service.handle_token_refreshed)
+            logger.info("Registered LLM service token refresh handler with ResourceMonitor")
 
         # Optional: Initialize secondary LLM service
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
@@ -1042,22 +1077,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
             from ciris_engine.logic.setup.first_run import is_first_run
 
-            critical_services: List[Any] = [
-                self.telemetry_service,
-                self.memory_service,
-                self.secrets_service,
-                self.adaptive_filter_service,
-            ]
+            # Use named dict for better error messages
+            critical_services: dict[str, Any] = {
+                "telemetry_service": self.telemetry_service,
+                "memory_service": self.memory_service,
+                "secrets_service": self.secrets_service,
+                "adaptive_filter_service": self.adaptive_filter_service,
+            }
 
             # Only require LLM service if not in first-run mode
             if not is_first_run():
-                critical_services.append(self.llm_service)
+                critical_services["llm_service"] = self.llm_service
             elif not self.llm_service:
                 logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
-            for service in critical_services:
+            for name, service in critical_services.items():
                 if not service:
-                    logger.error(f"Critical service {type(service).__name__} not initialized")
+                    logger.error(f"Critical service '{name}' not initialized (is None)")
                     return False
 
             # Verify audit service

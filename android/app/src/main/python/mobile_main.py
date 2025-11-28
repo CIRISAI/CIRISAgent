@@ -30,31 +30,44 @@ logger = logging.getLogger(__name__)
 
 
 def setup_android_environment():
-    """Configure environment for Android on-device operation."""
-    # Set Android-specific paths
-    if "ANDROID_DATA" in os.environ:
-        # Running on Android device
-        android_data = Path(os.environ["ANDROID_DATA"])
-        app_data = android_data / "data" / "ai.ciris.mobile"
+    """Configure environment for Android on-device operation.
 
-        # Ensure directories exist
-        ciris_home = app_data / "files" / "ciris"
-        ciris_home.mkdir(parents=True, exist_ok=True)
-        (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
-        (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
+    Sets up CIRIS_HOME and loads .env if present.
+    First-run detection is handled by is_first_run() which is Android-aware.
+    """
+    from dotenv import load_dotenv
 
-        # Configure CIRIS environment - use standard paths
-        os.environ.setdefault("CIRIS_HOME", str(ciris_home))
-        os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
-        os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
-        os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
+    if "ANDROID_DATA" not in os.environ:
+        logger.warning("ANDROID_DATA not set - not running on Android?")
+        return
 
-    # Ensure remote LLM endpoint is configured
-    if not os.environ.get("OPENAI_API_BASE"):
-        logger.warning(
-            "OPENAI_API_BASE not set. You must configure a remote LLM endpoint. "
-            "Example: https://api.openai.com/v1 or http://192.168.1.100:8080/v1"
-        )
+    # Running on Android device
+    android_data = Path(os.environ["ANDROID_DATA"])
+    app_data = android_data / "data" / "ai.ciris.mobile"
+
+    # Ensure directories exist
+    ciris_home = app_data / "files" / "ciris"
+    ciris_home.mkdir(parents=True, exist_ok=True)
+    (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
+    (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
+
+    # Configure CIRIS environment - use standard paths
+    # CIRIS_HOME is used by path_resolution.py for Android-aware path detection
+    os.environ.setdefault("CIRIS_HOME", str(ciris_home))
+    os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
+    os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
+    os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
+
+    # Load .env file if it exists (sets OPENAI_API_KEY, OPENAI_API_BASE, etc.)
+    # First-run detection is handled by is_first_run() - don't duplicate logic here
+    env_file = ciris_home / ".env"
+    if env_file.exists():
+        logger.info(f"Loading configuration from {env_file}")
+        load_dotenv(env_file, override=True)
+        logger.info(f"Loaded .env - OPENAI_API_KEY set: {bool(os.environ.get('OPENAI_API_KEY'))}")
+        logger.info(f"Loaded .env - OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE', 'NOT SET')}")
+    else:
+        logger.info(f"No .env file at {env_file} - is_first_run() will detect this")
 
     # Disable ciris.ai cloud components
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
@@ -78,27 +91,44 @@ async def start_mobile_runtime():
     logger.info(f"API endpoint: http://127.0.0.1:8080")
     logger.info(f"LLM endpoint: {os.environ.get('OPENAI_API_BASE', 'NOT CONFIGURED')}")
 
-    # Load configuration
-    try:
-        app_config = await load_config(None, {})
-    except Exception as e:
-        logger.warning(f"Could not load config, using defaults: {e}")
-        # Import EssentialConfig for defaults
-        from ciris_engine.schemas.config.app import EssentialConfig
-        app_config = EssentialConfig()
+    # On Android, we skip file-based config loading and use defaults directly
+    # since the app doesn't have access to config/essential.yaml
+    # The path resolution in EssentialConfig will use CIRIS_HOME env var
+    # which was set by setup_android_environment()
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
+    from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig, SecurityConfig
+
+    # Get Android-specific paths
+    ciris_home = get_ciris_home()
+    data_dir = get_data_dir()
+
+    # Create security config with absolute paths (Android CWD is read-only)
+    security_config = SecurityConfig(
+        secrets_key_path=ciris_home / ".ciris_keys",
+        audit_key_path=ciris_home / "audit_keys",
+    )
+
+    # Create database config with absolute paths
+    db_config = DatabaseConfig(
+        main_db=data_dir / "ciris_engine.db",
+        secrets_db=data_dir / "secrets.db",
+        audit_db=data_dir / "ciris_audit.db",
+    )
+
+    # Create config with Android-specific paths
+    app_config = EssentialConfig(
+        security=security_config,
+        database=db_config,
+        template_directory=ciris_home / "ciris_templates",
+    )
+    logger.info(f"Using Android config - CIRIS_HOME: {ciris_home}, data_dir: {data_dir}")
 
     # Configure API adapter
     api_config = APIAdapterConfig()
     api_config.host = "127.0.0.1"
     api_config.port = 8080
 
-    adapter_configs = {
-        "api": AdapterConfig(
-            adapter_type="api",
-            enabled=True,
-            settings=api_config.model_dump()
-        )
-    }
+    adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
 
     startup_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
 

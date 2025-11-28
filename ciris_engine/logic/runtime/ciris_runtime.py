@@ -1018,13 +1018,18 @@ class CIRISRuntime:
                 f"[_build_components] service_initializer.service_registry: {self.service_initializer.service_registry}"
             )
 
-        # Check if LLM service is available - if not, skip cognitive component building
+        # Check if LLM service is available - if not, check if this is first-run setup mode
         if not self.llm_service:
-            logger.warning("[_build_components] LLM service not available - skipping cognitive component building")
-            logger.warning(
-                "[_build_components] Agent will run in API-only mode without autonomous cognitive processing"
-            )
-            logger.info("[_build_components] Component building skipped (API-only mode)")
+            from ciris_engine.logic.setup.first_run import is_first_run
+
+            if is_first_run():
+                logger.info("[_build_components] First-run setup mode - LLM not yet configured")
+                logger.info("[_build_components] Setup wizard will guide LLM configuration")
+            else:
+                logger.error("[_build_components] LLM service not available but setup was completed!")
+                logger.error(
+                    "[_build_components] Check your LLM configuration - the agent cannot operate without an LLM"
+                )
             return
 
         try:
@@ -1179,10 +1184,15 @@ class CIRISRuntime:
         # Wait for all critical services to be available
         await self._wait_for_critical_services(timeout=30.0)
 
-        # Check if agent processor is built (may be None in API-only mode without LLM)
+        # Check if agent processor is built (may be None in first-run setup mode)
         if not self.agent_processor:
-            logger.warning("Agent processor not initialized - running in API-only mode without autonomous processing")
-            logger.info("Agent will respond to API requests but won't process cognitive tasks autonomously")
+            from ciris_engine.logic.setup.first_run import is_first_run
+
+            if is_first_run():
+                logger.info("Agent processor not started - first-run setup mode active")
+            else:
+                logger.error("Agent processor not initialized but setup was completed!")
+                logger.error("This indicates a configuration error - check LLM settings")
             return
 
         # Start the multi-service sink if available

@@ -89,6 +89,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             max_tokens=1024,
             temperature=0.0,
             thought_id=input_data.thought_id,
+            task_id=input_data.source_task_id,
         )
         response_obj: EthicalDMAResult = result_tuple[0]
         logger.info(f"Evaluation successful for thought ID {input_data.thought_id}")

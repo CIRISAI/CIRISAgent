@@ -65,10 +65,45 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 On first launch:
 1. Open Settings (menu → Settings)
 2. Enter your LLM endpoint:
+   - **ciris.ai** (recommended): `https://ciris.ai/v1` + Google Sign-In (see below)
    - **OpenAI**: `https://api.openai.com/v1` + your API key
    - **Together.ai**: `https://api.together.ai/v1` + your API key
    - **Local LLM**: `http://192.168.1.100:8080/v1` + any key
 3. Save and restart the app
+
+### 5. ciris.ai LLM Proxy (Recommended for Android)
+
+The ciris.ai proxy uses Google Sign-In for authentication, eliminating the need to manage API keys:
+
+1. **First Launch**: Tap "Sign in with Google" on the setup screen
+2. **Authentication**: Complete Google Sign-In flow
+3. **Auto-Configuration**: The app automatically configures:
+   - Endpoint: `https://ciris.ai/v1`
+   - API Key: Your Google ID token (auto-refresh)
+
+**Token Refresh Flow** (handled automatically):
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    Token Refresh Cycle                         │
+├────────────────────────────────────────────────────────────────┤
+│  1. Python LLM service receives 401 from ciris.ai              │
+│  2. Python writes `.token_refresh_needed` signal file          │
+│  3. Android TokenRefreshManager detects signal (polls 10s)     │
+│  4. Android calls silentSignIn() to get fresh Google ID token  │
+│  5. Android updates .env with new OPENAI_API_KEY               │
+│  6. Android writes `.config_reload` signal file                │
+│  7. Python ResourceMonitor detects signal (polls 1s)           │
+│  8. Python reloads .env, emits token_refreshed signal          │
+│  9. Python LLM service resets circuit breaker, reinits client  │
+│  10. Retry LLM request with fresh token                        │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Key Files**:
+- `auth/TokenRefreshManager.kt`: Android token refresh polling
+- `ciris_engine/logic/services/infrastructure/resource_monitor/service.py`: Signal detection
+- `ciris_engine/logic/services/runtime/llm_service/service.py`: Circuit breaker reset
 
 ## Architecture Details
 
@@ -200,11 +235,17 @@ curl -X POST http://127.0.0.1:8000/v1/chat/completions \
 
 Set in `mobile_main.py` or via Android settings:
 
-- `OPENAI_API_BASE`: LLM endpoint URL
-- `OPENAI_API_KEY`: LLM API key
+- `OPENAI_API_BASE`: LLM endpoint URL (e.g., `https://ciris.ai/v1`)
+- `OPENAI_API_KEY`: LLM API key (Google ID Token for ciris.ai, auto-refreshed)
 - `CIRIS_OFFLINE_MODE`: Always `true` (no cloud sync)
 - `CIRIS_MAX_WORKERS`: `1` (single worker)
 - `CIRIS_LOG_LEVEL`: `WARNING` (reduce overhead)
+- `CIRIS_HOME`: App data directory (set automatically by `setup_android_environment()`)
+
+**ciris.ai specific** (managed by TokenRefreshManager):
+- `.token_refresh_needed`: Signal file written by Python when 401 received
+- `.config_reload`: Signal file written by Android after token refresh
+- `.env`: Contains OPENAI_API_KEY (Google ID Token) and endpoint config
 
 ### SharedPreferences
 
@@ -311,6 +352,25 @@ Use Google Play's license testing:
 3. Test endpoint directly: `curl $OPENAI_API_BASE/models`
 4. Check network permissions in AndroidManifest.xml
 5. For LAN endpoints, ensure device is on same network
+
+### ciris.ai Token Refresh Issues
+
+**Symptom**: 401 errors persist, LLM calls keep failing
+
+**Solutions**:
+1. Check Google Sign-In is active: `adb logcat -s GoogleSignIn`
+2. Verify signal files exist: `ls $CIRIS_HOME/.token_refresh_needed .config_reload`
+3. Check TokenRefreshManager is polling: `adb logcat -s TokenRefreshManager`
+4. Force fresh sign-in: Settings → Sign Out → Sign In Again
+5. Check circuit breaker state in ResourceMonitor logs
+6. Verify .env has OPENAI_API_KEY after refresh
+
+**Symptom**: Token refreshes but calls still fail
+
+**Solutions**:
+1. Check the circuit breaker cooldown (5 minutes for billing errors)
+2. Verify LLM client was reinitialized: `adb logcat -s LLMService`
+3. Clear app data and re-authenticate
 
 ### High Memory Usage
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Optional
 
 import httpx
 
@@ -21,44 +22,105 @@ logger = logging.getLogger(__name__)
 
 
 class CIRISBillingProvider(CreditGateProtocol):
-    """Async credit provider that gates interactions via self-hosted CIRIS Billing API."""
+    """Async credit provider that gates interactions via self-hosted CIRIS Billing API.
+
+    Supports two auth modes:
+    1. API Key auth (server-to-server): Uses X-API-Key header
+    2. JWT auth (Android/mobile): Uses Authorization: Bearer {google_id_token}
+       - Token is refreshed automatically via token_refresh_callback
+       - Format matches CIRIS LLM proxy: Bearer google:{user_id} or raw ID token
+    """
 
     def __init__(
         self,
         *,
-        api_key: str,
+        api_key: str = "",
+        google_id_token: str = "",
+        token_refresh_callback: Optional[Callable[[], str]] = None,
         base_url: str = "https://billing.ciris.ai",
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        """Initialize CIRIS Billing Provider.
+
+        Args:
+            api_key: API key for server-to-server auth (uses X-API-Key header)
+            google_id_token: Google ID token for JWT auth (uses Authorization: Bearer)
+            token_refresh_callback: Optional callback to refresh google_id_token when expired
+            base_url: CIRIS Billing API base URL
+            timeout_seconds: HTTP request timeout
+            cache_ttl_seconds: Credit check cache TTL
+            fail_open: If True, allow requests when billing backend is unavailable
+            transport: Optional custom HTTP transport for testing
+        """
         self._api_key = api_key
+        self._google_id_token = google_id_token
+        self._token_refresh_callback = token_refresh_callback
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._cache_ttl = max(cache_ttl_seconds, 0)
         self._fail_open = fail_open
         self._transport = transport
 
+        # Determine auth mode
+        self._use_jwt_auth = bool(google_id_token)
+
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()
         self._cache: dict[str, tuple[CreditCheckResult, datetime]] = {}
+
+    def _get_current_token(self) -> str:
+        """Get the current Google ID token, refreshing if callback is available."""
+        if self._token_refresh_callback:
+            try:
+                new_token = self._token_refresh_callback()
+                if new_token:
+                    self._google_id_token = new_token
+            except Exception as exc:
+                logger.warning("Token refresh callback failed: %s", exc)
+        return self._google_id_token
+
+    def _build_auth_headers(self) -> dict[str, str]:
+        """Build authentication headers based on auth mode."""
+        headers = {"User-Agent": "CIRIS-Agent-CreditGate/1.0"}
+
+        if self._use_jwt_auth:
+            # JWT auth mode (Android/mobile) - use Authorization: Bearer
+            token = self._get_current_token()
+            headers["Authorization"] = f"Bearer {token}"
+            logger.debug("Using JWT auth mode with Google ID token")
+        else:
+            # API key auth mode (server-to-server)
+            headers["X-API-Key"] = self._api_key
+            logger.debug("Using API key auth mode")
+
+        return headers
+
+    def update_google_id_token(self, token: str) -> None:
+        """Update the Google ID token (for token refresh).
+
+        This is called when the Android app refreshes its Google ID token.
+        The next request will use the new token.
+        """
+        self._google_id_token = token
+        self._use_jwt_auth = True
+        logger.info("Updated Google ID token for billing auth")
 
     async def start(self) -> None:
         async with self._client_lock:
             if self._client is not None:
                 return
-            headers = {
-                "User-Agent": "CIRIS-Agent-CreditGate/1.0",
-                "X-API-Key": self._api_key,
-            }
+            headers = self._build_auth_headers()
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout_seconds,
                 headers=headers,
                 transport=self._transport,
             )
-            logger.info("CIRISBillingProvider started with base_url=%s", self._base_url)
+            auth_mode = "JWT (Google ID token)" if self._use_jwt_auth else "API Key"
+            logger.info("CIRISBillingProvider started with base_url=%s, auth_mode=%s", self._base_url, auth_mode)
 
     async def stop(self) -> None:
         async with self._client_lock:
@@ -101,6 +163,8 @@ class CIRISBillingProvider(CreditGateProtocol):
 
         try:
             assert self._client is not None  # nosec - ensured by _ensure_started
+            # Refresh auth header before request (for JWT mode token refresh)
+            self._refresh_auth_header()
             logger.info("Sending credit check to %s/v1/billing/credits/check", self._base_url)
             response = await self._client.post("/v1/billing/credits/check", json=payload)
             logger.info("Credit response status=%s", response.status_code)
@@ -153,6 +217,8 @@ class CIRISBillingProvider(CreditGateProtocol):
 
         try:
             assert self._client is not None
+            # Refresh auth header before request (for JWT mode token refresh)
+            self._refresh_auth_header()
             response = await self._client.post("/v1/billing/charges", json=payload)
             logger.debug("Credit spend response for %s: status=%s", cache_key, response.status_code)
         except (httpx.RequestError, asyncio.TimeoutError) as exc:
@@ -204,6 +270,20 @@ class CIRISBillingProvider(CreditGateProtocol):
         if self._client is not None:
             return
         await self.start()
+
+    def _refresh_auth_header(self) -> None:
+        """Refresh the Authorization header if in JWT mode.
+
+        This is called before each request to ensure the token is fresh.
+        For API key mode, this is a no-op since API keys don't expire.
+        """
+        if not self._use_jwt_auth or self._client is None:
+            return
+
+        # Get fresh token (may call refresh callback)
+        token = self._get_current_token()
+        if token:
+            self._client.headers["Authorization"] = f"Bearer {token}"
 
     def _store_cache(self, cache_key: str, result: CreditCheckResult) -> None:
         if self._cache_ttl <= 0:

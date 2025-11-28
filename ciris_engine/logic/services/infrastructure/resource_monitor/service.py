@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Callable, Deque, Dict, List, Optional, Tuple
 
 import psutil
@@ -36,6 +38,7 @@ class ResourceSignalBus:
             "defer": [],
             "reject": [],
             "shutdown": [],
+            "token_refreshed": [],  # ciris.ai token refresh signal
         }
 
     def register(self, signal: str, handler: Callable[[str, str], "asyncio.Future[None]"]) -> None:
@@ -84,6 +87,11 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self._last_credit_error: str | None = None
         self._last_credit_timestamp: float | None = None
 
+        # Token refresh monitoring for ciris.ai
+        self._env_file_mtime: float = 0.0  # Last known .env modification time
+        self._token_refresh_signal_mtime: float = 0.0  # Last signal file mtime we processed
+        self._ciris_home: Optional[Path] = None  # Cached CIRIS_HOME path
+
     def get_service_type(self) -> ServiceType:
         """Get service type."""
         return ServiceType.VISIBILITY
@@ -121,6 +129,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         """Update resource snapshot and check limits."""
         await self._update_snapshot()
         await self._check_limits()
+        await self._check_token_refresh_signal()
 
     async def _update_snapshot(self) -> None:
         if psutil and self._process:
@@ -203,6 +212,86 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         elif action == ResourceAction.SHUTDOWN:
             await self.signal_bus.emit("shutdown", resource)
         self._last_action_time[f"{resource}_{level}"] = current_time
+
+    async def _check_token_refresh_signal(self) -> None:
+        """Check for token refresh signals from ciris.ai authentication.
+
+        This monitors the .config_reload file written by Android's TokenRefreshManager
+        after it has updated .env with a fresh Google ID token.
+
+        Flow:
+        1. Python LLM service gets 401 → writes .token_refresh_needed
+        2. Android TokenRefreshManager detects signal, deletes it, refreshes token
+        3. Android updates .env with new token
+        4. Android writes .config_reload signal
+        5. This method detects .config_reload → reloads .env → emits token_refreshed
+        """
+        try:
+            # Get CIRIS_HOME (cached for performance)
+            if self._ciris_home is None:
+                ciris_home_str = os.environ.get("CIRIS_HOME")
+                if ciris_home_str:
+                    self._ciris_home = Path(ciris_home_str)
+                else:
+                    # Try path resolution helper
+                    try:
+                        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+                        self._ciris_home = get_ciris_home()
+                    except Exception:
+                        return  # No CIRIS_HOME, skip monitoring
+
+            if not self._ciris_home:
+                return
+
+            # Watch for .config_reload signal (written by Android after token refresh)
+            config_reload_file = self._ciris_home / ".config_reload"
+            env_file = self._ciris_home / ".env"
+
+            # Check if config reload signal file exists
+            if not config_reload_file.exists():
+                return
+
+            # Get signal file mtime
+            signal_mtime = config_reload_file.stat().st_mtime
+            if signal_mtime <= self._token_refresh_signal_mtime:
+                # Already processed this signal
+                return
+
+            # New config reload signal detected!
+            logger.info(f"🔄 Config reload signal detected from Android (timestamp: {signal_mtime})")
+
+            # Verify .env exists
+            if not env_file.exists():
+                logger.warning(f".env file not found at {env_file}")
+                return
+
+            # 1. Reload environment variables
+            try:
+                from dotenv import load_dotenv
+
+                load_dotenv(env_file, override=True)
+                logger.info(f"✓ Reloaded environment from {env_file}")
+            except Exception as e:
+                logger.error(f"Failed to reload .env: {e}")
+                return
+
+            # 2. Emit token_refreshed signal (LLM service will reset circuit breaker)
+            await self.signal_bus.emit("token_refreshed", "openai_api_key")
+            logger.info("✓ Emitted token_refreshed signal")
+
+            # 3. Mark signal as processed and clean up
+            self._token_refresh_signal_mtime = signal_mtime
+            try:
+                config_reload_file.unlink()
+                logger.info(f"✓ Cleaned up config reload signal file")
+            except Exception as e:
+                logger.warning(f"Failed to clean up signal file: {e}")
+
+            logger.info("🎉 Token refresh cycle complete!")
+
+        except Exception as e:
+            logger.debug(f"Token refresh signal check error: {e}")
 
     async def record_tokens(self, tokens: int) -> None:
         current_time = self.time_service.now() if self.time_service else datetime.now(timezone.utc)

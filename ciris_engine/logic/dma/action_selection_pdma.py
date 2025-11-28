@@ -207,6 +207,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             max_tokens=1500,
             temperature=0.0,
             thought_id=input_data.original_thought.thought_id,
+            task_id=input_data.original_thought.source_task_id,
         )
 
         # Extract the result from the tuple and cast to the correct type

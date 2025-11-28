@@ -12,7 +12,7 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.6.6-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
+**BETA RELEASE 1.6.7-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 Academic paper https://zenodo.org/records/17195221
 Philosophical foundation https://ciris.ai/ciris_covenant.pdf
@@ -107,6 +107,31 @@ CIRIS supports both built-in and modular adapters that can be loaded via `--adap
 | Geo Wisdom | Wise Authority | Geographic navigation guidance using OpenStreetMap for routing and geocoding. | None (uses public OSM API) | Loaded automatically for navigation domains |
 | Weather Wisdom | Wise Authority | Weather forecasting and alerts using NOAA National Weather Service API. | None (uses public NOAA API) | Loaded automatically for weather domains |
 | Sensor Wisdom | Wise Authority | Home automation and IoT sensor integration via Home Assistant. Actively filters out medical sensors. | `CIRIS_HOMEASSISTANT_URL`<br>`CIRIS_HOMEASSISTANT_TOKEN` | Loaded automatically for sensor domains |
+
+### LLM Providers
+
+CIRIS uses an OpenAI-compatible API interface for LLM inference:
+
+| Provider | Endpoint | Authentication | Platform |
+|----------|----------|----------------|----------|
+| ciris.ai | `https://ciris.ai/v1` | Google Sign-In | Android only |
+| OpenAI | `https://api.openai.com/v1` | API Key | All |
+| Groq | `https://api.groq.com/openai/v1` | API Key | All |
+| Together.ai | `https://api.together.ai/v1` | API Key | All |
+| Local LLMs | `http://localhost:8080/v1` | Optional | All |
+
+**ciris.ai Proxy** (Android only): Available exclusively on Android due to Google Play Services dependencies. Uses Google Sign-In for authentication with automatic token refresh. No logging - prompts and responses pass through without being stored. Backend providers are Groq and Together.ai.
+
+### Agent Templates
+
+CIRIS includes pre-configured agent templates in `ciris_engine/ciris_templates/`:
+
+| Template | Description |
+|----------|-------------|
+| **Ally** | Personal assistant focused on ethical partnership. Supports task management, scheduling, decision support, and wellbeing. Includes California SB 243 compliance, crisis response protocols, and GDPR DSAR automation. |
+| **Datum** | Community moderation agent for Discord. Production-deployed at agents.ciris.ai. |
+
+Templates define identity, permitted actions, guardrails, and standard operating procedures (SOPs) for DSAR compliance.
 
 ### Loading Adapters
 

@@ -32,8 +32,36 @@ Path Resolution Strategy:
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
+
+
+def is_android() -> bool:
+    """Detect if running on Android platform.
+
+    Checks multiple indicators:
+    - 'ANDROID_ROOT' environment variable (set by Android system)
+    - 'ANDROID_DATA' environment variable
+    - sys.platform contains 'linux' and /data/data exists
+    - Running under Chaquopy (Python on Android)
+
+    Returns:
+        True if running on Android
+    """
+    # Check for Android-specific environment variables
+    if os.getenv("ANDROID_ROOT") or os.getenv("ANDROID_DATA"):
+        return True
+
+    # Check for Chaquopy marker (Python on Android)
+    if hasattr(sys, "getandroidapilevel"):
+        return True
+
+    # Check for Android data directory structure
+    if sys.platform == "linux" and Path("/data/data").exists():
+        return True
+
+    return False
 
 
 def is_managed() -> bool:
@@ -70,8 +98,13 @@ def is_development_mode() -> bool:
     """Check if running in development mode (git repository).
 
     Returns:
-        True if current directory is a git repository
+        True if current directory is a git repository AND not on Android.
+        On Android, .git may exist in the bundled code but we're not in dev mode.
     """
+    # Never dev mode on Android - even if .git exists in bundled code
+    if is_android():
+        return False
+
     return (Path.cwd() / ".git").exists()
 
 
@@ -81,6 +114,7 @@ def get_ciris_home() -> Path:
     Returns:
         Path to CIRIS home directory:
         - /app/ if managed by CIRIS Manager (highest priority)
+        - Android app files/ciris/ if on Android
         - Current directory if in git repo (development)
         - CIRIS_HOME env var if set
         - ~/ciris/ otherwise (installed mode)
@@ -89,16 +123,27 @@ def get_ciris_home() -> Path:
     if is_managed():
         return Path("/app")
 
-    # Priority 2: Development mode - use current directory
+    # Priority 2: Android mode - use app's files directory
+    # On Android, Path.home() returns /data/user/0/ai.ciris.mobile
+    # but the writable files dir is /data/user/0/ai.ciris.mobile/files/
+    if is_android():
+        # CIRIS_HOME env var is set by mobile_main.py to the app's files dir
+        env_home = os.getenv("CIRIS_HOME")
+        if env_home:
+            return Path(env_home)
+        # Fallback: use Path.home()/files/ciris (Android app files structure)
+        return Path.home() / "files" / "ciris"
+
+    # Priority 3: Development mode - use current directory
     if is_development_mode():
         return Path.cwd()
 
-    # Priority 3: CIRIS_HOME environment variable
+    # Priority 4: CIRIS_HOME environment variable
     env_home = os.getenv("CIRIS_HOME")
     if env_home:
         return Path(env_home).expanduser().resolve()
 
-    # Priority 4: Default installed mode - ~/ciris/
+    # Priority 5: Default installed mode - ~/ciris/
     return Path.home() / "ciris"
 
 
@@ -166,9 +211,10 @@ def find_template_file(template_name: str) -> Optional[Path]:
     if is_managed():
         search_paths.append(Path("/app") / "ciris_templates" / template_name)
 
-    # 2. Development mode: check CWD
+    # 2. Development mode: check CWD and ciris_engine subdirectory
     if is_development_mode():
         search_paths.append(Path.cwd() / "ciris_templates" / template_name)
+        search_paths.append(Path.cwd() / "ciris_engine" / "ciris_templates" / template_name)
 
     # 3. CIRIS_HOME if set (custom location)
     env_home = os.getenv("CIRIS_HOME")
@@ -208,11 +254,16 @@ def get_template_directory() -> Path:
         if managed_templates.exists():
             return managed_templates
 
-    # Development mode
+    # Development mode - check both repo root and ciris_engine subdirectory
     if is_development_mode():
+        # First check repo root (for backwards compatibility)
         dev_templates = Path.cwd() / "ciris_templates"
         if dev_templates.exists():
             return dev_templates
+        # Also check ciris_engine subdirectory (actual location in source tree)
+        dev_engine_templates = Path.cwd() / "ciris_engine" / "ciris_templates"
+        if dev_engine_templates.exists():
+            return dev_engine_templates
 
     # CIRIS_HOME
     env_home = os.getenv("CIRIS_HOME")

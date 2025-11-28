@@ -118,19 +118,34 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun proceedToMain(authMethod: String) {
+        Log.i(TAG, "[Auth Flow] proceedToMain called with authMethod: $authMethod")
+
         val intent = Intent(this, MainActivity::class.java).apply {
             putExtra("auth_method", authMethod)
 
             if (authMethod == AUTH_METHOD_GOOGLE) {
-                // Pass Google user info
-                putExtra("google_user_id", googleSignInHelper.getGoogleUserId())
-                putExtra("user_email", googleSignInHelper.getUserEmail())
-                putExtra("user_name", googleSignInHelper.getUserDisplayName())
+                // Pass Google user info including ID token for native auth
+                val googleUserId = googleSignInHelper.getGoogleUserId()
+                val googleIdToken = googleSignInHelper.getIdToken()
+                val userEmail = googleSignInHelper.getUserEmail()
+                val userName = googleSignInHelper.getUserDisplayName()
+
+                Log.i(TAG, "[Auth Flow] Google auth data:")
+                Log.i(TAG, "[Auth Flow]   google_user_id: ${googleUserId ?: "(null)"}")
+                Log.i(TAG, "[Auth Flow]   google_id_token: ${if (googleIdToken != null) "${googleIdToken.take(20)}... (${googleIdToken.length} chars)" else "(null)"}")
+                Log.i(TAG, "[Auth Flow]   user_email: ${userEmail ?: "(null)"}")
+                Log.i(TAG, "[Auth Flow]   user_name: ${userName ?: "(null)"}")
+
+                putExtra("google_user_id", googleUserId)
+                putExtra("google_id_token", googleIdToken)
+                putExtra("user_email", userEmail)
+                putExtra("user_name", userName)
             }
 
             // Both methods should show setup wizard on first run
             putExtra("show_setup", true)
         }
+        Log.i(TAG, "[Auth Flow] Starting MainActivity with intent extras")
         startActivity(intent)
         finish()
     }

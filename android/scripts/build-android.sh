@@ -138,24 +138,35 @@ copy_web_assets() {
 
     # Use separate android_gui_static folder to avoid conflicts with ciris_engine/gui_static
     GUI_STATIC_DIR="$CIRISAGENT_DIR/android_gui_static"
-    ASSETS_LINK="$ANDROID_DIR/app/src/main/assets/public"
+    ASSETS_DIR="$ANDROID_DIR/app/src/main/assets/public"
+    PYTHON_GUI_DIR="$ANDROID_DIR/app/src/main/python/android_gui_static"
 
     # Clean previous assets
     rm -rf "$GUI_STATIC_DIR"
+    rm -rf "$PYTHON_GUI_DIR"
     mkdir -p "$GUI_STATIC_DIR"
 
     # Copy built web assets to android_gui_static
     cp -r "$WEB_SOURCE/out/"* "$GUI_STATIC_DIR/"
 
-    # Create symlink from Android assets to android_gui_static
-    rm -rf "$ASSETS_LINK"
-    mkdir -p "$(dirname "$ASSETS_LINK")"
-    ln -sf "../../../../../android_gui_static" "$ASSETS_LINK"
+    # IMPORTANT: Copy files directly to assets dir (NOT symlink!)
+    # Gradle/aapt does NOT follow symlinks when packaging APK assets
+    rm -rf "$ASSETS_DIR"
+    mkdir -p "$(dirname "$ASSETS_DIR")"
+    cp -r "$GUI_STATIC_DIR" "$ASSETS_DIR"
+
+    # ALSO copy to Python sources so Chaquopy packages it for the Python server
+    # The Python server's app.py looks for android_gui_static as sibling to ciris_engine
+    log_info "Copying GUI assets to Python sources for Chaquopy..."
+    mkdir -p "$PYTHON_GUI_DIR"
+    cp -r "$GUI_STATIC_DIR/"* "$PYTHON_GUI_DIR/"
 
     # Count files
-    FILE_COUNT=$(find "$GUI_STATIC_DIR" -type f | wc -l)
-    log_info "Copied $FILE_COUNT files to $GUI_STATIC_DIR"
-    log_info "Created symlink: $ASSETS_LINK -> android_gui_static"
+    FILE_COUNT=$(find "$ASSETS_DIR" -type f | wc -l)
+    log_info "Copied $FILE_COUNT files to $ASSETS_DIR"
+
+    PYTHON_FILE_COUNT=$(find "$PYTHON_GUI_DIR" -type f | wc -l)
+    log_info "Copied $PYTHON_FILE_COUNT files to $PYTHON_GUI_DIR (for Python server)"
 }
 
 # Build Android APK
@@ -194,6 +205,55 @@ build_android() {
     fi
 }
 
+# Validate APK contains expected assets
+validate_apk() {
+    log_info "Validating APK assets..."
+
+    if [ ! -f "$APK_PATH" ]; then
+        log_error "APK not found for validation: $APK_PATH"
+        exit 1
+    fi
+
+    # Check for _next directory (Next.js static assets)
+    NEXT_ASSETS=$(unzip -l "$APK_PATH" 2>/dev/null | grep -c "assets/public/_next" || true)
+    if [ "$NEXT_ASSETS" -lt 10 ]; then
+        log_error "APK missing _next assets! Found only $NEXT_ASSETS files."
+        log_error "This usually means symlinks were used instead of direct file copy."
+        exit 1
+    fi
+    log_info "Found $NEXT_ASSETS _next asset files in APK"
+
+    # Check for setup page chunk
+    SETUP_CHUNK=$(unzip -l "$APK_PATH" 2>/dev/null | grep "assets/public/_next/static/chunks/app/setup/page-" | head -1 || true)
+    if [ -z "$SETUP_CHUNK" ]; then
+        log_error "APK missing setup page chunk!"
+        exit 1
+    fi
+    CHUNK_NAME=$(echo "$SETUP_CHUNK" | awk '{print $NF}' | xargs basename)
+    log_info "Setup page chunk: $CHUNK_NAME"
+
+    # Check APK size (should be > 100MB with Chaquopy)
+    APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || stat -f%z "$APK_PATH" 2>/dev/null)
+    APK_SIZE_MB=$((APK_SIZE / 1024 / 1024))
+    if [ "$APK_SIZE_MB" -lt 100 ]; then
+        log_warn "APK size ($APK_SIZE_MB MB) seems small for Chaquopy build"
+    else
+        log_info "APK size: ${APK_SIZE_MB}MB"
+    fi
+
+    # Get version info
+    VERSION_INFO=$(unzip -p "$APK_PATH" "META-INF/MANIFEST.MF" 2>/dev/null | grep -i "version" || echo "Version info not available")
+
+    # Check output-metadata.json for version
+    if [ -f "$(dirname $APK_PATH)/output-metadata.json" ]; then
+        VERSION_CODE=$(grep -o '"versionCode": *[0-9]*' "$(dirname $APK_PATH)/output-metadata.json" | grep -o '[0-9]*')
+        VERSION_NAME=$(grep -o '"versionName": *"[^"]*"' "$(dirname $APK_PATH)/output-metadata.json" | cut -d'"' -f4)
+        log_info "Version: $VERSION_NAME (code: $VERSION_CODE)"
+    fi
+
+    log_info "APK validation passed!"
+}
+
 # Main
 main() {
     log_info "=== CIRIS Android Unified Build ==="
@@ -204,6 +264,7 @@ main() {
     build_web_assets
     copy_web_assets
     build_android
+    validate_apk
 
     log_info "=== Build Complete ==="
 }

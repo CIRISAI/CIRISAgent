@@ -12,10 +12,16 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 34
-        versionCode 1
-        versionName "1.6.3.2"
+        versionCode 5
+        versionName "1.6.7.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Allow _next directory in assets (Next.js static export)
+        // Default aapt ignoreAssetsPattern includes "_*" which excludes _next
+        aaptOptions {
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
 
         ndk {
             // Start with x86_64 only for emulator testing
@@ -69,6 +75,9 @@ android {
                 install "openai==1.12.0"
                 install "instructor==1.2.6"
 
+                // Note: psutil is NOT included - it requires native compilation
+                // Instead, we provide an android-specific stub at src/main/python/psutil.py
+
                 // Keep dependencies lean - no GPU, BLAS, or heavy ML libs
                 // All LLM inference is remote via API
             }
@@ -76,6 +85,7 @@ android {
     }
 
     // Include CIRIS Python source
+    // android_gui_static is copied by build-android.sh into src/main/python/
     sourceSets {
         main {
             python.srcDirs = ["src/main/python"]

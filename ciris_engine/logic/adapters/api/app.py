@@ -192,11 +192,21 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # ONLY in installed/standalone mode - NOT in managed/Docker mode
     from pathlib import Path
 
-    from ciris_engine.logic.utils.path_resolution import is_managed
+    from ciris_engine.logic.utils.path_resolution import is_android, is_managed
 
-    # Path: ciris_engine/logic/adapters/api/app.py -> ciris_engine/gui_static
+    # Path resolution for GUI static assets
     # Need 4 parent levels: api -> adapters -> logic -> ciris_engine
-    gui_static_dir = Path(__file__).resolve().parent.parent.parent.parent / "gui_static"
+    package_root = Path(__file__).resolve().parent.parent.parent.parent
+
+    # On Android, prefer android_gui_static (built from CIRISGUI-Android)
+    # Otherwise fall back to gui_static (bundled in wheel for desktop/server)
+    android_gui_dir = package_root.parent / "android_gui_static"
+    gui_static_dir = package_root / "gui_static"
+
+    # Choose the appropriate GUI directory
+    if is_android() and android_gui_dir.exists() and any(android_gui_dir.iterdir()):
+        gui_static_dir = android_gui_dir
+        print(f"📱 Using Android GUI static assets: {gui_static_dir}")
 
     # Skip GUI in managed/Docker mode - manager provides its own frontend
     if is_managed():

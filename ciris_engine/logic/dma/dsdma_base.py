@@ -344,6 +344,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 max_tokens=512,
                 temperature=0.0,
                 thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
             )
 
             result = DSDMAResult(

@@ -177,6 +177,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 max_tokens=512,
                 temperature=0.0,
                 thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
             )
             csdma_eval: CSDMAResult = result_tuple[0]
 

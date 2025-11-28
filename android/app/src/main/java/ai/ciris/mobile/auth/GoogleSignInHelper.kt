@@ -62,6 +62,15 @@ class GoogleSignInHelper(private val context: Context) {
     }
 
     /**
+     * Get the Google ID token for native token exchange.
+     * This token can be sent to the server to verify the user's identity.
+     * Returns null if not signed in.
+     */
+    fun getIdToken(): String? {
+        return getLastSignedInAccount()?.idToken
+    }
+
+    /**
      * Get the user's email address.
      */
     fun getUserEmail(): String? {

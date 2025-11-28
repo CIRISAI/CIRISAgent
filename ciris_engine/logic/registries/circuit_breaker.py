@@ -126,6 +126,36 @@ class CircuitBreaker:
         elif self.state == CircuitState.HALF_OPEN:
             self._transition_to_open()
 
+    def force_open(self, custom_timeout: Optional[float] = None, reason: str = "forced") -> None:
+        """Force the circuit breaker open immediately, bypassing failure threshold.
+
+        This is used for critical errors like billing/auth failures where we want
+        to immediately stop making requests without waiting for failure_threshold.
+
+        Args:
+            custom_timeout: Optional longer timeout for recovery (e.g., 300 for billing errors).
+                           If provided, overrides config.recovery_timeout until reset.
+            reason: Reason for forcing open (for logging)
+        """
+        self.total_calls += 1
+        self.total_failures += 1
+        self.consecutive_failures += 1
+        self.failure_count = self.config.failure_threshold  # Ensure threshold is met
+        self.last_failure_time = time.time()
+
+        # Store original timeout and set custom timeout if provided
+        if custom_timeout is not None:
+            if not hasattr(self, "_original_recovery_timeout"):
+                self._original_recovery_timeout = self.config.recovery_timeout
+            self.config.recovery_timeout = custom_timeout
+            logger.warning(
+                f"Circuit breaker '{self.name}' recovery timeout extended to {custom_timeout}s "
+                f"(was {self._original_recovery_timeout}s) due to: {reason}"
+            )
+
+        self._transition_to_open()
+        logger.warning(f"Circuit breaker '{self.name}' FORCE OPENED: {reason}")
+
     def _transition_to_open(self) -> None:
         """Transition to OPEN state (service disabled)"""
         with self._lock:

@@ -158,10 +158,10 @@ class ServiceInitializer:
             llm_base_url = os.getenv("OPENAI_API_BASE", "")
             using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
 
-            if google_id_token:
-                # JWT auth mode - Android uses Google ID token from .env file
+            if google_id_token and using_ciris_proxy:
+                # JWT auth mode - ONLY for Android using CIRIS LLM proxy
                 # Token is refreshed by TokenRefreshManager which signals via file
-                logger.info("Using JWT auth mode for billing (Android/mobile)")
+                logger.info("Using JWT auth mode for billing (CIRIS LLM proxy)")
                 credit_provider = CIRISBillingProvider(
                     google_id_token=google_id_token,
                     base_url=base_url,

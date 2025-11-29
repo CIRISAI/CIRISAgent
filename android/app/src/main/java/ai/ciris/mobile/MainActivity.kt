@@ -439,11 +439,11 @@ class MainActivity : AppCompatActivity() {
             if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 connection.disconnect()
-                // Parse JSON response: {"setup_required": true/false, ...}
+                // Parse JSON response: {"data": {"setup_required": true/false, ...}, "metadata": {...}}
                 val gson = com.google.gson.Gson()
                 val status = gson.fromJson(response, SetupStatusResponse::class.java)
-                Log.i(TAG, "[SetupStatus] Backend says setup_required=${status.setup_required}")
-                status.setup_required
+                Log.i(TAG, "[SetupStatus] Backend says setup_required=${status.data.setup_required}")
+                status.data.setup_required
             } else {
                 Log.w(TAG, "[SetupStatus] Failed to get status (HTTP $responseCode), defaulting to intent value: $showSetup")
                 connection.disconnect()
@@ -455,11 +455,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Response model for setup status
-    data class SetupStatusResponse(
+    // Response model for setup status (wrapped in SuccessResponse)
+    data class SetupStatusData(
         val setup_required: Boolean,
         val config_exists: Boolean?,
         val is_first_run: Boolean?
+    )
+
+    // Wrapper for API responses (backend returns {"data": {...}, "metadata": {...}})
+    data class SetupStatusResponse(
+        val data: SetupStatusData
     )
 
     /**

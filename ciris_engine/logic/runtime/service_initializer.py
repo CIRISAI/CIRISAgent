@@ -865,9 +865,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.info("Registered LLM service token refresh handler with ResourceMonitor")
 
         # Optional: Initialize secondary LLM service
+        # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
+        second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+
+        # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
+        is_ciris_proxy_secondary = "ciris.ai" in second_base_url
+
         if second_api_key:
+            # Standard API key auth
             await self._initialize_secondary_llm(config, second_api_key)
+        elif is_ciris_proxy_secondary and google_id_token:
+            # CIRIS proxy with JWT auth - use Google ID token as auth
+            logger.info("Secondary LLM using CIRIS proxy with JWT auth")
+            await self._initialize_secondary_llm(config, google_id_token)
 
     async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
         """Initialize optional secondary LLM service."""

@@ -1,10 +1,12 @@
 package ai.ciris.mobile.auth
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -34,6 +36,8 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var apiKeyButton: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
+    private lateinit var marketingCheckbox: CheckBox
+    private lateinit var privacyLink: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +50,8 @@ class LoginActivity : AppCompatActivity() {
         apiKeyButton = findViewById(R.id.api_key_button)
         progressBar = findViewById(R.id.progress_bar)
         statusText = findViewById(R.id.status_text)
+        marketingCheckbox = findViewById(R.id.marketing_checkbox)
+        privacyLink = findViewById(R.id.privacy_link)
 
         signInButton.setOnClickListener {
             startGoogleSignIn()
@@ -55,8 +61,25 @@ class LoginActivity : AppCompatActivity() {
             proceedWithApiKey()
         }
 
+        privacyLink.setOnClickListener {
+            openPrivacyPolicy()
+        }
+
         // Try silent sign-in on launch (only for returning Google users)
         attemptSilentSignIn()
+    }
+
+    private fun openPrivacyPolicy() {
+        // Open privacy policy in browser or in-app WebView
+        val privacyUrl = "file:///android_asset/public/privacy-policy.html"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(privacyUrl))
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: show toast with external URL
+            Log.e(TAG, "Failed to open privacy policy: ${e.message}")
+            Toast.makeText(this, "Privacy policy available at ciris.ai/privacy", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun attemptSilentSignIn() {
@@ -129,17 +152,20 @@ class LoginActivity : AppCompatActivity() {
                 val googleIdToken = googleSignInHelper.getIdToken()
                 val userEmail = googleSignInHelper.getUserEmail()
                 val userName = googleSignInHelper.getUserDisplayName()
+                val marketingOptIn = marketingCheckbox.isChecked
 
                 Log.i(TAG, "[Auth Flow] Google auth data:")
                 Log.i(TAG, "[Auth Flow]   google_user_id: ${googleUserId ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   google_id_token: ${if (googleIdToken != null) "${googleIdToken.take(20)}... (${googleIdToken.length} chars)" else "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_email: ${userEmail ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_name: ${userName ?: "(null)"}")
+                Log.i(TAG, "[Auth Flow]   marketing_opt_in: $marketingOptIn")
 
                 putExtra("google_user_id", googleUserId)
                 putExtra("google_id_token", googleIdToken)
                 putExtra("user_email", userEmail)
                 putExtra("user_name", userName)
+                putExtra("marketing_opt_in", marketingOptIn)
             }
 
             // Both methods should show setup wizard on first run
@@ -154,6 +180,8 @@ class LoginActivity : AppCompatActivity() {
         progressBar.visibility = if (show) View.VISIBLE else View.GONE
         signInButton.visibility = if (show) View.GONE else View.VISIBLE
         apiKeyButton.visibility = if (show) View.GONE else View.VISIBLE
+        marketingCheckbox.visibility = if (show) View.GONE else View.VISIBLE
+        privacyLink.visibility = if (show) View.GONE else View.VISIBLE
         statusText.text = message
         statusText.visibility = if (message.isNotEmpty()) View.VISIBLE else View.GONE
     }

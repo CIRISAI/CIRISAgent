@@ -106,6 +106,35 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- Marketing Opt-In (shown only for Google Sign-In) -->
+    <CheckBox
+        android:id="@+id/marketing_checkbox"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:text="Send me product updates and announcements"
+        android:textSize="12sp"
+        android:textColor="@color/white"
+        android:buttonTint="@color/white"
+        android:alpha="0.8"
+        android:layout_marginTop="16dp"
+        android:checked="false"
+        app:layout_constraintTop_toBottomOf="@id/info_text"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Privacy Policy Link -->
+    <TextView
+        android:id="@+id/privacy_link"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="View Privacy Policy"
+        android:textSize="12sp"
+        android:textColor="@color/ciris_accent"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/marketing_checkbox"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Progress Indicator -->
     <ProgressBar
         android:id="@+id/progress_bar"
@@ -128,7 +157,7 @@
         android:alpha="0.9"
         android:visibility="gone"
         android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/info_text"
+        app:layout_constraintTop_toBottomOf="@id/privacy_link"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

@@ -62,6 +62,7 @@
             android:name=".InteractActivity"
             android:exported="false"
             android:label="Interact Stream"
-            android:parentActivityName=".MainActivity" />
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.CIRIS.NoActionBar" />
     </application>
 </manifest>

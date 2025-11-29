@@ -136,18 +136,9 @@ class MainActivity : AppCompatActivity() {
         // Redirect Python stdout/stderr to console
         setupPythonOutputRedirect()
 
-        // Initialize Python runtime
-        appendToConsole("Initializing Python runtime...")
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-            appendToConsole("✓ Python runtime initialized")
-            Log.i(TAG, "Python runtime initialized")
-        } else {
-            appendToConsole("✓ Python runtime already running")
-        }
-
-        // Start Python server in background
-        startPythonServer()
+        // Initialize Python and start server in background to avoid ANR
+        appendToConsole("Initializing...")
+        initializePythonAndStartServer()
     }
 
     private fun setupPythonOutputRedirect() {
@@ -173,6 +164,44 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Logcat reader error: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Initialize Python runtime and start server in background.
+     * This prevents ANR (Application Not Responding) during startup.
+     */
+    private fun initializePythonAndStartServer() {
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                withContext(Dispatchers.Main) {
+                    appendToConsole("Initializing Python runtime...")
+                    updateStatus("Starting", "yellow")
+                }
+
+                // Python.start() can take several seconds - do it off main thread
+                // Note: AndroidPlatform requires a Context, but doesn't need to be on main thread
+                if (!Python.isStarted()) {
+                    Python.start(AndroidPlatform(this@MainActivity))
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("✓ Python runtime initialized")
+                    }
+                    Log.i(TAG, "Python runtime initialized")
+                } else {
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("✓ Python runtime already running")
+                    }
+                }
+
+                // Now start the server
+                startPythonServer()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize Python: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    appendToConsole("❌ Failed to initialize Python: ${e.message}")
+                    updateStatus("Error", "red")
+                }
             }
         }
     }
@@ -267,6 +296,13 @@ class MainActivity : AppCompatActivity() {
                     view: WebView?,
                     url: String?
                 ): Boolean {
+                    // Intercept ciris:// URL scheme for native functionality
+                    if (url != null && url.startsWith("ciris://")) {
+                        Log.i(TAG, "Intercepting CIRIS URL scheme: $url")
+                        handleCirisUrlScheme(url)
+                        return true
+                    }
+
                     // Check for native UI interception - only intercept the GUI runtime page
                     // NOT API endpoints like /v1/system/runtime/reasoning-stream
                     if (useNativeUi && url != null) {
@@ -332,7 +368,6 @@ class MainActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.Main) {
                     appendToConsole("Starting CIRIS runtime...")
-                    updateStatus("Starting", "yellow")
                 }
 
                 Log.i(TAG, "Starting Python server...")
@@ -676,6 +711,37 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("access_token", token)
         }
         startActivity(intent)
+    }
+
+    /**
+     * Handle ciris:// URL scheme for native functionality.
+     * Currently supports:
+     * - ciris://purchase/{productId} - Launch Google Play purchase flow
+     */
+    private fun handleCirisUrlScheme(url: String) {
+        try {
+            val uri = android.net.Uri.parse(url)
+            val host = uri.host
+            val pathSegments = uri.pathSegments
+
+            when (host) {
+                "purchase" -> {
+                    // ciris://purchase/{productId}
+                    val productId = if (pathSegments.isNotEmpty()) pathSegments[0] else null
+                    Log.i(TAG, "Launching purchase flow for product: $productId")
+                    val intent = Intent(this, PurchaseActivity::class.java)
+                    if (productId != null) {
+                        intent.putExtra("product_id", productId)
+                    }
+                    startActivity(intent)
+                }
+                else -> {
+                    Log.w(TAG, "Unknown CIRIS URL scheme host: $host")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling CIRIS URL scheme: ${e.message}")
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

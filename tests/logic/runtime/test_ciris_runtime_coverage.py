@@ -469,3 +469,169 @@ class TestShutdownOrchestration:
 
             # But no other shutdown steps should run
             mock_prepare.assert_not_called()
+
+
+# ============================================================================
+# TICKETS CONFIG MIGRATION TESTS
+# ============================================================================
+
+
+class TestTicketsConfigMigration:
+    """Test the _migrate_tickets_config_to_graph method."""
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_no_service_initializer(self, real_runtime_with_mock):
+        """Test migration returns early when service_initializer not available."""
+        runtime = real_runtime_with_mock
+        runtime.service_initializer = None
+
+        # Should not raise, just return early
+        await runtime._migrate_tickets_config_to_graph()
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_no_config_service(self, real_runtime_with_mock):
+        """Test migration returns early when config_service not available."""
+        runtime = real_runtime_with_mock
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = None
+
+        # Should not raise, just return early
+        await runtime._migrate_tickets_config_to_graph()
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_config_already_exists(self, real_runtime_with_mock):
+        """Test migration skips when tickets config already exists in graph."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service with existing config
+        mock_config_service = AsyncMock()
+        mock_existing_config = Mock()
+        mock_existing_config.value = Mock()
+        mock_existing_config.value.dict_value = {"enabled": True, "sops": {}}
+        mock_config_service.get_config = AsyncMock(return_value=mock_existing_config)
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+
+        await runtime._migrate_tickets_config_to_graph()
+
+        # Should check for existing config but not set new one
+        mock_config_service.get_config.assert_called_once_with("tickets")
+        mock_config_service.set_config.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_from_template(self, real_runtime_with_mock):
+        """Test migration uses template tickets config when available."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service with no existing config
+        mock_config_service = AsyncMock()
+        mock_config_service.get_config = AsyncMock(return_value=None)
+        mock_config_service.set_config = AsyncMock()
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+
+        # Mock identity_manager with template that has tickets config
+        from ciris_engine.schemas.config.tickets import TicketsConfig
+
+        mock_tickets_config = TicketsConfig(enabled=True, sops=[])
+        runtime.identity_manager = Mock()
+        runtime.identity_manager.agent_template = Mock()
+        runtime.identity_manager.agent_template.tickets = mock_tickets_config
+
+        await runtime._migrate_tickets_config_to_graph()
+
+        # Should set config from template
+        mock_config_service.set_config.assert_called_once()
+        call_args = mock_config_service.set_config.call_args
+        assert call_args.kwargs["key"] == "tickets"
+        assert call_args.kwargs["updated_by"] == "system_bootstrap"
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_creates_default_dsar_sops(self, real_runtime_with_mock):
+        """Test migration creates default DSAR SOPs for pre-1.7.0 agents."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service with no existing config
+        mock_config_service = AsyncMock()
+        mock_config_service.get_config = AsyncMock(return_value=None)
+        mock_config_service.set_config = AsyncMock()
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+
+        # No identity_manager or template - simulates pre-1.7.0 agent
+        runtime.identity_manager = None
+
+        await runtime._migrate_tickets_config_to_graph()
+
+        # Should set config with default DSAR SOPs
+        mock_config_service.set_config.assert_called_once()
+        call_args = mock_config_service.set_config.call_args
+        assert call_args.kwargs["key"] == "tickets"
+        assert call_args.kwargs["updated_by"] == "system_bootstrap"
+        # Value should have the default SOPs
+        assert "sops" in call_args.kwargs["value"]
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_handles_set_config_error(self, real_runtime_with_mock):
+        """Test migration handles errors when setting config."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service that fails on set_config
+        mock_config_service = AsyncMock()
+        mock_config_service.get_config = AsyncMock(return_value=None)
+        mock_config_service.set_config = AsyncMock(side_effect=Exception("Database error"))
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+        runtime.identity_manager = None
+
+        # Should not raise, just log error
+        await runtime._migrate_tickets_config_to_graph()
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_handles_get_config_exception(self, real_runtime_with_mock):
+        """Test migration handles exceptions when checking existing config."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service that raises on get_config
+        mock_config_service = AsyncMock()
+        mock_config_service.get_config = AsyncMock(side_effect=Exception("Query failed"))
+        mock_config_service.set_config = AsyncMock()
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+        runtime.identity_manager = None
+
+        # Should continue with migration after get_config fails
+        await runtime._migrate_tickets_config_to_graph()
+
+        # Should still try to set config
+        mock_config_service.set_config.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_migrate_tickets_template_without_tickets(self, real_runtime_with_mock):
+        """Test migration uses defaults when template has no tickets config."""
+        runtime = real_runtime_with_mock
+
+        # Mock config_service with no existing config
+        mock_config_service = AsyncMock()
+        mock_config_service.get_config = AsyncMock(return_value=None)
+        mock_config_service.set_config = AsyncMock()
+
+        runtime.service_initializer = Mock()
+        runtime.service_initializer.config_service = mock_config_service
+
+        # Mock identity_manager with template but no tickets
+        runtime.identity_manager = Mock()
+        runtime.identity_manager.agent_template = Mock()
+        runtime.identity_manager.agent_template.tickets = None
+
+        await runtime._migrate_tickets_config_to_graph()
+
+        # Should set default DSAR SOPs
+        mock_config_service.set_config.assert_called_once()
+        call_args = mock_config_service.set_config.call_args
+        assert "sops" in call_args.kwargs["value"]

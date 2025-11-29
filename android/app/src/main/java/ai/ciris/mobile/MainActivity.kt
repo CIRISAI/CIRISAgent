@@ -267,11 +267,20 @@ class MainActivity : AppCompatActivity() {
                     view: WebView?,
                     url: String?
                 ): Boolean {
-                    // Check for native UI interception
-                    if (useNativeUi && url != null && (url.contains("/runtime") || url.contains("runtime/index.html"))) {
-                        Log.i(TAG, "Intercepting runtime URL for native UI: $url")
-                        launchInteractActivity()
-                        return true
+                    // Check for native UI interception - only intercept the GUI runtime page
+                    // NOT API endpoints like /v1/system/runtime/reasoning-stream
+                    if (useNativeUi && url != null) {
+                        val isRuntimePage = url.endsWith("/runtime") ||
+                                           url.endsWith("/runtime/") ||
+                                           url.contains("/runtime/index.html") ||
+                                           url.contains("/runtime?")
+                        // Exclude API endpoints
+                        val isApiEndpoint = url.contains("/v1/") || url.contains("/api/")
+                        if (isRuntimePage && !isApiEndpoint) {
+                            Log.i(TAG, "Intercepting runtime page for native UI: $url")
+                            launchInteractActivity()
+                            return true
+                        }
                     }
 
                     // Only allow localhost/127.0.0.1

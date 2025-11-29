@@ -12,7 +12,7 @@ omit =
     */build/*
     */dist/*
     */protocols/*
-    setup.py
+    ./setup.py
     vulture_whitelist.py
 
 [report]

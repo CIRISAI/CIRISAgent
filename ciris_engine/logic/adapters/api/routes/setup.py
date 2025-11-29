@@ -558,6 +558,103 @@ def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
         json.dump(users_data, f, indent=2)
 
 
+def _validate_setup_passwords(setup: SetupCompleteRequest, is_oauth_user: bool) -> str:
+    """Validate and potentially generate admin password for setup.
+
+    For OAuth users without a password, generates a secure random password.
+    For non-OAuth users, validates password requirements.
+
+    Args:
+        setup: Setup configuration request
+        is_oauth_user: Whether user is authenticating via OAuth
+
+    Returns:
+        Validated or generated admin password
+
+    Raises:
+        HTTPException: If password validation fails
+    """
+    admin_password = setup.admin_password
+
+    if not admin_password or len(admin_password) == 0:
+        if is_oauth_user:
+            # Generate a secure random password for OAuth users
+            # They won't use this password - they'll authenticate via OAuth
+            admin_password = secrets.token_urlsafe(32)
+            logger.info("[Setup Complete] Generated random password for OAuth user (password auth disabled)")
+        else:
+            # Non-OAuth users MUST provide a password
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+            )
+    elif len(admin_password) < 8:
+        # If a password was provided, it must meet minimum requirements
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+        )
+
+    # Validate system admin password strength if provided
+    if setup.system_admin_password and len(setup.system_admin_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
+        )
+
+    return admin_password
+
+
+def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
+    """Save setup configuration to .env and reload environment variables.
+
+    Args:
+        setup: Setup configuration request
+
+    Returns:
+        Path to the saved configuration file
+    """
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
+    from dotenv import load_dotenv
+
+    logger.info("[Setup Complete] Path resolution:")
+    logger.info(f"[Setup Complete]   is_android(): {is_android()}")
+    logger.info(f"[Setup Complete]   is_development_mode(): {is_development_mode()}")
+    logger.info(f"[Setup Complete]   get_ciris_home(): {get_ciris_home()}")
+
+    config_path = get_default_config_path()
+    config_dir = config_path.parent
+    logger.info(f"[Setup Complete]   config_path: {config_path}")
+    logger.info(f"[Setup Complete]   config_dir: {config_dir}")
+
+    # Ensure directory exists
+    config_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"[Setup Complete] Directory ensured: {config_dir}")
+
+    # Save configuration
+    logger.info(f"[Setup Complete] Saving configuration to: {config_path}")
+    _save_setup_config(setup, config_path)
+    logger.info("[Setup Complete] Configuration saved successfully!")
+
+    # Verify the file was written
+    if config_path.exists():
+        file_size = config_path.stat().st_size
+        logger.info(f"[Setup Complete] Verified: .env exists ({file_size} bytes)")
+    else:
+        logger.error(f"[Setup Complete] ERROR: .env file NOT found at {config_path} after save!")
+
+    # Reload environment variables from the new .env file
+    load_dotenv(config_path, override=True)
+    logger.info(f"[Setup Complete] Reloaded environment variables from {config_path}")
+
+    # Verify key env vars were loaded
+    openai_key = os.getenv("OPENAI_API_KEY")
+    openai_base = os.getenv("OPENAI_API_BASE")
+    logger.info(
+        f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}..."
+    )
+    logger.info(f"[Setup Complete] After reload - OPENAI_API_BASE: {openai_base}")
+
+    return config_path
+
+
 def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
     """Save setup configuration to .env file.
 
@@ -708,77 +805,12 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     is_oauth_user = bool(setup.oauth_provider)
     logger.info(f"[Setup Complete] OAuth provider: {setup.oauth_provider}, is_oauth_user: {is_oauth_user}")
 
-    # For OAuth users without a password, generate a secure random password
-    # This allows the user account to exist but password auth is effectively disabled
-    # (they authenticate via OAuth instead)
-    if not setup.admin_password or len(setup.admin_password) == 0:
-        if is_oauth_user:
-            # Generate a secure random password for OAuth users
-            # They won't use this password - they'll authenticate via OAuth
-            setup.admin_password = secrets.token_urlsafe(32)
-            logger.info(f"[Setup Complete] Generated random password for OAuth user (password auth disabled)")
-        else:
-            # Non-OAuth users MUST provide a password
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
-            )
-    elif len(setup.admin_password) < 8:
-        # If a password was provided, it must meet minimum requirements
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
-        )
-
-    # Validate system admin password strength if provided
-    if setup.system_admin_password and len(setup.system_admin_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
-        )
+    # Validate passwords and potentially generate for OAuth users
+    setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)
 
     try:
-        # Get config path with detailed logging
-        from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
-
-        logger.info("[Setup Complete] Path resolution:")
-        logger.info(f"[Setup Complete]   is_android(): {is_android()}")
-        logger.info(f"[Setup Complete]   is_development_mode(): {is_development_mode()}")
-        logger.info(f"[Setup Complete]   get_ciris_home(): {get_ciris_home()}")
-
-        config_path = get_default_config_path()
-        config_dir = config_path.parent
-        logger.info(f"[Setup Complete]   config_path: {config_path}")
-        logger.info(f"[Setup Complete]   config_dir: {config_dir}")
-
-        # Ensure directory exists
-        config_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"[Setup Complete] Directory ensured: {config_dir}")
-
-        # Save configuration
-        logger.info(f"[Setup Complete] Saving configuration to: {config_path}")
-        _save_setup_config(setup, config_path)
-        logger.info(f"[Setup Complete] Configuration saved successfully!")
-
-        # Verify the file was written
-        if config_path.exists():
-            file_size = config_path.stat().st_size
-            logger.info(f"[Setup Complete] Verified: .env exists ({file_size} bytes)")
-        else:
-            logger.error(f"[Setup Complete] ERROR: .env file NOT found at {config_path} after save!")
-
-        # Reload environment variables from the new .env file
-        from dotenv import load_dotenv
-
-        load_dotenv(config_path, override=True)
-        logger.info(f"[Setup Complete] Reloaded environment variables from {config_path}")
-
-        # Verify key env vars were loaded
-        import os
-
-        openai_key = os.getenv("OPENAI_API_KEY")
-        openai_base = os.getenv("OPENAI_API_BASE")
-        logger.info(
-            f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}..."
-        )
-        logger.info(f"[Setup Complete] After reload - OPENAI_API_BASE: {openai_base}")
+        # Save configuration and reload environment variables
+        config_path = _save_and_reload_config(setup)
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

@@ -284,7 +284,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             self._token_refresh_signal_mtime = signal_mtime
             try:
                 config_reload_file.unlink()
-                logger.info(f"✓ Cleaned up config reload signal file")
+                logger.info("✓ Cleaned up config reload signal file")
             except Exception as e:
                 logger.warning(f"Failed to clean up signal file: {e}")
 

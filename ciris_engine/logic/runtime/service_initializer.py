@@ -790,6 +790,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         self._startup_end_time = time.time()
 
+    def _get_llm_service_config_value(self, config: Any, attr_name: str, default: Any) -> Any:
+        """Get LLM service config value safely with fallback to default.
+
+        Args:
+            config: Configuration object
+            attr_name: Attribute name to get from config.services
+            default: Default value if not found
+
+        Returns:
+            Config value or default
+        """
+        if config and hasattr(config, "services") and config.services:
+            return getattr(config.services, attr_name, default)
+        return default
+
     async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
@@ -815,27 +830,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("Initializing real LLM service")
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
+        # Get config values using helper to reduce complexity
+        base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
+            config, "llm_endpoint", "http://localhost:11434/v1"
+        )
+        model_name = os.environ.get("OPENAI_MODEL") or self._get_llm_service_config_value(
+            config, "llm_model", "gpt-4o-mini"
+        )
+
         llm_config = OpenAIConfig(
-            base_url=(
-                os.environ.get("OPENAI_API_BASE")
-                or (
-                    config.services.llm_endpoint if config and hasattr(config, "services") and config.services else None
-                )
-                or "http://localhost:11434/v1"
-            ),
-            model_name=(
-                os.environ.get("OPENAI_MODEL")
-                or (config.services.llm_model if config and hasattr(config, "services") and config.services else None)
-                or "gpt-4o-mini"
-            ),
+            base_url=base_url,
+            model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 
         # Create and start service
@@ -887,18 +896,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
-        # Get configuration from environment
+        # Get configuration from environment using helper
         base_url = os.environ.get(
             "CIRIS_OPENAI_API_BASE_2",
-            (
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
-            ),
+            self._get_llm_service_config_value(config, "llm_endpoint", "http://localhost:11434/v1"),
         )
         model_name = os.environ.get(
             "CIRIS_OPENAI_MODEL_NAME_2",
-            config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2",
+            self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
         # Create config
@@ -906,13 +911,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 
         # Create and start service

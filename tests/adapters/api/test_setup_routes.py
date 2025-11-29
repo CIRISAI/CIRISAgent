@@ -813,3 +813,102 @@ class TestResumeFromFirstRun:
 
         # Note: Background task scheduling is tested, but actual execution
         # happens asynchronously and is difficult to verify in sync test
+
+
+class TestValidateSetupPasswords:
+    """Test _validate_setup_passwords helper function."""
+
+    def test_valid_password(self):
+        """Test password validation with valid password."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+
+        setup = SetupCompleteRequest(
+            llm_provider="openai",
+            llm_api_key="sk-test123",
+            template_id="general",
+            enabled_adapters=["api"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="secure_password_123",
+            agent_port=8080,
+        )
+
+        result = _validate_setup_passwords(setup, is_oauth_user=False)
+        assert result == "secure_password_123"
+
+    def test_short_password_raises_error(self):
+        """Test password validation raises error for short password."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+
+        setup = SetupCompleteRequest(
+            llm_provider="openai",
+            llm_api_key="sk-test123",
+            template_id="general",
+            enabled_adapters=["api"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="short",  # Too short
+            agent_port=8080,
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            _validate_setup_passwords(setup, is_oauth_user=False)
+        assert "8 characters" in str(exc_info.value.detail)
+
+    def test_empty_password_for_non_oauth_raises_error(self):
+        """Test empty password raises error for non-OAuth users."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+
+        setup = SetupCompleteRequest(
+            llm_provider="openai",
+            llm_api_key="sk-test123",
+            template_id="general",
+            enabled_adapters=["api"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="",  # Empty
+            agent_port=8080,
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            _validate_setup_passwords(setup, is_oauth_user=False)
+        assert "8 characters" in str(exc_info.value.detail)
+
+    def test_oauth_user_generates_random_password(self):
+        """Test OAuth user without password gets random password generated."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+
+        setup = SetupCompleteRequest(
+            llm_provider="openai",
+            llm_api_key="sk-test123",
+            template_id="general",
+            enabled_adapters=["api"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="",  # Empty - should generate random for OAuth
+            oauth_provider="google",
+            agent_port=8080,
+        )
+
+        result = _validate_setup_passwords(setup, is_oauth_user=True)
+        assert len(result) >= 32  # Random password should be at least 32 chars
+
+    def test_system_admin_password_too_short_raises_error(self):
+        """Test system admin password validation."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+
+        setup = SetupCompleteRequest(
+            llm_provider="openai",
+            llm_api_key="sk-test123",
+            template_id="general",
+            enabled_adapters=["api"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="secure_password_123",
+            system_admin_password="short",  # Too short
+            agent_port=8080,
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            _validate_setup_passwords(setup, is_oauth_user=False)
+        assert "System admin password" in str(exc_info.value.detail)

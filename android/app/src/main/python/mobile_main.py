@@ -88,7 +88,7 @@ async def start_mobile_runtime():
     from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 
     logger.info("Starting CIRIS on-device runtime...")
-    logger.info(f"API endpoint: http://127.0.0.1:8080")
+    logger.info("API endpoint: http://127.0.0.1:8080")
     logger.info(f"LLM endpoint: {os.environ.get('OPENAI_API_BASE', 'NOT CONFIGURED')}")
 
     # On Android, we skip file-based config loading and use defaults directly

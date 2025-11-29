@@ -611,8 +611,9 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     Returns:
         Path to the saved configuration file
     """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
     from dotenv import load_dotenv
+
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
 
     logger.info("[Setup Complete] Path resolution:")
     logger.info(f"[Setup Complete]   is_android(): {is_android()}")
@@ -647,9 +648,7 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     # Verify key env vars were loaded
     openai_key = os.getenv("OPENAI_API_KEY")
     openai_base = os.getenv("OPENAI_API_BASE")
-    logger.info(
-        f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}..."
-    )
+    logger.info(f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}...")
     logger.info(f"[Setup Complete] After reload - OPENAI_API_BASE: {openai_base}")
 
     return config_path

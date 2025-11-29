@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2025-11-28
+
+### Added - Android On-Device Packaging
+
+- **Native Android App** - Full CIRIS agent running directly on Android devices
+  - Complete Python runtime with Chaquopy integration
+  - WebView-based GUI with bundled static assets
+  - Native Interact UI with web/native toggle option
+  - Startup console for monitoring agent initialization
+
+- **CIRIS Proxy Billing** - Metered billing support for CIRIS LLM proxy
+  - JWT-based authentication for proxy connections
+  - Secondary LLM configuration via CIRIS proxy
+  - Billing only active when using CIRIS proxy (not local LLMs)
+
+### Security
+
+- **Android Security Hardening**
+  - EncryptedSharedPreferences for API key storage
+  - Cleartext traffic restricted to localhost only
+  - WebView hardened: file access disabled, navigation restricted
+  - ProGuard minification and resource shrinking for release builds
+
+### Fixed
+
+- **InteractActivity Crash** - Fixed crash on Android interact screen
+- **URL Interception** - More specific routing for native runtime UI
+- **SonarCloud Quality** - Reduced cognitive complexity in setup.py and service_initializer.py
+- **Coverage Reporting** - Fixed routes/setup.py being excluded from coverage
+
 ## [1.6.6] - 2025-11-25
 
 ### Fixed - PostgreSQL Support & Log Noise Reduction

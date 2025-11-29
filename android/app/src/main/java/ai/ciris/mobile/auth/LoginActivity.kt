@@ -13,11 +13,11 @@ import ai.ciris.mobile.MainActivity
 import ai.ciris.mobile.R
 
 /**
- * Login screen with Google Sign-In and API Key options.
+ * Login screen with Google Sign-In and Local Login options.
  *
  * Both options proceed to the setup wizard:
- * - Google Sign-In: Uses CIRIS LLM Proxy with Google auth
- * - API Key: User provides their own OpenAI-compatible endpoint
+ * - Google Sign-In: Required for CIRIS hosted LLM services, also supports BYOK
+ * - Local Login: Offline mode with user-provided API key (BYOK only)
  */
 class LoginActivity : AppCompatActivity() {
 
@@ -92,8 +92,8 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun proceedWithApiKey() {
-        // Skip Google auth, proceed directly with API key mode
-        Log.i(TAG, "User chose API key mode")
+        // Skip Google auth, proceed directly with local login mode
+        Log.i(TAG, "User chose local login mode")
         proceedToMain(AUTH_METHOD_API_KEY)
     }
 

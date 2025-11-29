@@ -1070,9 +1070,7 @@ class TestGetLLMServiceConfigValue:
         mock_config.services.llm_endpoint = "http://example.com"
 
         # getattr with default will use the default for missing attribute
-        result = service_initializer._get_llm_service_config_value(
-            mock_config, "nonexistent_attr", "default_value"
-        )
+        result = service_initializer._get_llm_service_config_value(mock_config, "nonexistent_attr", "default_value")
         # Note: getattr returns default_value when attribute doesn't exist on spec
         assert result == "default_value"
 

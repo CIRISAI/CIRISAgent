@@ -644,6 +644,14 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, PurchaseActivity::class.java))
                 true
             }
+            R.id.action_interact -> {
+                val intent = Intent(this, InteractActivity::class.java)
+                cirisAccessToken?.let { token ->
+                    intent.putExtra("access_token", token)
+                }
+                startActivity(intent)
+                true
+            }
             R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true

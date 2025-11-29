@@ -67,6 +67,9 @@ class MainActivity : AppCompatActivity() {
     private var authInjected = false
     private var lastInjectedUrl: String? = null
 
+    // UI Preference
+    private var useNativeUi = true
+
     // Token refresh manager for ciris.ai proxy authentication
     private var googleSignInHelper: GoogleSignInHelper? = null
     private var tokenRefreshManager: TokenRefreshManager? = null
@@ -74,6 +77,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CIRISMobile"
+        private const val PREFS_UI = "ciris_ui_prefs"
+        private const val KEY_USE_NATIVE = "use_native_interact"
         private const val SERVER_URL = "http://localhost:8080"  // Match GUI SDK default (must use localhost, not 127.0.0.1, for Same-Origin Policy)
         private const val UI_PATH = "/index.html"
 
@@ -114,6 +119,10 @@ class MainActivity : AppCompatActivity() {
         if (authMethod == "google") {
             initializeTokenRefreshManager()
         }
+
+        // Load UI preference
+        val prefs = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
+        useNativeUi = prefs.getBoolean(KEY_USE_NATIVE, true)
 
         // Setup console views
         consoleContainer = findViewById(R.id.consoleContainer)
@@ -258,6 +267,13 @@ class MainActivity : AppCompatActivity() {
                     view: WebView?,
                     url: String?
                 ): Boolean {
+                    // Check for native UI interception
+                    if (useNativeUi && url != null && (url.contains("/runtime") || url.contains("runtime/index.html"))) {
+                        Log.i(TAG, "Intercepting runtime URL for native UI: $url")
+                        launchInteractActivity()
+                        return true
+                    }
+
                     // Only allow localhost/127.0.0.1
                     if (url != null && (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1"))) {
                         return false
@@ -640,13 +656,42 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
+        // Set initial state of the toggle
+        menu?.findItem(R.id.action_toggle_native)?.isChecked = useNativeUi
         return true
+    }
+
+    private fun launchInteractActivity() {
+        val intent = Intent(this, InteractActivity::class.java)
+        cirisAccessToken?.let { token ->
+            intent.putExtra("access_token", token)
+        }
+        startActivity(intent)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_toggle_native -> {
+                useNativeUi = !useNativeUi
+                item.isChecked = useNativeUi
+
+                // Save preference
+                getSharedPreferences(PREFS_UI, MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_USE_NATIVE, useNativeUi)
+                    .apply()
+
+                // If we are currently on the runtime page and just disabled native,
+                // or if we enabled it, reload might be useful, but simply toggling ensures
+                // next navigation is correct.
+                true
+            }
             R.id.action_buy_credits -> {
                 startActivity(Intent(this, PurchaseActivity::class.java))
+                true
+            }
+            R.id.action_interact -> {
+                launchInteractActivity()
                 true
             }
             R.id.action_settings -> {

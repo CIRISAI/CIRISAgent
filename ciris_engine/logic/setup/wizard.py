@@ -164,10 +164,13 @@ OPENAI_API_BASE="{llm_base_url}"
 OPENAI_MODEL="{llm_model}"
 
 """
-        # If using CIRIS LLM proxy, also set billing token (same as API key for Google auth)
+        # If using CIRIS LLM proxy, also set billing token and instructor mode
         if "ciris.ai" in llm_base_url.lower():
             content += f"""# CIRIS Billing Configuration (Android - uses Google ID token for JWT auth)
 CIRIS_BILLING_GOOGLE_ID_TOKEN="{llm_api_key}"
+
+# CIRIS Proxy uses JSON mode for Maverick (native structured output support)
+INSTRUCTOR_MODE="JSON"
 
 """
 

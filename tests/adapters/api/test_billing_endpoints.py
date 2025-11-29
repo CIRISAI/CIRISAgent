@@ -152,8 +152,43 @@ class TestGetCredits:
         assert "Contact administrator" in response.purchase_options["message"]
 
     @pytest.mark.asyncio
+    async def test_get_credits_billing_provider_jwt_mode(self, mock_auth_context):
+        """Test CIRISBillingProvider in JWT mode (no API key) - uses CreditCheckResult directly."""
+        request = Mock()
+        request.app.state = Mock()
+        request.app.state.auth_service = None
+        request.app.state.runtime = Mock()
+        request.app.state.runtime.agent_identity.agent_id = "test-agent"
+
+        # Mock resource monitor with CIRISBillingProvider
+        resource_monitor = Mock()
+        resource_monitor.credit_provider = Mock()
+        resource_monitor.credit_provider.__class__.__name__ = "CIRISBillingProvider"
+
+        async def check_credit_success(*args, **kwargs):
+            result = Mock()
+            result.has_credit = True
+            result.credits_remaining = 45
+            result.free_uses_remaining = 5
+            return result
+
+        resource_monitor.check_credit = AsyncMock(side_effect=check_credit_success)
+        request.app.state.resource_monitor = resource_monitor
+
+        # JWT mode - no API key needed, uses CreditCheckResult directly
+        import os
+        with pytest.MonkeyPatch.context() as mp:
+            mp.delenv("CIRIS_BILLING_API_KEY", raising=False)
+            response = await get_credits(request, mock_auth_context)
+
+        assert response.has_credit is True
+        assert response.credits_remaining == 45
+        assert response.free_uses_remaining == 5
+        assert response.plan_name == "CIRIS Mobile"
+
+    @pytest.mark.asyncio
     async def test_get_credits_billing_provider_success(self, mock_auth_context):
-        """Test CIRISBillingProvider with successful API call."""
+        """Test CIRISBillingProvider with successful API call (server mode with API key)."""
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -185,7 +220,11 @@ class TestGetCredits:
         billing_client.post = AsyncMock(return_value=mock_response)
         request.app.state.billing_client = billing_client
 
-        response = await get_credits(request, mock_auth_context)
+        # Server mode - with API key, queries billing backend
+        import os
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            response = await get_credits(request, mock_auth_context)
 
         assert response.has_credit is True
         assert response.credits_remaining == 45
@@ -194,7 +233,7 @@ class TestGetCredits:
 
     @pytest.mark.asyncio
     async def test_get_credits_billing_provider_api_error(self, mock_auth_context):
-        """Test CIRISBillingProvider with API error."""
+        """Test CIRISBillingProvider with API error (server mode with API key)."""
         request = Mock()
         request.app.state = Mock()
         request.app.state.auth_service = None
@@ -217,8 +256,12 @@ class TestGetCredits:
         billing_client.post = AsyncMock(side_effect=httpx.HTTPStatusError("Error", request=Mock(), response=Mock()))
         request.app.state.billing_client = billing_client
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_credits(request, mock_auth_context)
+        # Server mode - with API key, queries billing backend
+        import os
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
+            with pytest.raises(HTTPException) as exc_info:
+                await get_credits(request, mock_auth_context)
 
         assert exc_info.value.status_code == 503
         assert "Billing service unavailable" in exc_info.value.detail

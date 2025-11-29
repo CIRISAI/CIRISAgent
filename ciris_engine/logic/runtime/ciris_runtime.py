@@ -1118,6 +1118,75 @@ class CIRISRuntime:
         # Final verification with the existing wait method
         await self._wait_for_critical_services(timeout=5.0)
 
+    async def _reinitialize_billing_provider(self) -> None:
+        """Reinitialize billing provider after setup completes.
+
+        Called during resume_from_first_run to set up billing now that
+        environment variables (OPENAI_API_BASE, CIRIS_BILLING_GOOGLE_ID_TOKEN)
+        are available from the newly created .env file.
+        """
+        if not self.service_initializer:
+            logger.warning("Cannot reinitialize billing - service_initializer not available")
+            return
+
+        resource_monitor = self.service_initializer.resource_monitor_service
+        if not resource_monitor:
+            logger.warning("Cannot reinitialize billing - resource_monitor_service not available")
+            return
+
+        # Check if using CIRIS LLM proxy (Android only - billing required for proxy)
+        is_android = "ANDROID_DATA" in os.environ
+        llm_base_url = os.getenv("OPENAI_API_BASE", "")
+        using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+
+        logger.info(f"Billing provider check: is_android={is_android}, using_ciris_proxy={using_ciris_proxy}")
+        logger.info(f"  OPENAI_API_BASE={llm_base_url}")
+
+        if is_android and using_ciris_proxy:
+            google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+            if google_id_token:
+                from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+
+                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+                timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+                cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+                fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+
+                # Callback to get fresh token from environment (updated by Android TokenRefreshManager)
+                def get_fresh_token() -> str:
+                    return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+
+                credit_provider = CIRISBillingProvider(
+                    google_id_token=google_id_token,
+                    token_refresh_callback=get_fresh_token,
+                    base_url=base_url,
+                    timeout_seconds=timeout,
+                    cache_ttl_seconds=cache_ttl,
+                    fail_open=fail_open,
+                )
+
+                # Update the resource monitor's credit provider
+                resource_monitor.credit_provider = credit_provider
+
+                # Register handler for token_refreshed signal (emitted when Android refreshes token)
+                async def handle_billing_token_refreshed(signal: str, resource: str) -> None:
+                    """Update billing provider token when Android refreshes it."""
+                    new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+                    if new_token and credit_provider:
+                        credit_provider.update_google_id_token(new_token)
+                        logger.info("✓ Updated billing provider with refreshed Google ID token")
+
+                resource_monitor.signal_bus.register("token_refreshed", handle_billing_token_refreshed)
+                logger.info("✓ Reinitialized CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
+                logger.info("✓ Registered token_refreshed handler for billing provider")
+            else:
+                logger.warning(
+                    "Android using CIRIS LLM proxy without Google ID token - "
+                    "billing provider not configured"
+                )
+        else:
+            logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")
+
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes.
 
@@ -1141,6 +1210,11 @@ class CIRISRuntime:
         if config_path.exists():
             load_dotenv(config_path, override=True)
             logger.info(f"✓ Reloaded environment from {config_path}")
+
+        # Reinitialize billing provider now that environment variables are loaded
+        # This is critical because ResourceMonitorService was initialized before setup
+        # completed and didn't have the CIRIS proxy configuration
+        await self._reinitialize_billing_provider()
 
         # Initialize LLM service now that environment variables are loaded
         # This is critical because LLM service initialization was skipped during first-run

@@ -126,10 +126,14 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         try:
             self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
 
-            instructor_mode = getattr(self.openai_config, "instructor_mode", "json")
-            self.instruct_client = instructor.from_openai(
-                self.client, mode=instructor.Mode.JSON if instructor_mode.lower() == "json" else instructor.Mode.TOOLS
-            )
+            instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
+            mode_map = {
+                "json": instructor.Mode.JSON,
+                "tools": instructor.Mode.TOOLS,
+                "md_json": instructor.Mode.MD_JSON,
+            }
+            selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
+            self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
         except Exception as e:
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
@@ -183,6 +187,75 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Custom cleanup logic for LLM service."""
         await self.client.close()
         logger.info("OpenAI Compatible LLM Service stopped")
+
+    def update_api_key(self, new_api_key: str) -> None:
+        """Update the API key and reset circuit breaker.
+
+        Called when Android TokenRefreshManager provides a fresh Google ID token.
+        This is critical for ciris.ai proxy authentication which uses JWT tokens
+        that expire after ~1 hour.
+        """
+        if not new_api_key:
+            logger.warning("[LLM_TOKEN] Attempted to update with empty API key - ignoring")
+            return
+
+        old_key_preview = self.openai_config.api_key[:20] + "..." if self.openai_config.api_key else "None"
+        new_key_preview = new_api_key[:20] + "..."
+
+        # Update config
+        self.openai_config.api_key = new_api_key
+
+        # Update the OpenAI client's API key
+        # The AsyncOpenAI client stores the key and uses it for all requests
+        self.client.api_key = new_api_key
+
+        # Also update instructor client if it has a reference to the key
+        if hasattr(self.instruct_client, 'client') and hasattr(self.instruct_client.client, 'api_key'):
+            self.instruct_client.client.api_key = new_api_key
+
+        # Reset circuit breaker to allow immediate retry
+        self.circuit_breaker.reset()
+
+        logger.info(
+            "[LLM_TOKEN] API key updated and circuit breaker reset:\n"
+            "  Old key: %s\n"
+            "  New key: %s\n"
+            "  Circuit breaker state: %s",
+            old_key_preview,
+            new_key_preview,
+            self.circuit_breaker.get_stats().get("state", "unknown"),
+        )
+
+    async def handle_token_refreshed(self, signal: str, resource: str) -> None:
+        """Handle token_refreshed signal from ResourceMonitor.
+
+        Called when Android's TokenRefreshManager has updated .env with a fresh
+        Google ID token and the ResourceMonitor has reloaded environment variables.
+
+        This is the signal handler registered with ResourceMonitor.signal_bus.
+
+        Args:
+            signal: The signal name ("token_refreshed")
+            resource: The resource that was refreshed ("openai_api_key")
+        """
+        logger.info("[LLM_TOKEN] Received token_refreshed signal: %s for %s", signal, resource)
+
+        # Read fresh API key from environment
+        new_api_key = os.environ.get("OPENAI_API_KEY", "")
+
+        if not new_api_key:
+            logger.warning("[LLM_TOKEN] No OPENAI_API_KEY found in environment after refresh")
+            return
+
+        # Check if key actually changed
+        if new_api_key == self.openai_config.api_key:
+            logger.info("[LLM_TOKEN] API key unchanged after refresh - just resetting circuit breaker")
+            self.circuit_breaker.reset()
+            return
+
+        # Update the key
+        self.update_api_key(new_api_key)
+        logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> AsyncOpenAI:
         """Return the OpenAI client instance (private method)."""
@@ -356,13 +429,18 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 if "ciris.ai" in base_url:
                     # Hash task_id for billing (irreversible, same task = same hash = 1 credit)
                     import hashlib
-                    import uuid
 
-                    if task_id:
-                        trace_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
-                    else:
-                        trace_id = str(uuid.uuid4()).replace("-", "")
-                    extra_kwargs["extra_body"] = {"metadata": {"interaction_id": trace_id}}
+                    if not task_id:
+                        raise RuntimeError(
+                            f"BILLING BUG: task_id is required for CIRIS proxy but was None "
+                            f"(thought_id={thought_id}, model={resp_model.__name__})"
+                        )
+                    interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
+                    logger.info(
+                        f"DEBUG BILLING: interaction_id={interaction_id} "
+                        f"thought_id={thought_id} model={resp_model.__name__}"
+                    )
+                    extra_kwargs["extra_body"] = {"metadata": {"interaction_id": interaction_id}}
 
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
@@ -680,53 +758,3 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             logger.info(f"Token refresh signal written to: {signal_file}")
         except Exception as e:
             logger.error(f"Failed to write token refresh signal: {e}")
-
-    async def handle_token_refreshed(self, signal: str, resource: str) -> None:
-        """Handle token_refreshed signal from ResourceMonitor.
-
-        Called when the .env file has been updated with a new API key.
-        This resets the circuit breaker and reinitializes the OpenAI client.
-        """
-        logger.info(f"🔄 LLM Service: Handling token refresh signal (signal={signal}, resource={resource})")
-
-        try:
-            # 1. Get new API key from environment (already reloaded by ResourceMonitor)
-            new_api_key = os.environ.get("OPENAI_API_KEY", "")
-            if not new_api_key:
-                logger.error("Token refresh failed: No OPENAI_API_KEY in environment after reload")
-                return
-
-            # 2. Reset the circuit breaker
-            self.circuit_breaker.reset()
-            logger.info("✓ Circuit breaker reset")
-
-            # 3. Reinitialize the OpenAI client with new API key
-            old_client = self.client
-            try:
-                self.client = AsyncOpenAI(
-                    api_key=new_api_key,
-                    base_url=self.openai_config.base_url,
-                    timeout=self.openai_config.timeout_seconds,
-                    max_retries=0,
-                )
-
-                instructor_mode = getattr(self.openai_config, "instructor_mode", "json")
-                self.instruct_client = instructor.from_openai(
-                    self.client,
-                    mode=instructor.Mode.JSON if instructor_mode.lower() == "json" else instructor.Mode.TOOLS,
-                )
-
-                # Close old client
-                await old_client.close()
-
-                logger.info("✓ OpenAI client reinitialized with new API key")
-                logger.info("🎉 Token refresh complete - LLM service ready!")
-
-            except Exception as e:
-                logger.error(f"Failed to reinitialize OpenAI client: {e}")
-                # Restore old client on failure
-                self.client = old_client
-                raise
-
-        except Exception as e:
-            logger.error(f"Token refresh handling failed: {e}", exc_info=True)

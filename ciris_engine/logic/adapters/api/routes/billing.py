@@ -289,18 +289,27 @@ async def get_credits(
 
     The frontend calls this to display credit status.
     """
+    logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
     user_identity = _extract_user_identity(auth, request)
     agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
-    logger.debug(f"Credit check for user_id={auth.user_id} on agent {agent_id}")
+    logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
+        logger.error("[BILLING_API] No resource_monitor on app.state")
         raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
 
     resource_monitor = request.app.state.resource_monitor
+    logger.info(
+        "[BILLING_API] resource_monitor=%s, has credit_provider=%s, provider=%s",
+        type(resource_monitor).__name__,
+        hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider is not None,
+        type(resource_monitor.credit_provider).__name__ if hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider else "None",
+    )
 
     # Check if credit provider is configured
     if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        logger.info("[BILLING_API] No credit provider, returning unlimited response")
         return _get_unlimited_credit_response()
 
     # Query credit provider via resource monitor
@@ -330,7 +339,29 @@ async def get_credits(
     if is_simple_provider:
         return _get_simple_provider_response(result.has_credit)
 
-    # CIRISBillingProvider: Query billing backend for full details
+    # CIRISBillingProvider: We already have the credit check result
+    # For Android/JWT mode (no API key), use the result directly
+    # For server mode (with API key), query billing backend for full details
+    import os
+    has_billing_api_key = bool(os.getenv("CIRIS_BILLING_API_KEY"))
+
+    if not has_billing_api_key:
+        # Android/JWT mode - use CreditCheckResult directly
+        logger.info(
+            "[BILLING_CREDITS] Using CreditCheckResult (no API key): "
+            f"free={result.free_uses_remaining}, paid={result.credits_remaining}, has_credit={result.has_credit}"
+        )
+        return CreditStatusResponse(
+            has_credit=result.has_credit,
+            credits_remaining=result.credits_remaining or 0,
+            free_uses_remaining=result.free_uses_remaining or 0,
+            total_uses=0,  # Not tracked in JWT mode
+            plan_name="CIRIS Mobile",
+            purchase_required=not result.has_credit,
+            purchase_options={"price_minor": 499, "uses": 100, "currency": "USD"} if not result.has_credit else None,
+        )
+
+    # Server mode with API key - query billing backend for full details
     billing_client = _get_billing_client(request)
     check_payload = _build_credit_check_payload(user_identity, context)
     credit_data = await _query_billing_backend(billing_client, check_payload)

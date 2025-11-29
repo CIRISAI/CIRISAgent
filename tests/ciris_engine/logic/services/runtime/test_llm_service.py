@@ -343,6 +343,7 @@ async def test_llm_service_401_error_ciris_ai_writes_signal(llm_service, tmp_pat
                     response_model=TestResponse,
                     max_tokens=1024,
                     temperature=0.0,
+                    task_id="test-task-123",  # Required for CIRIS proxy
                 )
 
     # Verify the signal file was written

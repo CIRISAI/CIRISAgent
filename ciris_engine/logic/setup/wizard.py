@@ -163,7 +163,15 @@ OPENAI_API_KEY="{llm_api_key}"
 OPENAI_API_BASE="{llm_base_url}"
 OPENAI_MODEL="{llm_model}"
 
-# Popular OpenAI-compatible providers:
+"""
+        # If using CIRIS LLM proxy, also set billing token (same as API key for Google auth)
+        if "ciris.ai" in llm_base_url.lower():
+            content += f"""# CIRIS Billing Configuration (Android - uses Google ID token for JWT auth)
+CIRIS_BILLING_GOOGLE_ID_TOKEN="{llm_api_key}"
+
+"""
+
+        content += """# Popular OpenAI-compatible providers:
 #
 # Local Models:
 #   Ollama:    http://localhost:11434

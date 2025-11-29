@@ -179,6 +179,7 @@ class TokenRefreshManager(
 
     /**
      * Update the .env file with a new API key (ID token).
+     * Also updates CIRIS_BILLING_GOOGLE_ID_TOKEN if present (for CIRIS proxy billing).
      */
     private fun updateEnvFile(newIdToken: String) {
         val envFile = cirisHome?.let { File(it, ".env") } ?: run {
@@ -196,17 +197,32 @@ class TokenRefreshManager(
 
             // Replace the OPENAI_API_KEY value
             // Match both quoted and unquoted formats
-            val patterns = listOf(
+            val openaiPatterns = listOf(
                 Regex("""OPENAI_API_KEY="[^"]*""""),
                 Regex("""OPENAI_API_KEY='[^']*'"""),
                 Regex("""OPENAI_API_KEY=[^\n]*""")
             )
 
             var updated = false
-            for (pattern in patterns) {
+            for (pattern in openaiPatterns) {
                 if (pattern.containsMatchIn(content)) {
                     content = pattern.replace(content, """OPENAI_API_KEY="$newIdToken"""")
                     updated = true
+                    break
+                }
+            }
+
+            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN if present (same token used for billing JWT auth)
+            val billingPatterns = listOf(
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN="[^"]*""""),
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN='[^']*'"""),
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN=[^\n]*""")
+            )
+
+            for (pattern in billingPatterns) {
+                if (pattern.containsMatchIn(content)) {
+                    content = pattern.replace(content, """CIRIS_BILLING_GOOGLE_ID_TOKEN="$newIdToken"""")
+                    Log.i(TAG, "Also updated CIRIS_BILLING_GOOGLE_ID_TOKEN")
                     break
                 }
             }

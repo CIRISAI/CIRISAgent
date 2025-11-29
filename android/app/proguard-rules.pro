@@ -56,3 +56,7 @@
 
 # Keep billing data classes for Gson serialization
 -keep class ai.ciris.mobile.billing.** { *; }
+
+# Android Security Crypto (EncryptedSharedPreferences)
+-keep class com.google.crypto.tink.** { *; }
+-keep class androidx.security.crypto.** { *; }

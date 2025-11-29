@@ -850,6 +850,57 @@ class CIRISRuntime:
             except Exception as e:
                 logger.error(f"Failed to migrate adapter config for {adapter_type}: {e}")
 
+        # Migrate tickets config from template (first-run only)
+        await self._migrate_tickets_config_to_graph()
+
+    async def _migrate_tickets_config_to_graph(self) -> None:
+        """Migrate tickets config to graph.
+
+        This handles two scenarios:
+        1. First-run: Seeds tickets config from template to graph
+        2. Pre-1.7.0 upgrade: Adds default DSAR SOPs for existing agents without tickets config
+
+        After migration, tickets.py retrieves config from graph, not template.
+        """
+        if not self.service_initializer or not self.service_initializer.config_service:
+            logger.warning("Cannot migrate tickets config - GraphConfigService not available")
+            return
+
+        config_service = self.service_initializer.config_service
+
+        # Check if tickets config already exists in graph
+        try:
+            existing_config = await config_service.get_config("tickets")
+            if existing_config and existing_config.value and existing_config.value.dict_value:
+                logger.debug("Tickets config already exists in graph - skipping migration")
+                return
+        except Exception:
+            pass  # Config doesn't exist, proceed with migration
+
+        # Try to get tickets config from template (first-run scenario)
+        tickets_config = None
+        if self.identity_manager and self.identity_manager.agent_template:
+            tickets_config = self.identity_manager.agent_template.tickets
+
+        # If no template available (pre-1.7.0 agent upgrade), create default DSAR SOPs
+        if not tickets_config:
+            logger.info("No tickets config found - creating default DSAR SOPs for pre-1.7.0 compatibility")
+            from ciris_engine.schemas.config.default_dsar_sops import DEFAULT_DSAR_SOPS
+            from ciris_engine.schemas.config.tickets import TicketsConfig
+
+            tickets_config = TicketsConfig(enabled=True, sops=DEFAULT_DSAR_SOPS)
+
+        try:
+            # Store tickets config as a dict in the graph
+            await config_service.set_config(
+                key="tickets",
+                value=tickets_config.model_dump(),
+                updated_by="system_bootstrap",
+            )
+            logger.info("Migrated tickets config to graph (DSAR SOPs now available)")
+        except Exception as e:
+            logger.error(f"Failed to migrate tickets config to graph: {e}")
+
     async def _final_verification(self) -> None:
         """Perform final system verification."""
         # Don't check initialization status here - we're still IN the initialization process
@@ -1181,8 +1232,7 @@ class CIRISRuntime:
                 logger.info("✓ Registered token_refreshed handler for billing provider")
             else:
                 logger.warning(
-                    "Android using CIRIS LLM proxy without Google ID token - "
-                    "billing provider not configured"
+                    "Android using CIRIS LLM proxy without Google ID token - " "billing provider not configured"
                 )
         else:
             logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")

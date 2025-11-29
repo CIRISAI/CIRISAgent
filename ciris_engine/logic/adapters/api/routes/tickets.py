@@ -96,23 +96,30 @@ class SOPMetadataResponse(BaseModel):
 # ============================================================================
 
 
-def _get_agent_tickets_config(req: Request) -> Optional[TicketsConfig]:
-    """Get agent template tickets configuration.
+async def _get_agent_tickets_config(req: Request) -> Optional[TicketsConfig]:
+    """Get agent tickets configuration from the graph.
 
     Returns:
-        TicketsConfig from agent template, or None if not available
+        TicketsConfig from graph, or None if not available
     """
-    # Get agent template from app state
-    agent_template = getattr(req.app.state, "agent_template", None)
-    if not agent_template:
+    # Get config service from app state
+    config_service = getattr(req.app.state, "config_service", None)
+    if not config_service:
         return None
 
-    # Get tickets config (always present with DSAR SOPs)
-    return agent_template.tickets  # type: ignore[no-any-return]
+    # Get tickets config from graph (stored during first-run seeding)
+    try:
+        config_node = await config_service.get_config("tickets")
+        if config_node and config_node.value and config_node.value.dict_value:
+            return TicketsConfig(**config_node.value.dict_value)
+    except Exception:
+        pass
+
+    return None
 
 
-def _get_sop_config(req: Request, sop_name: str) -> Optional[TicketSOPConfig]:
-    """Get SOP configuration from agent template.
+async def _get_sop_config(req: Request, sop_name: str) -> Optional[TicketSOPConfig]:
+    """Get SOP configuration from graph.
 
     Args:
         req: FastAPI request
@@ -121,14 +128,14 @@ def _get_sop_config(req: Request, sop_name: str) -> Optional[TicketSOPConfig]:
     Returns:
         TicketSOPConfig if found, None otherwise
     """
-    tickets_config = _get_agent_tickets_config(req)
+    tickets_config = await _get_agent_tickets_config(req)
     if not tickets_config:
         return None
 
     return tickets_config.get_sop(sop_name)
 
 
-def _is_sop_supported(req: Request, sop_name: str) -> bool:
+async def _is_sop_supported(req: Request, sop_name: str) -> bool:
     """Check if an SOP is supported by this agent.
 
     Args:
@@ -138,7 +145,7 @@ def _is_sop_supported(req: Request, sop_name: str) -> bool:
     Returns:
         True if SOP is supported, False otherwise
     """
-    tickets_config = _get_agent_tickets_config(req)
+    tickets_config = await _get_agent_tickets_config(req)
     if not tickets_config:
         return False
 
@@ -184,12 +191,12 @@ async def list_supported_sops(
     """List all supported Standard Operating Procedures for this agent.
 
     DSAR SOPs are always present (GDPR compliance).
-    Additional SOPs defined in agent template.
+    Additional SOPs defined in graph config (seeded from template on first run).
 
     Returns:
         List of SOP identifiers (e.g., ["DSAR_ACCESS", "DSAR_DELETE", ...])
     """
-    tickets_config = _get_agent_tickets_config(req)
+    tickets_config = await _get_agent_tickets_config(req)
     if not tickets_config:
         # Should never happen - DSAR SOPs always present
         raise HTTPException(
@@ -214,7 +221,7 @@ async def get_sop_metadata(
     Raises:
         404: SOP not found/supported
     """
-    sop_config = _get_sop_config(req, sop)
+    sop_config = await _get_sop_config(req, sop)
     if not sop_config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -261,14 +268,14 @@ async def create_new_ticket(
         500: Ticket creation failed
     """
     # Validate SOP is supported (organic enforcement)
-    if not _is_sop_supported(req, request.sop):
+    if not await _is_sop_supported(req, request.sop):
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=f"SOP '{request.sop}' not supported by this agent",
         )
 
     # Get SOP configuration
-    sop_config = _get_sop_config(req, request.sop)
+    sop_config = await _get_sop_config(req, request.sop)
     if not sop_config:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -1131,6 +1131,9 @@ async def native_google_token_exchange(
         user_role = _determine_user_role(user_email, auth_service)
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
 
+        # Check if this is the first OAuth user (for auto-minting)
+        is_first_oauth_user = user_role == UserRole.SYSTEM_ADMIN
+
         # Create or get OAuth user
         logger.info(f"[NativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
         oauth_user = auth_service.create_oauth_user(
@@ -1146,6 +1149,30 @@ async def native_google_token_exchange(
         # Store OAuth profile data
         name = user_data.get("name") or "Unknown"
         _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data.get("picture"))
+
+        # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
+        # This handles both first-time users and existing users who weren't minted
+        if oauth_user.role == UserRole.SYSTEM_ADMIN:
+            # Check if user is already minted by looking up their user record
+            existing_user = auth_service.get_user(oauth_user.user_id)
+            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
+
+            if needs_minting:
+                logger.info(f"[NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role")
+                try:
+                    from ciris_engine.schemas.services.authority_core import WARole
+
+                    await auth_service.mint_wise_authority(
+                        user_id=oauth_user.user_id,
+                        wa_role=WARole.ROOT,
+                        minted_by="system_auto_mint",
+                    )
+                    logger.info(f"[NativeAuth] Successfully auto-minted {oauth_user.user_id} as ROOT WA")
+                except Exception as mint_error:
+                    # Don't fail login if minting fails - user can mint manually later
+                    logger.warning(f"[NativeAuth] Auto-mint failed (user can mint manually): {mint_error}")
+            else:
+                logger.debug(f"[NativeAuth] User {oauth_user.user_id} already minted as WA")
 
         # Generate API key
         logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")

@@ -489,8 +489,8 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     await auth_service.start()
 
     try:
-        # Create new user with AUTHORITY role (setup wizard always creates admin)
-        wa_role = WARole.AUTHORITY
+        # Create new user with ROOT role (setup wizard user needs full authority to handle deferrals)
+        wa_role = WARole.ROOT
 
         logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
 
@@ -498,7 +498,7 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
         wa_cert = await auth_service.create_wa(
             name=setup.admin_username,
             email=f"{setup.admin_username}@local",
-            scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
+            scopes=["read:any", "write:any"],  # ROOT gets full scopes
             role=wa_role,
         )
 

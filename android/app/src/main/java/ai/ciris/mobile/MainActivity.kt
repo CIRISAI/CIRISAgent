@@ -13,6 +13,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.auth.TokenRefreshManager
 import com.chaquo.python.Python
@@ -194,6 +196,38 @@ class MainActivity : AppCompatActivity() {
         statusIndicator.setTextColor(colorInt)
     }
 
+    private fun injectPythonConfig() {
+        try {
+            val masterKey = MasterKey.Builder(this)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            val prefs = EncryptedSharedPreferences.create(
+                this,
+                SettingsActivity.PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+
+            val apiBase = prefs.getString(SettingsActivity.KEY_API_BASE, null)
+            val apiKey = prefs.getString(SettingsActivity.KEY_API_KEY, null)
+
+            if (!apiBase.isNullOrEmpty()) {
+                System.setProperty("OPENAI_API_BASE", apiBase)
+                Log.i(TAG, "Injected OPENAI_API_BASE from secure settings")
+            }
+
+            if (!apiKey.isNullOrEmpty()) {
+                System.setProperty("OPENAI_API_KEY", apiKey)
+                Log.i(TAG, "Injected OPENAI_API_KEY from secure settings")
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read secure settings: ${e.message}")
+        }
+    }
+
     private fun setupWebView() {
         webView = findViewById(R.id.webView)
 
@@ -202,8 +236,8 @@ class MainActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
-                allowFileAccess = true
-                allowContentAccess = true
+                allowFileAccess = false
+                allowContentAccess = false
             }
 
             webViewClient = object : WebViewClient() {
@@ -224,8 +258,21 @@ class MainActivity : AppCompatActivity() {
                     view: WebView?,
                     url: String?
                 ): Boolean {
-                    // Keep navigation within WebView
-                    return false
+                    // Only allow localhost/127.0.0.1
+                    if (url != null && (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1"))) {
+                        return false
+                    }
+
+                    // Open external links in system browser
+                    if (url != null) {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to open external URL: $url")
+                        }
+                    }
+                    return true
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {

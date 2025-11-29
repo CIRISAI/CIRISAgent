@@ -9,6 +9,19 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_toggle_native"
+        android:title="Use Native Interact UI"
+        android:checkable="true"
+        android:checked="true"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_interact"
+        android:title="Open Interact Stream"
+        android:icon="@android:drawable/ic_menu_view"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_settings"
         android:title="@string/action_settings"
         android:icon="@android:drawable/ic_menu_preferences"

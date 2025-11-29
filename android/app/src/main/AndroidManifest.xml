@@ -56,5 +56,12 @@
             android:exported="false"
             android:label="@string/purchase_title"
             android:parentActivityName=".MainActivity" />
+
+        <!-- Interact activity for viewing live reasoning stream -->
+        <activity
+            android:name=".InteractActivity"
+            android:exported="false"
+            android:label="Interact Stream"
+            android:parentActivityName=".MainActivity" />
     </application>
 </manifest>

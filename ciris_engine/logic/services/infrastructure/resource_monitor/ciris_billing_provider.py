@@ -80,10 +80,7 @@ class CIRISBillingProvider(CreditGateProtocol):
                 if new_token and new_token != self._google_id_token:
                     old_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
                     new_preview = new_token[:20] + "..."
-                    logger.info(
-                        "[BILLING_TOKEN] Token refreshed via callback: %s -> %s",
-                        old_preview, new_preview
-                    )
+                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %s -> %s", old_preview, new_preview)
                     self._google_id_token = new_token
             except Exception as exc:
                 logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
@@ -359,6 +356,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         if not ciris_home:
             try:
                 from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
                 ciris_home = str(get_ciris_home())
             except Exception:
                 logger.warning("[BILLING_TOKEN] Cannot write refresh signal - CIRIS_HOME not found")

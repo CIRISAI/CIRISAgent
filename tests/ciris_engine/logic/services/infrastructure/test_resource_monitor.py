@@ -924,6 +924,7 @@ async def test_billing_provider_update_google_id_token():
 @pytest.mark.asyncio
 async def test_billing_provider_401_unauthorized():
     """Test handling of 401 Unauthorized response."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
             return httpx.Response(
@@ -968,6 +969,7 @@ async def test_billing_provider_401_unauthorized():
 @pytest.mark.asyncio
 async def test_billing_provider_payment_required():
     """Test handling of 402 Payment Required response."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
             return httpx.Response(
@@ -996,6 +998,7 @@ async def test_billing_provider_payment_required():
 @pytest.mark.asyncio
 async def test_billing_provider_request_error():
     """Test handling of network/request errors."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.RequestError("Connection refused")
 
@@ -1019,6 +1022,7 @@ async def test_billing_provider_request_error():
 @pytest.mark.asyncio
 async def test_billing_provider_spend_conflict():
     """Test handling of 409 Conflict (idempotency) response."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/charges"):
             return httpx.Response(
@@ -1050,6 +1054,7 @@ async def test_billing_provider_spend_conflict():
 @pytest.mark.asyncio
 async def test_billing_provider_spend_payment_required():
     """Test handling of 402 Payment Required on spend."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/charges"):
             return httpx.Response(
@@ -1078,6 +1083,7 @@ async def test_billing_provider_spend_payment_required():
 @pytest.mark.asyncio
 async def test_billing_provider_spend_request_error():
     """Test handling of request errors during spend."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/charges"):
             raise httpx.RequestError("Network error")
@@ -1103,6 +1109,7 @@ async def test_billing_provider_spend_request_error():
 @pytest.mark.asyncio
 async def test_billing_provider_spend_unexpected_status():
     """Test handling of unexpected status codes on spend."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/charges"):
             return httpx.Response(500, json={"error": "internal_error"})
@@ -1128,6 +1135,7 @@ async def test_billing_provider_spend_unexpected_status():
 @pytest.mark.asyncio
 async def test_billing_provider_check_unexpected_status():
     """Test handling of unexpected status codes on check_credit."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
             return httpx.Response(503, json={"error": "service_unavailable"})
@@ -1152,6 +1160,7 @@ async def test_billing_provider_check_unexpected_status():
 @pytest.mark.asyncio
 async def test_billing_provider_ensure_started():
     """Test that _ensure_started creates client if not started."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
             return httpx.Response(200, json={"has_credit": True})
@@ -1180,6 +1189,7 @@ async def test_billing_provider_ensure_started():
 @pytest.mark.asyncio
 async def test_billing_provider_token_refresh_callback_failure():
     """Test handling of token refresh callback that raises exception."""
+
     def failing_callback():
         raise RuntimeError("Token refresh failed")
 
@@ -1208,6 +1218,7 @@ async def test_billing_provider_token_refresh_callback_failure():
 @pytest.mark.asyncio
 async def test_billing_provider_signal_token_refresh_no_ciris_home():
     """Test signal file writing when CIRIS_HOME is not set."""
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/credits/check"):
             return httpx.Response(401, json={"error": "unauthorized"})

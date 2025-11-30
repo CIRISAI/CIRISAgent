@@ -435,11 +435,25 @@ class CIRISRuntime:
             raise
 
     async def _initialize_identity(self) -> None:
-        """Initialize agent identity - create from template on first run, load from graph thereafter."""
+        """Initialize agent identity - create from template on first run, load from graph thereafter.
+
+        In first-run mode, this only creates the IdentityManager but does NOT seed the graph.
+        The actual identity seeding happens in resume_from_first_run() AFTER the user selects
+        their template in the setup wizard.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
         config = self._ensure_config()
         if not self.time_service:
             raise RuntimeError("TimeService not available for IdentityManager")
         self.identity_manager = IdentityManager(config, self.time_service)
+
+        # In first-run mode, skip identity seeding - user hasn't selected template yet
+        # Identity will be seeded in resume_from_first_run() after setup completes
+        if is_first_run():
+            logger.info("First-run mode: Skipping identity seeding (will seed after setup wizard)")
+            return
+
         self.agent_identity = await self.identity_manager.initialize_identity()
 
         # Create startup node for continuity tracking
@@ -669,10 +683,22 @@ class CIRISRuntime:
         return await self.service_initializer.verify_memory_service()
 
     async def _verify_identity_integrity(self) -> bool:
-        """Verify identity was properly established."""
+        """Verify identity was properly established.
+
+        In first-run mode, identity is not seeded yet (waiting for user to select template),
+        so we only verify that the identity manager was created.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
         if not self.identity_manager:
             logger.error("Identity manager not initialized")
             return False
+
+        # In first-run mode, identity isn't seeded yet - just verify manager exists
+        if is_first_run():
+            logger.info("First-run mode: Identity manager created (identity will be seeded after setup)")
+            return True
+
         return await self.identity_manager.verify_identity_integrity()
 
     async def _initialize_security_services(self) -> None:
@@ -685,8 +711,20 @@ class CIRISRuntime:
         return await self.service_initializer.verify_security_services()
 
     async def _initialize_services(self) -> None:
-        """Initialize all remaining core services."""
+        """Initialize all remaining core services.
+
+        In first-run mode, identity is not yet established (user selects template in setup wizard).
+        We skip full service initialization - only the API adapter runs for the setup wizard.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
         config = self._ensure_config()
+
+        # In first-run mode, skip service initialization - we only need the API server
+        if is_first_run():
+            logger.info("First-run mode: Skipping core service initialization (setup wizard only)")
+            return
+
         # Identity MUST be established before services can be initialized
         if not self.agent_identity:
             raise RuntimeError("CRITICAL: Cannot initialize services without agent identity")
@@ -724,11 +762,29 @@ class CIRISRuntime:
                 logger.info("Updated telemetry service with runtime reference for aggregator")
 
     async def _verify_core_services(self) -> bool:
-        """Verify all core services are operational."""
+        """Verify all core services are operational.
+
+        In first-run mode, services aren't initialized yet - just return True.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        if is_first_run():
+            logger.info("First-run mode: Core services verification skipped")
+            return True
+
         return self.service_initializer.verify_core_services()
 
     async def _initialize_maintenance_service(self) -> None:
-        """Initialize the maintenance service and perform startup cleanup."""
+        """Initialize the maintenance service and perform startup cleanup.
+
+        In first-run mode, services aren't initialized - skip maintenance.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        if is_first_run():
+            logger.info("First-run mode: Skipping maintenance service initialization")
+            return
+
         # Verify maintenance service is available
         if not self.maintenance_service:
             raise RuntimeError("Maintenance service was not initialized properly")
@@ -902,7 +958,21 @@ class CIRISRuntime:
             logger.error(f"Failed to migrate tickets config to graph: {e}")
 
     async def _final_verification(self) -> None:
-        """Perform final system verification."""
+        """Perform final system verification.
+
+        In first-run mode, identity isn't established yet - skip full verification.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # In first-run mode, identity isn't established yet
+        if is_first_run():
+            logger.info("First-run mode: Skipping final verification (waiting for setup wizard)")
+            logger.info("=" * 60)
+            logger.info("CIRIS Agent First-Run Mode Active")
+            logger.info("Setup wizard is ready at http://127.0.0.1:8080/setup")
+            logger.info("=" * 60)
+            return
+
         # Don't check initialization status here - we're still IN the initialization process
         # Just verify the critical components are ready
 
@@ -995,7 +1065,16 @@ class CIRISRuntime:
             # Non-critical - don't fail initialization
 
     async def _register_adapter_services(self) -> None:
-        """Register services provided by the loaded adapters."""
+        """Register services provided by the loaded adapters.
+
+        In first-run mode, skip registration since services aren't initialized.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        if is_first_run():
+            logger.info("First-run mode: Skipping adapter service registration")
+            return
+
         if not self.service_registry:
             logger.error("ServiceRegistry not initialized. Cannot register adapter services.")
             return
@@ -1048,6 +1127,70 @@ class CIRISRuntime:
                     # All services are global now
                     self.service_registry.register_service(
                         service_type=reg.service_type,  # Use the enum directly
+                        provider=reg.provider,
+                        priority=reg.priority,
+                        capabilities=reg.capabilities,
+                    )
+                    logger.info(f"Registered {reg.service_type.value} from {adapter.__class__.__name__}")
+            except Exception as e:
+                logger.error(f"Error registering services for adapter {adapter.__class__.__name__}: {e}", exc_info=True)
+
+    async def _register_adapter_services_for_resume(self) -> None:
+        """Register adapter services during resume_from_first_run.
+
+        This is identical to _register_adapter_services but without the is_first_run check,
+        since we explicitly want to register during resume.
+        """
+        if not self.service_registry:
+            logger.error("ServiceRegistry not initialized. Cannot register adapter services.")
+            return
+
+        for adapter in self.adapters:
+            try:
+                # Generate authentication token for adapter - REQUIRED for security
+                adapter_type = adapter.__class__.__name__.lower().replace("adapter", "")
+                # Explicitly type as JSONDict for authentication service compatibility
+                adapter_info: JSONDict = {
+                    "instance_id": str(id(adapter)),
+                    "startup_time": (
+                        self.time_service.now().isoformat()
+                        if self.time_service
+                        else datetime.now(timezone.utc).isoformat()
+                    ),
+                }
+
+                # Get channel-specific info if available
+                if hasattr(adapter, "get_channel_info"):
+                    adapter_info.update(adapter.get_channel_info())
+
+                # Get authentication service from service initializer
+                auth_service = self.service_initializer.auth_service if self.service_initializer else None
+
+                # Create adapter token using the proper authentication service
+                auth_token = (
+                    await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
+                    if auth_service
+                    else None
+                )
+
+                # Set token on adapter if it has the method
+                if hasattr(adapter, "set_auth_token") and auth_token:
+                    adapter.set_auth_token(auth_token)
+
+                if auth_token:
+                    logger.info(f"Generated authentication token for {adapter_type} adapter")
+
+                registrations = adapter.get_services_to_register()
+                for reg in registrations:
+                    if not isinstance(reg, AdapterServiceRegistration):
+                        logger.error(
+                            f"Adapter {adapter.__class__.__name__} provided an invalid AdapterServiceRegistration object: {reg}"
+                        )
+                        continue
+
+                    # All services are global now
+                    self.service_registry.register_service(
+                        service_type=reg.service_type,
                         provider=reg.provider,
                         priority=reg.priority,
                         capabilities=reg.capabilities,
@@ -1261,6 +1404,54 @@ class CIRISRuntime:
             load_dotenv(config_path, override=True)
             logger.info(f"✓ Reloaded environment from {config_path}")
 
+        # Reload config to pick up CIRIS_TEMPLATE from .env
+        config = self._ensure_config()
+        config.load_env_vars()
+        logger.info(f"✓ Config reloaded - default_template: {config.default_template}")
+
+        # NOW initialize identity with the user-selected template
+        # This was skipped in _initialize_identity() during first-run
+        logger.info("Initializing agent identity with user-selected template...")
+        if self.identity_manager and self.time_service:
+            # Recreate identity manager with updated config that has CIRIS_TEMPLATE
+            self.identity_manager = IdentityManager(config, self.time_service)
+            self.agent_identity = await self.identity_manager.initialize_identity()
+            await self._create_startup_node()
+            logger.info(
+                f"✓ Agent identity initialized: {self.agent_identity.agent_id if self.agent_identity else 'None'}"
+            )
+
+        # Initialize core services now that identity is available
+        # This was skipped in _initialize_services() during first-run
+        logger.info("Initializing core services...")
+        if self.service_initializer and self.agent_identity:
+            await self.service_initializer.initialize_all_services(
+                config,
+                self.essential_config,
+                self.agent_identity.agent_id,
+                self.startup_channel_id,
+                self.modules_to_load,
+            )
+            logger.info("✓ Core services initialized")
+
+            # Load any external modules (e.g. mockllm)
+            if self.modules_to_load:
+                logger.info(f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}")
+                await self.service_initializer.load_modules(self.modules_to_load)
+
+        # Register adapter services now that service registry is available
+        # This was skipped in _register_adapter_services() during first-run
+        # Call the actual registration method instead of duplicating logic
+        logger.info("Registering adapter services...")
+        await self._register_adapter_services_for_resume()
+        logger.info("✓ Adapter services registered")
+
+        # Initialize maintenance service (skipped during first-run)
+        logger.info("Initializing maintenance service...")
+        if self.maintenance_service:
+            await self._perform_startup_maintenance()
+            logger.info("✓ Maintenance service initialized")
+
         # Reinitialize billing provider now that environment variables are loaded
         # This is critical because ResourceMonitorService was initialized before setup
         # completed and didn't have the CIRIS proxy configuration
@@ -1289,9 +1480,8 @@ class CIRISRuntime:
         self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
 
         # No need to verify adapter readiness - they're already running and serving the setup wizard!
-        # No need to re-register services - they were registered during first-run startup
-        # Just wait for critical services to ensure everything is still healthy
-        await self._wait_for_critical_services(timeout=5.0)
+        # Wait for critical services to ensure communication service is registered
+        await self._wait_for_critical_services(timeout=10.0)
 
         logger.info("")
         logger.info("✅ Agent processor started successfully!")

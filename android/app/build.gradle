@@ -8,12 +8,21 @@ android {
     namespace "ai.ciris.mobile"
     compileSdk 34
 
+    signingConfigs {
+        release {
+            storeFile file("/home/emoore/ciris-release-key.jks")
+            storePassword "changeme123"
+            keyAlias "ciris-key"
+            keyPassword "changeme123"
+        }
+    }
+
     defaultConfig {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
-        targetSdk 34
-        versionCode 5
-        versionName "1.6.7.2"
+        targetSdk 35
+        versionCode 7
+        versionName "1.6.7.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -94,9 +103,13 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
 
         debug {
@@ -196,6 +209,9 @@ dependencies {
 
     // Google Sign-In for OAuth authentication
     implementation "com.google.android.gms:play-services-auth:20.7.0"
+
+    // Google Play Integrity API
+    implementation "com.google.android.play:integrity:1.4.0"
 
     // Coroutines for async operations
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"

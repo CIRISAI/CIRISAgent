@@ -304,7 +304,11 @@ async def get_credits(
         "[BILLING_API] resource_monitor=%s, has credit_provider=%s, provider=%s",
         type(resource_monitor).__name__,
         hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider is not None,
-        type(resource_monitor.credit_provider).__name__ if hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider else "None",
+        (
+            type(resource_monitor.credit_provider).__name__
+            if hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider
+            else "None"
+        ),
     )
 
     # Check if credit provider is configured
@@ -343,6 +347,7 @@ async def get_credits(
     # For Android/JWT mode (no API key), use the result directly
     # For server mode (with API key), query billing backend for full details
     import os
+
     has_billing_api_key = bool(os.getenv("CIRIS_BILLING_API_KEY"))
 
     if not has_billing_api_key:

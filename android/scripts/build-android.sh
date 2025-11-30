@@ -14,6 +14,7 @@ CIRISGUI_BRANCH="${CIRISGUI_BRANCH:-main}"
 CIRISGUI_LOCAL_PATH="${CIRISGUI_LOCAL_PATH:-}"
 BUILD_TYPE="${BUILD_TYPE:-debug}"
 SKIP_WEB_BUILD="${SKIP_WEB_BUILD:-false}"
+OUTPUT_FORMAT="${OUTPUT_FORMAT:-apk}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -169,9 +170,9 @@ copy_web_assets() {
     log_info "Copied $PYTHON_FILE_COUNT files to $PYTHON_GUI_DIR (for Python server)"
 }
 
-# Build Android APK
+# Build Android APK or AAB
 build_android() {
-    log_info "Building Android APK ($BUILD_TYPE)..."
+    log_info "Building Android ($BUILD_TYPE, format: $OUTPUT_FORMAT)..."
 
     cd "$ANDROID_DIR"
 
@@ -183,25 +184,46 @@ build_android() {
 
     # Clean and build
     if [ "$BUILD_TYPE" = "release" ]; then
-        ./gradlew clean assembleRelease
-        APK_PATH="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
+        if [ "$OUTPUT_FORMAT" = "aab" ]; then
+            log_info "Building release AAB (for Play Store)..."
+            ./gradlew clean bundleRelease
+            AAB_PATH="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
+            if [ -f "$AAB_PATH" ]; then
+                log_info "AAB built successfully: $AAB_PATH"
+                OUTPUT_DIR="$ANDROID_DIR/build/outputs"
+                mkdir -p "$OUTPUT_DIR"
+                cp "$AAB_PATH" "$OUTPUT_DIR/"
+                log_info "AAB copied to: $OUTPUT_DIR/$(basename $AAB_PATH)"
+                # Set APK_PATH to AAB for validation (skip APK-specific validation)
+                APK_PATH="$AAB_PATH"
+                SKIP_APK_VALIDATION="true"
+            else
+                log_error "AAB not found at expected path: $AAB_PATH"
+                exit 1
+            fi
+        else
+            ./gradlew clean assembleRelease
+            APK_PATH="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
+        fi
     else
         ./gradlew clean assembleDebug
         APK_PATH="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
     fi
 
-    if [ -f "$APK_PATH" ]; then
-        log_info "APK built successfully: $APK_PATH"
+    if [ "$OUTPUT_FORMAT" != "aab" ]; then
+        if [ -f "$APK_PATH" ]; then
+            log_info "APK built successfully: $APK_PATH"
 
-        # Copy to output directory
-        OUTPUT_DIR="$ANDROID_DIR/build/outputs"
-        mkdir -p "$OUTPUT_DIR"
-        cp "$APK_PATH" "$OUTPUT_DIR/"
+            # Copy to output directory
+            OUTPUT_DIR="$ANDROID_DIR/build/outputs"
+            mkdir -p "$OUTPUT_DIR"
+            cp "$APK_PATH" "$OUTPUT_DIR/"
 
-        log_info "APK copied to: $OUTPUT_DIR/$(basename $APK_PATH)"
-    else
-        log_error "APK not found at expected path: $APK_PATH"
-        exit 1
+            log_info "APK copied to: $OUTPUT_DIR/$(basename $APK_PATH)"
+        else
+            log_error "APK not found at expected path: $APK_PATH"
+            exit 1
+        fi
     fi
 }
 
@@ -258,13 +280,20 @@ validate_apk() {
 main() {
     log_info "=== CIRIS Android Unified Build ==="
     log_info "Build type: $BUILD_TYPE"
+    log_info "Output format: $OUTPUT_FORMAT"
 
     check_requirements
     get_web_source
     build_web_assets
     copy_web_assets
     build_android
-    validate_apk
+
+    # Skip APK validation for AAB builds
+    if [ "$OUTPUT_FORMAT" = "aab" ]; then
+        log_info "Skipping APK validation (AAB build)"
+    else
+        validate_apk
+    fi
 
     log_info "=== Build Complete ==="
 }
@@ -292,12 +321,17 @@ while [[ $# -gt 0 ]]; do
             CIRISGUI_BRANCH="$2"
             shift 2
             ;;
+        --aab)
+            OUTPUT_FORMAT="aab"
+            shift
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
-            echo "  --release       Build release APK"
+            echo "  --release       Build release APK/AAB"
             echo "  --debug         Build debug APK (default)"
+            echo "  --aab           Build AAB (Android App Bundle) for Play Store"
             echo "  --skip-web      Skip web asset build"
             echo "  --local-gui     Path to local CIRISGUI-Android repo"
             echo "  --branch        CIRISGUI-Android branch to use"

@@ -210,7 +210,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self.client.api_key = new_api_key
 
         # Also update instructor client if it has a reference to the key
-        if hasattr(self.instruct_client, 'client') and hasattr(self.instruct_client.client, 'api_key'):
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "api_key"):
             self.instruct_client.client.api_key = new_api_key
 
         # Reset circuit breaker to allow immediate retry

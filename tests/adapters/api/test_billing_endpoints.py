@@ -177,6 +177,7 @@ class TestGetCredits:
 
         # JWT mode - no API key needed, uses CreditCheckResult directly
         import os
+
         with pytest.MonkeyPatch.context() as mp:
             mp.delenv("CIRIS_BILLING_API_KEY", raising=False)
             response = await get_credits(request, mock_auth_context)
@@ -222,6 +223,7 @@ class TestGetCredits:
 
         # Server mode - with API key, queries billing backend
         import os
+
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
             response = await get_credits(request, mock_auth_context)
@@ -258,6 +260,7 @@ class TestGetCredits:
 
         # Server mode - with API key, queries billing backend
         import os
+
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("CIRIS_BILLING_API_KEY", "test-api-key")
             with pytest.raises(HTTPException) as exc_info:

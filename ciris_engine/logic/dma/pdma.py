@@ -86,7 +86,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         result_tuple = await self.call_llm_structured(
             messages=messages,
             response_model=EthicalDMAResult,
-            max_tokens=1024,
+            max_tokens=2048,
             temperature=0.0,
             thought_id=input_data.thought_id,
             task_id=input_data.source_task_id,

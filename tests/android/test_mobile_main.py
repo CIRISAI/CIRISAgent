@@ -75,9 +75,7 @@ class TestSetupAndroidEnvironment:
             # Check environment variables were set
             assert os.environ.get("CIRIS_HOME") == str(ciris_home)
             assert os.environ.get("CIRIS_DATA_DIR") == str(ciris_home)
-            assert os.environ.get("CIRIS_DB_PATH") == str(
-                ciris_home / "databases" / "ciris.db"
-            )
+            assert os.environ.get("CIRIS_DB_PATH") == str(ciris_home / "databases" / "ciris.db")
             assert os.environ.get("CIRIS_LOG_DIR") == str(ciris_home / "logs")
 
             # Check Android-specific settings
@@ -105,9 +103,7 @@ class TestSetupAndroidEnvironment:
 
         # Create .env file
         env_file = app_data / ".env"
-        env_file.write_text(
-            "OPENAI_API_KEY=test-key-12345\nOPENAI_API_BASE=http://test.api\n"
-        )
+        env_file.write_text("OPENAI_API_KEY=test-key-12345\nOPENAI_API_BASE=http://test.api\n")
 
         env_backup = {
             "ANDROID_DATA": os.environ.get("ANDROID_DATA"),
@@ -238,9 +234,7 @@ class TestStartMobileRuntime:
                         await mobile_main.start_mobile_runtime()
 
                         mock_runtime.request_shutdown.assert_called_once()
-                        assert "User interrupt" in str(
-                            mock_runtime.request_shutdown.call_args
-                        )
+                        assert "User interrupt" in str(mock_runtime.request_shutdown.call_args)
                         mock_runtime.shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -287,9 +281,7 @@ class TestMain:
             "android.app.src.main.python.mobile_main.setup_android_environment",
             mock_setup,
         ):
-            with patch(
-                "android.app.src.main.python.mobile_main.asyncio.run", mock_asyncio_run
-            ):
+            with patch("android.app.src.main.python.mobile_main.asyncio.run", mock_asyncio_run):
                 from android.app.src.main.python import mobile_main
 
                 mobile_main.main()

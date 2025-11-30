@@ -60,3 +60,11 @@
 # Android Security Crypto (EncryptedSharedPreferences)
 -keep class com.google.crypto.tink.** { *; }
 -keep class androidx.security.crypto.** { *; }
+
+# Tink crypto library dependencies (referenced but not used at runtime)
+-dontwarn com.google.api.client.http.**
+-dontwarn com.google.api.client.http.javanet.**
+-dontwarn org.joda.time.**
+
+# Google API Client (optional dependency of Tink)
+-dontwarn com.google.api.client.**

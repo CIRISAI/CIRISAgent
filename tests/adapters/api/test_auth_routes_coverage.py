@@ -1143,9 +1143,7 @@ class TestOAuthProviderEndpoints:
 
         config_json = '{"google": {"client_id": "google-id", "created": "2024-01-01T00:00:00Z", "metadata": {}}}'
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value=config_json
-        ):
+        with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.read_text", return_value=config_json):
             response = await list_oauth_providers(mock_request, mock_auth)
 
         assert len(response.providers) == 1
@@ -1187,10 +1185,7 @@ class TestOAuthProviderEndpoints:
     @pytest.mark.asyncio
     async def test_configure_oauth_provider_success(self):
         """Test configuring OAuth provider - covers lines 323-366."""
-        from ciris_engine.logic.adapters.api.routes.auth import (
-            ConfigureOAuthProviderRequest,
-            configure_oauth_provider,
-        )
+        from ciris_engine.logic.adapters.api.routes.auth import ConfigureOAuthProviderRequest, configure_oauth_provider
         from ciris_engine.schemas.api.auth import AuthContext
 
         mock_auth = Mock(spec=AuthContext)
@@ -1215,19 +1210,14 @@ class TestOAuthProviderEndpoints:
     @pytest.mark.asyncio
     async def test_configure_oauth_provider_write_error(self):
         """Test configuring OAuth provider with write error - covers lines 364-366."""
-        from ciris_engine.logic.adapters.api.routes.auth import (
-            ConfigureOAuthProviderRequest,
-            configure_oauth_provider,
-        )
+        from ciris_engine.logic.adapters.api.routes.auth import ConfigureOAuthProviderRequest, configure_oauth_provider
         from ciris_engine.schemas.api.auth import AuthContext
 
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "admin-user"
         mock_request = Mock()
 
-        body = ConfigureOAuthProviderRequest(
-            provider="google", client_id="client-id", client_secret="client-secret"
-        )
+        body = ConfigureOAuthProviderRequest(provider="google", client_id="client-id", client_secret="client-secret")
 
         with patch("pathlib.Path.exists", return_value=False), patch("pathlib.Path.parent") as mock_parent, patch(
             "pathlib.Path.write_text", side_effect=IOError("Write error")
@@ -1303,9 +1293,7 @@ class TestOAuthLoginProviders:
 
         config_json = '{"custom": {"client_id": "custom-id", "client_secret": "secret"}}'
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value=config_json
-        ):
+        with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.read_text", return_value=config_json):
             with pytest.raises(HTTPException) as exc_info:
                 await oauth_login("custom", mock_request)
 
@@ -1501,12 +1489,8 @@ class TestProfileStorage:
         mock_auth_service.get_user = Mock(return_value=mock_user)
         mock_auth_service._users = {}
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.auth.validate_oauth_picture_url", return_value=True
-        ):
-            _store_oauth_profile(
-                mock_auth_service, "user-123", "Test User", "https://example.com/valid.jpg"
-            )
+        with patch("ciris_engine.logic.adapters.api.routes.auth.validate_oauth_picture_url", return_value=True):
+            _store_oauth_profile(mock_auth_service, "user-123", "Test User", "https://example.com/valid.jpg")
 
         assert mock_user.oauth_name == "Test User"
         assert mock_user.oauth_picture == "https://example.com/valid.jpg"
@@ -1517,12 +1501,8 @@ class TestProfileStorage:
 
         mock_auth_service = Mock()
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.auth.validate_oauth_picture_url", return_value=False
-        ):
-            _store_oauth_profile(
-                mock_auth_service, "user-123", "Test User", "javascript:alert('xss')"
-            )
+        with patch("ciris_engine.logic.adapters.api.routes.auth.validate_oauth_picture_url", return_value=False):
+            _store_oauth_profile(mock_auth_service, "user-123", "Test User", "javascript:alert('xss')")
 
         mock_auth_service.get_user.assert_not_called()
 

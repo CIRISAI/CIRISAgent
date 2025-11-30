@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import ai.ciris.mobile.integrity.PlayIntegrityManager
+import ai.ciris.mobile.integrity.IntegrityResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,11 +19,14 @@ import java.io.File
  * 1. Periodically refreshes tokens (every 45 minutes)
  * 2. Monitors for 401 signals from Python LLM service
  * 3. Updates .env file with fresh tokens
+ * 4. Re-verifies device integrity on each refresh (optional)
  */
 class TokenRefreshManager(
     private val context: Context,
     private val googleSignInHelper: GoogleSignInHelper,
-    private val onTokenRefreshed: ((String) -> Unit)? = null
+    private val integrityManager: PlayIntegrityManager? = null,
+    private val onTokenRefreshed: ((String) -> Unit)? = null,
+    private val onIntegrityChecked: ((IntegrityResult) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "TokenRefreshManager"
@@ -169,6 +174,29 @@ class TokenRefreshManager(
         // Update the .env file with new token
         CoroutineScope(Dispatchers.IO).launch {
             updateEnvFile(idToken)
+
+            // Re-verify device integrity on each token refresh
+            if (integrityManager != null) {
+                Log.i(TAG, "Re-verifying device integrity after token refresh...")
+                try {
+                    val integrityResult = integrityManager.verifyIntegrity()
+                    Log.i(TAG, "Integrity check result: verified=${integrityResult.verified}")
+
+                    withContext(Dispatchers.Main) {
+                        onIntegrityChecked?.invoke(integrityResult)
+                    }
+
+                    if (!integrityResult.verified) {
+                        Log.w(TAG, "Device integrity check failed: ${integrityResult.error}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Integrity check exception: ${e.message}")
+                    val failedResult = IntegrityResult(verified = false, error = "Exception: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        onIntegrityChecked?.invoke(failedResult)
+                    }
+                }
+            }
 
             withContext(Dispatchers.Main) {
                 // Notify callback

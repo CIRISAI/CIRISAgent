@@ -17,6 +17,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.auth.TokenRefreshManager
+import ai.ciris.mobile.integrity.PlayIntegrityManager
+import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.CoroutineScope
@@ -75,6 +77,10 @@ class MainActivity : AppCompatActivity() {
     private var tokenRefreshManager: TokenRefreshManager? = null
     private var cirisHomePath: String? = null
 
+    // Play Integrity manager for device/app attestation
+    private var integrityManager: PlayIntegrityManager? = null
+    private var integrityVerified: Boolean = false
+
     companion object {
         private const val TAG = "CIRISMobile"
         private const val PREFS_UI = "ciris_ui_prefs"
@@ -114,6 +120,9 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize CIRIS_HOME path (same logic as mobile_main.py)
         initializeCirisHomePath()
+
+        // Initialize Play Integrity manager for device attestation
+        integrityManager = PlayIntegrityManager(this)
 
         // Initialize token refresh manager for Google auth with ciris.ai
         if (authMethod == "google") {
@@ -443,16 +452,44 @@ class MainActivity : AppCompatActivity() {
         // Start token refresh manager now that server is ready
         startTokenRefreshManager()
 
-        // If we have a Google ID token, exchange it for a CIRIS API token
+        // If we have a Google ID token, perform integrity check + token exchange
         if (googleIdToken != null && authMethod == "google") {
             CoroutineScope(Dispatchers.IO).launch {
+                // Step 1: Verify device/app integrity with billing.ciris.ai
+                withContext(Dispatchers.Main) {
+                    appendToConsole("Verifying device integrity...")
+                }
+
+                val integrityResult = verifyDeviceIntegrity()
+                if (integrityResult != null && integrityResult.verified) {
+                    Log.i(TAG, "Device integrity verified: ${integrityResult.deviceIntegrity}")
+                    integrityVerified = true
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("✓ Device integrity verified")
+                    }
+                } else {
+                    Log.w(TAG, "Device integrity check failed: ${integrityResult?.error ?: "unknown"}")
+                    integrityVerified = false
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("⚠ Device integrity check: ${integrityResult?.error ?: "failed"}")
+                        // Continue anyway - integrity is logged but not blocking for now
+                    }
+                }
+
+                // Step 2: Exchange Google ID token for CIRIS API token
                 val exchanged = exchangeGoogleIdToken()
                 withContext(Dispatchers.Main) {
                     if (exchanged) {
                         Log.i(TAG, "Successfully exchanged Google ID token for CIRIS token")
+                        appendToConsole("✓ Authentication complete")
                     } else {
                         Log.w(TAG, "Token exchange failed, proceeding without CIRIS token")
+                        appendToConsole("⚠ Token exchange failed")
                     }
+
+                    // Short delay to let user see status
+                    delay(300)
+
                     // Hide console, show WebView
                     consoleContainer.visibility = View.GONE
                     webView.visibility = View.VISIBLE
@@ -464,6 +501,19 @@ class MainActivity : AppCompatActivity() {
             consoleContainer.visibility = View.GONE
             webView.visibility = View.VISIBLE
             loadUI()
+        }
+    }
+
+    /**
+     * Verify device and app integrity with billing.ciris.ai.
+     * This checks that the device is genuine and the app is unmodified.
+     */
+    private suspend fun verifyDeviceIntegrity(): IntegrityResult? {
+        return try {
+            integrityManager?.verifyIntegrity()
+        } catch (e: Exception) {
+            Log.e(TAG, "Integrity verification exception: ${e.message}", e)
+            IntegrityResult(verified = false, error = "Exception: ${e.message}")
         }
     }
 
@@ -820,10 +870,18 @@ class MainActivity : AppCompatActivity() {
         tokenRefreshManager = TokenRefreshManager(
             context = this,
             googleSignInHelper = googleSignInHelper!!,
+            integrityManager = integrityManager,  // Pass integrity manager for re-verification on refresh
             onTokenRefreshed = { newToken ->
                 Log.i(TAG, "Token refreshed, new token length: ${newToken.length}")
                 // Update the stored ID token
                 googleIdToken = newToken
+            },
+            onIntegrityChecked = { result ->
+                Log.i(TAG, "Integrity re-check on token refresh: verified=${result.verified}")
+                integrityVerified = result.verified
+                if (!result.verified) {
+                    Log.w(TAG, "Device integrity failed on token refresh: ${result.error}")
+                }
             }
         )
     }

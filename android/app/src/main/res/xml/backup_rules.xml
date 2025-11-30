@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude API keys from backup -->
+    <!-- Include shared preferences but exclude sensitive settings -->
+    <include domain="sharedpref" path="."/>
     <exclude domain="sharedpref" path="ciris_settings.xml"/>
 
     <!-- Include database for backup -->

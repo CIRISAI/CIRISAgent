@@ -33,6 +33,7 @@ from ciris_engine.logic.services.lifecycle.shutdown import ShutdownService
 # Import new infrastructure services
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClient
+from ciris_engine.logic.utils.path_resolution import get_data_dir
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -133,27 +134,35 @@ class ServiceInitializer:
         # Create default resource budget
         budget = ResourceBudget()  # Uses defaults from schema
 
-        # Credit provider: Always enabled for OAuth user credit gating
-        # - If CIRIS_BILLING_ENABLED=true: Use full billing backend (paid credits, purchases)
-        # - If CIRIS_BILLING_ENABLED=false: Use simple provider (1 free credit per OAuth user)
+        # Credit provider: Controls billing for CIRIS LLM proxy usage
+        # - Server: CIRIS_BILLING_API_KEY set → API key auth
+        # - Android: Using CIRIS proxy + Google ID token → JWT auth
+        # - Not using CIRIS proxy → No billing (credit_provider = None)
+        from typing import Optional
+
         from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 
-        credit_provider: CreditGateProtocol
-        billing_enabled = os.getenv("CIRIS_BILLING_ENABLED", "false").lower() == "true"
-        if billing_enabled:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+        credit_provider: Optional[CreditGateProtocol] = None
+        is_android = "ANDROID_DATA" in os.environ
 
-            # Get API key from environment (required for CIRISBillingProvider)
-            api_key = os.getenv("CIRIS_BILLING_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "CIRIS_BILLING_API_KEY environment variable is required when CIRIS_BILLING_ENABLED=true"
-                )
+        # Check if using CIRIS LLM proxy (Android only - billing required for proxy)
+        llm_base_url = os.getenv("OPENAI_API_BASE", "")
+        using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+
+        # Server: Simple API key check
+        api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
+        # Android: Google ID token for JWT auth with CIRIS proxy
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+
+        if api_key and not is_android:
+            # Server with API key - use API key auth
+            from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
             base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
             timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+
             credit_provider = CIRISBillingProvider(
                 api_key=api_key,
                 base_url=base_url,
@@ -161,14 +170,43 @@ class ServiceInitializer:
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
-            logger.info("Using CIRISBillingProvider for credit gating (URL: %s)", base_url)
-        else:
-            from ciris_engine.logic.services.infrastructure.resource_monitor import SimpleCreditProvider
+            logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
 
-            # Get free uses from environment (default: 0)
-            free_uses = int(os.getenv("CIRIS_SIMPLE_FREE_USES", "0"))
-            credit_provider = SimpleCreditProvider(free_uses=free_uses)
-            logger.info(f"Using SimpleCreditProvider - {free_uses} free uses per OAuth user")
+        elif is_android and using_ciris_proxy:
+            # Android using CIRIS LLM proxy - requires billing
+            if google_id_token:
+                # Have Google ID token - use JWT auth
+                from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+
+                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+                timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+                cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+                fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+
+                credit_provider = CIRISBillingProvider(
+                    google_id_token=google_id_token,
+                    base_url=base_url,
+                    timeout_seconds=timeout,
+                    cache_ttl_seconds=cache_ttl,
+                    fail_open=fail_open,
+                )
+                logger.info("Using CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
+            else:
+                # No token yet - user needs to sign in with Google
+                logger.warning(
+                    "Android using CIRIS LLM proxy without Google ID token - "
+                    "user needs to sign in with Google to use LLM features"
+                )
+                # credit_provider stays None - LLM calls will fail until signed in
+
+        elif is_android and not using_ciris_proxy:
+            # Android but not using CIRIS proxy - no billing needed
+            logger.info("Android not using CIRIS proxy - no billing required")
+            # credit_provider stays None
+
+        else:
+            # Server without API key - no billing
+            logger.info("No billing configured (CIRIS_BILLING_API_KEY not set)")
 
         self.resource_monitor_service = ResourceMonitorService(
             budget=budget,
@@ -665,7 +703,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("TSDBConsolidationService registered in ServiceRegistry")
 
         # Initialize maintenance service AFTER consolidation
-        archive_dir = getattr(config, "data_archive_dir", "data_archive")
+        archive_dir_config = getattr(config, "data_archive_dir", "data_archive")
+        # Resolve relative paths to absolute (critical for Android where CWD is read-only)
+        archive_path = Path(archive_dir_config)
+        if not archive_path.is_absolute():
+            archive_path = get_data_dir() / archive_dir_config
+        archive_dir = str(archive_path)
         archive_hours = getattr(config, "archive_older_than_hours", 24)
         assert self.time_service is not None
         assert self.config_service is not None
@@ -747,6 +790,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         self._startup_end_time = time.time()
 
+    def _get_llm_service_config_value(self, config: Any, attr_name: str, default: Any) -> Any:
+        """Get LLM service config value safely with fallback to default.
+
+        Args:
+            config: Configuration object
+            attr_name: Attribute name to get from config.services
+            default: Default value if not found
+
+        Returns:
+            Config value or default
+        """
+        if config and hasattr(config, "services") and config.services:
+            return getattr(config.services, attr_name, default)
+        return default
+
     async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
@@ -772,23 +830,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
         logger.info("Initializing real LLM service")
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
+        # Get config values using helper to reduce complexity
+        base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
+            config, "llm_endpoint", "http://localhost:11434/v1"
+        )
+        model_name = os.environ.get("OPENAI_MODEL") or self._get_llm_service_config_value(
+            config, "llm_model", "gpt-4o-mini"
+        )
+
         llm_config = OpenAIConfig(
-            base_url=(
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
-            ),
-            model_name=(
-                config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2"
-            ),
+            base_url=base_url,
+            model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 
         # Create and start service
@@ -809,12 +865,30 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Store reference
         self.llm_service = openai_service
-        logger.info(f"Primary LLM service initialized: {llm_config.model_name}")
+        logger.info(f"Primary LLM service initialized: model={llm_config.model_name}, base_url={llm_config.base_url}")
+
+        # Register token refresh signal handler for ciris.ai authentication
+        # This connects the LLM service to ResourceMonitor's signal bus
+        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", openai_service.handle_token_refreshed)
+            logger.info("Registered LLM service token refresh handler with ResourceMonitor")
 
         # Optional: Initialize secondary LLM service
+        # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
+        second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
+        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+
+        # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
+        is_ciris_proxy_secondary = "ciris.ai" in second_base_url
+
         if second_api_key:
+            # Standard API key auth
             await self._initialize_secondary_llm(config, second_api_key)
+        elif is_ciris_proxy_secondary and google_id_token:
+            # CIRIS proxy with JWT auth - use Google ID token as auth
+            logger.info("Secondary LLM using CIRIS proxy with JWT auth")
+            await self._initialize_secondary_llm(config, google_id_token)
 
     async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
         """Initialize optional secondary LLM service."""
@@ -822,18 +896,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
-        # Get configuration from environment
+        # Get configuration from environment using helper
         base_url = os.environ.get(
             "CIRIS_OPENAI_API_BASE_2",
-            (
-                config.services.llm_endpoint
-                if config and hasattr(config, "services") and config.services
-                else "http://localhost:11434/v1"
-            ),
+            self._get_llm_service_config_value(config, "llm_endpoint", "http://localhost:11434/v1"),
         )
         model_name = os.environ.get(
             "CIRIS_OPENAI_MODEL_NAME_2",
-            config.services.llm_model if config and hasattr(config, "services") and config.services else "llama3.2",
+            self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
         # Create config
@@ -841,13 +911,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
-            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),  # Allow override from environment
-            timeout_seconds=(
-                config.services.llm_timeout if config and hasattr(config, "services") and config.services else 60
-            ),
-            max_retries=(
-                config.services.llm_max_retries if config and hasattr(config, "services") and config.services else 3
-            ),
+            instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
+            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 
         # Create and start service
@@ -1042,22 +1108,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
             from ciris_engine.logic.setup.first_run import is_first_run
 
-            critical_services: List[Any] = [
-                self.telemetry_service,
-                self.memory_service,
-                self.secrets_service,
-                self.adaptive_filter_service,
-            ]
+            # Use named dict for better error messages
+            critical_services: dict[str, Any] = {
+                "telemetry_service": self.telemetry_service,
+                "memory_service": self.memory_service,
+                "secrets_service": self.secrets_service,
+                "adaptive_filter_service": self.adaptive_filter_service,
+            }
 
             # Only require LLM service if not in first-run mode
             if not is_first_run():
-                critical_services.append(self.llm_service)
+                critical_services["llm_service"] = self.llm_service
             elif not self.llm_service:
                 logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
-            for service in critical_services:
+            for name, service in critical_services.items():
                 if not service:
-                    logger.error(f"Critical service {type(service).__name__} not initialized")
+                    logger.error(f"Critical service '{name}' not initialized (is None)")
                     return False
 
             # Verify audit service

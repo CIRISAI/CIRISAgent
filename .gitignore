@@ -79,3 +79,15 @@ dict_any_audit_results.json
 build/
 dist/
 *.egg-info/
+android/.web-build/
+.idea/
+.token_refresh_needed
+android/.web-build/
+*.apk
+*.aab
+
+# Large media files from GUI static assets
+**/videos/
+**/*-unsplash.jpg
+**/infogfx-*.png
+**/blurryinfo.png

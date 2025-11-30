@@ -23,7 +23,7 @@ class TestMetricDataPoint:
 
         assert point.timestamp == timestamp
         assert point.value == 42.5
-        assert point.tags == {}
+        assert point.tags is None  # tags is Optional, defaults to None
 
     def test_create_with_tags(self):
         """Test creating MetricDataPoint with tags."""

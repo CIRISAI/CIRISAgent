@@ -40,8 +40,19 @@ def mock_request():
     """Create a mock FastAPI request with app state."""
     request = Mock(spec=Request)
     request.app.state.db_path = None
-    request.app.state.agent_template = None
+    request.app.state.config_service = None
     return request
+
+
+@pytest.fixture
+def mock_config_service(sample_tickets_config):
+    """Create a mock config service that returns tickets config."""
+    config_service = AsyncMock()
+    mock_config_node = Mock()
+    mock_config_node.value = Mock()
+    mock_config_node.value.dict_value = sample_tickets_config.model_dump()
+    config_service.get_config = AsyncMock(return_value=mock_config_node)
+    return config_service
 
 
 @pytest.fixture
@@ -130,59 +141,61 @@ def sample_ticket_data():
 class TestHelperFunctions:
     """Test helper functions for tickets routes."""
 
-    def test_get_agent_tickets_config_no_template(self, mock_request):
-        """Test getting tickets config when no agent template exists."""
-        result = _get_agent_tickets_config(mock_request)
+    @pytest.mark.asyncio
+    async def test_get_agent_tickets_config_no_config_service(self, mock_request):
+        """Test getting tickets config when no config service exists."""
+        result = await _get_agent_tickets_config(mock_request)
         assert result is None
 
-    def test_get_agent_tickets_config_with_template(self, mock_request, sample_tickets_config):
-        """Test getting tickets config from agent template."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+    @pytest.mark.asyncio
+    async def test_get_agent_tickets_config_with_config_service(
+        self, mock_request, mock_config_service, sample_tickets_config
+    ):
+        """Test getting tickets config from config service."""
+        mock_request.app.state.config_service = mock_config_service
 
-        result = _get_agent_tickets_config(mock_request)
-        assert result == sample_tickets_config
+        result = await _get_agent_tickets_config(mock_request)
+        assert result is not None
+        assert result.enabled == sample_tickets_config.enabled
+        assert len(result.sops) == len(sample_tickets_config.sops)
 
-    def test_get_sop_config_found(self, mock_request, sample_tickets_config, sample_sop_config):
+    @pytest.mark.asyncio
+    async def test_get_sop_config_found(self, mock_request, mock_config_service, sample_sop_config):
         """Test getting SOP config when it exists."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
-        result = _get_sop_config(mock_request, "DSAR_ACCESS")
-        assert result == sample_sop_config
+        result = await _get_sop_config(mock_request, "DSAR_ACCESS")
+        assert result is not None
+        assert result.sop == sample_sop_config.sop
 
-    def test_get_sop_config_not_found(self, mock_request, sample_tickets_config):
+    @pytest.mark.asyncio
+    async def test_get_sop_config_not_found(self, mock_request, mock_config_service):
         """Test getting SOP config when it doesn't exist."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
-        result = _get_sop_config(mock_request, "NONEXISTENT_SOP")
+        result = await _get_sop_config(mock_request, "NONEXISTENT_SOP")
         assert result is None
 
-    def test_is_sop_supported_true(self, mock_request, sample_tickets_config):
+    @pytest.mark.asyncio
+    async def test_is_sop_supported_true(self, mock_request, mock_config_service):
         """Test SOP support check when SOP is supported."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
-        result = _is_sop_supported(mock_request, "DSAR_ACCESS")
+        result = await _is_sop_supported(mock_request, "DSAR_ACCESS")
         assert result is True
 
-    def test_is_sop_supported_false(self, mock_request, sample_tickets_config):
+    @pytest.mark.asyncio
+    async def test_is_sop_supported_false(self, mock_request, mock_config_service):
         """Test SOP support check when SOP is not supported."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
-        result = _is_sop_supported(mock_request, "UNSUPPORTED_SOP")
+        result = await _is_sop_supported(mock_request, "UNSUPPORTED_SOP")
         assert result is False
 
-    def test_is_sop_supported_no_config(self, mock_request):
+    @pytest.mark.asyncio
+    async def test_is_sop_supported_no_config(self, mock_request):
         """Test SOP support check when no tickets config exists."""
-        result = _is_sop_supported(mock_request, "ANY_SOP")
+        result = await _is_sop_supported(mock_request, "ANY_SOP")
         assert result is False
 
     def test_initialize_ticket_metadata(self, sample_sop_config):
@@ -231,11 +244,9 @@ class TestListSupportedSOPs:
     """Test GET /tickets/sops endpoint."""
 
     @pytest.mark.asyncio
-    async def test_list_sops_success(self, mock_request, sample_tickets_config, mock_current_user):
+    async def test_list_sops_success(self, mock_request, mock_config_service, mock_current_user):
         """Test listing supported SOPs."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         result = await list_supported_sops(mock_request, mock_current_user)
 
@@ -256,11 +267,9 @@ class TestGetSOPMetadata:
     """Test GET /tickets/sops/{sop} endpoint."""
 
     @pytest.mark.asyncio
-    async def test_get_sop_metadata_success(self, mock_request, sample_tickets_config, mock_current_user):
+    async def test_get_sop_metadata_success(self, mock_request, mock_config_service, mock_current_user):
         """Test getting SOP metadata."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         result = await get_sop_metadata("DSAR_ACCESS", mock_request, mock_current_user)
 
@@ -272,11 +281,9 @@ class TestGetSOPMetadata:
         assert result.stages[0]["name"] == "identity_resolution"
 
     @pytest.mark.asyncio
-    async def test_get_sop_metadata_not_found(self, mock_request, sample_tickets_config, mock_current_user):
+    async def test_get_sop_metadata_not_found(self, mock_request, mock_config_service, mock_current_user):
         """Test getting metadata for unsupported SOP."""
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         with pytest.raises(HTTPException) as exc_info:
             await get_sop_metadata("UNSUPPORTED_SOP", mock_request, mock_current_user)
@@ -296,16 +303,14 @@ class TestCreateTicket:
         mock_get_ticket,
         mock_create_ticket,
         mock_request,
-        sample_tickets_config,
+        mock_config_service,
         sample_ticket_data,
         mock_current_user,
     ):
         """Test creating a new ticket."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
 
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         mock_create_ticket.return_value = True
         mock_get_ticket.return_value = sample_ticket_data
@@ -326,13 +331,11 @@ class TestCreateTicket:
         assert mock_get_ticket.called
 
     @pytest.mark.asyncio
-    async def test_create_ticket_unsupported_sop(self, mock_request, sample_tickets_config, mock_current_user):
+    async def test_create_ticket_unsupported_sop(self, mock_request, mock_config_service, mock_current_user):
         """Test creating ticket with unsupported SOP."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
 
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         request_data = CreateTicketRequest(
             sop="UNSUPPORTED_SOP",
@@ -348,14 +351,12 @@ class TestCreateTicket:
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.tickets.create_ticket")
     async def test_create_ticket_creation_failed(
-        self, mock_create_ticket, mock_request, sample_tickets_config, mock_current_user
+        self, mock_create_ticket, mock_request, mock_config_service, mock_current_user
     ):
         """Test ticket creation failure."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
 
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         mock_create_ticket.return_value = False
 
@@ -378,16 +379,14 @@ class TestCreateTicket:
         mock_get_ticket,
         mock_create_ticket,
         mock_request,
-        sample_tickets_config,
+        mock_config_service,
         sample_ticket_data,
         mock_current_user,
     ):
         """Test creating ticket with custom priority."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
 
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         mock_create_ticket.return_value = True
         ticket_data = sample_ticket_data.copy()
@@ -412,16 +411,14 @@ class TestCreateTicket:
         mock_get_ticket,
         mock_create_ticket,
         mock_request,
-        sample_tickets_config,
+        mock_config_service,
         sample_ticket_data,
         mock_current_user,
     ):
         """Test creating ticket with custom metadata."""
         from ciris_engine.logic.adapters.api.routes.tickets import CreateTicketRequest
 
-        mock_template = Mock()
-        mock_template.tickets = sample_tickets_config
-        mock_request.app.state.agent_template = mock_template
+        mock_request.app.state.config_service = mock_config_service
 
         mock_create_ticket.return_value = True
         ticket_data = sample_ticket_data.copy()

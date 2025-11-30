@@ -20,7 +20,7 @@ class MetricDataPoint(BaseModel):
 
     timestamp: datetime = Field(..., description="When metric was recorded")
     value: float = Field(..., description="Metric value")
-    tags: Optional[Dict[str, str]] = Field(default_factory=dict, description="Metric tags")
+    tags: Optional[Dict[str, str]] = Field(default=None, description="Metric tags")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> str:

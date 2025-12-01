@@ -14,6 +14,7 @@ logs/
 *.egg-info/
 *.egg
 *.whl
+!android/app/wheels/*.whl
 *.jsonl
 memory_graph.pkl
 audit_logs.jsonl

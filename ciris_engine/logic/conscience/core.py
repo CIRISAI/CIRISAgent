@@ -215,9 +215,10 @@ class EntropyConscience(_BaseConscience):
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
-                    max_tokens=64,
+                    max_tokens=1024,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
+                    task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -306,9 +307,10 @@ class CoherenceConscience(_BaseConscience):
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
-                    max_tokens=64,
+                    max_tokens=1024,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
+                    task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -406,9 +408,10 @@ class OptimizationVetoConscience(_BaseConscience):
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
-                    max_tokens=500,
+                    max_tokens=1024,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
+                    task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")
@@ -505,9 +508,10 @@ class EpistemicHumilityConscience(_BaseConscience):
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",
-                    max_tokens=384,
+                    max_tokens=768,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
+                    task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
                 raise RuntimeError("Sink does not have LLM service")

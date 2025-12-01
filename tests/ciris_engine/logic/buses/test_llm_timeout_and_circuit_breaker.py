@@ -64,6 +64,7 @@ class MockLLMService:
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        **kwargs,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Mock LLM call with configurable delay"""
         self.call_count += 1

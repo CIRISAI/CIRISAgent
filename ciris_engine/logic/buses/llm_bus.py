@@ -159,6 +159,7 @@ class LLMBus(BaseBus[LLMService]):
         handler_name: str = "default",
         domain: Optional[str] = None,  # NEW: Domain-aware routing
         thought_id: Optional[str] = None,  # NEW: For resource tracking per thought
+        task_id: Optional[str] = None,  # For ciris.ai billing - all calls with same task_id share 1 credit
     ) -> Tuple[BaseModel, ResourceUsage]:
         """
         Generate structured output using LLM with optional domain routing.
@@ -217,6 +218,8 @@ class LLMBus(BaseBus[LLMService]):
                     response_model=response_model,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    thought_id=thought_id,
+                    task_id=task_id,
                 )
 
                 # Record success

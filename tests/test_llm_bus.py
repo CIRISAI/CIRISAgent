@@ -72,7 +72,12 @@ class MockLLMService:
         self.capabilities = ["call_llm_structured", "get_available_models"]
 
     async def call_llm_structured(
-        self, messages: List[dict], response_model: Type[BaseModel], max_tokens: int = 1024, temperature: float = 0.0
+        self,
+        messages: List[dict],
+        response_model: Type[BaseModel],
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        **kwargs,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Simulate LLM call with configurable latency and failure"""
         self.call_count += 1
@@ -679,10 +684,11 @@ class TestMessageNormalization:
                 response_model: Type[BaseModel],
                 max_tokens: int = 1024,
                 temperature: float = 0.0,
+                **kwargs,
             ) -> Tuple[BaseModel, ResourceUsage]:
                 # Capture the messages for inspection
                 received_messages.extend(messages)
-                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature, **kwargs)
 
         service = InspectingLLMService("Inspector")
         service_registry.register_service(
@@ -722,9 +728,10 @@ class TestMessageNormalization:
                 response_model: Type[BaseModel],
                 max_tokens: int = 1024,
                 temperature: float = 0.0,
+                **kwargs,
             ) -> Tuple[BaseModel, ResourceUsage]:
                 received_messages.extend(messages)
-                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature, **kwargs)
 
         service = InspectingLLMService("Inspector")
         service_registry.register_service(
@@ -859,12 +866,12 @@ class TestServiceUnavailableFailover:
                 super().__init__(name)
                 self.should_fail = True
 
-            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0, **kwargs):
                 self.call_count += 1  # Track calls even if they fail
                 if self.should_fail:
                     # Simulate the same type of error that would cause circuit breaker activation
                     raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
-                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature, **kwargs)
 
         # Create secondary service that always succeeds
         primary_service = ServiceUnavailableLLMService("Together.AI")
@@ -932,7 +939,7 @@ class TestServiceUnavailableFailover:
         """Test that when both providers fail with 503, the error is properly propagated."""
 
         class FailingLLMService(MockLLMService):
-            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0, **kwargs):
                 self.call_count += 1  # Track calls even if they fail
                 raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
 
@@ -978,11 +985,11 @@ class TestServiceUnavailableFailover:
                 super().__init__(name)
                 self.should_fail = True
 
-            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0):
+            async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0, **kwargs):
                 if self.should_fail:
                     self.call_count += 1  # Track calls that fail
                     raise RuntimeError("LLM service unavailable - circuit breaker activated for failover")
-                return await super().call_llm_structured(messages, response_model, max_tokens, temperature)
+                return await super().call_llm_structured(messages, response_model, max_tokens, temperature, **kwargs)
 
         primary_service = RecoverableLLMService("Together.AI")
         secondary_service = MockLLMService("Lambda.AI")

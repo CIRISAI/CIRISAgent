@@ -1,7 +1,7 @@
 """LLM Service Protocol."""
 
 from abc import abstractmethod
-from typing import List, Protocol, Tuple, Type, TypedDict
+from typing import List, Optional, Protocol, Tuple, Type, TypedDict
 
 from pydantic import BaseModel
 
@@ -31,6 +31,8 @@ class LLMServiceProtocol(ServiceProtocol, Protocol):
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        thought_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Make a structured LLM call.
 
@@ -39,6 +41,8 @@ class LLMServiceProtocol(ServiceProtocol, Protocol):
             response_model: Pydantic model class for the expected response
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0 = deterministic)
+            thought_id: Optional thought ID for tracing (last 8 chars used)
+            task_id: Optional task ID for tracing (last 8 chars used)
 
         Returns:
             Tuple of (parsed response model instance, resource usage)

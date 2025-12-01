@@ -32,6 +32,10 @@ class CreditContext(BaseModel):
     channel_id: Optional[str] = Field(None, description="Interaction channel identifier")
     request_id: Optional[str] = Field(None, description="Request correlation ID")
     user_role: Optional[str] = Field(None, description="User role for bypass logic (ADMIN+ bypasses credit checks)")
+    billing_mode: str = Field(
+        default="transactional",
+        description="Billing mode: 'transactional' (check+spend for hosted), 'informational' (check only for Android)",
+    )
 
 
 class CreditCheckResult(BaseModel):

@@ -377,8 +377,14 @@ def _attach_credit_metadata(
         agent_identity = getattr(runtime, "agent_identity", None) if runtime else None
         agent_id = getattr(agent_identity, "agent_id", None)
 
+        # Determine billing mode: Android uses "informational" (check only, billing via LLM usage)
+        # Hosted sites use "transactional" (check+spend per interaction)
+        from ciris_engine.logic.utils.path_resolution import is_android
+
+        billing_mode = "informational" if is_android() else "transactional"
+
         logger.debug(
-            f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}, user_role={auth.role.value}"
+            f"[CREDIT_ATTACH] Creating CreditContext with agent_id={agent_id}, channel_id={channel_id}, user_role={auth.role.value}, billing_mode={billing_mode}"
         )
 
         credit_context = CreditContext(
@@ -386,6 +392,7 @@ def _attach_credit_metadata(
             channel_id=channel_id,
             request_id=msg.message_id,
             user_role=auth.role.value,
+            billing_mode=billing_mode,
         )
 
         logger.debug("[CREDIT_ATTACH] CreditContext created successfully")

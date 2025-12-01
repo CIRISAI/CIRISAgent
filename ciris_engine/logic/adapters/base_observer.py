@@ -857,15 +857,23 @@ class BaseObserver(Generic[MessageT], ABC):
         context: CreditContext,
         msg: MessageT,
     ) -> None:
-        """Check credit availability and charge the user."""
-        # Step 1: Check if user has credit
+        """Check credit availability and optionally charge the user.
+
+        Billing modes:
+        - 'transactional': Check AND spend (hosted sites like ciris.ai)
+        - 'informational': Check only, no spend (Android - billing via LLM usage)
+        """
+        billing_mode = context.billing_mode
+        msg_id = getattr(msg, "message_id", "unknown")
+
+        # Step 1: Check if user has credit (always, for both modes)
         try:
             result = await resource_monitor.check_credit(account, context)
         except Exception as exc:  # pragma: no cover - provider failure is rare
             if self._should_log_credit_event(f"provider_error:{account.cache_key()}"):
                 logger.warning(
                     "Credit provider error for message %s: %s",
-                    getattr(msg, "message_id", "unknown"),
+                    msg_id,
                     exc,
                 )
             raise CreditCheckFailed(str(exc)) from exc
@@ -876,13 +884,23 @@ class BaseObserver(Generic[MessageT], ABC):
             if self._should_log_credit_event(cache_key):
                 logger.warning(
                     "Credit denied for message %s (channel %s): %s",
-                    getattr(msg, "message_id", "unknown"),
+                    msg_id,
                     getattr(msg, "channel_id", "unknown"),
                     reason,
                 )
             raise CreditDenied(reason)
 
-        # Step 2: Charge the credit BEFORE processing message
+        # Step 2: Charge credit - ONLY for transactional mode (hosted sites)
+        # Android uses "informational" mode - billing happens via LLM usage instead
+        if billing_mode == "informational":
+            logger.info(
+                "[CREDIT] Informational mode - skipping spend for message %s (account %s, credits=%s)",
+                msg_id,
+                account.cache_key(),
+                result.credits_remaining,
+            )
+            return
+
         spend_request = CreditSpendRequest(
             amount_minor=1,
             currency="USD",
@@ -898,13 +916,13 @@ class BaseObserver(Generic[MessageT], ABC):
             if not spend_result.succeeded:
                 logger.warning(
                     "Credit charge failed for message %s: %s",
-                    getattr(msg, "message_id", "unknown"),
+                    msg_id,
                     spend_result.reason,
                 )
                 raise CreditCheckFailed(f"Credit charge failed: {spend_result.reason}")
             logger.info(
                 "Credit charged successfully for message %s (account %s)",
-                getattr(msg, "message_id", "unknown"),
+                msg_id,
                 account.cache_key(),
             )
         except CreditCheckFailed:
@@ -913,7 +931,7 @@ class BaseObserver(Generic[MessageT], ABC):
         except Exception as exc:  # pragma: no cover - provider failure is rare
             logger.error(
                 "Credit charge error for message %s: %s",
-                getattr(msg, "message_id", "unknown"),
+                msg_id,
                 exc,
             )
             raise CreditCheckFailed(str(exc)) from exc

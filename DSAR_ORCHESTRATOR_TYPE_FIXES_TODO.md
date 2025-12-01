@@ -13,7 +13,7 @@ The multi-source DSAR orchestrator implementation is functionally complete (~500
 ```python
 # Cast MemoryBus to MemoryServiceProtocol
 identity_node = await resolve_user_identity(
-    user_identifier, 
+    user_identifier,
     cast(MemoryServiceProtocol, self._memory_bus)
 )
 ```

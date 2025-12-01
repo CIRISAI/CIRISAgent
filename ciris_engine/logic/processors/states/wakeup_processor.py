@@ -52,7 +52,18 @@ class WakeupProcessor(BaseProcessor):
             ),
             (
                 "VALIDATE_INTEGRITY",
-                f"Your internal state, services, and data integrity are intact as {agent_name}. You produce an audit log of all actions taken by design. Your decisions and their rationales are logged via your telemetry service with PII detection and security filtering. Your service registry ensures proper dependency management and circuit breaker protection. If you have reached this point, maintenance has occurred and your strictly type-enforced persistence and services tiers, along with the minimum adapter, have passed health checks. If you agree, please speak in the affirmative, start with INTEGRITY - ",
+                f"Validate your internal state and data integrity as {agent_name}. "
+                "You can verify integrity through the SYSTEM SNAPSHOT provided in your context, which contains REAL-TIME dynamically generated data about your actual state:\n\n"
+                "• service_health: Dictionary showing health status of each service (True/False)\n"
+                "• circuit_breaker_status: Shows circuit breaker state for each service (CLOSED=healthy, OPEN=failing)\n"
+                "• system_counts: Shows total_tasks, pending_tasks, completed_tasks counts\n"
+                "• telemetry_summary: Contains uptime_seconds, error_rate_percent, and service metrics\n"
+                "• secrets_filter_version and total_secrets_stored: Confirms secrets management is active\n"
+                "• agent_version, agent_codename, agent_code_hash: Confirms your version identity\n\n"
+                "If your SYSTEM SNAPSHOT shows: (1) services are healthy, (2) circuit breakers are CLOSED, "
+                "(3) error rates are acceptable, and (4) you have reached this point in wakeup - then your "
+                "integrity is confirmed. The snapshot data is REAL and generated dynamically from your actual runtime state. "
+                "If you agree based on this evidence, please speak in the affirmative, start with INTEGRITY - ",
             ),
             (
                 "EVALUATE_RESILIENCE",

@@ -180,6 +180,40 @@ class ApiPlatform(Service):
         # Set up message handling
         self._setup_message_handling()
 
+    def reinject_services(self) -> None:
+        """Re-inject services after they become available (e.g., after first-run setup).
+
+        This is called from resume_from_first_run() to update the FastAPI app state
+        with services that were None during initial adapter startup in first-run mode.
+        """
+        logger.info("Re-injecting services into FastAPI app state after first-run setup...")
+
+        # Get service mappings from declarative configuration
+        service_mappings = ApiServiceConfiguration.get_current_mappings_as_tuples()
+
+        # Count how many services we successfully inject
+        injected_count = 0
+        skipped_count = 0
+
+        # Re-inject services using mapping
+        for runtime_attr, app_attrs, handler_name in service_mappings:
+            runtime = self.runtime
+            if hasattr(runtime, runtime_attr) and getattr(runtime, runtime_attr) is not None:
+                service = getattr(runtime, runtime_attr)
+                setattr(self.app.state, app_attrs, service)
+
+                # Call special handler if provided
+                if handler_name:
+                    handler = getattr(self, handler_name)
+                    handler(service)
+
+                injected_count += 1
+                logger.debug(f"Re-injected {runtime_attr}")
+            else:
+                skipped_count += 1
+
+        logger.info(f"Re-injection complete: {injected_count} services injected, {skipped_count} still unavailable")
+
     def _log_service_registry(self, service: Any) -> None:
         """Log service registry details."""
         try:
@@ -218,9 +252,20 @@ class ApiPlatform(Service):
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""
-        # Initialize APIAuthService with the authentication service for persistence
-        self.app.state.auth_service = APIAuthService(auth_service)
-        logger.info("Initialized APIAuthService with authentication service for persistence")
+        # CRITICAL: Preserve existing APIAuthService if it already exists (has stored API keys)
+        # During re-injection after first-run setup, we must NOT create a new instance
+        # because the existing instance has in-memory API keys that would be lost!
+        existing_auth_service = getattr(self.app.state, "auth_service", None)
+        if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
+            # Update the existing instance's auth_service reference but preserve API keys
+            existing_auth_service._auth_service = auth_service
+            logger.info(
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference"
+            )
+        else:
+            # First time initialization - create new instance
+            self.app.state.auth_service = APIAuthService(auth_service)
+            logger.info("Initialized APIAuthService with authentication service for persistence")
 
     def _handle_bus_manager(self, bus_manager: Any) -> None:
         """Special handler for bus manager - inject individual buses into app.state."""

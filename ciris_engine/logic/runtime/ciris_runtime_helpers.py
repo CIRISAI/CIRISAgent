@@ -40,15 +40,22 @@ else:
         if task is None:
             raise RuntimeError("No current task")
 
+        timed_out = False
+
+        def timeout_callback() -> None:
+            nonlocal timed_out
+            timed_out = True
+            task.cancel()  # type: ignore[union-attr]
+
         # Schedule timeout
-        handle = loop.call_later(delay, task.cancel)
+        handle = loop.call_later(delay, timeout_callback)
         try:
             yield
         except asyncio.CancelledError:
-            if not handle.cancelled():
-                handle.cancel()
+            handle.cancel()
+            if timed_out:
                 raise asyncio.TimeoutError()
-            raise
+            raise  # Re-raise CancelledError if not from timeout
         else:
             handle.cancel()
 

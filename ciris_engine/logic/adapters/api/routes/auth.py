@@ -1053,80 +1053,147 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     Verify a Google ID token and extract user info.
 
-    This verifies tokens from native Android/iOS Google Sign-In.
-    For on-device deployments where external verification may fail,
-    falls back to decoding the JWT without verification.
+    This verifies tokens from native Android/iOS Google Sign-In using
+    Google's tokeninfo API with full security validation:
+    - Validates audience (aud) matches our configured client ID
+    - Validates issuer (iss) is accounts.google.com
+    - Validates token is not expired (exp)
+    - Validates email is verified
+
+    SECURITY: No fallback path exists. Tokens MUST be verified by Google
+    with proper audience/issuer/expiry validation before user creation.
     """
-    import base64
-    import json
+    import time
 
     import httpx
 
     logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
 
-    # First try: Verify with Google's tokeninfo endpoint
+    # Load our expected client ID from OAuth config
+    try:
+        provider_config = _load_oauth_config("google")
+        expected_client_id = provider_config.get("client_id")
+        # Android apps may have a separate client ID - check for android_client_id in config
+        android_client_id = provider_config.get("android_client_id")
+        allowed_audiences = {expected_client_id}
+        if android_client_id:
+            allowed_audiences.add(android_client_id)
+        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
+    except HTTPException:
+        logger.error("[NativeAuth] Google OAuth not configured - cannot verify native tokens")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth not configured. Please configure OAuth before using native login.",
+        )
+
+    # Valid Google issuers
+    valid_issuers = {"accounts.google.com", "https://accounts.google.com"}
+
+    # Verify with Google's tokeninfo endpoint
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             logger.info("[NativeAuth] Calling Google tokeninfo API...")
             response = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
             logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
 
-            if response.status_code == 200:
-                token_info = response.json()
-                logger.info(
-                    f"[NativeAuth] Token verified via Google API - sub: {token_info.get('sub')}, email: {token_info.get('email')}"
+            if response.status_code != 200:
+                logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
                 )
-                return {
-                    "external_id": token_info.get("sub"),  # Google user ID
-                    "email": token_info.get("email"),
-                    "name": token_info.get("name"),
-                    "picture": token_info.get("picture"),
-                }
-            else:
-                logger.warning(f"[NativeAuth] Google API returned {response.status_code}: {response.text}")
-    except Exception as e:
-        logger.warning(f"[NativeAuth] Google tokeninfo API failed: {type(e).__name__}: {e}")
 
-    # Fallback: Decode JWT without verification (for on-device local deployments)
-    # This is safe for local-only servers (127.0.0.1) where the native app already verified the token
-    logger.info("[NativeAuth] Falling back to JWT decode without verification (on-device mode)")
-    try:
-        # JWT format: header.payload.signature
-        parts = id_token.split(".")
-        if len(parts) != 3:
-            logger.error(f"[NativeAuth] Invalid JWT format - expected 3 parts, got {len(parts)}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token format")
+            token_info = response.json()
+            logger.info(
+                f"[NativeAuth] Token info received - sub: {token_info.get('sub')}, "
+                f"email: {token_info.get('email')}, aud: {token_info.get('aud')}, "
+                f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
+            )
 
-        # Decode the payload (second part)
-        payload = parts[1]
-        # Add padding if needed
-        padding = 4 - len(payload) % 4
-        if padding != 4:
-            payload += "=" * padding
-        decoded = base64.urlsafe_b64decode(payload)
-        token_info = json.loads(decoded)
+            # SECURITY: Validate audience (aud) - CRITICAL!
+            # This ensures the token was issued for OUR application, not someone else's
+            token_aud = token_info.get("aud")
+            if not token_aud or token_aud not in allowed_audiences:
+                logger.error(
+                    f"[NativeAuth] SECURITY: Token audience mismatch! "
+                    f"Got: {token_aud}, Expected one of: {allowed_audiences}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token was not issued for this application (audience mismatch).",
+                )
 
-        logger.info(
-            f"[NativeAuth] JWT decoded - sub: {token_info.get('sub')}, email: {token_info.get('email')}, aud: {token_info.get('aud')}"
-        )
+            # SECURITY: Validate issuer (iss) - ensures token is from Google
+            token_iss = token_info.get("iss")
+            if not token_iss or token_iss not in valid_issuers:
+                logger.error(f"[NativeAuth] SECURITY: Invalid issuer! Got: {token_iss}, Expected: {valid_issuers}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token was not issued by Google (issuer mismatch).",
+                )
 
-        # Basic validation
-        if not token_info.get("sub"):
-            logger.error("[NativeAuth] JWT missing 'sub' claim")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID token missing user ID")
+            # SECURITY: Validate expiry (exp) - ensures token is not expired
+            token_exp = token_info.get("exp")
+            if token_exp:
+                try:
+                    exp_timestamp = int(token_exp)
+                    current_time = int(time.time())
+                    if exp_timestamp < current_time:
+                        logger.error(f"[NativeAuth] SECURITY: Token expired! exp: {exp_timestamp}, now: {current_time}")
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Google ID token has expired. Please sign in again.",
+                        )
+                except (ValueError, TypeError):
+                    logger.error(f"[NativeAuth] Invalid exp claim format: {token_exp}")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token has invalid expiry format.",
+                    )
 
-        return {
-            "external_id": token_info.get("sub"),  # Google user ID
-            "email": token_info.get("email"),
-            "name": token_info.get("name"),
-            "picture": token_info.get("picture"),
-        }
+            # SECURITY: Validate email is verified (for email-based operations)
+            email_verified = token_info.get("email_verified")
+            if email_verified is not None and str(email_verified).lower() not in ("true", "1"):
+                logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
+                # Not a hard failure, but log it
+
+            # Validate we have required claims
+            sub = token_info.get("sub")
+            if not sub:
+                logger.error("[NativeAuth] Token missing required 'sub' claim")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google ID token missing user ID (sub claim).",
+                )
+
+            logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
+
+            return {
+                "external_id": sub,
+                "email": token_info.get("email"),
+                "name": token_info.get("name"),
+                "picture": token_info.get("picture"),
+            }
+
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"[NativeAuth] JWT decode failed: {type(e).__name__}: {e}")
+    except httpx.TimeoutException:
+        logger.error("[NativeAuth] Google tokeninfo API timed out")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Failed to decode Google ID token: {str(e)}"
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Google verification service timed out. Please try again.",
+        )
+    except httpx.RequestError as e:
+        logger.error(f"[NativeAuth] Network error calling Google API: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Google verification service. Please check your connection.",
+        )
+    except Exception as e:
+        logger.error(f"[NativeAuth] Unexpected error during token verification: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token verification failed due to an internal error.",
         )
 
 

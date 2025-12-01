@@ -186,9 +186,12 @@ class TestOAuthHelperMethods:
         # Mock the JSON config file
         mock_config = {"google": {"client_id": "test-google-id", "client_secret": "test-google-secret"}}
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text",
-            return_value='{"google": {"client_id": "test-google-id", "client_secret": "test-google-secret"}}',
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch(
+                "pathlib.Path.read_text",
+                return_value='{"google": {"client_id": "test-google-id", "client_secret": "test-google-secret"}}',
+            ),
         ):
             config = _load_oauth_config("google")
 
@@ -208,9 +211,12 @@ class TestOAuthHelperMethods:
     def test_load_oauth_config_unsupported_provider(self):
         """Test OAuth config loading with unsupported provider."""
         # Mock config file that exists but doesn't have the requested provider
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text",
-            return_value='{"google": {"client_id": "test-id", "client_secret": "test-secret"}}',
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch(
+                "pathlib.Path.read_text",
+                return_value='{"google": {"client_id": "test-id", "client_secret": "test-secret"}}',
+            ),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 _load_oauth_config("unsupported")
@@ -441,10 +447,14 @@ class TestOAuthRedirectURI:
         # Mock OAuth config
         mock_config = {"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text",
-            return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
-        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "scout-test"}):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch(
+                "pathlib.Path.read_text",
+                return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
+            ),
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "scout-test"}),
+        ):
             # Create mock request with redirect_uri parameter
             mock_request = Mock()
             mock_request.headers = {"x-forwarded-proto": "https", "host": "scoutapi.ciris.ai"}
@@ -481,10 +491,14 @@ class TestOAuthRedirectURI:
         """Test oauth_login without redirect_uri (backward compatibility)."""
         from ciris_engine.logic.adapters.api.routes.auth import oauth_login
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text",
-            return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
-        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch(
+                "pathlib.Path.read_text",
+                return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
+            ),
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             mock_request = Mock()
             mock_request.headers = {"x-forwarded-proto": "https", "host": "agents.ciris.ai"}
             mock_request.url = Mock(scheme="https")
@@ -525,9 +539,10 @@ class TestOAuthRedirectURI:
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
         # Mock OAuth config and handlers
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth_handler:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+        ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
             # Mock OAuth user data
@@ -576,9 +591,11 @@ class TestOAuthRedirectURI:
         state_data = {"csrf": "test-csrf-token"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth_handler, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
             mock_oauth_handler.return_value = {
@@ -617,9 +634,11 @@ class TestOAuthRedirectURI:
         # Malformed state (not valid base64 JSON)
         malformed_state = "not-valid-base64-json"
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth_handler, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
             mock_oauth_handler.return_value = {
@@ -663,9 +682,10 @@ class TestOAuthRedirectURI:
         state_data = {"csrf": "test-csrf-token", "redirect_uri": redirect_uri}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth_handler:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+        ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
             mock_oauth_handler.return_value = {
@@ -967,12 +987,13 @@ class TestBillingIntegration:
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
         # Mock OAuth config and handlers
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth_handler, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"
-        ) as mock_billing_check, patch.dict(
-            os.environ, {"CIRIS_AGENT_ID": "datum"}
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"
+            ) as mock_billing_check,
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
         ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
@@ -1173,8 +1194,9 @@ class TestOAuthProviderEndpoints:
         mock_auth = Mock(spec=AuthContext)
         mock_request = Mock()
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", side_effect=IOError("Read error")
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", side_effect=IOError("Read error")),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 await list_oauth_providers(mock_request, mock_auth)
@@ -1197,9 +1219,12 @@ class TestOAuthProviderEndpoints:
             provider="google", client_id="new-client-id", client_secret="new-client-secret", metadata={}
         )
 
-        with patch("pathlib.Path.exists", return_value=False), patch("pathlib.Path.parent") as mock_parent, patch(
-            "pathlib.Path.write_text"
-        ) as mock_write, patch("pathlib.Path.chmod"):
+        with (
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.parent") as mock_parent,
+            patch("pathlib.Path.write_text") as mock_write,
+            patch("pathlib.Path.chmod"),
+        ):
             mock_parent.mkdir = Mock()
 
             response = await configure_oauth_provider(body, mock_request, mock_auth)
@@ -1219,8 +1244,10 @@ class TestOAuthProviderEndpoints:
 
         body = ConfigureOAuthProviderRequest(provider="google", client_id="client-id", client_secret="client-secret")
 
-        with patch("pathlib.Path.exists", return_value=False), patch("pathlib.Path.parent") as mock_parent, patch(
-            "pathlib.Path.write_text", side_effect=IOError("Write error")
+        with (
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.parent") as mock_parent,
+            patch("pathlib.Path.write_text", side_effect=IOError("Write error")),
         ):
             mock_parent.mkdir = Mock()
 
@@ -1247,9 +1274,11 @@ class TestOAuthLoginProviders:
 
         config_json = '{"github": {"client_id": "github-client-id", "client_secret": "secret"}}'
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value=config_json
-        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", return_value=config_json),
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             response = await oauth_login("github", mock_request)
 
         assert response.status_code == 302
@@ -1269,9 +1298,11 @@ class TestOAuthLoginProviders:
 
         config_json = '{"discord": {"client_id": "discord-client-id", "client_secret": "secret"}}'
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value=config_json
-        ), patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", return_value=config_json),
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             response = await oauth_login("discord", mock_request)
 
         assert response.status_code == 302
@@ -1311,8 +1342,9 @@ class TestOAuthLoginProviders:
         mock_request.headers = {"x-forwarded-proto": "https", "host": "agents.ciris.ai"}
         mock_request.url = Mock(scheme="https")
 
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", side_effect=Exception("Unexpected error")
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", side_effect=Exception("Unexpected error")),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 await oauth_login("google", mock_request)
@@ -1520,8 +1552,9 @@ class TestOAuthFrontendURL:
         mock_oauth_user.role = UserRole.OBSERVER
 
         # Patch the module-level variable directly
-        with patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_URL", "https://scout.ciris.ai"), patch(
-            "ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_PATH", "/oauth-complete.html"
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_URL", "https://scout.ciris.ai"),
+            patch("ciris_engine.logic.adapters.api.routes.auth.OAUTH_FRONTEND_PATH", "/oauth-complete.html"),
         ):
             response = _build_redirect_response(
                 api_key="test-key", oauth_user=mock_oauth_user, provider="google", redirect_uri=None
@@ -1547,9 +1580,10 @@ class TestMarketingOptInParsing:
         state_data = {"csrf": "test", "redirect_uri": redirect_uri}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
                 "external_id": "123",
@@ -1588,9 +1622,10 @@ class TestMarketingOptInParsing:
         state_data = {"csrf": "test", "redirect_uri": redirect_uri}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
                 "external_id": "123",
@@ -1631,9 +1666,11 @@ class TestOAuthCallbackProviders:
         state_data = {"csrf": "test"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_github_oauth"
-        ) as mock_oauth, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_github_oauth") as mock_oauth,
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
                 "external_id": "456",
@@ -1670,9 +1707,11 @@ class TestOAuthCallbackProviders:
         state_data = {"csrf": "test"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_discord_oauth"
-        ) as mock_oauth, patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}):
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_discord_oauth") as mock_oauth,
+            patch.dict(os.environ, {"CIRIS_AGENT_ID": "datum"}),
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
                 "external_id": "789",
@@ -1732,9 +1771,10 @@ class TestOAuthCallbackProviders:
         state_data = {"csrf": "test"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
                 "external_id": None,  # Missing external_id
@@ -1763,9 +1803,10 @@ class TestOAuthCallbackProviders:
         state_data = {"csrf": "test"}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
-        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config, patch(
-            "ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth"
-        ) as mock_oauth:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
+            patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+        ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.side_effect = RuntimeError("Unexpected error")
 
@@ -1784,10 +1825,18 @@ class TestNativeGoogleTokenExchange:
 
     @pytest.mark.asyncio
     async def test_verify_google_id_token_success(self):
-        """Test successful Google ID token verification via API."""
+        """Test successful Google ID token verification via API with full security validation."""
+        import time
+
         from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            # Mock OAuth config with expected client ID
+            mock_load_config.return_value = {"client_id": "test-client-id.apps.googleusercontent.com"}
+
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -1795,6 +1844,10 @@ class TestNativeGoogleTokenExchange:
                 "email": "test@gmail.com",
                 "name": "Test User",
                 "picture": "https://example.com/pic.jpg",
+                "aud": "test-client-id.apps.googleusercontent.com",  # Must match config
+                "iss": "accounts.google.com",  # Valid issuer
+                "exp": str(int(time.time()) + 3600),  # Not expired (1 hour in future)
+                "email_verified": "true",
             }
 
             mock_context = Mock()
@@ -1807,19 +1860,16 @@ class TestNativeGoogleTokenExchange:
             assert result["email"] == "test@gmail.com"
 
     @pytest.mark.asyncio
-    async def test_verify_google_id_token_api_failure_fallback_to_jwt(self):
-        """Test fallback to JWT decode when API fails."""
-        import base64
-        import json
-
+    async def test_verify_google_id_token_api_failure_no_fallback(self):
+        """Test that API failure returns 401 with no fallback (security fix)."""
         from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
 
-        # Create a valid JWT structure (header.payload.signature)
-        payload = {"sub": "jwt-user-123", "email": "jwt@example.com", "name": "JWT User", "aud": "test-client"}
-        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        jwt_token = f"eyJhbGciOiJSUzI1NiJ9.{payload_b64}.fake_signature"
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_load_config.return_value = {"client_id": "test-client-id"}
 
-        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
             mock_response.status_code = 400  # API failure
             mock_response.text = "Invalid token"
@@ -1828,54 +1878,160 @@ class TestNativeGoogleTokenExchange:
             mock_context.get = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value = mock_context
 
-            result = await _verify_google_id_token(jwt_token)
+            # No fallback - should raise 401
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_google_id_token("invalid-token")
 
-            assert result["external_id"] == "jwt-user-123"
-            assert result["email"] == "jwt@example.com"
+            assert exc_info.value.status_code == 401
+            assert "Google could not verify" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_verify_google_id_token_invalid_jwt_format(self):
-        """Test error when JWT format is invalid."""
+    async def test_verify_google_id_token_audience_mismatch(self):
+        """Test error when token audience doesn't match configured client ID (security)."""
+        import time
+
         from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            # Our expected client ID
+            mock_load_config.return_value = {"client_id": "our-client-id.apps.googleusercontent.com"}
+
             mock_response = Mock()
-            mock_response.status_code = 400
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "sub": "attacker-user",
+                "email": "attacker@example.com",
+                "aud": "different-client-id.apps.googleusercontent.com",  # Wrong audience!
+                "iss": "accounts.google.com",
+                "exp": str(int(time.time()) + 3600),
+            }
 
             mock_context = Mock()
             mock_context.get = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value = mock_context
 
             with pytest.raises(HTTPException) as exc_info:
-                await _verify_google_id_token("not.a.valid.jwt.format")
+                await _verify_google_id_token("token-with-wrong-audience")
 
             assert exc_info.value.status_code == 401
+            assert "audience mismatch" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_verify_google_id_token_jwt_missing_sub(self):
-        """Test error when JWT is missing 'sub' claim."""
-        import base64
-        import json
+    async def test_verify_google_id_token_invalid_issuer(self):
+        """Test error when token issuer is not Google (security)."""
+        import time
 
         from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
 
-        payload = {"email": "test@example.com"}  # Missing 'sub'
-        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        jwt_token = f"header.{payload_b64}.signature"
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_load_config.return_value = {"client_id": "test-client-id"}
 
-        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
-            mock_response.status_code = 400
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "sub": "user-123",
+                "email": "test@example.com",
+                "aud": "test-client-id",
+                "iss": "malicious-issuer.com",  # Wrong issuer!
+                "exp": str(int(time.time()) + 3600),
+            }
 
             mock_context = Mock()
             mock_context.get = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value = mock_context
 
             with pytest.raises(HTTPException) as exc_info:
-                await _verify_google_id_token(jwt_token)
+                await _verify_google_id_token("token-with-wrong-issuer")
 
             assert exc_info.value.status_code == 401
-            assert "missing user ID" in exc_info.value.detail
+            assert "issuer mismatch" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_verify_google_id_token_expired(self):
+        """Test error when token is expired (security)."""
+        import time
+
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_load_config.return_value = {"client_id": "test-client-id"}
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "sub": "user-123",
+                "email": "test@example.com",
+                "aud": "test-client-id",
+                "iss": "accounts.google.com",
+                "exp": str(int(time.time()) - 3600),  # Expired 1 hour ago!
+            }
+
+            mock_context = Mock()
+            mock_context.get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value = mock_context
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_google_id_token("expired-token")
+
+            assert exc_info.value.status_code == 401
+            assert "expired" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_verify_google_id_token_missing_sub(self):
+        """Test error when token is missing 'sub' claim."""
+        import time
+
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
+
+        with (
+            patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config,
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_load_config.return_value = {"client_id": "test-client-id"}
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "email": "test@example.com",  # Missing 'sub'!
+                "aud": "test-client-id",
+                "iss": "accounts.google.com",
+                "exp": str(int(time.time()) + 3600),
+            }
+
+            mock_context = Mock()
+            mock_context.get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value = mock_context
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_google_id_token("token-without-sub")
+
+            assert exc_info.value.status_code == 401
+            assert "sub claim" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_verify_google_id_token_oauth_not_configured(self):
+        """Test error when Google OAuth is not configured."""
+        from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
+
+        with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config:
+            mock_load_config.side_effect = HTTPException(
+                status_code=404, detail="OAuth provider 'google' not configured"
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await _verify_google_id_token("any-token")
+
+            assert exc_info.value.status_code == 503
+            assert "not configured" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_native_google_token_exchange_success(self):

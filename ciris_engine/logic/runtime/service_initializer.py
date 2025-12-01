@@ -42,6 +42,45 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
 logger = logging.getLogger(__name__)
 
+# Total core services for startup logging (22 per architecture)
+TOTAL_CORE_SERVICES = 22
+
+# Service names in initialization order for UI display
+SERVICE_NAMES = [
+    "TimeService",  # 1 - Infrastructure
+    "ShutdownService",  # 2 - Infrastructure
+    "InitializationService",  # 3 - Infrastructure
+    "ResourceMonitor",  # 4 - Infrastructure
+    "SecretsService",  # 5 - Memory Foundation
+    "MemoryService",  # 6 - Memory Foundation
+    "ConfigService",  # 7 - Graph Services
+    "AuditService",  # 8 - Graph Services
+    "TelemetryService",  # 9 - Graph Services
+    "IncidentManagement",  # 10 - Graph Services
+    "TSDBConsolidation",  # 11 - Graph Services
+    "ConsentService",  # 12 - Graph Services
+    "WiseAuthority",  # 13 - Security
+    "LLMService",  # 14 - Runtime
+    "AuthenticationService",  # 15 - Runtime (adapter-provided)
+    "DatabaseMaintenance",  # 16 - Infrastructure
+    "RuntimeControl",  # 17 - Runtime (adapter-provided)
+    "TaskScheduler",  # 18 - Lifecycle
+    "AdaptiveFilter",  # 19 - Governance
+    "VisibilityService",  # 20 - Governance
+    "SelfObservation",  # 21 - Governance
+    "SecretsToolService",  # 22 - Tool Services
+]
+
+
+def _log_service_started(service_num: int, service_name: str, success: bool = True) -> None:
+    """Log service startup status in a format parseable by the UI."""
+    status = "STARTED" if success else "FAILED"
+    msg = f"[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
+    # Use WARNING level so it shows up in incident logs for easy parsing
+    logger.warning(msg)
+    # Also print to console/stdout for Android logcat visibility
+    print(msg)
+
 
 class ServiceInitializer:
     """Manages initialization of all core services."""
@@ -105,9 +144,10 @@ class ServiceInitializer:
             self.time_service = TimeService()
             await self.time_service.start()
             self._services_started_count += 1
-            logger.info("TimeService initialized")
+            _log_service_started(1, "TimeService")
         except Exception as e:
             self._initialization_errors += 1
+            _log_service_started(1, "TimeService", success=False)
             logger.error(f"Failed to initialize TimeService: {e}")
             raise
         assert self.time_service is not None  # For type checker
@@ -119,13 +159,13 @@ class ServiceInitializer:
         self.shutdown_service = ShutdownService()
         await self.shutdown_service.start()
         self._services_started_count += 1
-        logger.info("ShutdownService initialized")
+        _log_service_started(2, "ShutdownService")
 
         # Initialize InitializationService with TimeService
         self.initialization_service = InitializationService(self.time_service)
         await self.initialization_service.start()
         self._services_started_count += 1
-        logger.info("InitializationService initialized")
+        _log_service_started(3, "InitializationService")
 
         # Initialize ResourceMonitorService
         from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService
@@ -216,7 +256,7 @@ class ServiceInitializer:
         )
         await self.resource_monitor_service.start()
         self._services_started_count += 1
-        logger.info("ResourceMonitorService initialized")
+        _log_service_started(4, "ResourceMonitor")
 
     async def initialize_memory_service(self, config: Any) -> None:
         """Initialize the memory service."""
@@ -306,7 +346,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.secrets_service.start()
         self._services_started_count += 1
-        logger.info("SecretsService initialized")
+        _log_service_started(5, "SecretsService")
 
         # Create and register CoreToolService
         from ciris_engine.logic.services.tools import CoreToolService
@@ -319,7 +359,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.secrets_tool_service.start()
         self._services_started_count += 1
-        logger.info("SecretsToolService created and started")
+        _log_service_started(22, "SecretsToolService")
 
         # LocalGraphMemoryService needs the correct db path from our config
         db_path = get_sqlite_db_full_path(self.essential_config)
@@ -328,8 +368,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.memory_service.start()
         self._services_started_count += 1
-
-        logger.info("Memory service initialized")
+        _log_service_started(6, "MemoryService")
 
         # Initialize GraphConfigService now that memory service is ready
         from ciris_engine.logic.registries.base import Priority, get_global_registry
@@ -341,7 +380,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.config_service = GraphConfigService(self.memory_service, self.time_service)
         await self.config_service.start()
         self._services_started_count += 1
-        logger.info("GraphConfigService initialized")
+        _log_service_started(7, "ConfigService")
 
         # Register config service immediately so it's available for persistence operations
         registry = get_global_registry()
@@ -440,7 +479,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.auth_service.start()
         self._services_started_count += 1
-        logger.info("AuthenticationService initialized")
+        _log_service_started(15, "AuthenticationService")
 
         # Process pending users from setup wizard if file exists
         await self._process_pending_users_from_setup()
@@ -452,7 +491,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.wa_auth_system.start()
         self._services_started_count += 1
-        logger.info("WA authentication system initialized")
+        _log_service_started(13, "WiseAuthority")
 
     async def verify_security_services(self) -> bool:
         """Verify security services are operational."""
@@ -616,7 +655,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             # Note: GraphTelemetryService structurally implements TelemetryService protocol
             self.telemetry_service = telemetry_service_impl  # type: ignore[assignment]
             self._services_started_count += 1
-            logger.info("GraphTelemetryService initialized")
+            _log_service_started(9, "TelemetryService")
         except Exception as e:
             self._initialization_errors += 1
             logger.error(f"Failed to initialize GraphTelemetryService: {e}")
@@ -646,6 +685,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.adaptive_filter_service.start()
         self._services_started_count += 1
+        _log_service_started(19, "AdaptiveFilter")
 
         # GraphConfigService (initialized earlier) handles all configuration including agent config
         # No separate agent configuration service needed - see GraphConfigService documentation
@@ -664,7 +704,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self.task_scheduler_service = TaskSchedulerService(db_path=db_path, time_service=self.time_service)
         await self.task_scheduler_service.start()
         self._services_started_count += 1
-        logger.info("Task scheduler service initialized")
+        _log_service_started(18, "TaskScheduler")
 
         # Initialize TSDB consolidation service BEFORE maintenance
         # This ensures we consolidate any missed windows before maintenance runs
@@ -688,9 +728,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.tsdb_consolidation_service.start()
         self._services_started_count += 1
-        logger.info(
-            "TSDB consolidation service initialized - consolidating missed windows and starting periodic consolidation"
-        )
+        _log_service_started(11, "TSDBConsolidation")
 
         # Register TSDBConsolidationService in registry
         self.service_registry.register_service(
@@ -720,7 +758,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.maintenance_service.start()
         self._services_started_count += 1
-        logger.info("Database maintenance service initialized and started")
+        _log_service_started(16, "DatabaseMaintenance")
 
         # Initialize self observation service
         from ciris_engine.logic.services.governance.self_observation import SelfObservationService
@@ -740,7 +778,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Start the service for API mode (in other modes DREAM processor starts it)
         await self.self_observation_service.start()
         self._services_started_count += 1
-        logger.info("Self observation service initialized and started")
+        _log_service_started(21, "SelfObservation")
 
         # Initialize visibility service
         from ciris_engine.logic.services.governance.visibility import VisibilityService
@@ -754,7 +792,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.visibility_service.start()
         self._services_started_count += 1
-        logger.info("Visibility service initialized - providing reasoning transparency")
+        _log_service_started(20, "VisibilityService")
 
         # Initialize consent service (Governance Service #5)
         from ciris_engine.logic.services.governance.consent import ConsentService
@@ -768,7 +806,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.consent_service.start()
         self._services_started_count += 1
-        logger.info("ConsentService initialized - managing user consent, decay protocol, and DSAR automation")
+        _log_service_started(12, "ConsentService")
 
         # Initialize runtime control service
         from ciris_engine.logic.services.runtime.control_service import RuntimeControlService
@@ -783,7 +821,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.runtime_control_service.start()
         self._services_started_count += 1
-        logger.info("Runtime control service initialized - managing processor and adapters")
+        _log_service_started(17, "RuntimeControl")
 
         # Mark end of startup process
         import time
@@ -865,7 +903,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Store reference
         self.llm_service = openai_service
-        logger.info(f"Primary LLM service initialized: model={llm_config.model_name}, base_url={llm_config.base_url}")
+        self._services_started_count += 1
+        _log_service_started(14, "LLMService")
 
         # Register token refresh signal handler for ciris.ai authentication
         # This connects the LLM service to ResourceMonitor's signal bus
@@ -1068,7 +1107,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         await graph_audit.start()
         self._services_started_count += 1
         self.audit_service = graph_audit
-        logger.info("Consolidated GraphAuditService started")
+        _log_service_started(8, "AuditService")
 
         # Update BusManager with the initialized audit service
         if self.bus_manager is not None:
@@ -1093,7 +1132,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         )
         await self.incident_management_service.start()
         self._services_started_count += 1
-        logger.info("Incident management service initialized and started")
+        _log_service_started(10, "IncidentManagement")
 
     def verify_core_services(self) -> bool:
         """Verify all core services are operational."""

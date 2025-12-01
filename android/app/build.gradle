@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 8
-        versionName "1.6.8"
+        versionCode 11
+        versionName "1.6.11"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -33,14 +33,14 @@ android {
         }
 
         ndk {
-            // x86_64 for emulator, arm64-v8a for real devices
-            abiFilters "x86_64", "arm64-v8a"
+            // Full ABI support: x86_64 for emulator, arm64-v8a for modern devices, armeabi-v7a for 32-bit ARM
+            abiFilters "x86_64", "arm64-v8a", "armeabi-v7a"
         }
 
         // Chaquopy Python configuration (inside defaultConfig for Chaquopy 15+)
         python {
-            // Use Python 3.12 - Chaquopy 16 supports 3.8-3.13
-            version "3.12"
+            // Use Python 3.10 for armeabi-v7a (32-bit ARM) support
+            version "3.10"
 
             // Use system Python 3.10+ for build-time operations
             buildPython "/usr/bin/python3"
@@ -73,7 +73,7 @@ android {
 
                 // Authentication and encryption
                 install "cryptography==42.0.8"
-                install "bcrypt==3.2.2"
+                install "bcrypt"  // Let Chaquopy find a pre-built version
                 install "PyJWT==2.8.0"
                 install "python-jose==3.3.0"
                 install "passlib==1.7.4"
@@ -114,6 +114,8 @@ android {
 
         debug {
             debuggable true
+            // Use release signing so Google Sign-In works
+            signingConfig signingConfigs.release
         }
     }
 
@@ -131,8 +133,8 @@ android {
     }
 }
 
-// Task to move pydantic-core native .so from common to x86_64 after pip install
-// Chaquopy puts it in common because pip removes WHEEL file during install
+// Task to copy pydantic_core Python sources to both arch directories
+// Chaquopy only extracts .so files for non-common wheels, so we need the Python files too
 android.applicationVariants.all { variant ->
     def variantName = variant.name.capitalize()
 
@@ -141,41 +143,105 @@ android.applicationVariants.all { variant ->
             task.doFirst {
                 def commonDir = file("${buildDir}/python/pip/${variant.name}/common")
                 def x86_64Dir = file("${buildDir}/python/pip/${variant.name}/x86_64")
+                def arm64Dir = file("${buildDir}/python/pip/${variant.name}/arm64-v8a")
+                def armeabiDir = file("${buildDir}/python/pip/${variant.name}/armeabi-v7a")
                 def commonPydanticCore = file("${commonDir}/pydantic_core")
                 def commonDistInfo = file("${commonDir}/pydantic_core-2.23.4.dist-info")
 
+                // If pydantic_core ends up in common (from PyPI), move to both arch dirs
                 if (commonPydanticCore.exists()) {
-                    println "Moving pydantic_core from common to x86_64 for native lib support..."
+                    println "Moving pydantic_core from common to x86_64..."
 
-                    // Create x86_64 directories
                     x86_64Dir.mkdirs()
                     def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
                     def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
 
-                    // Copy pydantic_core package
                     copy {
                         from commonPydanticCore
                         into x86_64PydanticCore
                     }
-
-                    // Copy dist-info
                     copy {
                         from commonDistInfo
                         into x86_64DistInfo
                     }
-
-                    // Add WHEEL file to x86_64 dist-info
                     file("${x86_64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
 Generator: maturin (1.10.2)
 Root-Is-Purelib: false
-Tag: cp312-cp312-android_24_x86_64
+Tag: cp310-cp310-android_24_x86_64
 """
 
-                    // Delete from common
                     delete commonPydanticCore
                     delete commonDistInfo
-
                     println "pydantic_core moved to ${x86_64Dir}"
+                }
+
+                // Copy Python source files from x86_64 to arm64-v8a if arm64 only has .so
+                def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                def arm64PydanticCore = file("${arm64Dir}/pydantic_core")
+                def arm64So = file("${arm64PydanticCore}/_pydantic_core.so")
+                def arm64Init = file("${arm64PydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && arm64So.exists() && !arm64Init.exists()) {
+                    println "Copying pydantic_core Python sources to arm64-v8a..."
+
+                    // Copy Python source files (not .so) from x86_64 to arm64
+                    copy {
+                        from x86_64PydanticCore
+                        into arm64PydanticCore
+                        exclude "*.so"
+                    }
+
+                    // Copy dist-info
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def arm64DistInfo = file("${arm64Dir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into arm64DistInfo
+                        }
+                        // Update WHEEL file for arm64
+                        file("${arm64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_arm64_v8a
+"""
+                    }
+
+                    println "pydantic_core Python sources copied to arm64-v8a"
+                }
+
+                // Copy Python source files from x86_64 to armeabi-v7a if armeabi only has .so
+                def armeabiPydanticCore = file("${armeabiDir}/pydantic_core")
+                def armeabiSo = file("${armeabiPydanticCore}/_pydantic_core.so")
+                def armeabiInit = file("${armeabiPydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && armeabiSo.exists() && !armeabiInit.exists()) {
+                    println "Copying pydantic_core Python sources to armeabi-v7a..."
+
+                    // Copy Python source files (not .so) from x86_64 to armeabi
+                    copy {
+                        from x86_64PydanticCore
+                        into armeabiPydanticCore
+                        exclude "*.so"
+                    }
+
+                    // Copy dist-info
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def armeabiDistInfo = file("${armeabiDir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into armeabiDistInfo
+                        }
+                        // Update WHEEL file for armeabi-v7a
+                        file("${armeabiDistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_armeabi_v7a
+"""
+                    }
+
+                    println "pydantic_core Python sources copied to armeabi-v7a"
                 }
             }
         }

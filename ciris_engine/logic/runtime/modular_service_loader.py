@@ -233,6 +233,12 @@ class ModularServiceLoader:
                 result.services_loaded.append(service_meta)
                 logger.info(f"Initialized modular service: {manifest.module.name}")
 
+                # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
+                if manifest.module.is_mock:
+                    for service_decl in manifest.services:
+                        if service_decl.type == ServiceType.LLM:
+                            logger.warning(f"[SERVICE 14/22] MockLLMService STARTED")
+
             except Exception as e:
                 error_msg = f"Failed to initialize {manifest.module.name}: {e}"
                 logger.error(error_msg)

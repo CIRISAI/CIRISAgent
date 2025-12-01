@@ -185,6 +185,11 @@ class ModuleLoader:
                 if manifest.module.is_mock:
                     logger.warning(f"⚠️  MOCK service registered: {service_class.__name__}")
                     result.warnings.append(f"MOCK service registered: {service_class.__name__}")
+                    # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
+                    if service_decl.type == ServiceType.LLM:
+                        msg = "[SERVICE 14/22] MockLLMService STARTED"
+                        logger.warning(msg)
+                        print(msg)  # Also print to console for Android logcat
                 else:
                     logger.info(f"Service registered: {service_class.__name__}")
 

@@ -320,6 +320,156 @@ Use Google Play's license testing:
 2. Test with sandbox purchases (no real charges)
 3. Verify idempotency by re-submitting tokens
 
+## Development & Debugging
+
+### Build Commands
+
+```bash
+# Set Java version (required for Gradle)
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+# Build debug APK
+cd /home/emoore/CIRISAgent/android
+./gradlew assembleDebug
+# Output: app/build/outputs/apk/debug/app-debug.apk
+
+# Build release APK
+./gradlew assembleRelease
+# Output: app/build/outputs/apk/release/app-release.apk
+
+# Clean build
+./gradlew clean assembleRelease
+```
+
+### ADB Commands (Windows via WSL)
+
+```bash
+# ADB path on Windows (accessed from WSL)
+ADB="/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+
+# List connected devices
+$ADB devices -l
+
+# Target specific device (Samsung example)
+$ADB -s R5CRC3BWLRZ <command>
+
+# Install APK
+$ADB install "$(wslpath -w /home/emoore/CIRISAgent/android/app/build/outputs/apk/release/app-release.apk)"
+
+# Uninstall (clears all data including database)
+$ADB uninstall ai.ciris.mobile
+
+# Launch app
+$ADB shell monkey -p ai.ciris.mobile -c android.intent.category.LAUNCHER 1
+
+# Clear logcat and start fresh
+$ADB logcat -c
+```
+
+### Log File Locations (On-Device)
+
+All logs are stored in the app's private data directory:
+
+```
+/data/data/ai.ciris.mobile/files/ciris/
+├── logs/
+│   ├── latest.log              # Symlink to current day's log
+│   ├── incidents_latest.log    # Symlink to current day's incidents
+│   ├── ciris_agent_YYYYMMDD_HHMMSS.log    # Full application log
+│   └── incidents_YYYYMMDD_HHMMSS.log      # Warnings/errors only
+├── data/
+│   └── ciris_engine.db         # SQLite database
+└── .env                        # Configuration (created after setup)
+```
+
+### Reading Logs via ADB
+
+```bash
+ADB="/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+DEVICE="R5CRC3BWLRZ"  # Samsung device ID
+
+# Read latest application log
+$ADB -s $DEVICE shell "run-as ai.ciris.mobile cat /data/data/ai.ciris.mobile/files/ciris/logs/latest.log" | tail -200
+
+# Read incidents log (warnings/errors only)
+$ADB -s $DEVICE shell "run-as ai.ciris.mobile cat /data/data/ai.ciris.mobile/files/ciris/logs/incidents_latest.log" | tail -100
+
+# Search for specific patterns
+$ADB -s $DEVICE shell "run-as ai.ciris.mobile cat /data/data/ai.ciris.mobile/files/ciris/logs/latest.log" | grep -iE "oauth|setup|error"
+
+# List all log files
+$ADB -s $DEVICE shell "run-as ai.ciris.mobile ls -la /data/data/ai.ciris.mobile/files/ciris/logs/"
+```
+
+### Android Logcat (Native/WebView Logs)
+
+```bash
+ADB="/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+
+# All CIRIS-related logs
+$ADB logcat -d 2>&1 | grep -i "CIRIS\|CIRISMobile"
+
+# WebView console logs (JavaScript)
+$ADB logcat -d 2>&1 | grep "chromium.*CONSOLE"
+
+# Setup wizard logs
+$ADB logcat -d 2>&1 | grep "chromium.*Setup"
+
+# Native auth injection logs
+$ADB logcat -d 2>&1 | grep "CIRISMobile.*Inject"
+
+# Filter by tag
+$ADB logcat -s CIRISMobile:V
+```
+
+### Rebuilding Web UI (Next.js Static Assets)
+
+When modifying the web UI, you must rebuild and copy assets:
+
+```bash
+# 1. Build Next.js static export
+cd /home/emoore/CIRISAgent/android/.web-build/CIRISGUI-Android/apps/agui
+npm run build
+
+# 2. Copy to android_gui_static
+rm -rf /home/emoore/CIRISAgent/android_gui_static/*
+cp -r out/* /home/emoore/CIRISAgent/android_gui_static/
+
+# 3. Copy to Android assets
+rm -rf /home/emoore/CIRISAgent/android/app/src/main/assets/public/*
+cp -r /home/emoore/CIRISAgent/android_gui_static/* /home/emoore/CIRISAgent/android/app/src/main/assets/public/
+
+# 4. Rebuild APK
+cd /home/emoore/CIRISAgent/android
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+./gradlew assembleRelease
+```
+
+### Key Source Files
+
+**Android Native (Kotlin)**:
+- `app/src/main/java/ai/ciris/mobile/MainActivity.kt` - Main activity, WebView, auth injection
+- `app/src/main/java/ai/ciris/mobile/auth/LoginActivity.kt` - Google Sign-In flow
+- `app/src/main/java/ai/ciris/mobile/billing/BillingManager.kt` - Google Play Billing
+
+**Python Backend**:
+- `ciris_engine/logic/adapters/api/routes/setup.py` - Setup wizard API
+- `ciris_engine/logic/adapters/api/routes/auth.py` - OAuth/auth endpoints
+- `ciris_engine/logic/setup/first_run.py` - First-run detection
+
+**Web UI (Next.js)**:
+- `android/.web-build/CIRISGUI-Android/apps/agui/app/setup/page.tsx` - Setup wizard
+- `android/.web-build/CIRISGUI-Android/apps/agui/lib/ciris-sdk/` - TypeScript SDK
+
+### Log Collection Script
+
+Use the script at `/tmp/collect_ciris_logs.sh` to collect all logs for analysis:
+
+```bash
+/tmp/collect_ciris_logs.sh
+# Logs saved to /tmp/ciris_logs_YYYYMMDD_HHMMSS/
+```
+
 ## Troubleshooting
 
 ### Server Won't Start

@@ -25,9 +25,9 @@ log() { echo -e "${GREEN}[BUILD]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-# Setup Rust environment
-export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
-export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+# Setup Rust environment (puccinialin location)
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.cache/puccinialin/rustup}"
+export CARGO_HOME="${CARGO_HOME:-$HOME/.cache/puccinialin/cargo}"
 export PATH="$CARGO_HOME/bin:$PATH"
 
 # Android NDK configuration
@@ -48,18 +48,19 @@ fi
 
 # Common build flags
 export CI=true
-export PYO3_CROSS_PYTHON_VERSION="3.12"
+export PYO3_CROSS_PYTHON_VERSION="3.10"
 export PYO3_CROSS_LIB_DIR=""
-export RUSTFLAGS="-C link-arg=-Wl,--allow-shlib-undefined -C link-arg=-Wl,-z,lazy"
 
 # Create PYO3 config file for Android
-PYO3_CONFIG="/tmp/pyo3-config-android-cp312.txt"
+# suppress_build_script_link_lines=true allows building without libpython present at compile time
+# We'll post-process the .so with patchelf to add the NEEDED entry for libpython3.10.so
+PYO3_CONFIG="/tmp/pyo3-config-android-cp310.txt"
 cat > "$PYO3_CONFIG" << 'PYOCONFIG'
 implementation=CPython
-version=3.12
+version=3.10
 shared=true
 abi3=false
-lib_name=python3.12
+lib_name=python3.10
 lib_dir=
 executable=python3
 pointer_width=64
@@ -67,6 +68,8 @@ build_flags=
 suppress_build_script_link_lines=true
 PYOCONFIG
 export PYO3_CONFIG_FILE="$PYO3_CONFIG"
+
+export RUSTFLAGS="-C link-arg=-Wl,--allow-shlib-undefined -C link-arg=-Wl,-z,lazy"
 
 # Download pydantic-core source if needed
 setup_source() {
@@ -84,8 +87,25 @@ build_target() {
     local target=$1
     local android_target=$2
     local wheel_suffix=$3
+    local pointer_width=${4:-64}
 
-    log "Building for $target..."
+    log "Building for $target (pointer_width=$pointer_width)..."
+
+    # Create target-specific PYO3 config file
+    local target_config="/tmp/pyo3-config-${target}.txt"
+    cat > "$target_config" << PYOCONFIG
+implementation=CPython
+version=3.10
+shared=true
+abi3=false
+lib_name=python3.10
+lib_dir=
+executable=python3
+pointer_width=${pointer_width}
+build_flags=
+suppress_build_script_link_lines=true
+PYOCONFIG
+    export PYO3_CONFIG_FILE="$target_config"
 
     # Set target-specific environment
     export CC="$NDK_TOOLCHAIN/${android_target}24-clang"
@@ -104,11 +124,44 @@ build_target() {
 
     maturin build --release --target "$target" -i python3 --skip-auditwheel
 
-    # Find and copy the wheel
+    # Find and process the wheel
     local wheel=$(find target/wheels -name "*.whl" | head -1)
     if [ -n "$wheel" ]; then
-        local dest_name="pydantic_core-${PYDANTIC_VERSION}-cp312-cp312-android_24_${wheel_suffix}.whl"
-        cp "$wheel" "$WHEELS_DIR/$dest_name"
+        local dest_name="pydantic_core-${PYDANTIC_VERSION}-cp310-cp310-android_24_${wheel_suffix}.whl"
+
+        # Post-process: add libpython3.10.so as NEEDED dependency
+        log "Adding libpython3.10.so dependency to wheel..."
+        local temp_dir=$(mktemp -d)
+        unzip -q "$wheel" -d "$temp_dir"
+
+        local so_file="$temp_dir/pydantic_core/_pydantic_core.so"
+        if [ -f "$so_file" ]; then
+            # Add NEEDED entry for libpython3.10.so
+            patchelf --add-needed libpython3.10.so "$so_file"
+            log "Added libpython3.10.so dependency"
+
+            # Verify
+            readelf -d "$so_file" | grep -i needed | head -5
+
+            # Repackage wheel
+            cd "$temp_dir"
+            # Update RECORD with new hash
+            rm -f pydantic_core-*.dist-info/RECORD
+            find . -type f ! -name "RECORD" | while read f; do
+                hash=$(sha256sum "$f" | cut -d' ' -f1 | xxd -r -p | base64 | tr -d '=')
+                size=$(stat -c%s "$f")
+                echo "${f#./},sha256=$hash,$size"
+            done > pydantic_core-*.dist-info/RECORD
+            echo "pydantic_core-*.dist-info/RECORD,," >> pydantic_core-*.dist-info/RECORD
+
+            zip -q -r "$WHEELS_DIR/$dest_name" .
+            cd "$BUILD_DIR/pydantic_core-$PYDANTIC_VERSION"
+        else
+            warn ".so file not found, copying wheel as-is"
+            cp "$wheel" "$WHEELS_DIR/$dest_name"
+        fi
+
+        rm -rf "$temp_dir"
         log "Built: $dest_name"
     else
         warn "No wheel found for $target"
@@ -130,17 +183,17 @@ main() {
     # Format: rust_target android_clang_prefix wheel_suffix
 
     log "--- Building x86_64 (emulator) ---"
-    build_target "x86_64-linux-android" "x86_64-linux-android" "x86_64"
+    build_target "x86_64-linux-android" "x86_64-linux-android" "x86_64" "64"
 
     log "--- Building ARM64 (real devices) ---"
-    build_target "aarch64-linux-android" "aarch64-linux-android" "arm64_v8a"
+    build_target "aarch64-linux-android" "aarch64-linux-android" "arm64_v8a" "64"
 
-    # Optional: Build for older 32-bit devices
-    # log "--- Building ARMv7 (older devices) ---"
-    # build_target "armv7-linux-androideabi" "armv7a-linux-androideabi" "armeabi_v7a"
+    # Build for 32-bit ARM devices
+    log "--- Building ARMv7 (32-bit ARM devices) ---"
+    build_target "armv7-linux-androideabi" "armv7a-linux-androideabi" "armeabi_v7a" "32"
 
     # log "--- Building x86 (older emulators) ---"
-    # build_target "i686-linux-android" "i686-linux-android" "x86"
+    # build_target "i686-linux-android" "i686-linux-android" "x86" "32"
 
     echo
     log "=== Build Complete ==="

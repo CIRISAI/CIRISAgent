@@ -345,6 +345,37 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    // CRITICAL: Clear stale tokens BEFORE the page loads and React initializes
+                    // This prevents the SDK from using old tokens from previous sessions
+                    if (url?.startsWith("http") == true && cirisAccessToken != null) {
+                        val clearStaleTokenScript = """
+                            (function() {
+                                var existing = localStorage.getItem('ciris_auth_token');
+                                if (existing) {
+                                    console.log('[Native onPageStarted] Clearing stale ciris_auth_token BEFORE page loads');
+                                    localStorage.removeItem('ciris_auth_token');
+                                }
+                                // Also set the fresh token immediately
+                                var authTokenJson = JSON.stringify({
+                                    access_token: '${cirisAccessToken}',
+                                    token_type: 'Bearer',
+                                    expires_in: 2592000,
+                                    user_id: 'native_user',
+                                    role: 'SYSTEM_ADMIN',
+                                    created_at: Date.now()
+                                });
+                                localStorage.setItem('ciris_auth_token', authTokenJson);
+                                localStorage.setItem('ciris_access_token', '${cirisAccessToken}');
+                                console.log('[Native onPageStarted] Injected fresh token BEFORE page loads');
+                            })();
+                        """.trimIndent()
+                        view?.evaluateJavascript(clearStaleTokenScript, null)
+                        Log.i(TAG, "[onPageStarted] Cleared stale token and injected fresh one for: $url")
+                    }
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     // Inject auth data after the real page loads (not on data: URLs)
@@ -693,9 +724,35 @@ class MainActivity : AppCompatActivity() {
 
         val tokenScript = if (cirisAccessToken != null) {
             """
-                // Set the CIRIS access token for API authentication
-                localStorage.setItem('ciris_access_token', '${cirisAccessToken}');
-                localStorage.setItem('access_token', '${cirisAccessToken}');
+                // ALWAYS clear stale ciris_auth_token first - this is what SDK's AuthStore reads
+                // We need to ensure the fresh token from this session is used, not a cached one
+                var existingAuthToken = localStorage.getItem('ciris_auth_token');
+                if (existingAuthToken) {
+                    console.log('[Native] Clearing stale ciris_auth_token from previous session');
+                    localStorage.removeItem('ciris_auth_token');
+                }
+
+                // Check if setup page has stored a fresh token (indicated by ciris_native_auth_complete flag)
+                // If so, don't overwrite it with the pre-setup observer token
+                var authComplete = localStorage.getItem('ciris_native_auth_complete');
+                if (authComplete === 'true') {
+                    console.log('[Native] Setup completed - preserving fresh token from setup flow');
+                } else {
+                    // Setup not complete yet, inject our token
+                    localStorage.setItem('ciris_access_token', '${cirisAccessToken}');
+                    localStorage.setItem('access_token', '${cirisAccessToken}');
+                    // Also set ciris_auth_token which is what SDK's AuthStore reads
+                    var authTokenJson = JSON.stringify({
+                        access_token: '${cirisAccessToken}',
+                        token_type: 'Bearer',
+                        expires_in: 2592000,
+                        user_id: 'native_user',
+                        role: 'SYSTEM_ADMIN',
+                        created_at: Date.now()
+                    });
+                    localStorage.setItem('ciris_auth_token', authTokenJson);
+                    console.log('[Native] Injected CIRIS access token to ciris_auth_token (setup not complete)');
+                }
             """
         } else {
             ""

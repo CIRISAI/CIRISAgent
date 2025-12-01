@@ -655,32 +655,64 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
         }
 
 
-def _determine_user_role(email: Optional[str], auth_service: Optional["APIAuthService"] = None) -> UserRole:
-    """Determine user role based on email domain and first-user status.
+def _determine_user_role(
+    email: Optional[str],
+    auth_service: Optional["APIAuthService"] = None,
+    external_id: Optional[str] = None,
+    provider: str = "google",
+) -> UserRole:
+    """Determine user role based on email domain, existing user status, and first-user status.
 
     For Android/native OAuth flow during setup, the first OAuth user gets
     SYSTEM_ADMIN role so they can see the default API channel history
     where agent wakeup messages are sent.
+
+    IMPORTANT: If the user already exists with a higher role (e.g., from initial
+    login before setup), preserve that role instead of demoting to OBSERVER.
     """
+    logger.info(
+        f"[AUTH DEBUG] _determine_user_role called: email={email}, external_id={external_id}, provider={provider}"
+    )
+
     # @ciris.ai users always get ADMIN
     if email and email.endswith("@ciris.ai"):
-        logger.debug("Granting ADMIN role to @ciris.ai user")
+        logger.debug("[AUTH DEBUG] Granting ADMIN role to @ciris.ai user")
         return UserRole.ADMIN
 
-    # Check if this is the first OAuth user (setup wizard scenario)
-    # Grant elevated role so they can see the default API channel
     if auth_service is not None:
-        # Check if there are any existing OAuth users
-        # Use defensive access to handle mocks and missing attributes
         try:
             oauth_users = getattr(auth_service, "_oauth_users", None)
+            logger.info(f"[AUTH DEBUG] _oauth_users count: {len(oauth_users) if oauth_users else 'None'}")
+
+            # Check if this user already exists with a role
+            # If so, preserve their existing role (don't demote!)
+            if external_id and oauth_users:
+                user_id = f"{provider}:{external_id}"
+                existing_user = oauth_users.get(user_id)
+                if existing_user:
+                    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
+                    # Return their existing role - don't demote them!
+                    role = existing_user.role
+                    if isinstance(role, UserRole):
+                        return role
+                    return UserRole(role) if role else UserRole.OBSERVER
+                else:
+                    logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
+                    # List existing users for debugging
+                    logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+
+            # Check if this is the first OAuth user (setup wizard scenario)
+            # Grant elevated role so they can see the default API channel
             if oauth_users is not None and len(oauth_users) == 0:
-                logger.info("First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
+                logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
                 return UserRole.SYSTEM_ADMIN
-        except (TypeError, AttributeError):
+
+        except (TypeError, AttributeError) as e:
             # Mock objects or missing attributes - fall through to OBSERVER
+            logger.warning(f"[AUTH DEBUG] Exception accessing auth_service: {e}")
             pass
 
+    logger.info("[AUTH DEBUG] No special conditions met - returning OBSERVER role")
     return UserRole.OBSERVER
 
 
@@ -701,7 +733,14 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
 
 def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthUser, provider: str) -> str:
     """Generate API key and store it for the OAuth user."""
-    role_prefix = "ciris_admin" if oauth_user.role == UserRole.ADMIN else "ciris_observer"
+    # SYSTEM_ADMIN, ADMIN, and AUTHORITY all get admin prefix (elevated roles)
+    # OBSERVER gets observer prefix
+    elevated_roles = (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
+    is_elevated = oauth_user.role in elevated_roles
+    role_prefix = "ciris_admin" if is_elevated else "ciris_observer"
+    logger.info(
+        f"[AUTH DEBUG] Generating API key for user {oauth_user.user_id} with role {oauth_user.role}, prefix: {role_prefix}"
+    )
     api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
@@ -935,14 +974,14 @@ async def oauth_callback(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported OAuth provider: {provider}"
             )
 
-        # Determine user role and create OAuth user
-        user_email = user_data["email"]
-        user_role = _determine_user_role(user_email, auth_service)
-
-        # Validate required fields
+        # Validate required fields first (need external_id for role determination)
         external_id = user_data["external_id"]
         if not external_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
+
+        # Determine user role (preserves existing role if user already exists)
+        user_email = user_data["email"]
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
 
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
@@ -1128,7 +1167,8 @@ async def native_google_token_exchange(
             )
 
         user_email = user_data.get("email")
-        user_role = _determine_user_role(user_email, auth_service)
+        # Pass external_id to preserve existing user's role (don't demote on re-auth!)
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
         logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
 
         # Check if this is the first OAuth user (for auto-minting)

@@ -139,6 +139,10 @@ class SetupCompleteRequest(BaseModel):
     oauth_provider: Optional[str] = Field(
         None, description="OAuth provider used for authentication (e.g., 'google'). If set, local password is optional."
     )
+    oauth_external_id: Optional[str] = Field(
+        None, description="OAuth external ID (e.g., Google user ID). Required if oauth_provider is set."
+    )
+    oauth_email: Optional[str] = Field(None, description="OAuth email address from the provider.")
 
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
@@ -494,10 +498,13 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
         logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
 
+        # Use OAuth email if available, otherwise generate local email
+        user_email = setup.oauth_email or f"{setup.admin_username}@local"
+
         # Create WA certificate
         wa_cert = await auth_service.create_wa(
             name=setup.admin_username,
-            email=f"{setup.admin_username}@local",
+            email=user_email,
             scopes=["read:any", "write:any"],  # ROOT gets full scopes
             role=wa_role,
         )
@@ -508,6 +515,61 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
         await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
 
         logger.info(f"✅ Created user: {setup.admin_username} (WA: {wa_cert.wa_id})")
+
+        # CIRIS_SETUP_DEBUG: Log OAuth linking decision
+        logger.info("CIRIS_SETUP_DEBUG _create_setup_users() OAuth linking check:")
+        logger.info(f"CIRIS_SETUP_DEBUG   setup.oauth_provider = {repr(setup.oauth_provider)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   setup.oauth_external_id = {repr(setup.oauth_external_id)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_provider) = {bool(setup.oauth_provider)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_external_id) = {bool(setup.oauth_external_id)}")
+        oauth_link_condition = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
+        logger.info(f"CIRIS_SETUP_DEBUG   Condition (provider AND external_id) = {oauth_link_condition}")
+
+        # Link OAuth identity if provided - THIS IS CRITICAL for OAuth login to work
+        if setup.oauth_provider and setup.oauth_external_id:
+            logger.info(f"CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
+            logger.info(
+                f"CIRIS_SETUP_DEBUG Linking OAuth identity: {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+            )
+            try:
+                # First check if OAuth identity is already linked to another WA
+                existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
+                if existing_wa and existing_wa.wa_id != wa_cert.wa_id:
+                    logger.info(f"CIRIS_SETUP_DEBUG OAuth identity already linked to WA {existing_wa.wa_id}")
+                    logger.info(
+                        f"CIRIS_SETUP_DEBUG During first-run setup, we'll update the existing WA to be ROOT instead of creating new"
+                    )
+                    # Update the existing WA to have ROOT role and update its name
+                    await auth_service.update_wa(
+                        wa_id=existing_wa.wa_id,
+                        name=setup.admin_username,
+                        role=WARole.ROOT,
+                    )
+                    # Use the existing WA instead of the newly created one
+                    wa_cert = existing_wa
+                    logger.info(f"CIRIS_SETUP_DEBUG ✅ Updated existing WA {existing_wa.wa_id} to ROOT role")
+                else:
+                    # No existing link or same WA - safe to link
+                    await auth_service.link_oauth_identity(
+                        wa_id=wa_cert.wa_id,
+                        provider=setup.oauth_provider,
+                        external_id=setup.oauth_external_id,
+                        account_name=setup.admin_username,
+                        metadata={"email": setup.oauth_email} if setup.oauth_email else None,
+                        primary=True,
+                    )
+                    logger.info(
+                        f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+                    )
+            except Exception as e:
+                logger.error(f"CIRIS_SETUP_DEBUG ❌ FAILED to link OAuth identity: {e}", exc_info=True)
+                # Don't fail setup if OAuth linking fails - user can still use password
+        else:
+            logger.info("CIRIS_SETUP_DEBUG *** SKIPPING OAuth linking block - condition not met ***")
+            if not setup.oauth_provider:
+                logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy/empty")
+            if not setup.oauth_external_id:
+                logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy/empty")
 
         # Update default admin password if specified
         if setup.system_admin_password:
@@ -782,16 +844,40 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     Only accessible during first-run (no authentication required).
     After setup, authentication is required for reconfiguration.
     """
-    # Log received configuration for debugging
-    logger.info("=" * 60)
-    logger.info("[Setup Complete] Received setup request")
-    logger.info(f"[Setup Complete] LLM Provider: {setup.llm_provider}")
-    logger.info(f"[Setup Complete] LLM API Key: {setup.llm_api_key[:20] if setup.llm_api_key else '(empty)'}...")
-    logger.info(f"[Setup Complete] LLM Base URL: {setup.llm_base_url}")
-    logger.info(f"[Setup Complete] LLM Model: {setup.llm_model}")
-    logger.info(f"[Setup Complete] Template: {setup.template_id}")
-    logger.info(f"[Setup Complete] Admin Username: {setup.admin_username}")
-    logger.info("=" * 60)
+    # CIRIS_SETUP_DEBUG: Comprehensive logging for OAuth identity linking
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+    logger.info("CIRIS_SETUP_DEBUG complete_setup() endpoint called")
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+
+    # Log ALL OAuth-related fields received from frontend
+    logger.info("CIRIS_SETUP_DEBUG OAuth fields received from frontend:")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_provider = {repr(setup.oauth_provider)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id = {repr(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_email = {repr(setup.oauth_email)}")
+
+    # Check truthiness explicitly
+    logger.info("CIRIS_SETUP_DEBUG Truthiness checks:")
+    logger.info(f"CIRIS_SETUP_DEBUG   bool(oauth_provider) = {bool(setup.oauth_provider)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   bool(oauth_external_id) = {bool(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id is None = {setup.oauth_external_id is None}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id == '' = {setup.oauth_external_id == ''}")
+
+    # The critical check that determines OAuth linking
+    will_link_oauth = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
+    logger.info(f"CIRIS_SETUP_DEBUG CRITICAL: Will OAuth linking happen? = {will_link_oauth}")
+    if not will_link_oauth:
+        if not setup.oauth_provider:
+            logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy")
+        if not setup.oauth_external_id:
+            logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy")
+
+    # Log other setup fields
+    logger.info("CIRIS_SETUP_DEBUG Other setup fields:")
+    logger.info(f"CIRIS_SETUP_DEBUG   admin_username = {setup.admin_username}")
+    logger.info(f"CIRIS_SETUP_DEBUG   admin_password set = {bool(setup.admin_password)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   system_admin_password set = {bool(setup.system_admin_password)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
+    logger.info(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
 
     # Only allow during first-run
     if not is_first_run():
@@ -802,7 +888,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
     # Determine if this is an OAuth user (password is optional for OAuth users)
     is_oauth_user = bool(setup.oauth_provider)
-    logger.info(f"[Setup Complete] OAuth provider: {setup.oauth_provider}, is_oauth_user: {is_oauth_user}")
+    logger.info(f"CIRIS_SETUP_DEBUG is_oauth_user (for password validation) = {is_oauth_user}")
 
     # Validate passwords and potentially generate for OAuth users
     setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)

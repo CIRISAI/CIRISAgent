@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 14
-        versionName "1.6.14"
+        versionCode 16
+        versionName "1.7.16"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -178,10 +178,11 @@ Tag: cp310-cp310-android_24_x86_64
                 // Copy Python source files from x86_64 to arm64-v8a if arm64 only has .so
                 def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
                 def arm64PydanticCore = file("${arm64Dir}/pydantic_core")
-                def arm64So = file("${arm64PydanticCore}/_pydantic_core.so")
+                // Check for any .so file (name includes cpython version suffix)
+                def arm64HasSo = arm64PydanticCore.exists() && arm64PydanticCore.listFiles()?.any { it.name.endsWith('.so') }
                 def arm64Init = file("${arm64PydanticCore}/__init__.py")
 
-                if (x86_64PydanticCore.exists() && arm64So.exists() && !arm64Init.exists()) {
+                if (x86_64PydanticCore.exists() && arm64HasSo && !arm64Init.exists()) {
                     println "Copying pydantic_core Python sources to arm64-v8a..."
 
                     // Copy Python source files (not .so) from x86_64 to arm64
@@ -212,10 +213,11 @@ Tag: cp310-cp310-android_24_arm64_v8a
 
                 // Copy Python source files from x86_64 to armeabi-v7a if armeabi only has .so
                 def armeabiPydanticCore = file("${armeabiDir}/pydantic_core")
-                def armeabiSo = file("${armeabiPydanticCore}/_pydantic_core.so")
+                // Check for any .so file (name includes cpython version suffix)
+                def armeabiHasSo = armeabiPydanticCore.exists() && armeabiPydanticCore.listFiles()?.any { it.name.endsWith('.so') }
                 def armeabiInit = file("${armeabiPydanticCore}/__init__.py")
 
-                if (x86_64PydanticCore.exists() && armeabiSo.exists() && !armeabiInit.exists()) {
+                if (x86_64PydanticCore.exists() && armeabiHasSo && !armeabiInit.exists()) {
                     println "Copying pydantic_core Python sources to armeabi-v7a..."
 
                     // Copy Python source files (not .so) from x86_64 to armeabi
@@ -281,6 +283,9 @@ dependencies {
 
     // Coroutines for async operations
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    // Coil for image loading (profile pictures)
+    implementation "io.coil-kt:coil:2.5.0"
 
     // Testing
     testImplementation "junit:junit:4.13.2"

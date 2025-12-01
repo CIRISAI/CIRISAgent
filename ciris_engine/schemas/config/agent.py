@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.config.tickets import TicketsConfig
 
 
@@ -80,6 +81,12 @@ class AgentTemplate(BaseModel):
     tickets: Optional["TicketsConfig"] = Field(
         None,
         description="Ticket system configuration with SOPs (DSAR always present)",
+    )
+
+    # Cognitive state transition configuration (Covenant Sections V, VIII)
+    cognitive_state_behaviors: Optional["CognitiveStateBehaviors"] = Field(
+        None,
+        description="Template-driven cognitive state transition configuration",
     )
 
     model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
@@ -190,6 +197,23 @@ class AgentTemplate(BaseModel):
                     v.sops.append(dsar_sop)
 
         return v  # type: ignore[no-any-return]
+
+    @field_validator("cognitive_state_behaviors", mode="before")
+    @classmethod
+    def convert_cognitive_state_behaviors(cls, v: Any) -> Optional[CognitiveStateBehaviors]:
+        """Convert dict to CognitiveStateBehaviors if needed.
+
+        If not provided, returns default CognitiveStateBehaviors which preserves
+        full Covenant compliance (wakeup enabled, always_consent shutdown).
+        """
+        if v is None:
+            # Default: full Covenant compliance
+            return CognitiveStateBehaviors()
+
+        if isinstance(v, dict):
+            return CognitiveStateBehaviors(**v)
+
+        return v  # type: ignore[no-any-return]  # Already a CognitiveStateBehaviors instance
 
 
 class DSDMAConfiguration(BaseModel):

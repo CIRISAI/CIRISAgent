@@ -26,6 +26,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import coil.transform.CircleCropTransformation
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
@@ -62,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private var googleIdToken: String? = null
     private var userEmail: String? = null
     private var userName: String? = null
+    private var userPhotoUrl: String? = null
     private var showSetup: Boolean = false
     private var cirisAccessToken: String? = null
 
@@ -103,10 +111,18 @@ class MainActivity : AppCompatActivity() {
         googleIdToken = intent.getStringExtra("google_id_token")
         userEmail = intent.getStringExtra("user_email")
         userName = intent.getStringExtra("user_name")
+        userPhotoUrl = intent.getStringExtra("user_photo_url")
         showSetup = intent.getBooleanExtra("show_setup", true)
 
         // Store globally for LLM proxy access
         currentGoogleUserId = googleUserId
+
+        // Save Google user ID to SharedPreferences for billing
+        if (!googleUserId.isNullOrEmpty()) {
+            val prefs = getSharedPreferences("ciris_settings", MODE_PRIVATE)
+            prefs.edit().putString("google_user_id", googleUserId).apply()
+            Log.i(TAG, "Saved Google user ID for billing: $googleUserId")
+        }
 
         // Comprehensive logging of received auth data
         Log.i(TAG, "[Auth Received] ========================================")
@@ -115,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "[Auth Received] google_id_token: ${googleIdToken?.let { "${it.take(20)}... (${it.length} chars)" } ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_email: ${userEmail ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_name: ${userName ?: "(null)"}")
+        Log.i(TAG, "[Auth Received] user_photo_url: ${userPhotoUrl ?: "(null)"}")
         Log.i(TAG, "[Auth Received] show_setup: $showSetup")
         Log.i(TAG, "[Auth Received] ========================================")
 
@@ -809,7 +826,61 @@ class MainActivity : AppCompatActivity() {
         menuInflater.inflate(R.menu.main_menu, menu)
         // Set initial state of the toggle
         menu?.findItem(R.id.action_toggle_native)?.isChecked = useNativeUi
+
+        // Set account icon based on auth method
+        val accountItem = menu?.findItem(R.id.action_account)
+        if (authMethod == "google" && !userPhotoUrl.isNullOrEmpty()) {
+            // Load user's profile picture using Coil
+            Log.i(TAG, "Account menu: loading profile picture from $userPhotoUrl")
+            loadProfilePicture(accountItem, userPhotoUrl!!)
+        } else if (authMethod == "google") {
+            // OAuth user without photo - use person icon
+            accountItem?.setIcon(R.drawable.ic_account)
+            Log.i(TAG, "Account menu: using person icon for OAuth user (no photo URL)")
+        } else {
+            // API key user - use key icon
+            accountItem?.setIcon(R.drawable.ic_key)
+            Log.i(TAG, "Account menu: using key icon for API key user")
+        }
+
         return true
+    }
+
+    /**
+     * Load user's profile picture into the menu item icon.
+     */
+    private fun loadProfilePicture(menuItem: MenuItem?, photoUrl: String) {
+        if (menuItem == null) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val imageLoader = ImageLoader(this@MainActivity)
+                val request = ImageRequest.Builder(this@MainActivity)
+                    .data(photoUrl)
+                    .size(96)  // ActionBar icon size in pixels
+                    .transformations(CircleCropTransformation())
+                    .build()
+
+                val result = imageLoader.execute(request)
+                if (result is SuccessResult) {
+                    val drawable = result.drawable
+                    withContext(Dispatchers.Main) {
+                        menuItem.icon = drawable
+                        Log.i(TAG, "Profile picture loaded successfully")
+                    }
+                } else {
+                    Log.w(TAG, "Failed to load profile picture, using fallback")
+                    withContext(Dispatchers.Main) {
+                        menuItem.setIcon(R.drawable.ic_account)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile picture: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    menuItem.setIcon(R.drawable.ic_account)
+                }
+            }
+        }
     }
 
     private fun launchInteractActivity() {
@@ -876,16 +947,92 @@ class MainActivity : AppCompatActivity() {
                 launchInteractActivity()
                 true
             }
-            R.id.action_settings -> {
-                startActivity(Intent(this, SettingsActivity::class.java))
-                true
-            }
             R.id.action_refresh -> {
                 webView.reload()
                 true
             }
+            // Account submenu items - navigate to webview pages
+            R.id.action_account_settings -> {
+                navigateToWebPage("/account")
+                true
+            }
+            R.id.action_settings -> {
+                navigateToWebPage("/account/settings")
+                true
+            }
+            R.id.action_consent -> {
+                navigateToWebPage("/account/consent")
+                true
+            }
+            R.id.action_privacy -> {
+                navigateToWebPage("/account/privacy")
+                true
+            }
+            R.id.action_api_keys -> {
+                navigateToWebPage("/account/api-keys")
+                true
+            }
+            R.id.action_billing -> {
+                navigateToWebPage("/billing")
+                true
+            }
+            R.id.action_logout -> {
+                performLogout()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    /**
+     * Navigate to a page in the webview.
+     */
+    private fun navigateToWebPage(path: String) {
+        val url = "$SERVER_URL$path"
+        Log.i(TAG, "Navigating to: $url")
+        webView.loadUrl(url)
+    }
+
+    /**
+     * Perform logout - sign out of Google (if applicable) and return to login screen.
+     */
+    private fun performLogout() {
+        Log.i(TAG, "Performing logout, auth_method: $authMethod")
+
+        // Stop token refresh manager
+        tokenRefreshManager?.stop()
+
+        // Sign out from Google if using OAuth
+        if (authMethod == "google" && googleSignInHelper != null) {
+            googleSignInHelper?.signOut {
+                Log.i(TAG, "Google sign-out complete")
+                returnToLogin()
+            }
+        } else {
+            returnToLogin()
+        }
+    }
+
+    /**
+     * Return to the login screen.
+     */
+    private fun returnToLogin() {
+        Log.i(TAG, "Returning to login screen")
+
+        // Clear stored tokens
+        cirisAccessToken = null
+        googleIdToken = null
+
+        // Clear Google user ID from billing SharedPreferences
+        val prefs = getSharedPreferences("ciris_settings", MODE_PRIVATE)
+        prefs.edit().remove("google_user_id").apply()
+        Log.i(TAG, "Cleared Google user ID from billing prefs")
+
+        // Start LoginActivity and clear the activity stack
+        val intent = Intent(this, ai.ciris.mobile.auth.LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 
     override fun onBackPressed() {

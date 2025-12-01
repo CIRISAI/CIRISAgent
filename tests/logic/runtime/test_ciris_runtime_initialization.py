@@ -253,8 +253,9 @@ class TestInternalInitializationMethods:
         runtime.essential_config = mock_config
 
         # Mock IdentityManager and first_run check
-        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as MockIdentityManager, \
-             patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as MockIdentityManager, patch(
+            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
+        ):
             mock_identity_manager = Mock()
             mock_identity = Mock()
             mock_identity.agent_id = "test_agent"

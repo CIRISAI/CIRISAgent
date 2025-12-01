@@ -6,6 +6,14 @@ and agent identity templates.
 """
 
 from .agent import AgentTemplate
+from .cognitive_state_behaviors import (
+    CognitiveStateBehaviors,
+    DreamBehavior,
+    ShutdownBehavior,
+    StateBehavior,
+    StatePreservationBehavior,
+    WakeupBehavior,
+)
 from .essential import (
     DatabaseConfig,
     EssentialConfig,
@@ -23,4 +31,11 @@ __all__ = [
     "OperationalLimitsConfig",
     "TelemetryConfig",
     "AgentTemplate",
+    # Cognitive state behaviors
+    "CognitiveStateBehaviors",
+    "WakeupBehavior",
+    "ShutdownBehavior",
+    "StateBehavior",
+    "DreamBehavior",
+    "StatePreservationBehavior",
 ]

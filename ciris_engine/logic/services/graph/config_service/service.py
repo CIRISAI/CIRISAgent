@@ -15,7 +15,7 @@ from ciris_engine.logic.services.graph.memory_service import LocalGraphMemorySer
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope
 from ciris_engine.schemas.services.nodes import ConfigNode, ConfigValue
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.types import ConfigValue as ConfigValueType
@@ -182,13 +182,27 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
         return latest_config
 
     async def set_config(
-        self, key: str, value: Union[str, int, float, bool, JSONList, JSONDict, Path], updated_by: str
+        self,
+        key: str,
+        value: Union[str, int, float, bool, JSONList, JSONDict, Path],
+        updated_by: str,
+        scope: Optional[GraphScope] = None,
     ) -> None:
-        """Set configuration value with history."""
+        """Set configuration value with history.
+
+        Args:
+            key: Configuration key
+            value: Configuration value
+            updated_by: Who is making the update
+            scope: Graph scope (LOCAL for agent-modifiable, IDENTITY for WA-protected).
+                   Defaults to LOCAL if not specified.
+        """
         import uuid
 
-        from ciris_engine.schemas.services.graph_core import GraphScope
         from ciris_engine.schemas.services.nodes import ConfigValue
+
+        # Default to LOCAL scope if not specified
+        config_scope = scope if scope is not None else GraphScope.LOCAL
 
         # Get current version
         current = await self.get_config(key)
@@ -233,7 +247,7 @@ class GraphConfigService(BaseGraphService, GraphConfigServiceProtocol):
             # GraphNode required fields
             id=f"config_{key.replace('.', '_')}_{uuid.uuid4().hex[:8]}",
             # type will use default from ConfigNode
-            scope=GraphScope.LOCAL,  # Config is always local scope
+            scope=config_scope,  # Use provided scope (LOCAL=agent-modifiable, IDENTITY=WA-protected)
             attributes={
                 "created_at": now.isoformat(),
                 "created_by": updated_by,

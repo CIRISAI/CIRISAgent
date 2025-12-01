@@ -909,6 +909,9 @@ class CIRISRuntime:
         # Migrate tickets config from template (first-run only)
         await self._migrate_tickets_config_to_graph()
 
+        # Migrate cognitive state behaviors (pre-1.7 compatibility)
+        await self._migrate_cognitive_state_behaviors_to_graph()
+
     async def _migrate_tickets_config_to_graph(self) -> None:
         """Migrate tickets config to graph.
 
@@ -947,15 +950,137 @@ class CIRISRuntime:
             tickets_config = TicketsConfig(enabled=True, sops=DEFAULT_DSAR_SOPS)
 
         try:
-            # Store tickets config as a dict in the graph
+            # Store tickets config as a dict in the graph with IDENTITY scope (WA-protected)
+            from ciris_engine.schemas.services.graph_core import GraphScope
+
             await config_service.set_config(
                 key="tickets",
                 value=tickets_config.model_dump(),
                 updated_by="system_bootstrap",
+                scope=GraphScope.IDENTITY,  # Protected - agent cannot modify
             )
-            logger.info("Migrated tickets config to graph (DSAR SOPs now available)")
+            logger.info("Migrated tickets config to graph (IDENTITY scope - WA-protected)")
         except Exception as e:
             logger.error(f"Failed to migrate tickets config to graph: {e}")
+
+    async def _migrate_cognitive_state_behaviors_to_graph(self, force_from_template: bool = False) -> None:
+        """Migrate cognitive state behaviors to graph.
+
+        This handles two scenarios:
+        1. First-run: Seeds cognitive behaviors from template to graph
+        2. Pre-1.7.0 upgrade: Adds legacy-compatible behaviors (PLAY/DREAM/SOLITUDE disabled)
+
+        Pre-1.7 agents get:
+        - Wakeup: enabled (full identity ceremony)
+        - Shutdown: always_consent (Covenant compliance)
+        - Play/Dream/Solitude: DISABLED (these states didn't exist pre-1.7)
+
+        After migration, StateManager retrieves config from graph, not template.
+
+        Args:
+            force_from_template: If True, always seed from template (used during resume_from_first_run
+                when template is now available). This overwrites any pre-existing config.
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # In first-run mode (before template selection), skip migration
+        # Migration will happen in resume_from_first_run() after user selects template
+        if is_first_run() and not force_from_template:
+            logger.info("[COGNITIVE_MIGRATION] First-run mode: Skipping migration (will seed after setup wizard)")
+            return
+
+        if not self.service_initializer or not self.service_initializer.config_service:
+            logger.warning("[COGNITIVE_MIGRATION] Cannot migrate - GraphConfigService not available")
+            return
+
+        config_service = self.service_initializer.config_service
+
+        # Check if cognitive state behaviors already exist in graph
+        logger.info("[COGNITIVE_MIGRATION] Starting cognitive state behaviors migration check...")
+        logger.info(f"[COGNITIVE_MIGRATION] force_from_template={force_from_template}")
+
+        if not force_from_template:
+            try:
+                existing_config = await config_service.get_config("cognitive_state_behaviors")
+                if existing_config and existing_config.value and existing_config.value.dict_value:
+                    existing_wakeup = existing_config.value.dict_value.get("wakeup", {})
+                    logger.info(
+                        f"[COGNITIVE_MIGRATION] Config already exists in graph - wakeup.enabled={existing_wakeup.get('enabled', 'MISSING')}"
+                    )
+                    logger.info("[COGNITIVE_MIGRATION] Skipping migration (existing config preserved)")
+                    return
+            except Exception as e:
+                logger.info(f"[COGNITIVE_MIGRATION] No existing config in graph (will migrate): {e}")
+        else:
+            logger.info("[COGNITIVE_MIGRATION] Force mode: Will overwrite existing config with template values")
+
+        # Try to get cognitive behaviors from template (first-run scenario)
+        cognitive_behaviors = None
+        logger.info(f"[COGNITIVE_MIGRATION] identity_manager={self.identity_manager is not None}")
+        if self.identity_manager and self.identity_manager.agent_template:
+            template = self.identity_manager.agent_template
+            logger.info(f"[COGNITIVE_MIGRATION] Template loaded: name={getattr(template, 'name', 'UNKNOWN')}")
+            cognitive_behaviors = getattr(template, "cognitive_state_behaviors", None)
+            if cognitive_behaviors:
+                logger.info(
+                    f"[COGNITIVE_MIGRATION] Template has cognitive_state_behaviors: wakeup.enabled={cognitive_behaviors.wakeup.enabled}"
+                )
+            else:
+                logger.info("[COGNITIVE_MIGRATION] Template has NO cognitive_state_behaviors attribute")
+        else:
+            logger.info("[COGNITIVE_MIGRATION] No template available (identity_manager or agent_template is None)")
+
+        # If no template available (pre-1.7.0 agent upgrade), create legacy-compatible config
+        if not cognitive_behaviors:
+            logger.info("No cognitive state behaviors found - creating pre-1.7 compatible config")
+            from ciris_engine.schemas.config.cognitive_state_behaviors import (
+                CognitiveStateBehaviors,
+                DreamBehavior,
+                StateBehavior,
+                StatePreservationBehavior,
+            )
+
+            # Pre-1.7 behavior: wakeup/shutdown enabled, PLAY/DREAM/SOLITUDE disabled
+            cognitive_behaviors = CognitiveStateBehaviors(
+                # Wakeup: enabled (default - full identity ceremony)
+                # Shutdown: always_consent (default - Covenant compliance)
+                play=StateBehavior(
+                    enabled=False,
+                    rationale="Pre-1.7 agent: PLAY state not available in legacy version",
+                ),
+                dream=DreamBehavior(
+                    enabled=False,
+                    auto_schedule=False,
+                    rationale="Pre-1.7 agent: DREAM state not available in legacy version",
+                ),
+                solitude=StateBehavior(
+                    enabled=False,
+                    rationale="Pre-1.7 agent: SOLITUDE state not available in legacy version",
+                ),
+                state_preservation=StatePreservationBehavior(
+                    enabled=True,
+                    resume_silently=False,
+                    rationale="Pre-1.7 agent: preserve state across restarts",
+                ),
+            )
+
+        try:
+            # Store cognitive behaviors in the graph with IDENTITY scope (WA-protected)
+            from ciris_engine.schemas.services.graph_core import GraphScope
+
+            config_dict = cognitive_behaviors.model_dump()
+            logger.info(
+                f"[COGNITIVE_MIGRATION] Saving to graph: wakeup.enabled={config_dict.get('wakeup', {}).get('enabled', 'MISSING')}"
+            )
+            await config_service.set_config(
+                key="cognitive_state_behaviors",
+                value=config_dict,
+                updated_by="system_bootstrap",
+                scope=GraphScope.IDENTITY,  # Protected - agent cannot modify
+            )
+            logger.info("[COGNITIVE_MIGRATION] SUCCESS - Migrated cognitive state behaviors to graph (IDENTITY scope)")
+        except Exception as e:
+            logger.error(f"[COGNITIVE_MIGRATION] FAILED to migrate cognitive state behaviors to graph: {e}")
 
     async def _final_verification(self) -> None:
         """Perform final system verification.
@@ -1230,7 +1355,7 @@ class CIRISRuntime:
             self.component_builder = ComponentBuilder(self)
             logger.info("[_build_components] ComponentBuilder created successfully")
 
-            self.agent_processor = self.component_builder.build_all_components()
+            self.agent_processor = await self.component_builder.build_all_components()
             logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
 
             # Set up thought tracking callback now that agent_processor exists
@@ -1400,7 +1525,7 @@ class CIRISRuntime:
         logger.warning("=" * 70)
         logger.warning("")
 
-        total_steps = 12
+        total_steps = 13
         log_step(1, total_steps, "Starting resume from first-run...")
 
         # Reload environment variables to pick up new config
@@ -1441,10 +1566,34 @@ class CIRISRuntime:
         else:
             log_step(4, total_steps, "⚠️ Skipped identity init - missing identity_manager or time_service")
 
+        # Migrate cognitive state behaviors from the user-selected template
+        # This was skipped in _migrate_adapter_configs_to_graph() during first-run
+        # because no template was selected yet. Now we have the template, so migrate with force=True
+        # to ensure the template's config (e.g., wakeup.enabled=false for Ally) is applied
+        log_step(5, total_steps, "Migrating cognitive state behaviors from template...")
+        if self.identity_manager and self.identity_manager.agent_template:
+            template_name = getattr(self.identity_manager.agent_template, "name", "UNKNOWN")
+            cognitive_behaviors = getattr(self.identity_manager.agent_template, "cognitive_state_behaviors", None)
+            if cognitive_behaviors:
+                log_step(
+                    5,
+                    total_steps,
+                    f"Template '{template_name}' has cognitive_state_behaviors: wakeup.enabled={cognitive_behaviors.wakeup.enabled}",
+                )
+            else:
+                log_step(
+                    5, total_steps, f"Template '{template_name}' has no cognitive_state_behaviors (will use defaults)"
+                )
+            await self._migrate_cognitive_state_behaviors_to_graph(force_from_template=True)
+            log_step(5, total_steps, "✓ Cognitive state behaviors migrated from template")
+        else:
+            log_step(5, total_steps, "⚠️ No template available - using default cognitive behaviors")
+            await self._migrate_cognitive_state_behaviors_to_graph(force_from_template=False)
+
         # Initialize core services now that identity is available
         # This was skipped in _initialize_services() during first-run
         log_step(
-            5,
+            6,
             total_steps,
             f"Initializing core services... service_initializer={self.service_initializer is not None}, agent_identity={self.agent_identity is not None}",
         )
@@ -1456,80 +1605,80 @@ class CIRISRuntime:
                 self.startup_channel_id,
                 self.modules_to_load,
             )
-            log_step(5, total_steps, "✓ Core services initialized")
+            log_step(6, total_steps, "✓ Core services initialized")
 
             # Load any external modules (e.g. mockllm)
             if self.modules_to_load:
                 log_step(
-                    5, total_steps, f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}"
+                    6, total_steps, f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}"
                 )
                 await self.service_initializer.load_modules(self.modules_to_load)
         else:
-            log_step(5, total_steps, "⚠️ Skipped core services - missing service_initializer or agent_identity")
+            log_step(6, total_steps, "⚠️ Skipped core services - missing service_initializer or agent_identity")
 
         # Register adapter services now that service registry is available
         # This was skipped in _register_adapter_services() during first-run
         # Call the actual registration method instead of duplicating logic
-        log_step(6, total_steps, "Registering adapter services...")
+        log_step(7, total_steps, "Registering adapter services...")
         await self._register_adapter_services_for_resume()
-        log_step(6, total_steps, "✓ Adapter services registered")
+        log_step(7, total_steps, "✓ Adapter services registered")
 
         # Initialize maintenance service (skipped during first-run)
         log_step(
-            7,
+            8,
             total_steps,
             f"Initializing maintenance service... maintenance_service={self.maintenance_service is not None}",
         )
         if self.maintenance_service:
             await self._perform_startup_maintenance()
-            log_step(7, total_steps, "✓ Maintenance service initialized")
+            log_step(8, total_steps, "✓ Maintenance service initialized")
         else:
-            log_step(7, total_steps, "⚠️ Skipped maintenance - no maintenance_service")
+            log_step(8, total_steps, "⚠️ Skipped maintenance - no maintenance_service")
 
         # Reinitialize billing provider now that environment variables are loaded
         # This is critical because ResourceMonitorService was initialized before setup
         # completed and didn't have the CIRIS proxy configuration
-        log_step(8, total_steps, "Reinitializing billing provider...")
+        log_step(9, total_steps, "Reinitializing billing provider...")
         await self._reinitialize_billing_provider()
-        log_step(8, total_steps, "✓ Billing provider reinitialized")
+        log_step(9, total_steps, "✓ Billing provider reinitialized")
 
         # Initialize LLM service now that environment variables are loaded
         # This is critical because LLM service initialization was skipped during first-run
         # due to missing OPENAI_API_KEY
         log_step(
-            9, total_steps, f"Initializing LLM service... service_initializer={self.service_initializer is not None}"
+            10, total_steps, f"Initializing LLM service... service_initializer={self.service_initializer is not None}"
         )
         if self.service_initializer:
             config = self._ensure_config()
             await self.service_initializer._initialize_llm_services(config, self.modules_to_load)
-            log_step(9, total_steps, "✓ LLM service initialized")
+            log_step(10, total_steps, "✓ LLM service initialized")
         else:
-            log_step(9, total_steps, "⚠️ Skipped LLM init - no service_initializer")
+            log_step(10, total_steps, "⚠️ Skipped LLM init - no service_initializer")
 
         # Re-inject services into running adapters now that they're all initialized
         # This is critical because adapters started in first-run mode had None services
-        log_step(10, total_steps, f"Re-injecting services into {len(self.adapters)} adapters...")
+        log_step(11, total_steps, f"Re-injecting services into {len(self.adapters)} adapters...")
         for adapter in self.adapters:
             if hasattr(adapter, "reinject_services"):
                 adapter.reinject_services()
-                log_step(10, total_steps, f"✓ Re-injected services into {adapter.__class__.__name__}")
+                log_step(11, total_steps, f"✓ Re-injected services into {adapter.__class__.__name__}")
 
         # Build cognitive components now that LLM is available
         # This was skipped during first-run due to missing OPENAI_API_KEY
-        log_step(11, total_steps, "Building cognitive components...")
+        log_step(12, total_steps, "Building cognitive components...")
         await self._build_components()
-        log_step(11, total_steps, "✓ Cognitive components built")
+        log_step(12, total_steps, "✓ Cognitive components built")
 
         # CRITICAL: Adapters are ALREADY RUNNING from first-run mode
         # DO NOT restart them - just create the agent processor task
         # Adapters will continue running with their existing lifecycle tasks
-        log_step(12, total_steps, "Creating agent processor task...")
+        log_step(13, total_steps, "Creating agent processor task...")
         # Task stored to prevent premature garbage collection - runs in background
         self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
 
         # No need to verify adapter readiness - they're already running and serving the setup wizard!
         # Wait for critical services to ensure communication service is registered
-        log_step(12, total_steps, "Waiting for critical services (timeout=10s)...")
+        log_step(13, total_steps, "Waiting for critical services (timeout=10s)...")
         await self._wait_for_critical_services(timeout=10.0)
 
         elapsed = time.time() - start_time

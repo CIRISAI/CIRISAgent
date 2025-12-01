@@ -8,6 +8,54 @@
         android:icon="@android:drawable/ic_menu_add"
         app:showAsAction="ifRoom" />
 
+    <!-- Account menu with submenu -->
+    <item
+        android:id="@+id/action_account"
+        android:title="@string/action_account"
+        android:icon="@drawable/ic_key"
+        app:showAsAction="ifRoom">
+        <menu>
+            <!-- Account section -->
+            <item
+                android:id="@+id/action_account_settings"
+                android:title="Account Settings" />
+
+            <item
+                android:id="@+id/action_settings"
+                android:title="Settings" />
+
+            <item
+                android:id="@+id/action_consent"
+                android:title="Consent Management" />
+
+            <item
+                android:id="@+id/action_privacy"
+                android:title="Privacy Settings" />
+
+            <item
+                android:id="@+id/action_api_keys"
+                android:title="API Keys" />
+
+            <item
+                android:id="@+id/action_billing"
+                android:title="Billing" />
+
+            <!-- Separator via group -->
+            <group android:id="@+id/group_logout">
+                <item
+                    android:id="@+id/action_logout"
+                    android:title="Logout" />
+            </group>
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/action_refresh"
+        android:title="@string/action_refresh"
+        android:icon="@android:drawable/ic_menu_rotate"
+        app:showAsAction="ifRoom" />
+
+    <!-- Hidden items in overflow -->
     <item
         android:id="@+id/action_toggle_native"
         android:title="Use Native Interact UI"
@@ -18,19 +66,6 @@
     <item
         android:id="@+id/action_interact"
         android:title="Open Interact Stream"
-        android:icon="@android:drawable/ic_menu_view"
         app:showAsAction="never" />
-
-    <item
-        android:id="@+id/action_settings"
-        android:title="@string/action_settings"
-        android:icon="@android:drawable/ic_menu_preferences"
-        app:showAsAction="ifRoom" />
-
-    <item
-        android:id="@+id/action_refresh"
-        android:title="@string/action_refresh"
-        android:icon="@android:drawable/ic_menu_rotate"
-        app:showAsAction="ifRoom" />
 
 </menu>

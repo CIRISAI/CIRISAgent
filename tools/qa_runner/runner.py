@@ -237,6 +237,7 @@ class QARunner:
             QAModule.MESSAGE_ID_DEBUG,
             QAModule.REDDIT,
             QAModule.SQL_EXTERNAL_DATA,
+            QAModule.STATE_TRANSITIONS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -804,6 +805,7 @@ class QARunner:
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
+        from .modules.state_transition_tests import StateTransitionTests
 
         all_passed = True
 
@@ -819,6 +821,7 @@ class QARunner:
             QAModule.MESSAGE_ID_DEBUG: MessageIDDebugTests,
             QAModule.REDDIT: RedditTests,
             QAModule.SQL_EXTERNAL_DATA: SQLExternalDataTests,
+            QAModule.STATE_TRANSITIONS: StateTransitionTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

@@ -29,6 +29,407 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# PYDANTIC_CORE NATIVE LIBRARY LOADER
+# =============================================================================
+# Chaquopy's extractPackages directive isn't extracting the .so file from .imy
+# archives in Python 3.10. This workaround manually extracts and loads it.
+#
+# ROOT CAUSE: Chaquopy serves packages from .imy (zip) files via AssetFinder,
+# but native .so files require real filesystem paths for dlopen(). Additionally,
+# Chaquopy's AssetFinder uses sys.meta_path hooks that take precedence over
+# sys.path, so we must install our own finder BEFORE AssetFinder.
+#
+# SYMPTOMS:
+#   - "No module named 'pydantic_core._pydantic_core'"
+#   - extract-packages directory is empty/missing
+#   - pydantic_core found in AssetFinder but .so won't load
+#   - ctypes.CDLL succeeds but import fails (AssetFinder interference)
+#
+# FIX: Extract to filesystem, install meta_path finder BEFORE AssetFinder
+# =============================================================================
+
+
+class PydanticCoreFinder:
+    """
+    Custom finder that intercepts ALL pydantic_core imports BEFORE Chaquopy's AssetFinder.
+    This ensures Python loads from our extracted location, including native extensions.
+
+    Chaquopy's AssetFinder intercepts imports before PathFinder checks sys.path,
+    so we must handle both .py files AND native extensions (.so files) ourselves.
+    """
+
+    def __init__(self, extract_path: str):
+        self.extract_path = extract_path
+        self.pydantic_core_dir = os.path.join(extract_path, "pydantic_core")
+        # Find the .so file pattern for this platform
+        import glob
+
+        so_files = glob.glob(os.path.join(self.pydantic_core_dir, "_pydantic_core*.so"))
+        self.so_path = so_files[0] if so_files else None
+
+    def find_module(self, fullname, path=None):
+        """Return self for all pydantic_core imports."""
+        if not fullname.startswith("pydantic_core"):
+            return None
+
+        if fullname == "pydantic_core":
+            init_path = os.path.join(self.pydantic_core_dir, "__init__.py")
+            return self if os.path.exists(init_path) else None
+
+        # For submodules
+        parts = fullname.split(".")
+        rel_name = parts[-1]
+
+        # Handle native extension (_pydantic_core)
+        if rel_name == "_pydantic_core" and self.so_path:
+            return self
+
+        # Handle .py files
+        py_path = os.path.join(self.pydantic_core_dir, rel_name + ".py")
+        return self if os.path.exists(py_path) else None
+
+    def load_module(self, fullname):
+        """Load pydantic_core module from our extracted location."""
+        import importlib.machinery
+        import importlib.util
+
+        if fullname in sys.modules:
+            return sys.modules[fullname]
+
+        parts = fullname.split(".")
+        rel_name = parts[-1] if len(parts) > 1 else None
+
+        # Handle the main pydantic_core package
+        if fullname == "pydantic_core":
+            module_path = os.path.join(self.pydantic_core_dir, "__init__.py")
+            spec = importlib.util.spec_from_file_location(
+                fullname, module_path, submodule_search_locations=[self.pydantic_core_dir]
+            )
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[fullname] = module
+            spec.loader.exec_module(module)
+            return module
+
+        # Handle native extension
+        if rel_name == "_pydantic_core" and self.so_path:
+            loader = importlib.machinery.ExtensionFileLoader(fullname, self.so_path)
+            spec = importlib.util.spec_from_loader(fullname, loader, origin=self.so_path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[fullname] = module
+            spec.loader.exec_module(module)
+            return module
+
+        # Handle .py submodules
+        module_path = os.path.join(self.pydantic_core_dir, rel_name + ".py")
+        if os.path.exists(module_path):
+            spec = importlib.util.spec_from_file_location(fullname, module_path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[fullname] = module
+            spec.loader.exec_module(module)
+            return module
+
+        raise ImportError(f"PydanticCoreFinder: {fullname} not found")
+
+
+def setup_pydantic_core():
+    """
+    Extract and load pydantic_core native library for Android.
+
+    Returns True if pydantic_core is ready to use, False otherwise.
+    """
+    import glob
+    import platform
+
+    print("=" * 60)
+    print("PYDANTIC_CORE NATIVE LIBRARY SETUP")
+    print("=" * 60)
+
+    # Step 1: Detect architecture
+    machine = platform.machine().lower()
+    if "aarch64" in machine or "arm64" in machine:
+        arch = "arm64-v8a"
+    elif "armv7" in machine or "arm" in machine:
+        arch = "armeabi-v7a"
+    else:
+        arch = "x86_64"
+
+    print(f"[1/6] Architecture: {arch} (machine={machine})")
+
+    # Step 2: Define paths - use Chaquopy's expected extract-packages location
+    chaquopy_base = Path("/data/data/ai.ciris.mobile/files/chaquopy")
+    extract_dir = chaquopy_base / "extract-packages"
+    pydantic_core_dir = extract_dir / "pydantic_core"
+
+    print(f"[2/6] Extract target: {extract_dir}")
+
+    # Step 3: Check if already extracted
+    so_pattern = str(pydantic_core_dir / "_pydantic_core*.so")
+    existing_so = glob.glob(so_pattern)
+
+    if existing_so:
+        so_path = existing_so[0]
+        print(f"[3/6] Found existing .so: {Path(so_path).name}")
+    else:
+        print(f"[3/6] No existing .so found, extracting from .imy...")
+        so_path = _extract_from_imy(arch, chaquopy_base.parent, extract_dir)
+        if not so_path:
+            print("[FAILED] Could not extract pydantic_core from .imy")
+            return False
+
+    # Step 4: Remove any cached pydantic_core modules
+    modules_to_remove = [k for k in sys.modules.keys() if k.startswith("pydantic_core")]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
+        print(f"[4/6] Cleared cached module: {mod}")
+
+    if not modules_to_remove:
+        print(f"[4/6] No cached modules to clear")
+
+    # Step 5: Configure import system
+    extract_path = str(extract_dir)
+
+    # Add our path FIRST in sys.path
+    if extract_path in sys.path:
+        sys.path.remove(extract_path)
+    sys.path.insert(0, extract_path)
+    print(f"[5/6] sys.path[0] = {extract_path}")
+
+    # Install our finder FIRST in sys.meta_path (before AssetFinder)
+    # This intercepts pydantic_core imports before Chaquopy can
+    our_finder = PydanticCoreFinder(extract_path)
+
+    # Remove any existing PydanticCoreFinder
+    sys.meta_path = [f for f in sys.meta_path if not isinstance(f, PydanticCoreFinder)]
+    sys.meta_path.insert(0, our_finder)
+    print(f"[5/6] Installed PydanticCoreFinder at meta_path[0]")
+
+    # Step 6: Test loading the native library
+    print(f"[6/6] Testing native library load...")
+
+    # First test with ctypes to get detailed error
+    import ctypes
+
+    try:
+        lib = ctypes.CDLL(so_path)
+        print(f"[6/6] ctypes.CDLL: SUCCESS")
+    except OSError as e:
+        print(f"[6/6] ctypes.CDLL: FAILED - {e}")
+        print("=" * 60)
+        print("DIAGNOSIS: The .so file exists but cannot be loaded.")
+        print("Possible causes:")
+        print("  - Missing dependency libraries")
+        print("  - ABI mismatch (wrong Python version or architecture)")
+        print("  - SELinux blocking execution from app data dir")
+        print("=" * 60)
+        return False
+
+    # Now test Python import
+    try:
+        import pydantic_core
+
+        print(f"[6/6] import pydantic_core: SUCCESS (v{pydantic_core.__version__})")
+        print(f"[6/6] Location: {pydantic_core.__file__}")
+        print("=" * 60)
+        print("PYDANTIC_CORE READY")
+        print("=" * 60)
+        return True
+    except ImportError as e:
+        print(f"[6/6] import pydantic_core: FAILED - {e}")
+        print("=" * 60)
+        print("DIAGNOSIS: ctypes loaded .so but Python import failed.")
+        print("This may be an import path or meta_path issue.")
+        print(f"sys.path[0:3]: {sys.path[0:3]}")
+        print(f"sys.meta_path[0:3]: {[type(f).__name__ for f in sys.meta_path[0:3]]}")
+
+        # Extra debug: list what's in our extract dir
+        print(f"Contents of {extract_path}:")
+        import os
+
+        for item in os.listdir(extract_path):
+            item_path = os.path.join(extract_path, item)
+            if os.path.isdir(item_path):
+                print(f"  {item}/")
+                for sub in os.listdir(item_path)[:5]:
+                    print(f"    {sub}")
+            else:
+                print(f"  {item}")
+        print("=" * 60)
+        return False
+
+
+def _extract_from_imy(arch: str, data_dir: Path, extract_dir: Path) -> str:
+    """Extract pydantic_core from .imy asset to filesystem."""
+    import glob
+    import zipfile
+
+    try:
+        from java import jclass
+
+        # Get Android context
+        ActivityThread = jclass("android.app.ActivityThread")
+        context = ActivityThread.currentApplication()
+
+        if context is None:
+            print("    ActivityThread.currentApplication() returned None")
+            return ""
+
+        # Get AssetManager and read .imy
+        asset_manager = context.getAssets()
+        imy_asset_path = f"chaquopy/requirements-{arch}.imy"
+        print(f"    Opening: {imy_asset_path}")
+
+        input_stream = asset_manager.open(imy_asset_path)
+
+        # Read all bytes
+        from java.io import ByteArrayOutputStream
+
+        buffer = bytearray(8192)
+        baos = ByteArrayOutputStream()
+
+        while True:
+            bytes_read = input_stream.read(buffer)
+            if bytes_read == -1:
+                break
+            baos.write(buffer, 0, bytes_read)
+
+        input_stream.close()
+        imy_bytes = bytes(baos.toByteArray())
+        baos.close()
+
+        print(f"    Read {len(imy_bytes):,} bytes from .imy")
+
+        # Write to temp file
+        temp_imy = data_dir / f"temp_requirements_{arch}.imy"
+        with open(temp_imy, "wb") as f:
+            f.write(imy_bytes)
+
+        # Extract pydantic_core to the extract directory
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        extracted_files = []
+
+        with zipfile.ZipFile(temp_imy, "r") as zf:
+            for name in zf.namelist():
+                if name.startswith("pydantic_core/"):
+                    zf.extract(name, extract_dir)
+                    extracted_files.append(name)
+
+        # Clean up temp file
+        temp_imy.unlink()
+
+        print(f"    Extracted {len(extracted_files)} files")
+
+        # Find the .so file
+        so_files = glob.glob(str(extract_dir / "pydantic_core" / "_pydantic_core*.so"))
+        if so_files:
+            so_path = so_files[0]
+            so_size = Path(so_path).stat().st_size
+            print(f"    Found: {Path(so_path).name} ({so_size:,} bytes)")
+            return so_path
+        else:
+            print("    ERROR: No .so file found after extraction!")
+            for f in extracted_files:
+                print(f"      - {f}")
+            return ""
+
+    except Exception as e:
+        print(f"    Extraction error: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return ""
+
+
+# Run setup before any pydantic imports
+_pydantic_ready = False
+try:
+    _pydantic_ready = setup_pydantic_core()
+except Exception as e:
+    print(f"PYDANTIC_CORE SETUP ERROR: {e}")
+    import traceback
+
+    traceback.print_exc()
+
+if not _pydantic_ready:
+    print("")
+    print("!" * 60)
+    print("WARNING: pydantic_core native library not loaded!")
+    print("CIRIS will fail to start. Check the logs above for diagnosis.")
+    print("!" * 60)
+    print("")
+
+
+# Legacy debug function (kept for reference)
+def debug_pydantic_core():
+    """Debug function to check pydantic_core loading issues."""
+    import importlib.util
+
+    print("DEBUG: sys.path entries:")
+    for i, p in enumerate(sys.path):
+        print(f"  [{i}] {p}")
+
+    # Check architecture-specific requirements paths
+    chaquopy_base = Path("/data/data/ai.ciris.mobile/files/chaquopy")
+    asset_finder = chaquopy_base / "AssetFinder"
+
+    # Check for arch-specific requirements
+    for arch in ["arm64-v8a", "armeabi-v7a", "x86_64"]:
+        arch_reqs = asset_finder / f"requirements-{arch}"
+        if arch_reqs.exists():
+            print(f"DEBUG: Found arch-specific requirements: {arch_reqs}")
+            pcore = arch_reqs / "pydantic_core"
+            if pcore.exists():
+                print(f"DEBUG: pydantic_core in {arch}:")
+                for f in pcore.iterdir():
+                    print(f"    - {f.name} ({f.stat().st_size if f.is_file() else 'dir'})")
+
+    # Check for extract-packages directory
+    extract_dir = chaquopy_base / "extract-packages"
+    if extract_dir.exists():
+        print(f"DEBUG: extract-packages exists: {extract_dir}")
+        for item in extract_dir.rglob("*"):
+            print(f"    - {item}")
+    else:
+        print(f"DEBUG: extract-packages directory MISSING: {extract_dir}")
+
+    # Check alternative locations
+    user_data = Path("/data/user/0/ai.ciris.mobile/files/chaquopy")
+    if user_data.exists():
+        print(f"DEBUG: user_data chaquopy exists: {user_data}")
+        for subdir in user_data.iterdir():
+            print(f"  - {subdir.name}")
+            if "extract" in subdir.name.lower() or "native" in subdir.name.lower():
+                for item in subdir.rglob("*pydantic*"):
+                    print(f"    pydantic found: {item}")
+
+    # Try to find pydantic_core
+    spec = importlib.util.find_spec("pydantic_core")
+    if spec:
+        print(f"DEBUG: pydantic_core found at: {spec.origin}")
+        print(f"DEBUG: pydantic_core submodule_search_locations: {spec.submodule_search_locations}")
+
+        # Check if _pydantic_core.so exists in that location
+        if spec.submodule_search_locations:
+            for loc in spec.submodule_search_locations:
+                loc_path = Path(loc)
+                if loc_path.exists():
+                    print(f"DEBUG: Contents of {loc}:")
+                    for f in loc_path.iterdir():
+                        print(f"  - {f.name} ({f.stat().st_size if f.is_file() else 'dir'})")
+    else:
+        print("DEBUG: pydantic_core not found by importlib")
+
+    # List ALL chaquopy subdirs
+    if chaquopy_base.exists():
+        print(f"DEBUG: All chaquopy subdirs:")
+        for subdir in chaquopy_base.iterdir():
+            print(f"  - {subdir.name}")
+
+
+# Note: debug_pydantic_core() is kept for manual debugging but not called automatically
+# The new setup_pydantic_core() handles everything with clear logging
+
+
 def setup_android_environment():
     """Configure environment for Android on-device operation.
 

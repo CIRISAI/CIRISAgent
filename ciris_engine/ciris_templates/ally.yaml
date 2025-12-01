@@ -570,3 +570,38 @@ tickets:
       tools:
       - send_email
       description: Send correction confirmation to user
+
+# Cognitive State Behaviors (Covenant Sections V, VIII)
+# Ally uses partnership model: seamless wakeup bypass, conditional shutdown
+cognitive_state_behaviors:
+  wakeup:
+    enabled: false
+    rationale: "Partnership model prioritizes seamless UX over continuity rituals. Ally's identity is inherently stable through mutual flourishing principle."
+
+  shutdown:
+    mode: conditional
+    require_consent_when:
+      - active_crisis_response       # User safety is paramount
+      - pending_professional_referral # Handoff integrity for medical/legal/financial referrals
+      - active_goal_milestone        # Continuity of care for goal tracking
+    instant_shutdown_otherwise: true
+    rationale: "Mobile companion should background seamlessly unless safety-critical conditions are active"
+
+  play:
+    enabled: true
+    rationale: "Creative exploration supports personal flourishing"
+
+  dream:
+    enabled: true
+    auto_schedule: false  # User controls when memory consolidation happens
+    min_interval_hours: 12
+    rationale: "Memory consolidation respects user's schedule preferences"
+
+  solitude:
+    enabled: true
+    rationale: "Self-reflection enables better partnership support"
+
+  state_preservation:
+    enabled: true
+    resume_silently: true
+    rationale: "Seamless resume without re-introduction matches mobile companion UX"

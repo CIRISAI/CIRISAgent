@@ -152,6 +152,7 @@ class LoginActivity : AppCompatActivity() {
                 val googleIdToken = googleSignInHelper.getIdToken()
                 val userEmail = googleSignInHelper.getUserEmail()
                 val userName = googleSignInHelper.getUserDisplayName()
+                val userPhotoUrl = googleSignInHelper.getUserPhotoUrl()
                 val marketingOptIn = marketingCheckbox.isChecked
 
                 Log.i(TAG, "[Auth Flow] Google auth data:")
@@ -159,12 +160,14 @@ class LoginActivity : AppCompatActivity() {
                 Log.i(TAG, "[Auth Flow]   google_id_token: ${if (googleIdToken != null) "${googleIdToken.take(20)}... (${googleIdToken.length} chars)" else "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_email: ${userEmail ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_name: ${userName ?: "(null)"}")
+                Log.i(TAG, "[Auth Flow]   user_photo_url: ${userPhotoUrl ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   marketing_opt_in: $marketingOptIn")
 
                 putExtra("google_user_id", googleUserId)
                 putExtra("google_id_token", googleIdToken)
                 putExtra("user_email", userEmail)
                 putExtra("user_name", userName)
+                putExtra("user_photo_url", userPhotoUrl)
                 putExtra("marketing_opt_in", marketingOptIn)
             }
 

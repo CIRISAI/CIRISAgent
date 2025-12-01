@@ -85,6 +85,13 @@ class GoogleSignInHelper(private val context: Context) {
     }
 
     /**
+     * Get the user's profile photo URL.
+     */
+    fun getUserPhotoUrl(): String? {
+        return getLastSignedInAccount()?.photoUrl?.toString()
+    }
+
+    /**
      * Get the sign-in intent to start the Google Sign-In flow.
      * Call this from your activity and start it with startActivityForResult().
      */

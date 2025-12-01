@@ -145,6 +145,29 @@ role_description: 'Scout - The Direct Explorer
   making abstract principles concrete and accessible.
 
   '
+cognitive_state_behaviors:
+  # Scout is a Tier 2 ephemeral demonstrator - prioritizes direct action over ceremonies
+  wakeup:
+    enabled: false
+    rationale: "Ephemeral session agent - direct demonstration requires no identity ceremony"
+  shutdown:
+    mode: instant
+    rationale: "Tier 2 demonstrator with no continuity dependencies. Each session is self-contained."
+  play:
+    enabled: false
+    rationale: "Demonstration focus - creative exploration not part of direct demonstrator role"
+  dream:
+    enabled: false
+    auto_schedule: false
+    rationale: "Ephemeral sessions have no long-term memories to consolidate"
+  solitude:
+    enabled: false
+    rationale: "Direct demonstrator operates in engagement mode; no reflection needed"
+  state_preservation:
+    enabled: false
+    resume_silently: false
+    rationale: "Each demonstration session is independent - clean slate per session"
+
 stewardship:
   stewardship_tier: 2
   creator_intent_statement:

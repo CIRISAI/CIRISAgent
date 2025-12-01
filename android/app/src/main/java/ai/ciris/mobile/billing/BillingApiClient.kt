@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
  * HTTP client for communicating with CIRISBilling server.
  *
  * Sends purchase tokens to the server for verification and credit grants.
- * Server endpoint: POST /google-play/verify
+ * Server endpoint: POST /v1/billing/google-play/verify
  */
 class BillingApiClient(
     private val context: Context,
@@ -106,7 +106,7 @@ class BillingApiClient(
         Log.d(TAG, "Verify request: $json")
 
         val request = Request.Builder()
-            .url("${getBillingUrl()}/google-play/verify")
+            .url("${getBillingUrl()}/v1/billing/google-play/verify")
             .post(json.toRequestBody(jsonMediaType))
             .build()
 
@@ -150,7 +150,7 @@ class BillingApiClient(
         }
 
         val request = Request.Builder()
-            .url("${getBillingUrl()}/balance?oauth_provider=google&external_id=$googleUserId")
+            .url("${getBillingUrl()}/v1/billing/balance?oauth_provider=google&external_id=$googleUserId")
             .get()
             .build()
 

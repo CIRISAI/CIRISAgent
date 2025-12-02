@@ -14,6 +14,9 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+# Common description strings to avoid duplication
+_RATIONALE_DESC = "Mission-driven rationale for this configuration"
+
 
 class WakeupBehavior(BaseModel):
     """Wakeup ceremony configuration.
@@ -29,9 +32,7 @@ class WakeupBehavior(BaseModel):
     enabled: bool = Field(
         default=True, description="Whether to perform full wakeup ceremony. Default preserves Covenant compliance."
     )
-    rationale: Optional[str] = Field(
-        default=None, description="Mission-driven rationale for this configuration (required if enabled=False)"
-    )
+    rationale: Optional[str] = Field(default=None, description=f"{_RATIONALE_DESC} (required if enabled=False)")
 
     @model_validator(mode="after")
     def validate_rationale_if_disabled(self) -> "WakeupBehavior":
@@ -68,7 +69,7 @@ class ShutdownBehavior(BaseModel):
     instant_shutdown_otherwise: bool = Field(
         default=False, description="If no conditions match in conditional mode, allow instant shutdown"
     )
-    rationale: Optional[str] = Field(default=None, description="Mission-driven rationale for this configuration")
+    rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
     @model_validator(mode="after")
     def validate_instant_mode_rationale(self) -> "ShutdownBehavior":
@@ -88,7 +89,7 @@ class StateBehavior(BaseModel):
     """
 
     enabled: bool = Field(default=True, description="Whether this cognitive state is available for this agent")
-    rationale: Optional[str] = Field(default=None, description="Mission-driven rationale for this configuration")
+    rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
 
 class DreamBehavior(BaseModel):
@@ -105,7 +106,7 @@ class DreamBehavior(BaseModel):
     min_interval_hours: int = Field(
         default=6, ge=1, le=168, description="Minimum hours between dream cycles"  # Max 1 week
     )
-    rationale: Optional[str] = Field(default=None, description="Mission-driven rationale for this configuration")
+    rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
 
 class StatePreservationBehavior(BaseModel):
@@ -118,7 +119,7 @@ class StatePreservationBehavior(BaseModel):
     resume_silently: bool = Field(
         default=False, description="Resume without notifying user (for seamless mobile experience)"
     )
-    rationale: Optional[str] = Field(default=None, description="Mission-driven rationale for this configuration")
+    rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
 
 class CognitiveStateBehaviors(BaseModel):

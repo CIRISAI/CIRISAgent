@@ -151,6 +151,35 @@ class StateManager:
 
         return transition_map
 
+    def _is_optional_state_enabled(self, state: AgentState, behaviors: CognitiveStateBehaviors) -> bool:
+        """Check if an optional cognitive state is enabled in behaviors.
+
+        Returns True for states that are always enabled (WORK, WAKEUP, SHUTDOWN).
+        Returns the enabled flag for optional states (PLAY, DREAM, SOLITUDE).
+        """
+        state_behavior_map = {
+            AgentState.PLAY: behaviors.play,
+            AgentState.DREAM: behaviors.dream,
+            AgentState.SOLITUDE: behaviors.solitude,
+        }
+        behavior = state_behavior_map.get(state)
+        return behavior.enabled if behavior else True
+
+    def _check_shutdown_wakeup_transition(
+        self, from_state: AgentState, to_state: AgentState, behaviors: CognitiveStateBehaviors
+    ) -> Optional[bool]:
+        """Check SHUTDOWN -> WAKEUP/WORK transitions based on wakeup config.
+
+        Returns True/False for definitive result, None if not a shutdown transition.
+        """
+        if from_state != AgentState.SHUTDOWN:
+            return None
+        if to_state == AgentState.WAKEUP:
+            return behaviors.wakeup.enabled
+        if to_state == AgentState.WORK:
+            return not behaviors.wakeup.enabled
+        return None
+
     def _is_transition_allowed(
         self,
         transition: StateTransition,
@@ -168,34 +197,17 @@ class StateManager:
         from_state = transition.from_state
         to_state = transition.to_state
 
-        # Wakeup behavior: SHUTDOWN can go to either WAKEUP or WORK
-        if from_state == AgentState.SHUTDOWN:
-            if to_state == AgentState.WAKEUP:
-                # Only allow SHUTDOWN -> WAKEUP if wakeup is enabled
-                return behaviors.wakeup.enabled
-            if to_state == AgentState.WORK:
-                # Only allow SHUTDOWN -> WORK if wakeup is bypassed
-                return not behaviors.wakeup.enabled
+        # Check SHUTDOWN -> WAKEUP/WORK transitions
+        shutdown_result = self._check_shutdown_wakeup_transition(from_state, to_state, behaviors)
+        if shutdown_result is not None:
+            return shutdown_result
 
-        # PLAY state transitions
-        if to_state == AgentState.PLAY and not behaviors.play.enabled:
+        # Check if optional states (PLAY, DREAM, SOLITUDE) are enabled
+        if not self._is_optional_state_enabled(to_state, behaviors):
             return False
-        if from_state == AgentState.PLAY and not behaviors.play.enabled:
+        if not self._is_optional_state_enabled(from_state, behaviors):
             return False
 
-        # DREAM state transitions
-        if to_state == AgentState.DREAM and not behaviors.dream.enabled:
-            return False
-        if from_state == AgentState.DREAM and not behaviors.dream.enabled:
-            return False
-
-        # SOLITUDE state transitions
-        if to_state == AgentState.SOLITUDE and not behaviors.solitude.enabled:
-            return False
-        if from_state == AgentState.SOLITUDE and not behaviors.solitude.enabled:
-            return False
-
-        # All other transitions are allowed
         return True
 
     def _record_state_change(self, new_state: AgentState, old_state: Optional[AgentState]) -> None:

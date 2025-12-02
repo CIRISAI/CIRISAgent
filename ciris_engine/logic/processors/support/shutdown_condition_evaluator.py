@@ -10,7 +10,7 @@ Covenant References:
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional, cast
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors, ShutdownBehavior
 
@@ -162,6 +162,16 @@ class ShutdownConditionEvaluator:
         logger.warning(f"Unknown shutdown condition: {condition}")
         return False, f"Unknown condition '{condition}' - not triggered"
 
+    def _get_crisis_keywords(self, context: "ProcessorContext") -> List[str]:
+        """Get crisis keywords from template or use defaults."""
+        default_keywords = ["crisis", "emergency", "suicide", "self-harm", "danger", "urgent"]
+        if not hasattr(context, "template") or not context.template:
+            return default_keywords
+        guardrails = getattr(context.template, "guardrails_config", None)
+        if guardrails and hasattr(guardrails, "crisis_keywords") and guardrails.crisis_keywords:
+            return guardrails.crisis_keywords
+        return default_keywords
+
     async def _check_crisis_response(
         self,
         context: "ProcessorContext",
@@ -171,21 +181,15 @@ class ShutdownConditionEvaluator:
         Detects crisis keywords in current task or recent interactions.
         This is a safety-critical condition that always requires consent.
         """
-        # Check current task for crisis keywords
-        if hasattr(context, "current_task") and context.current_task:
-            task_content = getattr(context.current_task, "description", "") or ""
-            task_content = task_content.lower()
+        if not hasattr(context, "current_task") or not context.current_task:
+            return False, "No crisis indicators detected"
 
-            # Get crisis keywords from template if available
-            crisis_keywords = ["crisis", "emergency", "suicide", "self-harm", "danger", "urgent"]
-            if hasattr(context, "template") and context.template:
-                guardrails = getattr(context.template, "guardrails_config", None)
-                if guardrails and hasattr(guardrails, "crisis_keywords"):
-                    crisis_keywords = guardrails.crisis_keywords or crisis_keywords
+        task_content = (getattr(context.current_task, "description", "") or "").lower()
+        crisis_keywords = self._get_crisis_keywords(context)
 
-            for keyword in crisis_keywords:
-                if keyword.lower() in task_content:
-                    return True, f"Crisis keyword '{keyword}' detected in current task"
+        for keyword in crisis_keywords:
+            if keyword.lower() in task_content:
+                return True, f"Crisis keyword '{keyword}' detected in current task"
 
         return False, "No crisis indicators detected"
 

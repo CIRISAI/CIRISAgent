@@ -655,6 +655,46 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
         }
 
 
+# =============================================================================
+# ROLE DETERMINATION HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+
+def _is_ciris_admin_email(email: Optional[str]) -> bool:
+    """Check if the email is a @ciris.ai domain email (gets automatic ADMIN role)."""
+    return email is not None and email.endswith("@ciris.ai")
+
+
+def _get_oauth_users_dict(auth_service: "APIAuthService") -> Optional[Dict]:
+    """Get the _oauth_users dictionary from auth_service, or None if unavailable."""
+    return getattr(auth_service, "_oauth_users", None)
+
+
+def _lookup_existing_user_role(oauth_users: Dict, provider: str, external_id: str) -> Optional[UserRole]:
+    """Look up an existing OAuth user and return their role if found.
+
+    Returns None if user not found.
+    """
+    user_id = f"{provider}:{external_id}"
+    existing_user = oauth_users.get(user_id)
+
+    if not existing_user:
+        logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
+        logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+        return None
+
+    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
+    role = existing_user.role
+    if isinstance(role, UserRole):
+        return role
+    return UserRole(role) if role else UserRole.OBSERVER
+
+
+def _is_first_oauth_user(oauth_users: Optional[Dict]) -> bool:
+    """Check if this would be the first OAuth user (empty oauth_users dict)."""
+    return oauth_users is not None and len(oauth_users) == 0
+
+
 def _determine_user_role(
     email: Optional[str],
     auth_service: Optional["APIAuthService"] = None,
@@ -675,42 +715,32 @@ def _determine_user_role(
     )
 
     # @ciris.ai users always get ADMIN
-    if email and email.endswith("@ciris.ai"):
+    if _is_ciris_admin_email(email):
         logger.debug("[AUTH DEBUG] Granting ADMIN role to @ciris.ai user")
         return UserRole.ADMIN
 
-    if auth_service is not None:
-        try:
-            oauth_users = getattr(auth_service, "_oauth_users", None)
-            logger.info(f"[AUTH DEBUG] _oauth_users count: {len(oauth_users) if oauth_users else 'None'}")
+    if auth_service is None:
+        logger.info("[AUTH DEBUG] No auth_service provided - returning OBSERVER role")
+        return UserRole.OBSERVER
 
-            # Check if this user already exists with a role
-            # If so, preserve their existing role (don't demote!)
-            if external_id and oauth_users:
-                user_id = f"{provider}:{external_id}"
-                existing_user = oauth_users.get(user_id)
-                if existing_user:
-                    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
-                    # Return their existing role - don't demote them!
-                    role = existing_user.role
-                    if isinstance(role, UserRole):
-                        return role
-                    return UserRole(role) if role else UserRole.OBSERVER
-                else:
-                    logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
-                    # List existing users for debugging
-                    logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+    try:
+        oauth_users = _get_oauth_users_dict(auth_service)
+        logger.info(f"[AUTH DEBUG] _oauth_users count: {len(oauth_users) if oauth_users else 'None'}")
 
-            # Check if this is the first OAuth user (setup wizard scenario)
-            # Grant elevated role so they can see the default API channel
-            if oauth_users is not None and len(oauth_users) == 0:
-                logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
-                return UserRole.SYSTEM_ADMIN
+        # Check if this user already exists with a role - preserve their existing role
+        if external_id and oauth_users:
+            existing_role = _lookup_existing_user_role(oauth_users, provider, external_id)
+            if existing_role is not None:
+                return existing_role
 
-        except (TypeError, AttributeError) as e:
-            # Mock objects or missing attributes - fall through to OBSERVER
-            logger.warning(f"[AUTH DEBUG] Exception accessing auth_service: {e}")
-            pass
+        # Check if this is the first OAuth user (setup wizard scenario)
+        if _is_first_oauth_user(oauth_users):
+            logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
+            return UserRole.SYSTEM_ADMIN
+
+    except (TypeError, AttributeError) as e:
+        # Mock objects or missing attributes - fall through to OBSERVER
+        logger.warning(f"[AUTH DEBUG] Exception accessing auth_service: {e}")
 
     logger.info("[AUTH DEBUG] No special conditions met - returning OBSERVER role")
     return UserRole.OBSERVER
@@ -1049,6 +1079,118 @@ class NativeTokenResponse(BaseModel):
     name: Optional[str] = None
 
 
+# =============================================================================
+# TOKEN VERIFICATION HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+# Valid Google issuers - constant
+VALID_GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+
+
+def _get_allowed_audiences_from_config() -> Optional[set]:
+    """Load allowed audiences from OAuth config.
+
+    Returns None if OAuth is not configured (on-device mode).
+    On-device mode skips audience validation since the Android app
+    has its own client ID and we can't know it ahead of time.
+    """
+    try:
+        provider_config = _load_oauth_config("google")
+        expected_client_id = provider_config.get("client_id")
+        android_client_id = provider_config.get("android_client_id")
+        allowed_audiences = {expected_client_id}
+        if android_client_id:
+            allowed_audiences.add(android_client_id)
+        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
+        return allowed_audiences
+    except HTTPException:
+        # On-device mode: OAuth not configured, skip audience validation
+        logger.info("[NativeAuth] No OAuth config found - running in on-device mode, skipping audience validation")
+        return None
+
+
+def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Optional[set]) -> None:
+    """Validate token audience matches our configured client ID.
+
+    If allowed_audiences is None (on-device mode), validation is skipped.
+    Raises HTTPException if validation fails.
+    """
+    if allowed_audiences is None:
+        # On-device mode: skip audience validation, just log the audience
+        logger.info(f"[NativeAuth] On-device mode: skipping audience validation (aud: {token_aud})")
+        return
+
+    if not token_aud or token_aud not in allowed_audiences:
+        logger.error(
+            f"[NativeAuth] SECURITY: Token audience mismatch! "
+            f"Got: {token_aud}, Expected one of: {allowed_audiences}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued for this application (audience mismatch).",
+        )
+
+
+def _validate_token_issuer(token_iss: Optional[str]) -> None:
+    """Validate token issuer is Google.
+
+    Raises HTTPException if validation fails.
+    """
+    if not token_iss or token_iss not in VALID_GOOGLE_ISSUERS:
+        logger.error(f"[NativeAuth] SECURITY: Invalid issuer! Got: {token_iss}, Expected: {VALID_GOOGLE_ISSUERS}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued by Google (issuer mismatch).",
+        )
+
+
+def _validate_token_expiry(token_exp: Optional[str]) -> None:
+    """Validate token is not expired.
+
+    Raises HTTPException if validation fails.
+    """
+    import time
+
+    if not token_exp:
+        return
+
+    try:
+        exp_timestamp = int(token_exp)
+        current_time = int(time.time())
+        if exp_timestamp < current_time:
+            logger.error(f"[NativeAuth] SECURITY: Token expired! exp: {exp_timestamp}, now: {current_time}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google ID token has expired. Please sign in again.",
+            )
+    except (ValueError, TypeError):
+        logger.error(f"[NativeAuth] Invalid exp claim format: {token_exp}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has invalid expiry format.",
+        )
+
+
+def _validate_token_sub_claim(sub: Optional[str]) -> None:
+    """Validate that the sub (user ID) claim exists.
+
+    Raises HTTPException if validation fails.
+    """
+    if not sub:
+        logger.error("[NativeAuth] Token missing required 'sub' claim")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google ID token missing user ID (sub claim).",
+        )
+
+
+def _log_email_verification_warning(token_info: Dict) -> None:
+    """Log a warning if email is not verified."""
+    email_verified = token_info.get("email_verified")
+    if email_verified is not None and str(email_verified).lower() not in ("true", "1"):
+        logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
+
+
 async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     Verify a Google ID token and extract user info.
@@ -1063,31 +1205,12 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     SECURITY: No fallback path exists. Tokens MUST be verified by Google
     with proper audience/issuer/expiry validation before user creation.
     """
-    import time
-
     import httpx
 
     logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
 
     # Load our expected client ID from OAuth config
-    try:
-        provider_config = _load_oauth_config("google")
-        expected_client_id = provider_config.get("client_id")
-        # Android apps may have a separate client ID - check for android_client_id in config
-        android_client_id = provider_config.get("android_client_id")
-        allowed_audiences = {expected_client_id}
-        if android_client_id:
-            allowed_audiences.add(android_client_id)
-        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
-    except HTTPException:
-        logger.error("[NativeAuth] Google OAuth not configured - cannot verify native tokens")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google OAuth not configured. Please configure OAuth before using native login.",
-        )
-
-    # Valid Google issuers
-    valid_issuers = {"accounts.google.com", "https://accounts.google.com"}
+    allowed_audiences = _get_allowed_audiences_from_config()
 
     # Verify with Google's tokeninfo endpoint
     try:
@@ -1110,61 +1233,14 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
                 f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
             )
 
-            # SECURITY: Validate audience (aud) - CRITICAL!
-            # This ensures the token was issued for OUR application, not someone else's
-            token_aud = token_info.get("aud")
-            if not token_aud or token_aud not in allowed_audiences:
-                logger.error(
-                    f"[NativeAuth] SECURITY: Token audience mismatch! "
-                    f"Got: {token_aud}, Expected one of: {allowed_audiences}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token was not issued for this application (audience mismatch).",
-                )
+            # SECURITY: Validate all token claims
+            _validate_token_audience(token_info.get("aud"), allowed_audiences)
+            _validate_token_issuer(token_info.get("iss"))
+            _validate_token_expiry(token_info.get("exp"))
+            _log_email_verification_warning(token_info)
 
-            # SECURITY: Validate issuer (iss) - ensures token is from Google
-            token_iss = token_info.get("iss")
-            if not token_iss or token_iss not in valid_issuers:
-                logger.error(f"[NativeAuth] SECURITY: Invalid issuer! Got: {token_iss}, Expected: {valid_issuers}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token was not issued by Google (issuer mismatch).",
-                )
-
-            # SECURITY: Validate expiry (exp) - ensures token is not expired
-            token_exp = token_info.get("exp")
-            if token_exp:
-                try:
-                    exp_timestamp = int(token_exp)
-                    current_time = int(time.time())
-                    if exp_timestamp < current_time:
-                        logger.error(f"[NativeAuth] SECURITY: Token expired! exp: {exp_timestamp}, now: {current_time}")
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Google ID token has expired. Please sign in again.",
-                        )
-                except (ValueError, TypeError):
-                    logger.error(f"[NativeAuth] Invalid exp claim format: {token_exp}")
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Token has invalid expiry format.",
-                    )
-
-            # SECURITY: Validate email is verified (for email-based operations)
-            email_verified = token_info.get("email_verified")
-            if email_verified is not None and str(email_verified).lower() not in ("true", "1"):
-                logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
-                # Not a hard failure, but log it
-
-            # Validate we have required claims
             sub = token_info.get("sub")
-            if not sub:
-                logger.error("[NativeAuth] Token missing required 'sub' claim")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Google ID token missing user ID (sub claim).",
-                )
+            _validate_token_sub_claim(sub)
 
             logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
 

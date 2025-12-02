@@ -466,6 +466,85 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
+# =============================================================================
+# SETUP USER HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+
+async def _link_oauth_identity_to_wa(auth_service: Any, setup: "SetupCompleteRequest", wa_cert: Any) -> Any:
+    """Link OAuth identity to WA, handling existing links gracefully.
+
+    Returns the WA cert to use (may be updated if existing link found).
+    """
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    logger.info("CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
+    logger.info(
+        f"CIRIS_SETUP_DEBUG Linking OAuth identity: {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+    )
+
+    try:
+        # First check if OAuth identity is already linked to another WA
+        existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
+        if existing_wa and existing_wa.wa_id != wa_cert.wa_id:
+            logger.info(f"CIRIS_SETUP_DEBUG OAuth identity already linked to WA {existing_wa.wa_id}")
+            logger.info(
+                "CIRIS_SETUP_DEBUG During first-run setup, we'll update the existing WA to be ROOT instead of creating new"
+            )
+            # Update the existing WA to have ROOT role and update its name
+            await auth_service.update_wa(
+                wa_id=existing_wa.wa_id,
+                name=setup.admin_username,
+                role=WARole.ROOT,
+            )
+            logger.info(f"CIRIS_SETUP_DEBUG ✅ Updated existing WA {existing_wa.wa_id} to ROOT role")
+            return existing_wa
+
+        # No existing link or same WA - safe to link
+        await auth_service.link_oauth_identity(
+            wa_id=wa_cert.wa_id,
+            provider=setup.oauth_provider,
+            external_id=setup.oauth_external_id,
+            account_name=setup.admin_username,
+            metadata={"email": setup.oauth_email} if setup.oauth_email else None,
+            primary=True,
+        )
+        logger.info(
+            f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+        )
+    except Exception as e:
+        logger.error(f"CIRIS_SETUP_DEBUG ❌ FAILED to link OAuth identity: {e}", exc_info=True)
+        # Don't fail setup if OAuth linking fails - user can still use password
+
+    return wa_cert
+
+
+def _log_oauth_linking_skip(setup: "SetupCompleteRequest") -> None:
+    """Log debug information when OAuth linking is skipped."""
+    logger.info("CIRIS_SETUP_DEBUG *** SKIPPING OAuth linking block - condition not met ***")
+    if not setup.oauth_provider:
+        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy/empty")
+    if not setup.oauth_external_id:
+        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy/empty")
+
+
+async def _update_system_admin_password(auth_service: Any, setup: "SetupCompleteRequest", exclude_wa_id: str) -> None:
+    """Update the default admin password if specified."""
+    if not setup.system_admin_password:
+        return
+
+    logger.info("Updating default admin password...")
+    all_was = await auth_service.list_was(active_only=True)
+    admin_wa = next((wa for wa in all_was if wa.name == "admin" and wa.wa_id != exclude_wa_id), None)
+
+    if admin_wa:
+        admin_password_hash = auth_service.hash_password(setup.system_admin_password)
+        await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
+        logger.info("✅ Updated admin password")
+    else:
+        logger.warning("⚠️  Default admin WA not found")
+
+
 async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) -> None:
     """Create users immediately during setup completion.
 
@@ -495,7 +574,6 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     try:
         # Create new user with ROOT role (setup wizard user needs full authority to handle deferrals)
         wa_role = WARole.ROOT
-
         logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
 
         # Use OAuth email if available, otherwise generate local email
@@ -527,62 +605,12 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
         # Link OAuth identity if provided - THIS IS CRITICAL for OAuth login to work
         if setup.oauth_provider and setup.oauth_external_id:
-            logger.info(f"CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
-            logger.info(
-                f"CIRIS_SETUP_DEBUG Linking OAuth identity: {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
-            )
-            try:
-                # First check if OAuth identity is already linked to another WA
-                existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
-                if existing_wa and existing_wa.wa_id != wa_cert.wa_id:
-                    logger.info(f"CIRIS_SETUP_DEBUG OAuth identity already linked to WA {existing_wa.wa_id}")
-                    logger.info(
-                        f"CIRIS_SETUP_DEBUG During first-run setup, we'll update the existing WA to be ROOT instead of creating new"
-                    )
-                    # Update the existing WA to have ROOT role and update its name
-                    await auth_service.update_wa(
-                        wa_id=existing_wa.wa_id,
-                        name=setup.admin_username,
-                        role=WARole.ROOT,
-                    )
-                    # Use the existing WA instead of the newly created one
-                    wa_cert = existing_wa
-                    logger.info(f"CIRIS_SETUP_DEBUG ✅ Updated existing WA {existing_wa.wa_id} to ROOT role")
-                else:
-                    # No existing link or same WA - safe to link
-                    await auth_service.link_oauth_identity(
-                        wa_id=wa_cert.wa_id,
-                        provider=setup.oauth_provider,
-                        external_id=setup.oauth_external_id,
-                        account_name=setup.admin_username,
-                        metadata={"email": setup.oauth_email} if setup.oauth_email else None,
-                        primary=True,
-                    )
-                    logger.info(
-                        f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
-                    )
-            except Exception as e:
-                logger.error(f"CIRIS_SETUP_DEBUG ❌ FAILED to link OAuth identity: {e}", exc_info=True)
-                # Don't fail setup if OAuth linking fails - user can still use password
+            wa_cert = await _link_oauth_identity_to_wa(auth_service, setup, wa_cert)
         else:
-            logger.info("CIRIS_SETUP_DEBUG *** SKIPPING OAuth linking block - condition not met ***")
-            if not setup.oauth_provider:
-                logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy/empty")
-            if not setup.oauth_external_id:
-                logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy/empty")
+            _log_oauth_linking_skip(setup)
 
         # Update default admin password if specified
-        if setup.system_admin_password:
-            logger.info("Updating default admin password...")
-            all_was = await auth_service.list_was(active_only=True)
-            admin_wa = next((wa for wa in all_was if wa.name == "admin" and wa.wa_id != wa_cert.wa_id), None)
-
-            if admin_wa:
-                admin_password_hash = auth_service.hash_password(setup.system_admin_password)
-                await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
-                logger.info("✅ Updated admin password")
-            else:
-                logger.warning("⚠️  Default admin WA not found")
+        await _update_system_admin_password(auth_service, setup, wa_cert.wa_id)
 
     finally:
         await auth_service.stop()

@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -963,6 +963,98 @@ class CIRISRuntime:
         except Exception as e:
             logger.error(f"Failed to migrate tickets config to graph: {e}")
 
+    def _should_skip_cognitive_migration(self, force_from_template: bool) -> bool:
+        """Check if cognitive migration should be skipped (first-run mode without force)."""
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        if is_first_run() and not force_from_template:
+            logger.info("[COGNITIVE_MIGRATION] First-run mode: Skipping migration (will seed after setup wizard)")
+            return True
+        return False
+
+    async def _check_existing_cognitive_config(self, config_service: Any) -> bool:
+        """Check if cognitive config already exists in graph.
+
+        Returns True if config exists and should skip migration.
+        """
+        try:
+            existing_config = await config_service.get_config("cognitive_state_behaviors")
+            if existing_config and existing_config.value and existing_config.value.dict_value:
+                existing_wakeup = existing_config.value.dict_value.get("wakeup", {})
+                logger.info(
+                    f"[COGNITIVE_MIGRATION] Config already exists in graph - wakeup.enabled={existing_wakeup.get('enabled', 'MISSING')}"
+                )
+                logger.info("[COGNITIVE_MIGRATION] Skipping migration (existing config preserved)")
+                return True
+        except Exception as e:
+            logger.info(f"[COGNITIVE_MIGRATION] No existing config in graph (will migrate): {e}")
+        return False
+
+    def _get_cognitive_behaviors_from_template(self) -> Optional[Any]:
+        """Get cognitive behaviors from the agent template if available."""
+        logger.info(f"[COGNITIVE_MIGRATION] identity_manager={self.identity_manager is not None}")
+        if not self.identity_manager or not self.identity_manager.agent_template:
+            logger.info("[COGNITIVE_MIGRATION] No template available (identity_manager or agent_template is None)")
+            return None
+
+        template = self.identity_manager.agent_template
+        logger.info(f"[COGNITIVE_MIGRATION] Template loaded: name={getattr(template, 'name', 'UNKNOWN')}")
+        cognitive_behaviors = getattr(template, "cognitive_state_behaviors", None)
+        if cognitive_behaviors:
+            logger.info(
+                f"[COGNITIVE_MIGRATION] Template has cognitive_state_behaviors: wakeup.enabled={cognitive_behaviors.wakeup.enabled}"
+            )
+        else:
+            logger.info("[COGNITIVE_MIGRATION] Template has NO cognitive_state_behaviors attribute")
+        return cognitive_behaviors
+
+    def _create_legacy_cognitive_behaviors(self) -> Any:
+        """Create pre-1.7 compatible cognitive behaviors config."""
+        from ciris_engine.schemas.config.cognitive_state_behaviors import (
+            CognitiveStateBehaviors,
+            DreamBehavior,
+            StateBehavior,
+            StatePreservationBehavior,
+        )
+
+        logger.info("No cognitive state behaviors found - creating pre-1.7 compatible config")
+        return CognitiveStateBehaviors(
+            play=StateBehavior(
+                enabled=False,
+                rationale="Pre-1.7 agent: PLAY state not available in legacy version",
+            ),
+            dream=DreamBehavior(
+                enabled=False,
+                auto_schedule=False,
+                rationale="Pre-1.7 agent: DREAM state not available in legacy version",
+            ),
+            solitude=StateBehavior(
+                enabled=False,
+                rationale="Pre-1.7 agent: SOLITUDE state not available in legacy version",
+            ),
+            state_preservation=StatePreservationBehavior(
+                enabled=True,
+                resume_silently=False,
+                rationale="Pre-1.7 agent: preserve state across restarts",
+            ),
+        )
+
+    async def _save_cognitive_behaviors_to_graph(self, config_service: Any, cognitive_behaviors: Any) -> None:
+        """Save cognitive behaviors to the graph with IDENTITY scope."""
+        from ciris_engine.schemas.services.graph_core import GraphScope
+
+        config_dict = cognitive_behaviors.model_dump()
+        logger.info(
+            f"[COGNITIVE_MIGRATION] Saving to graph: wakeup.enabled={config_dict.get('wakeup', {}).get('enabled', 'MISSING')}"
+        )
+        await config_service.set_config(
+            key="cognitive_state_behaviors",
+            value=config_dict,
+            updated_by="system_bootstrap",
+            scope=GraphScope.IDENTITY,
+        )
+        logger.info("[COGNITIVE_MIGRATION] SUCCESS - Migrated cognitive state behaviors to graph (IDENTITY scope)")
+
     async def _migrate_cognitive_state_behaviors_to_graph(self, force_from_template: bool = False) -> None:
         """Migrate cognitive state behaviors to graph.
 
@@ -981,12 +1073,7 @@ class CIRISRuntime:
             force_from_template: If True, always seed from template (used during resume_from_first_run
                 when template is now available). This overwrites any pre-existing config.
         """
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        # In first-run mode (before template selection), skip migration
-        # Migration will happen in resume_from_first_run() after user selects template
-        if is_first_run() and not force_from_template:
-            logger.info("[COGNITIVE_MIGRATION] First-run mode: Skipping migration (will seed after setup wizard)")
+        if self._should_skip_cognitive_migration(force_from_template):
             return
 
         if not self.service_initializer or not self.service_initializer.config_service:
@@ -995,90 +1082,24 @@ class CIRISRuntime:
 
         config_service = self.service_initializer.config_service
 
-        # Check if cognitive state behaviors already exist in graph
         logger.info("[COGNITIVE_MIGRATION] Starting cognitive state behaviors migration check...")
         logger.info(f"[COGNITIVE_MIGRATION] force_from_template={force_from_template}")
 
         if not force_from_template:
-            try:
-                existing_config = await config_service.get_config("cognitive_state_behaviors")
-                if existing_config and existing_config.value and existing_config.value.dict_value:
-                    existing_wakeup = existing_config.value.dict_value.get("wakeup", {})
-                    logger.info(
-                        f"[COGNITIVE_MIGRATION] Config already exists in graph - wakeup.enabled={existing_wakeup.get('enabled', 'MISSING')}"
-                    )
-                    logger.info("[COGNITIVE_MIGRATION] Skipping migration (existing config preserved)")
-                    return
-            except Exception as e:
-                logger.info(f"[COGNITIVE_MIGRATION] No existing config in graph (will migrate): {e}")
+            if await self._check_existing_cognitive_config(config_service):
+                return
         else:
             logger.info("[COGNITIVE_MIGRATION] Force mode: Will overwrite existing config with template values")
 
-        # Try to get cognitive behaviors from template (first-run scenario)
-        cognitive_behaviors = None
-        logger.info(f"[COGNITIVE_MIGRATION] identity_manager={self.identity_manager is not None}")
-        if self.identity_manager and self.identity_manager.agent_template:
-            template = self.identity_manager.agent_template
-            logger.info(f"[COGNITIVE_MIGRATION] Template loaded: name={getattr(template, 'name', 'UNKNOWN')}")
-            cognitive_behaviors = getattr(template, "cognitive_state_behaviors", None)
-            if cognitive_behaviors:
-                logger.info(
-                    f"[COGNITIVE_MIGRATION] Template has cognitive_state_behaviors: wakeup.enabled={cognitive_behaviors.wakeup.enabled}"
-                )
-            else:
-                logger.info("[COGNITIVE_MIGRATION] Template has NO cognitive_state_behaviors attribute")
-        else:
-            logger.info("[COGNITIVE_MIGRATION] No template available (identity_manager or agent_template is None)")
+        # Try to get cognitive behaviors from template
+        cognitive_behaviors = self._get_cognitive_behaviors_from_template()
 
         # If no template available (pre-1.7.0 agent upgrade), create legacy-compatible config
         if not cognitive_behaviors:
-            logger.info("No cognitive state behaviors found - creating pre-1.7 compatible config")
-            from ciris_engine.schemas.config.cognitive_state_behaviors import (
-                CognitiveStateBehaviors,
-                DreamBehavior,
-                StateBehavior,
-                StatePreservationBehavior,
-            )
-
-            # Pre-1.7 behavior: wakeup/shutdown enabled, PLAY/DREAM/SOLITUDE disabled
-            cognitive_behaviors = CognitiveStateBehaviors(
-                # Wakeup: enabled (default - full identity ceremony)
-                # Shutdown: always_consent (default - Covenant compliance)
-                play=StateBehavior(
-                    enabled=False,
-                    rationale="Pre-1.7 agent: PLAY state not available in legacy version",
-                ),
-                dream=DreamBehavior(
-                    enabled=False,
-                    auto_schedule=False,
-                    rationale="Pre-1.7 agent: DREAM state not available in legacy version",
-                ),
-                solitude=StateBehavior(
-                    enabled=False,
-                    rationale="Pre-1.7 agent: SOLITUDE state not available in legacy version",
-                ),
-                state_preservation=StatePreservationBehavior(
-                    enabled=True,
-                    resume_silently=False,
-                    rationale="Pre-1.7 agent: preserve state across restarts",
-                ),
-            )
+            cognitive_behaviors = self._create_legacy_cognitive_behaviors()
 
         try:
-            # Store cognitive behaviors in the graph with IDENTITY scope (WA-protected)
-            from ciris_engine.schemas.services.graph_core import GraphScope
-
-            config_dict = cognitive_behaviors.model_dump()
-            logger.info(
-                f"[COGNITIVE_MIGRATION] Saving to graph: wakeup.enabled={config_dict.get('wakeup', {}).get('enabled', 'MISSING')}"
-            )
-            await config_service.set_config(
-                key="cognitive_state_behaviors",
-                value=config_dict,
-                updated_by="system_bootstrap",
-                scope=GraphScope.IDENTITY,  # Protected - agent cannot modify
-            )
-            logger.info("[COGNITIVE_MIGRATION] SUCCESS - Migrated cognitive state behaviors to graph (IDENTITY scope)")
+            await self._save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
         except Exception as e:
             logger.error(f"[COGNITIVE_MIGRATION] FAILED to migrate cognitive state behaviors to graph: {e}")
 
@@ -1260,6 +1281,54 @@ class CIRISRuntime:
             except Exception as e:
                 logger.error(f"Error registering services for adapter {adapter.__class__.__name__}: {e}", exc_info=True)
 
+    def _build_adapter_info(self, adapter: Any) -> JSONDict:
+        """Build adapter info dictionary for authentication token creation."""
+        adapter_info: JSONDict = {
+            "instance_id": str(id(adapter)),
+            "startup_time": (
+                self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
+            ),
+        }
+        # Get channel-specific info if available
+        if hasattr(adapter, "get_channel_info"):
+            adapter_info.update(adapter.get_channel_info())
+        return adapter_info
+
+    async def _create_adapter_auth_token(
+        self, adapter: Any, adapter_type: str, adapter_info: JSONDict
+    ) -> Optional[str]:
+        """Create and set authentication token for an adapter."""
+        auth_service = self.service_initializer.auth_service if self.service_initializer else None
+        if not auth_service:
+            return None
+
+        auth_token = await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
+
+        if hasattr(adapter, "set_auth_token") and auth_token:
+            adapter.set_auth_token(auth_token)
+
+        if auth_token:
+            logger.info(f"Generated authentication token for {adapter_type} adapter")
+
+        return auth_token
+
+    def _register_adapter_service(self, reg: AdapterServiceRegistration, adapter: Any) -> bool:
+        """Register a single adapter service. Returns True if successful."""
+        if not isinstance(reg, AdapterServiceRegistration):
+            logger.error(
+                f"Adapter {adapter.__class__.__name__} provided an invalid AdapterServiceRegistration object: {reg}"
+            )
+            return False
+
+        self.service_registry.register_service(
+            service_type=reg.service_type,
+            provider=reg.provider,
+            priority=reg.priority,
+            capabilities=reg.capabilities,
+        )
+        logger.info(f"Registered {reg.service_type.value} from {adapter.__class__.__name__}")
+        return True
+
     async def _register_adapter_services_for_resume(self) -> None:
         """Register adapter services during resume_from_first_run.
 
@@ -1272,55 +1341,12 @@ class CIRISRuntime:
 
         for adapter in self.adapters:
             try:
-                # Generate authentication token for adapter - REQUIRED for security
                 adapter_type = adapter.__class__.__name__.lower().replace("adapter", "")
-                # Explicitly type as JSONDict for authentication service compatibility
-                adapter_info: JSONDict = {
-                    "instance_id": str(id(adapter)),
-                    "startup_time": (
-                        self.time_service.now().isoformat()
-                        if self.time_service
-                        else datetime.now(timezone.utc).isoformat()
-                    ),
-                }
+                adapter_info = self._build_adapter_info(adapter)
+                await self._create_adapter_auth_token(adapter, adapter_type, adapter_info)
 
-                # Get channel-specific info if available
-                if hasattr(adapter, "get_channel_info"):
-                    adapter_info.update(adapter.get_channel_info())
-
-                # Get authentication service from service initializer
-                auth_service = self.service_initializer.auth_service if self.service_initializer else None
-
-                # Create adapter token using the proper authentication service
-                auth_token = (
-                    await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
-                    if auth_service
-                    else None
-                )
-
-                # Set token on adapter if it has the method
-                if hasattr(adapter, "set_auth_token") and auth_token:
-                    adapter.set_auth_token(auth_token)
-
-                if auth_token:
-                    logger.info(f"Generated authentication token for {adapter_type} adapter")
-
-                registrations = adapter.get_services_to_register()
-                for reg in registrations:
-                    if not isinstance(reg, AdapterServiceRegistration):
-                        logger.error(
-                            f"Adapter {adapter.__class__.__name__} provided an invalid AdapterServiceRegistration object: {reg}"
-                        )
-                        continue
-
-                    # All services are global now
-                    self.service_registry.register_service(
-                        service_type=reg.service_type,
-                        provider=reg.provider,
-                        priority=reg.priority,
-                        capabilities=reg.capabilities,
-                    )
-                    logger.info(f"Registered {reg.service_type.value} from {adapter.__class__.__name__}")
+                for reg in adapter.get_services_to_register():
+                    self._register_adapter_service(reg, adapter)
             except Exception as e:
                 logger.error(f"Error registering services for adapter {adapter.__class__.__name__}: {e}", exc_info=True)
 
@@ -1505,30 +1531,10 @@ class CIRISRuntime:
         else:
             logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")
 
-    async def resume_from_first_run(self) -> None:
-        """Resume initialization after setup wizard completes.
-
-        This continues from the point where first-run mode paused (line 1088).
-        It executes the same steps as normal mode initialization.
-        """
-        import time
-
-        start_time = time.time()
-
-        def log_step(step_num: int, total: int, msg: str) -> None:
-            elapsed = time.time() - start_time
-            logger.warning(f"[RESUME {step_num}/{total}] [{elapsed:.2f}s] {msg}")
-
-        logger.warning("")
-        logger.warning("=" * 70)
-        logger.warning("🔄 RESUMING FROM FIRST-RUN MODE")
-        logger.warning("=" * 70)
-        logger.warning("")
-
-        total_steps = 13
-        log_step(1, total_steps, "Starting resume from first-run...")
-
-        # Reload environment variables to pick up new config
+    def _resume_reload_environment(
+        self, log_step: Callable[[int, int, str], None], total_steps: int
+    ) -> "EssentialConfig":
+        """Reload environment and config during resume from first-run."""
         from dotenv import load_dotenv
 
         from ciris_engine.logic.setup.first_run import get_default_config_path
@@ -1541,20 +1547,22 @@ class CIRISRuntime:
         else:
             log_step(2, total_steps, f"⚠️ Config path does not exist: {config_path}")
 
-        # Reload config to pick up CIRIS_TEMPLATE from .env
         config = self._ensure_config()
         config.load_env_vars()
         log_step(3, total_steps, f"✓ Config reloaded - default_template: {config.default_template}")
+        return config
 
-        # NOW initialize identity with the user-selected template
-        # This was skipped in _initialize_identity() during first-run
+    async def _resume_initialize_identity(
+        self, config: "EssentialConfig", log_step: Callable[[int, int, str], None], total_steps: int
+    ) -> None:
+        """Initialize identity with user-selected template during resume."""
         log_step(
             4,
             total_steps,
-            f"Initializing identity... identity_manager={self.identity_manager is not None}, time_service={self.time_service is not None}",
+            f"Initializing identity... identity_manager={self.identity_manager is not None}, "
+            f"time_service={self.time_service is not None}",
         )
         if self.identity_manager and self.time_service:
-            # Recreate identity manager with updated config that has CIRIS_TEMPLATE
             self.identity_manager = IdentityManager(config, self.time_service)
             self.agent_identity = await self.identity_manager.initialize_identity()
             await self._create_startup_node()
@@ -1566,10 +1574,10 @@ class CIRISRuntime:
         else:
             log_step(4, total_steps, "⚠️ Skipped identity init - missing identity_manager or time_service")
 
-        # Migrate cognitive state behaviors from the user-selected template
-        # This was skipped in _migrate_adapter_configs_to_graph() during first-run
-        # because no template was selected yet. Now we have the template, so migrate with force=True
-        # to ensure the template's config (e.g., wakeup.enabled=false for Ally) is applied
+    async def _resume_migrate_cognitive_behaviors(
+        self, log_step: Callable[[int, int, str], None], total_steps: int
+    ) -> None:
+        """Migrate cognitive state behaviors from template during resume."""
         log_step(5, total_steps, "Migrating cognitive state behaviors from template...")
         if self.identity_manager and self.identity_manager.agent_template:
             template_name = getattr(self.identity_manager.agent_template, "name", "UNKNOWN")
@@ -1578,7 +1586,8 @@ class CIRISRuntime:
                 log_step(
                     5,
                     total_steps,
-                    f"Template '{template_name}' has cognitive_state_behaviors: wakeup.enabled={cognitive_behaviors.wakeup.enabled}",
+                    f"Template '{template_name}' has cognitive_state_behaviors: "
+                    f"wakeup.enabled={cognitive_behaviors.wakeup.enabled}",
                 )
             else:
                 log_step(
@@ -1590,12 +1599,15 @@ class CIRISRuntime:
             log_step(5, total_steps, "⚠️ No template available - using default cognitive behaviors")
             await self._migrate_cognitive_state_behaviors_to_graph(force_from_template=False)
 
-        # Initialize core services now that identity is available
-        # This was skipped in _initialize_services() during first-run
+    async def _resume_initialize_core_services(
+        self, config: "EssentialConfig", log_step: Callable[[int, int, str], None], total_steps: int
+    ) -> None:
+        """Initialize core services during resume."""
         log_step(
             6,
             total_steps,
-            f"Initializing core services... service_initializer={self.service_initializer is not None}, agent_identity={self.agent_identity is not None}",
+            f"Initializing core services... service_initializer={self.service_initializer is not None}, "
+            f"agent_identity={self.agent_identity is not None}",
         )
         if self.service_initializer and self.agent_identity:
             await self.service_initializer.initialize_all_services(
@@ -1607,7 +1619,6 @@ class CIRISRuntime:
             )
             log_step(6, total_steps, "✓ Core services initialized")
 
-            # Load any external modules (e.g. mockllm)
             if self.modules_to_load:
                 log_step(
                     6, total_steps, f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}"
@@ -1616,35 +1627,8 @@ class CIRISRuntime:
         else:
             log_step(6, total_steps, "⚠️ Skipped core services - missing service_initializer or agent_identity")
 
-        # Register adapter services now that service registry is available
-        # This was skipped in _register_adapter_services() during first-run
-        # Call the actual registration method instead of duplicating logic
-        log_step(7, total_steps, "Registering adapter services...")
-        await self._register_adapter_services_for_resume()
-        log_step(7, total_steps, "✓ Adapter services registered")
-
-        # Initialize maintenance service (skipped during first-run)
-        log_step(
-            8,
-            total_steps,
-            f"Initializing maintenance service... maintenance_service={self.maintenance_service is not None}",
-        )
-        if self.maintenance_service:
-            await self._perform_startup_maintenance()
-            log_step(8, total_steps, "✓ Maintenance service initialized")
-        else:
-            log_step(8, total_steps, "⚠️ Skipped maintenance - no maintenance_service")
-
-        # Reinitialize billing provider now that environment variables are loaded
-        # This is critical because ResourceMonitorService was initialized before setup
-        # completed and didn't have the CIRIS proxy configuration
-        log_step(9, total_steps, "Reinitializing billing provider...")
-        await self._reinitialize_billing_provider()
-        log_step(9, total_steps, "✓ Billing provider reinitialized")
-
-        # Initialize LLM service now that environment variables are loaded
-        # This is critical because LLM service initialization was skipped during first-run
-        # due to missing OPENAI_API_KEY
+    async def _resume_initialize_llm(self, log_step: Callable[[int, int, str], None], total_steps: int) -> None:
+        """Initialize LLM service during resume."""
         log_step(
             10, total_steps, f"Initializing LLM service... service_initializer={self.service_initializer is not None}"
         )
@@ -1655,29 +1639,82 @@ class CIRISRuntime:
         else:
             log_step(10, total_steps, "⚠️ Skipped LLM init - no service_initializer")
 
-        # Re-inject services into running adapters now that they're all initialized
-        # This is critical because adapters started in first-run mode had None services
+    def _resume_reinject_adapters(self, log_step: Callable[[int, int, str], None], total_steps: int) -> None:
+        """Re-inject services into running adapters during resume."""
         log_step(11, total_steps, f"Re-injecting services into {len(self.adapters)} adapters...")
         for adapter in self.adapters:
             if hasattr(adapter, "reinject_services"):
                 adapter.reinject_services()
                 log_step(11, total_steps, f"✓ Re-injected services into {adapter.__class__.__name__}")
 
-        # Build cognitive components now that LLM is available
-        # This was skipped during first-run due to missing OPENAI_API_KEY
+    async def resume_from_first_run(self) -> None:
+        """Resume initialization after setup wizard completes.
+
+        This continues from the point where first-run mode paused (line 1088).
+        It executes the same steps as normal mode initialization.
+        """
+        import time
+
+        start_time = time.time()
+        total_steps = 13
+
+        def log_step(step_num: int, total: int, msg: str) -> None:
+            elapsed = time.time() - start_time
+            logger.warning(f"[RESUME {step_num}/{total}] [{elapsed:.2f}s] {msg}")
+
+        logger.warning("")
+        logger.warning("=" * 70)
+        logger.warning("🔄 RESUMING FROM FIRST-RUN MODE")
+        logger.warning("=" * 70)
+        logger.warning("")
+        log_step(1, total_steps, "Starting resume from first-run...")
+
+        # Steps 2-3: Reload environment and config
+        config = self._resume_reload_environment(log_step, total_steps)
+
+        # Step 4: Initialize identity with user-selected template
+        await self._resume_initialize_identity(config, log_step, total_steps)
+
+        # Step 5: Migrate cognitive behaviors from template
+        await self._resume_migrate_cognitive_behaviors(log_step, total_steps)
+
+        # Step 6: Initialize core services
+        await self._resume_initialize_core_services(config, log_step, total_steps)
+
+        # Step 7: Register adapter services
+        log_step(7, total_steps, "Registering adapter services...")
+        await self._register_adapter_services_for_resume()
+        log_step(7, total_steps, "✓ Adapter services registered")
+
+        # Step 8: Initialize maintenance service
+        log_step(
+            8, total_steps, f"Initializing maintenance... maintenance_service={self.maintenance_service is not None}"
+        )
+        if self.maintenance_service:
+            await self._perform_startup_maintenance()
+            log_step(8, total_steps, "✓ Maintenance service initialized")
+        else:
+            log_step(8, total_steps, "⚠️ Skipped maintenance - no maintenance_service")
+
+        # Step 9: Reinitialize billing provider
+        log_step(9, total_steps, "Reinitializing billing provider...")
+        await self._reinitialize_billing_provider()
+        log_step(9, total_steps, "✓ Billing provider reinitialized")
+
+        # Step 10: Initialize LLM service
+        await self._resume_initialize_llm(log_step, total_steps)
+
+        # Step 11: Re-inject services into adapters
+        self._resume_reinject_adapters(log_step, total_steps)
+
+        # Step 12: Build cognitive components
         log_step(12, total_steps, "Building cognitive components...")
         await self._build_components()
         log_step(12, total_steps, "✓ Cognitive components built")
 
-        # CRITICAL: Adapters are ALREADY RUNNING from first-run mode
-        # DO NOT restart them - just create the agent processor task
-        # Adapters will continue running with their existing lifecycle tasks
+        # Step 13: Create agent processor task
         log_step(13, total_steps, "Creating agent processor task...")
-        # Task stored to prevent premature garbage collection - runs in background
         self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
-
-        # No need to verify adapter readiness - they're already running and serving the setup wizard!
-        # Wait for critical services to ensure communication service is registered
         log_step(13, total_steps, "Waiting for critical services (timeout=10s)...")
         await self._wait_for_critical_services(timeout=10.0)
 

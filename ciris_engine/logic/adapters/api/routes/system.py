@@ -541,44 +541,74 @@ async def _collect_service_health(request: Request) -> Dict[str, Dict[str, int]]
     return services
 
 
-async def _check_processor_health(request: Request) -> bool:
-    """Check if processor thread is healthy."""
-    # First try: Check the runtime's agent_processor directly
-    runtime = getattr(request.app.state, "runtime", None)
-    if runtime:
-        agent_processor = getattr(runtime, "agent_processor", None)
-        if agent_processor:
-            # Agent processor exists - check if it's running
-            is_running = getattr(agent_processor, "_running", False)
-            if is_running:
-                return True
-            # Also check via _agent_task if available
-            agent_task = getattr(runtime, "_agent_task", None)
-            if agent_task and not agent_task.done():
-                return True
+def _check_processor_via_runtime(runtime: Any) -> Optional[bool]:
+    """Check processor health via runtime's agent_processor directly.
 
-    # Second try: Use RuntimeControlService if available (for full API)
+    Returns True if healthy, False if unhealthy, None if cannot determine.
+    """
+    if not runtime:
+        return None
+    agent_processor = getattr(runtime, "agent_processor", None)
+    if not agent_processor:
+        return None
+    # Agent processor exists - check if it's running
+    is_running = getattr(agent_processor, "_running", False)
+    if is_running:
+        return True
+    # Also check via _agent_task if available
+    agent_task = getattr(runtime, "_agent_task", None)
+    if agent_task and not agent_task.done():
+        return True
+    return None
+
+
+def _get_runtime_control_from_app(request: Request) -> Any:
+    """Get RuntimeControlService from app state, trying multiple locations."""
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
         runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    return runtime_control
 
-    if runtime_control:
-        try:
-            # Try get_processor_queue_status if available
-            if hasattr(runtime_control, "get_processor_queue_status"):
-                queue_status = await runtime_control.get_processor_queue_status()
-                processor_healthy = queue_status.processor_name != "unknown"
-                runtime_status = await runtime_control.get_runtime_status()
-                combined_health: bool = processor_healthy and runtime_status.is_running
-                return combined_health
-            # Fallback: Check runtime status dict (APIRuntimeControlService)
-            elif hasattr(runtime_control, "get_runtime_status"):
-                status = runtime_control.get_runtime_status()
-                if isinstance(status, dict):
-                    # APIRuntimeControlService returns dict, not paused = healthy
-                    return not status.get("paused", False)
-        except Exception as e:
-            logger.warning(f"Failed to check processor health via runtime_control: {e}")
+
+async def _check_health_via_runtime_control(runtime_control: Any) -> Optional[bool]:
+    """Check processor health via RuntimeControlService.
+
+    Returns True if healthy, False if unhealthy, None if cannot determine.
+    """
+    if not runtime_control:
+        return None
+    try:
+        # Try get_processor_queue_status if available
+        if hasattr(runtime_control, "get_processor_queue_status"):
+            queue_status = await runtime_control.get_processor_queue_status()
+            processor_healthy = queue_status.processor_name != "unknown"
+            runtime_status = await runtime_control.get_runtime_status()
+            return processor_healthy and runtime_status.is_running
+        # Fallback: Check runtime status dict (APIRuntimeControlService)
+        elif hasattr(runtime_control, "get_runtime_status"):
+            status = runtime_control.get_runtime_status()
+            if isinstance(status, dict):
+                # APIRuntimeControlService returns dict, not paused = healthy
+                return not status.get("paused", False)
+    except Exception as e:
+        logger.warning(f"Failed to check processor health via runtime_control: {e}")
+    return None
+
+
+async def _check_processor_health(request: Request) -> bool:
+    """Check if processor thread is healthy."""
+    runtime = getattr(request.app.state, "runtime", None)
+
+    # First try: Check the runtime's agent_processor directly
+    runtime_result = _check_processor_via_runtime(runtime)
+    if runtime_result is True:
+        return True
+
+    # Second try: Use RuntimeControlService if available (for full API)
+    runtime_control = _get_runtime_control_from_app(request)
+    control_result = await _check_health_via_runtime_control(runtime_control)
+    if control_result is not None:
+        return control_result
 
     # If we have a runtime with agent_processor, consider healthy
     if runtime and getattr(runtime, "agent_processor", None) is not None:

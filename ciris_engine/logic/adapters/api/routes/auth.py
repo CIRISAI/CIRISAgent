@@ -15,7 +15,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -665,12 +665,12 @@ def _is_ciris_admin_email(email: Optional[str]) -> bool:
     return email is not None and email.endswith("@ciris.ai")
 
 
-def _get_oauth_users_dict(auth_service: "APIAuthService") -> Optional[Dict]:
+def _get_oauth_users_dict(auth_service: "APIAuthService") -> Optional[Dict[str, Any]]:
     """Get the _oauth_users dictionary from auth_service, or None if unavailable."""
     return getattr(auth_service, "_oauth_users", None)
 
 
-def _lookup_existing_user_role(oauth_users: Dict, provider: str, external_id: str) -> Optional[UserRole]:
+def _lookup_existing_user_role(oauth_users: Dict[str, Any], provider: str, external_id: str) -> Optional[UserRole]:
     """Look up an existing OAuth user and return their role if found.
 
     Returns None if user not found.
@@ -690,7 +690,7 @@ def _lookup_existing_user_role(oauth_users: Dict, provider: str, external_id: st
     return UserRole(role) if role else UserRole.OBSERVER
 
 
-def _is_first_oauth_user(oauth_users: Optional[Dict]) -> bool:
+def _is_first_oauth_user(oauth_users: Optional[Dict[str, Any]]) -> bool:
     """Check if this would be the first OAuth user (empty oauth_users dict)."""
     return oauth_users is not None and len(oauth_users) == 0
 
@@ -1087,7 +1087,7 @@ class NativeTokenResponse(BaseModel):
 VALID_GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 
 
-def _get_allowed_audiences_from_config() -> Optional[set]:
+def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
     """Load allowed audiences from OAuth config.
 
     Returns None if OAuth is not configured (on-device mode).
@@ -1098,18 +1098,20 @@ def _get_allowed_audiences_from_config() -> Optional[set]:
         provider_config = _load_oauth_config("google")
         expected_client_id = provider_config.get("client_id")
         android_client_id = provider_config.get("android_client_id")
-        allowed_audiences = {expected_client_id}
+        allowed_audiences: Set[str] = set()
+        if expected_client_id:
+            allowed_audiences.add(expected_client_id)
         if android_client_id:
             allowed_audiences.add(android_client_id)
         logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
-        return allowed_audiences
+        return allowed_audiences if allowed_audiences else None
     except HTTPException:
         # On-device mode: OAuth not configured, skip audience validation
         logger.info("[NativeAuth] No OAuth config found - running in on-device mode, skipping audience validation")
         return None
 
 
-def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Optional[set]) -> None:
+def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Optional[Set[str]]) -> None:
     """Validate token audience matches our configured client ID.
 
     If allowed_audiences is None (on-device mode), validation is skipped.
@@ -1184,7 +1186,7 @@ def _validate_token_sub_claim(sub: Optional[str]) -> None:
         )
 
 
-def _log_email_verification_warning(token_info: Dict) -> None:
+def _log_email_verification_warning(token_info: Dict[str, Any]) -> None:
     """Log a warning if email is not verified."""
     email_verified = token_info.get("email_verified")
     if email_verified is not None and str(email_verified).lower() not in ("true", "1"):

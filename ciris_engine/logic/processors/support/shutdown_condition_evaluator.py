@@ -169,7 +169,7 @@ class ShutdownConditionEvaluator:
             return default_keywords
         guardrails = getattr(context.template, "guardrails_config", None)
         if guardrails and hasattr(guardrails, "crisis_keywords") and guardrails.crisis_keywords:
-            return guardrails.crisis_keywords
+            return list(guardrails.crisis_keywords)
         return default_keywords
 
     async def _check_crisis_response(

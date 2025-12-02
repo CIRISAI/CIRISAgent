@@ -1320,6 +1320,10 @@ class CIRISRuntime:
             )
             return False
 
+        if self.service_registry is None:
+            logger.error("Cannot register adapter service: service_registry is None")
+            return False
+
         self.service_registry.register_service(
             service_type=reg.service_type,
             provider=reg.provider,

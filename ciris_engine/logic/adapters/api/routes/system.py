@@ -583,7 +583,7 @@ async def _check_health_via_runtime_control(runtime_control: Any) -> Optional[bo
             queue_status = await runtime_control.get_processor_queue_status()
             processor_healthy = queue_status.processor_name != "unknown"
             runtime_status = await runtime_control.get_runtime_status()
-            return processor_healthy and runtime_status.is_running
+            return bool(processor_healthy and runtime_status.is_running)
         # Fallback: Check runtime status dict (APIRuntimeControlService)
         elif hasattr(runtime_control, "get_runtime_status"):
             status = runtime_control.get_runtime_status()

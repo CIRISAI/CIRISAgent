@@ -163,7 +163,7 @@ class StateManager:
             AgentState.SOLITUDE: behaviors.solitude,
         }
         behavior = state_behavior_map.get(state)
-        return behavior.enabled if behavior else True
+        return bool(getattr(behavior, "enabled", True)) if behavior else True
 
     def _check_shutdown_wakeup_transition(
         self, from_state: AgentState, to_state: AgentState, behaviors: CognitiveStateBehaviors

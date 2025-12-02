@@ -30,8 +30,9 @@ else:
         except asyncio.CancelledError:
             handle.cancel()
             if timed_out:
-                raise asyncio.TimeoutError()
-            raise  # Re-raise CancelledError if not from timeout
+                raise asyncio.TimeoutError() from None
+            else:
+                raise  # Re-raise CancelledError if not from timeout
         else:
             handle.cancel()
 

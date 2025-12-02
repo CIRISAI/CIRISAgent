@@ -2019,7 +2019,14 @@ class TestNativeGoogleTokenExchange:
 
     @pytest.mark.asyncio
     async def test_verify_google_id_token_oauth_not_configured(self):
-        """Test error when Google OAuth is not configured."""
+        """Test on-device mode when Google OAuth is not configured.
+
+        When OAuth is not configured, the function should:
+        1. Catch the 404 HTTPException and return None for allowed_audiences
+        2. Skip audience validation (on-device mode)
+        3. Proceed with Google's tokeninfo API verification
+        4. Return 401 if Google rejects the token
+        """
         from ciris_engine.logic.adapters.api.routes.auth import _verify_google_id_token
 
         with patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_load_config:
@@ -2027,11 +2034,21 @@ class TestNativeGoogleTokenExchange:
                 status_code=404, detail="OAuth provider 'google' not configured"
             )
 
-            with pytest.raises(HTTPException) as exc_info:
-                await _verify_google_id_token("any-token")
+            # Mock httpx to return a 401 from Google (token invalid)
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 401
+                mock_response.text = "Invalid token"
+                mock_context = Mock()
+                mock_context.get = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value = mock_context
 
-            assert exc_info.value.status_code == 503
-            assert "not configured" in exc_info.value.detail
+                with pytest.raises(HTTPException) as exc_info:
+                    await _verify_google_id_token("any-token")
+
+                # In on-device mode, Google rejects invalid tokens with 401
+                assert exc_info.value.status_code == 401
+                assert "could not verify" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_native_google_token_exchange_success(self):

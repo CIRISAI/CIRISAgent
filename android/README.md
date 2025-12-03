@@ -341,6 +341,89 @@ cd /home/emoore/CIRISAgent/android
 ./gradlew clean assembleRelease
 ```
 
+### Build & Deploy Scripts
+
+Located in `android/scripts/`, these scripts automate common development tasks:
+
+#### deploy-debug.sh - Quick Debug Deploy
+
+Build and deploy debug APK to connected device:
+
+```bash
+cd /home/emoore/CIRISAgent/android
+
+# Full build and deploy (rebuilds web assets + APK)
+./scripts/deploy-debug.sh
+
+# Skip web asset rebuild (faster, use when only Kotlin changed)
+./scripts/deploy-debug.sh --skip-web
+
+# Skip build, deploy existing APK
+./scripts/deploy-debug.sh --skip-web --skip-build
+
+# Skip install, just build
+./scripts/deploy-debug.sh --skip-install
+```
+
+**Features**:
+- Auto-detects ADB path (Windows via WSL or native Linux)
+- Sets correct JAVA_HOME
+- Copies web assets from Next.js build
+- Builds debug APK
+- Installs and launches on device
+- Shows helpful log commands after deploy
+
+#### full-rebuild.sh - Complete Clean Build
+
+Performs a complete rebuild including web assets and optional pydantic wheels:
+
+```bash
+# Standard full rebuild
+./scripts/full-rebuild.sh
+
+# Include pydantic wheel rebuild (takes longer)
+./scripts/full-rebuild.sh --rebuild-wheels
+
+# Build release instead of debug
+./scripts/full-rebuild.sh --release
+
+# Skip web rebuild
+./scripts/full-rebuild.sh --skip-web
+```
+
+**Build Steps**:
+1. Cleans Gradle cache
+2. Rebuilds Next.js web UI (`npm run build`)
+3. Copies assets to all 3 locations
+4. Optionally rebuilds pydantic wheels for ARM64
+5. Builds APK (debug or release)
+
+#### pull-device-logs.sh - Collect Device Logs
+
+Pull all logs from device for debugging:
+
+```bash
+# Pull all logs to /tmp/ciris-logs/YYYYMMDD_HHMMSS/
+./scripts/pull-device-logs.sh
+
+# Live tail Python logs
+./scripts/pull-device-logs.sh --live
+
+# Specify output directory
+./scripts/pull-device-logs.sh --output /path/to/logs
+```
+
+**Collected Files**:
+- `logs/` - All Python log files
+- `logcat_python.txt` - Python stdout/stderr from logcat
+- `logcat_crashes.txt` - AndroidRuntime crash logs
+- `logcat_full.txt` - Complete logcat dump
+- `databases/` - SQLite databases
+- `shared_prefs/` - SharedPreferences XML files
+- `app_info.txt` - Device/app version info
+
+**Note**: For debug builds, uses `run-as` to access private app data. Release builds can only pull logcat.
+
 ### ADB Commands (Windows via WSL)
 
 ```bash

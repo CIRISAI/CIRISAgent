@@ -6,21 +6,29 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.auth.TokenRefreshManager
+import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,6 +41,7 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.transform.CircleCropTransformation
+import org.json.JSONObject
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
@@ -89,6 +98,10 @@ class MainActivity : AppCompatActivity() {
     private var integrityManager: PlayIntegrityManager? = null
     private var integrityVerified: Boolean = false
 
+    // Activity result launcher for Google Sign-In from WebView
+    private lateinit var googleSignInLauncher: ActivityResultLauncher<Intent>
+    private var pendingGoogleSignInCallback: String? = null
+
     companion object {
         private const val TAG = "CIRISMobile"
         private const val PREFS_UI = "ciris_ui_prefs"
@@ -103,6 +116,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Register Google Sign-In activity result launcher BEFORE setContentView
+        googleSignInLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            handleGoogleSignInResult(result)
+        }
+
         setContentView(R.layout.activity_main)
 
         // Get user info from LoginActivity
@@ -415,9 +436,187 @@ class MainActivity : AppCompatActivity() {
             }
 
             webChromeClient = WebChromeClient()
+
+            // Add JavaScript interface for native Google Sign-In
+            addJavascriptInterface(WebAppInterface(), "CIRISNative")
         }
 
-        Log.i(TAG, "WebView configured")
+        Log.i(TAG, "WebView configured with CIRISNative JavaScript interface")
+    }
+
+    /**
+     * JavaScript interface for WebView to call native Android methods.
+     * Called from JavaScript via: window.CIRISNative.signIn()
+     */
+    inner class WebAppInterface {
+        /**
+         * Trigger native Google Sign-In flow.
+         * JavaScript should call this and then wait for the callback.
+         * @param callbackId A unique ID to track this sign-in request
+         */
+        @JavascriptInterface
+        fun signIn(callbackId: String) {
+            Log.i(TAG, "[WebAppInterface] signIn() called from JavaScript with callbackId: $callbackId")
+            pendingGoogleSignInCallback = callbackId
+
+            // Must run on main thread
+            runOnUiThread {
+                try {
+                    // Initialize GoogleSignInHelper if not already done
+                    if (googleSignInHelper == null) {
+                        googleSignInHelper = GoogleSignInHelper(this@MainActivity)
+                    }
+
+                    // Get the sign-in intent and launch
+                    val signInIntent = googleSignInHelper!!.getSignInIntent()
+                    googleSignInLauncher.launch(signInIntent)
+                    Log.i(TAG, "[WebAppInterface] Launched Google Sign-In activity")
+                } catch (e: Exception) {
+                    Log.e(TAG, "[WebAppInterface] Failed to launch sign-in: ${e.message}", e)
+                    sendGoogleSignInError(callbackId, e.message ?: "Failed to launch sign-in")
+                }
+            }
+        }
+
+        /**
+         * Check if native Google Sign-In is available.
+         * @return true if available
+         */
+        @JavascriptInterface
+        fun isGoogleSignInAvailable(): Boolean {
+            return true
+        }
+
+        /**
+         * Get the current Google user if already signed in.
+         * @return JSON string with user info or null
+         */
+        @JavascriptInterface
+        fun getCurrentUser(): String? {
+            val account = GoogleSignIn.getLastSignedInAccount(this@MainActivity)
+            return if (account != null) {
+                try {
+                    val json = JSONObject()
+                    json.put("id", account.id)
+                    json.put("email", account.email)
+                    json.put("name", account.displayName)
+                    json.put("photoUrl", account.photoUrl?.toString())
+                    json.put("idToken", account.idToken)
+                    json.toString()
+                } catch (e: Exception) {
+                    Log.e(TAG, "[WebAppInterface] Error getting current user: ${e.message}")
+                    null
+                }
+            } else {
+                null
+            }
+        }
+    }
+
+    /**
+     * Handle the result from Google Sign-In activity.
+     */
+    private fun handleGoogleSignInResult(result: ActivityResult) {
+        val callbackId = pendingGoogleSignInCallback
+        pendingGoogleSignInCallback = null
+
+        Log.i(TAG, "[GoogleSignIn] handleGoogleSignInResult - resultCode: ${result.resultCode}, callbackId: $callbackId")
+
+        if (callbackId == null) {
+            Log.e(TAG, "[GoogleSignIn] No callback ID found for sign-in result")
+            return
+        }
+
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val account = task.getResult(ApiException::class.java)
+
+            if (account != null) {
+                Log.i(TAG, "[GoogleSignIn] Sign-in successful: ${account.email}, hasIdToken: ${account.idToken != null}")
+
+                // Update stored values
+                googleUserId = account.id
+                googleIdToken = account.idToken
+                userEmail = account.email
+                userName = account.displayName
+                userPhotoUrl = account.photoUrl?.toString()
+                currentGoogleUserId = account.id
+
+                // Also save to BillingApiClient for billing API calls
+                val billingApiClient = BillingApiClient(this)
+                account.id?.let { billingApiClient.setGoogleUserId(it) }
+                account.email?.let { billingApiClient.setGoogleEmail(it) }
+                account.displayName?.let { billingApiClient.setGoogleDisplayName(it) }
+                Log.i(TAG, "[GoogleSignIn] Saved user info to BillingApiClient: id=${account.id}, email=${account.email}, name=${account.displayName}")
+
+                // Build JSON response for JavaScript
+                val json = JSONObject()
+                json.put("id", account.id)
+                json.put("email", account.email)
+                json.put("name", account.displayName)
+                json.put("photoUrl", account.photoUrl?.toString())
+                json.put("idToken", account.idToken)
+
+                sendGoogleSignInSuccess(callbackId, json.toString())
+            } else {
+                Log.e(TAG, "[GoogleSignIn] Sign-in returned null account")
+                sendGoogleSignInError(callbackId, "Sign-in returned null account")
+            }
+        } catch (e: ApiException) {
+            Log.e(TAG, "[GoogleSignIn] Sign-in failed: ${e.statusCode} - ${e.message}")
+            sendGoogleSignInError(callbackId, "Sign-in failed: ${e.statusCode} - ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "[GoogleSignIn] Unexpected error: ${e.message}", e)
+            sendGoogleSignInError(callbackId, "Unexpected error: ${e.message}")
+        }
+    }
+
+    /**
+     * Send success result to JavaScript callback.
+     */
+    private fun sendGoogleSignInSuccess(callbackId: String, jsonResult: String) {
+        runOnUiThread {
+            val escapedJson = jsonResult.replace("'", "\\'").replace("\n", "\\n")
+            val script = """
+                (function() {
+                    var callback = window.__ciris_google_signin_callbacks && window.__ciris_google_signin_callbacks['$callbackId'];
+                    if (callback && callback.resolve) {
+                        console.log('[CIRISNative] Resolving sign-in callback: $callbackId');
+                        callback.resolve(JSON.parse('$escapedJson'));
+                        delete window.__ciris_google_signin_callbacks['$callbackId'];
+                    } else {
+                        console.error('[CIRISNative] No callback found for: $callbackId');
+                    }
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(script) { result ->
+                Log.i(TAG, "[GoogleSignIn] Success callback sent: $result")
+            }
+        }
+    }
+
+    /**
+     * Send error result to JavaScript callback.
+     */
+    private fun sendGoogleSignInError(callbackId: String, errorMessage: String) {
+        runOnUiThread {
+            val escapedError = errorMessage.replace("'", "\\'").replace("\n", "\\n")
+            val script = """
+                (function() {
+                    var callback = window.__ciris_google_signin_callbacks && window.__ciris_google_signin_callbacks['$callbackId'];
+                    if (callback && callback.reject) {
+                        console.log('[CIRISNative] Rejecting sign-in callback: $callbackId');
+                        callback.reject(new Error('$escapedError'));
+                        delete window.__ciris_google_signin_callbacks['$callbackId'];
+                    } else {
+                        console.error('[CIRISNative] No callback found for: $callbackId');
+                    }
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(script) { result ->
+                Log.i(TAG, "[GoogleSignIn] Error callback sent: $result")
+            }
+        }
     }
 
     private fun startPythonServer() {

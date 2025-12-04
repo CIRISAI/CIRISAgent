@@ -754,7 +754,7 @@ class APIAuthService:
             if is_active is not None and user.is_active != is_active:
                 continue
 
-            users.append((user.wa_id, user))  # Use wa_id as the canonical key
+            users.append((user_id, user))  # Use the dict key as the canonical user_id
 
         # Add OAuth users not in _users
         for oauth_user in self._oauth_users.values():

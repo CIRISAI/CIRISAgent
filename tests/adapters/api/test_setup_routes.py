@@ -758,8 +758,8 @@ class TestSetupHelperFunctions:
                     mock_auth_instance.create_wa.assert_called_once()
 
                     # Verify system admin password was updated
-                    # Should call list_was to find admin WA
-                    mock_auth_instance.list_was.assert_called_once_with(active_only=True)
+                    # Should call list_was to find admin WA (called multiple times for different checks)
+                    mock_auth_instance.list_was.assert_any_call(active_only=True)
                     # Should call update_wa twice: once for new user, once for admin
                     assert mock_auth_instance.update_wa.call_count == 2
 

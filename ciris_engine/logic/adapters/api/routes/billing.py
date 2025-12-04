@@ -109,6 +109,11 @@ def _get_billing_client(request: Request, google_id_token: Optional[str] = None)
     """
     import os
 
+    # Check if billing client already exists in app state (for testing or pre-configured)
+    if hasattr(request.app.state, "billing_client") and request.app.state.billing_client is not None:
+        existing_client: httpx.AsyncClient = request.app.state.billing_client
+        return existing_client
+
     billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
     api_key = os.getenv("CIRIS_BILLING_API_KEY")
 

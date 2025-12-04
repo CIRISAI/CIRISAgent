@@ -603,6 +603,9 @@ def _create_conscience_execution_data(
     input_action_result = args[0]  # This is the ActionSelectionDMAResult passed to conscience
     action_rationale = input_action_result.rationale
 
+    # Extract ASPDMA prompt if available (set by evaluator in user_prompt field)
+    aspdma_prompt = getattr(input_action_result, "user_prompt", None)
+
     # Create comprehensive conscience evaluation details for full transparency
     conscience_check_result = _create_comprehensive_conscience_result(result)
 
@@ -617,6 +620,7 @@ def _create_conscience_execution_data(
         action_result=action_result,
         override_reason=override_reason,
         conscience_result=conscience_result,
+        aspdma_prompt=aspdma_prompt,
     )
 
 
@@ -1339,6 +1343,11 @@ def _create_dma_results_event(
     if not dma_results.ethical_pdma:
         raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
+    # Extract prompts if available (for debugging/transparency)
+    csdma_prompt = getattr(dma_results, "csdma_prompt", None)
+    dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
+    pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
+
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
         thought_id=step_data.thought_id,
@@ -1347,6 +1356,9 @@ def _create_dma_results_event(
         csdma=dma_results.csdma,  # Pass CSDMAResult object directly
         dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
         pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
+        csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
+        dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
+        pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
     )
 
 
@@ -1356,6 +1368,9 @@ def _create_aspdma_result_event(
     """Create ASPDMA_RESULT reasoning event."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
+    # Extract ASPDMA prompt if available (from ConscienceExecutionStepData)
+    aspdma_prompt = getattr(step_data, "aspdma_prompt", None)
+
     return create_reasoning_event(
         event_type=ReasoningEvent.ASPDMA_RESULT,
         thought_id=step_data.thought_id,
@@ -1364,6 +1379,7 @@ def _create_aspdma_result_event(
         is_recursive=is_recursive,
         selected_action=getattr(step_data, "selected_action", ""),
         action_rationale=getattr(step_data, "action_rationale", ""),
+        aspdma_prompt=aspdma_prompt,  # User prompt passed to ASPDMA
     )
 
 

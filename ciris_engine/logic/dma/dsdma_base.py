@@ -87,6 +87,9 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 else (self.DEFAULT_TEMPLATE if self.DEFAULT_TEMPLATE else "")
             )
 
+        # Store last user prompt for debugging/streaming
+        self.last_user_prompt: Optional[str] = None
+
         logger.info(f"BaseDSDMA '{self.domain_name}' initialized with model: {self.model_name}")
 
     class LLMOutputForDSDMA(BaseModel):
@@ -321,6 +324,9 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         full_snapshot_and_profile_context_str = system_snapshot_block + user_profiles_block
         user_message_content = f"{full_snapshot_and_profile_context_str}\nEvaluate this thought for the '{self.domain_name}' domain: \"{thought_content_str}\""
+
+        # Store user prompt for streaming/debugging
+        self.last_user_prompt = user_message_content
 
         logger.debug(
             f"DSDMA '{self.domain_name}' input to LLM for thought {thought_item.thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"

@@ -297,24 +297,9 @@ class InteractFragment : Fragment() {
                     ThoughtState(thoughtId = thoughtId)
                 }
 
-                // Convert JsonObject to Map for storage
-                val eventData = mutableMapOf<String, Any>()
-                for (key in event.keySet()) {
-                    val value = event.get(key)
-                    when {
-                        value.isJsonNull -> eventData[key] = "null"
-                        value.isJsonPrimitive -> {
-                            val prim = value.asJsonPrimitive
-                            eventData[key] = when {
-                                prim.isBoolean -> prim.asBoolean
-                                prim.isNumber -> prim.asNumber
-                                else -> prim.asString
-                            }
-                        }
-                        value.isJsonObject -> eventData[key] = value.toString()
-                        value.isJsonArray -> eventData[key] = value.toString()
-                    }
-                }
+                // Convert JsonObject to Map for storage (recursively parse nested objects)
+                val eventData = jsonObjectToMap(event)
+                Log.d(TAG, "SSE event type=$eventType, keys=${eventData.keys}, contextType=${eventData["context"]?.javaClass?.simpleName}")
 
                 // Update stage based on event type
                 when (eventType) {
@@ -362,6 +347,38 @@ class InteractFragment : Fragment() {
                     updateChatItemsFromHistory()
                 }
             }
+        }
+    }
+
+    // Recursively convert JsonObject to Map<String, Any>
+    private fun jsonObjectToMap(jsonObject: com.google.gson.JsonObject): Map<String, Any> {
+        val map = mutableMapOf<String, Any>()
+        for (key in jsonObject.keySet()) {
+            map[key] = jsonElementToAny(jsonObject.get(key))
+        }
+        return map
+    }
+
+    // Recursively convert JsonArray to List<Any>
+    private fun jsonArrayToList(jsonArray: com.google.gson.JsonArray): List<Any> {
+        return jsonArray.map { jsonElementToAny(it) }
+    }
+
+    // Convert any JsonElement to the appropriate Kotlin type
+    private fun jsonElementToAny(element: com.google.gson.JsonElement): Any {
+        return when {
+            element.isJsonNull -> "null"
+            element.isJsonPrimitive -> {
+                val prim = element.asJsonPrimitive
+                when {
+                    prim.isBoolean -> prim.asBoolean
+                    prim.isNumber -> prim.asNumber
+                    else -> prim.asString
+                }
+            }
+            element.isJsonObject -> jsonObjectToMap(element.asJsonObject)
+            element.isJsonArray -> jsonArrayToList(element.asJsonArray)
+            else -> element.toString()
         }
     }
 
@@ -977,51 +994,142 @@ class ChatWithReasoningAdapter(
         }
 
         private fun addDataField(container: LinearLayout, key: String, value: Any?, density: Float, isImportant: Boolean) {
-            val context = container.context
+            val ctx = container.context
 
-            val fieldLayout = LinearLayout(context).apply {
+            val fieldLayout = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, (2 * density).toInt(), 0, (2 * density).toInt())
             }
 
-            // Field name
-            val keyView = TextView(context).apply {
-                text = key.replace("_", " ").replaceFirstChar { it.uppercase() }
+            // Check if this is a complex object (Map or List)
+            val isComplex = value is Map<*, *> || value is List<*>
+
+            // Field name with expand indicator for complex objects
+            val keyView = TextView(ctx).apply {
+                val displayKey = key.replace("_", " ").replaceFirstChar { it.uppercase() }
+                text = if (isComplex) "$displayKey ▶" else displayKey
                 textSize = if (isImportant) 11f else 10f
                 setTextColor(android.graphics.Color.parseColor(if (isImportant) "#3B82F6" else "#6B7280"))
                 setTypeface(null, android.graphics.Typeface.BOLD)
+                if (isComplex) {
+                    setBackgroundResource(android.R.drawable.list_selector_background)
+                }
             }
             fieldLayout.addView(keyView)
 
-            // Field value
-            val valueStr = when (value) {
-                is Boolean -> if (value) "✓ Yes" else "✗ No"
-                is Number -> value.toString()
-                is String -> {
-                    if (value.length > 200) {
-                        value.take(200) + "..."
-                    } else {
-                        value
+            if (isComplex) {
+                // Create expandable container for complex objects
+                val expandContainer = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    visibility = View.GONE
+                    setPadding((8 * density).toInt(), (4 * density).toInt(), 0, (4 * density).toInt())
+                    setBackgroundColor(android.graphics.Color.parseColor("#F3F4F6"))
+                }
+
+                // Add scrollable JSON view
+                val scrollView = android.widget.HorizontalScrollView(ctx).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = (4 * density).toInt()
                     }
                 }
-                else -> value?.toString() ?: "null"
-            }
 
-            val valueView = TextView(context).apply {
-                text = valueStr
-                textSize = if (isImportant) 12f else 10f
-                setTextColor(android.graphics.Color.parseColor(
-                    when (value) {
-                        is Boolean -> if (value) "#10B981" else "#EF4444"
-                        is Number -> "#7C3AED"
-                        else -> "#374151"
+                val jsonView = TextView(ctx).apply {
+                    text = formatJsonPretty(value)
+                    textSize = 10f
+                    setTextColor(android.graphics.Color.parseColor("#374151"))
+                    setTypeface(android.graphics.Typeface.MONOSPACE)
+                    setTextIsSelectable(true)
+                }
+                scrollView.addView(jsonView)
+                expandContainer.addView(scrollView)
+
+                // Toggle on click
+                keyView.setOnClickListener {
+                    val isExpanded = expandContainer.visibility == View.VISIBLE
+                    expandContainer.visibility = if (isExpanded) View.GONE else View.VISIBLE
+                    val displayKey = key.replace("_", " ").replaceFirstChar { it.uppercase() }
+                    keyView.text = "$displayKey ${if (isExpanded) "▶" else "▼"}"
+                }
+
+                fieldLayout.addView(expandContainer)
+            } else {
+                // Simple value display
+                val valueStr = when (value) {
+                    is Boolean -> if (value) "✓ Yes" else "✗ No"
+                    is Number -> value.toString()
+                    is String -> {
+                        if (value.length > 500) {
+                            value.take(500) + "... [${value.length} chars]"
+                        } else {
+                            value
+                        }
                     }
-                ))
-                setPadding((4 * density).toInt(), 0, 0, 0)
+                    else -> value?.toString() ?: "null"
+                }
+
+                val valueView = TextView(ctx).apply {
+                    text = valueStr
+                    textSize = if (isImportant) 12f else 10f
+                    setTextColor(android.graphics.Color.parseColor(
+                        when (value) {
+                            is Boolean -> if (value) "#10B981" else "#EF4444"
+                            is Number -> "#7C3AED"
+                            else -> "#374151"
+                        }
+                    ))
+                    setPadding((4 * density).toInt(), 0, 0, 0)
+                    setTextIsSelectable(true)
+
+                    // Make long strings expandable
+                    if (value is String && value.length > 500) {
+                        var isExpanded = false
+                        setOnClickListener {
+                            isExpanded = !isExpanded
+                            text = if (isExpanded) value else value.take(500) + "... [${value.length} chars]"
+                        }
+                        setBackgroundResource(android.R.drawable.list_selector_background)
+                    }
+                }
+                fieldLayout.addView(valueView)
             }
-            fieldLayout.addView(valueView)
 
             container.addView(fieldLayout)
+        }
+
+        private fun formatJsonPretty(value: Any?, indent: Int = 0): String {
+            val indentStr = "  ".repeat(indent)
+            val nextIndent = "  ".repeat(indent + 1)
+
+            return when (value) {
+                null -> "null"
+                is Boolean -> value.toString()
+                is Number -> value.toString()
+                is String -> "\"$value\""
+                is Map<*, *> -> {
+                    if (value.isEmpty()) {
+                        "{}"
+                    } else {
+                        val entries = value.entries.joinToString(",\n") { (k, v) ->
+                            "$nextIndent\"$k\": ${formatJsonPretty(v, indent + 1)}"
+                        }
+                        "{\n$entries\n$indentStr}"
+                    }
+                }
+                is List<*> -> {
+                    if (value.isEmpty()) {
+                        "[]"
+                    } else {
+                        val items = value.joinToString(",\n") { item ->
+                            "$nextIndent${formatJsonPretty(item, indent + 1)}"
+                        }
+                        "[\n$items\n$indentStr]"
+                    }
+                }
+                else -> value.toString()
+            }
         }
     }
 }

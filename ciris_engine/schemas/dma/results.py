@@ -94,6 +94,9 @@ class ActionSelectionDMAResult(BaseModel):
     evaluation_time_ms: Optional[float] = Field(None, description="Time taken for evaluation")
     resource_usage: Optional[JSONDict] = Field(None, description="Resource usage details")
 
+    # User prompt for debugging/transparency (set by evaluator)
+    user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
+
     model_config = ConfigDict(extra="forbid")
 
 

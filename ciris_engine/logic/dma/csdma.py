@@ -57,6 +57,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         self.prompt_loader = get_prompt_loader()
         self.prompt_template_data = self.prompt_loader.load_prompt_template("csdma_common_sense")
 
+        # Store last user prompt for debugging/streaming
+        self.last_user_prompt: Optional[str] = None
+
         # Client will be retrieved from the service registry during evaluation
 
         self.env_kg = environmental_kg  # Placeholder for now
@@ -164,6 +167,11 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             system_snapshot_block=combined_snapshot_block,
             user_profiles_block="",
         )
+
+        # Store user prompt for streaming/debugging
+        user_messages = [m for m in messages if m.get("role") == "user"]
+        self.last_user_prompt = user_messages[-1]["content"] if user_messages else None
+
         logger.debug(
             "CSDMA input to LLM for thought %s:\nContext Summary: %s",
             thought_item.thought_id,

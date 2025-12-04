@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 23
-        versionName "1.7.23"
+        versionCode 24
+        versionName "1.7.24"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -143,7 +143,8 @@ android {
     // 16KB page size support for newer Android devices
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            // Extract native libs to filesystem for 16KB page size compatibility (Android 15+)
+            useLegacyPackaging = true
         }
     }
 }

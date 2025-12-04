@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 20
-        versionName "1.7.20"
+        versionCode 21
+        versionName "1.7.21"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -130,6 +130,13 @@ android {
 
     buildFeatures {
         viewBinding true
+    }
+
+    // 16KB page size support for newer Android devices
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 }
 
@@ -263,8 +270,8 @@ dependencies {
     // WebView for bundled UI
     implementation "androidx.webkit:webkit:1.9.0"
 
-    // Google Play Billing for in-app purchases
-    implementation "com.android.billingclient:billing-ktx:6.1.0"
+    // Google Play Billing for in-app purchases (7.0.0+ required by Google Play policy)
+    implementation "com.android.billingclient:billing-ktx:7.1.1"
 
     // Lifecycle for billing client connection
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"

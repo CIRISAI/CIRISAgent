@@ -267,7 +267,7 @@ The app supports in-app purchases via Google Play for buying CIRIS credits.
 │                     Android Device                          │
 ├─────────────────────────────────────────────────────────────┤
 │  CIRIS Agent (on-device)     │  Google Play Billing Client  │
-│  - FastAPI @ localhost:8000  │  - BillingClient SDK 6.1.0   │
+│  - FastAPI @ localhost:8000  │  - BillingClient SDK 7.1.1   │
 │  - Python via Chaquopy       │  - Purchase flow UI          │
 │  - SQLite DB                 │  - Returns purchaseToken     │
 └──────────────┬───────────────┴───────────────┬──────────────┘

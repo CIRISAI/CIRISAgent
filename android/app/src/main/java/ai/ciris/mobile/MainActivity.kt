@@ -1246,6 +1246,11 @@ class MainActivity : AppCompatActivity() {
                 cirisAccessToken = tokenResponse.access_token
                 userRole = tokenResponse.role
                 Log.i(TAG, "[TokenExchange] SUCCESS - Got CIRIS access token for user: ${tokenResponse.user_id}, role: ${tokenResponse.role}")
+
+                // Also store in BillingApiClient's SharedPreferences so getBalance() doesn't re-exchange
+                BillingApiClient(this).setApiKey(tokenResponse.access_token)
+                Log.i(TAG, "[TokenExchange] Stored API key in BillingApiClient SharedPreferences")
+
                 // Refresh menu to show/hide admin items based on role
                 runOnUiThread { invalidateOptionsMenu() }
                 connection.disconnect()

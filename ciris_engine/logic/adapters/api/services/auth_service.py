@@ -238,6 +238,10 @@ class APIAuthService:
             primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
             self._users[primary_key] = user
             logger.debug(f"[AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
+            # Clear from _oauth_users cache - DB record is authoritative
+            if primary_key in self._oauth_users:
+                logger.debug(f"[AUTH DEBUG] Clearing stale _oauth_users entry: '{primary_key}'")
+                del self._oauth_users[primary_key]
 
         for link in wa.oauth_links:
             link_key = f"{link.provider}:{link.external_id}"
@@ -246,42 +250,91 @@ class APIAuthService:
 
     async def _load_users_from_db(self) -> None:
         """Load existing users from the database."""
-        logger.debug("=" * 80)
-        logger.debug("[AUTH DEBUG] _load_users_from_db() called")
-        logger.debug("=" * 80)
+        logger.info("=" * 70)
+        logger.info("CIRIS_USER_CREATE: _load_users_from_db() called")
+        logger.info("=" * 70)
 
         if not self._auth_service:
-            logger.debug("[AUTH DEBUG] No auth service - skipping DB load")
+            logger.info("CIRIS_USER_CREATE: No auth service - skipping DB load")
             return
 
         try:
             was = await self._auth_service.list_was(active_only=False)
-            logger.debug(f"[AUTH DEBUG] Loaded {len(was)} WA certificates from database")
+            logger.info(f"CIRIS_USER_CREATE: Loaded {len(was)} WA certificates from database")
 
             for i, wa in enumerate(was, 1):
-                logger.debug(
-                    f"[AUTH DEBUG] Processing WA {i}/{len(was)}: wa_id={wa.wa_id}, name={wa.name}, has_password={wa.password_hash is not None}"
+                logger.info(
+                    f"CIRIS_USER_CREATE: Processing WA {i}/{len(was)}: wa_id={wa.wa_id}, name={wa.name}, role={wa.role}"
                 )
                 await self._process_wa_record(wa)
 
-            if not any(u.name == "admin" for u in self._users.values()):
-                logger.debug("[AUTH DEBUG] No admin user found, creating default admin")
-                await self._create_default_admin()
+            # Check if we need to create a default admin
+            # Skip if:
+            # 1. Any user named 'admin' exists, OR
+            # 2. Any ROOT user exists (setup wizard creates ROOT user with custom name)
+            has_admin_user = any(u.name == "admin" for u in self._users.values())
+            has_root_user = any(u.wa_role == WARole.ROOT for u in self._users.values())
 
-            logger.debug(f"[AUTH DEBUG] User loading complete. Total users in cache: {len(self._users)}")
-            logger.debug(f"[AUTH DEBUG] Usernames in cache: {list(set(u.name for u in self._users.values()))}")
-            logger.debug("=" * 80)
+            logger.info(f"CIRIS_USER_CREATE: Check default admin: has_admin={has_admin_user}, has_root={has_root_user}")
+
+            if not has_admin_user and not has_root_user:
+                logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - will create default admin")
+                await self._create_default_admin()
+            else:
+                logger.info("CIRIS_USER_CREATE: Skipping default admin creation - admin or ROOT already exists")
+
+            # Clear the fallback admin if it wasn't loaded from the database
+            # The fallback admin is only meant for when there's no auth_service
+            # If wa-system-admin is in the DB, it's a real user and should be kept
+            loaded_wa_ids = {wa.wa_id for wa in was}
+            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
+                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
+                del self._users["wa-system-admin"]
+
+            logger.info(f"CIRIS_USER_CREATE: User loading complete. Total users in cache: {len(self._users)}")
+            unique_users = {u.wa_id: u for u in self._users.values()}
+            for wa_id, user in unique_users.items():
+                logger.info(
+                    f"CIRIS_USER_CREATE:   - {wa_id}: name={user.name}, wa_role={user.wa_role}, api_role={user.api_role}"
+                )
+            logger.info("=" * 70)
 
         except Exception as e:
-            logger.debug(f"[AUTH DEBUG] Error loading users from database: {e}")
+            logger.error(f"CIRIS_USER_CREATE: Error loading users from database: {e}", exc_info=True)
             raise
 
     async def _create_default_admin(self) -> None:
-        """Create the default admin user in the database."""
+        """Create the default admin user in the database.
+
+        NOTE: This is only called if no user named 'admin' exists in the database.
+        During first-run setup, the setup wizard creates the ROOT user, so this
+        should NOT be called in that flow.
+        """
         if not self._auth_service:
+            logger.info("CIRIS_USER_CREATE: _create_default_admin skipped - no auth_service")
             return
 
+        logger.info("=" * 70)
+        logger.info("CIRIS_USER_CREATE: _create_default_admin() called")
+        logger.info("=" * 70)
+
         try:
+            # Check existing WAs before creating admin
+            existing_was = await self._auth_service.list_was(active_only=False)
+            logger.info(f"CIRIS_USER_CREATE: Existing WAs before default admin: {len(existing_was)}")
+            for wa in existing_was:
+                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+            # Check if any ROOT user already exists - DON'T create another one
+            root_was = [wa for wa in existing_was if wa.role == WARole.ROOT]
+            if root_was:
+                logger.info(
+                    f"CIRIS_USER_CREATE: ROOT WA already exists ({root_was[0].wa_id}) - skipping default admin creation"
+                )
+                return
+
+            logger.info("CIRIS_USER_CREATE: No ROOT WA exists - creating default admin")
+
             # Create admin WA certificate
             wa_cert = await self._auth_service.create_wa(
                 name="admin",
@@ -289,11 +342,13 @@ class APIAuthService:
                 scopes=["*"],  # All permissions
                 role=WARole.ROOT,  # System admin gets ROOT role
             )
+            logger.info(f"CIRIS_USER_CREATE: ✅ Created default admin WA: {wa_cert.wa_id}")
 
             # Update with password hash
             await self._auth_service.update_wa(
                 wa_cert.wa_id, updates=None, password_hash=self._hash_password("ciris_admin_password")
             )
+            logger.info(f"CIRIS_USER_CREATE: Password set for default admin: {wa_cert.wa_id}")
 
             # Add to cache
             admin_user = User(
@@ -307,9 +362,10 @@ class APIAuthService:
                 password_hash=self._hash_password("ciris_admin_password"),
             )
             self._users[admin_user.wa_id] = admin_user
+            logger.info(f"CIRIS_USER_CREATE: Added default admin to user cache")
 
         except Exception as e:
-            logger.debug(f"[AUTH DEBUG] Error creating default admin: {e}")
+            logger.error(f"CIRIS_USER_CREATE: Error creating default admin: {e}", exc_info=True)
 
     def _wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
         """Convert WA role to API role."""
@@ -677,9 +733,15 @@ class APIAuthService:
         await self._ensure_users_loaded()
 
         users = []
+        seen_wa_ids: set[str] = set()  # Dedupe by wa_id
 
-        # Add all stored users with their keys
+        # Add all stored users with their keys (deduplicated by wa_id)
         for user_id, user in self._users.items():
+            # Skip duplicates - _users has multiple keys (wa_id, google:xxx) for same user
+            if user.wa_id in seen_wa_ids:
+                continue
+            seen_wa_ids.add(user.wa_id)
+
             # Apply filters
             if search and search.lower() not in user.name.lower():
                 continue
@@ -692,13 +754,15 @@ class APIAuthService:
             if is_active is not None and user.is_active != is_active:
                 continue
 
-            users.append((user_id, user))
+            users.append((user.wa_id, user))  # Use wa_id as the canonical key
 
         # Add OAuth users not in _users
         for oauth_user in self._oauth_users.values():
             oauth_user_id = oauth_user.user_id
-            # Check if already in users
-            if any(uid == oauth_user_id for uid, u in users):
+            # Check if already in users by matching oauth_external_id
+            # This handles cases where the DB WA has a different wa_id (e.g., wa-2025-12-03-xxx)
+            # but represents the same OAuth user (same oauth_external_id)
+            if any(uid == oauth_user_id or u.oauth_external_id == oauth_user.external_id for uid, u in users):
                 continue
 
             # Convert OAuth user to User
@@ -743,17 +807,45 @@ class APIAuthService:
 
     def get_user(self, user_id: str) -> Optional[User]:
         """Get a specific user by ID."""
-        # Check stored users first
+        # Check stored users first (includes users loaded from DB with OAuth links)
         if user_id in self._users:
             return self._users[user_id]
 
-        # Check OAuth users
+        # Check OAuth users (in-memory only, for users who haven't been minted as WA yet)
         if user_id in self._oauth_users:
             oauth_user = self._oauth_users[user_id]
-            # Check if we have additional user data stored
+            # Check if we have a stored user from the database (linked via OAuth)
             stored_user = self._users.get(user_id)
+
+            # If stored_user exists, merge OAuth session data with persistent DB data
+            # CRITICAL: Use stored_user's wa_id if they're already a WA
+            if stored_user:
+                # User exists in DB - they're already minted, just update OAuth session info
+                return User(
+                    wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
+                    name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
+                    auth_type="oauth",
+                    api_role=stored_user.api_role,  # Preserve DB role
+                    wa_role=stored_user.wa_role,  # Preserve WA role
+                    oauth_provider=oauth_user.provider,
+                    oauth_email=oauth_user.email,
+                    oauth_external_id=oauth_user.external_id,
+                    created_at=stored_user.created_at or oauth_user.created_at,
+                    last_login=oauth_user.last_login,
+                    is_active=stored_user.is_active,
+                    wa_parent_id=stored_user.wa_parent_id,
+                    wa_auto_minted=stored_user.wa_auto_minted,
+                    oauth_name=stored_user.oauth_name or oauth_user.name,
+                    oauth_picture=stored_user.oauth_picture,
+                    permission_requested_at=stored_user.permission_requested_at,
+                    custom_permissions=stored_user.custom_permissions,
+                    oauth_links=stored_user.oauth_links,
+                    marketing_opt_in=oauth_user.marketing_opt_in,
+                )
+
+            # No stored user - pure OAuth user not yet minted as WA
             return User(
-                wa_id=oauth_user.user_id,
+                wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
                 name=oauth_user.name or oauth_user.email or oauth_user.user_id,
                 auth_type="oauth",
                 api_role=self._user_role_to_api_role(oauth_user.role),
@@ -763,13 +855,36 @@ class APIAuthService:
                 created_at=oauth_user.created_at,
                 last_login=oauth_user.last_login,
                 is_active=True,
-                oauth_name=(
-                    stored_user.oauth_name if stored_user else oauth_user.name
-                ),  # Use oauth_user.name as fallback
-                oauth_picture=stored_user.oauth_picture if stored_user else None,
-                permission_requested_at=stored_user.permission_requested_at if stored_user else None,
-                custom_permissions=stored_user.custom_permissions if stored_user else None,
+                oauth_name=oauth_user.name,
+                marketing_opt_in=oauth_user.marketing_opt_in,
             )
+
+        # Fallback: Try to find user by OAuth external_id (without provider prefix)
+        # This handles cases where frontend passes just "googleUserId" without "google:" prefix
+        for key, user in self._users.items():
+            if user.oauth_external_id == user_id:
+                return user
+        for key, oauth_user in self._oauth_users.items():
+            if oauth_user.external_id == user_id:
+                # Check if we have a stored user from the database
+                stored_user = self._users.get(key)
+                if stored_user:
+                    return stored_user
+                # Return OAuth-only user
+                return User(
+                    wa_id=oauth_user.user_id,
+                    name=oauth_user.name or oauth_user.email or oauth_user.user_id,
+                    auth_type="oauth",
+                    api_role=self._user_role_to_api_role(oauth_user.role),
+                    oauth_provider=oauth_user.provider,
+                    oauth_email=oauth_user.email,
+                    oauth_external_id=oauth_user.external_id,
+                    created_at=oauth_user.created_at,
+                    last_login=oauth_user.last_login,
+                    is_active=True,
+                    oauth_name=oauth_user.name,
+                    marketing_opt_in=oauth_user.marketing_opt_in,
+                )
 
         return None
 
@@ -988,6 +1103,33 @@ class APIAuthService:
         }
 
         return permissions.get(role, [])
+
+    def get_effective_permissions(self, user: "User") -> List[str]:
+        """Get effective permissions for a user including WA role inheritance.
+
+        This applies the following inheritance rules:
+        - ROOT WA users get SYSTEM_ADMIN + AUTHORITY permissions
+        - AUTHORITY WA users get their role's permissions (which include wa.resolve_deferral)
+        - All other users get just their API role's permissions
+        - Custom permissions are always added on top
+        """
+        # Start with base permissions from API role
+        permissions_set = set(self.get_permissions_for_role(user.api_role))
+
+        # ROOT WA role inherits AUTHORITY permissions (for deferral resolution, etc.)
+        # This is the key rule: ROOT maps to SYSTEM_ADMIN API role, but also gets AUTHORITY perms
+        if user.wa_role == WARole.ROOT:
+            authority_perms = self.get_permissions_for_role(APIRole.AUTHORITY)
+            permissions_set.update(authority_perms)
+
+        # AUTHORITY WA role already has wa.resolve_deferral in their API role permissions
+        # No extra inheritance needed since AUTHORITY maps to APIRole.AUTHORITY
+
+        # Add custom permissions
+        if user.custom_permissions:
+            permissions_set.update(user.custom_permissions)
+
+        return list(permissions_set)
 
     async def update_user_permissions(self, user_id: str, permissions: List[str]) -> Optional[User]:
         """Update a user's custom permissions."""

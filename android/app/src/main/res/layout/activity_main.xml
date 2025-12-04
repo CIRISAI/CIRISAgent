@@ -6,14 +6,158 @@
     android:layout_height="match_parent"
     android:background="#1a1a2e">
 
-    <!-- Console view shown during startup -->
+    <!-- Splash screen with service lights -->
+    <LinearLayout
+        android:id="@+id/splashContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        android:visibility="visible"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Logo/Title -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="48dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CIRIS"
+                android:textColor="#00d4ff"
+                android:textSize="36sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" Agent"
+                android:textColor="#ffffff"
+                android:textSize="36sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Prep lights (6 for pydantic/native lib setup) -->
+        <LinearLayout
+            android:id="@+id/prepLightsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/prepLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Preparing Environment"
+                android:textColor="#666666"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="4dp" />
+
+            <LinearLayout
+                android:id="@+id/prepLightsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <!-- 6 prep lights will be added programmatically -->
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Service lights container - 2 rows of 11 -->
+        <LinearLayout
+            android:id="@+id/lightsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="32dp">
+
+            <TextView
+                android:id="@+id/servicesLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Starting Services"
+                android:textColor="#666666"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="4dp"
+                android:visibility="gone" />
+
+            <!-- Row 1: lights 1-11 -->
+            <LinearLayout
+                android:id="@+id/lightsRow1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+                <!-- Lights will be added programmatically -->
+            </LinearLayout>
+
+            <!-- Row 2: lights 12-22 -->
+            <LinearLayout
+                android:id="@+id/lightsRow2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <!-- Lights will be added programmatically -->
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Status text -->
+        <TextView
+            android:id="@+id/splashStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Initializing..."
+            android:textColor="#888888"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Current service name -->
+        <TextView
+            android:id="@+id/currentServiceName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#00d4ff"
+            android:textSize="12sp"
+            android:fontFamily="monospace" />
+
+        <!-- Show logs button (appears on error) -->
+        <TextView
+            android:id="@+id/showLogsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Show Logs"
+            android:textColor="#00d4ff"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:visibility="gone"
+            android:layout_marginTop="24dp"
+            android:background="?attr/selectableItemBackground" />
+    </LinearLayout>
+
+    <!-- Console view (hidden by default, shown on error or toggle) -->
     <LinearLayout
         android:id="@+id/consoleContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:orientation="vertical"
         android:padding="16dp"
-        android:visibility="visible"
+        android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -81,15 +225,18 @@
                 android:text="Initializing Python runtime...\n" />
         </ScrollView>
 
-        <!-- Progress bar at bottom -->
-        <ProgressBar
-            android:id="@+id/startupProgress"
-            style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginTop="12dp"
-            android:indeterminate="true"
-            android:progressTint="#00d4ff" />
+        <!-- Back to splash button -->
+        <TextView
+            android:id="@+id/backToSplashButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="← Back"
+            android:textColor="#00d4ff"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:layout_marginTop="8dp"
+            android:background="?attr/selectableItemBackground" />
     </LinearLayout>
 
     <!-- WebView hidden during startup -->

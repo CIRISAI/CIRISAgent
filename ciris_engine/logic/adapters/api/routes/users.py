@@ -144,7 +144,9 @@ def _build_linked_accounts(user: Any) -> List[LinkedOAuthAccount]:
 
 def _build_user_detail(user_id: str, user: Any, auth_service: APIAuthService) -> UserDetail:
     """Build UserDetail response from user object (DRY helper)."""
-    permissions = auth_service.get_permissions_for_role(user.api_role)
+    # Use effective permissions which includes WA role inheritance
+    # ROOT WA users get AUTHORITY permissions (including wa.resolve_deferral)
+    permissions = auth_service.get_effective_permissions(user)
     api_keys = auth_service.list_user_api_keys(user_id)
 
     return UserDetail(

@@ -733,8 +733,40 @@ def _determine_user_role(
             if existing_role is not None:
                 return existing_role
 
+        # ALSO check _users dict (for users loaded from database via OAuth link during setup)
+        # This is critical for setup wizard users who were minted as WA before first OAuth login
+        if external_id:
+            user_id = f"{provider}:{external_id}"
+            stored_users = getattr(auth_service, "_users", {})
+            stored_user = stored_users.get(user_id)
+            if stored_user:
+                # User exists in database - preserve their role!
+                logger.info(
+                    f"[AUTH DEBUG] Found existing user in _users dict: {user_id}, "
+                    f"api_role={stored_user.api_role}, wa_role={stored_user.wa_role}"
+                )
+                # Convert APIRole to UserRole
+                api_role_to_user_role = {
+                    "OBSERVER": UserRole.OBSERVER,
+                    "ADMIN": UserRole.ADMIN,
+                    "AUTHORITY": UserRole.ADMIN,  # AUTHORITY maps to ADMIN
+                    "SYSTEM_ADMIN": UserRole.SYSTEM_ADMIN,
+                    "SERVICE_ACCOUNT": UserRole.SYSTEM_ADMIN,  # Service accounts get full access
+                }
+                role_str = (
+                    stored_user.api_role.value if hasattr(stored_user.api_role, "value") else str(stored_user.api_role)
+                )
+                existing_user_role = api_role_to_user_role.get(role_str.upper(), UserRole.OBSERVER)
+                logger.info(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
+                return existing_user_role
+
         # Check if this is the first OAuth user (setup wizard scenario)
-        if _is_first_oauth_user(oauth_users):
+        # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
+        stored_users = getattr(auth_service, "_users", {})
+        user_id = f"{provider}:{external_id}" if external_id else None
+        user_in_stored = user_id and user_id in stored_users
+
+        if _is_first_oauth_user(oauth_users) and not user_in_stored:
             logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
             return UserRole.SYSTEM_ADMIN
 
@@ -1337,13 +1369,24 @@ async def native_google_token_exchange(
 
         # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
         # This handles both first-time users and existing users who weren't minted
+        logger.info(
+            f"CIRIS_USER_CREATE: [NativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
+        )
         if oauth_user.role == UserRole.SYSTEM_ADMIN:
             # Check if user is already minted by looking up their user record
             existing_user = auth_service.get_user(oauth_user.user_id)
+            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] existing_user lookup: {existing_user}")
+            if existing_user:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
+                )
+
             needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
 
             if needs_minting:
-                logger.info(f"[NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role")
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
+                )
                 try:
                     from ciris_engine.schemas.services.authority_core import WARole
 
@@ -1352,12 +1395,20 @@ async def native_google_token_exchange(
                         wa_role=WARole.ROOT,
                         minted_by="system_auto_mint",
                     )
-                    logger.info(f"[NativeAuth] Successfully auto-minted {oauth_user.user_id} as ROOT WA")
+                    logger.info(
+                        f"CIRIS_USER_CREATE: [NativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
+                    )
                 except Exception as mint_error:
                     # Don't fail login if minting fails - user can mint manually later
-                    logger.warning(f"[NativeAuth] Auto-mint failed (user can mint manually): {mint_error}")
+                    logger.warning(
+                        f"CIRIS_USER_CREATE: [NativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
+                    )
             else:
-                logger.debug(f"[NativeAuth] User {oauth_user.user_id} already minted as WA")
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
+                )
+        else:
+            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
 
         # Generate API key
         logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")

@@ -228,6 +228,9 @@ def check_permissions(permissions: list[str]) -> Callable[..., Any]:
         auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
     ) -> None:
         """Validate user has required permissions."""
+        from ciris_engine.schemas.runtime.api import APIRole
+        from ciris_engine.schemas.services.authority_core import WARole
+
         # Get the user from auth service to get their API role
         user = auth_service.get_user(auth.user_id)
         if not user:
@@ -235,6 +238,12 @@ def check_permissions(permissions: list[str]) -> Callable[..., Any]:
 
         # Get permissions for user's API role
         user_permissions = set(auth_service.get_permissions_for_role(user.api_role))
+
+        # ROOT WA role inherits AUTHORITY permissions (for deferral resolution, etc.)
+        # This is separate from API role - ROOT WAs get both SYSTEM_ADMIN + AUTHORITY perms
+        if hasattr(user, "wa_role") and user.wa_role == WARole.ROOT:
+            authority_perms = auth_service.get_permissions_for_role(APIRole.AUTHORITY)
+            user_permissions.update(authority_perms)
 
         # Add any custom permissions
         if hasattr(user, "custom_permissions") and user.custom_permissions:

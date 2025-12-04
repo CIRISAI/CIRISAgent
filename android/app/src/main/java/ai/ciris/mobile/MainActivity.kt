@@ -1,8 +1,11 @@
 package ai.ciris.mobile
 
+import android.animation.ArgbEvaluator
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -34,6 +37,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.resume
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -71,6 +76,35 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusIndicator: TextView
     private var serverStarted = false
     private val consoleBuffer = StringBuilder()
+
+    // Splash screen views
+    private lateinit var splashContainer: LinearLayout
+    private lateinit var lightsRow1: LinearLayout
+    private lateinit var lightsRow2: LinearLayout
+    private lateinit var splashStatus: TextView
+    private lateinit var currentServiceName: TextView
+    private lateinit var showLogsButton: TextView
+    private lateinit var backToSplashButton: TextView
+
+    // Prep phase views (6 lights for pydantic/native lib setup)
+    private lateinit var prepLightsContainer: LinearLayout
+    private lateinit var prepLightsRow: LinearLayout
+    private lateinit var prepLabel: TextView
+    private lateinit var servicesLabel: TextView
+    private val prepLights = mutableListOf<View>()
+    private val litPrepSteps = mutableSetOf<Int>()
+    private val totalPrepSteps = 6
+
+    // Service lights (22 total - 2 rows of 11)
+    private val serviceLights = mutableListOf<View>()
+    private val litServices = mutableSetOf<Int>()
+    private var hasError = false
+    private val totalServices = 22
+
+    // Colors for lights
+    private val colorOff = 0xFF2a2a3e.toInt()      // Dark gray (off)
+    private val colorOn = 0xFF00d4ff.toInt()       // Cyan (on)
+    private val colorError = 0xFFff4444.toInt()    // Red (error)
 
     // User info passed from LoginActivity
     private var authMethod: String? = null
@@ -138,11 +172,14 @@ class MainActivity : AppCompatActivity() {
         // Store globally for LLM proxy access
         currentGoogleUserId = googleUserId
 
-        // Save Google user ID to SharedPreferences for billing
+        // Save Google user info to BillingApiClient for billing API calls
         if (!googleUserId.isNullOrEmpty()) {
-            val prefs = getSharedPreferences("ciris_settings", MODE_PRIVATE)
-            prefs.edit().putString("google_user_id", googleUserId).apply()
-            Log.i(TAG, "Saved Google user ID for billing: $googleUserId")
+            val billingApiClient = BillingApiClient(this)
+            billingApiClient.setGoogleUserId(googleUserId!!)
+            userEmail?.let { billingApiClient.setGoogleEmail(it) }
+            userName?.let { billingApiClient.setGoogleDisplayName(it) }
+            googleIdToken?.let { billingApiClient.setGoogleIdToken(it) }
+            Log.i(TAG, "Saved Google user info to BillingApiClient: id=$googleUserId, hasIdToken=${googleIdToken != null}")
         }
 
         // Comprehensive logging of received auth data
@@ -171,11 +208,36 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
         useNativeUi = prefs.getBoolean(KEY_USE_NATIVE, true)
 
+        // Setup splash screen views
+        splashContainer = findViewById(R.id.splashContainer)
+        lightsRow1 = findViewById(R.id.lightsRow1)
+        lightsRow2 = findViewById(R.id.lightsRow2)
+        splashStatus = findViewById(R.id.splashStatus)
+        currentServiceName = findViewById(R.id.currentServiceName)
+        showLogsButton = findViewById(R.id.showLogsButton)
+        backToSplashButton = findViewById(R.id.backToSplashButton)
+
+        // Setup prep phase views
+        prepLightsContainer = findViewById(R.id.prepLightsContainer)
+        prepLightsRow = findViewById(R.id.prepLightsRow)
+        prepLabel = findViewById(R.id.prepLabel)
+        servicesLabel = findViewById(R.id.servicesLabel)
+
         // Setup console views
         consoleContainer = findViewById(R.id.consoleContainer)
         consoleScroll = findViewById(R.id.consoleScroll)
         consoleOutput = findViewById(R.id.consoleOutput)
         statusIndicator = findViewById(R.id.statusIndicator)
+
+        // Create prep lights (6 for pydantic/native lib setup)
+        createPrepLights()
+
+        // Create service lights (22 total - 2 rows of 11)
+        createServiceLights()
+
+        // Setup button click handlers
+        showLogsButton.setOnClickListener { showConsoleView() }
+        backToSplashButton.setOnClickListener { showSplashView() }
 
         // Setup WebView (hidden initially)
         setupWebView()
@@ -201,11 +263,38 @@ class MainActivity : AppCompatActivity() {
                 val process = Runtime.getRuntime().exec("logcat -v raw python.stdout:I python.stderr:W *:S")
                 val reader = process.inputStream.bufferedReader()
 
+                // Regex to match prep phase lines: [1/6], [2/6], etc.
+                val prepPattern = Regex("""\[(\d+)/6\]""")
+                // Regex to match service startup lines: [SERVICE X/22] ServiceName STARTED
+                val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\w+) STARTED""")
+                // Regex to detect errors
+                val errorPattern = Regex("""ERROR|FAILED|Exception|Traceback""", RegexOption.IGNORE_CASE)
+
                 while (true) {
                     val line = reader.readLine() ?: break
                     if (line.isNotBlank()) {
                         withContext(Dispatchers.Main) {
                             appendToConsole(line)
+
+                            // Check for prep phase steps (pydantic/native lib setup)
+                            val prepMatch = prepPattern.find(line)
+                            if (prepMatch != null) {
+                                val stepNum = prepMatch.groupValues[1].toIntOrNull() ?: 0
+                                onPrepStepCompleted(stepNum, line)
+                            }
+
+                            // Check for service startup
+                            val serviceMatch = servicePattern.find(line)
+                            if (serviceMatch != null) {
+                                val serviceNum = serviceMatch.groupValues[1].toIntOrNull() ?: 0
+                                val serviceName = serviceMatch.groupValues[3]
+                                onServiceStarted(serviceNum, serviceName)
+                            }
+
+                            // Check for errors
+                            if (errorPattern.containsMatchIn(line)) {
+                                onErrorDetected(line)
+                            }
                         }
                     }
                 }
@@ -213,6 +302,184 @@ class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "Logcat reader error: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Create the 6 prep phase indicator lights.
+     * Tracks pydantic/native library setup progress.
+     */
+    private fun createPrepLights() {
+        prepLights.clear()
+
+        // Convert 12dp to pixels for prep light size (smaller than service lights)
+        val lightSizeDp = 12
+        val lightMarginDp = 3
+        val lightSizePx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, lightSizeDp.toFloat(), resources.displayMetrics
+        ).toInt()
+        val lightMarginPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, lightMarginDp.toFloat(), resources.displayMetrics
+        ).toInt()
+
+        // Create 6 prep lights
+        for (i in 1..totalPrepSteps) {
+            val light = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(lightSizePx, lightSizePx).apply {
+                    setMargins(lightMarginPx, lightMarginPx, lightMarginPx, lightMarginPx)
+                }
+                setBackgroundColor(colorOff)
+            }
+
+            prepLights.add(light)
+            prepLightsRow.addView(light)
+        }
+
+        Log.i(TAG, "Created ${prepLights.size} prep indicator lights")
+    }
+
+    /**
+     * Called when a prep step completes (pydantic/native lib setup).
+     */
+    private fun onPrepStepCompleted(stepNum: Int, description: String) {
+        if (stepNum < 1 || stepNum > totalPrepSteps) return
+
+        // Track this step as lit
+        litPrepSteps.add(stepNum)
+
+        // Light up the indicator with animation
+        val lightIndex = stepNum - 1
+        if (lightIndex < prepLights.size) {
+            val light = prepLights[lightIndex]
+            animateLightOn(light)
+        }
+
+        // Update prep label to show progress
+        prepLabel.text = "Preparing Environment... $stepNum/$totalPrepSteps"
+        prepLabel.setTextColor(0xFF00d4ff.toInt())  // Cyan when active
+
+        // Update status text with current step
+        splashStatus.text = "Setting up Python runtime..."
+        currentServiceName.text = description.take(50)  // Truncate long descriptions
+
+        // When all prep steps complete, show the services section
+        if (litPrepSteps.size >= totalPrepSteps) {
+            prepLabel.text = "Environment Ready"
+            prepLabel.setTextColor(0xFF00ff88.toInt())  // Green when complete
+            servicesLabel.visibility = View.VISIBLE
+        }
+
+        Log.i(TAG, "Prep step $stepNum/$totalPrepSteps completed: ${description.take(50)}")
+    }
+
+    /**
+     * Create the 22 service indicator lights (2 rows of 11).
+     * Looks like old computer startup LEDs.
+     */
+    private fun createServiceLights() {
+        serviceLights.clear()
+
+        // Convert 16dp to pixels for light size
+        val lightSizeDp = 16
+        val lightMarginDp = 4
+        val lightSizePx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, lightSizeDp.toFloat(), resources.displayMetrics
+        ).toInt()
+        val lightMarginPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, lightMarginDp.toFloat(), resources.displayMetrics
+        ).toInt()
+
+        // Create 22 lights
+        for (i in 1..totalServices) {
+            val light = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(lightSizePx, lightSizePx).apply {
+                    setMargins(lightMarginPx, lightMarginPx, lightMarginPx, lightMarginPx)
+                }
+                setBackgroundColor(colorOff)
+            }
+
+            serviceLights.add(light)
+
+            // Add to appropriate row (1-11 in row 1, 12-22 in row 2)
+            if (i <= 11) {
+                lightsRow1.addView(light)
+            } else {
+                lightsRow2.addView(light)
+            }
+        }
+
+        Log.i(TAG, "Created ${serviceLights.size} service indicator lights")
+    }
+
+    /**
+     * Called when a service starts. Lights up the corresponding indicator.
+     */
+    private fun onServiceStarted(serviceNum: Int, serviceName: String) {
+        if (serviceNum < 1 || serviceNum > totalServices) return
+
+        // Track this service as lit
+        litServices.add(serviceNum)
+
+        // Light up the indicator with animation
+        val lightIndex = serviceNum - 1
+        if (lightIndex < serviceLights.size) {
+            val light = serviceLights[lightIndex]
+            animateLightOn(light)
+        }
+
+        // Update status text
+        splashStatus.text = "Starting services... ${litServices.size}/$totalServices"
+        currentServiceName.text = serviceName
+
+        Log.i(TAG, "Service $serviceNum/$totalServices started: $serviceName")
+    }
+
+    /**
+     * Animate a light turning on with a glow effect.
+     */
+    private fun animateLightOn(light: View) {
+        val animator = ValueAnimator.ofObject(ArgbEvaluator(), colorOff, colorOn)
+        animator.duration = 200
+        animator.addUpdateListener { animation ->
+            light.setBackgroundColor(animation.animatedValue as Int)
+        }
+        animator.start()
+    }
+
+    /**
+     * Called when an error is detected in the logs.
+     * Shows error state and makes log view accessible.
+     */
+    private fun onErrorDetected(errorLine: String) {
+        if (hasError) return  // Already in error state
+        hasError = true
+
+        Log.e(TAG, "Error detected: $errorLine")
+
+        // Update splash status to show error
+        splashStatus.text = "Error detected"
+        splashStatus.setTextColor(colorError)
+
+        // Show the "Show Logs" button
+        showLogsButton.visibility = View.VISIBLE
+
+        // Update status indicator
+        updateStatus("Error", "red")
+    }
+
+    /**
+     * Show the console/log view.
+     */
+    private fun showConsoleView() {
+        splashContainer.visibility = View.GONE
+        consoleContainer.visibility = View.VISIBLE
+    }
+
+    /**
+     * Show the splash screen view.
+     */
+    private fun showSplashView() {
+        consoleContainer.visibility = View.GONE
+        splashContainer.visibility = View.VISIBLE
     }
 
     /**
@@ -225,6 +492,33 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     appendToConsole("Initializing Python runtime...")
                     updateStatus("Starting", "yellow")
+                }
+
+                // PRE-FLIGHT TOKEN REFRESH: Get fresh Google ID token BEFORE starting Python
+                // This ensures Python's billing service has a valid token when it reads .env
+                if (authMethod == "google") {
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("Refreshing authentication token...")
+                    }
+
+                    val freshToken = refreshGoogleTokenBeforeStartup()
+                    if (freshToken != null) {
+                        // Write fresh token to .env BEFORE Python starts
+                        val written = writeTokenToEnvFile(freshToken)
+                        withContext(Dispatchers.Main) {
+                            if (written) {
+                                appendToConsole("✓ Authentication token refreshed")
+                            } else {
+                                appendToConsole("⚠ Could not save token - billing may fail")
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("⚠ Token refresh failed - using existing token")
+                        }
+                        // Still try to write the existing token if we have one
+                        googleIdToken?.let { writeTokenToEnvFile(it) }
+                    }
                 }
 
                 // Python.start() can take several seconds - do it off main thread
@@ -547,7 +841,8 @@ class MainActivity : AppCompatActivity() {
                 account.id?.let { billingApiClient.setGoogleUserId(it) }
                 account.email?.let { billingApiClient.setGoogleEmail(it) }
                 account.displayName?.let { billingApiClient.setGoogleDisplayName(it) }
-                Log.i(TAG, "[GoogleSignIn] Saved user info to BillingApiClient: id=${account.id}, email=${account.email}, name=${account.displayName}")
+                account.idToken?.let { billingApiClient.setGoogleIdToken(it) }
+                Log.i(TAG, "[GoogleSignIn] Saved user info to BillingApiClient: id=${account.id}, email=${account.email}, name=${account.displayName}, hasIdToken=${account.idToken != null}")
 
                 // Build JSON response for JavaScript
                 val json = JSONObject()
@@ -737,14 +1032,16 @@ class MainActivity : AppCompatActivity() {
                     // Short delay to let user see status
                     delay(300)
 
-                    // Hide console, show WebView
+                    // Hide splash/console, show WebView
+                    splashContainer.visibility = View.GONE
                     consoleContainer.visibility = View.GONE
                     webView.visibility = View.VISIBLE
                     loadUI()
                 }
             }
         } else {
-            // Hide console, show WebView (no token exchange needed for API key auth)
+            // Hide splash/console, show WebView (no token exchange needed for API key auth)
+            splashContainer.visibility = View.GONE
             consoleContainer.visibility = View.GONE
             webView.visibility = View.VISIBLE
             loadUI()
@@ -1296,6 +1593,113 @@ class MainActivity : AppCompatActivity() {
         if (authMethod == "google" && tokenRefreshManager != null && cirisHomePath != null) {
             Log.i(TAG, "Starting token refresh manager")
             tokenRefreshManager?.start(cirisHomePath)
+        }
+    }
+
+    /**
+     * Pre-flight token refresh: Get a fresh Google ID token BEFORE starting Python.
+     * This ensures the .env file has a valid token when Python's billing service reads it.
+     *
+     * Returns the fresh token, or null if refresh failed.
+     */
+    private suspend fun refreshGoogleTokenBeforeStartup(): String? {
+        if (authMethod != "google" || googleSignInHelper == null) {
+            Log.i(TAG, "[PreflightTokenRefresh] Skipping - not using Google auth")
+            return null
+        }
+
+        Log.i(TAG, "[PreflightTokenRefresh] Refreshing Google ID token before Python startup...")
+
+        return suspendCoroutine { continuation ->
+            googleSignInHelper!!.silentSignIn { result ->
+                when (result) {
+                    is GoogleSignInHelper.SignInResult.Success -> {
+                        val freshToken = result.account.idToken
+                        if (freshToken != null) {
+                            Log.i(TAG, "[PreflightTokenRefresh] Got fresh token (${freshToken.length} chars)")
+                            // Update our stored token - the main purpose is to write to .env for Python
+                            this@MainActivity.googleIdToken = freshToken
+                            continuation.resume(freshToken)
+                        } else {
+                            Log.w(TAG, "[PreflightTokenRefresh] Silent sign-in succeeded but no ID token")
+                            continuation.resume(null)
+                        }
+                    }
+                    is GoogleSignInHelper.SignInResult.Error -> {
+                        Log.e(TAG, "[PreflightTokenRefresh] Silent sign-in failed: ${result.message}")
+                        continuation.resume(null)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Write a fresh Google ID token to the .env file BEFORE Python starts.
+     * This ensures Python's billing service has a valid token on first read.
+     */
+    private fun writeTokenToEnvFile(token: String): Boolean {
+        val envFile = cirisHomePath?.let { File(it, ".env") } ?: run {
+            Log.w(TAG, "[PreflightTokenRefresh] Cannot write .env - CIRIS_HOME not set")
+            return false
+        }
+
+        try {
+            if (!envFile.exists()) {
+                // Don't create .env file - let the setup wizard handle first-run configuration
+                // Only update existing .env files with fresh tokens
+                Log.i(TAG, "[PreflightTokenRefresh] No .env file exists - skipping (first-run will be handled by setup wizard)")
+                return false
+            }
+
+            // Update existing .env file
+            var content = envFile.readText()
+            var updated = false
+
+            // Update OPENAI_API_KEY
+            val openaiPatterns = listOf(
+                Regex("""OPENAI_API_KEY="[^"]*""""),
+                Regex("""OPENAI_API_KEY='[^']*'"""),
+                Regex("""OPENAI_API_KEY=[^\n]*""")
+            )
+            for (pattern in openaiPatterns) {
+                if (pattern.containsMatchIn(content)) {
+                    content = pattern.replace(content, """OPENAI_API_KEY="$token"""")
+                    updated = true
+                    break
+                }
+            }
+
+            // If OPENAI_API_KEY not found, append it
+            if (!updated) {
+                content += "\nOPENAI_API_KEY=\"$token\"\n"
+                updated = true
+            }
+
+            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN
+            val billingPatterns = listOf(
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN="[^"]*""""),
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN='[^']*'"""),
+                Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN=[^\n]*""")
+            )
+            var billingUpdated = false
+            for (pattern in billingPatterns) {
+                if (pattern.containsMatchIn(content)) {
+                    content = pattern.replace(content, """CIRIS_BILLING_GOOGLE_ID_TOKEN="$token"""")
+                    billingUpdated = true
+                    break
+                }
+            }
+            if (!billingUpdated) {
+                content += "\nCIRIS_BILLING_GOOGLE_ID_TOKEN=\"$token\"\n"
+            }
+
+            envFile.writeText(content)
+            Log.i(TAG, "[PreflightTokenRefresh] Updated .env file with fresh token")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "[PreflightTokenRefresh] Failed to write .env file: ${e.message}")
+            return false
         }
     }
 

@@ -1089,10 +1089,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
 
+        # Use platform-aware path for audit log export (critical for Android)
+        audit_export_path = get_data_dir() / "audit_logs.jsonl"
         graph_audit = GraphAuditService(
             memory_bus=None,  # Will be set via service registry
             time_service=self.time_service,
-            export_path="audit_logs.jsonl",  # Standard audit log path
+            export_path=str(audit_export_path),  # Platform-aware audit log path
             export_format="jsonl",
             enable_hash_chain=True,
             db_path=str(audit_db_path),

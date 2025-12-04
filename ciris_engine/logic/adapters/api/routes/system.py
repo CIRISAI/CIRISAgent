@@ -531,9 +531,7 @@ async def _collect_service_health(request: Request) -> Dict[str, Dict[str, int]]
                     if await _check_provider_health(provider):
                         healthy_count += 1
                     else:
-                        logger.warning(
-                            f"Service health check failed for {service_type.value}: Service may not implement is_healthy()"
-                        )
+                        logger.debug(f"Service health check returned unhealthy for {service_type.value}")
                 services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
     except Exception as e:
         logger.error(f"Error checking service health: {e}")

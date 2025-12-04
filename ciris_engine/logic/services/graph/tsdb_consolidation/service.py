@@ -981,12 +981,16 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             return 0
 
     async def is_healthy(self) -> bool:
-        """Check if the service is healthy."""
-        return (
-            self._running
-            and self._memory_bus is not None
-            and (self._consolidation_task is None or not self._consolidation_task.done())
-        )
+        """Check if the service is healthy.
+
+        The service is healthy if:
+        - It's running
+        - Memory bus is available
+
+        Note: We don't check consolidation_task state because the task may
+        complete between consolidation windows and that's normal behavior.
+        """
+        return self._running and self._memory_bus is not None
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""

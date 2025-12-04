@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 21
-        versionName "1.7.21"
+        versionCode 23
+        versionName "1.7.23"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -83,6 +83,14 @@ android {
                 // Use older versions that don't require jiter (native Rust extension)
                 install "openai==1.12.0"
                 install "instructor==1.2.6"
+
+                // Document parsing (pure Python - no native dependencies)
+                install "pypdf==5.1.0"  // PDF parsing
+                install "docx2txt==0.9"  // DOCX parsing
+
+                // Cron scheduling (pure Python)
+                install "croniter==2.0.7"
+                install "python-dateutil==2.8.2"  // croniter dependency
 
                 // Note: psutil is NOT included - it requires native compilation
                 // Instead, we provide an android-specific stub at src/main/python/psutil.py

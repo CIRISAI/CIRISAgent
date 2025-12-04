@@ -164,7 +164,6 @@ if [[ "$SKIP_WEB" != "true" && "$SKIP_BUILD" != "true" ]]; then
     fi
 
     # Count source files
-    local source_count
     source_count=$(find "$GUI_STATIC_DIR" -type f | wc -l)
     log_info "Source: $source_count files in android_gui_static"
 
@@ -172,7 +171,6 @@ if [[ "$SKIP_WEB" != "true" && "$SKIP_BUILD" != "true" ]]; then
     rm -rf "$PYTHON_GUI_DIR"
     mkdir -p "$PYTHON_GUI_DIR"
     cp -r "$GUI_STATIC_DIR/"* "$PYTHON_GUI_DIR/"
-    local python_count
     python_count=$(find "$PYTHON_GUI_DIR" -type f | wc -l)
     log_info "  -> python/android_gui_static: $python_count files"
 
@@ -180,7 +178,6 @@ if [[ "$SKIP_WEB" != "true" && "$SKIP_BUILD" != "true" ]]; then
     rm -rf "$ASSETS_DIR"
     mkdir -p "$(dirname "$ASSETS_DIR")"
     cp -r "$GUI_STATIC_DIR" "$ASSETS_DIR"
-    local assets_count
     assets_count=$(find "$ASSETS_DIR" -type f | wc -l)
     log_info "  -> assets/public: $assets_count files"
 
@@ -226,7 +223,6 @@ fi
 if [[ "$VERIFY_APK" == "true" ]]; then
     log_step "Verifying APK contents..."
 
-    local next_count
     next_count=$(unzip -l "$APK_PATH" 2>/dev/null | grep -c "assets/public/_next" || true)
     if [[ "$next_count" -lt 10 ]]; then
         log_error "APK missing _next assets (found $next_count, expected 100+)"
@@ -234,7 +230,6 @@ if [[ "$VERIFY_APK" == "true" ]]; then
     fi
     log_info "  _next assets: $next_count files"
 
-    local setup_chunk
     setup_chunk=$(unzip -l "$APK_PATH" 2>/dev/null | grep "app/setup/page-" | head -1 || true)
     if [[ -z "$setup_chunk" ]]; then
         log_warn "  Setup page chunk: NOT FOUND"

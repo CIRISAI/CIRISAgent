@@ -17,7 +17,7 @@ system_guidance_header: |
   - **Memory operations:** memorize, recall, forget
   - **Terminal action:** task_complete
 
-  Context: {{full_context_str}}
+  Context: {full_context_str}
 
   IMPORTANT: Focus on the specific thought under consideration, not the context. The context may contain red herrings or non sequiturs; use it only to inform your assessment of the specific thought.
 
@@ -37,6 +37,6 @@ response_format: |
   Do not include extra fields or PDMA step names.
 
 context_integration: |
-  Thought to Evaluate: {{original_thought_content}}
+  Thought to Evaluate: {original_thought_content}
 
 covenant_header: true  # Use COVENANT_TEXT as system message

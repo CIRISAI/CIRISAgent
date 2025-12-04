@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 24
-        versionName "1.7.24"
+        versionCode 25
+        versionName "1.7.25"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -39,11 +39,11 @@ android {
 
         // Chaquopy Python configuration (inside defaultConfig for Chaquopy 15+)
         python {
-            // Use Python 3.10 for armeabi-v7a (32-bit ARM) support
+            // Use Python 3.10 for armeabi-v7a (32-bit ARM) and pydantic-core compatibility
             version "3.10"
 
-            // Use system Python 3.10+ for build-time operations
-            buildPython "/usr/bin/python3"
+            // Use system Python 3.10 for build-time operations (must match target version for Chaquopy 17)
+            buildPython "/usr/bin/python3.10"
 
             // Extract pydantic_core to filesystem for native .so loading
             extractPackages "pydantic_core"
@@ -68,7 +68,7 @@ android {
                 install "aiofiles==23.2.1"
 
                 // Configuration
-                install "pyyaml==6.0.1"
+                install "pyyaml==6.0.3"
                 install "python-dotenv==1.0.1"
 
                 // Authentication and encryption

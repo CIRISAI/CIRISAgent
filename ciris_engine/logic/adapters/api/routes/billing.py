@@ -6,6 +6,7 @@ Frontend should NEVER call the billing backend directly.
 """
 
 import logging
+import re
 from typing import Any, Dict, Optional
 
 import httpx
@@ -26,6 +27,10 @@ router = APIRouter(prefix="/api/billing", tags=["billing"])
 ERROR_RESOURCE_MONITOR_UNAVAILABLE = "Resource monitor not available"
 ERROR_CREDIT_PROVIDER_NOT_CONFIGURED = "Credit provider not configured"
 ERROR_BILLING_SERVICE_UNAVAILABLE = "Billing service unavailable"
+ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
+
+# Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
+PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
 
 # Request/Response schemas
@@ -499,6 +504,10 @@ async def get_purchase_status(
     Frontend can poll this after initiating payment to confirm credits were added.
     Only works when CIRIS_BILLING_ENABLED=true (CIRISBillingProvider).
     """
+    # Validate payment_id to prevent path traversal attacks
+    if not PAYMENT_ID_PATTERN.match(payment_id):
+        raise HTTPException(status_code=400, detail=ERROR_INVALID_PAYMENT_ID)
+
     # Check if billing is enabled
     if not hasattr(request.app.state, "resource_monitor"):
         raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)

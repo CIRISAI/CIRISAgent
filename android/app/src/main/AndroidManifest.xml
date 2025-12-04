@@ -57,11 +57,20 @@
             android:label="@string/purchase_title"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Interact activity for viewing live reasoning stream -->
+        <!-- Interact activity for chat with agent -->
         <activity
             android:name=".InteractActivity"
             android:exported="false"
-            android:label="Interact Stream"
+            android:label="Chat with CIRIS"
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.CIRIS.NoActionBar" />
+
+        <!-- Runtime activity for viewing live reasoning stream -->
+        <activity
+            android:name=".RuntimeActivity"
+            android:exported="false"
+            android:label="Reasoning Stream"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.CIRIS.NoActionBar" />
     </application>

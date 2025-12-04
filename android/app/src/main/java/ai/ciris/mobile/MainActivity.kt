@@ -13,6 +13,8 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -73,6 +75,7 @@ import java.net.URL
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var fragmentContainer: FrameLayout
     private lateinit var consoleContainer: LinearLayout
     private lateinit var consoleScroll: ScrollView
     private lateinit var consoleOutput: TextView
@@ -118,6 +121,7 @@ class MainActivity : AppCompatActivity() {
     private var userPhotoUrl: String? = null
     private var showSetup: Boolean = false
     private var cirisAccessToken: String? = null
+    private var userRole: String = "OBSERVER"  // Default role, updated after token exchange
 
     // Track auth injection to prevent duplicate events
     private var authInjected = false
@@ -125,6 +129,12 @@ class MainActivity : AppCompatActivity() {
 
     // UI Preference
     private var useNativeUi = true
+
+    // Custom toolbar views
+    private lateinit var toolbar: androidx.appcompat.widget.Toolbar
+    private lateinit var toolbarSignet: ImageView
+    private lateinit var creditsContainer: View
+    private lateinit var creditsCountText: TextView
 
     // Token refresh manager for ciris.ai proxy authentication
     private var googleSignInHelper: GoogleSignInHelper? = null
@@ -170,6 +180,24 @@ class MainActivity : AppCompatActivity() {
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
             WindowInsetsCompat.CONSUMED
+        }
+
+        // Set up custom toolbar (include tag makes the Toolbar have the include's ID)
+        toolbar = findViewById(R.id.toolbarInclude) as androidx.appcompat.widget.Toolbar
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // Set up toolbar click listeners (views are children of the toolbar)
+        toolbarSignet = toolbar.findViewById(R.id.toolbarSignet)
+        creditsContainer = toolbar.findViewById(R.id.creditsContainer)
+        creditsCountText = toolbar.findViewById(R.id.creditsCount)
+
+        toolbarSignet.setOnClickListener {
+            showInteractFragment()
+        }
+
+        creditsContainer.setOnClickListener {
+            startActivity(Intent(this, PurchaseActivity::class.java))
         }
 
         // Get user info from LoginActivity
@@ -219,6 +247,9 @@ class MainActivity : AppCompatActivity() {
         // Load UI preference
         val prefs = getSharedPreferences(PREFS_UI, MODE_PRIVATE)
         useNativeUi = prefs.getBoolean(KEY_USE_NATIVE, true)
+
+        // Setup fragment container for native Kotlin pages
+        fragmentContainer = findViewById(R.id.fragmentContainer)
 
         // Setup splash screen views
         splashContainer = findViewById(R.id.splashContainer)
@@ -656,18 +687,31 @@ class MainActivity : AppCompatActivity() {
                         return true
                     }
 
-                    // Check for native UI interception - only intercept the GUI runtime page
+                    // Check for native UI interception
                     // NOT API endpoints like /v1/system/runtime/reasoning-stream
                     if (useNativeUi && url != null) {
+                        // Exclude API endpoints
+                        val isApiEndpoint = url.contains("/v1/") || url.contains("/api/")
+
+                        // Check for interact page -> InteractActivity (chat UI)
+                        val isInteractPage = url.endsWith("/interact") ||
+                                            url.endsWith("/interact/") ||
+                                            url.contains("/interact/index.html") ||
+                                            url.contains("/interact?")
+                        if (isInteractPage && !isApiEndpoint) {
+                            Log.i(TAG, "Intercepting interact page for native chat UI: $url")
+                            launchInteractActivity()
+                            return true
+                        }
+
+                        // Check for runtime page -> RuntimeActivity (SSE stream viewer)
                         val isRuntimePage = url.endsWith("/runtime") ||
                                            url.endsWith("/runtime/") ||
                                            url.contains("/runtime/index.html") ||
                                            url.contains("/runtime?")
-                        // Exclude API endpoints
-                        val isApiEndpoint = url.contains("/v1/") || url.contains("/api/")
                         if (isRuntimePage && !isApiEndpoint) {
-                            Log.i(TAG, "Intercepting runtime page for native UI: $url")
-                            launchInteractActivity()
+                            Log.i(TAG, "Intercepting runtime page for native stream viewer: $url")
+                            launchRuntimeActivity()
                             return true
                         }
                     }
@@ -815,6 +859,33 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 null
+            }
+        }
+
+        /**
+         * Refresh the CIRIS access token by re-exchanging the Google ID token.
+         * Call this after setup completes to get a token with updated role.
+         */
+        @JavascriptInterface
+        fun refreshToken() {
+            Log.i(TAG, "[WebAppInterface] refreshToken() called from JavaScript")
+
+            if (googleIdToken == null || authMethod != "google") {
+                Log.w(TAG, "[WebAppInterface] Cannot refresh - no Google ID token or not Google auth")
+                return
+            }
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val exchanged = exchangeGoogleIdToken()
+                withContext(Dispatchers.Main) {
+                    if (exchanged) {
+                        Log.i(TAG, "[WebAppInterface] Token refreshed successfully")
+                        // Re-inject auth data with fresh token
+                        injectAuthData(true)
+                    } else {
+                        Log.w(TAG, "[WebAppInterface] Token refresh failed")
+                    }
+                }
             }
         }
     }
@@ -1044,19 +1115,21 @@ class MainActivity : AppCompatActivity() {
                     // Short delay to let user see status
                     delay(300)
 
-                    // Hide splash/console, show WebView
+                    // Hide splash/console, show toolbar and Kotlin interact fragment
                     splashContainer.visibility = View.GONE
                     consoleContainer.visibility = View.GONE
-                    webView.visibility = View.VISIBLE
-                    loadUI()
+                    findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
+                    showInteractFragment()
+                    loadCreditsBalance()
                 }
             }
         } else {
-            // Hide splash/console, show WebView (no token exchange needed for API key auth)
+            // Hide splash/console, show toolbar and Kotlin interact fragment (no token exchange needed for API key auth)
             splashContainer.visibility = View.GONE
             consoleContainer.visibility = View.GONE
-            webView.visibility = View.VISIBLE
-            loadUI()
+            findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
+            showInteractFragment()
+            loadCreditsBalance()
         }
     }
 
@@ -1171,7 +1244,10 @@ class MainActivity : AppCompatActivity() {
                 val gson = com.google.gson.Gson()
                 val tokenResponse = gson.fromJson(response, NativeTokenResponse::class.java)
                 cirisAccessToken = tokenResponse.access_token
+                userRole = tokenResponse.role
                 Log.i(TAG, "[TokenExchange] SUCCESS - Got CIRIS access token for user: ${tokenResponse.user_id}, role: ${tokenResponse.role}")
+                // Refresh menu to show/hide admin items based on role
+                runOnUiThread { invalidateOptionsMenu() }
                 connection.disconnect()
                 true
             } else {
@@ -1202,6 +1278,31 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "Loading UI from $url")
         // Auth data is injected in onPageFinished after page loads
         webView.loadUrl(url)
+    }
+
+    /**
+     * Load and display the user's credit balance in the toolbar.
+     */
+    private fun loadCreditsBalance() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val billingApiClient = BillingApiClient(this@MainActivity)
+                val result = billingApiClient.getBalance()
+
+                withContext(Dispatchers.Main) {
+                    if (result.success) {
+                        creditsCountText.text = result.balance.toString()
+                    } else {
+                        creditsCountText.text = "--"
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading credits balance", e)
+                withContext(Dispatchers.Main) {
+                    creditsCountText.text = "--"
+                }
+            }
+        }
     }
 
     private fun injectAuthData(dispatchEvent: Boolean = true) {
@@ -1257,27 +1358,20 @@ class MainActivity : AppCompatActivity() {
                     localStorage.removeItem('ciris_auth_token');
                 }
 
-                // Check if setup page has stored a fresh token (indicated by ciris_native_auth_complete flag)
-                // If so, don't overwrite it with the pre-setup observer token
-                var authComplete = localStorage.getItem('ciris_native_auth_complete');
-                if (authComplete === 'true') {
-                    console.log('[Native] Setup completed - preserving fresh token from setup flow');
-                } else {
-                    // Setup not complete yet, inject our token
-                    localStorage.setItem('ciris_access_token', '${cirisAccessToken}');
-                    localStorage.setItem('access_token', '${cirisAccessToken}');
-                    // Also set ciris_auth_token which is what SDK's AuthStore reads
-                    var authTokenJson = JSON.stringify({
-                        access_token: '${cirisAccessToken}',
-                        token_type: 'Bearer',
-                        expires_in: 2592000,
-                        user_id: 'native_user',
-                        role: 'SYSTEM_ADMIN',
-                        created_at: Date.now()
-                    });
-                    localStorage.setItem('ciris_auth_token', authTokenJson);
-                    console.log('[Native] Injected CIRIS access token to ciris_auth_token (setup not complete)');
-                }
+                // Always inject the fresh token - we have a valid token from this session
+                localStorage.setItem('ciris_access_token', '${cirisAccessToken}');
+                localStorage.setItem('access_token', '${cirisAccessToken}');
+                // Also set ciris_auth_token which is what SDK's AuthStore reads
+                var authTokenJson = JSON.stringify({
+                    access_token: '${cirisAccessToken}',
+                    token_type: 'Bearer',
+                    expires_in: 2592000,
+                    user_id: 'native_user',
+                    role: '$userRole',
+                    created_at: Date.now()
+                });
+                localStorage.setItem('ciris_auth_token', authTokenJson);
+                console.log('[Native] Injected CIRIS access token to ciris_auth_token (role: $userRole)');
             """
         } else {
             ""
@@ -1332,8 +1426,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
-        // Set initial state of the toggle
-        menu?.findItem(R.id.action_toggle_native)?.isChecked = useNativeUi
+
+        // Hide admin menu if user is not ADMIN or SYSTEM_ADMIN
+        val isAdmin = userRole == "ADMIN" || userRole == "SYSTEM_ADMIN"
+        menu?.findItem(R.id.action_admin)?.isVisible = isAdmin
+        Log.i(TAG, "Menu: userRole=$userRole, isAdmin=$isAdmin")
 
         // Set account icon based on auth method
         val accountItem = menu?.findItem(R.id.action_account)
@@ -1345,11 +1442,8 @@ class MainActivity : AppCompatActivity() {
             // OAuth user without photo - use person icon
             accountItem?.setIcon(R.drawable.ic_account)
             Log.i(TAG, "Account menu: using person icon for OAuth user (no photo URL)")
-        } else {
-            // API key user - use key icon
-            accountItem?.setIcon(R.drawable.ic_key)
-            Log.i(TAG, "Account menu: using key icon for API key user")
         }
+        // Default icon is meatball from XML for all other cases
 
         return true
     }
@@ -1391,8 +1485,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showInteractFragment() {
+        Log.i(TAG, "Showing InteractFragment")
+        // Hide WebView, show fragment container
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        // Create and show fragment
+        val fragment = InteractFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "interact_fragment")
+            .addToBackStack("interact")
+            .commit()
+    }
+
+    private fun hideFragmentShowWebView() {
+        Log.i(TAG, "Hiding fragment, showing WebView")
+        // Hide fragment container, show WebView
+        fragmentContainer.visibility = View.GONE
+        webView.visibility = View.VISIBLE
+
+        // Remove fragment if present
+        supportFragmentManager.findFragmentByTag("interact_fragment")?.let {
+            supportFragmentManager.beginTransaction().remove(it).commit()
+        }
+        supportFragmentManager.popBackStack()
+    }
+
+    // Keep for backward compatibility - redirects to fragment
     private fun launchInteractActivity() {
-        val intent = Intent(this, InteractActivity::class.java)
+        showInteractFragment()
+    }
+
+    private fun launchRuntimeActivity() {
+        val intent = Intent(this, RuntimeActivity::class.java)
         cirisAccessToken?.let { token ->
             intent.putExtra("access_token", token)
         }
@@ -1432,25 +1558,57 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_toggle_native -> {
-                useNativeUi = !useNativeUi
-                item.isChecked = useNativeUi
-
-                // Save preference
-                getSharedPreferences(PREFS_UI, MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_USE_NATIVE, useNativeUi)
-                    .apply()
-
-                // If we are currently on the runtime page and just disabled native,
-                // or if we enabled it, reload might be useful, but simply toggling ensures
-                // next navigation is correct.
+            // System submenu items
+            R.id.action_memory_graph -> {
+                navigateToWebPage("/memory")
                 true
             }
-            R.id.action_buy_credits -> {
-                startActivity(Intent(this, PurchaseActivity::class.java))
+            R.id.action_dashboard -> {
+                navigateToWebPage("/dashboard")
                 true
             }
+            R.id.action_tools -> {
+                navigateToWebPage("/tools")
+                true
+            }
+            // Admin submenu items
+            R.id.action_admin_system -> {
+                navigateToWebPage("/system")
+                true
+            }
+            R.id.action_runtime -> {
+                navigateToWebPage("/runtime")
+                true
+            }
+            R.id.action_config -> {
+                navigateToWebPage("/config")
+                true
+            }
+            R.id.action_users -> {
+                navigateToWebPage("/users")
+                true
+            }
+            R.id.action_wa -> {
+                navigateToWebPage("/wa")
+                true
+            }
+            R.id.action_api_explorer -> {
+                navigateToWebPage("/api-demo")
+                true
+            }
+            R.id.action_api_docs -> {
+                navigateToWebPage("/docs")
+                true
+            }
+            R.id.action_audit -> {
+                navigateToWebPage("/audit")
+                true
+            }
+            R.id.action_logs -> {
+                navigateToWebPage("/logs")
+                true
+            }
+            // Overflow menu items
             R.id.action_interact -> {
                 launchInteractActivity()
                 true
@@ -1459,7 +1617,7 @@ class MainActivity : AppCompatActivity() {
                 webView.reload()
                 true
             }
-            // Account submenu items - navigate to webview pages
+            // Account submenu items
             R.id.action_account_settings -> {
                 navigateToWebPage("/account")
                 true
@@ -1496,6 +1654,16 @@ class MainActivity : AppCompatActivity() {
      * Navigate to a page in the webview.
      */
     private fun navigateToWebPage(path: String) {
+        // Hide fragment if visible, show WebView
+        if (fragmentContainer.visibility == View.VISIBLE) {
+            fragmentContainer.visibility = View.GONE
+            webView.visibility = View.VISIBLE
+            supportFragmentManager.findFragmentByTag("interact_fragment")?.let {
+                supportFragmentManager.beginTransaction().remove(it).commit()
+            }
+            supportFragmentManager.popBackStack()
+        }
+
         val url = "$SERVER_URL$path"
         Log.i(TAG, "Navigating to: $url")
         webView.loadUrl(url)
@@ -1544,6 +1712,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        // If fragment is showing, go back to WebView
+        if (fragmentContainer.visibility == View.VISIBLE) {
+            hideFragmentShowWebView()
+            return
+        }
         if (webView.canGoBack()) {
             webView.goBack()
         } else {

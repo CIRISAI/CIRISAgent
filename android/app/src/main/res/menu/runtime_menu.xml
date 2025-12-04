@@ -3,14 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
-        android:id="@+id/action_refresh"
-        android:title="Refresh"
-        android:icon="@android:drawable/ic_menu_rotate"
+        android:id="@+id/action_clear"
+        android:title="Clear"
+        android:icon="@android:drawable/ic_menu_delete"
         app:showAsAction="ifRoom" />
 
     <item
-        android:id="@+id/action_view_runtime"
-        android:title="View Reasoning Stream"
+        android:id="@+id/action_switch_to_web"
+        android:title="Switch to Web View"
         app:showAsAction="never" />
 
 </menu>

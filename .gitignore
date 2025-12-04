@@ -92,3 +92,8 @@ android/.web-build/
 **/*-unsplash.jpg
 **/infogfx-*.png
 **/blurryinfo.png
+
+# Android built GUI static assets (regenerated from CIRISGUI-Android)
+android/app/src/main/assets/public/
+android/app/src/main/python/android_gui_static/
+android_gui_static/

@@ -1,77 +1,143 @@
 package ai.ciris.mobile
 
-import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
-import java.io.BufferedReader
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+/**
+ * InteractActivity - Chat Interface
+ *
+ * Main chat interface for interacting with the CIRIS agent.
+ * Features:
+ * - Send/receive messages
+ * - Conversation history (last 20 messages)
+ * - Agent status display (connection + cognitive state)
+ * - Shutdown controls (graceful + emergency)
+ */
 class InteractActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: InteractAdapter
+    private lateinit var adapter: ChatAdapter
+    private lateinit var messageInput: EditText
+    private lateinit var sendButton: ImageButton
+    private lateinit var statusDot: View
     private lateinit var statusText: TextView
+    private lateinit var shutdownButton: Button
+    private lateinit var emergencyButton: Button
+    private lateinit var loadingIndicator: ProgressBar
 
     private val client = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS) // Disable read timeout for SSE
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private var sseJob: Job? = null
     private val gson = Gson()
-
-    // Data state
-    private val items = mutableListOf<InteractItem>()
-    private var lastTaskId: String? = null
-    private var lastThoughtId: String? = null
+    private val messages = mutableListOf<ChatMessage>()
+    private var accessToken: String? = null
+    private var pollingJob: Job? = null
+    private var statusJob: Job? = null
+    private var isConnected = false
+    private var isSending = false
 
     companion object {
         private const val TAG = "InteractActivity"
-        private const val PREFS_UI = "ciris_ui_prefs"
-        private const val KEY_USE_NATIVE = "use_native_interact"
-        // Use 127.0.0.1 instead of localhost for slightly better reliability in some envs,
-        // though Chaquopy is local. Matching MainActivity logic.
-        private const val SSE_URL = "http://localhost:8080/v1/system/runtime/reasoning-stream"
+        private const val BASE_URL = "http://localhost:8080"
+        private const val CHANNEL_ID = "api_0.0.0.0_8080"
+        private const val POLL_INTERVAL_MS = 2000L
+        private const val STATUS_POLL_INTERVAL_MS = 5000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_interact)
 
+        accessToken = intent.getStringExtra("access_token")
+        Log.i(TAG, "InteractActivity started, hasToken=${accessToken != null}")
+
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title = "Interact Stream"
+        supportActionBar?.title = "Chat with CIRIS"
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
+        // Bind views
+        recyclerView = findViewById(R.id.chatRecyclerView)
+        messageInput = findViewById(R.id.messageInput)
+        sendButton = findViewById(R.id.sendButton)
+        statusDot = findViewById(R.id.statusDot)
         statusText = findViewById(R.id.statusText)
-        recyclerView = findViewById(R.id.recyclerView)
+        shutdownButton = findViewById(R.id.shutdownButton)
+        emergencyButton = findViewById(R.id.emergencyButton)
+        loadingIndicator = findViewById(R.id.loadingIndicator)
 
-        adapter = InteractAdapter(items)
-        recyclerView.layoutManager = LinearLayoutManager(this)
+        // Setup RecyclerView
+        adapter = ChatAdapter(messages)
+        val layoutManager = LinearLayoutManager(this)
+        layoutManager.stackFromEnd = true
+        recyclerView.layoutManager = layoutManager
         recyclerView.adapter = adapter
 
-        startSseStream()
+        // Setup click listeners
+        sendButton.setOnClickListener { sendMessage() }
+        shutdownButton.setOnClickListener { showShutdownDialog() }
+        emergencyButton.setOnClickListener { showEmergencyShutdownDialog() }
+
+        // Handle Enter key to send
+        messageInput.setOnEditorActionListener { _, actionId, event ->
+            if (actionId == EditorInfo.IME_ACTION_SEND ||
+                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
+                sendMessage()
+                true
+            } else {
+                false
+            }
+        }
+
+        // Start polling
+        startPolling()
+        startStatusPolling()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        sseJob?.cancel()
+        pollingJob?.cancel()
+        statusJob?.cancel()
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
@@ -81,236 +147,402 @@ class InteractActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_switch_to_web -> {
-                // Disable native UI preference
-                getSharedPreferences(PREFS_UI, MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_USE_NATIVE, false)
-                    .apply()
-
-                // Finish activity to return to WebView
-                // Note: The user will need to reload or navigate again in WebView,
-                // but since they just came from there or invoked it, they are likely
-                // still on the runtime page (which was intercepted) or dashboard.
-                finish()
+            R.id.action_view_runtime -> {
+                // Launch RuntimeActivity
+                val intent = android.content.Intent(this, RuntimeActivity::class.java)
+                intent.putExtra("access_token", accessToken)
+                startActivity(intent)
+                true
+            }
+            R.id.action_refresh -> {
+                loadHistory()
                 true
             }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
+    private fun startPolling() {
+        pollingJob = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                try {
+                    fetchHistory()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching history", e)
+                }
+                delay(POLL_INTERVAL_MS)
+            }
+        }
     }
 
-    private fun startSseStream() {
-        sseJob = CoroutineScope(Dispatchers.IO).launch {
+    private fun startStatusPolling() {
+        statusJob = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                try {
+                    fetchStatus()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching status", e)
+                    withContext(Dispatchers.Main) {
+                        updateConnectionStatus(false, null)
+                    }
+                }
+                delay(STATUS_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun loadHistory() {
+        CoroutineScope(Dispatchers.IO).launch {
+            withContext(Dispatchers.Main) {
+                loadingIndicator.visibility = View.VISIBLE
+            }
             try {
-                withContext(Dispatchers.Main) {
-                    statusText.text = "Status: Connecting..."
-                }
-
-                val token = intent.getStringExtra("access_token")
-                val requestBuilder = Request.Builder()
-                    .url(SSE_URL)
-                    .addHeader("Accept", "text/event-stream")
-
-                if (!token.isNullOrEmpty()) {
-                    requestBuilder.addHeader("Authorization", "Bearer $token")
-                }
-
-                val request = requestBuilder.build()
-                val response: Response = client.newCall(request).execute()
-
-                if (!response.isSuccessful) {
-                    withContext(Dispatchers.Main) {
-                        statusText.text = "Status: Error ${response.code}"
-                    }
-                    return@launch
-                }
-
-                withContext(Dispatchers.Main) {
-                    statusText.text = "Status: Connected"
-                }
-
-                val source = response.body?.source()
-                if (source == null) {
-                    withContext(Dispatchers.Main) {
-                        statusText.text = "Status: Empty Body"
-                    }
-                    return@launch
-                }
-
-                while (!source.exhausted()) {
-                    val line = source.readUtf8Line() ?: continue
-                    if (line.startsWith("data:")) {
-                        val jsonStr = line.substring(5).trim()
-                        try {
-                            processSseData(jsonStr)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error parsing SSE data: ${e.message}")
-                        }
-                    }
-                }
-
+                fetchHistory()
             } catch (e: Exception) {
-                Log.e(TAG, "SSE Error", e)
+                Log.e(TAG, "Error loading history", e)
+            } finally {
                 withContext(Dispatchers.Main) {
-                    statusText.text = "Status: Disconnected (${e.message})"
+                    loadingIndicator.visibility = View.GONE
                 }
-                // Retry logic could go here
             }
         }
     }
 
-    private suspend fun processSseData(jsonStr: String) {
-        val jsonObject = JsonParser.parseString(jsonStr).asJsonObject
+    private suspend fun fetchHistory() {
+        val url = "$BASE_URL/v1/agent/history?channel_id=$CHANNEL_ID&limit=20"
+        Log.d(TAG, "Fetching history from: $url")
+        val requestBuilder = Request.Builder().url(url).get()
+        accessToken?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
 
-        // Handle keepalive or simple status
-        if (jsonObject.has("status") && jsonObject.get("status").asString == "connected") {
-            return
-        }
-        if (jsonObject.has("timestamp") && jsonObject.size() == 1) {
-            // Keepalive
-            return
-        }
+        try {
+            val response = client.newCall(requestBuilder.build()).execute()
+            val body = response.body?.string()
+            Log.d(TAG, "History response: code=${response.code}, body=${body?.take(200)}")
 
-        if (jsonObject.has("events")) {
-            val events = jsonObject.getAsJsonArray("events")
-            val newItems = mutableListOf<InteractItem>()
+            if (response.isSuccessful && body != null) {
+                val historyResponse = gson.fromJson(body, HistoryResponse::class.java)
+                val messages = historyResponse.data?.messages ?: emptyList()
+                Log.d(TAG, "Parsed ${messages.size} messages")
 
-            for (eventElem in events) {
-                val event = eventElem.asJsonObject
-                val taskId = if (event.has("task_id") && !event.get("task_id").isJsonNull) event.get("task_id").asString else "System"
-                val thoughtId = if (event.has("thought_id") && !event.get("thought_id").isJsonNull) event.get("thought_id").asString else "Unknown Thought"
-                val eventType = event.get("event_type").asString
-
-                // 1. Check/Add Task Header
-                if (taskId != lastTaskId) {
-                    lastTaskId = taskId
-                    newItems.add(InteractItem.TaskHeader(taskId))
-                }
-
-                // 2. Check/Add Thought Header
-                if (thoughtId != lastThoughtId) {
-                    lastThoughtId = thoughtId
-                    newItems.add(InteractItem.ThoughtHeader(thoughtId, taskId))
-                }
-
-                // 3. Add Event
-                newItems.add(InteractItem.EventItem(eventType, event.toString(), thoughtId))
-            }
-
-            if (newItems.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
-                    val startPos = items.size
-                    items.addAll(newItems)
-                    adapter.notifyItemRangeInserted(startPos, newItems.size)
-                    recyclerView.scrollToPosition(items.size - 1)
+                    updateMessages(messages)
+                }
+            } else {
+                Log.e(TAG, "History fetch failed: ${response.code}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "History fetch error", e)
+        }
+    }
+
+    private suspend fun fetchStatus() {
+        val url = "$BASE_URL/v1/agent/status"
+        val requestBuilder = Request.Builder().url(url).get()
+        accessToken?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
+
+        val response = client.newCall(requestBuilder.build()).execute()
+        if (response.isSuccessful) {
+            val body = response.body?.string() ?: return
+            val status = gson.fromJson(body, AgentStatusResponse::class.java)
+
+            withContext(Dispatchers.Main) {
+                updateConnectionStatus(true, status.cognitiveState)
+            }
+        } else {
+            withContext(Dispatchers.Main) {
+                updateConnectionStatus(false, null)
+            }
+        }
+    }
+
+    private fun updateConnectionStatus(connected: Boolean, cognitiveState: String?) {
+        isConnected = connected
+        if (connected) {
+            statusDot.setBackgroundResource(R.drawable.status_dot_green)
+            statusText.text = "Connected"
+            statusText.setTextColor(resources.getColor(R.color.status_green, null))
+        } else {
+            statusDot.setBackgroundResource(R.drawable.status_dot_red)
+            statusText.text = "Disconnected"
+            statusText.setTextColor(resources.getColor(R.color.status_red, null))
+        }
+    }
+
+    private fun updateMessages(newMessages: List<HistoryMessage>) {
+        // Sort by timestamp (oldest first)
+        val sorted = newMessages.sortedBy { it.timestamp }
+
+        // Convert to ChatMessage
+        val chatMessages = sorted.map { msg ->
+            ChatMessage(
+                id = msg.id ?: "",
+                content = msg.content ?: "",
+                isAgent = msg.isAgent ?: false,
+                author = msg.author ?: if (msg.isAgent == true) "CIRIS" else "You",
+                timestamp = msg.timestamp ?: ""
+            )
+        }
+
+        // Only update if changed
+        if (chatMessages != messages) {
+            messages.clear()
+            messages.addAll(chatMessages)
+            adapter.notifyDataSetChanged()
+            if (messages.isNotEmpty()) {
+                recyclerView.scrollToPosition(messages.size - 1)
+            }
+        }
+    }
+
+    private fun sendMessage() {
+        val text = messageInput.text.toString().trim()
+        if (text.isEmpty() || isSending) return
+
+        Log.d(TAG, "Sending message: $text")
+        isSending = true
+        sendButton.isEnabled = false
+        messageInput.isEnabled = false
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Use non-blocking /message endpoint
+                val url = "$BASE_URL/v1/agent/message"
+                val jsonBody = gson.toJson(mapOf("message" to text))
+                Log.d(TAG, "POST $url with body: $jsonBody")
+
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                accessToken?.let {
+                    requestBuilder.addHeader("Authorization", "Bearer $it")
+                    Log.d(TAG, "Added auth header: Bearer ${it.take(20)}...")
+                }
+
+                val response = client.newCall(requestBuilder.build()).execute()
+                val responseCode = response.code
+                val isSuccess = response.isSuccessful
+                val body = response.body?.string()  // Read body on IO thread
+                Log.d(TAG, "Send response: code=$responseCode, success=$isSuccess, body=${body?.take(200)}")
+
+                withContext(Dispatchers.Main) {
+                    if (isSuccess) {
+                        messageInput.text.clear()
+
+                        // Check if message was accepted
+                        if (!body.isNullOrEmpty()) {
+                            try {
+                                val submitResponse = gson.fromJson(body, MessageSubmitResponse::class.java)
+                                if (submitResponse.data?.accepted == true) {
+                                    Toast.makeText(
+                                        this@InteractActivity,
+                                        "Message sent",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    val reason = submitResponse.data?.rejectionDetail ?: "Unknown"
+                                    Toast.makeText(
+                                        this@InteractActivity,
+                                        "Rejected: $reason",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error parsing response", e)
+                            }
+                        }
+
+                        // Refresh history to see response when ready
+                        loadHistory()
+                    } else {
+                        Toast.makeText(
+                            this@InteractActivity,
+                            "Error: $responseCode - $body",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending message", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@InteractActivity,
+                        "Failed to send: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isSending = false
+                    sendButton.isEnabled = true
+                    messageInput.isEnabled = true
+                }
+            }
+        }
+    }
+
+    private fun showShutdownDialog() {
+        val input = EditText(this)
+        input.setText("User requested graceful shutdown")
+        input.setHint("Shutdown reason")
+
+        AlertDialog.Builder(this)
+            .setTitle("Initiate Graceful Shutdown")
+            .setMessage("The agent will complete critical tasks and perform clean shutdown procedures.")
+            .setView(input)
+            .setPositiveButton("Shutdown") { _, _ ->
+                val reason = input.text.toString()
+                performShutdown(reason, force = false)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showEmergencyShutdownDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("⚠️ EMERGENCY SHUTDOWN")
+            .setMessage("WARNING: This will IMMEDIATELY terminate the agent!\n\n• NO graceful shutdown\n• NO task completion\n• NO final messages\n• IMMEDIATE termination")
+            .setPositiveButton("EXECUTE") { _, _ ->
+                performShutdown("EMERGENCY: Immediate shutdown required", force = true)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun performShutdown(reason: String, force: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = "$BASE_URL/v1/system/shutdown"
+                val jsonBody = gson.toJson(mapOf(
+                    "reason" to reason,
+                    "notify_channels" to true,
+                    "force" to force
+                ))
+
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                accessToken?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
+
+                val response = client.newCall(requestBuilder.build()).execute()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val msg = if (force) "EMERGENCY SHUTDOWN INITIATED" else "Shutdown initiated"
+                        Toast.makeText(this@InteractActivity, msg, Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(
+                            this@InteractActivity,
+                            "Shutdown failed: ${response.code}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Shutdown error", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@InteractActivity,
+                        "Shutdown error: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
     }
 }
 
-// Data Models
-sealed class InteractItem {
-    data class TaskHeader(val taskId: String) : InteractItem()
-    data class ThoughtHeader(val thoughtId: String, val parentTaskId: String) : InteractItem()
-    data class EventItem(val eventType: String, val rawJson: String, val parentThoughtId: String) : InteractItem()
-}
+// Data classes
+data class HistoryResponse(
+    val data: HistoryData?
+)
 
-// Adapter
-class InteractAdapter(private val items: List<InteractItem>) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+data class HistoryData(
+    val messages: List<HistoryMessage>?,
+    @SerializedName("total_count") val totalCount: Int?
+)
+
+data class HistoryMessage(
+    val id: String?,
+    val content: String?,
+    @SerializedName("is_agent") val isAgent: Boolean?,
+    val author: String?,
+    val timestamp: String?
+)
+
+data class AgentStatusResponse(
+    @SerializedName("cognitive_state") val cognitiveState: String?,
+    val status: String?
+)
+
+// Message submission response (non-blocking endpoint)
+data class MessageSubmitResponse(
+    val data: MessageSubmitData?
+)
+
+data class MessageSubmitData(
+    @SerializedName("message_id") val messageId: String?,
+    @SerializedName("task_id") val taskId: String?,
+    @SerializedName("channel_id") val channelId: String?,
+    @SerializedName("submitted_at") val submittedAt: String?,
+    val accepted: Boolean?,
+    @SerializedName("rejection_reason") val rejectionReason: String?,
+    @SerializedName("rejection_detail") val rejectionDetail: String?
+)
+
+data class ChatMessage(
+    val id: String,
+    val content: String,
+    val isAgent: Boolean,
+    val author: String,
+    val timestamp: String
+)
+
+// Chat Adapter
+class ChatAdapter(private val messages: List<ChatMessage>) : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
 
     companion object {
-        private const val TYPE_TASK = 0
-        private const val TYPE_THOUGHT = 1
-        private const val TYPE_EVENT = 2
+        private const val VIEW_TYPE_USER = 0
+        private const val VIEW_TYPE_AGENT = 1
     }
 
     override fun getItemViewType(position: Int): Int {
-        return when (items[position]) {
-            is InteractItem.TaskHeader -> TYPE_TASK
-            is InteractItem.ThoughtHeader -> TYPE_THOUGHT
-            is InteractItem.EventItem -> TYPE_EVENT
-        }
+        return if (messages[position].isAgent) VIEW_TYPE_AGENT else VIEW_TYPE_USER
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
-        return when (viewType) {
-            TYPE_TASK -> {
-                val view = inflater.inflate(R.layout.item_interact_header, parent, false)
-                TaskViewHolder(view)
-            }
-            TYPE_THOUGHT -> {
-                val view = inflater.inflate(R.layout.item_interact_header, parent, false)
-                ThoughtViewHolder(view)
-            }
-            else -> {
-                val view = inflater.inflate(R.layout.item_interact_event, parent, false)
-                EventViewHolder(view)
-            }
-        }
+        val layout = if (viewType == VIEW_TYPE_AGENT)
+            R.layout.item_chat_agent
+        else
+            R.layout.item_chat_user
+        val view = inflater.inflate(layout, parent, false)
+        return ViewHolder(view)
     }
 
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        when (val item = items[position]) {
-            is InteractItem.TaskHeader -> (holder as TaskViewHolder).bind(item)
-            is InteractItem.ThoughtHeader -> (holder as ThoughtViewHolder).bind(item)
-            is InteractItem.EventItem -> (holder as EventViewHolder).bind(item)
-        }
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.bind(messages[position])
     }
 
-    override fun getItemCount() = items.size
+    override fun getItemCount() = messages.size
 
-    class TaskViewHolder(itemView: android.view.View) : RecyclerView.ViewHolder(itemView) {
-        private val title: TextView = itemView.findViewById(R.id.headerTitle)
-        private val subtitle: TextView = itemView.findViewById(R.id.headerSubtitle)
+    class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val authorText: TextView = itemView.findViewById(R.id.authorText)
+        private val contentText: TextView = itemView.findViewById(R.id.contentText)
+        private val timestampText: TextView = itemView.findViewById(R.id.timestampText)
 
-        fun bind(item: InteractItem.TaskHeader) {
-            title.text = "Task: ${item.taskId}"
-            subtitle.text = "New Task Started"
-            title.setTextColor(android.graphics.Color.BLUE)
-        }
-    }
+        fun bind(message: ChatMessage) {
+            authorText.text = message.author
+            contentText.text = message.content
 
-    class ThoughtViewHolder(itemView: android.view.View) : RecyclerView.ViewHolder(itemView) {
-        private val title: TextView = itemView.findViewById(R.id.headerTitle)
-        private val subtitle: TextView = itemView.findViewById(R.id.headerSubtitle)
-
-        fun bind(item: InteractItem.ThoughtHeader) {
-            title.text = "Thought: ${item.thoughtId}"
-            subtitle.text = "Under Task: ${item.parentTaskId}"
-
-            val density = itemView.context.resources.displayMetrics.density
-            val paddingLeft = (24 * density).toInt()
-            itemView.setPadding(paddingLeft, itemView.paddingTop, itemView.paddingRight, itemView.paddingBottom)
-
-            title.textSize = 16f
-        }
-    }
-
-    class EventViewHolder(itemView: android.view.View) : RecyclerView.ViewHolder(itemView) {
-        private val type: TextView = itemView.findViewById(R.id.eventType)
-        private val content: TextView = itemView.findViewById(R.id.eventContent)
-        private val timestamp: TextView = itemView.findViewById(R.id.eventTimestamp)
-
-        fun bind(item: InteractItem.EventItem) {
-            type.text = item.eventType
-
-            // Basic pretty print or just show part of JSON
-            val contentStr = if (item.rawJson.length > 200) {
-                 item.rawJson.substring(0, 200) + "..."
-            } else {
-                item.rawJson
+            // Format timestamp
+            try {
+                val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                val outputFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+                val date = inputFormat.parse(message.timestamp.substringBefore("."))
+                timestampText.text = date?.let { outputFormat.format(it) } ?: ""
+            } catch (e: Exception) {
+                timestampText.text = ""
             }
-            content.text = contentStr
-
-            // Parse timestamp if possible or just use current
-            timestamp.text = ""
         }
     }
 }

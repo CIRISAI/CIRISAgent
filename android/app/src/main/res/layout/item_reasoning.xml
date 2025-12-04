@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="4dp">
+
+    <!-- Reasoning Card -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/reasoning_card_background"
+        android:elevation="2dp">
+
+        <!-- Header (clickable to expand/collapse) -->
+        <LinearLayout
+            android:id="@+id/reasoningHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground">
+
+            <!-- Status dot -->
+            <View
+                android:id="@+id/reasoningStatusDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/status_dot_yellow" />
+
+            <!-- Task description -->
+            <TextView
+                android:id="@+id/reasoningHeaderText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Processing..."
+                android:textSize="13sp"
+                android:textColor="#1F2937"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Progress indicator -->
+            <TextView
+                android:id="@+id/progressIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="○○○○○○"
+                android:textSize="11sp"
+                android:textColor="#6B7280"
+                android:fontFamily="monospace" />
+
+            <!-- Expand/collapse chevron -->
+            <TextView
+                android:id="@+id/expandChevron"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="▼"
+                android:textSize="10sp"
+                android:textColor="#9CA3AF" />
+
+        </LinearLayout>
+
+        <!-- Details container (expandable) -->
+        <LinearLayout
+            android:id="@+id/detailsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+</LinearLayout>

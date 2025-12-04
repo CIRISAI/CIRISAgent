@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Main CIRIS theme with action bar -->
-    <style name="Theme.CIRIS" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <!-- Main CIRIS theme with custom toolbar (no default action bar) -->
+    <style name="Theme.CIRIS" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/ciris_primary</item>
         <item name="colorPrimaryVariant">@color/ciris_secondary</item>
         <item name="colorOnPrimary">@color/white</item>

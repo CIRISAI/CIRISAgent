@@ -676,6 +676,7 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
             _log_oauth_linking_skip(setup)
 
         # Update default admin password if specified
+        assert wa_cert is not None, "wa_cert should be set by create_wa or existing WA lookup"
         await _update_system_admin_password(auth_service, setup, wa_cert.wa_id)
 
     finally:

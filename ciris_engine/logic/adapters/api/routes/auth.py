@@ -763,8 +763,8 @@ def _determine_user_role(
         # Check if this is the first OAuth user (setup wizard scenario)
         # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
         stored_users = getattr(auth_service, "_users", {})
-        user_id = f"{provider}:{external_id}" if external_id else None
-        user_in_stored = user_id and user_id in stored_users
+        user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
+        user_in_stored = user_id_check and user_id_check in stored_users
 
         if _is_first_oauth_user(oauth_users) and not user_in_stored:
             logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")

@@ -170,7 +170,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         # Store user prompt for streaming/debugging
         user_messages = [m for m in messages if m.get("role") == "user"]
-        self.last_user_prompt = user_messages[-1]["content"] if user_messages else None
+        content = user_messages[-1]["content"] if user_messages else None
+        self.last_user_prompt = str(content) if content is not None else None
 
         logger.debug(
             "CSDMA input to LLM for thought %s:\nContext Summary: %s",

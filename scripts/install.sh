@@ -32,7 +32,7 @@ trap cleanup_on_error EXIT
 
 INSTALL_DIR="${CIRIS_INSTALL_DIR:-$HOME/ciris}"
 AGENT_REPO="https://github.com/CIRISAI/CIRISAgent.git"
-GUI_REPO="https://github.com/CIRISAI/CIRISGUI.git"
+GUI_REPO="https://github.com/CIRISAI/CIRISGUI-Standalone.git"
 AGENT_BRANCH="${CIRIS_AGENT_BRANCH:-main}"
 GUI_BRANCH="${CIRIS_GUI_BRANCH:-main}"
 

@@ -97,3 +97,7 @@ android/.web-build/
 android/app/src/main/assets/public/
 android/app/src/main/python/android_gui_static/
 android_gui_static/
+ios/CirisiOS/src/ciris_engine/
+ios/CirisiOS/src/ciris_modular_services/
+ios/wheels/
+ios/build/

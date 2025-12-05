@@ -261,288 +261,404 @@ class WorkProcessor(BaseProcessor):
             thought_id=thought_id, status=ThoughtStatus.FAILED, final_action={"error": error}
         )
 
+    def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
+        """Check if ticket should be skipped based on status."""
+        return ticket_status in ["blocked", "deferred", "completed", "failed", "cancelled"]
+
+    def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+        """Attempt to atomically claim a pending ticket.
+
+        Args:
+            ticket: Ticket dictionary
+            db_path: Database path
+
+        Returns:
+            True if claim succeeded, False otherwise
+        """
+        from ciris_engine.logic.persistence.models.tickets import update_ticket_status
+
+        ticket_id = ticket.get("ticket_id")
+        if not ticket_id:
+            return False
+
+        # Only claim tickets with agent_occurrence_id="__shared__"
+        if ticket.get("agent_occurrence_id") != "__shared__":
+            logger.debug(f"Ticket {ticket_id} not shared, skipping claim attempt")
+            return False
+
+        # Skip tickets with certain statuses
+        if self._should_skip_ticket_by_status(ticket.get("status", "")):
+            logger.debug(f"Ticket {ticket_id} has status {ticket.get('status')}, skipping")
+            return False
+
+        # Atomic claiming: only update if ticket is still __shared__
+        success = update_ticket_status(
+            ticket_id,
+            "assigned",
+            notes=f"Claimed by occurrence {self.agent_occurrence_id}",
+            agent_occurrence_id=self.agent_occurrence_id,
+            require_current_occurrence_id="__shared__",
+            db_path=db_path,
+        )
+
+        if not success:
+            logger.debug(f"Failed to claim ticket {ticket_id} (already claimed by another occurrence)")
+            return False
+
+        return True
+
+    def _create_seed_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+        """Create seed task for newly claimed ticket.
+
+        Args:
+            ticket: Ticket dictionary
+            db_path: Database path
+
+        Returns:
+            True if task creation succeeded, False otherwise
+        """
+        import json
+        from ciris_engine.logic.persistence.db.core import get_db_connection
+
+        ticket_id = ticket.get("ticket_id")
+        if not ticket_id:
+            return False
+
+        task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
+        ticket_metadata = ticket.get("metadata", {})
+        ticket_sop = ticket.get("sop", "UNKNOWN")
+        current_stage = ticket_metadata.get("current_stage", "starting")
+
+        task_context = {
+            "ticket_id": ticket_id,
+            "ticket_sop": ticket_sop,
+            "ticket_type": ticket.get("ticket_type"),
+            "ticket_status": "assigned",
+            "ticket_metadata": ticket_metadata,
+            "ticket_priority": ticket.get("priority", 5),
+            "ticket_email": ticket.get("email"),
+            "ticket_user_identifier": ticket.get("user_identifier"),
+            "is_ticket_task": True,
+        }
+
+        # Create Task object
+        now = self.time_service.now().isoformat()
+        task = Task(
+            task_id=task_id,
+            channel_id=self.startup_channel_id or "ticket_processing",
+            agent_occurrence_id=self.agent_occurrence_id,
+            description=f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            status=TaskStatus.PENDING,
+            priority=ticket.get("priority", 5),
+            created_at=now,
+            updated_at=now,
+            context=None,
+        )
+
+        task_dict = task.model_dump(mode="json")
+        task_dict["context"] = task_context
+
+        sql = """
+            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
+                              created_at, updated_at, parent_task_id, context_json, outcome_json,
+                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
+            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
+                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
+                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
+        """
+        params = {
+            **task_dict,
+            "status": task.status.value,
+            "context": json.dumps(task_context),
+            "outcome": None,
+            "signed_by": None,
+            "signature": None,
+            "signed_at": None,
+            "parent_task_id": None,
+            "updated_info_available": 0,
+            "updated_info_content": None,
+        }
+
+        try:
+            with get_db_connection(db_path=db_path) as conn:
+                conn.execute(sql, params)
+                conn.commit()
+            logger.info(f"Claimed ticket {ticket_id} and created seed task {task_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create task {task_id}: {e}")
+            return False
+
+    def _should_process_ticket_for_continuation(self, ticket: Dict[str, Any]) -> bool:
+        """Check if ticket should be processed for continuation task creation.
+
+        Args:
+            ticket: Ticket dictionary
+
+        Returns:
+            True if ticket should be processed, False otherwise
+        """
+        ticket_id = ticket.get("ticket_id")
+        if not ticket_id:
+            return False
+
+        # Only process tickets assigned to this occurrence
+        if ticket.get("agent_occurrence_id") != self.agent_occurrence_id:
+            logger.debug(f"Ticket {ticket_id} assigned to different occurrence, skipping")
+            return False
+
+        # Skip if ticket has become BLOCKED or DEFERRED
+        if self._should_skip_ticket_by_status(ticket.get("status", "")):
+            logger.debug(f"Ticket {ticket_id} is {ticket.get('status')}, skipping task creation")
+            return False
+
+        return True
+
+    def _has_existing_task_for_ticket(self, ticket_id: str, db_path: Optional[str]) -> bool:
+        """Check if there's already a pending or active task for this ticket.
+
+        Args:
+            ticket_id: Ticket ID
+            db_path: Database path
+
+        Returns:
+            True if task exists, False otherwise
+        """
+        from ciris_engine.logic.persistence.db import get_db_connection
+
+        sql = "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
+        task_prefix = f"TICKET-{ticket_id}-%"
+
+        try:
+            with get_db_connection(db_path=db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    sql,
+                    (task_prefix, self.agent_occurrence_id, TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
+                )
+                row = cursor.fetchone()
+                # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
+                count = row["count"] if isinstance(row, dict) else row[0]
+                has_task = bool(count > 0)
+
+                if has_task:
+                    logger.debug(f"Ticket {ticket_id} already has pending/active task, skipping")
+
+                return has_task
+        except Exception as e:
+            logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")
+            return False
+
+    def _is_ticket_deferred(self, ticket_metadata: Dict[str, Any], ticket_id: str) -> bool:
+        """Check if ticket is deferred.
+
+        Args:
+            ticket_metadata: Ticket metadata dictionary
+            ticket_id: Ticket ID for logging
+
+        Returns:
+            True if ticket is deferred, False otherwise
+        """
+        from datetime import datetime, timezone
+
+        # Check for deferral until specific time
+        deferred_until_str = ticket_metadata.get("deferred_until")
+        if deferred_until_str:
+            try:
+                # Ensure we have a string before calling fromisoformat
+                if isinstance(deferred_until_str, str):
+                    deferred_until = datetime.fromisoformat(deferred_until_str)
+                    if deferred_until > datetime.now(timezone.utc):
+                        logger.debug(f"Ticket {ticket_id} deferred until {deferred_until_str}, skipping")
+                        return True
+                else:
+                    logger.warning(f"Invalid deferred_until type for ticket {ticket_id}: {type(deferred_until_str)}")
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid deferred_until format for ticket {ticket_id}: {deferred_until_str}")
+
+        # Check for awaiting human response
+        if ticket_metadata.get("awaiting_human_response"):
+            logger.debug(f"Ticket {ticket_id} awaiting human response, skipping")
+            return True
+
+        return False
+
+    def _create_continuation_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+        """Create continuation task for active ticket.
+
+        Args:
+            ticket: Ticket dictionary
+            db_path: Database path
+
+        Returns:
+            True if task creation succeeded, False otherwise
+        """
+        import json
+        from ciris_engine.logic.persistence.db import get_db_connection
+
+        ticket_id = ticket.get("ticket_id")
+        if not ticket_id:
+            return False
+
+        ticket_metadata = ticket.get("metadata", {})
+        ticket_sop = ticket.get("sop", "UNKNOWN")
+        current_stage = ticket_metadata.get("current_stage", "unknown")
+        ticket_status = ticket.get("status", "")
+
+        continuation_task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
+        ticket_channel_id = self.startup_channel_id or "ticket_processing"
+
+        task_context = {
+            "channel_id": ticket_channel_id,
+            "ticket_id": ticket_id,
+            "ticket_sop": ticket_sop,
+            "ticket_type": ticket.get("ticket_type"),
+            "ticket_status": ticket_status,
+            "ticket_metadata": ticket_metadata,
+            "ticket_priority": ticket.get("priority", 5),
+            "ticket_email": ticket.get("email"),
+            "ticket_user_identifier": ticket.get("user_identifier"),
+            "is_ticket_task": True,
+        }
+
+        now = self.time_service.now().isoformat()
+        task = Task(
+            task_id=continuation_task_id,
+            channel_id=ticket_channel_id,
+            agent_occurrence_id=self.agent_occurrence_id,
+            description=f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            status=TaskStatus.PENDING,
+            priority=ticket.get("priority", 5),
+            created_at=now,
+            updated_at=now,
+            context=None,
+        )
+
+        task_dict = task.model_dump(mode="json")
+
+        sql = """
+            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
+                              created_at, updated_at, parent_task_id, context_json, outcome_json,
+                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
+            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
+                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
+                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
+        """
+        params = {
+            **task_dict,
+            "status": task.status.value,
+            "context": json.dumps(task_context),
+            "outcome": json.dumps(task_dict.get("outcome")) if task_dict.get("outcome") is not None else None,
+            "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
+        }
+
+        try:
+            with get_db_connection(db_path=db_path) as conn:
+                conn.execute(sql, params)
+                conn.commit()
+            logger.info(f"Created continuation task {continuation_task_id} for ticket {ticket_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create continuation task {continuation_task_id}: {e}")
+            return False
+
     async def _discover_incomplete_tickets(self) -> int:
         """Discover incomplete tickets and create tasks for them.
 
         Two-phase discovery for multi-occurrence coordination:
         1. Phase 1: Atomically claim PENDING tickets with agent_occurrence_id="__shared__"
-           - Uses try_claim_shared_task() for race-free claiming
-           - Updates PENDING → ASSIGNED with this occurrence's ID
-           - Creates seed task for newly claimed ticket
-
         2. Phase 2: Create continuation tasks for ASSIGNED/IN_PROGRESS tickets
-           - Only for tickets assigned to this occurrence
-           - Respects BLOCKED/DEFERRED status (skips task creation)
-           - Prevents duplicate tasks (one task per ticket)
 
         Returns:
             Number of tasks created for tickets
         """
-        from datetime import datetime, timezone
-
-        from ciris_engine.logic.persistence.models.tasks import add_task, get_tasks_by_status, try_claim_shared_task
-        from ciris_engine.logic.persistence.models.tickets import list_tickets, update_ticket_status
+        from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
         db_path = getattr(self.config, "db_path", None)
 
         try:
-            # ===== PHASE 1: Claim PENDING tickets with __shared__ =====
-            pending_tickets = list_tickets(status="pending", db_path=db_path)
+            # Phase 1: Claim PENDING tickets with __shared__
+            tasks_created += await self._process_pending_tickets(db_path)
 
-            for ticket in pending_tickets:
-                ticket_id = ticket.get("ticket_id")
-                if not ticket_id:
-                    continue
-
-                # Only claim tickets with agent_occurrence_id="__shared__"
-                if ticket.get("agent_occurrence_id") != "__shared__":
-                    logger.debug(f"Ticket {ticket_id} not shared, skipping claim attempt")
-                    continue
-
-                # Skip BLOCKED/DEFERRED tickets (check status)
-                ticket_status = ticket.get("status", "")
-                if ticket_status in ["blocked", "deferred", "completed", "failed", "cancelled"]:
-                    logger.debug(f"Ticket {ticket_id} has status {ticket_status}, skipping")
-                    continue
-
-                # Atomic claiming: only update if ticket is still __shared__
-                # This WHERE clause makes it race-safe - only one occurrence will succeed
-                success = update_ticket_status(
-                    ticket_id,
-                    "assigned",
-                    notes=f"Claimed by occurrence {self.agent_occurrence_id}",
-                    agent_occurrence_id=self.agent_occurrence_id,
-                    require_current_occurrence_id="__shared__",  # Only claim if still shared
-                    db_path=db_path,
-                )
-
-                if not success:
-                    logger.debug(f"Failed to claim ticket {ticket_id} (already claimed by another occurrence)")
-                    continue
-
-                # Create seed task for newly claimed ticket
-                task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
-                ticket_metadata = ticket.get("metadata", {})
-                ticket_sop = ticket.get("sop", "UNKNOWN")
-                current_stage = ticket_metadata.get("current_stage", "starting")
-
-                task_context = {
-                    "ticket_id": ticket_id,
-                    "ticket_sop": ticket_sop,
-                    "ticket_type": ticket.get("ticket_type"),
-                    "ticket_status": "assigned",
-                    "ticket_metadata": ticket_metadata,
-                    "ticket_priority": ticket.get("priority", 5),
-                    "ticket_email": ticket.get("email"),
-                    "ticket_user_identifier": ticket.get("user_identifier"),
-                    "is_ticket_task": True,
-                }
-
-                # Create Task object
-                now = self.time_service.now().isoformat()
-                task = Task(
-                    task_id=task_id,
-                    channel_id=self.startup_channel_id or "ticket_processing",
-                    agent_occurrence_id=self.agent_occurrence_id,
-                    description=f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-                    status=TaskStatus.PENDING,
-                    priority=ticket.get("priority", 5),
-                    created_at=now,
-                    updated_at=now,
-                    context=None,  # Context will be stored separately
-                )
-
-                # Store the task with the context
-                task_dict = task.model_dump(mode="json")
-                task_dict["context"] = task_context  # Override with actual context dict
-
-                # Manually insert task with custom context
-                import json
-
-                from ciris_engine.logic.persistence.db.core import get_db_connection
-
-                sql = """
-                    INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                                      created_at, updated_at, parent_task_id, context_json, outcome_json,
-                                      signed_by, signature, signed_at, updated_info_available, updated_info_content)
-                    VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                            :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                            :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-                """
-                params = {
-                    **task_dict,
-                    "status": task.status.value,
-                    "context": json.dumps(task_context),
-                    "outcome": None,
-                    "signed_by": None,
-                    "signature": None,
-                    "signed_at": None,
-                    "parent_task_id": None,
-                    "updated_info_available": 0,
-                    "updated_info_content": None,
-                }
-
-                try:
-                    with get_db_connection(db_path=db_path) as conn:
-                        conn.execute(sql, params)
-                        conn.commit()
-                    task_success = True
-                except Exception as e:
-                    logger.error(f"Failed to create task {task_id}: {e}")
-                    task_success = False
-
-                if task_success:
-                    tasks_created += 1
-                    logger.info(f"Claimed ticket {ticket_id} and created seed task {task_id}")
-                else:
-                    logger.warning(f"Claimed ticket {ticket_id} but failed to create task")
-
-            # ===== PHASE 2: Create continuation tasks for ASSIGNED/IN_PROGRESS tickets =====
-            assigned_tickets = list_tickets(status="assigned", db_path=db_path)
-            in_progress_tickets = list_tickets(status="in_progress", db_path=db_path)
-            active_tickets = assigned_tickets + in_progress_tickets
-
-            for ticket in active_tickets:
-                ticket_id = ticket.get("ticket_id")
-                if not ticket_id:
-                    continue
-
-                # Only process tickets assigned to this occurrence
-                if ticket.get("agent_occurrence_id") != self.agent_occurrence_id:
-                    logger.debug(f"Ticket {ticket_id} assigned to different occurrence, skipping")
-                    continue
-
-                # Skip if ticket has become BLOCKED or DEFERRED
-                ticket_status = ticket.get("status", "")
-                if ticket_status in ["blocked", "deferred"]:
-                    logger.debug(f"Ticket {ticket_id} is {ticket_status}, skipping task creation")
-                    continue
-
-                # Check if there's already a PENDING or ACTIVE task for this ticket
-                # We check by task_id prefix instead of context since context may not contain ticket_id after serialization
-                from ciris_engine.logic.persistence.db import get_db_connection
-
-                sql = "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
-                task_prefix = f"TICKET-{ticket_id}-%"
-
-                try:
-                    with get_db_connection(db_path=db_path) as conn:
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            sql,
-                            (task_prefix, self.agent_occurrence_id, TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                        )
-                        row = cursor.fetchone()
-                        # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
-                        # Access by key for compatibility with both
-                        count = row["count"] if isinstance(row, dict) else row[0]
-                        has_task = count > 0
-                except Exception as e:
-                    logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")
-                    has_task = False
-
-                if has_task:
-                    logger.debug(f"Ticket {ticket_id} already has pending/active task, skipping")
-                    continue
-
-                # Check for deferral in metadata (legacy check)
-                ticket_metadata = ticket.get("metadata", {})
-                if ticket_metadata.get("deferred_until"):
-                    deferred_until_str = ticket_metadata.get("deferred_until")
-                    try:
-                        deferred_until = datetime.fromisoformat(deferred_until_str)
-                        if deferred_until > datetime.now(timezone.utc):
-                            logger.debug(f"Ticket {ticket_id} deferred until {deferred_until_str}, skipping")
-                            continue
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid deferred_until format for ticket {ticket_id}: {deferred_until_str}")
-
-                if ticket_metadata.get("awaiting_human_response"):
-                    logger.debug(f"Ticket {ticket_id} awaiting human response, skipping")
-                    continue
-
-                # Create continuation task
-                continuation_task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
-                ticket_sop = ticket.get("sop", "UNKNOWN")
-                current_stage = ticket_metadata.get("current_stage", "unknown")
-
-                seed_thought_content = f"TICKET {ticket_id} IS NOT COMPLETE (SOP: {ticket_sop}, Stage: {current_stage})"
-
-                # Determine channel_id for this ticket task
-                ticket_channel_id = self.startup_channel_id or "ticket_processing"
-
-                task_context = {
-                    "channel_id": ticket_channel_id,  # Required for thought dispatch
-                    "ticket_id": ticket_id,
-                    "ticket_sop": ticket_sop,
-                    "ticket_type": ticket.get("ticket_type"),
-                    "ticket_status": ticket_status,
-                    "ticket_metadata": ticket_metadata,
-                    "ticket_priority": ticket.get("priority", 5),
-                    "ticket_email": ticket.get("email"),
-                    "ticket_user_identifier": ticket.get("user_identifier"),
-                    "is_ticket_task": True,
-                }
-
-                # Create Task object for continuation (without context, will be inserted manually)
-                now = self.time_service.now().isoformat()
-                task = Task(
-                    task_id=continuation_task_id,
-                    channel_id=ticket_channel_id,  # Use same channel as task context
-                    agent_occurrence_id=self.agent_occurrence_id,
-                    description=f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-                    status=TaskStatus.PENDING,
-                    priority=ticket.get("priority", 5),
-                    created_at=now,
-                    updated_at=now,
-                    context=None,  # Context will be stored separately via SQL
-                )
-
-                # Convert task to dict for SQL insertion
-                task_dict = task.model_dump(mode="json")
-
-                # Manually insert task with custom context
-                import json
-
-                from ciris_engine.logic.persistence.db import get_db_connection
-
-                sql = """
-                    INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                                      created_at, updated_at, parent_task_id, context_json, outcome_json,
-                                      signed_by, signature, signed_at, updated_info_available, updated_info_content)
-                    VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                            :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                            :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-                """
-                params = {
-                    **task_dict,
-                    "status": task.status.value,
-                    "context": json.dumps(task_context),  # Custom ticket context as JSON
-                    "outcome": json.dumps(task_dict.get("outcome")) if task_dict.get("outcome") is not None else None,
-                    "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
-                }
-
-                try:
-                    with get_db_connection(db_path=db_path) as conn:
-                        conn.execute(sql, params)
-                        conn.commit()
-                    task_success = True
-                except Exception as e:
-                    logger.error(f"Failed to create continuation task {continuation_task_id}: {e}")
-                    task_success = False
-
-                if task_success:
-                    tasks_created += 1
-                    logger.info(f"Created continuation task {continuation_task_id} for ticket {ticket_id}")
-                else:
-                    logger.warning(f"Failed to create continuation task for ticket {ticket_id}")
+            # Phase 2: Create continuation tasks for ASSIGNED/IN_PROGRESS tickets
+            tasks_created += await self._process_active_tickets(db_path)
 
             if tasks_created > 0:
                 logger.info(f"Ticket discovery: created {tasks_created} tasks (claimed + continued)")
 
         except Exception as e:
             logger.error(f"Error discovering incomplete tickets: {e}", exc_info=True)
+
+        return tasks_created
+
+    async def _process_pending_tickets(self, db_path: Optional[str]) -> int:
+        """Process PENDING tickets and claim them atomically.
+
+        Args:
+            db_path: Database path
+
+        Returns:
+            Number of tasks created
+        """
+        from ciris_engine.logic.persistence.models.tickets import list_tickets
+
+        tasks_created = 0
+        pending_tickets = list_tickets(status="pending", db_path=db_path)
+
+        for ticket in pending_tickets:
+            # Attempt to claim the ticket
+            if not self._attempt_claim_pending_ticket(ticket, db_path):
+                continue
+
+            # Create seed task for newly claimed ticket
+            if self._create_seed_task_for_ticket(ticket, db_path):
+                tasks_created += 1
+            else:
+                ticket_id = ticket.get("ticket_id", "unknown")
+                logger.warning(f"Claimed ticket {ticket_id} but failed to create task")
+
+        return tasks_created
+
+    async def _process_active_tickets(self, db_path: Optional[str]) -> int:
+        """Process ASSIGNED/IN_PROGRESS tickets and create continuation tasks.
+
+        Args:
+            db_path: Database path
+
+        Returns:
+            Number of tasks created
+        """
+        from ciris_engine.logic.persistence.models.tickets import list_tickets
+
+        tasks_created = 0
+        assigned_tickets = list_tickets(status="assigned", db_path=db_path)
+        in_progress_tickets = list_tickets(status="in_progress", db_path=db_path)
+        active_tickets = assigned_tickets + in_progress_tickets
+
+        for ticket in active_tickets:
+            ticket_id = ticket.get("ticket_id")
+            if not ticket_id:
+                continue
+
+            # Check if ticket should be processed
+            if not self._should_process_ticket_for_continuation(ticket):
+                continue
+
+            # Check for existing tasks
+            if self._has_existing_task_for_ticket(ticket_id, db_path):
+                continue
+
+            # Check for deferral
+            ticket_metadata = ticket.get("metadata", {})
+            if self._is_ticket_deferred(ticket_metadata, ticket_id):
+                continue
+
+            # Create continuation task
+            if self._create_continuation_task_for_ticket(ticket, db_path):
+                tasks_created += 1
+            else:
+                logger.warning(f"Failed to create continuation task for ticket {ticket_id}")
 
         return tasks_created
 

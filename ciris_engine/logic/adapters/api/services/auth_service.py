@@ -806,6 +806,79 @@ class APIAuthService:
         }
         return mapping.get(role, APIRole.OBSERVER)
 
+    def _merge_oauth_with_stored_user(self, oauth_user: OAuthUser, stored_user: User) -> User:
+        """Merge OAuth session data with persistent database user data."""
+        return User(
+            wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
+            name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
+            auth_type="oauth",
+            api_role=stored_user.api_role,  # Preserve DB role
+            wa_role=stored_user.wa_role,  # Preserve WA role
+            oauth_provider=oauth_user.provider,
+            oauth_email=oauth_user.email,
+            oauth_external_id=oauth_user.external_id,
+            created_at=stored_user.created_at or oauth_user.created_at,
+            last_login=oauth_user.last_login,
+            is_active=stored_user.is_active,
+            wa_parent_id=stored_user.wa_parent_id,
+            wa_auto_minted=stored_user.wa_auto_minted,
+            oauth_name=stored_user.oauth_name or oauth_user.name,
+            oauth_picture=stored_user.oauth_picture,
+            permission_requested_at=stored_user.permission_requested_at,
+            custom_permissions=stored_user.custom_permissions,
+            oauth_links=stored_user.oauth_links,
+            marketing_opt_in=oauth_user.marketing_opt_in,
+        )
+
+    def _create_user_from_oauth(self, oauth_user: OAuthUser) -> User:
+        """Create a User object from an OAuth user (not yet minted as WA)."""
+        return User(
+            wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
+            name=oauth_user.name or oauth_user.email or oauth_user.user_id,
+            auth_type="oauth",
+            api_role=self._user_role_to_api_role(oauth_user.role),
+            oauth_provider=oauth_user.provider,
+            oauth_email=oauth_user.email,
+            oauth_external_id=oauth_user.external_id,
+            created_at=oauth_user.created_at,
+            last_login=oauth_user.last_login,
+            is_active=True,
+            oauth_name=oauth_user.name,
+            marketing_opt_in=oauth_user.marketing_opt_in,
+        )
+
+    def _lookup_oauth_user(self, user_id: str) -> Optional[User]:
+        """Look up user in OAuth users dictionary."""
+        if user_id not in self._oauth_users:
+            return None
+
+        oauth_user = self._oauth_users[user_id]
+        stored_user = self._users.get(user_id)
+
+        # If stored_user exists, merge OAuth session data with persistent DB data
+        if stored_user:
+            return self._merge_oauth_with_stored_user(oauth_user, stored_user)
+
+        # No stored user - pure OAuth user not yet minted as WA
+        return self._create_user_from_oauth(oauth_user)
+
+    def _lookup_by_external_id(self, user_id: str) -> Optional[User]:
+        """Fallback lookup by OAuth external_id (without provider prefix)."""
+        # Try stored users first
+        for key, user in self._users.items():
+            if user.oauth_external_id == user_id:
+                return user
+
+        # Try OAuth users
+        for key, oauth_user in self._oauth_users.items():
+            if oauth_user.external_id == user_id:
+                stored_user = self._users.get(key)
+                if stored_user:
+                    return stored_user
+                return self._create_user_from_oauth(oauth_user)
+
+        return None
+
     def get_user(self, user_id: str) -> Optional[User]:
         """Get a specific user by ID."""
         # Check stored users first (includes users loaded from DB with OAuth links)
@@ -813,81 +886,13 @@ class APIAuthService:
             return self._users[user_id]
 
         # Check OAuth users (in-memory only, for users who haven't been minted as WA yet)
-        if user_id in self._oauth_users:
-            oauth_user = self._oauth_users[user_id]
-            # Check if we have a stored user from the database (linked via OAuth)
-            stored_user = self._users.get(user_id)
-
-            # If stored_user exists, merge OAuth session data with persistent DB data
-            # CRITICAL: Use stored_user's wa_id if they're already a WA
-            if stored_user:
-                # User exists in DB - they're already minted, just update OAuth session info
-                return User(
-                    wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
-                    name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
-                    auth_type="oauth",
-                    api_role=stored_user.api_role,  # Preserve DB role
-                    wa_role=stored_user.wa_role,  # Preserve WA role
-                    oauth_provider=oauth_user.provider,
-                    oauth_email=oauth_user.email,
-                    oauth_external_id=oauth_user.external_id,
-                    created_at=stored_user.created_at or oauth_user.created_at,
-                    last_login=oauth_user.last_login,
-                    is_active=stored_user.is_active,
-                    wa_parent_id=stored_user.wa_parent_id,
-                    wa_auto_minted=stored_user.wa_auto_minted,
-                    oauth_name=stored_user.oauth_name or oauth_user.name,
-                    oauth_picture=stored_user.oauth_picture,
-                    permission_requested_at=stored_user.permission_requested_at,
-                    custom_permissions=stored_user.custom_permissions,
-                    oauth_links=stored_user.oauth_links,
-                    marketing_opt_in=oauth_user.marketing_opt_in,
-                )
-
-            # No stored user - pure OAuth user not yet minted as WA
-            return User(
-                wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
-                name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-                auth_type="oauth",
-                api_role=self._user_role_to_api_role(oauth_user.role),
-                oauth_provider=oauth_user.provider,
-                oauth_email=oauth_user.email,
-                oauth_external_id=oauth_user.external_id,
-                created_at=oauth_user.created_at,
-                last_login=oauth_user.last_login,
-                is_active=True,
-                oauth_name=oauth_user.name,
-                marketing_opt_in=oauth_user.marketing_opt_in,
-            )
+        oauth_result = self._lookup_oauth_user(user_id)
+        if oauth_result:
+            return oauth_result
 
         # Fallback: Try to find user by OAuth external_id (without provider prefix)
         # This handles cases where frontend passes just "googleUserId" without "google:" prefix
-        for key, user in self._users.items():
-            if user.oauth_external_id == user_id:
-                return user
-        for key, oauth_user in self._oauth_users.items():
-            if oauth_user.external_id == user_id:
-                # Check if we have a stored user from the database
-                stored_user = self._users.get(key)
-                if stored_user:
-                    return stored_user
-                # Return OAuth-only user
-                return User(
-                    wa_id=oauth_user.user_id,
-                    name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-                    auth_type="oauth",
-                    api_role=self._user_role_to_api_role(oauth_user.role),
-                    oauth_provider=oauth_user.provider,
-                    oauth_email=oauth_user.email,
-                    oauth_external_id=oauth_user.external_id,
-                    created_at=oauth_user.created_at,
-                    last_login=oauth_user.last_login,
-                    is_active=True,
-                    oauth_name=oauth_user.name,
-                    marketing_opt_in=oauth_user.marketing_opt_in,
-                )
-
-        return None
+        return self._lookup_by_external_id(user_id)
 
     async def update_user(
         self, user_id: str, api_role: Optional[APIRole] = None, is_active: Optional[bool] = None

@@ -16,8 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 import discord
 import pytest
 
-from ciris_engine.logic.adapters.discord.ciris_discord_client import \
-    CIRISDiscordClient
+from ciris_engine.logic.adapters.discord.ciris_discord_client import CIRISDiscordClient
 
 logger = logging.getLogger(__name__)
 

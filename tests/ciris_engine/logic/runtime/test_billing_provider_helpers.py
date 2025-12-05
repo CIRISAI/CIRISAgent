@@ -241,7 +241,11 @@ class TestUpdateLLMServicesToken:
         runtime.llm_service = None
         # Bind actual methods
         runtime._update_llm_services_token = lambda token: CIRISRuntime._update_llm_services_token(runtime, token)
-        runtime._update_service_token_if_ciris_proxy = lambda svc, token, is_primary=False: CIRISRuntime._update_service_token_if_ciris_proxy(runtime, svc, token, is_primary)
+        runtime._update_service_token_if_ciris_proxy = (
+            lambda svc, token, is_primary=False: CIRISRuntime._update_service_token_if_ciris_proxy(
+                runtime, svc, token, is_primary
+            )
+        )
         return runtime
 
     def test_updates_registry_services(self, runtime):

@@ -392,6 +392,87 @@ async def list_all_tickets(
     return [TicketResponse(**ticket) for ticket in tickets]
 
 
+def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """Deep merge update into base dictionary."""
+    result = base.copy()
+    for key, value in update.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _get_db_path(req: Request) -> Optional[str]:
+    """Get database path from request app state."""
+    return getattr(req.app.state, "db_path", None)
+
+
+def _verify_ticket_exists(ticket_id: str, db_path: Optional[str]) -> Dict[str, Any]:
+    """Verify ticket exists and return it, raising 404 if not found."""
+    ticket = get_ticket(ticket_id, db_path=db_path)
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ticket {ticket_id} not found",
+        )
+    return ticket
+
+
+def _update_ticket_status_if_provided(
+    ticket_id: str, request: UpdateTicketRequest, db_path: Optional[str]
+) -> None:
+    """Update ticket status if provided in request."""
+    if not request.status:
+        return
+
+    success = update_ticket_status(
+        ticket_id=ticket_id,
+        new_status=request.status,
+        notes=request.notes,
+        db_path=db_path,
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update ticket status",
+        )
+
+
+def _update_ticket_metadata_if_provided(
+    ticket_id: str, request: UpdateTicketRequest, ticket: Dict[str, Any], db_path: Optional[str]
+) -> None:
+    """Update ticket metadata if provided in request (deep merge with existing)."""
+    if not request.metadata:
+        return
+
+    # Get current metadata and merge with new data
+    existing_metadata = ticket.get("metadata", {})
+    merged_metadata = _deep_merge(existing_metadata, request.metadata)
+
+    success = update_ticket_metadata(
+        ticket_id=ticket_id,
+        metadata=merged_metadata,
+        db_path=db_path,
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update ticket metadata",
+        )
+
+
+def _retrieve_updated_ticket(ticket_id: str, db_path: Optional[str]) -> Dict[str, Any]:
+    """Retrieve updated ticket, raising 500 if retrieval fails."""
+    updated_ticket = get_ticket(ticket_id, db_path=db_path)
+    if not updated_ticket:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Update succeeded but failed to retrieve ticket",
+        )
+    return updated_ticket
+
+
 @router.patch("/{ticket_id}", response_model=TicketResponse)
 async def update_existing_ticket(
     ticket_id: str,
@@ -408,64 +489,19 @@ async def update_existing_ticket(
         404: Ticket not found
         500: Update failed
     """
+    db_path = _get_db_path(req)
+
     # Verify ticket exists
-    ticket = get_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
-    if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ticket {ticket_id} not found",
-        )
+    ticket = _verify_ticket_exists(ticket_id, db_path)
 
     # Update status if provided
-    if request.status:
-        success = update_ticket_status(
-            ticket_id=ticket_id,
-            new_status=request.status,
-            notes=request.notes,
-            db_path=getattr(req.app.state, "db_path", None),
-        )
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update ticket status",
-            )
+    _update_ticket_status_if_provided(ticket_id, request, db_path)
 
     # Update metadata if provided (merge with existing)
-    if request.metadata:
-        # Get current metadata and merge with new data
-        existing_metadata = ticket.get("metadata", {})
-
-        # Deep merge: update existing metadata with new values
-        def deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
-            """Deep merge update into base dictionary."""
-            result = base.copy()
-            for key, value in update.items():
-                if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                    result[key] = deep_merge(result[key], value)
-                else:
-                    result[key] = value
-            return result
-
-        merged_metadata = deep_merge(existing_metadata, request.metadata)
-
-        success = update_ticket_metadata(
-            ticket_id=ticket_id,
-            metadata=merged_metadata,
-            db_path=getattr(req.app.state, "db_path", None),
-        )
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update ticket metadata",
-            )
+    _update_ticket_metadata_if_provided(ticket_id, request, ticket, db_path)
 
     # Retrieve and return updated ticket
-    updated_ticket = get_ticket(ticket_id, db_path=getattr(req.app.state, "db_path", None))
-    if not updated_ticket:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Update succeeded but failed to retrieve ticket",
-        )
+    updated_ticket = _retrieve_updated_ticket(ticket_id, db_path)
 
     return TicketResponse(**updated_ticket)
 

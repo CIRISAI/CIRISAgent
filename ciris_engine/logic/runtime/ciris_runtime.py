@@ -1509,9 +1509,7 @@ class CIRISRuntime:
         if self.llm_service:
             self._update_service_token_if_ciris_proxy(self.llm_service, new_token, is_primary=True)
 
-    def _update_service_token_if_ciris_proxy(
-        self, service: Any, new_token: str, is_primary: bool = False
-    ) -> None:
+    def _update_service_token_if_ciris_proxy(self, service: Any, new_token: str, is_primary: bool = False) -> None:
         """Update a service's API key if it uses CIRIS proxy."""
         if not hasattr(service, "openai_config") or not service.openai_config:
             return
@@ -1549,18 +1547,14 @@ class CIRISRuntime:
 
         google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
         if not google_id_token:
-            logger.warning(
-                "Android using CIRIS LLM proxy without Google ID token - billing provider not configured"
-            )
+            logger.warning("Android using CIRIS LLM proxy without Google ID token - billing provider not configured")
             return
 
         credit_provider = self._create_billing_provider(google_id_token)
         resource_monitor.credit_provider = credit_provider
 
         # Register token refresh handlers
-        resource_monitor.signal_bus.register(
-            "token_refreshed", self._create_billing_token_handler(credit_provider)
-        )
+        resource_monitor.signal_bus.register("token_refreshed", self._create_billing_token_handler(credit_provider))
         logger.info("✓ Reinitialized CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
         logger.info("✓ Registered token_refreshed handler for billing provider")
 

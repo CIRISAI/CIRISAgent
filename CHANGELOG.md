@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Empty `user_profiles` list now valid for wakeup/system tasks (not treated as error)
   - Files: `tools/qa_runner/modules/streaming_verification.py`
 
+### Security
+
+- **CodeQL Alert Remediation** - Addressed 28 GitHub CodeQL security alerts
+  - Masked email addresses in all debug logs
+  - Removed API key preview from debug logs
+  - Changed OAuth debug logs from INFO to DEBUG level
+  - Added NOSONAR comments for 18 false positives (provider IDs, client IDs, boolean status)
+  - Files: `auth_service.py`, `auth.py`, `setup.py`, `billing.py`, `authentication/service.py`
+
 ## [1.7.0] - 2025-11-28
 
 ### Added - Android On-Device Packaging

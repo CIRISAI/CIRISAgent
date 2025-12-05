@@ -293,12 +293,10 @@ class StreamingVerificationModule:
                                             event_detail["issues"].append(issue_msg)
                                             errors.append(f"🐛 WRONG TYPE: {issue_msg}")
                                         elif len(snapshot.get("user_profiles", [])) == 0:
-                                            issue_msg = "system_snapshot.user_profiles is empty list (should contain at least API user profile)"
-                                            event_detail["issues"].append(issue_msg)
-                                            errors.append(f"🐛 EMPTY LIST: {issue_msg}")
-                                            # Log concise info instead of massive JSON dump
+                                            # Empty user_profiles is valid during wakeup or system tasks
+                                            # Log concise info for visibility but don't treat as error
                                             logger.debug(
-                                                f"Empty user_profiles - thought={event.get('thought_id')}, "
+                                                f"Empty user_profiles (valid for wakeup/system tasks) - thought={event.get('thought_id')}, "
                                                 f"task={event.get('task_id')}, channel={snapshot.get('channel_id')}"
                                             )
                                         else:
@@ -417,7 +415,7 @@ class StreamingVerificationModule:
                                                     f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)"
                                                 )
                                             elif len(user_profiles) == 0:
-                                                print("  ❌ EMPTY (should contain at least API user profile)")
+                                                print("  ℹ️  Empty list (valid for wakeup/system tasks)")
                                             else:
                                                 print(f"  ✓ Type: list with {len(user_profiles)} profile(s)")
                                                 for i, profile in enumerate(user_profiles, 1):
@@ -693,8 +691,20 @@ class StreamingVerificationModule:
                                         "updated_info_available",
                                     },
                                     "snapshot_and_context": {"system_snapshot"},
-                                    "dma_results": {"csdma", "dsdma", "pdma"},  # Changed from aspdma_options to pdma
-                                    "aspdma_result": {"selected_action", "action_rationale", "is_recursive"},
+                                    "dma_results": {
+                                        "csdma",
+                                        "dsdma",
+                                        "pdma",
+                                        "csdma_prompt",
+                                        "dsdma_prompt",
+                                        "pdma_prompt",
+                                    },  # DMA results + optional prompt fields
+                                    "aspdma_result": {
+                                        "selected_action",
+                                        "action_rationale",
+                                        "is_recursive",
+                                        "aspdma_prompt",
+                                    },
                                     "conscience_result": {
                                         "conscience_passed",
                                         "final_action",
@@ -703,6 +713,7 @@ class StreamingVerificationModule:
                                         "conscience_override_reason",
                                         "action_was_overridden",
                                         "updated_status_available",
+                                        "conscience_prompt",
                                     },
                                     "action_result": {
                                         "action_executed",

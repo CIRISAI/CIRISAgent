@@ -5,6 +5,23 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2025-12-04
+
+### Added
+
+- **LLM Token Refresh for System Tasks** - System tasks (partnership, DSAR) now properly use ROOT OAuth user's credentials
+  - Added `token_refreshed` signal handler for LLM services in runtime
+  - When Android TokenRefreshManager updates the Google ID token, both billing provider AND LLM services are updated
+  - Ensures system tasks can hit llm.ciris.ai with fresh JWT credentials
+  - Files: `ciris_engine/logic/runtime/ciris_runtime.py:1532-1567`
+
+### Fixed
+
+- **Streaming Test Schema Expectations** - Updated H3ERE reasoning event stream test expectations
+  - Added optional `*_prompt` fields to DMA results, ASPDMA result, and conscience result schemas
+  - Empty `user_profiles` list now valid for wakeup/system tasks (not treated as error)
+  - Files: `tools/qa_runner/modules/streaming_verification.py`
+
 ## [1.7.0] - 2025-11-28
 
 ### Added - Android On-Device Packaging

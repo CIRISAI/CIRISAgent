@@ -1528,6 +1528,46 @@ class CIRISRuntime:
                 resource_monitor.signal_bus.register("token_refreshed", handle_billing_token_refreshed)
                 logger.info("✓ Reinitialized CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
                 logger.info("✓ Registered token_refreshed handler for billing provider")
+
+                # Also register handler for LLM service token refresh
+                # System tasks (partnership, DSAR) use ROOT OAuth user's credentials
+                async def handle_llm_token_refreshed(signal: str, resource: str) -> None:
+                    """Update LLM service API key when Android refreshes Google ID token.
+
+                    The same token is used for both billing (CIRIS_BILLING_GOOGLE_ID_TOKEN)
+                    and LLM proxy auth (OPENAI_API_KEY) when using llm.ciris.ai.
+                    """
+                    new_token = os.getenv("OPENAI_API_KEY", "")
+                    if not new_token:
+                        logger.warning("[LLM_TOKEN] No OPENAI_API_KEY in env after token refresh")
+                        return
+
+                    # Update all LLM services that use CIRIS proxy
+                    if self.service_registry:
+                        from ciris_engine.schemas.runtime.enums import ServiceType
+
+                        llm_services = self.service_registry.get_services_by_type(ServiceType.LLM)
+                        for service in llm_services:
+                            # Check if service uses CIRIS proxy (has ciris.ai in base_url)
+                            if hasattr(service, "openai_config") and service.openai_config:
+                                base_url = getattr(service.openai_config, "base_url", "") or ""
+                                if "ciris.ai" in base_url:
+                                    if hasattr(service, "update_api_key"):
+                                        service.update_api_key(new_token)
+                                        logger.info(
+                                            f"✓ Updated LLM service {type(service).__name__} with refreshed token"
+                                        )
+
+                    # Also update primary llm_service if available
+                    if self.llm_service and hasattr(self.llm_service, "update_api_key"):
+                        if hasattr(self.llm_service, "openai_config"):
+                            base_url = getattr(self.llm_service.openai_config, "base_url", "") or ""
+                            if "ciris.ai" in base_url:
+                                self.llm_service.update_api_key(new_token)
+                                logger.info("✓ Updated primary LLM service with refreshed token")
+
+                resource_monitor.signal_bus.register("token_refreshed", handle_llm_token_refreshed)
+                logger.info("✓ Registered token_refreshed handler for LLM service")
             else:
                 logger.warning(
                     "Android using CIRIS LLM proxy without Google ID token - " "billing provider not configured"

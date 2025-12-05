@@ -545,6 +545,108 @@ async def _update_system_admin_password(auth_service: Any, setup: "SetupComplete
         logger.warning("⚠️  Default admin WA not found")
 
 
+async def _check_existing_oauth_wa(
+    auth_service: Any, setup: "SetupCompleteRequest"
+) -> tuple[Optional[Any], bool]:
+    """Check if OAuth user already exists and update to ROOT if found.
+
+    Returns:
+        Tuple of (wa_cert, was_found) where wa_cert is the WA certificate and
+        was_found indicates if an existing WA was found and updated.
+    """
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    if not (setup.oauth_provider and setup.oauth_external_id):
+        return None, False
+
+    logger.debug(  # NOSONAR - provider:external_id is not a secret
+        f"CIRIS_USER_CREATE: Checking for existing OAuth user: {setup.oauth_provider}:{setup.oauth_external_id}"
+    )
+    existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
+
+    if not existing_wa:
+        logger.info("CIRIS_USER_CREATE: No existing WA found for OAuth user - will create new")
+        return None, False
+
+    logger.info(f"CIRIS_USER_CREATE: ✓ Found existing WA for OAuth user: {existing_wa.wa_id}")
+    logger.info(f"CIRIS_USER_CREATE:   Current role: {existing_wa.role}")
+    logger.info(f"CIRIS_USER_CREATE:   Current name: {existing_wa.name}")
+
+    # Update existing WA to ROOT role instead of creating new one
+    logger.info(
+        f"CIRIS_USER_CREATE: Updating existing WA {existing_wa.wa_id} to ROOT role (keeping name: {existing_wa.name})"
+    )
+    await auth_service.update_wa(wa_id=existing_wa.wa_id, role=WARole.ROOT)
+    logger.info(f"CIRIS_USER_CREATE: ✅ Updated existing OAuth WA to ROOT: {existing_wa.wa_id}")
+
+    return existing_wa, True
+
+
+async def _create_new_wa(auth_service: Any, setup: "SetupCompleteRequest") -> Any:
+    """Create a new WA certificate for the setup user.
+
+    Returns:
+        WA certificate for the newly created user
+    """
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    logger.info(f"CIRIS_USER_CREATE: Creating NEW user: {setup.admin_username} with role: {WARole.ROOT}")
+
+    # Use OAuth email if available, otherwise generate local email
+    user_email = setup.oauth_email or f"{setup.admin_username}@local"
+    masked_email = (user_email[:3] + "***@" + user_email.split("@")[-1]) if "@" in user_email else user_email
+    logger.debug(f"CIRIS_USER_CREATE: User email: {masked_email}")  # NOSONAR - email masked
+
+    # List existing WAs before creation for debugging
+    existing_was = await auth_service.list_was(active_only=False)
+    logger.info(f"CIRIS_USER_CREATE: Existing WAs before creation: {len(existing_was)}")
+    for wa in existing_was:
+        logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+    # Create WA certificate
+    wa_cert = await auth_service.create_wa(
+        name=setup.admin_username,
+        email=user_email,
+        scopes=["read:any", "write:any"],  # ROOT gets full scopes
+        role=WARole.ROOT,
+    )
+    logger.info(f"CIRIS_USER_CREATE: ✅ Created NEW WA: {wa_cert.wa_id}")
+
+    return wa_cert
+
+
+async def _set_password_for_wa(auth_service: Any, setup: "SetupCompleteRequest", wa_cert: Any) -> None:
+    """Set password hash for non-OAuth users."""
+    is_oauth_setup = bool(setup.oauth_provider and setup.oauth_external_id)
+
+    if is_oauth_setup:
+        logger.info(f"CIRIS_USER_CREATE: Skipping password hash for OAuth user: {wa_cert.wa_id}")
+        return
+
+    # Hash password and update WA (admin_password is guaranteed set by validation above)
+    assert setup.admin_password is not None, "admin_password should be set by validation"
+    password_hash = auth_service.hash_password(setup.admin_password)
+    await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
+    logger.info(f"CIRIS_USER_CREATE: Password hash set for WA: {wa_cert.wa_id}")
+
+
+async def _ensure_system_wa(auth_service: Any) -> None:
+    """Ensure system WA exists for signing system tasks."""
+    system_wa_id = await auth_service.ensure_system_wa_exists()
+    if system_wa_id:
+        logger.info(f"✅ System WA ready: {system_wa_id}")
+    else:
+        logger.warning("⚠️ Could not create system WA - deferral handling may not work")
+
+
+async def _log_wa_list(auth_service: Any, phase: str) -> None:
+    """Log list of WAs for debugging purposes."""
+    was = await auth_service.list_was(active_only=False)
+    logger.info(f"CIRIS_USER_CREATE: WAs {phase}: {len(was)}")
+    for wa in was:
+        logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+
 async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) -> None:
     """Create users immediately during setup completion.
 
@@ -560,7 +662,6 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     """
     from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
-    from ciris_engine.schemas.services.authority_core import WARole
 
     logger.info("=" * 70)
     logger.info("CIRIS_USER_CREATE: _create_setup_users() called")
@@ -581,94 +682,26 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     await auth_service.start()
 
     try:
-        wa_role = WARole.ROOT
-        wa_cert = None
+        # Check if OAuth user already exists and update to ROOT if found
+        wa_cert, was_existing = await _check_existing_oauth_wa(auth_service, setup)
 
-        # CRITICAL: Check if OAuth user already exists BEFORE creating new WA
-        # This prevents duplicate ROOT users
-        if setup.oauth_provider and setup.oauth_external_id:
-            logger.debug(  # NOSONAR - provider:external_id is not a secret
-                f"CIRIS_USER_CREATE: Checking for existing OAuth user: {setup.oauth_provider}:{setup.oauth_external_id}"
-            )
-            existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
-
-            if existing_wa:
-                logger.info(f"CIRIS_USER_CREATE: ✓ Found existing WA for OAuth user: {existing_wa.wa_id}")
-                logger.info(f"CIRIS_USER_CREATE:   Current role: {existing_wa.role}")
-                logger.info(f"CIRIS_USER_CREATE:   Current name: {existing_wa.name}")
-
-                # Update existing WA to ROOT role instead of creating new one
-                # IMPORTANT: Keep the existing name (from OAuth) - don't overwrite with fallback username
-                logger.info(
-                    f"CIRIS_USER_CREATE: Updating existing WA {existing_wa.wa_id} to ROOT role (keeping name: {existing_wa.name})"
-                )
-                await auth_service.update_wa(
-                    wa_id=existing_wa.wa_id,
-                    role=WARole.ROOT,
-                )
-                wa_cert = existing_wa
-                logger.info(f"CIRIS_USER_CREATE: ✅ Updated existing OAuth WA to ROOT: {wa_cert.wa_id}")
-            else:
-                logger.info(f"CIRIS_USER_CREATE: No existing WA found for OAuth user - will create new")
-
-        # Only create new WA if we didn't find an existing OAuth user
+        # Create new WA if we didn't find an existing OAuth user
         if wa_cert is None:
-            logger.info(f"CIRIS_USER_CREATE: Creating NEW user: {setup.admin_username} with role: {wa_role}")
+            wa_cert = await _create_new_wa(auth_service, setup)
 
-            # Use OAuth email if available, otherwise generate local email
-            user_email = setup.oauth_email or f"{setup.admin_username}@local"
-            masked_email = (user_email[:3] + "***@" + user_email.split("@")[-1]) if "@" in user_email else user_email
-            logger.debug(f"CIRIS_USER_CREATE: User email: {masked_email}")  # NOSONAR - email masked
+        # Set password for non-OAuth users
+        await _set_password_for_wa(auth_service, setup, wa_cert)
 
-            # List existing WAs before creation for debugging
-            existing_was = await auth_service.list_was(active_only=False)
-            logger.info(f"CIRIS_USER_CREATE: Existing WAs before creation: {len(existing_was)}")
-            for wa in existing_was:
-                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+        # Log WAs after creation for debugging
+        await _log_wa_list(auth_service, "after setup")
 
-            # Create WA certificate
-            wa_cert = await auth_service.create_wa(
-                name=setup.admin_username,
-                email=user_email,
-                scopes=["read:any", "write:any"],  # ROOT gets full scopes
-                role=wa_role,
-            )
-            logger.info(f"CIRIS_USER_CREATE: ✅ Created NEW WA: {wa_cert.wa_id}")
-
-        # Only set password hash for NON-OAuth users
-        # OAuth users authenticate via their OAuth provider, not local password
-        is_oauth_setup = bool(setup.oauth_provider and setup.oauth_external_id)
-        if not is_oauth_setup:
-            # Hash password and update WA (admin_password is guaranteed set by validation above)
-            assert setup.admin_password is not None, "admin_password should be set by validation"
-            password_hash = auth_service.hash_password(setup.admin_password)
-            await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
-            logger.info(f"CIRIS_USER_CREATE: Password hash set for WA: {wa_cert.wa_id}")
-        else:
-            logger.info(f"CIRIS_USER_CREATE: Skipping password hash for OAuth user: {wa_cert.wa_id}")
-
-        # List WAs after creation for debugging
-        final_was = await auth_service.list_was(active_only=False)
-        logger.info(f"CIRIS_USER_CREATE: WAs after setup: {len(final_was)}")
-        for wa in final_was:
-            logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
-
-        # Ensure system WA exists now that we have a ROOT WA
-        # This is critical for signing system tasks like WAKEUP
-        system_wa_id = await auth_service.ensure_system_wa_exists()
-        if system_wa_id:
-            logger.info(f"✅ System WA ready: {system_wa_id}")
-        else:
-            logger.warning("⚠️ Could not create system WA - deferral handling may not work")
+        # Ensure system WA exists
+        await _ensure_system_wa(auth_service)
 
         # CIRIS_SETUP_DEBUG: Log OAuth linking decision
         logger.debug("CIRIS_SETUP_DEBUG _create_setup_users() OAuth linking check:")
-        logger.debug(
-            f"CIRIS_SETUP_DEBUG   setup.oauth_provider = {repr(setup.oauth_provider)}"
-        )  # NOSONAR - provider name not secret
-        logger.debug(
-            f"CIRIS_SETUP_DEBUG   setup.oauth_external_id = {repr(setup.oauth_external_id)}"
-        )  # NOSONAR - provider ID not secret
+        logger.debug(f"CIRIS_SETUP_DEBUG   setup.oauth_provider = {repr(setup.oauth_provider)}")
+        logger.debug(f"CIRIS_SETUP_DEBUG   setup.oauth_external_id = {repr(setup.oauth_external_id)}")
         logger.debug(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_provider) = {bool(setup.oauth_provider)}")
         logger.debug(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_external_id) = {bool(setup.oauth_external_id)}")
         oauth_link_condition = bool(setup.oauth_provider) and bool(setup.oauth_external_id)

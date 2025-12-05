@@ -1,6 +1,6 @@
 # iOS Build Pipeline Instructions
 
-This guide explains how to build the required binary dependencies for the CIRIS iOS runtime.
+This guide explains how to build the required binary dependencies and run the CIRIS iOS runtime.
 
 ## Prerequisites
 
@@ -9,6 +9,7 @@ This guide explains how to build the required binary dependencies for the CIRIS 
 *   Rust (`rustup`)
 *   Python 3.10
 *   `pip`
+*   `briefcase` (`pip install briefcase`)
 
 ## Architecture
 
@@ -17,7 +18,9 @@ The main blockers identified are:
 1.  `pydantic-core` (Rust)
 2.  `cryptography` (Rust/C)
 
-## Automatic Build Script
+## Part 1: Building Dependencies
+
+### Automatic Build Script (`pydantic-core`)
 
 We provide a script to build `pydantic-core`:
 
@@ -30,7 +33,7 @@ This will:
 2.  Build it for `aarch64-apple-ios`.
 3.  Output the `.whl` file to `ios/wheels/`.
 
-## Manual Steps for Cryptography
+### Manual Steps for Cryptography
 
 Building `cryptography` for iOS is more complex as it depends on OpenSSL. We recommend using a recipe-based system like [kivy-ios](https://github.com/kivy/kivy-ios) or [BeeWare](https://beeware.org) tools if possible, but for manual builds:
 
@@ -47,8 +50,38 @@ Building `cryptography` for iOS is more complex as it depends on OpenSSL. We rec
     pip wheel cryptography==42.0.8 --no-deps --wheel-dir ios/wheels --no-binary cryptography
     ```
 
-## Integration
+## Part 2: Running the iOS App
 
-Once you have the wheels in `ios/wheels/`:
-1.  **Copy**: Move the `.whl` files to your iOS project structure.
-2.  **Install**: Use a script to unzip these wheels into your app's `site-packages` directory, or use a tool that supports installing from local wheels.
+We use [BeeWare Briefcase](https://briefcase.readthedocs.io) to package and run the iOS application.
+
+### Setup
+
+1.  Prepare the source code (copies `ciris_engine` and `ciris_modular_services`):
+    ```bash
+    ./ios/scripts/prepare_source.sh
+    ```
+
+2.  (Important) Ensure you have built the wheels (see Part 1) and placed them in `ios/wheels`.
+    *Note: Briefcase does not automatically pick up local wheels by default. You may need to manually install them into the generated Xcode project or use a custom Briefcase configuration to point to local pip sources.*
+
+### Build and Run
+
+1.  Navigate to the project directory:
+    ```bash
+    cd ios/CirisiOS
+    ```
+
+2.  Create the iOS app structure:
+    ```bash
+    briefcase create iOS
+    ```
+
+3.  Build the app:
+    ```bash
+    briefcase build iOS
+    ```
+
+4.  Run in Simulator:
+    ```bash
+    briefcase run iOS
+    ```

@@ -103,3 +103,9 @@ android/app/src/main/python/ciris_engine/
 android/app/src/main/python/ciris_adapters/
 android/ciris_engine/
 android/ciris_adapters/
+
+# iOS synced Python code and build artifacts
+ios/CirisiOS/src/ciris_engine/
+ios/CirisiOS/src/ciris_modular_services/
+ios/wheels/
+ios/build/

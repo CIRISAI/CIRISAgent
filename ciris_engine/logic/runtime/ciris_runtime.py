@@ -74,6 +74,9 @@ from .service_initializer import ServiceInitializer
 
 logger = logging.getLogger(__name__)
 
+# Domain identifier for CIRIS proxy services (LLM, billing)
+CIRIS_PROXY_DOMAIN = "ciris.ai"
+
 
 class CIRISRuntime:
     """
@@ -1467,6 +1470,62 @@ class CIRISRuntime:
         # Final verification with the existing wait method
         await self._wait_for_critical_services(timeout=5.0)
 
+    def _is_using_ciris_proxy(self) -> bool:
+        """Check if runtime is configured to use CIRIS proxy."""
+        llm_base_url = os.getenv("OPENAI_API_BASE", "")
+        return CIRIS_PROXY_DOMAIN in llm_base_url
+
+    def _create_billing_token_handler(self, credit_provider: Any) -> Callable[..., Any]:
+        """Create handler for billing token refresh signals."""
+
+        async def handle_billing_token_refreshed(signal: str, resource: str) -> None:
+            new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+            if new_token and credit_provider:
+                credit_provider.update_google_id_token(new_token)
+                logger.info("✓ Updated billing provider with refreshed Google ID token")
+
+        return handle_billing_token_refreshed
+
+    def _create_llm_token_handler(self) -> Callable[..., Any]:
+        """Create handler for LLM service token refresh signals."""
+
+        async def handle_llm_token_refreshed(signal: str, resource: str) -> None:
+            new_token = os.getenv("OPENAI_API_KEY", "")
+            if not new_token:
+                logger.warning("[LLM_TOKEN] No OPENAI_API_KEY in env after token refresh")
+                return
+
+            self._update_llm_services_token(new_token)
+
+        return handle_llm_token_refreshed
+
+    def _update_llm_services_token(self, new_token: str) -> None:
+        """Update all LLM services that use CIRIS proxy with new token."""
+        if self.service_registry:
+            llm_services = self.service_registry.get_services_by_type(ServiceType.LLM)
+            for service in llm_services:
+                self._update_service_token_if_ciris_proxy(service, new_token)
+
+        if self.llm_service:
+            self._update_service_token_if_ciris_proxy(self.llm_service, new_token, is_primary=True)
+
+    def _update_service_token_if_ciris_proxy(
+        self, service: Any, new_token: str, is_primary: bool = False
+    ) -> None:
+        """Update a service's API key if it uses CIRIS proxy."""
+        if not hasattr(service, "openai_config") or not service.openai_config:
+            return
+        if not hasattr(service, "update_api_key"):
+            return
+
+        base_url = getattr(service.openai_config, "base_url", "") or ""
+        if CIRIS_PROXY_DOMAIN not in base_url:
+            return
+
+        service.update_api_key(new_token)
+        label = "primary LLM service" if is_primary else type(service).__name__
+        logger.info(f"✓ Updated {label} with refreshed token")
+
     async def _reinitialize_billing_provider(self) -> None:
         """Reinitialize billing provider after setup completes.
 
@@ -1474,106 +1533,78 @@ class CIRISRuntime:
         environment variables (OPENAI_API_BASE, CIRIS_BILLING_GOOGLE_ID_TOKEN)
         are available from the newly created .env file.
         """
+        resource_monitor = self._get_resource_monitor_for_billing()
+        if not resource_monitor:
+            return
+
+        is_android = "ANDROID_DATA" in os.environ
+        using_ciris_proxy = self._is_using_ciris_proxy()
+
+        logger.info(f"Billing provider check: is_android={is_android}, using_ciris_proxy={using_ciris_proxy}")
+        logger.info(f"  OPENAI_API_BASE={os.getenv('OPENAI_API_BASE', '')}")
+
+        if not (is_android and using_ciris_proxy):
+            logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")
+            return
+
+        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        if not google_id_token:
+            logger.warning(
+                "Android using CIRIS LLM proxy without Google ID token - billing provider not configured"
+            )
+            return
+
+        credit_provider = self._create_billing_provider(google_id_token)
+        resource_monitor.credit_provider = credit_provider
+
+        # Register token refresh handlers
+        resource_monitor.signal_bus.register(
+            "token_refreshed", self._create_billing_token_handler(credit_provider)
+        )
+        logger.info("✓ Reinitialized CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
+        logger.info("✓ Registered token_refreshed handler for billing provider")
+
+        resource_monitor.signal_bus.register("token_refreshed", self._create_llm_token_handler())
+        logger.info("✓ Registered token_refreshed handler for LLM service")
+
+    def _get_resource_monitor_for_billing(self) -> Any:
+        """Get resource monitor service for billing initialization.
+
+        Returns the resource monitor service or None if not available.
+        Uses Any type since we access implementation-specific attributes
+        (credit_provider, signal_bus) not in the protocol.
+        """
         if not self.service_initializer:
             logger.warning("Cannot reinitialize billing - service_initializer not available")
-            return
+            return None
 
         resource_monitor = self.service_initializer.resource_monitor_service
         if not resource_monitor:
             logger.warning("Cannot reinitialize billing - resource_monitor_service not available")
-            return
+            return None
 
-        # Check if using CIRIS LLM proxy (Android only - billing required for proxy)
-        is_android = "ANDROID_DATA" in os.environ
-        llm_base_url = os.getenv("OPENAI_API_BASE", "")
-        using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+        return resource_monitor
 
-        logger.info(f"Billing provider check: is_android={is_android}, using_ciris_proxy={using_ciris_proxy}")
-        logger.info(f"  OPENAI_API_BASE={llm_base_url}")
+    def _create_billing_provider(self, google_id_token: str) -> Any:
+        """Create and configure the CIRIS billing provider."""
+        from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-        if is_android and using_ciris_proxy:
-            google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            if google_id_token:
-                from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+        base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+        timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
+        cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
+        fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
 
-                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
-                timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
-                cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
-                fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
+        def get_fresh_token() -> str:
+            return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
 
-                # Callback to get fresh token from environment (updated by Android TokenRefreshManager)
-                def get_fresh_token() -> str:
-                    return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-
-                credit_provider = CIRISBillingProvider(
-                    google_id_token=google_id_token,
-                    token_refresh_callback=get_fresh_token,
-                    base_url=base_url,
-                    timeout_seconds=timeout,
-                    cache_ttl_seconds=cache_ttl,
-                    fail_open=fail_open,
-                )
-
-                # Update the resource monitor's credit provider
-                resource_monitor.credit_provider = credit_provider
-
-                # Register handler for token_refreshed signal (emitted when Android refreshes token)
-                async def handle_billing_token_refreshed(signal: str, resource: str) -> None:
-                    """Update billing provider token when Android refreshes it."""
-                    new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-                    if new_token and credit_provider:
-                        credit_provider.update_google_id_token(new_token)
-                        logger.info("✓ Updated billing provider with refreshed Google ID token")
-
-                resource_monitor.signal_bus.register("token_refreshed", handle_billing_token_refreshed)
-                logger.info("✓ Reinitialized CIRISBillingProvider with JWT auth (CIRIS LLM proxy)")
-                logger.info("✓ Registered token_refreshed handler for billing provider")
-
-                # Also register handler for LLM service token refresh
-                # System tasks (partnership, DSAR) use ROOT OAuth user's credentials
-                async def handle_llm_token_refreshed(signal: str, resource: str) -> None:
-                    """Update LLM service API key when Android refreshes Google ID token.
-
-                    The same token is used for both billing (CIRIS_BILLING_GOOGLE_ID_TOKEN)
-                    and LLM proxy auth (OPENAI_API_KEY) when using llm.ciris.ai.
-                    """
-                    new_token = os.getenv("OPENAI_API_KEY", "")
-                    if not new_token:
-                        logger.warning("[LLM_TOKEN] No OPENAI_API_KEY in env after token refresh")
-                        return
-
-                    # Update all LLM services that use CIRIS proxy
-                    if self.service_registry:
-                        from ciris_engine.schemas.runtime.enums import ServiceType
-
-                        llm_services = self.service_registry.get_services_by_type(ServiceType.LLM)
-                        for service in llm_services:
-                            # Check if service uses CIRIS proxy (has ciris.ai in base_url)
-                            if hasattr(service, "openai_config") and service.openai_config:
-                                base_url = getattr(service.openai_config, "base_url", "") or ""
-                                if "ciris.ai" in base_url:
-                                    if hasattr(service, "update_api_key"):
-                                        service.update_api_key(new_token)
-                                        logger.info(
-                                            f"✓ Updated LLM service {type(service).__name__} with refreshed token"
-                                        )
-
-                    # Also update primary llm_service if available
-                    if self.llm_service and hasattr(self.llm_service, "update_api_key"):
-                        if hasattr(self.llm_service, "openai_config"):
-                            base_url = getattr(self.llm_service.openai_config, "base_url", "") or ""
-                            if "ciris.ai" in base_url:
-                                self.llm_service.update_api_key(new_token)
-                                logger.info("✓ Updated primary LLM service with refreshed token")
-
-                resource_monitor.signal_bus.register("token_refreshed", handle_llm_token_refreshed)
-                logger.info("✓ Registered token_refreshed handler for LLM service")
-            else:
-                logger.warning(
-                    "Android using CIRIS LLM proxy without Google ID token - " "billing provider not configured"
-                )
-        else:
-            logger.info("Billing provider not needed (not using CIRIS proxy or not Android)")
+        return CIRISBillingProvider(
+            google_id_token=google_id_token,
+            token_refresh_callback=get_fresh_token,
+            base_url=base_url,
+            timeout_seconds=timeout,
+            cache_ttl_seconds=cache_ttl,
+            fail_open=fail_open,
+        )
 
     def _resume_reload_environment(
         self, log_step: Callable[[int, int, str], None], total_steps: int

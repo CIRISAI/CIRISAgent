@@ -1,0 +1,35 @@
+[build-system]
+requires = ["briefcase"]
+
+[tool.briefcase]
+project_name = "Ciris iOS"
+bundle = "ai.ciris"
+version = "0.1.0"
+url = "https://ciris.ai"
+license = "Proprietary"
+author = "CIRIS Team"
+author_email = "team@ciris.ai"
+
+[tool.briefcase.app.ciris_ios]
+formal_name = "Ciris iOS"
+description = "CIRIS Engine on iOS"
+sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_modular_services"]
+requires = [
+    "pydantic==2.9.2",
+    "cryptography==42.0.8",
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "aiosqlite",
+    "std-nslog"
+]
+
+[tool.briefcase.app.ciris_ios.iOS]
+requires = [
+    "toga-iOS~=0.4.0",
+]
+
+[tool.briefcase.app.ciris_ios.macOS]
+requires = [
+    "toga-cocoa~=0.4.0",
+]

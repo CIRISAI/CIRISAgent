@@ -144,8 +144,9 @@ jobs:
       - name: Install dependencies
         run: |
           # Install from monorepo root (where package-lock.json lives)
+          # Use npm install instead of npm ci to handle minor version drift in lock file
           cd cirisgui
-          npm ci
+          npm install --legacy-peer-deps
 
       - name: Build static assets
         id: build_gui

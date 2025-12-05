@@ -36,7 +36,7 @@ def _create_fallback_token_data() -> TokenData:
     return TokenData(username="admin", email="admin@ciris.ai", role="SYSTEM_ADMIN")
 
 
-async def _try_api_key_validation(token_str: str, api_auth_service: Optional[Any], logger: Any) -> Optional[TokenData]:
+def _try_api_key_validation(token_str: str, api_auth_service: Optional[Any], logger: Any) -> Optional[TokenData]:
     """Try to validate token as an API key. Returns TokenData if valid, None otherwise."""
     if not token_str.startswith("ciris_"):
         return None
@@ -131,7 +131,7 @@ async def get_current_user(request: Request, token: Optional[str] = Depends(secu
 
     try:
         # Try API key validation first
-        api_key_result = await _try_api_key_validation(token_str, api_auth_service, logger)
+        api_key_result = _try_api_key_validation(token_str, api_auth_service, logger)
         if api_key_result:
             return api_key_result
 

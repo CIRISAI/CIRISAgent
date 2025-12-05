@@ -419,9 +419,7 @@ def _verify_ticket_exists(ticket_id: str, db_path: Optional[str]) -> Dict[str, A
     return ticket
 
 
-def _update_ticket_status_if_provided(
-    ticket_id: str, request: UpdateTicketRequest, db_path: Optional[str]
-) -> None:
+def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketRequest, db_path: Optional[str]) -> None:
     """Update ticket status if provided in request."""
     if not request.status:
         return

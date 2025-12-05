@@ -318,6 +318,7 @@ class WorkProcessor(BaseProcessor):
             True if task creation succeeded, False otherwise
         """
         import json
+
         from ciris_engine.logic.persistence.db.core import get_db_connection
 
         ticket_id = ticket.get("ticket_id")
@@ -426,7 +427,9 @@ class WorkProcessor(BaseProcessor):
         """
         from ciris_engine.logic.persistence.db import get_db_connection
 
-        sql = "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
+        sql = (
+            "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
+        )
         task_prefix = f"TICKET-{ticket_id}-%"
 
         try:
@@ -494,6 +497,7 @@ class WorkProcessor(BaseProcessor):
             True if task creation succeeded, False otherwise
         """
         import json
+
         from ciris_engine.logic.persistence.db import get_db_connection
 
         ticket_id = ticket.get("ticket_id")

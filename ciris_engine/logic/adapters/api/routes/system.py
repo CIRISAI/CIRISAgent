@@ -976,7 +976,7 @@ def _create_audit_metadata(body: ShutdownRequest, auth: AuthContext, request: Re
 
 async def _audit_shutdown_request(
     request: Request, body: ShutdownRequest, auth: AuthContext, safe_reason: str
-) -> None:
+) -> None:  # NOSONAR - async required for create_task
     """Audit the shutdown request for security tracking."""
     audit_service = getattr(request.app.state, "audit_service", None)
     if not audit_service:

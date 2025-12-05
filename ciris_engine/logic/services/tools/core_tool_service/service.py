@@ -283,6 +283,45 @@ class CoreToolService(BaseService, ToolService):
 
         return metadata_updates, None
 
+    def _merge_single_stage(
+        self,
+        merged_stages: dict[str, Any],
+        stage_name: str,
+        stage_data: Any,
+        start_time: float,
+    ) -> None:
+        """Merge a single stage into the merged_stages dict in place.
+
+        Args:
+            merged_stages: Dictionary of merged stages (modified in place)
+            stage_name: Name of the stage to merge
+            stage_data: Data for the stage
+            start_time: Timer start for debug logging
+        """
+        import time
+
+        logger.debug(
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE " f"stage={stage_name} data={stage_data}"
+        )
+
+        if not isinstance(stage_data, dict):
+            return
+
+        if stage_name in merged_stages and isinstance(merged_stages[stage_name], dict):
+            # Merge existing stage
+            before = merged_stages[stage_name].copy()
+            merged_stages[stage_name] = {**merged_stages[stage_name], **stage_data}
+            logger.debug(
+                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGED_STAGE "
+                f"stage={stage_name} before={before} after={merged_stages[stage_name]}"
+            )
+        else:
+            # New stage
+            merged_stages[stage_name] = stage_data
+            logger.debug(
+                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE " f"stage={stage_name} data={stage_data}"
+            )
+
     def _merge_stage_metadata(
         self, current_metadata: dict[str, Any], metadata_updates: dict[str, Any], start_time: float
     ) -> dict[str, Any]:
@@ -302,40 +341,21 @@ class CoreToolService(BaseService, ToolService):
         merged_metadata: dict[str, Any] = {**current_metadata, **metadata_updates}
 
         # Deep merge for 'stages' key only
-        if "stages" in metadata_updates and "stages" in current_metadata:
-            merged_stages: dict[str, Any] = {**current_metadata.get("stages", {})}
-            stages_updates = metadata_updates.get("stages", {})
+        if "stages" not in metadata_updates or "stages" not in current_metadata:
+            return merged_metadata
 
-            logger.debug(
-                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DEEP_MERGE_STAGES "
-                f"base_stages={list(merged_stages.keys())} update_stages={list(stages_updates.keys())}"
-            )
+        merged_stages: dict[str, Any] = {**current_metadata.get("stages", {})}
+        stages_updates = metadata_updates.get("stages", {})
 
-            if isinstance(stages_updates, dict):
-                for stage_name, stage_data in stages_updates.items():
-                    logger.debug(
-                        f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE "
-                        f"stage={stage_name} data={stage_data}"
-                    )
+        logger.debug(
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DEEP_MERGE_STAGES "
+            f"base_stages={list(merged_stages.keys())} update_stages={list(stages_updates.keys())}"
+        )
 
-                    if isinstance(stage_data, dict):
-                        if stage_name in merged_stages and isinstance(merged_stages[stage_name], dict):
-                            # Merge existing stage
-                            before = merged_stages[stage_name].copy()
-                            merged_stages[stage_name] = {**merged_stages[stage_name], **stage_data}
-                            logger.debug(
-                                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGED_STAGE "
-                                f"stage={stage_name} before={before} after={merged_stages[stage_name]}"
-                            )
-                        else:
-                            # New stage
-                            merged_stages[stage_name] = stage_data
-                            logger.debug(
-                                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE "
-                                f"stage={stage_name} data={stage_data}"
-                            )
-
-                merged_metadata["stages"] = merged_stages
+        if isinstance(stages_updates, dict):
+            for stage_name, stage_data in stages_updates.items():
+                self._merge_single_stage(merged_stages, stage_name, stage_data, start_time)
+            merged_metadata["stages"] = merged_stages
 
         return merged_metadata
 

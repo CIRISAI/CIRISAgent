@@ -545,9 +545,7 @@ async def _update_system_admin_password(auth_service: Any, setup: "SetupComplete
         logger.warning("⚠️  Default admin WA not found")
 
 
-async def _check_existing_oauth_wa(
-    auth_service: Any, setup: "SetupCompleteRequest"
-) -> tuple[Optional[Any], bool]:
+async def _check_existing_oauth_wa(auth_service: Any, setup: "SetupCompleteRequest") -> tuple[Optional[Any], bool]:
     """Check if OAuth user already exists and update to ROOT if found.
 
     Returns:
@@ -683,7 +681,7 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
 
     try:
         # Check if OAuth user already exists and update to ROOT if found
-        wa_cert, was_existing = await _check_existing_oauth_wa(auth_service, setup)
+        wa_cert, _ = await _check_existing_oauth_wa(auth_service, setup)
 
         # Create new WA if we didn't find an existing OAuth user
         if wa_cert is None:

@@ -29,6 +29,10 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from ciris_engine.logic.persistence.models.tickets import (
+    _get_row_value,
+    _parse_automated_value,
+    _parse_datetime_value,
+    _parse_metadata_value,
     _row_to_dict,
     create_ticket,
     delete_ticket,
@@ -1286,3 +1290,104 @@ class TestUpdateTicketStatusAdvanced:
 
         ticket = get_ticket(ticket_id, db_path=temp_db_path)
         assert ticket["agent_occurrence_id"] == "occurrence-1"
+
+
+class TestHelperFunctions:
+    """Test helper functions extracted for cognitive complexity reduction."""
+
+    def test_parse_metadata_value_none(self):
+        """TC-HF001: Parse None metadata value."""
+        result = _parse_metadata_value(None)
+        assert result is None
+
+    def test_parse_metadata_value_empty_string(self):
+        """TC-HF002: Parse empty string metadata value."""
+        result = _parse_metadata_value("")
+        assert result is None
+
+    def test_parse_metadata_value_json_string(self):
+        """TC-HF003: Parse JSON string metadata (SQLite)."""
+        result = _parse_metadata_value('{"stage": 1, "progress": 0.5}')
+        assert result == {"stage": 1, "progress": 0.5}
+
+    def test_parse_metadata_value_dict(self):
+        """TC-HF004: Parse dict metadata (PostgreSQL JSONB)."""
+        result = _parse_metadata_value({"stage": 2, "progress": 0.75})
+        assert result == {"stage": 2, "progress": 0.75}
+
+    def test_parse_metadata_value_invalid_json(self):
+        """TC-HF005: Parse invalid JSON string."""
+        result = _parse_metadata_value("invalid json {")
+        assert result == {}
+
+    def test_parse_metadata_value_complex_nested(self):
+        """TC-HF006: Parse complex nested metadata."""
+        metadata = {"stages": [{"name": "verify", "status": "completed"}], "data": {"records": 42}}
+        result = _parse_metadata_value(json.dumps(metadata))
+        assert result == metadata
+
+    def test_parse_automated_value_none(self):
+        """TC-HF007: Parse None automated value."""
+        result = _parse_automated_value(None)
+        assert result is False
+
+    def test_parse_automated_value_zero(self):
+        """TC-HF008: Parse 0 automated value (SQLite)."""
+        result = _parse_automated_value(0)
+        assert result is False
+
+    def test_parse_automated_value_one(self):
+        """TC-HF009: Parse 1 automated value (SQLite)."""
+        result = _parse_automated_value(1)
+        assert result is True
+
+    def test_parse_automated_value_true(self):
+        """TC-HF010: Parse True automated value (PostgreSQL)."""
+        result = _parse_automated_value(True)
+        assert result is True
+
+    def test_parse_automated_value_false(self):
+        """TC-HF011: Parse False automated value (PostgreSQL)."""
+        result = _parse_automated_value(False)
+        assert result is False
+
+    def test_parse_datetime_value_none(self):
+        """TC-HF012: Parse None datetime value."""
+        result = _parse_datetime_value(None)
+        assert result is None
+
+    def test_parse_datetime_value_datetime_object(self):
+        """TC-HF013: Parse datetime object (PostgreSQL)."""
+        dt = datetime(2025, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+        result = _parse_datetime_value(dt)
+        assert result == "2025-01-15T10:30:00+00:00"
+
+    def test_parse_datetime_value_iso_string(self):
+        """TC-HF014: Parse ISO string (SQLite)."""
+        iso_string = "2025-01-15T10:30:00+00:00"
+        result = _parse_datetime_value(iso_string)
+        assert result == iso_string
+
+    def test_get_row_value_dict_access(self):
+        """TC-HF015: Get value from dict-like row."""
+        row = {"ticket_id": "TEST-001", "status": "pending"}
+        result = _get_row_value(row, "ticket_id")
+        assert result == "TEST-001"
+
+    def test_get_row_value_missing_key(self):
+        """TC-HF016: Get missing value from row."""
+        row = {"ticket_id": "TEST-001"}
+        result = _get_row_value(row, "missing_key")
+        assert result is None
+
+    def test_get_row_value_index_error(self):
+        """TC-HF017: Handle index error gracefully."""
+
+        # Simulate a row that raises IndexError
+        class BadRow:
+            def __getitem__(self, key):
+                raise IndexError("Bad index")
+
+        row = BadRow()
+        result = _get_row_value(row, "any_key")
+        assert result is None

@@ -389,6 +389,79 @@ def get_tickets_by_correlation_id(
         return []
 
 
+def _parse_metadata_value(value: Any) -> Optional[Dict[str, Any]]:
+    """Parse metadata value from database.
+
+    Args:
+        value: Metadata value (JSON string from SQLite or dict from PostgreSQL)
+
+    Returns:
+        Parsed metadata dict, empty dict on error, or None if value is None
+    """
+    if not value:
+        return None  # Preserve None for missing metadata
+
+    try:
+        # PostgreSQL JSONB returns dict, SQLite returns string
+        if isinstance(value, str):
+            parsed: Dict[str, Any] = json.loads(value)
+            return parsed
+        # Already a dict from PostgreSQL JSONB
+        return dict(value) if value else {}
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(
+            f"_parse_metadata_value: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}"
+        )
+        return {}
+
+
+def _parse_automated_value(value: Any) -> bool:
+    """Parse automated boolean value from database.
+
+    Args:
+        value: Automated value (INTEGER from SQLite or BOOLEAN from PostgreSQL)
+
+    Returns:
+        Boolean value (defaults to False if None)
+    """
+    return bool(value) if value is not None else False
+
+
+def _parse_datetime_value(value: Any) -> Optional[str]:
+    """Parse datetime value from database.
+
+    Args:
+        value: Datetime value (ISO string from SQLite or datetime from PostgreSQL)
+
+    Returns:
+        ISO string or None
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        # PostgreSQL returns datetime objects
+        return value.isoformat()
+    # SQLite returns ISO strings already
+    return str(value)
+
+
+def _get_row_value(row: Any, key: str) -> Any:
+    """Safely get value from database row.
+
+    Args:
+        row: Database row
+        key: Column name
+
+    Returns:
+        Column value or None if not found
+    """
+    try:
+        return row[key]
+    except (KeyError, IndexError) as e:
+        logger.debug(f"_get_row_value: Key {key} not found in row, using None. Error: {e}")
+        return None
+
+
 def _row_to_dict(row: Any) -> Dict[str, Any]:
     """Convert a database row to a dict.
 
@@ -422,39 +495,23 @@ def _row_to_dict(row: Any) -> Dict[str, Any]:
         "agent_occurrence_id",
     ]
 
-    for key in columns:
-        try:
-            value = row[key]
-        except (KeyError, IndexError) as e:
-            logger.debug(f"_row_to_dict: Key {key} not found in row, using None. Error: {e}")
-            value = None
+    # Datetime columns that need special parsing
+    datetime_columns = ("submitted_at", "deadline", "last_updated", "completed_at")
 
-        # Parse JSON metadata
-        if key == "metadata" and value:
-            try:
-                # PostgreSQL JSONB returns dict, SQLite returns string
-                result[key] = json.loads(value) if isinstance(value, str) else value
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(
-                    f"_row_to_dict: Failed to parse metadata, using empty dict. Error: {e}, value type: {type(value)}"
-                )
-                result[key] = {}
-        # Convert INTEGER booleans to Python bools (SQLite)
-        elif key == "automated":
-            result[key] = bool(value) if value is not None else False
-        # Skip created_at (internal only)
-        elif key == "created_at":
+    for key in columns:
+        # Skip internal-only column
+        if key == "created_at":
             continue
-        # Convert datetime objects to ISO strings (PostgreSQL TIMESTAMP → string for API)
-        elif key in ("submitted_at", "deadline", "last_updated", "completed_at"):
-            if value is None:
-                result[key] = None
-            elif isinstance(value, datetime):
-                # PostgreSQL returns datetime objects
-                result[key] = value.isoformat()
-            else:
-                # SQLite returns ISO strings already
-                result[key] = value
+
+        value = _get_row_value(row, key)
+
+        # Apply type-specific parsing
+        if key == "metadata":
+            result[key] = _parse_metadata_value(value)
+        elif key == "automated":
+            result[key] = _parse_automated_value(value)
+        elif key in datetime_columns:
+            result[key] = _parse_datetime_value(value)
         else:
             result[key] = value
 

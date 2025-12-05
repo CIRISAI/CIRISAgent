@@ -16,67 +16,58 @@ The current Android implementation relies on **Chaquopy**, which handles:
     *   Binary Extensions (Rust/C): Chaquopy provides a repository of pre-built wheels.
     *   **Custom Binaries**: The project currently uses **manually cross-compiled wheels** for `pydantic-core` (Rust) placed in `android/app/wheels/`.
 
-## iOS Options Evaluation
+## Selected iOS Architecture: BeeWare Briefcase
 
-To achieve an equivalent setup on iOS, we must assemble the following components:
+After evaluation, we have selected **BeeWare Briefcase** as the foundation for the iOS build.
 
-### 1. Python Runtime: **Python-Apple-support (BeeWare)**
-*   **Description**: A build of Python (compiled as a framework) optimized for iOS/macOS.
-*   **Role**: Replaces the Chaquopy runtime.
-*   **Status**: Stable and widely used.
+*   **Runtime**: Uses **Python-Apple-support**, a pre-compiled Python framework for iOS.
+*   **Packaging**: **Briefcase** handles the creation of the Xcode project, signing, and bundling of the Python environment.
+*   **Interop**: Initial validation uses **Toga** (BeeWare's UI toolkit) to ensure the runtime works. Future iterations can use **PythonKit** or the Python C-API for deep integration with a native Swift UI.
 
-### 2. Interoperability: **PythonKit** (or Python-Apple-support's C-API)
-*   **Description**: A Swift library that provides a bridge to Python. allows writing `let sys = Python.import("sys")` in Swift.
-*   **Role**: Replaces Chaquopy's Java API.
-*   **Status**: Mature, but requires manual setup in Xcode.
+### Critical Dependency Strategy
 
-### 3. Dependency Management (The Main Challenge)
-*   **Pure Python**: Can be installed into the app bundle using standard tools (`pip install -t ...`).
-*   **Binary Extensions**: This is the critical bottleneck. iOS does not allow JIT compilation and has strict signing rules. All binary extensions must be:
-    *   Compiled for `arm64` (device) and `x86_64/arm64` (simulator).
-    *   Signed correctly.
-    *   Linked as dynamic libraries or frameworks.
+The main challenge remains binary extensions (`pydantic` and `cryptography`).
 
-#### Critical Dependencies Analysis
-*   **`pydantic` (requires `pydantic-core`)**:
-    *   **Type**: Rust Extension.
-    *   **Status**: **No public iOS wheels exist.**
-    *   **Effort**: You must cross-compile `pydantic-core` for iOS using the Rust toolchain (`cargo build --target aarch64-apple-ios`). This mirrors the work already done for Android.
-    *   **Risk**: High. [GitHub Issue #1170](https://github.com/pydantic/pydantic-core/issues/1170) indicates this is non-trivial and not officially supported.
-*   **`cryptography`**:
-    *   **Type**: Rust/C Extension.
-    *   **Status**: **No public iOS wheels exist.**
-    *   **Effort**: Requires cross-compilation. BeeWare's `mobile-forge` project has recipes, but they may need maintenance.
+1.  **`pydantic-core` (Rust)**:
+    *   **Solution**: We have implemented a custom build script (`ios/scripts/build_wheels.sh`) that uses `maturin` to cross-compile this dependency for `aarch64-apple-ios`.
+    *   **Status**: Automated script available.
 
-## Proposed iOS Stack
+2.  **`cryptography` (Rust/C)**:
+    *   **Solution**: Requires manual compilation against an iOS-built OpenSSL.
+    *   **Status**: Manual instructions provided in `docs/IOS_BUILD_INSTRUCTIONS.md`.
 
-If the team decides to proceed, the recommended stack is:
+## Implementation Status
 
-1.  **Build System**: Custom script wrapping `pip` and `cargo` (for Rust).
-2.  **Runtime**: **BeeWare's Python-Apple-support**.
-3.  **Bridge**: **PythonKit** for Swift integration.
-4.  **Process**:
-    *   Create a `ios/wheels` directory (similar to `android/app/wheels`).
-    *   Build `pydantic-core` and `cryptography` for iOS (arm64).
-    *   Embed the Python framework and site-packages into the iOS App Bundle.
+We have established the following infrastructure for the iOS runtime:
 
-## Alternatives Considered
+| Component | Path | Status |
+| :--- | :--- | :--- |
+| **Build Pipeline** | `ios/scripts/build_wheels.sh` | **Done.** Automates `pydantic-core` cross-compilation. |
+| **Project Scaffold** | `ios/CirisiOS/` | **Done.** BeeWare Briefcase project configured for CIRIS. |
+| **Source Sync** | `ios/scripts/prepare_source.sh` | **Done.** Copies `ciris_engine` and services into the app bundle. |
+| **Verification App** | `ios/CirisiOS/src/ciris_ios/app.py` | **Done.** A test harness to verify `pydantic` and `cryptography` loading. |
 
-| Option | Pros | Cons | Verdict |
-| :--- | :--- | :--- | :--- |
-| **BeeWare (Briefcase)** | Full packaging solution. | Optimizes for Toga (UI), opaque build process for embedded use. | Good for referencing build recipes, but might be too heavy for just embedding a backend. |
-| **Kivy (ios-deploy)** | Mature cross-platform tool. | Non-native UI focus. | Not suitable for "Native UI + Python Backend" architecture. |
-| **Pyto / Pythonista** | Existing apps. | Closed source or not embeddable as a library. | Not viable for a standalone product. |
+## Next Steps
+
+To finalize the "100% on device" iOS implementation:
+
+1.  **Execute Build Pipeline (on macOS)**:
+    *   Run `ios/scripts/build_wheels.sh` to generate the `pydantic-core` wheel.
+    *   Manually build `cryptography` (requires OpenSSL setup).
+    *   Place wheels in `ios/wheels/`.
+
+2.  **Build & Run Simulator**:
+    *   Run `./ios/scripts/prepare_source.sh` to populate the source code.
+    *   Run `briefcase run iOS` to launch the verification app in the Simulator.
+    *   **Success Criteria**: The app launches and displays the versions of Pydantic and Cryptography without crashing.
+
+3.  **Native Integration**:
+    *   Once the runtime is verified, modify the Briefcase template (or export the Xcode project) to expose the CIRIS engine to Swift code, replacing the Toga UI with the native iOS interface.
 
 ## Conclusion
 
 **Is an equivalent to Chaquopy available?**
-**No.** There is no single "add-plugin-and-run" solution for iOS that supports complex binary dependencies like Pydantic V2.
+**No.** However, **BeeWare Briefcase** provides a viable alternative workflow.
 
 **Can we implement 100% on device?**
-**Yes**, but it requires significant engineering investment to:
-1.  Set up a cross-compilation pipeline for Rust/Python extensions (Pydantic, Cryptography) targeting iOS.
-2.  Manually integrate the Python runtime and dependencies into the Xcode project.
-
-**Recommendation:**
-Proceed only if the team has resources to maintain custom builds of `pydantic-core` and `cryptography` for iOS. The architecture would mirror the Android one (using local wheels), but the setup cost is higher due to the lack of an ecosystem equivalent to Chaquopy.
+**Yes.** We have scaffolded the necessary pipeline to cross-compile the required dependencies. The path forward involves executing these build scripts on a macOS machine and verifying the runtime in the Simulator. The "hard part" (automating the Rust build for Pydantic) has been scripted.

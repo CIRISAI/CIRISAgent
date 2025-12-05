@@ -1504,6 +1504,42 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
+    private fun showAdaptersFragment() {
+        Log.i(TAG, "Showing AdaptersFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = AdaptersFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "adapters_fragment")
+            .addToBackStack("adapters")
+            .commit()
+    }
+
+    private fun showTelemetryFragment() {
+        Log.i(TAG, "Showing TelemetryFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = TelemetryFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "telemetry_fragment")
+            .addToBackStack("telemetry")
+            .commit()
+    }
+
+    private fun showSessionsFragment() {
+        Log.i(TAG, "Showing SessionsFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = SessionsFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "sessions_fragment")
+            .addToBackStack("sessions")
+            .commit()
+    }
+
     private fun hideFragmentShowWebView() {
         Log.i(TAG, "Hiding fragment, showing WebView")
         // Hide fragment container, show WebView
@@ -1576,6 +1612,14 @@ class MainActivity : AppCompatActivity() {
                 navigateToWebPage("/tools")
                 true
             }
+            R.id.action_telemetry -> {
+                showTelemetryFragment()
+                true
+            }
+            R.id.action_adapters -> {
+                showAdaptersFragment()
+                true
+            }
             // Admin submenu items
             R.id.action_admin_system -> {
                 navigateToWebPage("/system")
@@ -1583,6 +1627,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_runtime -> {
                 navigateToWebPage("/runtime")
+                true
+            }
+            R.id.action_sessions -> {
+                showSessionsFragment()
                 true
             }
             R.id.action_config -> {

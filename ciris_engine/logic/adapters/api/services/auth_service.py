@@ -186,12 +186,14 @@ class APIAuthService:
                 # Check if link has email in metadata or as direct attribute
                 if hasattr(link, "email") and link.email:
                     oauth_email = link.email
-                    logger.debug(f"[AUTH DEBUG] Extracted email from link.email: {oauth_email}")
+                    masked = oauth_email[:3] + "***" if oauth_email else "None"  # NOSONAR - masked email for debug
+                    logger.debug(f"[AUTH DEBUG] Extracted email from link.email: {masked}")
                     break
                 elif hasattr(link, "metadata") and isinstance(link.metadata, dict):
                     if "email" in link.metadata:
                         oauth_email = link.metadata["email"]
-                        logger.debug(f"[AUTH DEBUG] Extracted email from link.metadata['email']: {oauth_email}")
+                        masked = oauth_email[:3] + "***" if oauth_email else "None"  # NOSONAR - masked email for debug
+                        logger.debug(f"[AUTH DEBUG] Extracted email from link.metadata['email']: {masked}")
                         break
         else:
             logger.debug(f"[AUTH DEBUG] No OAuth links found for {wa.wa_id}")
@@ -436,14 +438,13 @@ class APIAuthService:
         key_id = self._get_key_id(api_key)
         stored_key = self._api_keys.get(key_id)
 
-        # DEBUG: Log validation attempt with full context
-        key_preview = api_key[:20] + "..." if len(api_key) > 20 else api_key
-        all_key_ids = list(self._api_keys.keys())
+        # DEBUG: Log validation attempt with minimal context (key_id only, no key content)
+        all_key_ids = list(self._api_keys.keys())  # NOSONAR - key IDs are hashes, not secrets
         logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - Validating key_id={key_id} (key={key_preview})"
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - Validating key_id={key_id}"
         )
         logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - _api_keys has {len(self._api_keys)} keys: {all_key_ids}, dict_id={id(self._api_keys)}"
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - _api_keys has {len(self._api_keys)} keys, dict_id={id(self._api_keys)}"
         )
         logger.debug(
             f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - stored_key found: {stored_key is not None}"

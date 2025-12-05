@@ -1,21 +1,32 @@
-
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from typing import List
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ciris_engine.logic.services.governance.dsar.orchestrator import DSAROrchestrator
-from ciris_engine.schemas.consent.core import (
-    ConsentStatus, ConsentStream, DSARAccessPackage, DSARExportPackage,
-    DSARDeletionStatus, ConsentImpactReport, DSARExportFormat
+from ciris_engine.logic.services.governance.dsar.schemas import (
+    DataSourceExport,
+    MultiSourceDSARAccessPackage,
+    MultiSourceDSARExportPackage,
 )
-from ciris_engine.logic.services.governance.dsar.schemas import DataSourceExport, MultiSourceDSARAccessPackage, MultiSourceDSARExportPackage
+from ciris_engine.schemas.consent.core import (
+    ConsentImpactReport,
+    ConsentStatus,
+    ConsentStream,
+    DSARAccessPackage,
+    DSARDeletionStatus,
+    DSARExportFormat,
+    DSARExportPackage,
+)
+
 
 @pytest.fixture
 def mock_time_service():
     service = MagicMock()
     service.now.return_value = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     return service
+
 
 @pytest.fixture
 def mock_dsar_automation():
@@ -79,10 +90,12 @@ def mock_dsar_automation():
 
     return service
 
+
 @pytest.fixture
 def mock_consent_service():
     service = AsyncMock()
     return service
+
 
 @pytest.fixture
 def mock_tool_bus():
@@ -96,18 +109,10 @@ def mock_tool_bus():
     def execute_tool_side_effect(tool_name, parameters, handler_name=None):
         mock_res = MagicMock()
         if tool_name == "sql_export_user":
-            mock_res.data = {
-                "data": {"table1": [{"id": 1}]},
-                "tables_scanned": ["table1"],
-                "total_records": 1
-            }
+            mock_res.data = {"data": {"table1": [{"id": 1}]}, "tables_scanned": ["table1"], "total_records": 1}
         elif tool_name == "sql_delete_user":
             mock_res.success = True
-            mock_res.data = {
-                "success": True,
-                "tables_affected": ["table1"],
-                "total_records_deleted": 1
-            }
+            mock_res.data = {"success": True, "tables_affected": ["table1"], "total_records_deleted": 1}
         elif tool_name == "sql_verify_deletion":
             mock_res.data = {"zero_data_confirmed": True}
         return mock_res
@@ -115,10 +120,12 @@ def mock_tool_bus():
     bus.execute_tool.side_effect = execute_tool_side_effect
     return bus
 
+
 @pytest.fixture
 def mock_memory_bus():
     bus = AsyncMock()
     return bus
+
 
 @pytest.fixture
 def dsar_orchestrator(mock_time_service, mock_dsar_automation, mock_consent_service, mock_tool_bus, mock_memory_bus):
@@ -130,74 +137,85 @@ def dsar_orchestrator(mock_time_service, mock_dsar_automation, mock_consent_serv
         memory_bus=mock_memory_bus,
     )
 
+
 @pytest.mark.asyncio
 async def test_init(dsar_orchestrator):
     assert dsar_orchestrator._multi_source_requests == 0
 
+
 @pytest.mark.asyncio
 async def test_handle_access_request_multi_source(dsar_orchestrator):
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
-        mock_resolve.return_value = None # Mock identity resolution result
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
+        mock_resolve.return_value = None  # Mock identity resolution result
 
-        result = await dsar_orchestrator.handle_access_request_multi_source(
-            user_identifier="test_user@example.com"
-        )
+        result = await dsar_orchestrator.handle_access_request_multi_source(user_identifier="test_user@example.com")
 
         assert result.user_identifier == "test_user@example.com"
         assert len(result.external_sources) == 1
         assert result.external_sources[0].source_id == "sql_connector_1"
         assert result.total_records == 1
 
+
 @pytest.mark.asyncio
 async def test_handle_export_request_multi_source(dsar_orchestrator):
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
         result = await dsar_orchestrator.handle_export_request_multi_source(
-            user_identifier="test_user@example.com",
-            export_format=DSARExportFormat.JSON
+            user_identifier="test_user@example.com", export_format=DSARExportFormat.JSON
         )
 
         assert result.user_identifier == "test_user@example.com"
         assert result.export_format == "json"
         assert len(result.external_exports) == 1
 
+
 @pytest.mark.asyncio
 async def test_handle_deletion_request_multi_source(dsar_orchestrator):
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
-        result = await dsar_orchestrator.handle_deletion_request_multi_source(
-            user_identifier="test_user@example.com"
-        )
+        result = await dsar_orchestrator.handle_deletion_request_multi_source(user_identifier="test_user@example.com")
 
         assert result.user_identifier == "test_user@example.com"
         assert len(result.external_deletions) == 1
         assert result.external_deletions[0].success is True
         assert result.external_deletions[0].verification_passed is True
 
+
 @pytest.mark.asyncio
 async def test_handle_correction_request_multi_source(dsar_orchestrator):
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
         result = await dsar_orchestrator.handle_correction_request_multi_source(
-            user_identifier="test_user@example.com",
-            corrections={"name": "New Name"}
+            user_identifier="test_user@example.com", corrections={"name": "New Name"}
         )
 
         assert result.user_identifier == "test_user@example.com"
         assert "ciris" in result.corrections_by_source
         assert result.corrections_by_source["ciris"] == {"name": "New Name"}
 
+
 # --- Resilience Tests (Restored & Adapted) ---
+
 
 @pytest.mark.asyncio
 async def test_access_request_handles_ciris_failure_gracefully(dsar_orchestrator, mock_dsar_automation):
     """Test that access request creates empty package if CIRIS fails."""
     mock_dsar_automation.handle_access_request.side_effect = Exception("CIRIS unavailable")
 
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
         result = await dsar_orchestrator.handle_access_request_multi_source("test@example.com")
@@ -208,12 +226,15 @@ async def test_access_request_handles_ciris_failure_gracefully(dsar_orchestrator
         assert result.ciris_data is not None
         assert result.ciris_data.user_id == "test@example.com"
 
+
 @pytest.mark.asyncio
 async def test_export_request_handles_ciris_failure(dsar_orchestrator, mock_dsar_automation):
     """Test that export creates empty package if CIRIS export fails."""
     mock_dsar_automation.handle_export_request.side_effect = Exception("Export failed")
 
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
         result = await dsar_orchestrator.handle_export_request_multi_source(
@@ -224,13 +245,16 @@ async def test_export_request_handles_ciris_failure(dsar_orchestrator, mock_dsar
         assert isinstance(result, MultiSourceDSARExportPackage)
         assert result.ciris_export.file_size_bytes == 0
 
+
 @pytest.mark.asyncio
 async def test_access_request_continues_on_sql_failure(dsar_orchestrator, mock_tool_bus):
     """Test that access request continues if one SQL source fails."""
     # Tool bus fails execution
     mock_tool_bus.execute_tool.side_effect = Exception("Database timeout")
 
-    with patch("ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock) as mock_resolve:
+    with patch(
+        "ciris_engine.logic.utils.identity_resolution.resolve_user_identity", new_callable=AsyncMock
+    ) as mock_resolve:
         mock_resolve.return_value = None
 
         result = await dsar_orchestrator.handle_access_request_multi_source("test@example.com")

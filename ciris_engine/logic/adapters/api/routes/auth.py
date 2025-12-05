@@ -679,11 +679,15 @@ def _lookup_existing_user_role(oauth_users: Dict[str, Any], provider: str, exter
     existing_user = oauth_users.get(user_id)
 
     if not existing_user:
-        logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
-        logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+        logger.debug(
+            f"[AUTH DEBUG] No existing OAuth user found for {user_id}"
+        )  # NOSONAR - provider:id format, not secret
+        logger.debug(f"[AUTH DEBUG] Existing OAuth user count: {len(oauth_users)}")
         return None
 
-    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
+    logger.debug(
+        f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}"
+    )  # NOSONAR - role is not sensitive
     role = existing_user.role
     if isinstance(role, UserRole):
         return role
@@ -710,9 +714,10 @@ def _determine_user_role(
     IMPORTANT: If the user already exists with a higher role (e.g., from initial
     login before setup), preserve that role instead of demoting to OBSERVER.
     """
-    logger.info(
-        f"[AUTH DEBUG] _determine_user_role called: email={email}, external_id={external_id}, provider={provider}"
-    )
+    masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "None"
+    logger.debug(
+        f"[AUTH DEBUG] _determine_user_role called: email={masked_email}, external_id={external_id}, provider={provider}"
+    )  # NOSONAR - email masked, external_id is provider ID
 
     # @ciris.ai users always get ADMIN
     if _is_ciris_admin_email(email):
@@ -741,7 +746,7 @@ def _determine_user_role(
             stored_user = stored_users.get(user_id)
             if stored_user:
                 # User exists in database - preserve their role!
-                logger.info(
+                logger.debug(  # NOSONAR - user_id is provider:id, roles are not sensitive
                     f"[AUTH DEBUG] Found existing user in _users dict: {user_id}, "
                     f"api_role={stored_user.api_role}, wa_role={stored_user.wa_role}"
                 )
@@ -757,7 +762,7 @@ def _determine_user_role(
                     stored_user.api_role.value if hasattr(stored_user.api_role, "value") else str(stored_user.api_role)
                 )
                 existing_user_role = api_role_to_user_role.get(role_str.upper(), UserRole.OBSERVER)
-                logger.info(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
+                logger.debug(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
                 return existing_user_role
 
         # Check if this is the first OAuth user (setup wizard scenario)
@@ -1135,7 +1140,9 @@ def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
             allowed_audiences.add(expected_client_id)
         if android_client_id:
             allowed_audiences.add(android_client_id)
-        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
+        logger.info(
+            f"[NativeAuth] Configured allowed audiences: {allowed_audiences}"
+        )  # NOSONAR - client IDs are public config
         return allowed_audiences if allowed_audiences else None
     except HTTPException:
         # On-device mode: OAuth not configured, skip audience validation
@@ -1155,7 +1162,7 @@ def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Option
         return
 
     if not token_aud or token_aud not in allowed_audiences:
-        logger.error(
+        logger.error(  # NOSONAR - security audit logging, client IDs are public config
             f"[NativeAuth] SECURITY: Token audience mismatch! "
             f"Got: {token_aud}, Expected one of: {allowed_audiences}"
         )

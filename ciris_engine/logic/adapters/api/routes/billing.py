@@ -767,7 +767,9 @@ async def verify_google_play_purchase(
         "package_name": body.package_name,
     }
 
-    logger.info(f"[GOOGLE_PLAY_VERIFY] Sending to billing backend: oauth_provider={verify_payload['oauth_provider']}")
+    logger.info(
+        f"[GOOGLE_PLAY_VERIFY] Sending to billing backend: oauth_provider={verify_payload['oauth_provider']}"
+    )  # NOSONAR - provider type not secret
 
     # Get Google ID token for JWT pass-through mode (Android/native)
     # Android sends this in X-Google-ID-Token header for billing backend auth

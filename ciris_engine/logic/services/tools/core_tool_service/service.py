@@ -242,29 +242,229 @@ class CoreToolService(BaseService, ToolService):
             logger.error(f"Error reading experience document: {e}")
             return ToolResult(success=False, error=str(e))
 
-    async def _update_ticket(self, params: ToolParameters) -> ToolResult:
-        """Update ticket status or metadata during task processing."""
-        import logging
+    def _validate_ticket_id(self, params: ToolParameters) -> Optional[str]:
+        """Validate and extract ticket_id from parameters.
+
+        Returns:
+            ticket_id if valid, None otherwise
+        """
+        ticket_id = params.get("ticket_id")
+        if not ticket_id or not isinstance(ticket_id, str):
+            return None
+        return ticket_id
+
+    def _parse_metadata_json(
+        self, metadata_updates: Any, start_time: float
+    ) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+        """Parse metadata updates, handling JSON strings from CLI/mock LLM.
+
+        Args:
+            metadata_updates: Raw metadata updates (dict or JSON string)
+            start_time: Timer start for debug logging
+
+        Returns:
+            Tuple of (parsed_metadata, error_message). One will be None.
+        """
+        import json
         import time
 
-        logger = logging.getLogger(__name__)
+        # Handle JSON string from command-line tools (mock LLM, CLI)
+        if isinstance(metadata_updates, str):
+            try:
+                metadata_updates = json.loads(metadata_updates)
+                logger.debug(
+                    f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s PARSED_JSON metadata_updates={metadata_updates}"
+                )
+            except json.JSONDecodeError as e:
+                return None, f"metadata must be valid JSON: {e}"
+
+        if not isinstance(metadata_updates, dict):
+            return None, "metadata must be a dictionary or valid JSON string"
+
+        return metadata_updates, None
+
+    def _merge_single_stage(
+        self,
+        merged_stages: dict[str, Any],
+        stage_name: str,
+        stage_data: Any,
+        start_time: float,
+    ) -> None:
+        """Merge a single stage into the merged_stages dict in place.
+
+        Args:
+            merged_stages: Dictionary of merged stages (modified in place)
+            stage_name: Name of the stage to merge
+            stage_data: Data for the stage
+            start_time: Timer start for debug logging
+        """
+        import time
+
+        logger.debug(
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE " f"stage={stage_name} data={stage_data}"
+        )
+
+        if not isinstance(stage_data, dict):
+            return
+
+        if stage_name in merged_stages and isinstance(merged_stages[stage_name], dict):
+            # Merge existing stage
+            before = merged_stages[stage_name].copy()
+            merged_stages[stage_name] = {**merged_stages[stage_name], **stage_data}
+            logger.debug(
+                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGED_STAGE "
+                f"stage={stage_name} before={before} after={merged_stages[stage_name]}"
+            )
+        else:
+            # New stage
+            merged_stages[stage_name] = stage_data
+            logger.debug(
+                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE " f"stage={stage_name} data={stage_data}"
+            )
+
+    def _merge_stage_metadata(
+        self, current_metadata: dict[str, Any], metadata_updates: dict[str, Any], start_time: float
+    ) -> dict[str, Any]:
+        """Deep merge stage metadata, preserving existing stage data.
+
+        Args:
+            current_metadata: Current ticket metadata
+            metadata_updates: New metadata to merge
+            start_time: Timer start for debug logging
+
+        Returns:
+            Merged metadata dictionary
+        """
+        import time
+
+        # Shallow merge first
+        merged_metadata: dict[str, Any] = {**current_metadata, **metadata_updates}
+
+        # Deep merge for 'stages' key only
+        if "stages" not in metadata_updates or "stages" not in current_metadata:
+            return merged_metadata
+
+        merged_stages: dict[str, Any] = {**current_metadata.get("stages", {})}
+        stages_updates = metadata_updates.get("stages", {})
+
+        logger.debug(
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DEEP_MERGE_STAGES "
+            f"base_stages={list(merged_stages.keys())} update_stages={list(stages_updates.keys())}"
+        )
+
+        if isinstance(stages_updates, dict):
+            for stage_name, stage_data in stages_updates.items():
+                self._merge_single_stage(merged_stages, stage_name, stage_data, start_time)
+            merged_metadata["stages"] = merged_stages
+
+        return merged_metadata
+
+    def _update_ticket_status_only(
+        self, ticket_id: str, new_status: Any, params: ToolParameters, result_data: dict[str, Any]
+    ) -> Optional[ToolResult]:
+        """Update ticket status and add to result data.
+
+        Args:
+            ticket_id: Ticket ID to update
+            new_status: New status value
+            params: Tool parameters (for notes)
+            result_data: Result dictionary to update
+
+        Returns:
+            ToolResult with error if update fails, None if successful
+        """
+        from ciris_engine.logic.persistence.models.tickets import update_ticket_status
+
+        if not isinstance(new_status, str):
+            return ToolResult(success=False, error="status must be a string")
+
+        notes = params.get("notes")
+        notes_str = str(notes) if notes is not None else None
+        success = update_ticket_status(ticket_id, new_status, notes=notes_str, db_path=self._db_path)
+
+        if not success:
+            return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status")
+
+        result_data["updates"]["status"] = new_status
+        if notes:
+            result_data["updates"]["notes"] = notes
+
+        return None
+
+    def _update_ticket_metadata_only(
+        self,
+        ticket_id: str,
+        current_ticket: dict[str, Any],
+        metadata_updates: Any,
+        result_data: dict[str, Any],
+        start_time: float,
+    ) -> Optional[ToolResult]:
+        """Update ticket metadata with deep merge for stages.
+
+        Args:
+            ticket_id: Ticket ID to update
+            current_ticket: Current ticket data
+            metadata_updates: New metadata to merge
+            result_data: Result dictionary to update
+            start_time: Timer start for debug logging
+
+        Returns:
+            ToolResult with error if update fails, None if successful
+        """
+        import time
+
+        from ciris_engine.logic.persistence.models.tickets import update_ticket_metadata
+
+        logger.debug(
+            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s METADATA_UPDATE_START metadata_updates={metadata_updates}"
+        )
+
+        # Parse JSON if needed
+        parsed_metadata, error = self._parse_metadata_json(metadata_updates, start_time)
+        if error:
+            return ToolResult(success=False, error=error)
+
+        metadata_updates = parsed_metadata
+
+        # Get current metadata
+        current_metadata = current_ticket.get("metadata", {})
+        if not isinstance(current_metadata, dict):
+            current_metadata = {}
+
+        logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s BEFORE_MERGE current={current_metadata}")
+
+        # Deep merge with special handling for stages
+        merged_metadata = self._merge_stage_metadata(current_metadata, metadata_updates, start_time)
+
+        logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s AFTER_MERGE merged={merged_metadata}")
+
+        # Update database
+        success = update_ticket_metadata(ticket_id, merged_metadata, db_path=self._db_path)
+        logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DB_UPDATE_RESULT success={success}")
+
+        if not success:
+            return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} metadata")
+
+        result_data["updates"]["metadata"] = metadata_updates
+        return None
+
+    async def _update_ticket(self, params: ToolParameters) -> ToolResult:
+        """Update ticket status or metadata during task processing."""
+        import time
+
         start_time = time.time()
 
         try:
-            from ciris_engine.logic.persistence.models.tickets import (
-                get_ticket,
-                update_ticket_metadata,
-                update_ticket_status,
-            )
+            from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-            ticket_id = params.get("ticket_id")
-            if not ticket_id or not isinstance(ticket_id, str):
+            # Validate ticket_id
+            ticket_id = self._validate_ticket_id(params)
+            if not ticket_id:
                 return ToolResult(success=False, error=ERROR_TICKET_ID_REQUIRED)
 
             logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s START ticket_id={ticket_id}")
 
             # Get current ticket to validate and merge metadata
-            # Use self._db_path (None uses current config, otherwise uses provided path)
             current_ticket = get_ticket(ticket_id, db_path=self._db_path)
             if not current_ticket:
                 return ToolResult(success=False, error=f"Ticket {ticket_id} not found")
@@ -278,81 +478,18 @@ class CoreToolService(BaseService, ToolService):
             # Update status if provided
             new_status = params.get("status")
             if new_status:
-                if not isinstance(new_status, str):
-                    return ToolResult(success=False, error="status must be a string")
-                notes = params.get("notes")
-                notes_str = str(notes) if notes is not None else None
-                success = update_ticket_status(ticket_id, new_status, notes=notes_str, db_path=self._db_path)
-                if not success:
-                    return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} status")
-                result_data["updates"]["status"] = new_status
-                if notes:
-                    result_data["updates"]["notes"] = notes
+                error_result = self._update_ticket_status_only(ticket_id, new_status, params, result_data)
+                if error_result:
+                    return error_result
 
-            # Update metadata if provided (merge with existing, deep merge for stages)
+            # Update metadata if provided
             metadata_updates = params.get("metadata")
             if metadata_updates:
-                logger.debug(
-                    f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s METADATA_UPDATE_START metadata_updates={metadata_updates}"
+                error_result = self._update_ticket_metadata_only(
+                    ticket_id, current_ticket, metadata_updates, result_data, start_time
                 )
-
-                # Handle JSON string from command-line tools (mock LLM, CLI)
-                if isinstance(metadata_updates, str):
-                    import json
-
-                    try:
-                        metadata_updates = json.loads(metadata_updates)
-                        logger.debug(
-                            f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s PARSED_JSON metadata_updates={metadata_updates}"
-                        )
-                    except json.JSONDecodeError as e:
-                        return ToolResult(success=False, error=f"metadata must be valid JSON: {e}")
-
-                if not isinstance(metadata_updates, dict):
-                    return ToolResult(success=False, error="metadata must be a dictionary or valid JSON string")
-                current_metadata = current_ticket.get("metadata", {})
-                if not isinstance(current_metadata, dict):
-                    current_metadata = {}
-
-                logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s BEFORE_MERGE current={current_metadata}")
-
-                # Deep merge for 'stages' key
-                merged_metadata: dict[str, Any] = {**current_metadata, **metadata_updates}
-                if "stages" in metadata_updates and "stages" in current_metadata:
-                    # Deep merge stages: preserve existing stage data, update provided stages
-                    merged_stages: dict[str, Any] = {**current_metadata.get("stages", {})}
-                    stages_updates = metadata_updates.get("stages", {})
-                    logger.debug(
-                        f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DEEP_MERGE_STAGES base_stages={list(merged_stages.keys())} update_stages={list(stages_updates.keys())}"
-                    )
-                    if isinstance(stages_updates, dict):
-                        for stage_name, stage_data in stages_updates.items():
-                            logger.debug(
-                                f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGING_STAGE stage={stage_name} data={stage_data}"
-                            )
-                            if isinstance(stage_data, dict):
-                                if stage_name in merged_stages and isinstance(merged_stages[stage_name], dict):
-                                    # Merge stage data: preserve untouched fields, update provided fields
-                                    before = merged_stages[stage_name].copy()
-                                    merged_stages[stage_name] = {**merged_stages[stage_name], **stage_data}
-                                    logger.debug(
-                                        f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s MERGED_STAGE stage={stage_name} before={before} after={merged_stages[stage_name]}"
-                                    )
-                                else:
-                                    # New stage
-                                    merged_stages[stage_name] = stage_data
-                                    logger.debug(
-                                        f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s NEW_STAGE stage={stage_name} data={stage_data}"
-                                    )
-                        merged_metadata["stages"] = merged_stages
-
-                logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s AFTER_MERGE merged={merged_metadata}")
-
-                success = update_ticket_metadata(ticket_id, merged_metadata, db_path=self._db_path)
-                logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s DB_UPDATE_RESULT success={success}")
-                if not success:
-                    return ToolResult(success=False, error=f"Failed to update ticket {ticket_id} metadata")
-                result_data["updates"]["metadata"] = metadata_updates
+                if error_result:
+                    return error_result
 
             self._tickets_updated += 1
             logger.debug(f"[UPDATE_TICKET] T+{time.time()-start_time:.3f}s COMPLETE result={result_data}")

@@ -14,7 +14,7 @@ It does NOT provide service health, metrics, or general system status.
 
 import logging
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -406,71 +406,91 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         Only returns traces that haven't been exported yet (timestamp-based filtering).
         """
         try:
-            # Get telemetry service from runtime if available
-            if hasattr(self, "_runtime") and self._runtime:
-                telemetry_service = getattr(self._runtime, "telemetry_service", None)
-                if telemetry_service and hasattr(telemetry_service, "_recent_correlations"):
-                    # Initialize last export timestamp if not present
-                    if not hasattr(telemetry_service, "_last_trace_export_time"):
-                        from datetime import datetime, timezone
+            # Try to get traces from in-memory telemetry service
+            traces = self._get_traces_from_telemetry_service(limit)
+            if traces is not None:
+                return traces
 
-                        # Start from "now" so we only export NEW traces going forward
-                        telemetry_service._last_trace_export_time = datetime.now(timezone.utc)
-                        logger.info(
-                            f"Initialized trace export timestamp filter at {telemetry_service._last_trace_export_time}"
-                        )
-
-                    # Filter to only traces created AFTER last export
-                    from datetime import datetime, timezone
-
-                    last_export = telemetry_service._last_trace_export_time
-                    new_correlations = [c for c in telemetry_service._recent_correlations if c.timestamp > last_export]
-
-                    # Return up to limit newest traces
-                    correlations = new_correlations[-limit:] if new_correlations else []
-
-                    # Update last export time to the newest trace we're returning
-                    if correlations:
-                        telemetry_service._last_trace_export_time = max(c.timestamp for c in correlations)
-                        logger.debug(
-                            f"Retrieved {len(correlations)} NEW traces (after {last_export}), updated export time to {telemetry_service._last_trace_export_time}"
-                        )
-                    else:
-                        logger.debug(f"No new traces since last export at {last_export}")
-
-                    return list(correlations)
-                else:
-                    logger.debug("Telemetry service found but _recent_correlations not available, will query database")
-            else:
-                logger.warning("No _runtime reference on visibility service - cannot get telemetry service")
-
-            # Fallback: query from memory graph
-            # Query correlations from database (not memory graph)
-            # Correlations are stored in SQLite, not as graph nodes
-            from ciris_engine.logic.persistence.models.correlations import get_recent_correlations
-            from ciris_engine.schemas.services.graph_core import NodeType
-            from ciris_engine.schemas.telemetry.core import (
-                CorrelationType,
-                ServiceCorrelation,
-                ServiceCorrelationStatus,
-                ServiceRequestData,
-                ServiceResponseData,
-                TraceContext,
-            )
-
-            try:
-                # Get recent correlations from database
-                correlations = get_recent_correlations(limit=limit)
-                # The correlations are already ServiceCorrelation objects from the database
-                logger.debug(f"Retrieved {len(correlations)} traces from database")
-                return list(correlations)
-            except Exception as e:
-                # Log the error loudly
-                logger.error(f"Failed to get traces from database: {e}", exc_info=True)
-                return []
+            # Fallback to database
+            return await self._get_traces_from_database(limit)
 
         except Exception as e:
             logger.error(f"Failed to get recent traces: {e}")
+            return []
+
+    def _get_traces_from_telemetry_service(self, limit: int) -> Optional[List["ServiceCorrelation"]]:
+        """
+        Get traces from in-memory telemetry service.
+
+        Returns None if telemetry service is not available or doesn't have correlations.
+        """
+        # Check if runtime and telemetry service are available
+        if not hasattr(self, "_runtime") or not self._runtime:
+            logger.warning("No _runtime reference on visibility service - cannot get telemetry service")
+            return None
+
+        telemetry_service = getattr(self._runtime, "telemetry_service", None)
+        if not telemetry_service:
+            return None
+
+        if not hasattr(telemetry_service, "_recent_correlations"):
+            logger.debug("Telemetry service found but _recent_correlations not available, will query database")
+            return None
+
+        # Initialize export timestamp if needed
+        self._initialize_trace_export_timestamp(telemetry_service)
+
+        # Filter and return new traces
+        return self._filter_and_update_traces(telemetry_service, limit)
+
+    def _initialize_trace_export_timestamp(self, telemetry_service: Any) -> None:
+        """Initialize the last export timestamp on telemetry service if not present."""
+        if hasattr(telemetry_service, "_last_trace_export_time"):
+            return
+
+        from datetime import datetime, timezone
+
+        # Start from "now" so we only export NEW traces going forward
+        telemetry_service._last_trace_export_time = datetime.now(timezone.utc)
+        logger.info(f"Initialized trace export timestamp filter at {telemetry_service._last_trace_export_time}")
+
+    def _filter_and_update_traces(self, telemetry_service: Any, limit: int) -> List["ServiceCorrelation"]:
+        """Filter new traces and update the export timestamp."""
+        last_export = telemetry_service._last_trace_export_time
+        new_correlations = [c for c in telemetry_service._recent_correlations if c.timestamp > last_export]
+
+        # Return up to limit newest traces
+        correlations = new_correlations[-limit:] if new_correlations else []
+
+        # Update last export time to the newest trace we're returning
+        if correlations:
+            telemetry_service._last_trace_export_time = max(c.timestamp for c in correlations)
+            logger.debug(
+                f"Retrieved {len(correlations)} NEW traces (after {last_export}), "
+                f"updated export time to {telemetry_service._last_trace_export_time}"
+            )
+        else:
+            logger.debug(f"No new traces since last export at {last_export}")
+
+        return list(correlations)
+
+    async def _get_traces_from_database(self, limit: int) -> List["ServiceCorrelation"]:
+        """
+        Fallback method to get traces from database.
+
+        Returns empty list on error.
+        """
+        from ciris_engine.logic.persistence.models.correlations import get_recent_correlations
+
+        try:
+            # Get recent correlations from database
+            correlations = get_recent_correlations(limit=limit)
+            # The correlations are already ServiceCorrelation objects from the database
+            logger.debug(f"Retrieved {len(correlations)} traces from database")
+            return list(correlations)
+        except Exception as e:
+            # Log the error loudly
+            logger.error(f"Failed to get traces from database: {e}", exc_info=True)
             return []
 
     def _collect_custom_metrics(self) -> Dict[str, float]:

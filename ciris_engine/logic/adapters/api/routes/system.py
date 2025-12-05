@@ -922,6 +922,97 @@ async def get_services_status(
         )
 
 
+def _validate_shutdown_request(body: ShutdownRequest) -> None:
+    """Validate shutdown request confirmation."""
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="Confirmation required (confirm=true)")
+
+
+def _get_shutdown_service(request: Request) -> Any:
+    """Get shutdown service from runtime, raising HTTPException if not available."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        raise HTTPException(status_code=503, detail="Runtime not available")
+
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    if not shutdown_service:
+        raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
+
+    return shutdown_service, runtime
+
+
+def _check_shutdown_already_requested(shutdown_service: Any) -> None:
+    """Check if shutdown is already in progress."""
+    if shutdown_service.is_shutdown_requested():
+        existing_reason = shutdown_service.get_shutdown_reason()
+        raise HTTPException(status_code=409, detail=f"Shutdown already requested: {existing_reason}")
+
+
+def _build_shutdown_reason(body: ShutdownRequest, auth: AuthContext) -> str:
+    """Build and sanitize shutdown reason."""
+    reason = f"{body.reason} (API shutdown by {auth.user_id})"
+    if body.force:
+        reason += " [FORCED]"
+
+    # Sanitize reason for logging to prevent log injection
+    # Replace newlines and control characters with spaces
+    safe_reason = "".join(c if c.isprintable() and c not in "\n\r\t" else " " for c in reason)
+
+    return safe_reason
+
+
+def _create_audit_metadata(body: ShutdownRequest, auth: AuthContext, request: Request) -> Dict[str, Any]:
+    """Create metadata dict for shutdown audit event."""
+    is_service_account = auth.role.value == "SERVICE_ACCOUNT"
+    return {
+        "force": body.force,
+        "is_service_account": is_service_account,
+        "auth_role": auth.role.value,
+        "ip_address": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", "unknown"),
+        "request_path": str(request.url.path),
+    }
+
+
+async def _audit_shutdown_request(
+    request: Request, body: ShutdownRequest, auth: AuthContext, safe_reason: str
+) -> None:  # NOSONAR - async required for create_task
+    """Audit the shutdown request for security tracking."""
+    audit_service = getattr(request.app.state, "audit_service", None)
+    if not audit_service:
+        return
+
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+    audit_event = AuditEventData(
+        entity_id="system",
+        actor=auth.user_id,
+        outcome="initiated",
+        severity="high" if body.force else "warning",
+        action="system_shutdown",
+        resource="system",
+        reason=safe_reason,
+        metadata=_create_audit_metadata(body, auth, request),
+    )
+
+    import asyncio
+
+    # Store task reference to prevent garbage collection
+    # Using _ prefix to indicate we're intentionally not awaiting
+    _audit_task = asyncio.create_task(audit_service.log_event("system_shutdown_request", audit_event))
+
+
+async def _execute_shutdown(shutdown_service: Any, runtime: Any, body: ShutdownRequest, reason: str) -> None:
+    """Execute the shutdown with appropriate method based on force flag."""
+    if body.force:
+        # Forced shutdown: bypass thought processing, immediate termination
+        await shutdown_service.emergency_shutdown(reason, timeout_seconds=5)
+    else:
+        # Normal shutdown: allow thoughtful consideration via runtime
+        # The runtime's request_shutdown will call the shutdown service AND set global flags
+        runtime.request_shutdown(reason)
+
+
 @router.post("/shutdown", response_model=SuccessResponse[ShutdownResponse])
 async def shutdown_system(
     body: ShutdownRequest, request: Request, auth: AuthContext = Depends(require_admin)
@@ -934,79 +1025,30 @@ async def shutdown_system(
 
     Requires ADMIN role.
     """
-    # Validate confirmation
-    if not body.confirm:
-        raise HTTPException(status_code=400, detail="Confirmation required (confirm=true)")
-
-    # Get shutdown service from runtime
-    runtime = getattr(request.app.state, "runtime", None)
-    if not runtime:
-        raise HTTPException(status_code=503, detail="Runtime not available")
-
-    shutdown_service = getattr(runtime, "shutdown_service", None)
-    if not shutdown_service:
-        raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
-
     try:
+        # Validate and get required services
+        _validate_shutdown_request(body)
+        shutdown_service, runtime = _get_shutdown_service(request)
+
         # Check if already shutting down
-        if shutdown_service.is_shutdown_requested():
-            existing_reason = shutdown_service.get_shutdown_reason()
-            raise HTTPException(status_code=409, detail=f"Shutdown already requested: {existing_reason}")
+        _check_shutdown_already_requested(shutdown_service)
 
-        # Build shutdown reason
-        reason = f"{body.reason} (API shutdown by {auth.user_id})"
-        if body.force:
-            reason += " [FORCED]"
+        # Build and sanitize shutdown reason
+        safe_reason = _build_shutdown_reason(body, auth)
 
-        # Sanitize reason for logging to prevent log injection
-        # Replace newlines and control characters with spaces
-        safe_reason = "".join(c if c.isprintable() and c not in "\n\r\t" else " " for c in reason)
-
-        # Log shutdown request with sanitized reason
+        # Log shutdown request
         logger.warning(f"SHUTDOWN requested: {safe_reason}")
 
-        # Audit shutdown request - especially important for service tokens
-        audit_service = getattr(request.app.state, "audit_service", None)
-        if audit_service:
-            from ciris_engine.schemas.services.graph.audit import AuditEventData
+        # Audit shutdown request
+        await _audit_shutdown_request(request, body, auth, safe_reason)
 
-            # Check if this is a service account
-            is_service_account = auth.role.value == "SERVICE_ACCOUNT"
-            audit_event = AuditEventData(
-                entity_id="system",
-                actor=auth.user_id,
-                outcome="initiated",
-                severity="high" if body.force else "warning",
-                action="system_shutdown",
-                resource="system",
-                reason=safe_reason,
-                metadata={
-                    "force": body.force,
-                    "is_service_account": is_service_account,
-                    "auth_role": auth.role.value,
-                    "ip_address": request.client.host if request.client else "unknown",
-                    "user_agent": request.headers.get("user-agent", "unknown"),
-                    "request_path": str(request.url.path),
-                },
-            )
-            import asyncio
+        # Execute shutdown
+        await _execute_shutdown(shutdown_service, runtime, body, safe_reason)
 
-            # Store task reference to prevent garbage collection
-            # Using _ prefix to indicate we're intentionally not awaiting
-            _audit_task = asyncio.create_task(audit_service.log_event("system_shutdown_request", audit_event))
-
-        # Execute shutdown - use emergency_shutdown for force=true to skip thought processing
-        if body.force:
-            # Forced shutdown: bypass thought processing, immediate termination
-            await shutdown_service.emergency_shutdown(reason, timeout_seconds=5)
-        else:
-            # Normal shutdown: allow thoughtful consideration via runtime
-            # The runtime's request_shutdown will call the shutdown service AND set global flags
-            runtime.request_shutdown(reason)
-
+        # Create response
         response = ShutdownResponse(
             status="initiated",
-            message=f"System shutdown initiated: {reason}",
+            message=f"System shutdown initiated: {safe_reason}",
             shutdown_initiated=True,
             timestamp=datetime.now(timezone.utc),
         )

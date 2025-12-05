@@ -105,11 +105,19 @@ class TestOpenAIConfig:
 class TestLLMPricingCalculator:
     """Tests for LLMPricingCalculator."""
 
-    def test_calculate_cost_and_impact(self):
+    @pytest.fixture
+    def pricing_config(self):
+        """Create isolated pricing config to avoid global state race conditions."""
+        from ciris_engine.config.pricing_models import PricingConfig
+
+        return PricingConfig.load_from_file()
+
+    def test_calculate_cost_and_impact(self, pricing_config):
         """Calculates cost and impact correctly."""
         from ciris_engine.logic.services.runtime.llm_service.pricing_calculator import LLMPricingCalculator
 
-        calculator = LLMPricingCalculator()
+        # Use explicit config to avoid global singleton race conditions
+        calculator = LLMPricingCalculator(pricing_config=pricing_config)
         usage = calculator.calculate_cost_and_impact(
             model_name="gpt-4o-mini",
             prompt_tokens=100,
@@ -123,11 +131,12 @@ class TestLLMPricingCalculator:
         assert usage.tokens_used == 150
         assert usage.cost_cents >= 0
 
-    def test_unknown_model_defaults(self):
+    def test_unknown_model_defaults(self, pricing_config):
         """Unknown model uses default pricing."""
         from ciris_engine.logic.services.runtime.llm_service.pricing_calculator import LLMPricingCalculator
 
-        calculator = LLMPricingCalculator()
+        # Use explicit config to avoid global singleton race conditions
+        calculator = LLMPricingCalculator(pricing_config=pricing_config)
         usage = calculator.calculate_cost_and_impact(
             model_name="unknown-model-xyz",
             prompt_tokens=100,

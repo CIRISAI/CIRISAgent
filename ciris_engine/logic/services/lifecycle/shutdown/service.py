@@ -276,6 +276,26 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         logger.critical(f"EMERGENCY SHUTDOWN: {reason}")
 
         # Set emergency flags
+        self._set_emergency_flags(reason)
+
+        # Set shutdown event immediately
+        if self._shutdown_event:
+            self._shutdown_event.set()
+
+        # Notify all handlers with timeout
+        await self._execute_handlers_with_timeout(timeout_seconds)
+
+        # Start force kill timer
+        self._force_kill_task = asyncio.create_task(self._force_kill_after_timeout(timeout_seconds))
+
+        # Try graceful exit first
+        logger.info("Attempting graceful exit...")
+        import sys
+
+        sys.exit(1)
+
+    def _set_emergency_flags(self, reason: str) -> None:
+        """Set emergency shutdown flags and update metrics."""
         with self._lock:
             self._shutdown_requested = True
             self._shutdown_reason = f"EMERGENCY: {reason}"
@@ -283,11 +303,8 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
             self._shutdown_requests_total += 1
             self._shutdown_emergency_total += 1
 
-        # Set shutdown event immediately
-        if self._shutdown_event:
-            self._shutdown_event.set()
-
-        # Notify all handlers with timeout
+    async def _execute_handlers_with_timeout(self, timeout_seconds: int) -> None:
+        """Execute shutdown handlers with timeout protection."""
         try:
             # Execute sync handlers first (quick)
             self._execute_sync_handlers()
@@ -301,54 +318,61 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         except Exception as e:
             logger.error(f"Error during emergency shutdown: {e}")
 
-        # Force termination after timeout
-        async def force_kill() -> None:
-            await asyncio.sleep(timeout_seconds)
-            logger.critical("Emergency shutdown timeout reached - forcing termination")
-            import os
-            import signal
+    async def _force_kill_after_timeout(self, timeout_seconds: int) -> None:
+        """Force process termination after timeout period."""
+        await asyncio.sleep(timeout_seconds)
+        logger.critical("Emergency shutdown timeout reached - forcing termination")
 
-            # Safety check: only kill our own process
-            pid = os.getpid()
-            logger.critical(f"Sending SIGKILL to process {pid}")
+        import os
+        import signal
 
-            try:
-                # Use platform-specific signals
-                # SIGKILL doesn't exist on Windows - use SIGTERM or sys.exit
-                if hasattr(signal, "SIGKILL"):
-                    # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-                    os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
-                elif hasattr(signal, "SIGTERM"):
-                    # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-                    os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
-                else:
-                    # Windows fallback - just exit
-                    import sys
+        # Safety check: only kill our own process
+        pid = os.getpid()
+        logger.critical(f"Sending SIGKILL to process {pid}")
 
-                    sys.exit(1)
-            except (OSError, AttributeError) as e:
-                logger.error(f"Failed to force kill process: {e}")
-                # If primary signal fails, try SIGTERM as fallback
-                try:
-                    if hasattr(signal, "SIGTERM"):
-                        # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-                        os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
-                    else:
-                        # Windows fallback
-                        import sys
+        self._send_kill_signal(pid, signal)
 
-                        sys.exit(1)
-                except (OSError, AttributeError):
-                    # Last resort
-                    import sys
+    def _send_kill_signal(self, pid: int, signal: Any) -> None:
+        """Send kill signal to process with platform-specific handling."""
+        try:
+            self._try_primary_signal(pid, signal)
+        except (OSError, AttributeError) as e:
+            logger.error(f"Failed to force kill process: {e}")
+            self._try_fallback_signal(pid, signal)
 
-                    sys.exit(1)
+    def _try_primary_signal(self, pid: int, signal: Any) -> None:
+        """Try to send primary kill signal (SIGKILL or SIGTERM)."""
+        import os
 
-        # Start force kill timer
-        self._force_kill_task = asyncio.create_task(force_kill())
+        # Use platform-specific signals
+        # SIGKILL doesn't exist on Windows - use SIGTERM or sys.exit
+        if hasattr(signal, "SIGKILL"):
+            # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+            os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
+        elif hasattr(signal, "SIGTERM"):
+            # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+            os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
+        else:
+            # Windows fallback - just exit
+            import sys
 
-        # Try graceful exit first
-        logger.info("Attempting graceful exit...")
-        import sys
+            sys.exit(1)
 
-        sys.exit(1)
+    def _try_fallback_signal(self, pid: int, signal: Any) -> None:
+        """Try fallback kill signal if primary fails."""
+        import os
+
+        try:
+            if hasattr(signal, "SIGTERM"):
+                # NOSONAR: Safe - only sending signal to our own process (os.getpid())
+                os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
+            else:
+                # Windows fallback
+                import sys
+
+                sys.exit(1)
+        except (OSError, AttributeError):
+            # Last resort
+            import sys
+
+            sys.exit(1)

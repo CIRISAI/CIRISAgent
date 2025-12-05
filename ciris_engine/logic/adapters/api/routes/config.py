@@ -23,45 +23,53 @@ router = APIRouter(prefix="/config", tags=["config"])
 # Request/Response schemas
 
 
-def wrap_config_value(value: Any) -> ConfigValueWrapper:
+def _has_typed_field_set(wrapper: ConfigValueWrapper) -> bool:
+    """Check if ConfigValueWrapper has at least one typed field set."""
+    return (
+        wrapper.string_value is not None
+        or wrapper.int_value is not None
+        or wrapper.float_value is not None
+        or wrapper.bool_value is not None
+        or wrapper.list_value is not None
+        or wrapper.dict_value is not None
+    )
+
+
+def _try_extract_primitive_value(value: ConfigValueWrapper) -> Any:
+    """Try to extract primitive value from ConfigValueWrapper.
+
+    Returns the primitive value if extraction succeeds, None otherwise.
     """
-    Wrap a raw value into ConfigValueWrapper format for TypeScript SDK compatibility.
+    if not hasattr(value, "value"):
+        return None
 
-    The TypeScript SDK expects values in a wrapped format with typed fields:
-    { string_value: "foo", int_value: null, ... }
-    """
-    # Handle ConfigValue objects by extracting their primitive value
-    # This is a defensive check - normally callers should extract .value before calling this function
-    if isinstance(value, ConfigValueWrapper):
-        # Check if it's already properly wrapped (has at least one typed field set)
-        has_typed_field = (
-            value.string_value is not None
-            or value.int_value is not None
-            or value.float_value is not None
-            or value.bool_value is not None
-            or value.list_value is not None
-            or value.dict_value is not None
-        )
+    try:
+        primitive_value = value.value
+        if primitive_value is not None and not isinstance(primitive_value, ConfigValueWrapper):
+            return primitive_value
+    except Exception:
+        pass
 
-        if has_typed_field:
-            # Already properly wrapped with typed fields, return as-is (preserves identity)
-            return value
+    return None
 
-        # All typed fields are None - might be an improperly passed ConfigValue object
-        # Try to extract the primitive value and wrap it properly
-        if hasattr(value, "value"):
-            try:
-                primitive_value = value.value
-                # If .value returns a non-None primitive, wrap it
-                if primitive_value is not None and not isinstance(primitive_value, ConfigValueWrapper):
-                    return wrap_config_value(primitive_value)
-            except Exception:
-                # If extraction fails, fall through to return the object as-is
-                pass
 
-        # All fields are None, return as-is (represents None/empty value)
+def _handle_config_value_wrapper(value: ConfigValueWrapper) -> ConfigValueWrapper:
+    """Handle ConfigValueWrapper input, returning properly wrapped value."""
+    # Already properly wrapped with typed fields
+    if _has_typed_field_set(value):
         return value
 
+    # Try to extract and re-wrap primitive value
+    primitive_value = _try_extract_primitive_value(value)
+    if primitive_value is not None:
+        return wrap_config_value(primitive_value)
+
+    # All fields are None, return as-is (represents None/empty value)
+    return value
+
+
+def _wrap_primitive_value(value: Any) -> ConfigValueWrapper:
+    """Wrap a primitive Python value into ConfigValueWrapper."""
     if value is None:
         return ConfigValueWrapper()
     elif isinstance(value, str):
@@ -79,6 +87,21 @@ def wrap_config_value(value: Any) -> ConfigValueWrapper:
     else:
         # Fallback: convert to string (e.g., for custom objects)
         return ConfigValueWrapper(string_value=str(value))
+
+
+def wrap_config_value(value: Any) -> ConfigValueWrapper:
+    """
+    Wrap a raw value into ConfigValueWrapper format for TypeScript SDK compatibility.
+
+    The TypeScript SDK expects values in a wrapped format with typed fields:
+    { string_value: "foo", int_value: null, ... }
+    """
+    # Handle ConfigValue objects by extracting their primitive value
+    if isinstance(value, ConfigValueWrapper):
+        return _handle_config_value_wrapper(value)
+
+    # Handle primitive values
+    return _wrap_primitive_value(value)
 
 
 class ConfigItemResponse(BaseModel):

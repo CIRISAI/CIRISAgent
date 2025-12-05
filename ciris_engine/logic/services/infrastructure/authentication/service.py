@@ -405,7 +405,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         confidence=1.0,
                         source="oauth",
                     )
-                    logger.info(f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}")
+                    logger.info(
+                        f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}"
+                    )  # NOSONAR - IDs not secrets
                 except Exception as e:
                     logger.warning(f"Failed to create identity mapping for OAuth link: {e}")
                     # Non-fatal - OAuth link still works even if graph mapping fails

@@ -679,11 +679,15 @@ def _lookup_existing_user_role(oauth_users: Dict[str, Any], provider: str, exter
     existing_user = oauth_users.get(user_id)
 
     if not existing_user:
-        logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
-        logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+        logger.debug(
+            f"[AUTH DEBUG] No existing OAuth user found for {user_id}"
+        )  # NOSONAR - provider:id format, not secret
+        logger.debug(f"[AUTH DEBUG] Existing OAuth user count: {len(oauth_users)}")
         return None
 
-    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
+    logger.debug(
+        f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}"
+    )  # NOSONAR - role is not sensitive
     role = existing_user.role
     if isinstance(role, UserRole):
         return role
@@ -693,6 +697,50 @@ def _lookup_existing_user_role(oauth_users: Dict[str, Any], provider: str, exter
 def _is_first_oauth_user(oauth_users: Optional[Dict[str, Any]]) -> bool:
     """Check if this would be the first OAuth user (empty oauth_users dict)."""
     return oauth_users is not None and len(oauth_users) == 0
+
+
+def _check_stored_user_role(auth_service: "APIAuthService", provider: str, external_id: str) -> Optional[UserRole]:
+    """Check for existing user in _users dict and return their role if found."""
+    user_id = f"{provider}:{external_id}"
+    stored_users = getattr(auth_service, "_users", {})
+    stored_user = stored_users.get(user_id)
+
+    if not stored_user:
+        return None
+
+    # User exists in database - preserve their role!
+    logger.debug(  # NOSONAR - user_id is provider:id, roles are not sensitive
+        f"[AUTH DEBUG] Found existing user in _users dict: {user_id}, "
+        f"api_role={stored_user.api_role}, wa_role={stored_user.wa_role}"
+    )
+
+    # Convert APIRole to UserRole
+    api_role_to_user_role = {
+        "OBSERVER": UserRole.OBSERVER,
+        "ADMIN": UserRole.ADMIN,
+        "AUTHORITY": UserRole.ADMIN,  # AUTHORITY maps to ADMIN
+        "SYSTEM_ADMIN": UserRole.SYSTEM_ADMIN,
+        "SERVICE_ACCOUNT": UserRole.SYSTEM_ADMIN,  # Service accounts get full access
+    }
+    role_str = stored_user.api_role.value if hasattr(stored_user.api_role, "value") else str(stored_user.api_role)
+    existing_user_role = api_role_to_user_role.get(role_str.upper(), UserRole.OBSERVER)
+    logger.debug(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
+    return existing_user_role
+
+
+def _check_first_oauth_user_status(
+    auth_service: "APIAuthService", oauth_users: Optional[Dict[str, Any]], provider: str, external_id: Optional[str]
+) -> bool:
+    """Check if this is the first OAuth user (setup wizard scenario)."""
+    if not _is_first_oauth_user(oauth_users):
+        return False
+
+    # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
+    stored_users = getattr(auth_service, "_users", {})
+    user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
+    user_in_stored = user_id_check and user_id_check in stored_users
+
+    return not user_in_stored
 
 
 def _determine_user_role(
@@ -710,15 +758,17 @@ def _determine_user_role(
     IMPORTANT: If the user already exists with a higher role (e.g., from initial
     login before setup), preserve that role instead of demoting to OBSERVER.
     """
-    logger.info(
-        f"[AUTH DEBUG] _determine_user_role called: email={email}, external_id={external_id}, provider={provider}"
-    )
+    masked_email = (email[:3] + "***@" + email.split("@")[-1]) if email and "@" in email else "None"
+    logger.debug(
+        f"[AUTH DEBUG] _determine_user_role called: email={masked_email}, external_id={external_id}, provider={provider}"
+    )  # NOSONAR - email masked, external_id is provider ID
 
     # @ciris.ai users always get ADMIN
     if _is_ciris_admin_email(email):
         logger.debug("[AUTH DEBUG] Granting ADMIN role to @ciris.ai user")
         return UserRole.ADMIN
 
+    # No auth service - return default role
     if auth_service is None:
         logger.info("[AUTH DEBUG] No auth_service provided - returning OBSERVER role")
         return UserRole.OBSERVER
@@ -733,40 +783,14 @@ def _determine_user_role(
             if existing_role is not None:
                 return existing_role
 
-        # ALSO check _users dict (for users loaded from database via OAuth link during setup)
-        # This is critical for setup wizard users who were minted as WA before first OAuth login
+        # Check _users dict (for users loaded from database via OAuth link during setup)
         if external_id:
-            user_id = f"{provider}:{external_id}"
-            stored_users = getattr(auth_service, "_users", {})
-            stored_user = stored_users.get(user_id)
-            if stored_user:
-                # User exists in database - preserve their role!
-                logger.info(
-                    f"[AUTH DEBUG] Found existing user in _users dict: {user_id}, "
-                    f"api_role={stored_user.api_role}, wa_role={stored_user.wa_role}"
-                )
-                # Convert APIRole to UserRole
-                api_role_to_user_role = {
-                    "OBSERVER": UserRole.OBSERVER,
-                    "ADMIN": UserRole.ADMIN,
-                    "AUTHORITY": UserRole.ADMIN,  # AUTHORITY maps to ADMIN
-                    "SYSTEM_ADMIN": UserRole.SYSTEM_ADMIN,
-                    "SERVICE_ACCOUNT": UserRole.SYSTEM_ADMIN,  # Service accounts get full access
-                }
-                role_str = (
-                    stored_user.api_role.value if hasattr(stored_user.api_role, "value") else str(stored_user.api_role)
-                )
-                existing_user_role = api_role_to_user_role.get(role_str.upper(), UserRole.OBSERVER)
-                logger.info(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
-                return existing_user_role
+            stored_role = _check_stored_user_role(auth_service, provider, external_id)
+            if stored_role is not None:
+                return stored_role
 
         # Check if this is the first OAuth user (setup wizard scenario)
-        # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
-        stored_users = getattr(auth_service, "_users", {})
-        user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
-        user_in_stored = user_id_check and user_id_check in stored_users
-
-        if _is_first_oauth_user(oauth_users) and not user_in_stored:
+        if _check_first_oauth_user_status(auth_service, oauth_users, provider, external_id):
             logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
             return UserRole.SYSTEM_ADMIN
 
@@ -1135,7 +1159,9 @@ def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
             allowed_audiences.add(expected_client_id)
         if android_client_id:
             allowed_audiences.add(android_client_id)
-        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
+        logger.info(
+            f"[NativeAuth] Configured allowed audiences: {allowed_audiences}"
+        )  # NOSONAR - client IDs are public config
         return allowed_audiences if allowed_audiences else None
     except HTTPException:
         # On-device mode: OAuth not configured, skip audience validation
@@ -1155,7 +1181,7 @@ def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Option
         return
 
     if not token_aud or token_aud not in allowed_audiences:
-        logger.error(
+        logger.error(  # NOSONAR - security audit logging, client IDs are public config
             f"[NativeAuth] SECURITY: Token audience mismatch! "
             f"Got: {token_aud}, Expected one of: {allowed_audiences}"
         )
@@ -1225,6 +1251,50 @@ def _log_email_verification_warning(token_info: Dict[str, Any]) -> None:
         logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
 
 
+async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
+    """Call Google's tokeninfo API and return the response JSON."""
+    import httpx
+
+    logger.info("[NativeAuth] Calling Google tokeninfo API...")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
+        logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
+
+        if response.status_code != 200:
+            logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
+            )
+
+        token_info: Dict[str, Any] = response.json()
+        return token_info
+
+
+def _validate_all_token_claims(token_info: Dict[str, Any], allowed_audiences: Optional[Set[str]]) -> None:
+    """Validate all required token claims (audience, issuer, expiry, sub)."""
+    # SECURITY: Validate all token claims
+    _validate_token_audience(token_info.get("aud"), allowed_audiences)
+    _validate_token_issuer(token_info.get("iss"))
+    _validate_token_expiry(token_info.get("exp"))
+    _log_email_verification_warning(token_info)
+    _validate_token_sub_claim(token_info.get("sub"))
+
+
+def _extract_user_info_from_token(token_info: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """Extract user information from validated token."""
+    sub = token_info.get("sub")
+    logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
+
+    return {
+        "external_id": sub,
+        "email": token_info.get("email"),
+        "name": token_info.get("name"),
+        "picture": token_info.get("picture"),
+    }
+
+
 async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
     """
     Verify a Google ID token and extract user info.
@@ -1248,42 +1318,19 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
 
     # Verify with Google's tokeninfo endpoint
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            logger.info("[NativeAuth] Calling Google tokeninfo API...")
-            response = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
-            logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
+        token_info = await _call_google_tokeninfo_api(id_token)
 
-            if response.status_code != 200:
-                logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
-                )
+        logger.info(
+            f"[NativeAuth] Token info received - sub: {token_info.get('sub')}, "
+            f"email: {token_info.get('email')}, aud: {token_info.get('aud')}, "
+            f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
+        )
 
-            token_info = response.json()
-            logger.info(
-                f"[NativeAuth] Token info received - sub: {token_info.get('sub')}, "
-                f"email: {token_info.get('email')}, aud: {token_info.get('aud')}, "
-                f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
-            )
+        # Validate all token claims
+        _validate_all_token_claims(token_info, allowed_audiences)
 
-            # SECURITY: Validate all token claims
-            _validate_token_audience(token_info.get("aud"), allowed_audiences)
-            _validate_token_issuer(token_info.get("iss"))
-            _validate_token_expiry(token_info.get("exp"))
-            _log_email_verification_warning(token_info)
-
-            sub = token_info.get("sub")
-            _validate_token_sub_claim(sub)
-
-            logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
-
-            return {
-                "external_id": sub,
-                "email": token_info.get("email"),
-                "name": token_info.get("name"),
-                "picture": token_info.get("picture"),
-            }
+        # Extract and return user info
+        return _extract_user_info_from_token(token_info)
 
     except HTTPException:
         raise

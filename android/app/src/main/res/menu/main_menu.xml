@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- System dropdown menu -->
+    <item
+        android:id="@+id/action_system"
+        android:title="System"
+        android:icon="@drawable/ic_system"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/action_memory_graph"
+                android:title="Memory Graph" />
+            <item
+                android:id="@+id/action_dashboard"
+                android:title="System Details" />
+            <item
+                android:id="@+id/action_tools"
+                android:title="Tools" />
+        </menu>
+    </item>
+
+    <!-- Admin dropdown menu -->
+    <item
+        android:id="@+id/action_admin"
+        android:title="Admin"
+        android:icon="@drawable/ic_admin"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/action_admin_system"
+                android:title="System" />
+            <item
+                android:id="@+id/action_runtime"
+                android:title="Runtime Control" />
+            <item
+                android:id="@+id/action_config"
+                android:title="Config" />
+            <item
+                android:id="@+id/action_users"
+                android:title="Users" />
+            <item
+                android:id="@+id/action_wa"
+                android:title="Wise Authority" />
+            <item
+                android:id="@+id/action_api_explorer"
+                android:title="API Explorer" />
+            <item
+                android:id="@+id/action_api_docs"
+                android:title="API Docs" />
+            <item
+                android:id="@+id/action_audit"
+                android:title="Audit" />
+            <item
+                android:id="@+id/action_logs"
+                android:title="Logs" />
+        </menu>
+    </item>
+
+    <!-- Account menu (meatball) -->
+    <item
+        android:id="@+id/action_account"
+        android:title="@string/action_account"
+        android:icon="@drawable/ic_meatball"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/action_account_settings"
+                android:title="Account Settings" />
+            <item
+                android:id="@+id/action_settings"
+                android:title="Settings" />
+            <item
+                android:id="@+id/action_consent"
+                android:title="Consent Management" />
+            <item
+                android:id="@+id/action_privacy"
+                android:title="Privacy Settings" />
+            <item
+                android:id="@+id/action_api_keys"
+                android:title="API Keys" />
+            <item
+                android:id="@+id/action_billing"
+                android:title="Billing" />
+            <group android:id="@+id/group_logout">
+                <item
+                    android:id="@+id/action_logout"
+                    android:title="Logout" />
+            </group>
+        </menu>
+    </item>
+
+    <!-- Overflow menu items -->
+    <item
+        android:id="@+id/action_refresh"
+        android:title="@string/action_refresh"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_interact"
+        android:title="Open Reasoning Stream"
+        app:showAsAction="never" />
+
+</menu>

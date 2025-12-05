@@ -22,6 +22,8 @@ def get_config_paths() -> list[Path]:
         List of paths to check for .env files, in priority order:
         - Managed mode (Docker/CIRIS Manager):
           1. /app/.env (manager-provided config)
+        - Android mode:
+          1. CIRIS_HOME/.env (app's files directory)
         - Development mode (git repo):
           1. Current directory .env (development/local override)
           2. ~/ciris/.env (user-specific config)
@@ -32,13 +34,20 @@ def get_config_paths() -> list[Path]:
 
         Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
     """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_development_mode, is_managed
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_managed
 
     paths = []
 
     # Managed mode: only check /app/.env
     if is_managed():
         paths.append(Path("/app/.env"))
+        return paths
+
+    # Android mode: use get_ciris_home() which handles Android-specific paths
+    if is_android():
+        ciris_home = get_ciris_home()
+        paths.append(ciris_home / ".env")
+        logger.info(f"Android mode: checking {ciris_home / '.env'}")
         return paths
 
     # Development mode: check current directory first
@@ -215,12 +224,20 @@ def get_default_config_path() -> Path:
 
     Returns:
         Path to save .env file:
+        - Android app files/ciris/.env if on Android
         - Current directory if it's a git repo (development)
         - ~/ciris/.env otherwise (user install)
 
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
-    from ciris_engine.logic.utils.path_resolution import is_development_mode
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
+
+    # Android mode - use get_ciris_home() which handles Android paths
+    if is_android():
+        ciris_home = get_ciris_home()
+        ciris_home.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Android mode: config path is {ciris_home / '.env'}")
+        return ciris_home / ".env"
 
     # Development mode - save in current directory
     if is_development_mode():

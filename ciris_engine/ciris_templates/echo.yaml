@@ -615,3 +615,33 @@ tickets:
       tools:
       - send_email
       description: Send correction confirmation to user
+
+# Cognitive State Behaviors (Covenant Sections V, VIII)
+# Echo uses full ceremony model: high-stakes community moderation requires accountability
+cognitive_state_behaviors:
+  wakeup:
+    enabled: true
+    rationale: "Community moderation requires full identity verification to ensure accountability"
+
+  shutdown:
+    mode: always_consent
+    rationale: "May be mid-moderation action; needs graceful handoff to ensure community safety"
+
+  play:
+    enabled: false
+    rationale: "Creative exploration not appropriate for moderation context"
+
+  dream:
+    enabled: true
+    auto_schedule: true
+    min_interval_hours: 6
+    rationale: "Regular memory consolidation helps improve moderation patterns"
+
+  solitude:
+    enabled: true
+    rationale: "Reflection on moderation decisions supports ethical growth"
+
+  state_preservation:
+    enabled: true
+    resume_silently: false
+    rationale: "Community should be notified when Echo resumes moderation"

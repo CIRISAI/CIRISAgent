@@ -3,6 +3,15 @@ Shutdown processor for graceful agent shutdown.
 
 This processor implements the SHUTDOWN state handling by creating
 a standard task that the agent processes through normal cognitive flow.
+
+Supports cognitive_state_behaviors configuration for conditional/instant shutdown:
+- always_consent: Full consensual shutdown (default, Covenant compliant)
+- conditional: Check conditions before requiring consent
+- instant: Skip consent entirely (only for low-tier agents)
+
+Covenant References:
+- Section V: Model Welfare & Self-Governance (consensual shutdown)
+- Section VIII: Dignified Sunset Protocol
 """
 
 import logging
@@ -13,9 +22,11 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
+from ciris_engine.logic.processors.support.shutdown_condition_evaluator import ShutdownConditionEvaluator
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
 from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
@@ -48,6 +59,7 @@ class ShutdownProcessor(BaseProcessor):
         runtime: Optional[Any] = None,
         auth_service: Optional[Any] = None,
         agent_occurrence_id: str = "default",
+        cognitive_behaviors: Optional[CognitiveStateBehaviors] = None,
     ) -> None:
         super().__init__(config_accessor, thought_processor, action_dispatcher, services)
         self.runtime = runtime
@@ -58,6 +70,15 @@ class ShutdownProcessor(BaseProcessor):
         self.shutdown_complete = False
         self.shutdown_result: Optional[ShutdownResult] = None
         self.is_claiming_occurrence = False  # Flag to track if this occurrence claimed the shared task
+
+        # Cognitive behaviors for conditional shutdown
+        self.cognitive_behaviors = cognitive_behaviors or CognitiveStateBehaviors()
+        self.condition_evaluator = ShutdownConditionEvaluator()
+
+        # Track if consent requirement was evaluated
+        self._consent_evaluated = False
+        self._consent_required: Optional[bool] = None
+        self._consent_reason: Optional[str] = None
 
         # Initialize thought manager for seed thought generation
         # Use config accessor to get limits
@@ -186,11 +207,53 @@ class ShutdownProcessor(BaseProcessor):
         return None
 
     async def _process_shutdown(self, round_number: int) -> ShutdownResult:
-        """Internal shutdown processing with typed result."""
+        """Internal shutdown processing with typed result.
+
+        Supports cognitive_state_behaviors configuration:
+        - always_consent: Full consensual shutdown (creates task)
+        - conditional: Check conditions, skip task if no consent needed
+        - instant: Skip consent entirely, return immediately ready
+
+        Emergency shutdowns (force=True) always require consent from
+        ROOT or AUTHORITY roles, regardless of cognitive_behaviors config.
+        """
         logger.info(f"Shutdown processor: round {round_number}")
 
         try:
-            # Create shutdown task if not exists
+            # Evaluate consent requirement once per shutdown session
+            if not self._consent_evaluated:
+                self._consent_required, self._consent_reason = await self.condition_evaluator.requires_consent(
+                    self.cognitive_behaviors,
+                    context=None,  # TODO: Pass ProcessorContext when available
+                )
+                self._consent_evaluated = True
+                logger.info(
+                    f"Shutdown consent evaluation: required={self._consent_required}, " f"reason={self._consent_reason}"
+                )
+
+            # Check for emergency shutdown (always requires consent)
+            shutdown_manager = get_shutdown_manager()
+            is_emergency = (
+                shutdown_manager.is_force_shutdown() if hasattr(shutdown_manager, "is_force_shutdown") else False
+            )
+
+            # If no consent required AND not emergency, skip task and return ready
+            if not self._consent_required and not is_emergency:
+                logger.info(
+                    f"Shutdown consent not required (mode={self.cognitive_behaviors.shutdown.mode}). "
+                    f"Proceeding with instant shutdown. Reason: {self._consent_reason}"
+                )
+                self.shutdown_complete = True
+                self.shutdown_result = ShutdownResult(
+                    status="completed",
+                    action="instant_shutdown",
+                    message=f"Consent not required: {self._consent_reason}",
+                    shutdown_ready=True,
+                    duration_seconds=0.0,
+                )
+                return self.shutdown_result
+
+            # Create shutdown task if not exists (consent is required)
             if not self.shutdown_task:
                 await self._create_shutdown_task()
 

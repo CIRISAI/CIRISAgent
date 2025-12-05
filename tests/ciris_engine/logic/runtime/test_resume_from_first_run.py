@@ -7,7 +7,7 @@ Tests the runtime's ability to resume from first-run mode after setup wizard com
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -26,44 +26,73 @@ class TestResumeFromFirstRun:
     @pytest.fixture
     def mock_runtime(self, temp_config_dir):
         """Create mock runtime with necessary components."""
-        runtime = Mock(spec=CIRISRuntime)
-        runtime.service_initializer = Mock()
+        runtime = MagicMock(spec=CIRISRuntime)
+        runtime.service_initializer = MagicMock()
         runtime.service_initializer._initialize_llm_services = AsyncMock()
+        runtime.service_initializer.initialize_all_services = AsyncMock()
+        runtime.service_initializer.load_modules = AsyncMock()
+        runtime.service_initializer.auth_service = MagicMock()
         runtime._wait_for_critical_services = AsyncMock()
-        runtime._ensure_config = Mock()
+        runtime._ensure_config = MagicMock()
+        runtime._ensure_config.return_value.default_template = "default"
+        runtime._ensure_config.return_value.load_env_vars = MagicMock()
+        runtime._build_components = AsyncMock()
+        runtime._reinitialize_billing_provider = AsyncMock()
+        runtime._register_adapter_services_for_resume = AsyncMock()
+        runtime._perform_startup_maintenance = AsyncMock()
+        runtime._create_startup_node = AsyncMock()
+        runtime._create_agent_processor_when_ready = AsyncMock()
         runtime.modules_to_load = []
+        runtime.adapters = []
+        runtime.essential_config = MagicMock()
+        runtime.startup_channel_id = None
+
+        # Identity-related attributes - use MagicMock that returns async mock for initialize_identity
+        mock_identity_manager = MagicMock()
+        mock_identity_manager.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test-agent"))
+        runtime.identity_manager = mock_identity_manager
+        runtime.time_service = MagicMock()
+        runtime.agent_identity = MagicMock(agent_id="test-agent")
+        runtime.maintenance_service = MagicMock()
+        runtime.service_registry = MagicMock()
         return runtime
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_loads_env(self, mock_runtime, temp_config_dir):
-        """Test that resume_from_first_run loads environment variables."""
+        """Test that resume_from_first_run calls the environment reload helper."""
         # Create .env file
         config_path = temp_config_dir / ".env"
         config_path.write_text("OPENAI_API_KEY=sk-test-key\nCIRIS_CONFIGURED=true\n")
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv") as mock_load_dotenv:
-                with patch("asyncio.create_task") as mock_create_task:
-                    # Call the actual resume method
-                    await CIRISRuntime.resume_from_first_run(mock_runtime)
+        # Mock the helper method to track calls
+        mock_runtime._resume_reload_environment = MagicMock(return_value=MagicMock())
 
-                    # Verify environment was reloaded
-                    mock_load_dotenv.assert_called_once_with(config_path, override=True)
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                # Call the actual resume method
+                await CIRISRuntime.resume_from_first_run(mock_runtime)
+
+                # Verify the environment reload helper was called
+                mock_runtime._resume_reload_environment.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_initializes_llm(self, mock_runtime, temp_config_dir):
-        """Test that resume_from_first_run initializes LLM service."""
+        """Test that resume_from_first_run calls the LLM initialization helper."""
         config_path = temp_config_dir / ".env"
         config_path.write_text("OPENAI_API_KEY=sk-test-key\n")
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv"):
-                with patch("asyncio.create_task") as mock_create_task:
-                    # Call resume method
-                    await CIRISRuntime.resume_from_first_run(mock_runtime)
+        # Mock the helper method to track calls
+        mock_runtime._resume_initialize_llm = AsyncMock()
 
-                    # Verify LLM service was initialized
-                    mock_runtime.service_initializer._initialize_llm_services.assert_called_once()
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                # Call resume method
+                await CIRISRuntime.resume_from_first_run(mock_runtime)
+
+                # Verify LLM initialization helper was called
+                mock_runtime._resume_initialize_llm.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_creates_agent_task(self, mock_runtime, temp_config_dir):
@@ -71,20 +100,19 @@ class TestResumeFromFirstRun:
         config_path = temp_config_dir / ".env"
         config_path.write_text("OPENAI_API_KEY=sk-test-key\n")
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv"):
-                with patch("asyncio.create_task") as mock_create_task:
-                    # Mock _create_agent_processor_when_ready
-                    mock_runtime._create_agent_processor_when_ready = AsyncMock()
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                with patch("dotenv.load_dotenv"):
+                    with patch("asyncio.create_task") as mock_create_task:
+                        # Call resume method
+                        await CIRISRuntime.resume_from_first_run(mock_runtime)
 
-                    # Call resume method
-                    await CIRISRuntime.resume_from_first_run(mock_runtime)
-
-                    # Verify agent task was created
-                    mock_create_task.assert_called_once()
-                    # The task should have been created with a name
-                    call_kwargs = mock_create_task.call_args[1]
-                    assert call_kwargs.get("name") == "AgentProcessorTask"
+                        # Verify agent task was created
+                        mock_create_task.assert_called_once()
+                        # The task should have been created with a name
+                        call_kwargs = mock_create_task.call_args[1]
+                        assert call_kwargs.get("name") == "AgentProcessorTask"
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_waits_for_services(self, mock_runtime, temp_config_dir):
@@ -92,14 +120,16 @@ class TestResumeFromFirstRun:
         config_path = temp_config_dir / ".env"
         config_path.write_text("OPENAI_API_KEY=sk-test-key\n")
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv"):
-                with patch("asyncio.create_task"):
-                    # Call resume method
-                    await CIRISRuntime.resume_from_first_run(mock_runtime)
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                with patch("dotenv.load_dotenv"):
+                    with patch("asyncio.create_task"):
+                        # Call resume method
+                        await CIRISRuntime.resume_from_first_run(mock_runtime)
 
-                    # Verify critical services check was called
-                    mock_runtime._wait_for_critical_services.assert_called_once_with(timeout=5.0)
+                        # Verify critical services check was called with 10s timeout
+                        mock_runtime._wait_for_critical_services.assert_called_once_with(timeout=10.0)
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_no_config_file(self, mock_runtime, temp_config_dir):
@@ -107,15 +137,17 @@ class TestResumeFromFirstRun:
         config_path = temp_config_dir / ".env"
         # Don't create the file
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv") as mock_load_dotenv:
-                with patch("asyncio.create_task"):
-                    # Call resume method - should still work, just skip env loading
-                    await CIRISRuntime.resume_from_first_run(mock_runtime)
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                with patch("dotenv.load_dotenv") as mock_load_dotenv:
+                    with patch("asyncio.create_task"):
+                        # Call resume method - should still work, just skip env loading
+                        await CIRISRuntime.resume_from_first_run(mock_runtime)
 
-                    # load_dotenv should NOT be called when file doesn't exist
-                    # (implementation checks config_path.exists() first)
-                    mock_load_dotenv.assert_not_called()
+                        # load_dotenv should NOT be called when file doesn't exist
+                        # (implementation checks config_path.exists() first)
+                        mock_load_dotenv.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_resume_from_first_run_without_service_initializer(self, temp_config_dir):
@@ -123,20 +155,39 @@ class TestResumeFromFirstRun:
         config_path = temp_config_dir / ".env"
         config_path.write_text("OPENAI_API_KEY=sk-test-key\n")
 
-        runtime = Mock(spec=CIRISRuntime)
+        runtime = MagicMock(spec=CIRISRuntime)
         runtime.service_initializer = None  # No service initializer
         runtime._wait_for_critical_services = AsyncMock()
-        runtime._ensure_config = Mock()
+        runtime._ensure_config = MagicMock()
+        runtime._ensure_config.return_value.default_template = "default"
+        runtime._ensure_config.return_value.load_env_vars = MagicMock()
+        runtime._build_components = AsyncMock()
+        runtime._reinitialize_billing_provider = AsyncMock()
+        runtime._register_adapter_services_for_resume = AsyncMock()
+        runtime._perform_startup_maintenance = AsyncMock()
+        runtime._create_startup_node = AsyncMock()
+        runtime._create_agent_processor_when_ready = AsyncMock()
         runtime.modules_to_load = []
+        runtime.adapters = []
+        runtime.essential_config = MagicMock()
+        runtime.startup_channel_id = None
+        runtime.identity_manager = MagicMock()
+        runtime.identity_manager.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test-agent"))
+        runtime.time_service = MagicMock()
+        runtime.agent_identity = MagicMock(agent_id="test-agent")
+        runtime.maintenance_service = None  # No maintenance service either
+        runtime.service_registry = None
 
-        with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-            with patch("dotenv.load_dotenv"):
-                with patch("asyncio.create_task"):
-                    # Should not crash even without service_initializer
-                    await CIRISRuntime.resume_from_first_run(runtime)
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+            mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                with patch("dotenv.load_dotenv"):
+                    with patch("asyncio.create_task"):
+                        # Should not crash even without service_initializer
+                        await CIRISRuntime.resume_from_first_run(runtime)
 
-                    # Should still wait for services
-                    runtime._wait_for_critical_services.assert_called_once()
+                        # Should still wait for services
+                        runtime._wait_for_critical_services.assert_called_once()
 
 
 class TestResumeFromFirstRunIntegration:
@@ -149,25 +200,47 @@ class TestResumeFromFirstRunIntegration:
         This was the bug that caused the crash - we were canceling old adapter
         tasks and creating new ones, which tried to bind to port 8080 again.
         """
-        runtime = Mock(spec=CIRISRuntime)
-        runtime.service_initializer = Mock()
+        runtime = MagicMock(spec=CIRISRuntime)
+        runtime.service_initializer = MagicMock()
         runtime.service_initializer._initialize_llm_services = AsyncMock()
+        runtime.service_initializer.initialize_all_services = AsyncMock()
+        runtime.service_initializer.load_modules = AsyncMock()
+        runtime.service_initializer.auth_service = MagicMock()
         runtime._wait_for_critical_services = AsyncMock()
-        runtime._ensure_config = Mock()
+        runtime._ensure_config = MagicMock()
+        runtime._ensure_config.return_value.default_template = "default"
+        runtime._ensure_config.return_value.load_env_vars = MagicMock()
+        runtime._build_components = AsyncMock()
+        runtime._reinitialize_billing_provider = AsyncMock()
+        runtime._register_adapter_services_for_resume = AsyncMock()
+        runtime._perform_startup_maintenance = AsyncMock()
+        runtime._create_startup_node = AsyncMock()
+        runtime._create_agent_processor_when_ready = AsyncMock()
         runtime.modules_to_load = []
-        runtime._adapter_tasks = [Mock(done=Mock(return_value=False))]  # Existing adapter tasks
+        runtime.adapters = []
+        runtime.essential_config = MagicMock()
+        runtime.startup_channel_id = None
+        runtime.identity_manager = MagicMock()
+        runtime.identity_manager.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test-agent"))
+        runtime.time_service = MagicMock()
+        runtime.agent_identity = MagicMock(agent_id="test-agent")
+        runtime.maintenance_service = MagicMock()
+        runtime.service_registry = MagicMock()
+        runtime._adapter_tasks = [MagicMock(done=MagicMock(return_value=False))]  # Existing adapter tasks
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / ".env"
             config_path.write_text("OPENAI_API_KEY=sk-test-key\n")
 
-            with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
-                with patch("dotenv.load_dotenv"):
-                    with patch("asyncio.create_task"):
-                        # Call resume method
-                        await CIRISRuntime.resume_from_first_run(runtime)
+            with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as mock_identity_cls:
+                mock_identity_cls.return_value.initialize_identity = AsyncMock(return_value=MagicMock(agent_id="test"))
+                with patch("ciris_engine.logic.setup.first_run.get_default_config_path", return_value=config_path):
+                    with patch("dotenv.load_dotenv"):
+                        with patch("asyncio.create_task"):
+                            # Call resume method
+                            await CIRISRuntime.resume_from_first_run(runtime)
 
-                        # Verify adapter tasks were NOT modified
-                        # The old code would cancel these tasks - we shouldn't touch them
-                        for task in runtime._adapter_tasks:
-                            task.cancel.assert_not_called()
+                            # Verify adapter tasks were NOT modified
+                            # The old code would cancel these tasks - we shouldn't touch them
+                            for task in runtime._adapter_tasks:
+                                task.cancel.assert_not_called()

@@ -168,6 +168,11 @@ class EssentialConfig(BaseModel):
         if env_db_url:
             self.database.database_url = env_db_url
 
+        # Load template from environment (set by setup wizard)
+        env_template = os.getenv("CIRIS_TEMPLATE")
+        if env_template:
+            self.default_template = env_template
+
 
 class CIRISNodeConfig(BaseModel):
     """Configuration for CIRISNode integration."""

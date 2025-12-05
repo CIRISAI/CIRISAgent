@@ -46,7 +46,7 @@ class ComponentBuilder:
         self.runtime = runtime
         self.agent_processor: Optional[AgentProcessor] = None
 
-    def build_all_components(self) -> AgentProcessor:
+    async def build_all_components(self) -> AgentProcessor:
         """Build all processing components and return the agent processor."""
         if not self.runtime.llm_service:
             raise RuntimeError("LLM service not initialized")
@@ -285,6 +285,9 @@ class ComponentBuilder:
             communication_bus=self.runtime.bus_manager.communication,
         )
 
+        # Get cognitive behaviors from graph (populated by migration on first-run or pre-1.7 upgrade)
+        cognitive_behaviors = await self._get_cognitive_behaviors_from_graph()
+
         self.agent_processor = AgentProcessor(
             app_config=self.runtime.essential_config,
             agent_identity=self.runtime.agent_identity,
@@ -295,6 +298,7 @@ class ComponentBuilder:
             time_service=self.runtime.time_service,  # Add missing parameter
             runtime=self.runtime,  # Pass runtime reference for preload tasks
             agent_occurrence_id=self.runtime.essential_config.agent_occurrence_id,  # Pass occurrence_id from config
+            cognitive_behaviors=cognitive_behaviors,  # Template-driven state transition config
         )
 
         return self.agent_processor
@@ -311,3 +315,45 @@ class ComponentBuilder:
             secrets_service=dependencies.secrets_service,
             audit_service=self.runtime.audit_service,
         )
+
+    async def _get_cognitive_behaviors_from_graph(self) -> Optional[Any]:
+        """Get cognitive state behaviors from graph database.
+
+        The migration in ciris_runtime populates this on:
+        1. First-run: Seeds from template
+        2. Pre-1.7 upgrade: Creates legacy-compatible config (PLAY/DREAM/SOLITUDE disabled)
+
+        Returns:
+            CognitiveStateBehaviors if found in graph, None otherwise
+        """
+        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
+
+        logger.info("[COGNITIVE_LOAD] Loading cognitive behaviors from graph...")
+
+        if not self.runtime.service_initializer or not self.runtime.service_initializer.config_service:
+            logger.warning("[COGNITIVE_LOAD] Cannot get cognitive behaviors - GraphConfigService not available")
+            return None
+
+        config_service = self.runtime.service_initializer.config_service
+
+        try:
+            config_entry = await config_service.get_config("cognitive_state_behaviors")
+            if config_entry and config_entry.value and config_entry.value.dict_value:
+                dict_value = config_entry.value.dict_value
+                wakeup_config = dict_value.get("wakeup", {})
+                logger.info(
+                    f"[COGNITIVE_LOAD] Found in graph: wakeup.enabled={wakeup_config.get('enabled', 'MISSING')}"
+                )
+                behaviors = CognitiveStateBehaviors(**dict_value)
+                logger.info(f"[COGNITIVE_LOAD] Parsed: wakeup.enabled={behaviors.wakeup.enabled}")
+                return behaviors
+            else:
+                logger.info("[COGNITIVE_LOAD] Config entry exists but has no dict_value")
+        except Exception as e:
+            logger.warning(f"[COGNITIVE_LOAD] Failed to get cognitive behaviors from graph: {e}")
+
+        # Fallback: return default (full Covenant compliance)
+        logger.info(
+            "[COGNITIVE_LOAD] No cognitive behaviors in graph - using Covenant-compliant defaults (wakeup.enabled=True)"
+        )
+        return CognitiveStateBehaviors()

@@ -11,7 +11,6 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.persistence.db import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WACertificate
 
 logger = logging.getLogger(__name__)
@@ -38,19 +37,21 @@ def init_auth_database(db_path: str) -> None:
     Args:
         db_path: Database connection string (SQLite path or PostgreSQL URL)
     """
-    from ciris_engine.logic.persistence.db.dialect import get_adapter
+    from ciris_engine.logic.persistence.db.dialect import DialectAdapter
 
-    # Get adapter to determine database type
-    adapter = get_adapter()
+    # Create adapter from db_path to determine database type
+    # This avoids race conditions with global adapter in parallel tests
+    adapter = DialectAdapter(db_path)
+    is_postgres = adapter.is_postgresql()
 
     # Import appropriate table definition based on database type
-    if adapter.is_postgresql():
+    if is_postgres:
         from ciris_engine.schemas.persistence.postgres.tables import WA_CERT_TABLE_V1
     else:
         from ciris_engine.schemas.persistence.sqlite.tables import WA_CERT_TABLE_V1
 
     with get_db_connection(db_path=db_path) as conn:
-        if adapter.is_postgresql():
+        if is_postgres:
             # PostgreSQL: Execute statements individually
             statements = [s.strip() for s in WA_CERT_TABLE_V1.split(";") if s.strip()]
             cursor = conn.cursor()
@@ -66,7 +67,7 @@ def init_auth_database(db_path: str) -> None:
         # Get table info to check existing columns
         cursor = conn.cursor()
 
-        if adapter.is_postgresql():
+        if is_postgres:
             # PostgreSQL: Query information_schema
             cursor.execute(
                 """
@@ -359,10 +360,13 @@ def get_certificate_counts(db_path: str) -> Dict[str, int]:
     """
     from typing import cast
 
+    from ciris_engine.logic.persistence.db.dialect import DialectAdapter
+
     counts: Dict[str, Any] = {"total": 0, "active": 0, "revoked": 0, "by_role": cast(Dict[str, int], {})}
 
     try:
-        adapter = get_adapter()
+        # Create adapter from db_path to avoid race conditions in parallel tests
+        adapter = DialectAdapter(db_path)
         with get_db_connection(db_path=db_path) as conn:
             cursor = conn.cursor()
 

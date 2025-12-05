@@ -16,12 +16,50 @@ These helpers target the highest complexity methods:
 # Import required for helper functions
 import asyncio
 import logging
+import sys
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple
 
 # Set up logger for helpers
 logger = logging.getLogger(__name__)
+
+
+# Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
+if sys.version_info >= (3, 11):
+    # Use native asyncio.timeout in Python 3.11+
+    _async_timeout = asyncio.timeout
+else:
+    # Python 3.10 polyfill using CancelledError approach
+    @asynccontextmanager
+    async def _async_timeout(delay: float) -> AsyncGenerator[None, None]:
+        """Python 3.10 compatible timeout context manager."""
+        loop = asyncio.get_event_loop()
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("No current task")
+
+        timed_out = False
+
+        def timeout_callback() -> None:
+            nonlocal timed_out
+            timed_out = True
+            task.cancel()  # type: ignore[union-attr]
+
+        # Schedule timeout
+        handle = loop.call_later(delay, timeout_callback)
+        try:
+            yield
+        except asyncio.CancelledError:
+            handle.cancel()
+            if timed_out:
+                raise asyncio.TimeoutError() from None
+            else:
+                raise  # Re-raise CancelledError if not from timeout
+        else:
+            handle.cancel()
+
 
 # Import runtime utilities
 from ciris_engine.logic.utils.shutdown_manager import is_global_shutdown_requested, wait_for_global_shutdown_async
@@ -740,7 +778,7 @@ async def wait_for_adapter_readiness(adapters: List[Any]) -> bool:
     logger.info("  ⏳ Waiting for adapter connections to establish...")
 
     try:
-        async with asyncio.timeout(30.0):
+        async with _async_timeout(30.0):
             while True:
                 health_checks = [_check_adapter_health(adapter) for adapter in adapters]
                 health_results = await asyncio.gather(*health_checks)
@@ -764,7 +802,7 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
     await asyncio.sleep(0.1)
 
     try:
-        async with asyncio.timeout(30.0):
+        async with _async_timeout(30.0):
             while True:
                 # Check if services are actually available
                 if runtime.service_registry:

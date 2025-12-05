@@ -5,6 +5,7 @@ Manages API keys, OAuth users, and authentication state.
 
 import base64
 import hashlib
+import logging
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import bcrypt
+
+logger = logging.getLogger(__name__)
 
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
@@ -101,11 +104,25 @@ class User:
 class APIAuthService:
     """Simple in-memory authentication service with database persistence."""
 
+    # Class-level instance counter to track re-initialization
+    _instance_counter = 0
+
     def __init__(self, auth_service: Optional[AuthenticationServiceProtocol] = None) -> None:
+        # Track instance creation for debugging
+        APIAuthService._instance_counter += 1
+        self._instance_id = APIAuthService._instance_counter
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] APIAuthService.__init__ called - INSTANCE #{self._instance_id} created (id={id(self)})"
+        )
+
         # In-memory caches for performance
         self._api_keys: Dict[str, StoredAPIKey] = {}
         self._oauth_users: Dict[str, OAuthUser] = {}
         self._users: Dict[str, User] = {}
+
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] Instance #{self._instance_id} - _api_keys initialized as EMPTY dict (id={id(self._api_keys)})"
+        )
 
         # Store reference to the actual authentication service
         self._auth_service = auth_service
@@ -161,23 +178,23 @@ class APIAuthService:
         # Extract email from oauth_links if available
         oauth_email = None
         if wa.oauth_links:
-            print(f"  📧 [AUTH DEBUG] Found {len(wa.oauth_links)} OAuth links for {wa.wa_id}")
+            logger.debug(f"[AUTH DEBUG] Found {len(wa.oauth_links)} OAuth links for {wa.wa_id}")
             for i, link in enumerate(wa.oauth_links):
-                print(
-                    f"  📧 [AUTH DEBUG] Link {i}: provider={link.provider}, external_id={link.external_id}, metadata={link.metadata}"
+                logger.debug(
+                    f"[AUTH DEBUG] Link {i}: provider={link.provider}, external_id={link.external_id}, metadata={link.metadata}"
                 )
                 # Check if link has email in metadata or as direct attribute
                 if hasattr(link, "email") and link.email:
                     oauth_email = link.email
-                    print(f"  ✅ [AUTH DEBUG] Extracted email from link.email: {oauth_email}")
+                    logger.debug(f"[AUTH DEBUG] Extracted email from link.email: {oauth_email}")
                     break
                 elif hasattr(link, "metadata") and isinstance(link.metadata, dict):
                     if "email" in link.metadata:
                         oauth_email = link.metadata["email"]
-                        print(f"  ✅ [AUTH DEBUG] Extracted email from link.metadata['email']: {oauth_email}")
+                        logger.debug(f"[AUTH DEBUG] Extracted email from link.metadata['email']: {oauth_email}")
                         break
         else:
-            print(f"  ⚠️  [AUTH DEBUG] No OAuth links found for {wa.wa_id}")
+            logger.debug(f"[AUTH DEBUG] No OAuth links found for {wa.wa_id}")
 
         return User(
             wa_id=wa.wa_id,
@@ -200,71 +217,124 @@ class APIAuthService:
 
     async def _process_wa_record(self, wa: "WACertificate") -> None:
         """Process a single WA record and add/update user."""
-        print(f"  🔧 [AUTH DEBUG] _process_wa_record: wa_id={wa.wa_id}, name={wa.name}")
+        logger.debug(f"[AUTH DEBUG] _process_wa_record: wa_id={wa.wa_id}, name={wa.name}")
 
         # Remove stale cache entries for this WA
         to_remove = [key for key, value in self._users.items() if getattr(value, "wa_id", None) == wa.wa_id]
         if to_remove:
-            print(f"  🗑️  [AUTH DEBUG] Removing {len(to_remove)} stale entries for {wa.wa_id}")
+            logger.debug(f"[AUTH DEBUG] Removing {len(to_remove)} stale entries for {wa.wa_id}")
         for key in to_remove:
             self._users.pop(key, None)
 
         user = self._create_user_from_wa(wa)
-        print(
-            f"  👤 [AUTH DEBUG] Created User: name={user.name}, auth_type={user.auth_type}, has_password={user.password_hash is not None}"
+        logger.debug(
+            f"[AUTH DEBUG] Created User: name={user.name}, auth_type={user.auth_type}, has_password={user.password_hash is not None}"
         )
 
         self._users[wa.wa_id] = user
-        print(f"  🔑 [AUTH DEBUG] Stored user under key: '{wa.wa_id}'")
+        logger.debug(f"[AUTH DEBUG] Stored user under key: '{wa.wa_id}'")
 
         if wa.oauth_provider and wa.oauth_external_id:
             primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
             self._users[primary_key] = user
-            print(f"  🔑 [AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
+            logger.debug(f"[AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
+            # Clear from _oauth_users cache - DB record is authoritative
+            if primary_key in self._oauth_users:
+                logger.debug(f"[AUTH DEBUG] Clearing stale _oauth_users entry: '{primary_key}'")
+                del self._oauth_users[primary_key]
 
         for link in wa.oauth_links:
             link_key = f"{link.provider}:{link.external_id}"
             self._users[link_key] = user
-            print(f"  🔑 [AUTH DEBUG] Stored user under link key: '{link_key}'")
+            logger.debug(f"[AUTH DEBUG] Stored user under link key: '{link_key}'")
 
     async def _load_users_from_db(self) -> None:
         """Load existing users from the database."""
-        print("=" * 80)
-        print("🔍 [AUTH DEBUG] _load_users_from_db() called")
-        print("=" * 80)
+        logger.info("=" * 70)
+        logger.info("CIRIS_USER_CREATE: _load_users_from_db() called")
+        logger.info("=" * 70)
 
         if not self._auth_service:
-            print("⚠️  [AUTH DEBUG] No auth service - skipping DB load")
+            logger.info("CIRIS_USER_CREATE: No auth service - skipping DB load")
             return
 
         try:
             was = await self._auth_service.list_was(active_only=False)
-            print(f"📊 [AUTH DEBUG] Loaded {len(was)} WA certificates from database")
+            logger.info(f"CIRIS_USER_CREATE: Loaded {len(was)} WA certificates from database")
 
             for i, wa in enumerate(was, 1):
-                print(
-                    f"📝 [AUTH DEBUG] Processing WA {i}/{len(was)}: wa_id={wa.wa_id}, name={wa.name}, has_password={wa.password_hash is not None}"
+                logger.info(
+                    f"CIRIS_USER_CREATE: Processing WA {i}/{len(was)}: wa_id={wa.wa_id}, name={wa.name}, role={wa.role}"
                 )
                 await self._process_wa_record(wa)
 
-            if not any(u.name == "admin" for u in self._users.values()):
-                print("🔧 [AUTH DEBUG] No admin user found, creating default admin")
-                await self._create_default_admin()
+            # Check if we need to create a default admin
+            # Skip if:
+            # 1. Any user named 'admin' exists, OR
+            # 2. Any ROOT user exists (setup wizard creates ROOT user with custom name)
+            has_admin_user = any(u.name == "admin" for u in self._users.values())
+            has_root_user = any(u.wa_role == WARole.ROOT for u in self._users.values())
 
-            print(f"✅ [AUTH DEBUG] User loading complete. Total users in cache: {len(self._users)}")
-            print(f"👤 [AUTH DEBUG] Usernames in cache: {list(set(u.name for u in self._users.values()))}")
-            print("=" * 80)
+            logger.info(f"CIRIS_USER_CREATE: Check default admin: has_admin={has_admin_user}, has_root={has_root_user}")
+
+            if not has_admin_user and not has_root_user:
+                logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - will create default admin")
+                await self._create_default_admin()
+            else:
+                logger.info("CIRIS_USER_CREATE: Skipping default admin creation - admin or ROOT already exists")
+
+            # Clear the fallback admin if it wasn't loaded from the database
+            # The fallback admin is only meant for when there's no auth_service
+            # If wa-system-admin is in the DB, it's a real user and should be kept
+            loaded_wa_ids = {wa.wa_id for wa in was}
+            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
+                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
+                del self._users["wa-system-admin"]
+
+            logger.info(f"CIRIS_USER_CREATE: User loading complete. Total users in cache: {len(self._users)}")
+            unique_users = {u.wa_id: u for u in self._users.values()}
+            for wa_id, user in unique_users.items():
+                logger.info(
+                    f"CIRIS_USER_CREATE:   - {wa_id}: name={user.name}, wa_role={user.wa_role}, api_role={user.api_role}"
+                )
+            logger.info("=" * 70)
 
         except Exception as e:
-            print(f"❌ [AUTH DEBUG] Error loading users from database: {e}")
+            logger.error(f"CIRIS_USER_CREATE: Error loading users from database: {e}", exc_info=True)
             raise
 
     async def _create_default_admin(self) -> None:
-        """Create the default admin user in the database."""
+        """Create the default admin user in the database.
+
+        NOTE: This is only called if no user named 'admin' exists in the database.
+        During first-run setup, the setup wizard creates the ROOT user, so this
+        should NOT be called in that flow.
+        """
         if not self._auth_service:
+            logger.info("CIRIS_USER_CREATE: _create_default_admin skipped - no auth_service")
             return
 
+        logger.info("=" * 70)
+        logger.info("CIRIS_USER_CREATE: _create_default_admin() called")
+        logger.info("=" * 70)
+
         try:
+            # Check existing WAs before creating admin
+            existing_was = await self._auth_service.list_was(active_only=False)
+            logger.info(f"CIRIS_USER_CREATE: Existing WAs before default admin: {len(existing_was)}")
+            for wa in existing_was:
+                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+            # Check if any ROOT user already exists - DON'T create another one
+            root_was = [wa for wa in existing_was if wa.role == WARole.ROOT]
+            if root_was:
+                logger.info(
+                    f"CIRIS_USER_CREATE: ROOT WA already exists ({root_was[0].wa_id}) - skipping default admin creation"
+                )
+                return
+
+            logger.info("CIRIS_USER_CREATE: No ROOT WA exists - creating default admin")
+
             # Create admin WA certificate
             wa_cert = await self._auth_service.create_wa(
                 name="admin",
@@ -272,11 +342,13 @@ class APIAuthService:
                 scopes=["*"],  # All permissions
                 role=WARole.ROOT,  # System admin gets ROOT role
             )
+            logger.info(f"CIRIS_USER_CREATE: ✅ Created default admin WA: {wa_cert.wa_id}")
 
             # Update with password hash
             await self._auth_service.update_wa(
                 wa_cert.wa_id, updates=None, password_hash=self._hash_password("ciris_admin_password")
             )
+            logger.info(f"CIRIS_USER_CREATE: Password set for default admin: {wa_cert.wa_id}")
 
             # Add to cache
             admin_user = User(
@@ -290,9 +362,10 @@ class APIAuthService:
                 password_hash=self._hash_password("ciris_admin_password"),
             )
             self._users[admin_user.wa_id] = admin_user
+            logger.info(f"CIRIS_USER_CREATE: Added default admin to user cache")
 
         except Exception as e:
-            print(f"Error creating default admin: {e}")
+            logger.error(f"CIRIS_USER_CREATE: Error creating default admin: {e}", exc_info=True)
 
     def _wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
         """Convert WA role to API role."""
@@ -353,6 +426,9 @@ class APIAuthService:
         )
         # Store by key_id instead of hash (bcrypt hashes are unique per call)
         self._api_keys[key_id] = stored_key
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] store_api_key: Instance #{self._instance_id} - Stored key_id={key_id} for user={user_id}, role={role}. Total keys now: {len(self._api_keys)}, dict_id={id(self._api_keys)}"
+        )
 
     def validate_api_key(self, api_key: str) -> Optional[StoredAPIKey]:
         """Validate an API key and return its info."""
@@ -360,15 +436,35 @@ class APIAuthService:
         key_id = self._get_key_id(api_key)
         stored_key = self._api_keys.get(key_id)
 
+        # DEBUG: Log validation attempt with full context
+        key_preview = api_key[:20] + "..." if len(api_key) > 20 else api_key
+        all_key_ids = list(self._api_keys.keys())
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - Validating key_id={key_id} (key={key_preview})"
+        )
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - _api_keys has {len(self._api_keys)} keys: {all_key_ids}, dict_id={id(self._api_keys)}"
+        )
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - stored_key found: {stored_key is not None}"
+        )
+
         # Verify the key using bcrypt
         if not stored_key or not stored_key.is_active:
+            logger.debug(
+                f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - FAILED: key not found or inactive"
+            )
             return None
 
         if not self._verify_key(api_key, stored_key.key_hash):
+            logger.debug(
+                f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - FAILED: bcrypt verification failed"
+            )
             return None
 
         # Check expiration
         if stored_key.expires_at and stored_key.expires_at < datetime.now(timezone.utc):
+            logger.debug(f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - FAILED: key expired")
             return None
 
         # Update last used
@@ -389,6 +485,9 @@ class APIAuthService:
             )
             self._users[admin_user.wa_id] = admin_user
 
+        logger.debug(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - SUCCESS: key valid for user={stored_key.user_id}, role={stored_key.role}"
+        )
         return stored_key
 
     def revoke_api_key(self, key_id: str) -> None:
@@ -486,51 +585,51 @@ class APIAuthService:
 
     async def verify_user_password(self, username: str, password: str) -> Optional[User]:
         """Verify a user's password and return the user if valid."""
-        print("=" * 80)
-        print(f"🔐 [AUTH DEBUG] verify_user_password('{username}') called")
-        print(f"📊 [AUTH DEBUG] _users_loaded flag: {self._users_loaded}")
+        logger.debug("=" * 80)
+        logger.debug(f"[AUTH DEBUG] verify_user_password('{username}') called")
+        logger.debug(f"[AUTH DEBUG] _users_loaded flag: {self._users_loaded}")
 
         # Ensure users are loaded from database
         await self._ensure_users_loaded()
 
-        print(f"📊 [AUTH DEBUG] After _ensure_users_loaded, _users_loaded: {self._users_loaded}")
-        print(f"📊 [AUTH DEBUG] _users dict size: {len(self._users)}")
+        logger.debug(f"[AUTH DEBUG] After _ensure_users_loaded, _users_loaded: {self._users_loaded}")
+        logger.debug(f"[AUTH DEBUG] _users dict size: {len(self._users)}")
 
         user = self.get_user_by_username(username)
         if not user:
-            print("❌ [AUTH DEBUG] User lookup failed - returning None")
-            print("=" * 80)
+            logger.debug("[AUTH DEBUG] User lookup failed - returning None")
+            logger.debug("=" * 80)
             return None
 
-        print(f"✅ [AUTH DEBUG] User found: wa_id={user.wa_id}")
-        print(f"📝 [AUTH DEBUG] User.name: '{user.name}'")
-        print(f"📝 [AUTH DEBUG] User.auth_type: '{user.auth_type}'")
-        print(f"📝 [AUTH DEBUG] Has password_hash: {user.password_hash is not None}")
+        logger.debug(f"[AUTH DEBUG] User found: wa_id={user.wa_id}")
+        logger.debug(f"[AUTH DEBUG] User.name: '{user.name}'")
+        logger.debug(f"[AUTH DEBUG] User.auth_type: '{user.auth_type}'")
+        logger.debug(f"[AUTH DEBUG] Has password_hash: {user.password_hash is not None}")
 
         if user.password_hash:
-            print(f"📝 [AUTH DEBUG] password_hash length: {len(user.password_hash)}")
-            print(f"📝 [AUTH DEBUG] password_hash prefix: {user.password_hash[:10]}")
+            logger.debug(f"[AUTH DEBUG] password_hash length: {len(user.password_hash)}")
+            logger.debug(f"[AUTH DEBUG] password_hash prefix: {user.password_hash[:10]}")
 
             verify_result = self._verify_password(password, user.password_hash)
-            print(f"🔑 [AUTH DEBUG] Password verification result: {verify_result}")
+            logger.debug(f"[AUTH DEBUG] Password verification result: {verify_result}")
 
             if verify_result:
-                print(f"✅ [AUTH DEBUG] Authentication SUCCESS for '{username}'")
-                print("=" * 80)
+                logger.debug(f"[AUTH DEBUG] Authentication SUCCESS for '{username}'")
+                logger.debug("=" * 80)
                 return user
             else:
-                print("❌ [AUTH DEBUG] Password verification FAILED")
-                print("=" * 80)
+                logger.debug("[AUTH DEBUG] Password verification FAILED")
+                logger.debug("=" * 80)
                 return None
         else:
-            print("❌ [AUTH DEBUG] No password_hash for user")
-            print("=" * 80)
+            logger.debug("[AUTH DEBUG] No password_hash for user")
+            logger.debug("=" * 80)
             return None
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         """Get a user by username."""
-        print(f"🔍 [AUTH DEBUG] get_user_by_username('{username}') called")
-        print(f"📊 [AUTH DEBUG] _users dict has {len(self._users)} entries")
+        logger.debug(f"[AUTH DEBUG] get_user_by_username('{username}') called")
+        logger.debug(f"[AUTH DEBUG] _users dict has {len(self._users)} entries")
 
         # Get unique usernames (since users can be stored under multiple keys)
         unique_users = {}
@@ -539,16 +638,16 @@ class APIAuthService:
                 unique_users[user.wa_id] = user
 
         usernames = [u.name for u in unique_users.values()]
-        print(f"👤 [AUTH DEBUG] Available usernames: {usernames}")
+        logger.debug(f"[AUTH DEBUG] Available usernames: {usernames}")
 
         for user in self._users.values():
             if user.name == username:
-                print(
-                    f"✅ [AUTH DEBUG] FOUND user: wa_id={user.wa_id}, name={user.name}, has_password={user.password_hash is not None}"
+                logger.debug(
+                    f"[AUTH DEBUG] FOUND user: wa_id={user.wa_id}, name={user.name}, has_password={user.password_hash is not None}"
                 )
                 return user
 
-        print(f"❌ [AUTH DEBUG] User '{username}' NOT FOUND")
+        logger.debug(f"[AUTH DEBUG] User '{username}' NOT FOUND")
         return None
 
     async def create_user(self, username: str, password: str, api_role: APIRole = APIRole.OBSERVER) -> Optional[User]:
@@ -600,7 +699,7 @@ class APIAuthService:
                 return user
 
             except Exception as e:
-                print(f"Error creating user in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error creating user in database: {e}")
                 # Fall through to in-memory creation
 
         # Fallback: in-memory only
@@ -634,9 +733,15 @@ class APIAuthService:
         await self._ensure_users_loaded()
 
         users = []
+        seen_wa_ids: set[str] = set()  # Dedupe by wa_id
 
-        # Add all stored users with their keys
+        # Add all stored users with their keys (deduplicated by wa_id)
         for user_id, user in self._users.items():
+            # Skip duplicates - _users has multiple keys (wa_id, google:xxx) for same user
+            if user.wa_id in seen_wa_ids:
+                continue
+            seen_wa_ids.add(user.wa_id)
+
             # Apply filters
             if search and search.lower() not in user.name.lower():
                 continue
@@ -649,13 +754,15 @@ class APIAuthService:
             if is_active is not None and user.is_active != is_active:
                 continue
 
-            users.append((user_id, user))
+            users.append((user_id, user))  # Use the dict key as the canonical user_id
 
         # Add OAuth users not in _users
         for oauth_user in self._oauth_users.values():
             oauth_user_id = oauth_user.user_id
-            # Check if already in users
-            if any(uid == oauth_user_id for uid, u in users):
+            # Check if already in users by matching oauth_external_id
+            # This handles cases where the DB WA has a different wa_id (e.g., wa-2025-12-03-xxx)
+            # but represents the same OAuth user (same oauth_external_id)
+            if any(uid == oauth_user_id or u.oauth_external_id == oauth_user.external_id for uid, u in users):
                 continue
 
             # Convert OAuth user to User
@@ -700,17 +807,45 @@ class APIAuthService:
 
     def get_user(self, user_id: str) -> Optional[User]:
         """Get a specific user by ID."""
-        # Check stored users first
+        # Check stored users first (includes users loaded from DB with OAuth links)
         if user_id in self._users:
             return self._users[user_id]
 
-        # Check OAuth users
+        # Check OAuth users (in-memory only, for users who haven't been minted as WA yet)
         if user_id in self._oauth_users:
             oauth_user = self._oauth_users[user_id]
-            # Check if we have additional user data stored
+            # Check if we have a stored user from the database (linked via OAuth)
             stored_user = self._users.get(user_id)
+
+            # If stored_user exists, merge OAuth session data with persistent DB data
+            # CRITICAL: Use stored_user's wa_id if they're already a WA
+            if stored_user:
+                # User exists in DB - they're already minted, just update OAuth session info
+                return User(
+                    wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
+                    name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
+                    auth_type="oauth",
+                    api_role=stored_user.api_role,  # Preserve DB role
+                    wa_role=stored_user.wa_role,  # Preserve WA role
+                    oauth_provider=oauth_user.provider,
+                    oauth_email=oauth_user.email,
+                    oauth_external_id=oauth_user.external_id,
+                    created_at=stored_user.created_at or oauth_user.created_at,
+                    last_login=oauth_user.last_login,
+                    is_active=stored_user.is_active,
+                    wa_parent_id=stored_user.wa_parent_id,
+                    wa_auto_minted=stored_user.wa_auto_minted,
+                    oauth_name=stored_user.oauth_name or oauth_user.name,
+                    oauth_picture=stored_user.oauth_picture,
+                    permission_requested_at=stored_user.permission_requested_at,
+                    custom_permissions=stored_user.custom_permissions,
+                    oauth_links=stored_user.oauth_links,
+                    marketing_opt_in=oauth_user.marketing_opt_in,
+                )
+
+            # No stored user - pure OAuth user not yet minted as WA
             return User(
-                wa_id=oauth_user.user_id,
+                wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
                 name=oauth_user.name or oauth_user.email or oauth_user.user_id,
                 auth_type="oauth",
                 api_role=self._user_role_to_api_role(oauth_user.role),
@@ -720,13 +855,36 @@ class APIAuthService:
                 created_at=oauth_user.created_at,
                 last_login=oauth_user.last_login,
                 is_active=True,
-                oauth_name=(
-                    stored_user.oauth_name if stored_user else oauth_user.name
-                ),  # Use oauth_user.name as fallback
-                oauth_picture=stored_user.oauth_picture if stored_user else None,
-                permission_requested_at=stored_user.permission_requested_at if stored_user else None,
-                custom_permissions=stored_user.custom_permissions if stored_user else None,
+                oauth_name=oauth_user.name,
+                marketing_opt_in=oauth_user.marketing_opt_in,
             )
+
+        # Fallback: Try to find user by OAuth external_id (without provider prefix)
+        # This handles cases where frontend passes just "googleUserId" without "google:" prefix
+        for key, user in self._users.items():
+            if user.oauth_external_id == user_id:
+                return user
+        for key, oauth_user in self._oauth_users.items():
+            if oauth_user.external_id == user_id:
+                # Check if we have a stored user from the database
+                stored_user = self._users.get(key)
+                if stored_user:
+                    return stored_user
+                # Return OAuth-only user
+                return User(
+                    wa_id=oauth_user.user_id,
+                    name=oauth_user.name or oauth_user.email or oauth_user.user_id,
+                    auth_type="oauth",
+                    api_role=self._user_role_to_api_role(oauth_user.role),
+                    oauth_provider=oauth_user.provider,
+                    oauth_email=oauth_user.email,
+                    oauth_external_id=oauth_user.external_id,
+                    created_at=oauth_user.created_at,
+                    last_login=oauth_user.last_login,
+                    is_active=True,
+                    oauth_name=oauth_user.name,
+                    marketing_opt_in=oauth_user.marketing_opt_in,
+                )
 
         return None
 
@@ -776,7 +934,7 @@ class APIAuthService:
                         # Deactivate
                         await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
-                print(f"Error updating user in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error updating user in database: {e}")
 
         # Also update OAuth user if applicable
         if user_id in self._oauth_users:
@@ -857,7 +1015,7 @@ class APIAuthService:
                     user_id, updates=None, password_hash=self._hash_password(new_password)
                 )
             except Exception as e:
-                print(f"Error updating password in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error updating password in database: {e}")
 
         return True
 
@@ -875,7 +1033,7 @@ class APIAuthService:
             try:
                 await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
-                print(f"Error deactivating user in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error deactivating user in database: {e}")
 
         # Also deactivate OAuth user if applicable
         if user_id in self._oauth_users:
@@ -946,6 +1104,33 @@ class APIAuthService:
 
         return permissions.get(role, [])
 
+    def get_effective_permissions(self, user: "User") -> List[str]:
+        """Get effective permissions for a user including WA role inheritance.
+
+        This applies the following inheritance rules:
+        - ROOT WA users get SYSTEM_ADMIN + AUTHORITY permissions
+        - AUTHORITY WA users get their role's permissions (which include wa.resolve_deferral)
+        - All other users get just their API role's permissions
+        - Custom permissions are always added on top
+        """
+        # Start with base permissions from API role
+        permissions_set = set(self.get_permissions_for_role(user.api_role))
+
+        # ROOT WA role inherits AUTHORITY permissions (for deferral resolution, etc.)
+        # This is the key rule: ROOT maps to SYSTEM_ADMIN API role, but also gets AUTHORITY perms
+        if user.wa_role == WARole.ROOT:
+            authority_perms = self.get_permissions_for_role(APIRole.AUTHORITY)
+            permissions_set.update(authority_perms)
+
+        # AUTHORITY WA role already has wa.resolve_deferral in their API role permissions
+        # No extra inheritance needed since AUTHORITY maps to APIRole.AUTHORITY
+
+        # Add custom permissions
+        if user.custom_permissions:
+            permissions_set.update(user.custom_permissions)
+
+        return list(permissions_set)
+
     async def update_user_permissions(self, user_id: str, permissions: List[str]) -> Optional[User]:
         """Update a user's custom permissions."""
         user = self.get_user(user_id)
@@ -967,7 +1152,7 @@ class APIAuthService:
                     user_id, updates=WAUpdate(permissions=permissions) if permissions else None
                 )
             except Exception as e:
-                print(f"Error updating permissions in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error updating permissions in database: {e}")
 
         return user
 
@@ -1088,7 +1273,7 @@ class APIAuthService:
 
         except Exception as e:
             # Log error but don't expose internal details
-            print(f"Signature verification error: {e}")
+            logger.debug(f"[AUTH DEBUG] Signature verification error: {e}")
             return False
 
     def _update_user_wa_role(self, user: User, wa_role: WARole, minted_by: str) -> None:
@@ -1099,7 +1284,8 @@ class APIAuthService:
 
     def _upgrade_api_role_if_needed(self, user: User, wa_role: WARole) -> None:
         """Upgrade user's API role if WA role requires higher access."""
-        if wa_role == WARole.AUTHORITY and user.api_role.value < APIRole.AUTHORITY.value:
+        # ROOT and AUTHORITY WA roles both grant AUTHORITY API role
+        if wa_role in (WARole.ROOT, WARole.AUTHORITY) and user.api_role.value < APIRole.AUTHORITY.value:
             user.api_role = APIRole.AUTHORITY
         elif wa_role == WARole.OBSERVER and user.api_role.value < APIRole.OBSERVER.value:
             user.api_role = APIRole.OBSERVER
@@ -1111,7 +1297,7 @@ class APIAuthService:
         await self._auth_service.update_wa(
             user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
         )
-        print(f"Updated existing WA {user_id} to role {wa_role}")
+        logger.debug(f"[AUTH DEBUG] Updated existing WA {user_id} to role {wa_role}")
 
     def _create_wa_email(self, user_name: str) -> str:
         """Create email for WA certificate."""
@@ -1176,7 +1362,7 @@ class APIAuthService:
         else:
             raise ValueError("Cannot store WA certificate - method not available")
 
-        print(f"Created WA certificate {wa_id} for OAuth user {user_id} with role {wa_role}")
+        logger.debug(f"[AUTH DEBUG] Created WA certificate {wa_id} for OAuth user {user_id} with role {wa_role}")
         return wa_id
 
     # Removed _link_oauth_identity - no longer needed since OAuth users use their user_id as wa_id
@@ -1220,6 +1406,6 @@ class APIAuthService:
                 # Note: parent_wa_id and auto_minted are not supported by the protocol's update_wa method
                 # They would need to be set during creation or via a different mechanism
             except Exception as e:
-                print(f"Error updating/creating WA in database: {e}")
+                logger.debug(f"[AUTH DEBUG] Error updating/creating WA in database: {e}")
 
         return user

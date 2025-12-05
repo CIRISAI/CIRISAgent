@@ -206,9 +206,26 @@ class APIServerManager:
         while time.time() - start_time < self.config.server_startup_timeout:
             # Check if process is still alive
             if self.process and self.process.poll() is not None:
-                # Process died
-                stderr = self.process.stderr.read().decode() if self.process.stderr else ""
-                self.console.print(f"[red]Server process died: {stderr[:500]}[/red]")
+                # Process died - read error from console log file
+                exit_code = self.process.returncode
+                error_output = ""
+                console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+                try:
+                    with open(console_log_path, "r") as f:
+                        # Read last 1000 chars to find error
+                        f.seek(0, 2)  # Seek to end
+                        size = f.tell()
+                        f.seek(max(0, size - 2000))
+                        error_output = f.read()
+                except Exception:
+                    pass
+                self.console.print(f"[red]Server process died (exit code: {exit_code})[/red]")
+                if error_output:
+                    # Show last few lines of output
+                    lines = error_output.strip().split("\n")[-10:]
+                    self.console.print(f"[red]Last output:[/red]")
+                    for line in lines:
+                        self.console.print(f"[dim]{line}[/dim]")
                 return False
 
             # Check if server is responding

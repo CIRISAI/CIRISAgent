@@ -1,6 +1,13 @@
 """
 State management for the CIRISAgent processor.
 Handles transitions between WAKEUP, DREAM, PLAY, WORK, SOLITUDE, and SHUTDOWN states.
+
+Supports template-driven cognitive state behaviors configuration per
+FSD/COGNITIVE_STATE_BEHAVIORS.md for mission-appropriate transition rules.
+
+Covenant References:
+- Section V: Model Welfare & Self-Governance
+- Section VIII: Dignified Sunset Protocol
 """
 
 import logging
@@ -8,6 +15,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.processors.state import StateHistory, StateMetadata, StateMetrics, StateTransitionRecord
 from ciris_engine.schemas.processors.states import AgentState
 
@@ -31,17 +39,27 @@ class StateTransition:
 
 
 class StateManager:
-    """Manages agent state transitions and state-specific behaviors."""
+    """Manages agent state transitions and state-specific behaviors.
 
-    VALID_TRANSITIONS = [
+    Supports template-driven cognitive state behaviors configuration:
+    - Wakeup ceremony can be bypassed for partnership-model agents
+    - Shutdown can be instant, conditional, or always-consent
+    - PLAY/DREAM/SOLITUDE states can be enabled/disabled per agent
+
+    See FSD/COGNITIVE_STATE_BEHAVIORS.md for design rationale.
+    """
+
+    # Base valid transitions - these are filtered based on cognitive_behaviors config
+    BASE_TRANSITIONS = [
         # Transitions TO shutdown from any state
         StateTransition(AgentState.WAKEUP, AgentState.SHUTDOWN),
         StateTransition(AgentState.WORK, AgentState.SHUTDOWN),
         StateTransition(AgentState.DREAM, AgentState.SHUTDOWN),
         StateTransition(AgentState.PLAY, AgentState.SHUTDOWN),
         StateTransition(AgentState.SOLITUDE, AgentState.SHUTDOWN),
-        # Special startup transition - only allowed during initialization
+        # Special startup transition - may be WAKEUP or WORK depending on config
         StateTransition(AgentState.SHUTDOWN, AgentState.WAKEUP),
+        StateTransition(AgentState.SHUTDOWN, AgentState.WORK),  # Direct to WORK when wakeup bypassed
         # Other valid transitions
         StateTransition(AgentState.WAKEUP, AgentState.WORK),
         StateTransition(AgentState.WAKEUP, AgentState.DREAM),
@@ -54,11 +72,32 @@ class StateManager:
         StateTransition(AgentState.SOLITUDE, AgentState.WORK),
     ]
 
-    def __init__(self, time_service: TimeServiceProtocol, initial_state: AgentState = AgentState.SHUTDOWN) -> None:
+    # Legacy class attribute for backwards compatibility
+    VALID_TRANSITIONS = BASE_TRANSITIONS
+
+    def __init__(
+        self,
+        time_service: TimeServiceProtocol,
+        initial_state: AgentState = AgentState.SHUTDOWN,
+        cognitive_behaviors: Optional[CognitiveStateBehaviors] = None,
+    ) -> None:
+        """Initialize the state manager.
+
+        Args:
+            time_service: Service for time operations
+            initial_state: Starting state (default: SHUTDOWN)
+            cognitive_behaviors: Template-driven state transition config.
+                If None, uses default Covenant-compliant behaviors.
+        """
         self.time_service = time_service
         self.current_state = initial_state
         self.state_history: List[StateTransitionRecord] = []
         self.state_metadata: Dict[AgentState, StateMetadata] = {}
+
+        # Store cognitive behaviors config (default if not provided)
+        self.cognitive_behaviors = cognitive_behaviors or CognitiveStateBehaviors()
+
+        # Build transition map respecting cognitive behaviors
         self._transition_map = self._build_transition_map()
 
         self._record_state_change(initial_state, None)
@@ -68,14 +107,108 @@ class StateManager:
             entered_at=self.time_service.now_iso(), metrics=StateMetrics()
         )
 
+        # Log cognitive behaviors configuration with clear indication of source
+        logger.info(
+            f"[STATE_MANAGER] Initialized with cognitive behaviors "
+            f"(from_template={cognitive_behaviors is not None}): "
+            f"wakeup.enabled={self.cognitive_behaviors.wakeup.enabled}, "
+            f"startup_target={self.startup_target_state.value}, "
+            f"shutdown.mode={self.cognitive_behaviors.shutdown.mode}"
+        )
+
+    @property
+    def wakeup_bypassed(self) -> bool:
+        """Check if wakeup ceremony is bypassed for this agent."""
+        return not self.cognitive_behaviors.wakeup.enabled
+
+    @property
+    def startup_target_state(self) -> AgentState:
+        """Get the target state for startup (WAKEUP or WORK)."""
+        if self.wakeup_bypassed:
+            return AgentState.WORK
+        return AgentState.WAKEUP
+
     def _build_transition_map(self) -> Dict[AgentState, Dict[AgentState, StateTransition]]:
-        """Build a map for quick transition lookups."""
+        """Build a map for quick transition lookups respecting cognitive behaviors.
+
+        Filters transitions based on:
+        - wakeup.enabled: Determines SHUTDOWN -> WAKEUP vs SHUTDOWN -> WORK
+        - play.enabled: Whether PLAY state is accessible
+        - dream.enabled: Whether DREAM state is accessible
+        - solitude.enabled: Whether SOLITUDE state is accessible
+        """
         transition_map: Dict[AgentState, Dict[AgentState, StateTransition]] = {}
-        for transition in self.VALID_TRANSITIONS:
+        behaviors = self.cognitive_behaviors
+
+        for transition in self.BASE_TRANSITIONS:
+            # Filter based on cognitive behaviors config
+            if not self._is_transition_allowed(transition, behaviors):
+                continue
+
             if transition.from_state not in transition_map:
                 transition_map[transition.from_state] = {}
             transition_map[transition.from_state][transition.to_state] = transition
+
         return transition_map
+
+    def _is_optional_state_enabled(self, state: AgentState, behaviors: CognitiveStateBehaviors) -> bool:
+        """Check if an optional cognitive state is enabled in behaviors.
+
+        Returns True for states that are always enabled (WORK, WAKEUP, SHUTDOWN).
+        Returns the enabled flag for optional states (PLAY, DREAM, SOLITUDE).
+        """
+        state_behavior_map = {
+            AgentState.PLAY: behaviors.play,
+            AgentState.DREAM: behaviors.dream,
+            AgentState.SOLITUDE: behaviors.solitude,
+        }
+        behavior = state_behavior_map.get(state)
+        return bool(getattr(behavior, "enabled", True)) if behavior else True
+
+    def _check_shutdown_wakeup_transition(
+        self, from_state: AgentState, to_state: AgentState, behaviors: CognitiveStateBehaviors
+    ) -> Optional[bool]:
+        """Check SHUTDOWN -> WAKEUP/WORK transitions based on wakeup config.
+
+        Returns True/False for definitive result, None if not a shutdown transition.
+        """
+        if from_state != AgentState.SHUTDOWN:
+            return None
+        if to_state == AgentState.WAKEUP:
+            return behaviors.wakeup.enabled
+        if to_state == AgentState.WORK:
+            return not behaviors.wakeup.enabled
+        return None
+
+    def _is_transition_allowed(
+        self,
+        transition: StateTransition,
+        behaviors: CognitiveStateBehaviors,
+    ) -> bool:
+        """Check if a transition is allowed based on cognitive behaviors.
+
+        Args:
+            transition: The transition to check
+            behaviors: The cognitive behaviors configuration
+
+        Returns:
+            True if the transition is allowed, False otherwise
+        """
+        from_state = transition.from_state
+        to_state = transition.to_state
+
+        # Check SHUTDOWN -> WAKEUP/WORK transitions
+        shutdown_result = self._check_shutdown_wakeup_transition(from_state, to_state, behaviors)
+        if shutdown_result is not None:
+            return shutdown_result
+
+        # Check if optional states (PLAY, DREAM, SOLITUDE) are enabled
+        if not self._is_optional_state_enabled(to_state, behaviors):
+            return False
+        if not self._is_optional_state_enabled(from_state, behaviors):
+            return False
+
+        return True
 
     def _record_state_change(self, new_state: AgentState, old_state: Optional[AgentState]) -> None:
         """Record state change in history."""
@@ -107,16 +240,21 @@ class StateManager:
         """
         Attempt to transition to a new state.
         Returns True if successful, False otherwise.
+
+        Note: Respects cognitive_behaviors configuration for startup transitions.
+        When wakeup is bypassed, SHUTDOWN -> WORK is the valid startup path.
         """
-        # CRITICAL: Only allow SHUTDOWN -> WAKEUP transition for startup
+        # Handle startup transition based on cognitive behaviors
         if self.current_state == AgentState.SHUTDOWN:
-            if target_state != AgentState.WAKEUP:
+            expected_startup = self.startup_target_state
+            if target_state != expected_startup:
                 logger.warning(
                     f"Attempted transition from SHUTDOWN to {target_state.value} - blocked! "
-                    "Only WAKEUP transition is allowed from SHUTDOWN."
+                    f"Expected startup transition is SHUTDOWN -> {expected_startup.value} "
+                    f"(wakeup_bypassed={self.wakeup_bypassed})"
                 )
                 return False
-            # Allow SHUTDOWN -> WAKEUP for startup sequence
+            # Allow the configured startup transition
 
         if not await self.can_transition_to(target_state):
             logger.warning(f"Invalid state transition attempted: {self.current_state.value} -> {target_state.value}")

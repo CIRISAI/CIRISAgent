@@ -33,6 +33,7 @@ class QAModule(Enum):
     REDDIT = "reddit"  # Reddit adapter testing
     SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
     SETUP = "setup"  # Setup wizard testing (first-run configuration)
+    STATE_TRANSITIONS = "state_transitions"  # Cognitive state behavior testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -192,6 +193,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.SQL_EXTERNAL_DATA:
             # SQL external data tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.STATE_TRANSITIONS:
+            # State transition tests use SDK client pattern
             return []  # Will be handled separately by runner
 
         # Handler test modules

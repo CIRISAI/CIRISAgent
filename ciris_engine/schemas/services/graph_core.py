@@ -67,6 +67,8 @@ class ConfigNodeType(str, Enum):
     CAPABILITY_LIMITS = "capability_limits"
     TRUST_PARAMETERS = "trust_parameters"
     LEARNING_RULES = "learning_rules"
+    COGNITIVE_STATE_BEHAVIORS = "cognitive_state_behaviors"  # Wakeup/shutdown/play/dream/solitude config
+    TICKET_SOPS = "ticket_sops"  # DSAR and other ticket Standard Operating Procedures
 
 
 # Mapping of config types to required scopes
@@ -81,6 +83,8 @@ CONFIG_SCOPE_MAP = {
     ConfigNodeType.CAPABILITY_LIMITS: GraphScope.IDENTITY,
     ConfigNodeType.TRUST_PARAMETERS: GraphScope.IDENTITY,
     ConfigNodeType.LEARNING_RULES: GraphScope.IDENTITY,
+    ConfigNodeType.COGNITIVE_STATE_BEHAVIORS: GraphScope.IDENTITY,
+    ConfigNodeType.TICKET_SOPS: GraphScope.IDENTITY,
 }
 
 

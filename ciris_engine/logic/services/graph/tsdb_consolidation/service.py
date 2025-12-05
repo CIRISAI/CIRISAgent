@@ -173,10 +173,8 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         self._running = True
         self._start_time = self._now()
 
-        # Consolidate any missed windows before starting the regular loop
-        await self._consolidate_missed_windows()
-
         # Start single consolidation loop that handles basic → extensive → profound sequentially
+        # The loop will consolidate missed windows first before entering the regular schedule
         self._consolidation_task = asyncio.create_task(self._consolidation_loop())
         logger.info(
             f"TSDBConsolidationService started - Basic: {self._basic_interval}, Extensive: {self._extensive_interval}, Profound: {self._profound_interval}"
@@ -220,6 +218,14 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
         This ensures only ONE occurrence handles all consolidation types sequentially,
         preventing race conditions between consolidation levels.
         """
+        # First, consolidate any missed windows in the background
+        # This runs asynchronously and doesn't block the main init sequence
+        try:
+            await self._consolidate_missed_windows()
+        except Exception as e:
+            logger.error(f"Error consolidating missed windows: {e}", exc_info=True)
+            # Continue anyway - don't let missed window errors block regular operation
+
         while self._running:
             try:
                 # Calculate next run time
@@ -975,12 +981,16 @@ class TSDBConsolidationService(BaseGraphService, RegistryAwareServiceProtocol):
             return 0
 
     async def is_healthy(self) -> bool:
-        """Check if the service is healthy."""
-        return (
-            self._running
-            and self._memory_bus is not None
-            and (self._consolidation_task is None or not self._consolidation_task.done())
-        )
+        """Check if the service is healthy.
+
+        The service is healthy if:
+        - It's running
+        - Memory bus is available
+
+        Note: We don't check consolidation_task state because the task may
+        complete between consolidation windows and that's normal behavior.
+        """
+        return self._running and self._memory_bus is not None
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Get service capabilities."""

@@ -27,7 +27,9 @@ class IdentityManager:
         self.config = config
         self.time_service = time_service
         self.agent_identity: Optional[AgentIdentityRoot] = None
-        self.agent_template: Optional[AgentTemplate] = None  # Store full template for API access
+        # NOTE: agent_template is ONLY set during first-run seeding, then never used again
+        # All operational config (including tickets) should come from the graph after seeding
+        self.agent_template: Optional[AgentTemplate] = None
 
     async def initialize_identity(self) -> AgentIdentityRoot:
         """Initialize agent identity - create from template on first run, load from graph thereafter."""
@@ -35,19 +37,12 @@ class IdentityManager:
         identity_data = await self._get_identity_from_graph()
 
         if identity_data:
-            # Identity exists - load it and use it
-            logger.info("Loading existing agent identity from graph")
+            # Identity exists - load it from graph
+            # IMPORTANT: Template is COMPLETELY IGNORED when identity already exists
+            # All config (identity, operational, tickets, etc.) comes from the graph
+            logger.info("Loading existing agent identity from graph (template ignored entirely)")
             self.agent_identity = AgentIdentityRoot.model_validate(identity_data)
-
-            # Also load template for API access (tickets config, etc.)
-            template_name = getattr(self.config, "default_template", "default")
-            from ciris_engine.logic.utils.path_resolution import find_template_file
-
-            template_path = find_template_file(template_name)
-            if template_path:
-                self.agent_template = await self._load_template(template_path)
-            if not self.agent_template:
-                logger.warning(f"Template '{template_name}' not found")
+            # self.agent_template remains None - template is not used after first run
         else:
             # First run - use template to create initial identity
             logger.info("No identity found, creating from template (first run only)")
@@ -72,7 +67,9 @@ class IdentityManager:
             if not initial_template:
                 raise RuntimeError("No template available for initial identity creation")
 
-            # Store template for API access (tickets config, etc.)
+            # Store template temporarily - only used during this seeding process
+            # After seeding, all config comes from graph
+            # NOTE: Tickets config will be migrated to graph by ciris_runtime._migrate_tickets_config_to_graph()
             self.agent_template = initial_template
 
             # Create identity from template and save to graph

@@ -6,6 +6,7 @@ Frontend should NEVER call the billing backend directly.
 """
 
 import logging
+import re
 from typing import Any, Dict, Optional
 
 import httpx
@@ -26,6 +27,10 @@ router = APIRouter(prefix="/api/billing", tags=["billing"])
 ERROR_RESOURCE_MONITOR_UNAVAILABLE = "Resource monitor not available"
 ERROR_CREDIT_PROVIDER_NOT_CONFIGURED = "Credit provider not configured"
 ERROR_BILLING_SERVICE_UNAVAILABLE = "Billing service unavailable"
+ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
+
+# Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
+PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
 
 # Request/Response schemas
@@ -96,25 +101,55 @@ class TransactionListResponse(BaseModel):
 # Helper functions
 
 
-def _get_billing_client(request: Request) -> httpx.AsyncClient:
-    """Get billing API client from app state."""
-    if not hasattr(request.app.state, "billing_client"):
-        # Create billing client if not exists
-        import os
+def _get_billing_client(request: Request, google_id_token: Optional[str] = None) -> httpx.AsyncClient:
+    """Get billing API client from app state.
 
-        billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
-        api_key = os.getenv("CIRIS_BILLING_API_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Billing API key not configured")
+    Supports two authentication modes:
+    1. Server mode: Uses CIRIS_BILLING_API_KEY env var (for agents.ciris.ai)
+    2. JWT pass-through mode: Uses Google ID token from request (for Android/native)
 
+    Args:
+        request: FastAPI request object
+        google_id_token: Optional Google ID token for JWT pass-through mode
+    """
+    import os
+
+    # Check if billing client already exists in app state (for testing or pre-configured)
+    if hasattr(request.app.state, "billing_client") and request.app.state.billing_client is not None:
+        existing_client: httpx.AsyncClient = request.app.state.billing_client
+        return existing_client
+
+    billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+    api_key = os.getenv("CIRIS_BILLING_API_KEY")
+
+    # Determine authentication mode
+    if api_key:
+        # Server mode: use API key (cached client)
+        if not hasattr(request.app.state, "billing_client"):
+            headers = {
+                "X-API-Key": api_key,
+                "User-Agent": "CIRIS-Agent-Frontend/1.0",
+            }
+            new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
+            request.app.state.billing_client = new_client
+        client: httpx.AsyncClient = request.app.state.billing_client
+        return client
+    elif google_id_token:
+        # JWT pass-through mode: create new client with Google ID token as Bearer
+        # Don't cache this client since token changes per request
         headers = {
-            "X-API-Key": api_key,
-            "User-Agent": "CIRIS-Agent-Frontend/1.0",
+            "Authorization": f"Bearer {google_id_token}",
+            "User-Agent": "CIRIS-Mobile/1.0",
         }
-        new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
-        request.app.state.billing_client = new_client
-    client: httpx.AsyncClient = request.app.state.billing_client
-    return client
+        logger.info(
+            f"[BILLING_JWT] Creating JWT pass-through client with Google ID token ({len(google_id_token)} chars)"
+        )
+        return httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Billing not configured: set CIRIS_BILLING_API_KEY or provide X-Google-ID-Token header",
+        )
 
 
 def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
@@ -289,18 +324,31 @@ async def get_credits(
 
     The frontend calls this to display credit status.
     """
+    logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
     user_identity = _extract_user_identity(auth, request)
     agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
-    logger.debug(f"Credit check for user_id={auth.user_id} on agent {agent_id}")
+    logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check if we have a resource monitor with credit provider
     if not hasattr(request.app.state, "resource_monitor"):
+        logger.error("[BILLING_API] No resource_monitor on app.state")
         raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
 
     resource_monitor = request.app.state.resource_monitor
+    logger.info(
+        "[BILLING_API] resource_monitor=%s, has credit_provider=%s, provider=%s",
+        type(resource_monitor).__name__,
+        hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider is not None,
+        (
+            type(resource_monitor.credit_provider).__name__
+            if hasattr(resource_monitor, "credit_provider") and resource_monitor.credit_provider
+            else "None"
+        ),
+    )
 
     # Check if credit provider is configured
     if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        logger.info("[BILLING_API] No credit provider, returning unlimited response")
         return _get_unlimited_credit_response()
 
     # Query credit provider via resource monitor
@@ -330,7 +378,30 @@ async def get_credits(
     if is_simple_provider:
         return _get_simple_provider_response(result.has_credit)
 
-    # CIRISBillingProvider: Query billing backend for full details
+    # CIRISBillingProvider: We already have the credit check result
+    # For Android/JWT mode (no API key), use the result directly
+    # For server mode (with API key), query billing backend for full details
+    import os
+
+    has_billing_api_key = bool(os.getenv("CIRIS_BILLING_API_KEY"))
+
+    if not has_billing_api_key:
+        # Android/JWT mode - use CreditCheckResult directly
+        logger.info(
+            "[BILLING_CREDITS] Using CreditCheckResult (no API key): "
+            f"free={result.free_uses_remaining}, paid={result.credits_remaining}, has_credit={result.has_credit}"
+        )
+        return CreditStatusResponse(
+            has_credit=result.has_credit,
+            credits_remaining=result.credits_remaining or 0,
+            free_uses_remaining=result.free_uses_remaining or 0,
+            total_uses=0,  # Not tracked in JWT mode
+            plan_name="CIRIS Mobile",
+            purchase_required=not result.has_credit,
+            purchase_options={"price_minor": 499, "uses": 100, "currency": "USD"} if not result.has_credit else None,
+        )
+
+    # Server mode with API key - query billing backend for full details
     billing_client = _get_billing_client(request)
     check_payload = _build_credit_check_payload(user_identity, context)
     credit_data = await _query_billing_backend(billing_client, check_payload)
@@ -433,6 +504,10 @@ async def get_purchase_status(
     Frontend can poll this after initiating payment to confirm credits were added.
     Only works when CIRIS_BILLING_ENABLED=true (CIRISBillingProvider).
     """
+    # Validate payment_id to prevent path traversal attacks
+    if not PAYMENT_ID_PATTERN.match(payment_id):
+        raise HTTPException(status_code=400, detail=ERROR_INVALID_PAYMENT_ID)
+
     # Check if billing is enabled
     if not hasattr(request.app.state, "resource_monitor"):
         raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
@@ -619,3 +694,111 @@ async def get_transactions(
     except httpx.RequestError as e:
         logger.error(f"Billing API request error: {e}")
         raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+
+
+# Google Play verification models
+
+
+class GooglePlayVerifyRequest(BaseModel):
+    """Request to verify a Google Play purchase."""
+
+    purchase_token: str = Field(..., description="Google Play purchase token")
+    product_id: str = Field(..., description="Product SKU (e.g., 'credits_100')")
+    package_name: str = Field(..., description="App package name")
+
+
+class GooglePlayVerifyResponse(BaseModel):
+    """Response from Google Play purchase verification."""
+
+    success: bool = Field(..., description="Whether verification succeeded")
+    credits_added: int = Field(0, description="Credits added from this purchase")
+    new_balance: int = Field(0, description="New credit balance after purchase")
+    already_processed: bool = Field(False, description="Whether purchase was already processed")
+    error: Optional[str] = Field(None, description="Error message if verification failed")
+
+
+@router.post("/google-play/verify", response_model=GooglePlayVerifyResponse)
+async def verify_google_play_purchase(
+    request: Request,
+    body: GooglePlayVerifyRequest,
+    auth: AuthContext = Depends(require_observer),
+) -> GooglePlayVerifyResponse:
+    """
+    Verify a Google Play purchase and add credits.
+
+    This endpoint proxies the verification request to the billing backend,
+    which validates the purchase token with Google Play and adds credits.
+
+    Supports two authentication modes:
+    1. Server mode: Uses CIRIS_BILLING_API_KEY (agents.ciris.ai)
+    2. JWT pass-through: Uses Bearer token from request (Android/native)
+
+    Only works when CIRISBillingProvider is configured.
+    """
+    logger.info(f"[GOOGLE_PLAY_VERIFY] Verifying purchase for user_id={auth.user_id}, product={body.product_id}")
+
+    # Check if billing is enabled
+    if not hasattr(request.app.state, "resource_monitor"):
+        return GooglePlayVerifyResponse(success=False, error=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
+
+    resource_monitor = request.app.state.resource_monitor
+
+    if not hasattr(resource_monitor, "credit_provider") or resource_monitor.credit_provider is None:
+        return GooglePlayVerifyResponse(success=False, error=ERROR_CREDIT_PROVIDER_NOT_CONFIGURED)
+
+    is_simple_provider = resource_monitor.credit_provider.__class__.__name__ == "SimpleCreditProvider"
+
+    if is_simple_provider:
+        return GooglePlayVerifyResponse(
+            success=False, error="Google Play purchases not supported - billing backend not configured"
+        )
+
+    # Extract user identity for billing backend
+    user_identity = _extract_user_identity(auth, request)
+
+    # Build verification request for billing backend
+    verify_payload = {
+        "oauth_provider": user_identity["oauth_provider"],
+        "external_id": user_identity["external_id"],
+        "email": user_identity.get("customer_email"),
+        "display_name": None,  # Not needed for verification
+        "purchase_token": body.purchase_token,
+        "product_id": body.product_id,
+        "package_name": body.package_name,
+    }
+
+    logger.info(f"[GOOGLE_PLAY_VERIFY] Sending to billing backend: oauth_provider={verify_payload['oauth_provider']}")
+
+    # Get Google ID token for JWT pass-through mode (Android/native)
+    # Android sends this in X-Google-ID-Token header for billing backend auth
+    google_id_token = request.headers.get("X-Google-ID-Token")
+    if google_id_token:
+        logger.info(f"[GOOGLE_PLAY_VERIFY] Using JWT pass-through with Google ID token ({len(google_id_token)} chars)")
+    billing_client = _get_billing_client(request, google_id_token=google_id_token)
+
+    try:
+        response = await billing_client.post(
+            "/v1/billing/google-play/verify",
+            json=verify_payload,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        logger.info(
+            f"[GOOGLE_PLAY_VERIFY] Success: credits_added={result.get('credits_added')}, "
+            f"new_balance={result.get('new_balance')}, already_processed={result.get('already_processed')}"
+        )
+
+        return GooglePlayVerifyResponse(
+            success=result.get("success", False),
+            credits_added=result.get("credits_added", 0),
+            new_balance=result.get("new_balance", 0),
+            already_processed=result.get("already_processed", False),
+        )
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[GOOGLE_PLAY_VERIFY] Billing API error: {e.response.status_code} - {e.response.text}")
+        return GooglePlayVerifyResponse(success=False, error=f"Verification failed: {e.response.status_code}")
+    except httpx.RequestError as e:
+        logger.error(f"[GOOGLE_PLAY_VERIFY] Request error: {e}")
+        return GooglePlayVerifyResponse(success=False, error=f"Network error: {str(e)}")

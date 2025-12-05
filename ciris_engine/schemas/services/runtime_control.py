@@ -744,6 +744,7 @@ class ConscienceExecutionStepData(BaseStepData):
     action_result: str = Field(..., description="Complete action result")
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
     conscience_result: ConscienceResult = Field(..., description="Complete conscience evaluation result")
+    aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA for debugging")
 
 
 class RecursiveASPDMAStepData(BaseStepData):
@@ -930,6 +931,11 @@ class DMAResultsEvent(BaseModel):
     dsdma: DSDMAResult = Field(..., description="Domain Specific DMA result")
     pdma: EthicalDMAResult = Field(..., description="Ethical Perspective DMA result (PDMA)")
 
+    # User prompts passed to each DMA (for debugging/transparency)
+    csdma_prompt: Optional[str] = Field(None, description="User prompt passed to CSDMA")
+    dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
+    pdma_prompt: Optional[str] = Field(None, description="User prompt passed to PDMA")
+
 
 class ASPDMAResultEvent(BaseModel):
     """Event 3: Selected action and rationale (PERFORM_ASPDMA + RECURSIVE_ASPDMA steps)."""
@@ -943,6 +949,9 @@ class ASPDMAResultEvent(BaseModel):
     # ASPDMA selection
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for selection")
+
+    # User prompt passed to ASPDMA (for debugging/transparency)
+    aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 
 
 class ConscienceResultEvent(BaseModel):

@@ -3,6 +3,7 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, Union
 
+from ciris_engine.schemas.services.graph_core import GraphScope
 from ciris_engine.schemas.types import ConfigValue
 
 from ...runtime.base import GraphServiceProtocol
@@ -20,8 +21,21 @@ class GraphConfigServiceProtocol(GraphServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def set_config(self, key: str, value: ConfigValue, updated_by: str) -> None:
-        """Set configuration value."""
+    async def set_config(
+        self,
+        key: str,
+        value: ConfigValue,
+        updated_by: str,
+        scope: GraphScope = GraphScope.LOCAL,
+    ) -> None:
+        """Set configuration value.
+
+        Args:
+            key: Configuration key
+            value: Configuration value
+            updated_by: Who is making the update
+            scope: Graph scope (LOCAL for agent-modifiable, IDENTITY for WA-protected)
+        """
         ...
 
     @abstractmethod

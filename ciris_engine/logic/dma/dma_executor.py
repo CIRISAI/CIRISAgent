@@ -1,6 +1,41 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Optional, Union
+import sys
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, Union
+
+# Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
+if sys.version_info >= (3, 11):
+    _async_timeout = asyncio.timeout
+else:
+
+    @asynccontextmanager
+    async def _async_timeout(delay: float) -> AsyncGenerator[None, None]:
+        """Python 3.10 compatible timeout context manager."""
+        loop = asyncio.get_event_loop()
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("No current task")
+
+        timed_out = False
+
+        def timeout_callback() -> None:
+            nonlocal timed_out
+            timed_out = True
+            task.cancel()  # type: ignore[union-attr]
+
+        handle = loop.call_later(delay, timeout_callback)
+        try:
+            yield
+        except asyncio.CancelledError:
+            handle.cancel()
+            if timed_out:
+                raise asyncio.TimeoutError() from None
+            else:
+                raise  # Re-raise CancelledError if not from timeout
+        else:
+            handle.cancel()
+
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -46,7 +81,7 @@ async def run_dma_with_retries(
     last_error: Optional[Exception] = None
     while attempt < retry_limit:
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with _async_timeout(timeout_seconds):
                 # Pass time_service if the function expects it
                 if time_service and "time_service" not in kwargs:
                     kwargs["time_service"] = time_service

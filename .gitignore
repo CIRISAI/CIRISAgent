@@ -14,6 +14,7 @@ logs/
 *.egg-info/
 *.egg
 *.whl
+!android/app/wheels/*.whl
 *.jsonl
 memory_graph.pkl
 audit_logs.jsonl
@@ -79,3 +80,20 @@ dict_any_audit_results.json
 build/
 dist/
 *.egg-info/
+android/.web-build/
+.idea/
+.token_refresh_needed
+android/.web-build/
+*.apk
+*.aab
+
+# Large media files from GUI static assets
+**/videos/
+**/*-unsplash.jpg
+**/infogfx-*.png
+**/blurryinfo.png
+
+# Android built GUI static assets (regenerated from CIRISGUI-Android)
+android/app/src/main/assets/public/
+android/app/src/main/python/android_gui_static/
+android_gui_static/

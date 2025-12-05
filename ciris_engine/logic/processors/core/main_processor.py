@@ -48,6 +48,7 @@ from ciris_engine.logic.processors.states.wakeup_processor import WakeupProcesso
 from ciris_engine.logic.processors.states.work_processor import WorkProcessor
 from ciris_engine.logic.processors.support.state_manager import StateManager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +70,24 @@ class AgentProcessor:
         time_service: TimeServiceProtocol,
         runtime: Optional[Any] = None,
         agent_occurrence_id: str = "default",
+        cognitive_behaviors: Optional[CognitiveStateBehaviors] = None,
     ) -> None:
-        """Initialize the agent processor with v1 configuration."""
+        """Initialize the agent processor with v1 configuration.
+
+        Args:
+            app_config: Configuration accessor
+            agent_identity: Agent identity root
+            thought_processor: Thought processor instance
+            action_dispatcher: Action dispatcher instance
+            services: Processor services container
+            startup_channel_id: Channel ID for startup messages
+            time_service: Time service for timestamps
+            runtime: Runtime reference for preload tasks
+            agent_occurrence_id: Occurrence ID for multi-instance support
+            cognitive_behaviors: Template-driven cognitive state behaviors config.
+                Controls wakeup/shutdown/play/dream/solitude state transitions.
+                See FSD/COGNITIVE_STATE_BEHAVIORS.md for details.
+        """
         # Allow empty string for startup_channel_id - will be resolved dynamically
         if startup_channel_id is None:
             raise ValueError("startup_channel_id cannot be None (empty string is allowed)")
@@ -86,9 +103,16 @@ class AgentProcessor:
         self._time_service = time_service  # Store injected time service
         self.agent_occurrence_id = agent_occurrence_id  # Store occurrence ID for multi-instance support
 
-        # Initialize state manager - agent always starts in SHUTDOWN state
+        # Store cognitive behaviors for access by state processors
+        self.cognitive_behaviors = cognitive_behaviors or CognitiveStateBehaviors()
+
+        # Initialize state manager with cognitive behaviors config
         time_service_from_services = services.time_service or time_service
-        self.state_manager = StateManager(time_service=time_service_from_services, initial_state=AgentState.SHUTDOWN)
+        self.state_manager = StateManager(
+            time_service=time_service_from_services,
+            initial_state=AgentState.SHUTDOWN,
+            cognitive_behaviors=self.cognitive_behaviors,
+        )
 
         # Initialize specialized processors, passing the standard services container
         self.wakeup_processor = WakeupProcessor(
@@ -146,6 +170,7 @@ class AgentProcessor:
         )
 
         # Shutdown processor for graceful shutdown negotiation
+        # Pass cognitive_behaviors for conditional/instant shutdown modes
         self.shutdown_processor = ShutdownProcessor(
             config_accessor=app_config,
             thought_processor=thought_processor,
@@ -154,6 +179,7 @@ class AgentProcessor:
             time_service=time_service,
             runtime=runtime,
             agent_occurrence_id=agent_occurrence_id,
+            cognitive_behaviors=self.cognitive_behaviors,
         )
 
         # Map states to processors
@@ -266,74 +292,94 @@ class AgentProcessor:
             self._stop_event.clear()
         logger.info(f"Starting agent processing (rounds: {num_rounds or 'infinite'})")
 
-        # Transition from SHUTDOWN to WAKEUP state when starting processing
+        # Determine startup target state based on cognitive behaviors
+        # When wakeup is bypassed, transition directly to WORK (partnership model)
+        startup_state = self.state_manager.startup_target_state
+        wakeup_bypassed = self.state_manager.wakeup_bypassed
+
+        if wakeup_bypassed:
+            logger.info(
+                f"Wakeup ceremony bypassed (cognitive_behaviors.wakeup.enabled=False). "
+                f"Rationale: {self.cognitive_behaviors.wakeup.rationale or 'Not specified'}"
+            )
+
+        # Transition from SHUTDOWN to startup state (WAKEUP or WORK)
         if self.state_manager.get_state() == AgentState.SHUTDOWN:
-            if not await self.state_manager.transition_to(AgentState.WAKEUP):
-                logger.error("Failed to transition from SHUTDOWN to WAKEUP state")
+            if not await self.state_manager.transition_to(startup_state):
+                logger.error(f"Failed to transition from SHUTDOWN to {startup_state.value} state")
                 return
-        elif self.state_manager.get_state() != AgentState.WAKEUP:
+        elif self.state_manager.get_state() != startup_state:
             logger.warning(f"Unexpected state {self.state_manager.get_state()} when starting processing")
-            if not await self.state_manager.transition_to(AgentState.WAKEUP):
-                logger.error(f"Failed to transition from {self.state_manager.get_state()} to WAKEUP state")
+            if not await self.state_manager.transition_to(startup_state):
+                logger.error(
+                    f"Failed to transition from {self.state_manager.get_state()} to {startup_state.value} state"
+                )
                 return
 
-        self.wakeup_processor.initialize()
+        # Skip wakeup sequence if bypassed
+        if wakeup_bypassed:
+            logger.info("✓ Wakeup bypassed - proceeding directly to WORK state")
+            self.state_manager.update_state_metadata("wakeup_complete", True)
+            self.state_manager.update_state_metadata("wakeup_bypassed", True)
+        else:
+            # Full wakeup ceremony
+            self.wakeup_processor.initialize()
 
-        wakeup_complete = False
-        wakeup_round = 0
+            wakeup_complete = False
+            wakeup_round = 0
 
-        while (
-            not wakeup_complete
-            and not (self._stop_event is not None and self._stop_event.is_set())
-            and (num_rounds is None or self.current_round_number < num_rounds)
-        ):
-            logger.info(f"Wakeup round {wakeup_round}")
+            while (
+                not wakeup_complete
+                and not (self._stop_event is not None and self._stop_event.is_set())
+                and (num_rounds is None or self.current_round_number < num_rounds)
+            ):
+                logger.info(f"Wakeup round {wakeup_round}")
 
-            wakeup_result = await self.wakeup_processor.process(wakeup_round)
-            wakeup_complete = wakeup_result.wakeup_complete
+                wakeup_result = await self.wakeup_processor.process(wakeup_round)
+                wakeup_complete = wakeup_result.wakeup_complete
 
-            # Check if wakeup failed (any task failed)
-            if hasattr(wakeup_result, "errors") and wakeup_result.errors > 0:
-                logger.error(f"Wakeup failed with {wakeup_result.errors} errors - transitioning to SHUTDOWN")
+                # Check if wakeup failed (any task failed)
+                if hasattr(wakeup_result, "errors") and wakeup_result.errors > 0:
+                    logger.error(f"Wakeup failed with {wakeup_result.errors} errors - transitioning to SHUTDOWN")
+                    if not await self.state_manager.transition_to(AgentState.SHUTDOWN):
+                        logger.error("Failed to transition to SHUTDOWN state after wakeup failure")
+                    await self.stop_processing()
+                    return
+
+                if not wakeup_complete:
+                    _thoughts_processed = await self._process_pending_thoughts_async()
+
+                    logger.info(f"Wakeup round {wakeup_round}: {wakeup_result.thoughts_processed} thoughts processed")
+
+                    # Use shorter delay for mock LLM
+                    llm_service = self._get_service("llm_service")
+                    is_mock_llm = llm_service and type(llm_service).__name__ == "MockLLMService"
+                    round_delay = 0.1 if is_mock_llm else 5.0
+                    await asyncio.sleep(round_delay)
+                else:
+                    logger.info("✓ Wakeup sequence completed successfully!")
+
+                wakeup_round += 1
+                self.current_round_number += 1
+
+            if not wakeup_complete:
+                logger.error(
+                    f"Wakeup did not complete within {num_rounds or 'infinite'} rounds - transitioning to SHUTDOWN"
+                )
+                # Transition to SHUTDOWN state since wakeup failed
                 if not await self.state_manager.transition_to(AgentState.SHUTDOWN):
                     logger.error("Failed to transition to SHUTDOWN state after wakeup failure")
                 await self.stop_processing()
                 return
 
-            if not wakeup_complete:
-                _thoughts_processed = await self._process_pending_thoughts_async()
+            logger.info("Attempting to transition from WAKEUP to WORK state...")
+            if not await self.state_manager.transition_to(AgentState.WORK):
+                logger.error("Failed to transition to WORK state after wakeup")
+                await self.stop_processing()
+                return
 
-                logger.info(f"Wakeup round {wakeup_round}: {wakeup_result.thoughts_processed} thoughts processed")
-
-                # Use shorter delay for mock LLM
-                llm_service = self._get_service("llm_service")
-                is_mock_llm = llm_service and type(llm_service).__name__ == "MockLLMService"
-                round_delay = 0.1 if is_mock_llm else 5.0
-                await asyncio.sleep(round_delay)
-            else:
-                logger.info("✓ Wakeup sequence completed successfully!")
-
-            wakeup_round += 1
-            self.current_round_number += 1
-
-        if not wakeup_complete:
-            logger.error(
-                f"Wakeup did not complete within {num_rounds or 'infinite'} rounds - transitioning to SHUTDOWN"
-            )
-            # Transition to SHUTDOWN state since wakeup failed
-            if not await self.state_manager.transition_to(AgentState.SHUTDOWN):
-                logger.error("Failed to transition to SHUTDOWN state after wakeup failure")
-            await self.stop_processing()
-            return
-
-        logger.info("Attempting to transition from WAKEUP to WORK state...")
-        if not await self.state_manager.transition_to(AgentState.WORK):
-            logger.error("Failed to transition to WORK state after wakeup")
-            await self.stop_processing()
-            return
-
-        logger.info("Successfully transitioned to WORK state")
-        self.state_manager.update_state_metadata("wakeup_complete", True)
+            logger.info("Successfully transitioned to WORK state")
+            self.state_manager.update_state_metadata("wakeup_complete", True)
 
         logger.info("Loading preload tasks...")
         self._load_preload_tasks()

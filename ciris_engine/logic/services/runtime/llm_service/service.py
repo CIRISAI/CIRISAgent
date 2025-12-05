@@ -2,12 +2,20 @@
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 
 import instructor
-from openai import APIConnectionError, APIStatusError, AsyncOpenAI, InternalServerError, RateLimitError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    AsyncOpenAI,
+    AuthenticationError,
+    InternalServerError,
+    RateLimitError,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
@@ -118,10 +126,14 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         try:
             self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=max_retries)
 
-            instructor_mode = getattr(self.openai_config, "instructor_mode", "json")
-            self.instruct_client = instructor.from_openai(
-                self.client, mode=instructor.Mode.JSON if instructor_mode.lower() == "json" else instructor.Mode.TOOLS
-            )
+            instructor_mode = getattr(self.openai_config, "instructor_mode", "json").lower()
+            mode_map = {
+                "json": instructor.Mode.JSON,
+                "tools": instructor.Mode.TOOLS,
+                "md_json": instructor.Mode.MD_JSON,
+            }
+            selected_mode = mode_map.get(instructor_mode, instructor.Mode.JSON)
+            self.instruct_client = instructor.from_openai(self.client, mode=selected_mode)
         except Exception as e:
             raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
 
@@ -175,6 +187,75 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Custom cleanup logic for LLM service."""
         await self.client.close()
         logger.info("OpenAI Compatible LLM Service stopped")
+
+    def update_api_key(self, new_api_key: str) -> None:
+        """Update the API key and reset circuit breaker.
+
+        Called when Android TokenRefreshManager provides a fresh Google ID token.
+        This is critical for ciris.ai proxy authentication which uses JWT tokens
+        that expire after ~1 hour.
+        """
+        if not new_api_key:
+            logger.warning("[LLM_TOKEN] Attempted to update with empty API key - ignoring")
+            return
+
+        old_key_preview = self.openai_config.api_key[:20] + "..." if self.openai_config.api_key else "None"
+        new_key_preview = new_api_key[:20] + "..."
+
+        # Update config
+        self.openai_config.api_key = new_api_key
+
+        # Update the OpenAI client's API key
+        # The AsyncOpenAI client stores the key and uses it for all requests
+        self.client.api_key = new_api_key
+
+        # Also update instructor client if it has a reference to the key
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "api_key"):
+            self.instruct_client.client.api_key = new_api_key
+
+        # Reset circuit breaker to allow immediate retry
+        self.circuit_breaker.reset()
+
+        logger.info(
+            "[LLM_TOKEN] API key updated and circuit breaker reset:\n"
+            "  Old key: %s\n"
+            "  New key: %s\n"
+            "  Circuit breaker state: %s",
+            old_key_preview,
+            new_key_preview,
+            self.circuit_breaker.get_stats().get("state", "unknown"),
+        )
+
+    async def handle_token_refreshed(self, signal: str, resource: str) -> None:
+        """Handle token_refreshed signal from ResourceMonitor.
+
+        Called when Android's TokenRefreshManager has updated .env with a fresh
+        Google ID token and the ResourceMonitor has reloaded environment variables.
+
+        This is the signal handler registered with ResourceMonitor.signal_bus.
+
+        Args:
+            signal: The signal name ("token_refreshed")
+            resource: The resource that was refreshed ("openai_api_key")
+        """
+        logger.info("[LLM_TOKEN] Received token_refreshed signal: %s for %s", signal, resource)
+
+        # Read fresh API key from environment
+        new_api_key = os.environ.get("OPENAI_API_KEY", "")
+
+        if not new_api_key:
+            logger.warning("[LLM_TOKEN] No OPENAI_API_KEY found in environment after refresh")
+            return
+
+        # Check if key actually changed
+        if new_api_key == self.openai_config.api_key:
+            logger.info("[LLM_TOKEN] API key unchanged after refresh - just resetting circuit breaker")
+            self.circuit_breaker.reset()
+            return
+
+        # Update the key
+        self.update_api_key(new_api_key)
+        logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> AsyncOpenAI:
         """Return the OpenAI client instance (private method)."""
@@ -304,8 +385,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        thought_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
-        """Make a structured LLM call with circuit breaker protection."""
+        """Make a structured LLM call with circuit breaker protection.
+
+        Args:
+            messages: List of message dicts for the LLM
+            response_model: Pydantic model for structured response
+            max_tokens: Maximum tokens in response
+            temperature: Sampling temperature
+            thought_id: Optional thought ID for tracing (last 8 chars used)
+            task_id: Optional task ID for tracing (last 8 chars used)
+        """
         # Track the request
         self._track_request()
         # Track LLM-specific request
@@ -328,6 +420,28 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # Use instructor but capture the completion for usage data
                 # Note: We cast to Any because instructor expects OpenAI-specific message types
                 # but we use our own MessageDict protocol for type safety at the service boundary
+
+                # Build extra kwargs for CIRIS proxy (requires interaction_id)
+                # NOTE: CIRIS proxy charges per unique interaction_id, so we use task_id only
+                # All thoughts within the same task share one credit
+                extra_kwargs: Dict[str, Any] = {}
+                base_url = self.openai_config.base_url or ""
+                if "ciris.ai" in base_url:
+                    # Hash task_id for billing (irreversible, same task = same hash = 1 credit)
+                    import hashlib
+
+                    if not task_id:
+                        raise RuntimeError(
+                            f"BILLING BUG: task_id is required for CIRIS proxy but was None "
+                            f"(thought_id={thought_id}, model={resp_model.__name__})"
+                        )
+                    interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
+                    logger.info(
+                        f"DEBUG BILLING: interaction_id={interaction_id} "
+                        f"thought_id={thought_id} model={resp_model.__name__}"
+                    )
+                    extra_kwargs["extra_body"] = {"metadata": {"interaction_id": interaction_id}}
+
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
                     messages=cast(Any, msg_list),
@@ -335,6 +449,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     max_retries=0,  # Disable instructor retries completely
                     max_tokens=max_toks,
                     temperature=temp,
+                    **extra_kwargs,
                 )
 
                 # Extract usage data from completion
@@ -366,6 +481,35 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     await self.telemetry_service.record_metric("llm_api_call_structured")
 
                 return response, usage_obj
+
+            except AuthenticationError as e:
+                # Handle 401 Unauthorized - likely expired token or billing issue for ciris.ai
+                self._track_error(e)
+                self._total_errors += 1
+
+                base_url = self.openai_config.base_url or ""
+                if "ciris.ai" in base_url:
+                    # Force circuit breaker open immediately (don't wait for failure threshold)
+                    # This prevents burning credits on repeated failures
+                    self.circuit_breaker.force_open(reason="ciris.ai 401 - billing or token error")
+                    # Write signal file for Android to trigger token refresh
+                    logger.error(
+                        f"LLM AUTHENTICATION ERROR (401) - ciris.ai billing or token error.\n"
+                        f"  Model: {self.model_name}\n"
+                        f"  Provider: {base_url}\n"
+                        f"  Circuit breaker forced open immediately.\n"
+                        f"  Writing token refresh signal..."
+                    )
+                    self._signal_token_refresh_needed()
+                else:
+                    self.circuit_breaker.record_failure()
+                    logger.error(
+                        f"LLM AUTHENTICATION ERROR (401) - Invalid API key.\n"
+                        f"  Model: {self.model_name}\n"
+                        f"  Provider: {base_url}\n"
+                        f"  Error: {e}"
+                    )
+                raise
 
             except (APIConnectionError, RateLimitError, InternalServerError) as e:
                 # Record failure with circuit breaker
@@ -590,3 +734,27 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if last_exception:
             raise last_exception
         raise RuntimeError("Retry logic failed without exception")
+
+    def _signal_token_refresh_needed(self) -> None:
+        """Write a signal file to indicate token refresh is needed (for ciris.ai).
+
+        This file is monitored by the Android app to trigger Google silentSignIn().
+        The signal file is written to CIRIS_HOME/.token_refresh_needed
+        """
+        import os
+        from pathlib import Path
+
+        try:
+            # Get CIRIS_HOME from environment (set by mobile_main.py on Android)
+            ciris_home = os.getenv("CIRIS_HOME")
+            if not ciris_home:
+                # Fallback for non-Android environments
+                from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+                ciris_home = str(get_ciris_home())
+
+            signal_file = Path(ciris_home) / ".token_refresh_needed"
+            signal_file.write_text(str(time.time()))
+            logger.info(f"Token refresh signal written to: {signal_file}")
+        except Exception as e:
+            logger.error(f"Failed to write token refresh signal: {e}")

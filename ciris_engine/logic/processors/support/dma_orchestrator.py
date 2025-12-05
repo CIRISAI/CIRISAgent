@@ -129,11 +129,19 @@ class DMAOrchestrator:
         if errors.has_errors():
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
 
-        # Create InitialDMAResults with all 3 required fields
+        # Capture prompts from evaluators (set during evaluation)
+        ethical_pdma_prompt = getattr(self.ethical_pdma_evaluator, "last_user_prompt", None)
+        csdma_prompt = getattr(self.csdma_evaluator, "last_user_prompt", None)
+        dsdma_prompt = getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None
+
+        # Create InitialDMAResults with all 3 required fields and prompts
         return InitialDMAResults(
             ethical_pdma=dma_results["ethical_pdma"],
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
+            ethical_pdma_prompt=ethical_pdma_prompt,
+            csdma_prompt=csdma_prompt,
+            dsdma_prompt=dsdma_prompt,
         )
 
     async def run_dmas(

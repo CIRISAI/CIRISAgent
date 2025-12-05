@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Load environment variables from .env if present
 # Load from all standard config paths in priority order
 try:

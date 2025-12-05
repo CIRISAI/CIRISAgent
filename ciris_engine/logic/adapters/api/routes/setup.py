@@ -128,10 +128,21 @@ class SetupCompleteRequest(BaseModel):
 
     # User Configuration - Dual Password Support
     admin_username: str = Field(default="admin", description="New user's username")
-    admin_password: str = Field(..., description="New user's password (min 8 characters)")
+    admin_password: Optional[str] = Field(
+        None,
+        description="New user's password (min 8 characters). Optional for OAuth users - if not provided, a random password is generated and password auth is disabled for this user.",
+    )
     system_admin_password: Optional[str] = Field(
         None, description="System admin password to replace default (min 8 characters, optional)"
     )
+    # OAuth indicator - frontend sets this when user authenticated via OAuth (Google, etc.)
+    oauth_provider: Optional[str] = Field(
+        None, description="OAuth provider used for authentication (e.g., 'google'). If set, local password is optional."
+    )
+    oauth_external_id: Optional[str] = Field(
+        None, description="OAuth external ID (e.g., Google user ID). Required if oauth_provider is set."
+    )
+    oauth_email: Optional[str] = Field(None, description="OAuth email address from the provider.")
 
     # Application Configuration
     agent_port: int = Field(default=8080, description="Agent API port")
@@ -455,11 +466,93 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
+# =============================================================================
+# SETUP USER HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+
+async def _link_oauth_identity_to_wa(auth_service: Any, setup: "SetupCompleteRequest", wa_cert: Any) -> Any:
+    """Link OAuth identity to WA, handling existing links gracefully.
+
+    Returns the WA cert to use (may be updated if existing link found).
+    """
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    logger.info("CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
+    logger.info(
+        f"CIRIS_SETUP_DEBUG Linking OAuth identity: {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+    )
+
+    try:
+        # First check if OAuth identity is already linked to another WA
+        existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
+        if existing_wa and existing_wa.wa_id != wa_cert.wa_id:
+            logger.info(f"CIRIS_SETUP_DEBUG OAuth identity already linked to WA {existing_wa.wa_id}")
+            logger.info(
+                "CIRIS_SETUP_DEBUG During first-run setup, we'll update the existing WA to be ROOT instead of creating new"
+            )
+            # Update the existing WA to have ROOT role and update its name
+            await auth_service.update_wa(
+                wa_id=existing_wa.wa_id,
+                name=setup.admin_username,
+                role=WARole.ROOT,
+            )
+            logger.info(f"CIRIS_SETUP_DEBUG ✅ Updated existing WA {existing_wa.wa_id} to ROOT role")
+            return existing_wa
+
+        # No existing link or same WA - safe to link
+        await auth_service.link_oauth_identity(
+            wa_id=wa_cert.wa_id,
+            provider=setup.oauth_provider,
+            external_id=setup.oauth_external_id,
+            account_name=setup.admin_username,
+            metadata={"email": setup.oauth_email} if setup.oauth_email else None,
+            primary=True,
+        )
+        logger.info(
+            f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+        )
+    except Exception as e:
+        logger.error(f"CIRIS_SETUP_DEBUG ❌ FAILED to link OAuth identity: {e}", exc_info=True)
+        # Don't fail setup if OAuth linking fails - user can still use password
+
+    return wa_cert
+
+
+def _log_oauth_linking_skip(setup: "SetupCompleteRequest") -> None:
+    """Log debug information when OAuth linking is skipped."""
+    logger.info("CIRIS_SETUP_DEBUG *** SKIPPING OAuth linking block - condition not met ***")
+    if not setup.oauth_provider:
+        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy/empty")
+    if not setup.oauth_external_id:
+        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy/empty")
+
+
+async def _update_system_admin_password(auth_service: Any, setup: "SetupCompleteRequest", exclude_wa_id: str) -> None:
+    """Update the default admin password if specified."""
+    if not setup.system_admin_password:
+        return
+
+    logger.info("Updating default admin password...")
+    all_was = await auth_service.list_was(active_only=True)
+    admin_wa = next((wa for wa in all_was if wa.name == "admin" and wa.wa_id != exclude_wa_id), None)
+
+    if admin_wa:
+        admin_password_hash = auth_service.hash_password(setup.system_admin_password)
+        await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
+        logger.info("✅ Updated admin password")
+    else:
+        logger.warning("⚠️  Default admin WA not found")
+
+
 async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) -> None:
     """Create users immediately during setup completion.
 
     This is called during setup completion to create users without waiting for restart.
     Creates users directly in the database using authentication store functions.
+
+    IMPORTANT: For OAuth users, we check if they already exist and update to ROOT instead
+    of creating a duplicate WA. This prevents multiple ROOT users from being created.
 
     Args:
         setup: Setup configuration with user details
@@ -469,8 +562,14 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
     from ciris_engine.schemas.services.authority_core import WARole
 
-    logger.info("Creating setup users immediately...")
-    logger.debug(f"Using auth database path: {auth_db_path}")
+    logger.info("=" * 70)
+    logger.info("CIRIS_USER_CREATE: _create_setup_users() called")
+    logger.info("=" * 70)
+    logger.info(f"CIRIS_USER_CREATE: auth_db_path = {auth_db_path}")
+    logger.info(f"CIRIS_USER_CREATE: admin_username = {setup.admin_username}")
+    logger.info(f"CIRIS_USER_CREATE: oauth_provider = {repr(setup.oauth_provider)}")
+    logger.info(f"CIRIS_USER_CREATE: oauth_external_id = {repr(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_USER_CREATE: oauth_email = {repr(setup.oauth_email)}")
 
     # Create temporary authentication service for user creation
     time_service = TimeService()
@@ -482,37 +581,103 @@ async def _create_setup_users(setup: SetupCompleteRequest, auth_db_path: str) ->
     await auth_service.start()
 
     try:
-        # Create new user with AUTHORITY role (setup wizard always creates admin)
-        wa_role = WARole.AUTHORITY
+        wa_role = WARole.ROOT
+        wa_cert = None
 
-        logger.info(f"Creating user: {setup.admin_username} with role: {wa_role}")
+        # CRITICAL: Check if OAuth user already exists BEFORE creating new WA
+        # This prevents duplicate ROOT users
+        if setup.oauth_provider and setup.oauth_external_id:
+            logger.info(
+                f"CIRIS_USER_CREATE: Checking for existing OAuth user: {setup.oauth_provider}:{setup.oauth_external_id}"
+            )
+            existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
 
-        # Create WA certificate
-        wa_cert = await auth_service.create_wa(
-            name=setup.admin_username,
-            email=f"{setup.admin_username}@local",
-            scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
-            role=wa_role,
-        )
+            if existing_wa:
+                logger.info(f"CIRIS_USER_CREATE: ✓ Found existing WA for OAuth user: {existing_wa.wa_id}")
+                logger.info(f"CIRIS_USER_CREATE:   Current role: {existing_wa.role}")
+                logger.info(f"CIRIS_USER_CREATE:   Current name: {existing_wa.name}")
 
-        # Hash password and update WA
-        password_hash = auth_service.hash_password(setup.admin_password)
-        await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
+                # Update existing WA to ROOT role instead of creating new one
+                # IMPORTANT: Keep the existing name (from OAuth) - don't overwrite with fallback username
+                logger.info(
+                    f"CIRIS_USER_CREATE: Updating existing WA {existing_wa.wa_id} to ROOT role (keeping name: {existing_wa.name})"
+                )
+                await auth_service.update_wa(
+                    wa_id=existing_wa.wa_id,
+                    role=WARole.ROOT,
+                )
+                wa_cert = existing_wa
+                logger.info(f"CIRIS_USER_CREATE: ✅ Updated existing OAuth WA to ROOT: {wa_cert.wa_id}")
+            else:
+                logger.info(f"CIRIS_USER_CREATE: No existing WA found for OAuth user - will create new")
 
-        logger.info(f"✅ Created user: {setup.admin_username} (WA: {wa_cert.wa_id})")
+        # Only create new WA if we didn't find an existing OAuth user
+        if wa_cert is None:
+            logger.info(f"CIRIS_USER_CREATE: Creating NEW user: {setup.admin_username} with role: {wa_role}")
+
+            # Use OAuth email if available, otherwise generate local email
+            user_email = setup.oauth_email or f"{setup.admin_username}@local"
+            logger.info(f"CIRIS_USER_CREATE: User email: {user_email}")
+
+            # List existing WAs before creation for debugging
+            existing_was = await auth_service.list_was(active_only=False)
+            logger.info(f"CIRIS_USER_CREATE: Existing WAs before creation: {len(existing_was)}")
+            for wa in existing_was:
+                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+            # Create WA certificate
+            wa_cert = await auth_service.create_wa(
+                name=setup.admin_username,
+                email=user_email,
+                scopes=["read:any", "write:any"],  # ROOT gets full scopes
+                role=wa_role,
+            )
+            logger.info(f"CIRIS_USER_CREATE: ✅ Created NEW WA: {wa_cert.wa_id}")
+
+        # Only set password hash for NON-OAuth users
+        # OAuth users authenticate via their OAuth provider, not local password
+        is_oauth_setup = bool(setup.oauth_provider and setup.oauth_external_id)
+        if not is_oauth_setup:
+            # Hash password and update WA (admin_password is guaranteed set by validation above)
+            assert setup.admin_password is not None, "admin_password should be set by validation"
+            password_hash = auth_service.hash_password(setup.admin_password)
+            await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
+            logger.info(f"CIRIS_USER_CREATE: Password hash set for WA: {wa_cert.wa_id}")
+        else:
+            logger.info(f"CIRIS_USER_CREATE: Skipping password hash for OAuth user: {wa_cert.wa_id}")
+
+        # List WAs after creation for debugging
+        final_was = await auth_service.list_was(active_only=False)
+        logger.info(f"CIRIS_USER_CREATE: WAs after setup: {len(final_was)}")
+        for wa in final_was:
+            logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+        # Ensure system WA exists now that we have a ROOT WA
+        # This is critical for signing system tasks like WAKEUP
+        system_wa_id = await auth_service.ensure_system_wa_exists()
+        if system_wa_id:
+            logger.info(f"✅ System WA ready: {system_wa_id}")
+        else:
+            logger.warning("⚠️ Could not create system WA - deferral handling may not work")
+
+        # CIRIS_SETUP_DEBUG: Log OAuth linking decision
+        logger.info("CIRIS_SETUP_DEBUG _create_setup_users() OAuth linking check:")
+        logger.info(f"CIRIS_SETUP_DEBUG   setup.oauth_provider = {repr(setup.oauth_provider)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   setup.oauth_external_id = {repr(setup.oauth_external_id)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_provider) = {bool(setup.oauth_provider)}")
+        logger.info(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_external_id) = {bool(setup.oauth_external_id)}")
+        oauth_link_condition = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
+        logger.info(f"CIRIS_SETUP_DEBUG   Condition (provider AND external_id) = {oauth_link_condition}")
+
+        # Link OAuth identity if provided - THIS IS CRITICAL for OAuth login to work
+        if setup.oauth_provider and setup.oauth_external_id:
+            wa_cert = await _link_oauth_identity_to_wa(auth_service, setup, wa_cert)
+        else:
+            _log_oauth_linking_skip(setup)
 
         # Update default admin password if specified
-        if setup.system_admin_password:
-            logger.info("Updating default admin password...")
-            all_was = await auth_service.list_was(active_only=True)
-            admin_wa = next((wa for wa in all_was if wa.name == "admin" and wa.wa_id != wa_cert.wa_id), None)
-
-            if admin_wa:
-                admin_password_hash = auth_service.hash_password(setup.system_admin_password)
-                await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
-                logger.info("✅ Updated admin password")
-            else:
-                logger.warning("⚠️  Default admin WA not found")
+        assert wa_cert is not None, "wa_cert should be set by create_wa or existing WA lookup"
+        await _update_system_admin_password(auth_service, setup, wa_cert.wa_id)
 
     finally:
         await auth_service.stop()
@@ -548,6 +713,102 @@ def _save_pending_users(setup: SetupCompleteRequest, config_dir: Path) -> None:
     # Save to JSON file
     with open(pending_users_file, "w") as f:
         json.dump(users_data, f, indent=2)
+
+
+def _validate_setup_passwords(setup: SetupCompleteRequest, is_oauth_user: bool) -> str:
+    """Validate and potentially generate admin password for setup.
+
+    For OAuth users without a password, generates a secure random password.
+    For non-OAuth users, validates password requirements.
+
+    Args:
+        setup: Setup configuration request
+        is_oauth_user: Whether user is authenticating via OAuth
+
+    Returns:
+        Validated or generated admin password
+
+    Raises:
+        HTTPException: If password validation fails
+    """
+    admin_password = setup.admin_password
+
+    if not admin_password or len(admin_password) == 0:
+        if is_oauth_user:
+            # Generate a secure random password for OAuth users
+            # They won't use this password - they'll authenticate via OAuth
+            admin_password = secrets.token_urlsafe(32)
+            logger.info("[Setup Complete] Generated random password for OAuth user (password auth disabled)")
+        else:
+            # Non-OAuth users MUST provide a password
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+            )
+    elif len(admin_password) < 8:
+        # If a password was provided, it must meet minimum requirements
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
+        )
+
+    # Validate system admin password strength if provided
+    if setup.system_admin_password and len(setup.system_admin_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
+        )
+
+    return admin_password
+
+
+def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
+    """Save setup configuration to .env and reload environment variables.
+
+    Args:
+        setup: Setup configuration request
+
+    Returns:
+        Path to the saved configuration file
+    """
+    from dotenv import load_dotenv
+
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
+
+    logger.info("[Setup Complete] Path resolution:")
+    logger.info(f"[Setup Complete]   is_android(): {is_android()}")
+    logger.info(f"[Setup Complete]   is_development_mode(): {is_development_mode()}")
+    logger.info(f"[Setup Complete]   get_ciris_home(): {get_ciris_home()}")
+
+    config_path = get_default_config_path()
+    config_dir = config_path.parent
+    logger.info(f"[Setup Complete]   config_path: {config_path}")
+    logger.info(f"[Setup Complete]   config_dir: {config_dir}")
+
+    # Ensure directory exists
+    config_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"[Setup Complete] Directory ensured: {config_dir}")
+
+    # Save configuration
+    logger.info(f"[Setup Complete] Saving configuration to: {config_path}")
+    _save_setup_config(setup, config_path)
+    logger.info("[Setup Complete] Configuration saved successfully!")
+
+    # Verify the file was written
+    if config_path.exists():
+        file_size = config_path.stat().st_size
+        logger.info(f"[Setup Complete] Verified: .env exists ({file_size} bytes)")
+    else:
+        logger.error(f"[Setup Complete] ERROR: .env file NOT found at {config_path} after save!")
+
+    # Reload environment variables from the new .env file
+    load_dotenv(config_path, override=True)
+    logger.info(f"[Setup Complete] Reloaded environment variables from {config_path}")
+
+    # Verify key env vars were loaded
+    openai_key = os.getenv("OPENAI_API_KEY")
+    openai_base = os.getenv("OPENAI_API_BASE")
+    logger.info(f"[Setup Complete] After reload - OPENAI_API_KEY: {openai_key[:20] if openai_key else '(not set)'}...")
+    logger.info(f"[Setup Complete] After reload - OPENAI_API_BASE: {openai_base}")
+
+    return config_path
 
 
 def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
@@ -678,6 +939,41 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     Only accessible during first-run (no authentication required).
     After setup, authentication is required for reconfiguration.
     """
+    # CIRIS_SETUP_DEBUG: Comprehensive logging for OAuth identity linking
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+    logger.info("CIRIS_SETUP_DEBUG complete_setup() endpoint called")
+    logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
+
+    # Log ALL OAuth-related fields received from frontend
+    logger.info("CIRIS_SETUP_DEBUG OAuth fields received from frontend:")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_provider = {repr(setup.oauth_provider)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id = {repr(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_email = {repr(setup.oauth_email)}")
+
+    # Check truthiness explicitly
+    logger.info("CIRIS_SETUP_DEBUG Truthiness checks:")
+    logger.info(f"CIRIS_SETUP_DEBUG   bool(oauth_provider) = {bool(setup.oauth_provider)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   bool(oauth_external_id) = {bool(setup.oauth_external_id)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id is None = {setup.oauth_external_id is None}")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id == '' = {setup.oauth_external_id == ''}")
+
+    # The critical check that determines OAuth linking
+    will_link_oauth = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
+    logger.info(f"CIRIS_SETUP_DEBUG CRITICAL: Will OAuth linking happen? = {will_link_oauth}")
+    if not will_link_oauth:
+        if not setup.oauth_provider:
+            logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy")
+        if not setup.oauth_external_id:
+            logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy")
+
+    # Log other setup fields
+    logger.info("CIRIS_SETUP_DEBUG Other setup fields:")
+    logger.info(f"CIRIS_SETUP_DEBUG   admin_username = {setup.admin_username}")
+    logger.info(f"CIRIS_SETUP_DEBUG   admin_password set = {bool(setup.admin_password)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   system_admin_password set = {bool(setup.system_admin_password)}")
+    logger.info(f"CIRIS_SETUP_DEBUG   llm_provider = {setup.llm_provider}")
+    logger.info(f"CIRIS_SETUP_DEBUG   template_id = {setup.template_id}")
+
     # Only allow during first-run
     if not is_first_run():
         raise HTTPException(
@@ -685,34 +981,16 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
             detail="Setup already completed. Use PUT /v1/setup/config to update configuration.",
         )
 
-    # Validate new user password strength
-    if len(setup.admin_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
-        )
+    # Determine if this is an OAuth user (password is optional for OAuth users)
+    is_oauth_user = bool(setup.oauth_provider)
+    logger.info(f"CIRIS_SETUP_DEBUG is_oauth_user (for password validation) = {is_oauth_user}")
 
-    # Validate system admin password strength if provided
-    if setup.system_admin_password and len(setup.system_admin_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
-        )
+    # Validate passwords and potentially generate for OAuth users
+    setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)
 
     try:
-        # Get config path
-        config_path = get_default_config_path()
-        config_dir = config_path.parent
-
-        # Ensure directory exists
-        config_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save configuration
-        _save_setup_config(setup, config_path)
-
-        # Reload environment variables from the new .env file
-        from dotenv import load_dotenv
-
-        load_dotenv(config_path, override=True)
-        logger.info(f"Reloaded environment variables from {config_path}")
+        # Save configuration and reload environment variables
+        config_path = _save_and_reload_config(setup)
 
         # Get runtime and database path from the running application
         runtime = getattr(request.app.state, "runtime", None)

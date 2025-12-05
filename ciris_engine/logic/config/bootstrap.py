@@ -106,6 +106,11 @@ class ConfigBootstrap:
         if debug_mode:
             config_data["debug_mode"] = debug_mode.lower() in ("true", "1", "yes", "on")
 
+        # Agent template (only used for first-time identity creation)
+        template = get_env_var("CIRIS_TEMPLATE")
+        if template:
+            config_data["default_template"] = template
+
         return config_data
 
     @staticmethod

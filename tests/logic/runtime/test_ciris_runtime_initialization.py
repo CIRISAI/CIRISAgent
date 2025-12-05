@@ -243,7 +243,7 @@ class TestInternalInitializationMethods:
         """Test _initialize_identity creates IdentityManager and initializes identity."""
         runtime = runtime_with_full_initialization_mocks
 
-        # Mock time service
+        # Mock time service via service_initializer (time_service is a property)
         mock_time_service = Mock()
         runtime.service_initializer = Mock()
         runtime.service_initializer.time_service = mock_time_service
@@ -252,13 +252,18 @@ class TestInternalInitializationMethods:
         mock_config = Mock()
         runtime.essential_config = mock_config
 
-        # Mock IdentityManager
-        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as MockIdentityManager:
+        # Mock IdentityManager and first_run check
+        with patch("ciris_engine.logic.runtime.ciris_runtime.IdentityManager") as MockIdentityManager, patch(
+            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
+        ):
             mock_identity_manager = Mock()
             mock_identity = Mock()
             mock_identity.agent_id = "test_agent"
             mock_identity_manager.initialize_identity = AsyncMock(return_value=mock_identity)
             MockIdentityManager.return_value = mock_identity_manager
+
+            # Mock _create_startup_node since it's called after identity init
+            runtime._create_startup_node = AsyncMock()
 
             await runtime._initialize_identity()
 
@@ -272,7 +277,7 @@ class TestInternalInitializationMethods:
         """Test _initialize_identity raises error when time service not available."""
         runtime = runtime_with_full_initialization_mocks
         runtime.service_initializer = Mock()
-        runtime.service_initializer.time_service = None
+        runtime.service_initializer.time_service = None  # time_service property delegates here
         runtime.essential_config = Mock()
 
         with pytest.raises(RuntimeError, match="TimeService not available"):

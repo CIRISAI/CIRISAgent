@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Main CIRIS theme with custom toolbar (no default action bar) -->
+    <style name="Theme.CIRIS" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ciris_primary</item>
+        <item name="colorPrimaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ciris_accent</item>
+        <item name="colorSecondaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">@color/ciris_secondary</item>
+    </style>
+
+    <!-- No action bar theme for login screen -->
+    <style name="Theme.CIRIS.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ciris_primary</item>
+        <item name="colorPrimaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ciris_accent</item>
+        <item name="colorSecondaryVariant">@color/ciris_secondary</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">@color/ciris_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

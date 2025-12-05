@@ -15,6 +15,7 @@ from .multi_occurrence_tests import MultiOccurrenceTestModule
 from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
 from .sql_external_data_tests import SQLExternalDataTests
+from .state_transition_tests import StateTransitionTests
 
 __all__ = [
     "APITestModule",
@@ -30,4 +31,5 @@ __all__ = [
     "MultiOccurrenceTestModule",
     "MessageIDDebugTests",
     "SQLExternalDataTests",
+    "StateTransitionTests",
 ]

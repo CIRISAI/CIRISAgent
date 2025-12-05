@@ -1,0 +1,310 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "com.chaquo.python"
+}
+
+android {
+    namespace "ai.ciris.mobile"
+    compileSdk 34
+
+    signingConfigs {
+        release {
+            storeFile file("/home/emoore/ciris-release-key.jks")
+            storePassword "changeme123"
+            keyAlias "ciris-key"
+            keyPassword "changeme123"
+        }
+    }
+
+    defaultConfig {
+        applicationId "ai.ciris.mobile"
+        minSdk 24  // Android 7.0+
+        targetSdk 35
+        versionCode 26
+        versionName "1.7.26"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Allow _next directory in assets (Next.js static export)
+        // Default aapt ignoreAssetsPattern includes "_*" which excludes _next
+        aaptOptions {
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+
+        ndk {
+            // Full ABI support: x86_64 for emulator, arm64-v8a for modern devices, armeabi-v7a for 32-bit ARM
+            abiFilters "x86_64", "arm64-v8a", "armeabi-v7a"
+        }
+
+        // Chaquopy Python configuration (inside defaultConfig for Chaquopy 15+)
+        python {
+            // Use Python 3.10 for armeabi-v7a (32-bit ARM) and pydantic-core compatibility
+            version "3.10"
+
+            // Use system Python 3.10 for build-time operations (must match target version for Chaquopy 17)
+            buildPython "/usr/bin/python3.10"
+
+            // Extract pydantic_core to filesystem for native .so loading
+            extractPackages "pydantic_core"
+
+            pip {
+                // Use local wheels directory for cross-compiled pydantic-core
+                options "--find-links", "wheels"
+
+                // Install pydantic-core from local wheel FIRST (before pydantic pulls it from PyPI)
+                install "pydantic-core==2.23.4"
+
+                // Pydantic 2.x (will use our local pydantic-core)
+                install "pydantic==2.9.2"
+
+                // Core FastAPI dependencies
+                install "fastapi==0.115.0"
+                install "uvicorn==0.30.0"
+                install "httpx==0.27.0"
+
+                // Database
+                install "aiosqlite==0.20.0"
+                install "aiofiles==23.2.1"
+
+                // Configuration
+                install "pyyaml==6.0.3"
+                install "python-dotenv==1.0.1"
+
+                // Authentication and encryption
+                install "cryptography==42.0.8"
+                install "bcrypt"  // Let Chaquopy find a pre-built version
+                install "PyJWT==2.8.0"
+                install "python-jose==3.3.0"
+                install "passlib==1.7.4"
+                install "python-multipart==0.0.9"
+
+                // LLM client (remote inference only)
+                // Use older versions that don't require jiter (native Rust extension)
+                install "openai==1.12.0"
+                install "instructor==1.2.6"
+
+                // Document parsing (pure Python - no native dependencies)
+                install "pypdf==5.1.0"  // PDF parsing
+                install "docx2txt==0.9"  // DOCX parsing
+
+                // Cron scheduling (pure Python)
+                install "croniter==2.0.7"
+                install "python-dateutil==2.8.2"  // croniter dependency
+
+                // Note: psutil is NOT included - it requires native compilation
+                // Instead, we provide an android-specific stub at src/main/python/psutil.py
+
+                // Keep dependencies lean - no GPU, BLAS, or heavy ML libs
+                // All LLM inference is remote via API
+            }
+        }
+    }
+
+    // Include CIRIS Python source
+    // android_gui_static is copied by build-android.sh into src/main/python/
+    sourceSets {
+        main {
+            python.srcDirs = ["src/main/python"]
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
+        }
+
+        debug {
+            debuggable true
+            // Use release signing so Google Sign-In works
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+
+    // 16KB page size support for newer Android devices
+    packaging {
+        jniLibs {
+            // Extract native libs to filesystem for 16KB page size compatibility (Android 15+)
+            useLegacyPackaging = true
+        }
+    }
+}
+
+// Task to copy pydantic_core Python sources to both arch directories
+// Chaquopy only extracts .so files for non-common wheels, so we need the Python files too
+android.applicationVariants.all { variant ->
+    def variantName = variant.name.capitalize()
+
+    tasks.whenTaskAdded { task ->
+        if (task.name == "generate${variantName}PythonRequirementsAssets") {
+            task.doFirst {
+                def commonDir = file("${buildDir}/python/pip/${variant.name}/common")
+                def x86_64Dir = file("${buildDir}/python/pip/${variant.name}/x86_64")
+                def arm64Dir = file("${buildDir}/python/pip/${variant.name}/arm64-v8a")
+                def armeabiDir = file("${buildDir}/python/pip/${variant.name}/armeabi-v7a")
+                def commonPydanticCore = file("${commonDir}/pydantic_core")
+                def commonDistInfo = file("${commonDir}/pydantic_core-2.23.4.dist-info")
+
+                // If pydantic_core ends up in common (from PyPI), move to both arch dirs
+                if (commonPydanticCore.exists()) {
+                    println "Moving pydantic_core from common to x86_64..."
+
+                    x86_64Dir.mkdirs()
+                    def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+
+                    copy {
+                        from commonPydanticCore
+                        into x86_64PydanticCore
+                    }
+                    copy {
+                        from commonDistInfo
+                        into x86_64DistInfo
+                    }
+                    file("${x86_64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_x86_64
+"""
+
+                    delete commonPydanticCore
+                    delete commonDistInfo
+                    println "pydantic_core moved to ${x86_64Dir}"
+                }
+
+                // Copy Python source files from x86_64 to arm64-v8a if arm64 only has .so
+                def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                def arm64PydanticCore = file("${arm64Dir}/pydantic_core")
+                // Check for any .so file (name includes cpython version suffix)
+                def arm64HasSo = arm64PydanticCore.exists() && arm64PydanticCore.listFiles()?.any { it.name.endsWith('.so') }
+                def arm64Init = file("${arm64PydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && arm64HasSo && !arm64Init.exists()) {
+                    println "Copying pydantic_core Python sources to arm64-v8a..."
+
+                    // Copy Python source files (not .so) from x86_64 to arm64
+                    copy {
+                        from x86_64PydanticCore
+                        into arm64PydanticCore
+                        exclude "*.so"
+                    }
+
+                    // Copy dist-info
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def arm64DistInfo = file("${arm64Dir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into arm64DistInfo
+                        }
+                        // Update WHEEL file for arm64
+                        file("${arm64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_arm64_v8a
+"""
+                    }
+
+                    println "pydantic_core Python sources copied to arm64-v8a"
+                }
+
+                // Copy Python source files from x86_64 to armeabi-v7a if armeabi only has .so
+                def armeabiPydanticCore = file("${armeabiDir}/pydantic_core")
+                // Check for any .so file (name includes cpython version suffix)
+                def armeabiHasSo = armeabiPydanticCore.exists() && armeabiPydanticCore.listFiles()?.any { it.name.endsWith('.so') }
+                def armeabiInit = file("${armeabiPydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && armeabiHasSo && !armeabiInit.exists()) {
+                    println "Copying pydantic_core Python sources to armeabi-v7a..."
+
+                    // Copy Python source files (not .so) from x86_64 to armeabi
+                    copy {
+                        from x86_64PydanticCore
+                        into armeabiPydanticCore
+                        exclude "*.so"
+                    }
+
+                    // Copy dist-info
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def armeabiDistInfo = file("${armeabiDir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into armeabiDistInfo
+                        }
+                        // Update WHEEL file for armeabi-v7a
+                        file("${armeabiDistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_armeabi_v7a
+"""
+                    }
+
+                    println "pydantic_core Python sources copied to armeabi-v7a"
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    // AndroidX core
+    implementation "androidx.core:core-ktx:1.12.0"
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "com.google.android.material:material:1.11.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    implementation "androidx.cardview:cardview:1.0.0"
+    implementation "androidx.recyclerview:recyclerview:1.3.2"
+
+    // WebView for bundled UI
+    implementation "androidx.webkit:webkit:1.9.0"
+
+    // Google Play Billing for in-app purchases (7.0.0+ required by Google Play policy)
+    implementation "com.android.billingclient:billing-ktx:7.1.1"
+
+    // Lifecycle for billing client connection
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
+
+    // OkHttp for billing API calls
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+
+    // Gson for JSON parsing
+    implementation "com.google.code.gson:gson:2.10.1"
+
+    // Google Sign-In for OAuth authentication
+    implementation "com.google.android.gms:play-services-auth:20.7.0"
+
+    // Google Play Integrity API
+    implementation "com.google.android.play:integrity:1.4.0"
+
+    // Coroutines for async operations
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    // Coil for image loading (profile pictures)
+    implementation "io.coil-kt:coil:2.5.0"
+
+    // Testing
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
+}

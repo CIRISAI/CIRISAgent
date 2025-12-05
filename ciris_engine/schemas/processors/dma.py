@@ -25,6 +25,11 @@ class InitialDMAResults(BaseModel):
     csdma: CSDMAResult = Field(..., description="CSDMA result (required)")
     dsdma: DSDMAResult = Field(..., description="DSDMA result (required)")
 
+    # User prompts passed to each DMA (for debugging/transparency)
+    ethical_pdma_prompt: Optional[str] = Field(None, description="User prompt passed to Ethical PDMA")
+    csdma_prompt: Optional[str] = Field(None, description="User prompt passed to CSDMA")
+    dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
+
 
 class DMAError(BaseModel):
     """Error from a DMA execution."""

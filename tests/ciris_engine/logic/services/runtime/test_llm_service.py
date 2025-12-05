@@ -304,3 +304,215 @@ async def test_llm_service_error_handling(llm_service):
                 max_tokens=1024,
                 temperature=0.0,
             )
+
+
+@pytest.mark.asyncio
+async def test_llm_service_401_error_ciris_ai_writes_signal(llm_service, tmp_path):
+    """Test that 401 errors from ciris.ai providers write a token refresh signal file."""
+    import httpx
+    from openai import AuthenticationError
+    from pydantic import BaseModel
+
+    class TestResponse(BaseModel):
+        test: str
+
+    # Configure the service to use ciris.ai as base URL
+    llm_service.openai_config.base_url = "https://proxy.ciris.ai/v1"
+
+    # Create a mock AuthenticationError (401)
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.headers = {}
+
+    # Mock CIRIS_HOME to use temp directory
+    with patch.dict("os.environ", {"CIRIS_HOME": str(tmp_path)}):
+        with patch.object(
+            llm_service.instruct_client.chat.completions,
+            "create_with_completion",
+            AsyncMock(
+                side_effect=AuthenticationError(
+                    message="Invalid API key",
+                    response=mock_response,
+                    body=None,
+                )
+            ),
+        ):
+            with pytest.raises(AuthenticationError):
+                await llm_service.call_llm_structured(
+                    messages=[{"role": "user", "content": "Test"}],
+                    response_model=TestResponse,
+                    max_tokens=1024,
+                    temperature=0.0,
+                    task_id="test-task-123",  # Required for CIRIS proxy
+                )
+
+    # Verify the signal file was written
+    signal_file = tmp_path / ".token_refresh_needed"
+    assert signal_file.exists(), "Signal file should be written for ciris.ai 401 errors"
+
+    # Verify it contains a timestamp
+    content = signal_file.read_text()
+    assert float(content) > 0, "Signal file should contain a timestamp"
+
+
+@pytest.mark.asyncio
+async def test_llm_service_401_error_non_ciris_ai_no_signal(llm_service, tmp_path):
+    """Test that 401 errors from non-ciris.ai providers do NOT write a signal file."""
+    from openai import AuthenticationError
+    from pydantic import BaseModel
+
+    class TestResponse(BaseModel):
+        test: str
+
+    # Configure the service to use a non-ciris.ai URL (e.g., OpenAI)
+    llm_service.openai_config.base_url = "https://api.openai.com/v1"
+
+    # Create a mock AuthenticationError (401)
+    mock_response = MagicMock()
+    mock_response.status_code = 401
+    mock_response.headers = {}
+
+    # Mock CIRIS_HOME to use temp directory
+    with patch.dict("os.environ", {"CIRIS_HOME": str(tmp_path)}):
+        with patch.object(
+            llm_service.instruct_client.chat.completions,
+            "create_with_completion",
+            AsyncMock(
+                side_effect=AuthenticationError(
+                    message="Invalid API key",
+                    response=mock_response,
+                    body=None,
+                )
+            ),
+        ):
+            with pytest.raises(AuthenticationError):
+                await llm_service.call_llm_structured(
+                    messages=[{"role": "user", "content": "Test"}],
+                    response_model=TestResponse,
+                    max_tokens=1024,
+                    temperature=0.0,
+                )
+
+    # Verify the signal file was NOT written
+    signal_file = tmp_path / ".token_refresh_needed"
+    assert not signal_file.exists(), "Signal file should NOT be written for non-ciris.ai 401 errors"
+
+
+def test_signal_token_refresh_needed_writes_file(llm_service, tmp_path):
+    """Test _signal_token_refresh_needed writes timestamp to signal file."""
+    # Mock CIRIS_HOME to use temp directory
+    with patch.dict("os.environ", {"CIRIS_HOME": str(tmp_path)}):
+        llm_service._signal_token_refresh_needed()
+
+    # Verify the signal file was written
+    signal_file = tmp_path / ".token_refresh_needed"
+    assert signal_file.exists(), "Signal file should be written"
+
+    # Verify it contains a valid timestamp
+    content = signal_file.read_text()
+    timestamp = float(content)
+    assert timestamp > 0, "Signal file should contain a positive timestamp"
+
+
+def test_signal_token_refresh_needed_handles_missing_ciris_home(llm_service):
+    """Test _signal_token_refresh_needed handles missing CIRIS_HOME gracefully."""
+    # Mock CIRIS_HOME to be unset and mock path_resolution to return non-writable path
+    with patch.dict("os.environ", {}, clear=True):
+        # Mock the path_resolution module's get_ciris_home function
+        with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home") as mock_get_home:
+            mock_get_home.return_value = "/nonexistent/path/that/does/not/exist"
+
+            # Should not raise an exception (errors are logged but not raised)
+            llm_service._signal_token_refresh_needed()
+
+
+@pytest.mark.asyncio
+async def test_llm_service_interaction_id_only_for_ciris_ai(llm_service):
+    """Test that interaction_id is only added for ciris.ai providers."""
+    from pydantic import BaseModel
+
+    class TestResponse(BaseModel):
+        result: str
+
+    mock_result = TestResponse(result="test")
+    mock_completion = MagicMock()
+    mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    # Test with ciris.ai URL - should include extra_body
+    llm_service.openai_config.base_url = "https://proxy.ciris.ai/v1"
+
+    with patch.object(
+        llm_service.instruct_client.chat.completions,
+        "create_with_completion",
+        AsyncMock(return_value=(mock_result, mock_completion)),
+    ) as mock_create:
+        await llm_service.call_llm_structured(
+            messages=[{"role": "user", "content": "Test"}],
+            response_model=TestResponse,
+            max_tokens=1024,
+            temperature=0.0,
+            task_id="test-task-123",
+        )
+
+        # Verify extra_body was passed
+        call_args = mock_create.call_args[1]
+        assert "extra_body" in call_args
+        assert "metadata" in call_args["extra_body"]
+        assert "interaction_id" in call_args["extra_body"]["metadata"]
+
+    # Test with non-ciris.ai URL - should NOT include extra_body
+    llm_service.openai_config.base_url = "https://api.openai.com/v1"
+
+    with patch.object(
+        llm_service.instruct_client.chat.completions,
+        "create_with_completion",
+        AsyncMock(return_value=(mock_result, mock_completion)),
+    ) as mock_create:
+        await llm_service.call_llm_structured(
+            messages=[{"role": "user", "content": "Test"}],
+            response_model=TestResponse,
+            max_tokens=1024,
+            temperature=0.0,
+            task_id="test-task-123",
+        )
+
+        # Verify extra_body was NOT passed
+        call_args = mock_create.call_args[1]
+        assert "extra_body" not in call_args
+
+
+@pytest.mark.asyncio
+async def test_llm_service_interaction_id_uses_sha256_hash(llm_service):
+    """Test that interaction_id is a SHA256 hash of task_id."""
+    import hashlib
+
+    from pydantic import BaseModel
+
+    class TestResponse(BaseModel):
+        result: str
+
+    mock_result = TestResponse(result="test")
+    mock_completion = MagicMock()
+    mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    llm_service.openai_config.base_url = "https://proxy.ciris.ai/v1"
+
+    task_id = "my-test-task-id-12345"
+    expected_hash = hashlib.sha256(task_id.encode()).hexdigest()[:32]
+
+    with patch.object(
+        llm_service.instruct_client.chat.completions,
+        "create_with_completion",
+        AsyncMock(return_value=(mock_result, mock_completion)),
+    ) as mock_create:
+        await llm_service.call_llm_structured(
+            messages=[{"role": "user", "content": "Test"}],
+            response_model=TestResponse,
+            max_tokens=1024,
+            temperature=0.0,
+            task_id=task_id,
+        )
+
+        call_args = mock_create.call_args[1]
+        actual_interaction_id = call_args["extra_body"]["metadata"]["interaction_id"]
+        assert actual_interaction_id == expected_hash, f"Expected {expected_hash}, got {actual_interaction_id}"

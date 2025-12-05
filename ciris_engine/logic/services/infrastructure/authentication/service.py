@@ -1197,6 +1197,31 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         system_wa = await self._get_system_wa()
         return system_wa.wa_id if system_wa else None
 
+    async def ensure_system_wa_exists(self) -> Optional[str]:
+        """Ensure the system WA exists, creating it if a ROOT WA is available.
+
+        This should be called after creating a ROOT WA during setup to ensure
+        the system WA is immediately available for signing system tasks.
+
+        Returns:
+            The system WA ID if it exists or was created, None if no ROOT WA exists.
+        """
+        # Check if system WA already exists
+        system_wa = await self._get_system_wa()
+        if system_wa:
+            return system_wa.wa_id
+
+        # Find a ROOT WA to use as parent
+        for wa in await self._list_all_was():
+            if wa.role == WARole.ROOT:
+                # Create system WA as child of root
+                new_system_wa = await self._create_system_wa_certificate(wa.wa_id)
+                logger.info(f"✅ Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
+                return new_system_wa.wa_id
+
+        logger.warning("Cannot create system WA - no ROOT WA found")
+        return None
+
     async def _create_system_wa_certificate(self, parent_wa_id: str) -> WACertificate:
         """Create the system WA certificate as a child of the root certificate.
 

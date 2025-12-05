@@ -15,7 +15,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -655,11 +655,126 @@ async def _handle_discord_oauth(code: str, client_id: str, client_secret: str) -
         }
 
 
-def _determine_user_role(email: Optional[str]) -> UserRole:
-    """Determine user role based on email domain."""
-    if email and email.endswith("@ciris.ai"):
-        logger.debug("Granting ADMIN role to @ciris.ai user")
+# =============================================================================
+# ROLE DETERMINATION HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+
+def _is_ciris_admin_email(email: Optional[str]) -> bool:
+    """Check if the email is a @ciris.ai domain email (gets automatic ADMIN role)."""
+    return email is not None and email.endswith("@ciris.ai")
+
+
+def _get_oauth_users_dict(auth_service: "APIAuthService") -> Optional[Dict[str, Any]]:
+    """Get the _oauth_users dictionary from auth_service, or None if unavailable."""
+    return getattr(auth_service, "_oauth_users", None)
+
+
+def _lookup_existing_user_role(oauth_users: Dict[str, Any], provider: str, external_id: str) -> Optional[UserRole]:
+    """Look up an existing OAuth user and return their role if found.
+
+    Returns None if user not found.
+    """
+    user_id = f"{provider}:{external_id}"
+    existing_user = oauth_users.get(user_id)
+
+    if not existing_user:
+        logger.info(f"[AUTH DEBUG] No existing OAuth user found for {user_id}")
+        logger.info(f"[AUTH DEBUG] Existing OAuth user IDs: {list(oauth_users.keys())}")
+        return None
+
+    logger.info(f"[AUTH DEBUG] Found existing OAuth user: {user_id}, role={existing_user.role}")
+    role = existing_user.role
+    if isinstance(role, UserRole):
+        return role
+    return UserRole(role) if role else UserRole.OBSERVER
+
+
+def _is_first_oauth_user(oauth_users: Optional[Dict[str, Any]]) -> bool:
+    """Check if this would be the first OAuth user (empty oauth_users dict)."""
+    return oauth_users is not None and len(oauth_users) == 0
+
+
+def _determine_user_role(
+    email: Optional[str],
+    auth_service: Optional["APIAuthService"] = None,
+    external_id: Optional[str] = None,
+    provider: str = "google",
+) -> UserRole:
+    """Determine user role based on email domain, existing user status, and first-user status.
+
+    For Android/native OAuth flow during setup, the first OAuth user gets
+    SYSTEM_ADMIN role so they can see the default API channel history
+    where agent wakeup messages are sent.
+
+    IMPORTANT: If the user already exists with a higher role (e.g., from initial
+    login before setup), preserve that role instead of demoting to OBSERVER.
+    """
+    logger.info(
+        f"[AUTH DEBUG] _determine_user_role called: email={email}, external_id={external_id}, provider={provider}"
+    )
+
+    # @ciris.ai users always get ADMIN
+    if _is_ciris_admin_email(email):
+        logger.debug("[AUTH DEBUG] Granting ADMIN role to @ciris.ai user")
         return UserRole.ADMIN
+
+    if auth_service is None:
+        logger.info("[AUTH DEBUG] No auth_service provided - returning OBSERVER role")
+        return UserRole.OBSERVER
+
+    try:
+        oauth_users = _get_oauth_users_dict(auth_service)
+        logger.info(f"[AUTH DEBUG] _oauth_users count: {len(oauth_users) if oauth_users else 'None'}")
+
+        # Check if this user already exists with a role - preserve their existing role
+        if external_id and oauth_users:
+            existing_role = _lookup_existing_user_role(oauth_users, provider, external_id)
+            if existing_role is not None:
+                return existing_role
+
+        # ALSO check _users dict (for users loaded from database via OAuth link during setup)
+        # This is critical for setup wizard users who were minted as WA before first OAuth login
+        if external_id:
+            user_id = f"{provider}:{external_id}"
+            stored_users = getattr(auth_service, "_users", {})
+            stored_user = stored_users.get(user_id)
+            if stored_user:
+                # User exists in database - preserve their role!
+                logger.info(
+                    f"[AUTH DEBUG] Found existing user in _users dict: {user_id}, "
+                    f"api_role={stored_user.api_role}, wa_role={stored_user.wa_role}"
+                )
+                # Convert APIRole to UserRole
+                api_role_to_user_role = {
+                    "OBSERVER": UserRole.OBSERVER,
+                    "ADMIN": UserRole.ADMIN,
+                    "AUTHORITY": UserRole.ADMIN,  # AUTHORITY maps to ADMIN
+                    "SYSTEM_ADMIN": UserRole.SYSTEM_ADMIN,
+                    "SERVICE_ACCOUNT": UserRole.SYSTEM_ADMIN,  # Service accounts get full access
+                }
+                role_str = (
+                    stored_user.api_role.value if hasattr(stored_user.api_role, "value") else str(stored_user.api_role)
+                )
+                existing_user_role = api_role_to_user_role.get(role_str.upper(), UserRole.OBSERVER)
+                logger.info(f"[AUTH DEBUG] Mapped API role {role_str} to UserRole {existing_user_role}")
+                return existing_user_role
+
+        # Check if this is the first OAuth user (setup wizard scenario)
+        # Only grant SYSTEM_ADMIN if BOTH oauth_users AND _users are empty for this OAuth identity
+        stored_users = getattr(auth_service, "_users", {})
+        user_id_check: Optional[str] = f"{provider}:{external_id}" if external_id else None
+        user_in_stored = user_id_check and user_id_check in stored_users
+
+        if _is_first_oauth_user(oauth_users) and not user_in_stored:
+            logger.info("[AUTH DEBUG] First OAuth user detected - granting SYSTEM_ADMIN role for setup wizard user")
+            return UserRole.SYSTEM_ADMIN
+
+    except (TypeError, AttributeError) as e:
+        # Mock objects or missing attributes - fall through to OBSERVER
+        logger.warning(f"[AUTH DEBUG] Exception accessing auth_service: {e}")
+
+    logger.info("[AUTH DEBUG] No special conditions met - returning OBSERVER role")
     return UserRole.OBSERVER
 
 
@@ -680,7 +795,14 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
 
 def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthUser, provider: str) -> str:
     """Generate API key and store it for the OAuth user."""
-    role_prefix = "ciris_admin" if oauth_user.role == UserRole.ADMIN else "ciris_observer"
+    # SYSTEM_ADMIN, ADMIN, and AUTHORITY all get admin prefix (elevated roles)
+    # OBSERVER gets observer prefix
+    elevated_roles = (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
+    is_elevated = oauth_user.role in elevated_roles
+    role_prefix = "ciris_admin" if is_elevated else "ciris_observer"
+    logger.info(
+        f"[AUTH DEBUG] Generating API key for user {oauth_user.user_id} with role {oauth_user.role}, prefix: {role_prefix}"
+    )
     api_key = f"{role_prefix}_{secrets.token_urlsafe(32)}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
@@ -914,14 +1036,14 @@ async def oauth_callback(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported OAuth provider: {provider}"
             )
 
-        # Determine user role and create OAuth user
-        user_email = user_data["email"]
-        user_role = _determine_user_role(user_email)
-
-        # Validate required fields
+        # Validate required fields first (need external_id for role determination)
         external_id = user_data["external_id"]
         if not external_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth provider did not return user ID")
+
+        # Determine user role (preserves existing role if user already exists)
+        user_email = user_data["email"]
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider=provider)
 
         oauth_user = auth_service.create_oauth_user(
             provider=provider,
@@ -964,6 +1086,353 @@ async def oauth_callback(
         logger.error(f"OAuth callback error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OAuth callback failed: {str(e)}"
+        )
+
+
+# ========== Native App Token Exchange Endpoints ==========
+
+
+class NativeTokenRequest(BaseModel):
+    """Request model for native app token exchange."""
+
+    id_token: str = Field(..., description="Google ID token from native Sign-In")
+    provider: str = Field(default="google", description="OAuth provider (currently only 'google' supported)")
+
+
+class NativeTokenResponse(BaseModel):
+    """Response model for native app token exchange."""
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user_id: str
+    role: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+
+
+# =============================================================================
+# TOKEN VERIFICATION HELPER FUNCTIONS (extracted for cognitive complexity reduction)
+# =============================================================================
+
+# Valid Google issuers - constant
+VALID_GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+
+
+def _get_allowed_audiences_from_config() -> Optional[Set[str]]:
+    """Load allowed audiences from OAuth config.
+
+    Returns None if OAuth is not configured (on-device mode).
+    On-device mode skips audience validation since the Android app
+    has its own client ID and we can't know it ahead of time.
+    """
+    try:
+        provider_config = _load_oauth_config("google")
+        expected_client_id = provider_config.get("client_id")
+        android_client_id = provider_config.get("android_client_id")
+        allowed_audiences: Set[str] = set()
+        if expected_client_id:
+            allowed_audiences.add(expected_client_id)
+        if android_client_id:
+            allowed_audiences.add(android_client_id)
+        logger.info(f"[NativeAuth] Configured allowed audiences: {allowed_audiences}")
+        return allowed_audiences if allowed_audiences else None
+    except HTTPException:
+        # On-device mode: OAuth not configured, skip audience validation
+        logger.info("[NativeAuth] No OAuth config found - running in on-device mode, skipping audience validation")
+        return None
+
+
+def _validate_token_audience(token_aud: Optional[str], allowed_audiences: Optional[Set[str]]) -> None:
+    """Validate token audience matches our configured client ID.
+
+    If allowed_audiences is None (on-device mode), validation is skipped.
+    Raises HTTPException if validation fails.
+    """
+    if allowed_audiences is None:
+        # On-device mode: skip audience validation, just log the audience
+        logger.info(f"[NativeAuth] On-device mode: skipping audience validation (aud: {token_aud})")
+        return
+
+    if not token_aud or token_aud not in allowed_audiences:
+        logger.error(
+            f"[NativeAuth] SECURITY: Token audience mismatch! "
+            f"Got: {token_aud}, Expected one of: {allowed_audiences}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued for this application (audience mismatch).",
+        )
+
+
+def _validate_token_issuer(token_iss: Optional[str]) -> None:
+    """Validate token issuer is Google.
+
+    Raises HTTPException if validation fails.
+    """
+    if not token_iss or token_iss not in VALID_GOOGLE_ISSUERS:
+        logger.error(f"[NativeAuth] SECURITY: Invalid issuer! Got: {token_iss}, Expected: {VALID_GOOGLE_ISSUERS}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued by Google (issuer mismatch).",
+        )
+
+
+def _validate_token_expiry(token_exp: Optional[str]) -> None:
+    """Validate token is not expired.
+
+    Raises HTTPException if validation fails.
+    """
+    import time
+
+    if not token_exp:
+        return
+
+    try:
+        exp_timestamp = int(token_exp)
+        current_time = int(time.time())
+        if exp_timestamp < current_time:
+            logger.error(f"[NativeAuth] SECURITY: Token expired! exp: {exp_timestamp}, now: {current_time}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google ID token has expired. Please sign in again.",
+            )
+    except (ValueError, TypeError):
+        logger.error(f"[NativeAuth] Invalid exp claim format: {token_exp}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has invalid expiry format.",
+        )
+
+
+def _validate_token_sub_claim(sub: Optional[str]) -> None:
+    """Validate that the sub (user ID) claim exists.
+
+    Raises HTTPException if validation fails.
+    """
+    if not sub:
+        logger.error("[NativeAuth] Token missing required 'sub' claim")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google ID token missing user ID (sub claim).",
+        )
+
+
+def _log_email_verification_warning(token_info: Dict[str, Any]) -> None:
+    """Log a warning if email is not verified."""
+    email_verified = token_info.get("email_verified")
+    if email_verified is not None and str(email_verified).lower() not in ("true", "1"):
+        logger.warning(f"[NativeAuth] Email not verified for user {token_info.get('sub')}")
+
+
+async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
+    """
+    Verify a Google ID token and extract user info.
+
+    This verifies tokens from native Android/iOS Google Sign-In using
+    Google's tokeninfo API with full security validation:
+    - Validates audience (aud) matches our configured client ID
+    - Validates issuer (iss) is accounts.google.com
+    - Validates token is not expired (exp)
+    - Validates email is verified
+
+    SECURITY: No fallback path exists. Tokens MUST be verified by Google
+    with proper audience/issuer/expiry validation before user creation.
+    """
+    import httpx
+
+    logger.info(f"[NativeAuth] Verifying Google ID token (length: {len(id_token)}, prefix: {id_token[:20]}...)")
+
+    # Load our expected client ID from OAuth config
+    allowed_audiences = _get_allowed_audiences_from_config()
+
+    # Verify with Google's tokeninfo endpoint
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            logger.info("[NativeAuth] Calling Google tokeninfo API...")
+            response = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
+            logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(f"[NativeAuth] Google API rejected token: {response.status_code} - {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google could not verify this ID token. It may be expired, malformed, or invalid.",
+                )
+
+            token_info = response.json()
+            logger.info(
+                f"[NativeAuth] Token info received - sub: {token_info.get('sub')}, "
+                f"email: {token_info.get('email')}, aud: {token_info.get('aud')}, "
+                f"iss: {token_info.get('iss')}, exp: {token_info.get('exp')}"
+            )
+
+            # SECURITY: Validate all token claims
+            _validate_token_audience(token_info.get("aud"), allowed_audiences)
+            _validate_token_issuer(token_info.get("iss"))
+            _validate_token_expiry(token_info.get("exp"))
+            _log_email_verification_warning(token_info)
+
+            sub = token_info.get("sub")
+            _validate_token_sub_claim(sub)
+
+            logger.info(f"[NativeAuth] Token VERIFIED successfully - sub: {sub}, email: {token_info.get('email')}")
+
+            return {
+                "external_id": sub,
+                "email": token_info.get("email"),
+                "name": token_info.get("name"),
+                "picture": token_info.get("picture"),
+            }
+
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        logger.error("[NativeAuth] Google tokeninfo API timed out")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Google verification service timed out. Please try again.",
+        )
+    except httpx.RequestError as e:
+        logger.error(f"[NativeAuth] Network error calling Google API: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Google verification service. Please check your connection.",
+        )
+    except Exception as e:
+        logger.error(f"[NativeAuth] Unexpected error during token verification: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token verification failed due to an internal error.",
+        )
+
+
+@router.post("/auth/native/google", response_model=NativeTokenResponse)
+async def native_google_token_exchange(
+    request: NativeTokenRequest,
+    auth_service: APIAuthService = Depends(get_auth_service),
+) -> NativeTokenResponse:
+    """
+    Exchange a native Google ID token for a CIRIS API token.
+
+    This endpoint is used by native Android/iOS apps that perform Google Sign-In
+    directly and need to exchange their Google ID token for a CIRIS API token.
+
+    Unlike the web OAuth flow (which uses authorization codes), native apps get
+    ID tokens directly from Google Sign-In SDK and send them here.
+    """
+    logger.info(f"[NativeAuth] Native Google token exchange request - provider: {request.provider}")
+
+    if request.provider != "google":
+        logger.warning(f"[NativeAuth] Unsupported provider: {request.provider}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only 'google' provider is currently supported for native token exchange",
+        )
+
+    try:
+        # Verify the Google ID token and get user info
+        logger.info("[NativeAuth] Starting token verification...")
+        user_data = await _verify_google_id_token(request.id_token)
+        logger.info(f"[NativeAuth] Token verification complete - external_id: {user_data.get('external_id')}")
+
+        external_id = user_data.get("external_id")
+        if not external_id:
+            logger.error("[NativeAuth] No external_id in user_data")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Google ID token did not contain user ID"
+            )
+
+        user_email = user_data.get("email")
+        # Pass external_id to preserve existing user's role (don't demote on re-auth!)
+        user_role = _determine_user_role(user_email, auth_service, external_id=external_id, provider="google")
+        logger.info(f"[NativeAuth] Determined role for {user_email}: {user_role}")
+
+        # Check if this is the first OAuth user (for auto-minting)
+        is_first_oauth_user = user_role == UserRole.SYSTEM_ADMIN
+
+        # Create or get OAuth user
+        logger.info(f"[NativeAuth] Creating/getting OAuth user - external_id: {external_id}, email: {user_email}")
+        oauth_user = auth_service.create_oauth_user(
+            provider="google",
+            external_id=external_id,
+            email=user_email,
+            name=user_data.get("name"),
+            role=user_role,
+            marketing_opt_in=False,
+        )
+        logger.info(f"[NativeAuth] OAuth user created/retrieved - user_id: {oauth_user.user_id}")
+
+        # Store OAuth profile data
+        name = user_data.get("name") or "Unknown"
+        _store_oauth_profile(auth_service, oauth_user.user_id, name, user_data.get("picture"))
+
+        # Auto-mint SYSTEM_ADMIN users as WA with ROOT role so they can handle deferrals
+        # This handles both first-time users and existing users who weren't minted
+        logger.info(
+            f"CIRIS_USER_CREATE: [NativeAuth] Checking auto-mint for {oauth_user.user_id} with role {oauth_user.role}"
+        )
+        if oauth_user.role == UserRole.SYSTEM_ADMIN:
+            # Check if user is already minted by looking up their user record
+            existing_user = auth_service.get_user(oauth_user.user_id)
+            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] existing_user lookup: {existing_user}")
+            if existing_user:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth]   wa_id={existing_user.wa_id}, wa_role={existing_user.wa_role}"
+                )
+
+            needs_minting = not existing_user or not existing_user.wa_id or existing_user.wa_id == oauth_user.user_id
+
+            if needs_minting:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth] Auto-minting SYSTEM_ADMIN user {oauth_user.user_id} as WA with ROOT role"
+                )
+                try:
+                    from ciris_engine.schemas.services.authority_core import WARole
+
+                    await auth_service.mint_wise_authority(
+                        user_id=oauth_user.user_id,
+                        wa_role=WARole.ROOT,
+                        minted_by="system_auto_mint",
+                    )
+                    logger.info(
+                        f"CIRIS_USER_CREATE: [NativeAuth] ✅ Successfully auto-minted {oauth_user.user_id} as ROOT WA"
+                    )
+                except Exception as mint_error:
+                    # Don't fail login if minting fails - user can mint manually later
+                    logger.warning(
+                        f"CIRIS_USER_CREATE: [NativeAuth] Auto-mint failed (user can mint manually): {mint_error}"
+                    )
+            else:
+                logger.info(
+                    f"CIRIS_USER_CREATE: [NativeAuth] User {oauth_user.user_id} already minted as WA - skipping auto-mint"
+                )
+        else:
+            logger.info(f"CIRIS_USER_CREATE: [NativeAuth] Not SYSTEM_ADMIN, skipping auto-mint")
+
+        # Generate API key
+        logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")
+        api_key = _generate_api_key_and_store(auth_service, oauth_user, "google")
+
+        logger.info(f"[NativeAuth] SUCCESS - Native Google user {oauth_user.user_id} logged in, token generated")
+
+        return NativeTokenResponse(
+            access_token=api_key,
+            token_type="bearer",
+            expires_in=2592000,  # 30 days in seconds
+            user_id=oauth_user.user_id,
+            role=oauth_user.role.value,
+            email=user_email,
+            name=user_data.get("name"),
+        )
+
+    except HTTPException as e:
+        logger.error(f"[NativeAuth] HTTP error: {e.status_code} - {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"[NativeAuth] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Native token exchange failed: {str(e)}"
         )
 
 

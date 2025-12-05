@@ -121,7 +121,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ${{ steps.find_app.outputs.gui_dir }}/package-lock.json
+          cache-dependency-path: cirisgui/package-lock.json
 
       - name: Configure for static export
         run: |
@@ -143,8 +143,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          npm ci
+          # Install from monorepo root (where package-lock.json lives)
+          # Use npm install instead of npm ci to handle minor version drift in lock file
+          cd cirisgui
+          npm install --legacy-peer-deps
 
       - name: Build static assets
         id: build_gui

@@ -2,11 +2,17 @@ from typing import Any, List, Optional, Union, cast
 
 
 def _convert_user_profile_to_dict(profile: Any) -> dict[str, Any]:
-    """Convert a UserProfile to dict format."""
+    """Convert a UserProfile to dict format.
+
+    Includes user_preferred_name and display_name for proper name resolution
+    in the formatter (user_preferred_name takes priority over display_name).
+    """
     from ciris_engine.schemas.runtime.system_context import UserProfile
 
     if isinstance(profile, UserProfile):
         return {
+            "user_preferred_name": profile.user_preferred_name,
+            "display_name": profile.display_name,
             "name": profile.display_name,
             "nick": profile.display_name,
             "interest": profile.notes or "",
@@ -31,9 +37,23 @@ def _convert_profiles_list_to_dict(profiles: List[Any]) -> dict[str, Any]:
 
 
 def _format_single_profile(user_key: str, profile_data: dict[str, Any]) -> str:
-    """Format a single profile entry."""
-    display_name = profile_data.get("name") or profile_data.get("nick") or user_key
-    profile_summary = f"User '{user_key}': Name/Nickname: '{display_name}'"
+    """Format a single profile entry.
+
+    Shows the user's display name (or nickname) as the primary identifier,
+    not the OAuth ID (user_key). This ensures the agent addresses users
+    by their preferred name rather than technical identifiers.
+    """
+    # Prefer user_preferred_name > display_name > nick > name > fallback
+    display_name = (
+        profile_data.get("user_preferred_name")
+        or profile_data.get("display_name")
+        or profile_data.get("nick")
+        or profile_data.get("name")
+        or f"User_{user_key}"
+    )
+
+    # Show display_name as the primary identifier, not the OAuth ID
+    profile_summary = f"User '{display_name}'"
 
     interest = profile_data.get("interest")
     if interest:

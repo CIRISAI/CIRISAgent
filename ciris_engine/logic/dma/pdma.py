@@ -40,6 +40,10 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         self.prompt_loader = get_prompt_loader()
         self.prompt_template_data = self.prompt_loader.load_prompt_template("pdma_ethical")
+
+        # Store last user prompt for debugging/streaming
+        self.last_user_prompt: Optional[str] = None
+
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> EthicalDMAResult:  # type: ignore[override]
@@ -83,12 +87,16 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
         messages.append({"role": "user", "content": user_message})
 
+        # Store user prompt for streaming/debugging
+        self.last_user_prompt = user_message
+
         result_tuple = await self.call_llm_structured(
             messages=messages,
             response_model=EthicalDMAResult,
-            max_tokens=1024,
+            max_tokens=2048,
             temperature=0.0,
             thought_id=input_data.thought_id,
+            task_id=input_data.source_task_id,
         )
         response_obj: EthicalDMAResult = result_tuple[0]
         logger.info(f"Evaluation successful for thought ID {input_data.thought_id}")

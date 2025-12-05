@@ -69,6 +69,9 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         self.context_builder = ActionSelectionContextBuilder(self.prompts, service_registry, self.sink)
         self.faculty_integration = FacultyIntegration(faculties) if faculties else None
 
+        # Store last user prompt for debugging/streaming
+        self.last_user_prompt: Optional[str] = None
+
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool = False
     ) -> ActionSelectionDMAResult:
@@ -201,16 +204,33 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             {"role": "user", "content": main_user_content},
         ]
 
+        # Store user prompt for streaming/debugging
+        self.last_user_prompt = main_user_content
+
         result_tuple = await self.call_llm_structured(
             messages=messages,
             response_model=ActionSelectionDMAResult,
             max_tokens=1500,
             temperature=0.0,
             thought_id=input_data.original_thought.thought_id,
+            task_id=input_data.original_thought.source_task_id,
         )
 
         # Extract the result from the tuple and cast to the correct type
         final_result = cast(ActionSelectionDMAResult, result_tuple[0])
+
+        # Add user prompt to result for debugging/transparency
+        # Create new instance with user_prompt set (model is frozen)
+        final_result = ActionSelectionDMAResult(
+            selected_action=final_result.selected_action,
+            action_parameters=final_result.action_parameters,
+            rationale=final_result.rationale,
+            raw_llm_response=final_result.raw_llm_response,
+            reasoning=final_result.reasoning,
+            evaluation_time_ms=final_result.evaluation_time_ms,
+            resource_usage=final_result.resource_usage,
+            user_prompt=self.last_user_prompt,
+        )
 
         if final_result.selected_action == HandlerActionType.OBSERVE:
             thought_id = input_data.original_thought.thought_id

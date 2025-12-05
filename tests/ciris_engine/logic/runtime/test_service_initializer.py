@@ -994,3 +994,94 @@ class TestModularServiceLoading:
             assert call_kwargs["filter_service"] is None
             assert call_kwargs["secrets_service"] is None
             assert call_kwargs["time_service"] is None
+
+
+class TestGetLLMServiceConfigValue:
+    """Test cases for _get_llm_service_config_value helper method."""
+
+    @pytest.fixture
+    def mock_essential_config(self, tmp_path):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = str(tmp_path)
+        config.db_path = str(tmp_path / "test.db")
+
+        # Add database attribute
+        mock_database = Mock()
+        mock_database.main_db = tmp_path / "test.db"
+        mock_database.secrets_db = tmp_path / "secrets.db"
+        mock_database.audit_db = tmp_path / "audit.db"
+        mock_database.database_url = None
+        config.database = mock_database
+
+        # Add security attribute
+        mock_security = Mock()
+        mock_security.secrets_key_path = tmp_path / ".ciris_keys"
+        config.security = mock_security
+
+        # Add graph attribute
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        from ciris_engine.logic.runtime.service_initializer import ServiceInitializer
+
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        return initializer
+
+    def test_get_config_value_with_valid_config(self, service_initializer):
+        """Test getting config value when config and services exist."""
+        mock_config = Mock()
+        mock_config.services = Mock()
+        mock_config.services.llm_endpoint = "https://api.example.com/v1"
+
+        result = service_initializer._get_llm_service_config_value(mock_config, "llm_endpoint", "default_url")
+        assert result == "https://api.example.com/v1"
+
+    def test_get_config_value_returns_default_when_no_config(self, service_initializer):
+        """Test getting config value returns default when config is None."""
+        result = service_initializer._get_llm_service_config_value(None, "llm_endpoint", "default_url")
+        assert result == "default_url"
+
+    def test_get_config_value_returns_default_when_no_services(self, service_initializer):
+        """Test getting config value returns default when services is None."""
+        mock_config = Mock()
+        mock_config.services = None
+
+        result = service_initializer._get_llm_service_config_value(mock_config, "llm_endpoint", "default_url")
+        assert result == "default_url"
+
+    def test_get_config_value_returns_default_when_no_services_attr(self, service_initializer):
+        """Test getting config value returns default when config has no services attribute."""
+        mock_config = Mock(spec=[])  # Empty spec means no attributes
+
+        result = service_initializer._get_llm_service_config_value(mock_config, "llm_endpoint", "default_url")
+        assert result == "default_url"
+
+    def test_get_config_value_returns_default_for_missing_attr(self, service_initializer):
+        """Test getting config value returns default when attribute doesn't exist."""
+        mock_config = Mock()
+        mock_config.services = Mock(spec=["llm_endpoint"])  # Only has llm_endpoint, not nonexistent_attr
+        mock_config.services.llm_endpoint = "http://example.com"
+
+        # getattr with default will use the default for missing attribute
+        result = service_initializer._get_llm_service_config_value(mock_config, "nonexistent_attr", "default_value")
+        # Note: getattr returns default_value when attribute doesn't exist on spec
+        assert result == "default_value"
+
+    def test_get_config_value_with_various_types(self, service_initializer):
+        """Test getting config values of different types."""
+        mock_config = Mock()
+        mock_config.services = Mock()
+        mock_config.services.llm_timeout = 60
+        mock_config.services.llm_max_retries = 3
+        mock_config.services.llm_model = "gpt-4"
+
+        assert service_initializer._get_llm_service_config_value(mock_config, "llm_timeout", 30) == 60
+        assert service_initializer._get_llm_service_config_value(mock_config, "llm_max_retries", 1) == 3
+        assert service_initializer._get_llm_service_config_value(mock_config, "llm_model", "default") == "gpt-4"

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CIRIS Brand Colors -->
+    <color name="colorPrimary">#419CA0</color>
+    <color name="colorPrimaryDark">#327578</color>
+    <color name="colorAccent">#667eea</color>
+    <color name="ciris_primary">#667eea</color>
+    <color name="ciris_secondary">#764ba2</color>
+    <color name="ciris_background">#667eea</color>
+    <color name="ciris_accent">#00d4aa</color>
+
+    <!-- Standard Colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="gray_light">#F5F5F5</color>
+    <color name="gray_medium">#9E9E9E</color>
+    <color name="gray_dark">#424242</color>
+
+    <!-- Status Colors -->
+    <color name="success">#4CAF50</color>
+    <color name="error">#F44336</color>
+    <color name="warning">#FF9800</color>
+    <color name="info">#2196F3</color>
+
+    <!-- Connection Status Colors -->
+    <color name="status_green">#10B981</color>
+    <color name="status_red">#EF4444</color>
+</resources>

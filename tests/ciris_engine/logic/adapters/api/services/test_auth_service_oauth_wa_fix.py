@@ -406,17 +406,17 @@ class TestAuthServiceOAuthWAFix:
         assert oauth_user_id in api_auth_service._users
         assert "wa-2025-09-10-T123AB" in api_auth_service._users
 
-        # Verify: Result contains the loaded user (returned with both keys)
-        assert len(result) == 2  # Both keys are returned (wa_id and oauth key)
+        # Verify: Result contains the loaded user (deduplicated - same user only returned once)
+        assert len(result) == 1  # Deduplicated - same user under multiple keys returns once
         user_ids = [user_id for user_id, user in result]
-        assert oauth_user_id in user_ids
-        assert "wa-2025-09-10-T123AB" in user_ids
+        # One of the keys should be present (whichever was iterated first)
+        assert oauth_user_id in user_ids or "wa-2025-09-10-T123AB" in user_ids
 
-        # Verify: Both entries point to the same user object with correct data
-        for user_id, user in result:
-            assert user.name == "Test User"
-            assert user.wa_role == WARole.AUTHORITY
-            assert user.wa_id == "wa-2025-09-10-T123AB"
+        # Verify: The returned user has correct data
+        user_id, user = result[0]
+        assert user.name == "Test User"
+        assert user.wa_role == WARole.AUTHORITY
+        assert user.wa_id == "wa-2025-09-10-T123AB"
 
     def test_authority_role_includes_wa_resolve_deferral_permission(self, api_auth_service):
         """Test that AUTHORITY role includes wa.resolve_deferral permission for deferral resolution."""

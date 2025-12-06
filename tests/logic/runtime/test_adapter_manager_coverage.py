@@ -243,7 +243,7 @@ class TestRuntimeAdapterManager:
 
         # Verify
         assert result.success is False
-        assert "last communication-capable adapters" in result.message
+        assert "Unable to unload last adapter providing COMM service" in result.message
 
     @pytest.mark.asyncio
     async def test_unload_adapter_with_lifecycle_tasks(self, adapter_manager, mock_time_service):
@@ -720,7 +720,7 @@ class TestRuntimeAdapterManager:
 
         assert result is not None
         assert result.success is False
-        assert "last communication-capable adapters" in result.message
+        assert "Unable to unload last adapter providing COMM service" in result.message
 
     def test_validate_adapter_unload_eligibility_success(self, adapter_manager, mock_time_service):
         """Test _validate_adapter_unload_eligibility for valid unload."""

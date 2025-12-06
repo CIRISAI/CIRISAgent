@@ -390,7 +390,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             else:
                 logger.warning(f"State transition failed: {current_state.value} -> {target.value}")
 
-            return success
+            return bool(success)
 
         except Exception as e:
             logger.error(f"State transition failed: {e}", exc_info=True)

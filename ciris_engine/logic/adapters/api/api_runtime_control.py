@@ -97,9 +97,9 @@ class APIRuntimeControlService(Service):
             # Use runtime's state transition if available
             if has_request_state_transition:
                 logger.info("[API_RUNTIME_CONTROL] Delegating to runtime.request_state_transition()")
-                result = await self.runtime.request_state_transition(target_state, reason)  # type: ignore[no-any-return]
+                result = await self.runtime.request_state_transition(target_state, reason)
                 logger.info(f"[API_RUNTIME_CONTROL] Result: {result}")
-                return result
+                return bool(result)
 
             # Otherwise try direct transition
             if has_transition_to_state:
@@ -118,7 +118,7 @@ class APIRuntimeControlService(Service):
                         target = AgentState(target_state.lower())
                         result = await agent_processor.state_manager.transition_to(target)
                         logger.info(f"[API_RUNTIME_CONTROL] Direct state_manager result: {result}")
-                        return result
+                        return bool(result)
                     except ValueError:
                         logger.error(f"[API_RUNTIME_CONTROL] Invalid state: {target_state}")
                         return False

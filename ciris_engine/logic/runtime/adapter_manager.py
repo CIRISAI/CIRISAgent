@@ -148,7 +148,17 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 service_registry=getattr(self.runtime, "service_registry", None),
             )
 
-            adapter_kwargs = config_params.settings if config_params else {}
+            # Build adapter kwargs from config
+            # For complex adapters (MCP), use adapter_config for nested structures
+            # For simple adapters, use settings for flat primitives
+            adapter_kwargs: Dict[str, Any] = {}
+            if config_params:
+                # First add simple settings as kwargs
+                if config_params.settings:
+                    adapter_kwargs.update(config_params.settings)
+                # For adapters that need nested configs (MCP), pass adapter_config
+                if config_params.adapter_config:
+                    adapter_kwargs["adapter_config"] = config_params.adapter_config
 
             # All adapters must support context - no fallback
             # Type ignore: adapter_class is dynamically loaded, mypy can't verify constructor signature
@@ -473,11 +483,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         is_running=instance.is_running,
                         loaded_at=instance.loaded_at,
                         services_registered=instance.services_registered,
-                        config_params=AdapterConfig(
-                            adapter_type=instance.adapter_type,
-                            enabled=instance.is_running,
-                            settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
-                        ),
+                        config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                         metrics=metrics,
                         last_activity=None,
                         tools=tools,
@@ -613,11 +619,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 is_running=instance.is_running,
                 loaded_at=instance.loaded_at,
                 services_registered=instance.services_registered,
-                config_params=AdapterConfig(
-                    adapter_type=instance.adapter_type,
-                    enabled=instance.is_running,
-                    settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
-                ),
+                config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                 metrics=metrics,
                 last_activity=None,
                 tools=tools,

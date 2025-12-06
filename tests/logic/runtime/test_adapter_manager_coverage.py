@@ -334,7 +334,7 @@ class TestRuntimeAdapterManager:
     async def test_list_adapters_with_health_check(self, adapter_manager, mock_time_service):
         """Test listing adapters with health status."""
         # Mock the _sanitize_config_params method to avoid errors
-        adapter_manager._sanitize_config_params = Mock(return_value={})
+        adapter_manager._sanitize_config_params = Mock(return_value=AdapterConfig(adapter_type="cli", enabled=True))
 
         # Setup - add healthy adapter
         healthy_adapter = MockAdapter(None)
@@ -379,7 +379,7 @@ class TestRuntimeAdapterManager:
     async def test_list_adapters_with_tools(self, adapter_manager, mock_time_service):
         """Test listing adapters with tool information."""
         # Mock the _sanitize_config_params method to avoid errors
-        adapter_manager._sanitize_config_params = Mock(return_value={})
+        adapter_manager._sanitize_config_params = Mock(return_value=AdapterConfig(adapter_type="cli", enabled=True))
 
         # Setup adapter with tool service
         adapter = MockAdapter(None)
@@ -423,8 +423,8 @@ class TestRuntimeAdapterManager:
     @pytest.mark.asyncio
     async def test_list_adapters_exception_handling(self, adapter_manager, mock_time_service):
         """Test list adapters with exception in health check."""
-        # Mock the _sanitize_config_params method to avoid errors
-        adapter_manager._sanitize_config_params = Mock(return_value={})
+        # Mock the _sanitize_config_params method to return a valid AdapterConfig
+        adapter_manager._sanitize_config_params = Mock(return_value=AdapterConfig(adapter_type="cli", enabled=True))
 
         # Setup adapter that throws exception
         bad_adapter = MockAdapter(None)
@@ -450,8 +450,8 @@ class TestRuntimeAdapterManager:
     @pytest.mark.asyncio
     async def test_get_adapter_status(self, adapter_manager, mock_time_service):
         """Test getting status of specific adapter."""
-        # Mock the _sanitize_config_params method to avoid errors
-        adapter_manager._sanitize_config_params = Mock(return_value={})
+        # Mock the _sanitize_config_params method to return a valid AdapterConfig
+        adapter_manager._sanitize_config_params = Mock(return_value=AdapterConfig(adapter_type="cli", enabled=True))
 
         # Setup
         adapter = MockAdapter(None)

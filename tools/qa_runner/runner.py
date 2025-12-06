@@ -238,6 +238,7 @@ class QARunner:
             QAModule.REDDIT,
             QAModule.SQL_EXTERNAL_DATA,
             QAModule.STATE_TRANSITIONS,
+            QAModule.MCP,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -799,10 +800,11 @@ class QARunner:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
-        from .modules import BillingTests, ConsentTests, DSARTests, MessageIDDebugTests, PartnershipTests
+        from .modules import BillingTests, ConsentTests, DSARTests, MCPTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.mcp_tests import MCPTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
@@ -822,6 +824,7 @@ class QARunner:
             QAModule.REDDIT: RedditTests,
             QAModule.SQL_EXTERNAL_DATA: SQLExternalDataTests,
             QAModule.STATE_TRANSITIONS: StateTransitionTests,
+            QAModule.MCP: MCPTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

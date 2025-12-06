@@ -1,0 +1,48 @@
+{
+  "module": {
+    "name": "mockllm",
+    "version": "1.0.0",
+    "description": "Mock LLM service for testing - simulates AI responses",
+    "author": "CIRIS Team",
+    "MOCK": true
+  },
+  "services": [{
+    "type": "LLM",
+    "priority": "CRITICAL",
+    "class": "mock_llm.service.MockLLMService",
+    "capabilities": ["call_llm_structured"]
+  }],
+  "capabilities": [
+    "call_llm_structured"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.LLMService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.llm_core",
+      "ciris_engine.schemas.runtime.models"
+    ]
+  },
+  "exports": {
+    "service_class": "mock_llm.service.MockLLMService",
+    "protocol": "mock_llm.protocol.MockLLMProtocol",
+    "schemas": "mock_llm.schemas"
+  },
+  "configuration": {
+    "delay_ms": {
+      "type": "integer",
+      "default": 100,
+      "description": "Simulated response delay in milliseconds"
+    },
+    "failure_rate": {
+      "type": "float",
+      "default": 0.0,
+      "description": "Probability of simulated failures (0.0-1.0)"
+    }
+  },
+  "metadata": {
+    "warning": "MOCK LLM - NOT FOR PRODUCTION USE",
+    "provider": "mock"
+  }
+}

@@ -10,6 +10,7 @@ from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
 from .filter_tests import FilterTestModule
 from .handler_tests import HandlerTestModule
+from .mcp_tests import MCPTests
 from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
 from .partnership_tests import PartnershipTests
@@ -32,4 +33,5 @@ __all__ = [
     "MessageIDDebugTests",
     "SQLExternalDataTests",
     "StateTransitionTests",
+    "MCPTests",
 ]

@@ -23,6 +23,9 @@ from ciris_engine.schemas.runtime.adapter_management import (
     AdapterListResponse,
     AdapterMetrics,
     AdapterOperationResult,
+    ModuleConfigParameter,
+    ModuleTypeInfo,
+    ModuleTypesResponse,
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -1142,6 +1145,239 @@ async def list_adapters(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Module types helper functions
+
+
+def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
+    """Generate ModuleTypeInfo for a core adapter."""
+    core_adapters: Dict[str, Dict[str, Any]] = {
+        "api": {
+            "name": "API Adapter",
+            "description": "REST API adapter providing HTTP endpoints for CIRIS interaction",
+            "service_types": ["COMMUNICATION", "TOOL", "RUNTIME_CONTROL"],
+            "capabilities": [
+                "communication:send_message",
+                "communication:fetch_messages",
+                "tool:api",
+                "runtime_control",
+            ],
+            "configuration": [
+                ModuleConfigParameter(
+                    name="host",
+                    param_type="string",
+                    default="127.0.0.1",
+                    description="Host address to bind to",
+                    env_var="CIRIS_API_HOST",
+                    required=False,
+                ),
+                ModuleConfigParameter(
+                    name="port",
+                    param_type="integer",
+                    default=8000,
+                    description="Port to listen on",
+                    env_var="CIRIS_API_PORT",
+                    required=False,
+                ),
+                ModuleConfigParameter(
+                    name="debug",
+                    param_type="boolean",
+                    default=False,
+                    description="Enable debug mode",
+                    env_var="CIRIS_API_DEBUG",
+                    required=False,
+                ),
+            ],
+        },
+        "cli": {
+            "name": "CLI Adapter",
+            "description": "Command-line interface adapter for interactive terminal sessions",
+            "service_types": ["COMMUNICATION"],
+            "capabilities": ["communication:send_message", "communication:fetch_messages"],
+            "configuration": [
+                ModuleConfigParameter(
+                    name="prompt",
+                    param_type="string",
+                    default="CIRIS> ",
+                    description="CLI prompt string",
+                    required=False,
+                ),
+            ],
+        },
+        "discord": {
+            "name": "Discord Adapter",
+            "description": "Discord bot adapter for community interaction",
+            "service_types": ["COMMUNICATION", "TOOL"],
+            "capabilities": [
+                "communication:send_message",
+                "communication:fetch_messages",
+                "tool:discord",
+            ],
+            "configuration": [
+                ModuleConfigParameter(
+                    name="discord_token",
+                    param_type="string",
+                    description="Discord bot token",
+                    env_var="CIRIS_DISCORD_TOKEN",
+                    required=True,
+                    sensitivity="HIGH",
+                ),
+                ModuleConfigParameter(
+                    name="guild_id",
+                    param_type="string",
+                    description="Discord guild ID to operate in",
+                    env_var="CIRIS_DISCORD_GUILD_ID",
+                    required=False,
+                ),
+                ModuleConfigParameter(
+                    name="channel_id",
+                    param_type="string",
+                    description="Default channel ID for messages",
+                    env_var="CIRIS_DISCORD_CHANNEL_ID",
+                    required=False,
+                ),
+            ],
+        },
+    }
+
+    adapter_info = core_adapters.get(adapter_type, {})
+    return ModuleTypeInfo(
+        module_id=adapter_type,
+        name=adapter_info.get("name", adapter_type.title()),
+        version="1.0.0",
+        description=adapter_info.get("description", f"Core {adapter_type} adapter"),
+        author="CIRIS Team",
+        module_source="core",
+        service_types=adapter_info.get("service_types", []),
+        capabilities=adapter_info.get("capabilities", []),
+        configuration_schema=adapter_info.get("configuration", []),
+        requires_external_deps=adapter_type == "discord",
+        external_dependencies={"discord.py": ">=2.0.0"} if adapter_type == "discord" else {},
+        is_mock=False,
+        safe_domain=None,
+        prohibited=[],
+        metadata=None,
+    )
+
+
+def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
+    """Parse a manifest.json into a ModuleTypeInfo."""
+    module_info = manifest_data.get("module", {})
+
+    # Extract service types from services list
+    service_types = []
+    for svc in manifest_data.get("services", []):
+        svc_type = svc.get("type", "")
+        if svc_type and svc_type not in service_types:
+            service_types.append(svc_type)
+
+    # Parse configuration parameters
+    config_params: List[ModuleConfigParameter] = []
+    for param_name, param_data in manifest_data.get("configuration", {}).items():
+        if isinstance(param_data, dict):
+            config_params.append(
+                ModuleConfigParameter(
+                    name=param_name,
+                    param_type=param_data.get("type", "string"),
+                    default=param_data.get("default"),
+                    description=param_data.get("description", ""),
+                    env_var=param_data.get("env"),
+                    required=param_data.get("required", True),
+                    sensitivity=param_data.get("sensitivity"),
+                )
+            )
+
+    # Extract external dependencies
+    external_deps: Dict[str, str] = {}
+    deps = manifest_data.get("dependencies", {})
+    if isinstance(deps, dict):
+        external_deps = deps.get("external", {}) or {}
+
+    # Extract metadata
+    metadata = manifest_data.get("metadata", {})
+    safe_domain = metadata.get("safe_domain") if isinstance(metadata, dict) else None
+    prohibited = metadata.get("prohibited", []) if isinstance(metadata, dict) else []
+
+    return ModuleTypeInfo(
+        module_id=module_id,
+        name=module_info.get("name", module_id),
+        version=module_info.get("version", "1.0.0"),
+        description=module_info.get("description", ""),
+        author=module_info.get("author", "Unknown"),
+        module_source="modular",
+        service_types=service_types,
+        capabilities=manifest_data.get("capabilities", []),
+        configuration_schema=config_params,
+        requires_external_deps=bool(external_deps),
+        external_dependencies=external_deps,
+        is_mock=module_info.get("MOCK", False) or module_info.get("is_mock", False),
+        safe_domain=safe_domain if isinstance(safe_domain, str) else None,
+        prohibited=prohibited if isinstance(prohibited, list) else [],
+        metadata=metadata if isinstance(metadata, dict) else None,
+    )
+
+
+@router.get("/adapters/types", response_model=SuccessResponse[ModuleTypesResponse])
+async def list_module_types(
+    request: Request, auth: AuthContext = Depends(require_observer)
+) -> SuccessResponse[ModuleTypesResponse]:
+    """
+    List all available module/adapter types.
+
+    Returns both core adapters (api, cli, discord) and modular services
+    (mcp_client, mcp_server, reddit, etc.) with their typed configuration schemas.
+
+    This endpoint is useful for:
+    - Dynamic adapter loading UI
+    - Configuration validation
+    - Capability discovery
+
+    Requires OBSERVER role.
+    """
+    import json
+    from pathlib import Path
+
+    try:
+        # Get core adapters
+        core_modules: List[ModuleTypeInfo] = []
+        core_adapter_types = ["api", "cli", "discord"]
+        for adapter_type in core_adapter_types:
+            core_modules.append(_get_core_adapter_info(adapter_type))
+
+        # Discover modular services from manifest files
+        modular_services: List[ModuleTypeInfo] = []
+        services_dir = Path("ciris_modular_services")
+
+        if services_dir.exists():
+            for service_dir in services_dir.iterdir():
+                if not service_dir.is_dir() or service_dir.name.startswith("_"):
+                    continue
+
+                manifest_path = service_dir / "manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path) as f:
+                            manifest_data = json.load(f)
+
+                        module_info = _parse_manifest_to_module_info(manifest_data, service_dir.name)
+                        modular_services.append(module_info)
+                        logger.debug(f"Discovered modular service: {service_dir.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse manifest from {service_dir}: {e}")
+
+        response = ModuleTypesResponse(
+            core_modules=core_modules,
+            modular_services=modular_services,
+            total_core=len(core_modules),
+            total_modular=len(modular_services),
+        )
+
+        return SuccessResponse(data=response)
+
+    except Exception as e:
+        logger.error(f"Error listing module types: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/adapters/{adapter_id}", response_model=SuccessResponse[AdapterStatusSchema])
 async def get_adapter_status(
     adapter_id: str, request: Request, auth: AuthContext = Depends(require_observer)
@@ -1205,7 +1441,11 @@ async def get_adapter_status(
 
 @router.post("/adapters/{adapter_type}", response_model=SuccessResponse[AdapterOperationResult])
 async def load_adapter(
-    adapter_type: str, body: AdapterActionRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    adapter_type: str,
+    body: AdapterActionRequest,
+    request: Request,
+    adapter_id: Optional[str] = None,
+    auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[AdapterOperationResult]:
     """
     Load a new adapter instance.
@@ -1213,7 +1453,11 @@ async def load_adapter(
     Dynamically loads and starts a new adapter of the specified type.
     Requires ADMIN role.
 
-    Adapter types: cli, api, discord
+    Adapter types: cli, api, discord, mcp, mcp_server
+
+    Args:
+        adapter_type: Type of adapter to load
+        adapter_id: Optional unique ID for the adapter (auto-generated if not provided)
     """
     runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
     if not runtime_control:
@@ -1223,14 +1467,8 @@ async def load_adapter(
         # Generate adapter ID if not provided
         import uuid
 
-        adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
-
-        # Load adapter through runtime control service
-        logger.info(
-            f"Loading adapter through runtime_control: {runtime_control.__class__.__name__} (id: {id(runtime_control)})"
-        )
-        if hasattr(runtime_control, "adapter_manager"):
-            logger.info(f"Runtime control adapter_manager id: {id(runtime_control.adapter_manager)}")
+        if not adapter_id:
+            adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
 
         result = await runtime_control.load_adapter(
             adapter_type=adapter_type, adapter_id=adapter_id, config=body.config, auto_start=body.auto_start
@@ -1331,7 +1569,7 @@ async def reload_adapter(
             adapter_id=load_result.adapter_id,
             adapter_type=adapter_info.adapter_type,
             message=(
-                f"Adapter reloaded: {load_result.message}"
+                f"Adapter {adapter_id} reloaded successfully"
                 if load_result.success
                 else f"Reload failed: {load_result.error}"
             ),

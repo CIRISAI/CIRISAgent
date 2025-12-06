@@ -199,6 +199,15 @@ class APITestModule:
                 description="Test listing system adapters",
             ),
             QATestCase(
+                name="List module types",
+                module=QAModule.SYSTEM,
+                endpoint="/v1/system/adapters/types",
+                method="GET",
+                expected_status=200,
+                requires_auth=True,
+                description="Test listing available module/adapter types with configuration schemas",
+            ),
+            QATestCase(
                 name="Processing queue status",
                 module=QAModule.SYSTEM,
                 endpoint="/v1/system/runtime/queue",

@@ -250,45 +250,51 @@ class SessionsFragment : Fragment() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Send a message to the agent requesting state transition
-                val messageBody = mapOf(
-                    "message" to "Please transition to $targetState state.",
-                    "metadata" to mapOf(
-                        "requested_state" to targetState,
-                        "source" to "android_sessions_ui"
-                    )
+                // Use the dedicated state transition API endpoint
+                val transitionBody = mapOf(
+                    "target_state" to targetState,
+                    "reason" to "Requested via Android Sessions UI"
                 )
 
                 val request = Request.Builder()
-                    .url("$BASE_URL/v1/agent/message")
-                    .post(gson.toJson(messageBody).toRequestBody("application/json".toMediaType()))
+                    .url("$BASE_URL/v1/system/state/transition")
+                    .post(gson.toJson(transitionBody).toRequestBody("application/json".toMediaType()))
                     .apply {
                         accessToken?.let { addHeader("Authorization", "Bearer $it") }
                     }
                     .build()
 
                 val response = client.newCall(request).execute()
+                val body = response.body?.string()
 
                 withContext(Dispatchers.Main) {
                     loadingIndicator.visibility = View.GONE
 
-                    if (response.isSuccessful) {
-                        Toast.makeText(
-                            context,
-                            "Requested transition to $targetState",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        // Refresh state after a short delay
-                        CoroutineScope(Dispatchers.IO).launch {
-                            delay(2000)
-                            fetchProcessorStatesInternal()
+                    if (response.isSuccessful && body != null) {
+                        val transitionResponse = gson.fromJson(body, StateTransitionResponse::class.java)
+                        if (transitionResponse.data?.success == true) {
+                            Toast.makeText(
+                                context,
+                                "Transitioned to ${transitionResponse.data.currentState}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            // Refresh state immediately
+                            fetchProcessorStates()
+                        } else {
+                            Toast.makeText(
+                                context,
+                                transitionResponse.data?.message ?: "Transition not initiated",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     } else {
-                        Toast.makeText(
-                            context,
-                            "Failed to request state transition",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val errorMsg = when (response.code) {
+                            400 -> "Invalid state requested"
+                            401 -> "Authentication required"
+                            503 -> "State transition not supported"
+                            else -> "Failed to request state transition (${response.code})"
+                        }
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
@@ -313,4 +319,16 @@ data class ProcessorStateInfo(
     @SerializedName("is_active") val isActive: Boolean,
     val description: String,
     val capabilities: List<String>
+)
+
+data class StateTransitionResponse(
+    val success: Boolean,
+    val data: StateTransitionData?
+)
+
+data class StateTransitionData(
+    val success: Boolean,
+    @SerializedName("current_state") val currentState: String?,
+    @SerializedName("previous_state") val previousState: String?,
+    val message: String?
 )

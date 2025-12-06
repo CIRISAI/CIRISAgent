@@ -238,6 +238,7 @@ class QARunner:
             QAModule.REDDIT,
             QAModule.SQL_EXTERNAL_DATA,
             QAModule.STATE_TRANSITIONS,
+            QAModule.COGNITIVE_STATE_API,
             QAModule.MCP,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
@@ -802,6 +803,7 @@ class QARunner:
 
         from .modules import BillingTests, ConsentTests, DSARTests, MCPTests, MessageIDDebugTests, PartnershipTests
         from .modules.billing_integration_tests import BillingIntegrationTests
+        from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
         from .modules.mcp_tests import MCPTests
@@ -824,6 +826,7 @@ class QARunner:
             QAModule.REDDIT: RedditTests,
             QAModule.SQL_EXTERNAL_DATA: SQLExternalDataTests,
             QAModule.STATE_TRANSITIONS: StateTransitionTests,
+            QAModule.COGNITIVE_STATE_API: CognitiveStateAPITests,
             QAModule.MCP: MCPTests,
         }
 

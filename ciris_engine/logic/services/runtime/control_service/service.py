@@ -342,6 +342,52 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error=str(e),
             )
 
+    async def request_state_transition(self, target_state: str, reason: str) -> bool:
+        """Request a cognitive state transition.
+
+        Args:
+            target_state: Target state name (e.g., "DREAM", "PLAY", "SOLITUDE", "WORK")
+            reason: Reason for the transition request
+
+        Returns:
+            True if transition was successful, False otherwise
+        """
+        try:
+            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
+                logger.error("Cannot transition state: agent processor not available")
+                return False
+
+            agent_processor = self.runtime.agent_processor
+            if not agent_processor:
+                logger.error("Cannot transition state: agent processor is None")
+                return False
+
+            # Convert string to AgentState enum (values are lowercase)
+            from ciris_engine.schemas.processors.states import AgentState
+            try:
+                target = AgentState(target_state.lower())
+            except ValueError:
+                logger.error(f"Invalid target state: {target_state}")
+                return False
+
+            current_state = agent_processor.state_manager.get_state()
+            logger.info(f"State transition requested: {current_state.value} -> {target.value} (reason: {reason})")
+
+            # Use the state manager's transition_to method
+            success = await agent_processor.state_manager.transition_to(target)
+
+            if success:
+                self._state_transitions += 1
+                logger.info(f"State transition successful: {current_state.value} -> {target.value}")
+            else:
+                logger.warning(f"State transition failed: {current_state.value} -> {target.value}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"State transition failed: {e}", exc_info=True)
+            return False
+
     async def get_processor_queue_status(self) -> ProcessorQueueStatus:
         """Get processor queue status."""
         try:
@@ -660,6 +706,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
     async def unload_adapter(self, adapter_id: str, force: bool = False) -> AdapterOperationResponse:
         """Unload an adapter instance."""
+        logger.warning(
+            f"RuntimeControlService.unload_adapter called: adapter_id={adapter_id}, "
+            f"has_adapter_manager={self.adapter_manager is not None}, "
+            f"adapter_manager_id={id(self.adapter_manager) if self.adapter_manager else None}, "
+            f"has_runtime={self.runtime is not None}, "
+            f"service_id={id(self)}"
+        )
         # AdapterStatus is already imported at module level
 
         # Lazy initialization of adapter_manager if needed

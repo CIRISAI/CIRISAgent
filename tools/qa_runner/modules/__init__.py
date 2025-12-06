@@ -4,6 +4,7 @@ QA test modules for different components.
 
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
+from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
@@ -20,6 +21,7 @@ from .state_transition_tests import StateTransitionTests
 
 __all__ = [
     "APITestModule",
+    "CognitiveStateAPITests",
     "HandlerTestModule",
     "SDKTestModule",
     "ConsentTests",

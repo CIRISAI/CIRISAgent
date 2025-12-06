@@ -6,8 +6,10 @@ into a unified system operations interface.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -32,6 +34,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.path_resolution import get_package_root
 from ciris_engine.utils.serialization import serialize_timestamp
 
 from ..constants import (
@@ -94,6 +97,22 @@ class RuntimeAction(BaseModel):
     """Runtime control action request."""
 
     reason: Optional[str] = Field(None, description="Reason for the action")
+
+
+class StateTransitionRequest(BaseModel):
+    """Request to transition cognitive state."""
+
+    target_state: str = Field(..., description="Target cognitive state (WORK, DREAM, PLAY, SOLITUDE)")
+    reason: Optional[str] = Field(None, description="Reason for the transition")
+
+
+class StateTransitionResponse(BaseModel):
+    """Response to cognitive state transition request."""
+
+    success: bool = Field(..., description="Whether transition was initiated")
+    message: str = Field(..., description="Human-readable status message")
+    previous_state: Optional[str] = Field(None, description="State before transition")
+    current_state: str = Field(..., description="Current cognitive state after transition attempt")
 
 
 class RuntimeControlResponse(BaseModel):
@@ -710,6 +729,79 @@ async def control_runtime(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Valid cognitive states for transition
+VALID_COGNITIVE_STATES = {"WORK", "DREAM", "PLAY", "SOLITUDE"}
+
+
+@router.post("/state/transition", response_model=SuccessResponse[StateTransitionResponse])
+async def transition_cognitive_state(
+    request: Request,
+    body: StateTransitionRequest = Body(...),
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[StateTransitionResponse]:
+    """
+    Request a cognitive state transition.
+
+    Transitions the agent to a different cognitive state (WORK, DREAM, PLAY, SOLITUDE).
+    Valid transitions depend on the current state:
+    - From WORK: Can transition to DREAM, PLAY, or SOLITUDE
+    - From PLAY: Can transition to WORK or SOLITUDE
+    - From SOLITUDE: Can transition to WORK
+    - From DREAM: Typically transitions back to WORK when complete
+
+    Requires ADMIN role.
+    """
+    try:
+        target_state = body.target_state.upper()
+
+        # Validate target state
+        if target_state not in VALID_COGNITIVE_STATES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid target state '{target_state}'. Must be one of: {', '.join(sorted(VALID_COGNITIVE_STATES))}",
+            )
+
+        # Get current state
+        previous_state = _get_cognitive_state(request)
+
+        # Get runtime control service
+        runtime_control = _get_runtime_control_service(request)
+
+        # Check if request_state_transition is available
+        if not hasattr(runtime_control, "request_state_transition"):
+            raise HTTPException(
+                status_code=503,
+                detail="State transition not supported by current runtime control service",
+            )
+
+        # Request the transition
+        reason = body.reason or f"Requested via API from {previous_state or 'UNKNOWN'}"
+        success = await runtime_control.request_state_transition(target_state, reason)
+
+        # Get current state after transition attempt
+        current_state = _get_cognitive_state(request) or target_state
+
+        if success:
+            message = f"Transition to {target_state} initiated successfully"
+        else:
+            message = f"Transition to {target_state} could not be initiated"
+
+        return SuccessResponse(
+            data=StateTransitionResponse(
+                success=success,
+                message=message,
+                previous_state=previous_state,
+                current_state=current_state,
+            )
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"State transition failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1344,25 +1436,70 @@ async def list_module_types(
             core_modules.append(_get_core_adapter_info(adapter_type))
 
         # Discover modular services from manifest files
+        # Use importlib for cross-platform compatibility (works with Chaquopy AssetFinder)
         modular_services: List[ModuleTypeInfo] = []
-        services_dir = Path("ciris_modular_services")
 
-        if services_dir.exists():
-            for service_dir in services_dir.iterdir():
-                if not service_dir.is_dir() or service_dir.name.startswith("_"):
-                    continue
+        try:
+            import importlib.resources
+            import ciris_modular_services
 
-                manifest_path = service_dir / "manifest.json"
-                if manifest_path.exists():
-                    try:
-                        with open(manifest_path) as f:
-                            manifest_data = json.load(f)
+            # Get the package path - works with both filesystem and AssetFinder
+            if hasattr(ciris_modular_services, "__path__"):
+                services_base = Path(ciris_modular_services.__path__[0])
+                logger.debug(f"Modular services base path: {services_base}")
 
-                        module_info = _parse_manifest_to_module_info(manifest_data, service_dir.name)
-                        modular_services.append(module_info)
-                        logger.debug(f"Discovered modular service: {service_dir.name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to parse manifest from {service_dir}: {e}")
+                # List subdirectories - each is a potential service
+                try:
+                    for item in services_base.iterdir():
+                        if not item.is_dir() or item.name.startswith("_"):
+                            continue
+
+                        manifest_path = item / "manifest.json"
+                        try:
+                            # Try to read manifest using importlib for Android compatibility
+                            submodule_name = f"ciris_modular_services.{item.name}"
+                            try:
+                                submodule = importlib.import_module(submodule_name)
+                                if hasattr(submodule, "__path__"):
+                                    manifest_file = Path(submodule.__path__[0]) / "manifest.json"
+                                    if manifest_file.exists():
+                                        with open(manifest_file) as f:
+                                            manifest_data = json.load(f)
+                                        module_info = _parse_manifest_to_module_info(manifest_data, item.name)
+                                        modular_services.append(module_info)
+                                        logger.debug(f"Discovered modular service: {item.name}")
+                            except ImportError:
+                                # Not an importable module, try direct file access
+                                if manifest_path.exists():
+                                    with open(manifest_path) as f:
+                                        manifest_data = json.load(f)
+                                    module_info = _parse_manifest_to_module_info(manifest_data, item.name)
+                                    modular_services.append(module_info)
+                                    logger.debug(f"Discovered modular service (direct): {item.name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to parse manifest from {item}: {e}")
+                except OSError as e:
+                    # iterdir() may fail on Android AssetFinder - try known service names
+                    logger.debug(f"iterdir failed ({e}), trying known service names")
+                    known_services = [
+                        "mcp_client", "mcp_server", "mock_llm", "reddit",
+                        "geo_wisdom", "sensor_wisdom", "weather_wisdom",
+                        "external_data_sql", "mcp_common"
+                    ]
+                    for svc_name in known_services:
+                        try:
+                            submodule = importlib.import_module(f"ciris_modular_services.{svc_name}")
+                            if hasattr(submodule, "__path__"):
+                                manifest_file = Path(submodule.__path__[0]) / "manifest.json"
+                                with open(manifest_file) as f:
+                                    manifest_data = json.load(f)
+                                module_info = _parse_manifest_to_module_info(manifest_data, svc_name)
+                                modular_services.append(module_info)
+                                logger.debug(f"Discovered modular service (known): {svc_name}")
+                        except Exception as e:
+                            logger.debug(f"Service {svc_name} not available: {e}")
+        except ImportError as e:
+            logger.debug(f"ciris_modular_services not available: {e}")
 
         response = ModuleTypesResponse(
             core_modules=core_modules,
@@ -1511,6 +1648,10 @@ async def unload_adapter(
         result = await runtime_control.unload_adapter(
             adapter_id=adapter_id, force=False  # Never force, respect safety checks
         )
+
+        # Log failures explicitly
+        if not result.success:
+            logger.error(f"Adapter unload failed: {result.error}")
 
         # Convert response
         response = AdapterOperationResult(

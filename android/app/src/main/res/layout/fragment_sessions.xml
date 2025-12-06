@@ -122,7 +122,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="CIRIS has different cognitive states for specialized processing. Dream enables deep introspection, Play allows creative exploration, and Solitude provides quiet reflection time."
+                        android:text="CIRIS cognitive states control how the agent processes. DREAM uses credits for self-improvement. PLAY processes normally with creative variance. SOLITUDE uses zero credits - perfect for rest periods."
                         android:textSize="11sp"
                         android:textColor="#15803D"
                         android:lineSpacingMultiplier="1.2" />
@@ -187,9 +187,19 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Deep introspection and memory consolidation"
+                        android:text="Deep introspection and memory consolidation. Consolidates telemetry, analyzes patterns, and adapts behavior."
                         android:textSize="13sp"
                         android:textColor="#6B7280" />
+
+                    <!-- Resource Usage -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Uses 12-24 credits • 30-120 min duration"
+                        android:textSize="11sp"
+                        android:textColor="#9CA3AF"
+                        android:textStyle="italic" />
 
                     <!-- Capabilities -->
                     <LinearLayout
@@ -293,9 +303,19 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Creative exploration and experimentation"
+                        android:text="Creative exploration and experimentation. Processes tasks with 20% chance of novel approaches."
                         android:textSize="13sp"
                         android:textColor="#6B7280" />
+
+                    <!-- Resource Usage -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Normal credit usage • Same as WORK • Until you exit"
+                        android:textSize="11sp"
+                        android:textColor="#9CA3AF"
+                        android:textStyle="italic" />
 
                     <!-- Capabilities -->
                     <LinearLayout
@@ -410,9 +430,19 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Quiet reflection and planning"
+                        android:text="Quiet reflection and rest. Only handles critical tasks (priority 8+). Good for boundary setting."
                         android:textSize="13sp"
                         android:textColor="#6B7280" />
+
+                    <!-- Resource Usage -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Zero credits used • 5-30 min duration"
+                        android:textSize="11sp"
+                        android:textColor="#9CA3AF"
+                        android:textStyle="italic" />
 
                     <!-- Capabilities -->
                     <LinearLayout
@@ -424,7 +454,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Planning"
+                            android:text="Rest Mode"
                             android:textSize="10sp"
                             android:textColor="#0284C7"
                             android:background="@drawable/chip_cyan"
@@ -435,7 +465,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="6dp"
-                            android:text="Reflection"
+                            android:text="Maintenance"
                             android:textSize="10sp"
                             android:textColor="#0284C7"
                             android:background="@drawable/chip_cyan"
@@ -446,7 +476,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="6dp"
-                            android:text="Goal Setting"
+                            android:text="Zero Credits"
                             android:textSize="10sp"
                             android:textColor="#0284C7"
                             android:background="@drawable/chip_cyan"

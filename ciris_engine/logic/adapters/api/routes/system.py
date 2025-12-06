@@ -48,6 +48,14 @@ from ..constants import (
 from ..dependencies.auth import AuthContext, require_admin, require_observer
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+# Capability constants (avoid duplication)
+CAP_COMM_SEND_MESSAGE = "communication:send_message"
+CAP_COMM_FETCH_MESSAGES = "communication:fetch_messages"
+MANIFEST_FILENAME = "manifest.json"
+
+# Common communication capabilities for adapters
+COMM_CAPABILITIES = [CAP_COMM_SEND_MESSAGE, CAP_COMM_FETCH_MESSAGES]
 logger = logging.getLogger(__name__)
 
 
@@ -1274,12 +1282,7 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
             "name": "API Adapter",
             "description": "REST API adapter providing HTTP endpoints for CIRIS interaction",
             "service_types": ["COMMUNICATION", "TOOL", "RUNTIME_CONTROL"],
-            "capabilities": [
-                "communication:send_message",
-                "communication:fetch_messages",
-                "tool:api",
-                "runtime_control",
-            ],
+            "capabilities": [*COMM_CAPABILITIES, "tool:api", "runtime_control"],
             "configuration": [
                 ModuleConfigParameter(
                     name="host",
@@ -1311,7 +1314,7 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
             "name": "CLI Adapter",
             "description": "Command-line interface adapter for interactive terminal sessions",
             "service_types": ["COMMUNICATION"],
-            "capabilities": ["communication:send_message", "communication:fetch_messages"],
+            "capabilities": COMM_CAPABILITIES,
             "configuration": [
                 ModuleConfigParameter(
                     name="prompt",
@@ -1326,11 +1329,7 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
             "name": "Discord Adapter",
             "description": "Discord bot adapter for community interaction",
             "service_types": ["COMMUNICATION", "TOOL"],
-            "capabilities": [
-                "communication:send_message",
-                "communication:fetch_messages",
-                "tool:discord",
-            ],
+            "capabilities": [*COMM_CAPABILITIES, "tool:discord"],
             "configuration": [
                 ModuleConfigParameter(
                     name="discord_token",
@@ -1379,7 +1378,7 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
 
 
 def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
-    """Parse a manifest.json into a ModuleTypeInfo."""
+    """Parse a module manifest into a ModuleTypeInfo."""
     module_info = manifest_data.get("module", {})
 
     # Extract service types from services list
@@ -1435,6 +1434,113 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
     )
 
 
+# Known services for Android AssetFinder fallback
+KNOWN_MODULAR_SERVICES = [
+    "mcp_client",
+    "mcp_server",
+    "mock_llm",
+    "reddit",
+    "geo_wisdom",
+    "sensor_wisdom",
+    "weather_wisdom",
+    "external_data_sql",
+    "mcp_common",
+    "ha_integration",
+]
+
+
+async def _read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
+    """Read and parse a manifest file asynchronously."""
+    import aiofiles
+
+    try:
+        async with aiofiles.open(manifest_path, mode="r") as f:
+            content = await f.read()
+        return json.loads(content)
+    except Exception:
+        return None
+
+
+def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
+    """Try to load a modular service manifest by name."""
+    import importlib
+
+    try:
+        submodule = importlib.import_module(f"ciris_modular_services.{service_name}")
+        if not hasattr(submodule, "__path__"):
+            return None
+        manifest_file = Path(submodule.__path__[0]) / MANIFEST_FILENAME
+        if not manifest_file.exists():
+            return None
+        with open(manifest_file) as f:
+            manifest_data = json.load(f)
+        return _parse_manifest_to_module_info(manifest_data, service_name)
+    except Exception as e:
+        logger.debug("Service %s not available: %s", service_name, e)
+        return None
+
+
+async def _discover_services_from_directory(services_base: Path) -> List[ModuleTypeInfo]:
+    """Discover modular services by iterating the services directory."""
+    modular_services: List[ModuleTypeInfo] = []
+
+    for item in services_base.iterdir():
+        if not item.is_dir() or item.name.startswith("_"):
+            continue
+
+        # Try importlib-based loading first (Android compatibility)
+        module_info = _try_load_service_manifest(item.name)
+        if module_info:
+            modular_services.append(module_info)
+            logger.debug("Discovered modular service: %s", item.name)
+            continue
+
+        # Fallback to direct file access
+        manifest_path = item / MANIFEST_FILENAME
+        manifest_data = await _read_manifest_async(manifest_path)
+        if manifest_data:
+            module_info = _parse_manifest_to_module_info(manifest_data, item.name)
+            modular_services.append(module_info)
+            logger.debug("Discovered modular service (direct): %s", item.name)
+
+    return modular_services
+
+
+async def _discover_services_by_name() -> List[ModuleTypeInfo]:
+    """Discover modular services from known service names (Android fallback)."""
+    modular_services: List[ModuleTypeInfo] = []
+
+    for svc_name in KNOWN_MODULAR_SERVICES:
+        module_info = _try_load_service_manifest(svc_name)
+        if module_info:
+            modular_services.append(module_info)
+            logger.debug("Discovered modular service (known): %s", svc_name)
+
+    return modular_services
+
+
+async def _discover_modular_services() -> List[ModuleTypeInfo]:
+    """Discover all available modular services."""
+    try:
+        import ciris_modular_services
+
+        if not hasattr(ciris_modular_services, "__path__"):
+            return []
+
+        services_base = Path(ciris_modular_services.__path__[0])
+        logger.debug("Modular services base path: %s", services_base)
+
+        try:
+            return await _discover_services_from_directory(services_base)
+        except OSError as e:
+            logger.debug("iterdir failed (%s), trying known service names", e)
+            return await _discover_services_by_name()
+
+    except ImportError as e:
+        logger.debug("ciris_modular_services not available: %s", e)
+        return []
+
+
 @router.get("/adapters/types", response_model=SuccessResponse[ModuleTypesResponse])
 async def list_module_types(
     request: Request, auth: AuthContext = Depends(require_observer)
@@ -1452,88 +1558,13 @@ async def list_module_types(
 
     Requires OBSERVER role.
     """
-    import json
-    from pathlib import Path
-
     try:
         # Get core adapters
-        core_modules: List[ModuleTypeInfo] = []
         core_adapter_types = ["api", "cli", "discord"]
-        for adapter_type in core_adapter_types:
-            core_modules.append(_get_core_adapter_info(adapter_type))
+        core_modules = [_get_core_adapter_info(t) for t in core_adapter_types]
 
-        # Discover modular services from manifest files
-        # Use importlib for cross-platform compatibility (works with Chaquopy AssetFinder)
-        modular_services: List[ModuleTypeInfo] = []
-
-        try:
-            import importlib.resources
-
-            import ciris_modular_services
-
-            # Get the package path - works with both filesystem and AssetFinder
-            if hasattr(ciris_modular_services, "__path__"):
-                services_base = Path(ciris_modular_services.__path__[0])
-                logger.debug(f"Modular services base path: {services_base}")
-
-                # List subdirectories - each is a potential service
-                try:
-                    for item in services_base.iterdir():
-                        if not item.is_dir() or item.name.startswith("_"):
-                            continue
-
-                        manifest_path = item / "manifest.json"
-                        try:
-                            # Try to read manifest using importlib for Android compatibility
-                            submodule_name = f"ciris_modular_services.{item.name}"
-                            try:
-                                submodule = importlib.import_module(submodule_name)
-                                if hasattr(submodule, "__path__"):
-                                    manifest_file = Path(submodule.__path__[0]) / "manifest.json"
-                                    if manifest_file.exists():
-                                        with open(manifest_file) as f:
-                                            manifest_data = json.load(f)
-                                        module_info = _parse_manifest_to_module_info(manifest_data, item.name)
-                                        modular_services.append(module_info)
-                                        logger.debug(f"Discovered modular service: {item.name}")
-                            except ImportError:
-                                # Not an importable module, try direct file access
-                                if manifest_path.exists():
-                                    with open(manifest_path) as f:
-                                        manifest_data = json.load(f)
-                                    module_info = _parse_manifest_to_module_info(manifest_data, item.name)
-                                    modular_services.append(module_info)
-                                    logger.debug(f"Discovered modular service (direct): {item.name}")
-                        except Exception as e:
-                            logger.warning(f"Failed to parse manifest from {item}: {e}")
-                except OSError as e:
-                    # iterdir() may fail on Android AssetFinder - try known service names
-                    logger.debug(f"iterdir failed ({e}), trying known service names")
-                    known_services = [
-                        "mcp_client",
-                        "mcp_server",
-                        "mock_llm",
-                        "reddit",
-                        "geo_wisdom",
-                        "sensor_wisdom",
-                        "weather_wisdom",
-                        "external_data_sql",
-                        "mcp_common",
-                    ]
-                    for svc_name in known_services:
-                        try:
-                            submodule = importlib.import_module(f"ciris_modular_services.{svc_name}")
-                            if hasattr(submodule, "__path__"):
-                                manifest_file = Path(submodule.__path__[0]) / "manifest.json"
-                                with open(manifest_file) as f:
-                                    manifest_data = json.load(f)
-                                module_info = _parse_manifest_to_module_info(manifest_data, svc_name)
-                                modular_services.append(module_info)
-                                logger.debug(f"Discovered modular service (known): {svc_name}")
-                        except Exception as e:
-                            logger.debug(f"Service {svc_name} not available: {e}")
-        except ImportError as e:
-            logger.debug(f"ciris_modular_services not available: {e}")
+        # Discover modular services
+        modular_services = await _discover_modular_services()
 
         response = ModuleTypesResponse(
             core_modules=core_modules,
@@ -1545,7 +1576,7 @@ async def list_module_types(
         return SuccessResponse(data=response)
 
     except Exception as e:
-        logger.error(f"Error listing module types: {e}")
+        logger.error("Error listing module types: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

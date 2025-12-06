@@ -372,9 +372,9 @@ class CIRISRuntime:
             logger.error("Cannot transition state: agent processor not initialized")
             return False
 
-        # Convert string to AgentState enum
+        # Convert string to AgentState enum (values are lowercase)
         try:
-            target = AgentState(target_state.upper())
+            target = AgentState(target_state.lower())
         except ValueError:
             logger.error(f"Invalid target state: {target_state}")
             return False

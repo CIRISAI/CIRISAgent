@@ -1456,7 +1456,8 @@ async def _read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
     try:
         async with aiofiles.open(manifest_path, mode="r") as f:
             content = await f.read()
-        return json.loads(content)
+        result: Dict[str, Any] = json.loads(content)
+        return result
     except Exception:
         return None
 

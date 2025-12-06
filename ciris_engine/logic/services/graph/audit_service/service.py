@@ -37,6 +37,11 @@ except ImportError:
     psutil = None  # type: ignore
     PSUTIL_AVAILABLE = False
 
+# SQLite PRAGMA constants (avoid duplicate literals)
+PRAGMA_JOURNAL_MODE_WAL = "PRAGMA journal_mode=WAL"
+PRAGMA_BUSY_TIMEOUT_5000 = "PRAGMA busy_timeout=5000"
+PRAGMA_SYNCHRONOUS_NORMAL = "PRAGMA synchronous=NORMAL"
+
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
@@ -1041,9 +1046,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             cursor = conn.cursor()
 
             # Set PRAGMA statements for stability and corruption prevention
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA busy_timeout=5000")
-            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
+            cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
+            cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
             cursor.execute("PRAGMA foreign_keys=ON")
 
             # Check database integrity
@@ -1064,9 +1069,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 logger.warning("Corrupted audit database removed, recreating...")
                 conn = sqlite3.connect(db_path_str, check_same_thread=False)
                 cursor = conn.cursor()
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA busy_timeout=5000")
-                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
+                cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
+                cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
 
             # Audit log table
             cursor.execute(
@@ -1126,9 +1131,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         await asyncio.to_thread(_create_tables)
         self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
         # Apply PRAGMA settings to persistent connection
-        self._db_connection.execute("PRAGMA journal_mode=WAL")
-        self._db_connection.execute("PRAGMA busy_timeout=5000")
-        self._db_connection.execute("PRAGMA synchronous=NORMAL")
+        self._db_connection.execute(PRAGMA_JOURNAL_MODE_WAL)
+        self._db_connection.execute(PRAGMA_BUSY_TIMEOUT_5000)
+        self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)
 
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain.

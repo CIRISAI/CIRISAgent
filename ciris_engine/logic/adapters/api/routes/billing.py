@@ -315,7 +315,8 @@ def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
 def _get_agent_id(request: Request) -> str:
     """Extract agent_id from request runtime."""
     if hasattr(request.app.state, "runtime") and request.app.state.runtime.agent_identity:
-        return request.app.state.runtime.agent_identity.agent_id
+        agent_id: str = request.app.state.runtime.agent_identity.agent_id
+        return agent_id
     return "pending"
 
 
@@ -394,9 +395,10 @@ async def get_credits(
     # CIRISBillingProvider: mobile mode (no API key) or server mode
     if not os.getenv("CIRIS_BILLING_API_KEY"):
         logger.info(
-            "[BILLING_CREDITS] Using CreditCheckResult (no API key): "
-            "free=%s, paid=%s, has_credit=%s",
-            result.free_uses_remaining, result.credits_remaining, result.has_credit,
+            "[BILLING_CREDITS] Using CreditCheckResult (no API key): " "free=%s, paid=%s, has_credit=%s",
+            result.free_uses_remaining,
+            result.credits_remaining,
+            result.has_credit,
         )
         return _build_mobile_credit_response(result)
 
@@ -406,7 +408,9 @@ async def get_credits(
     response = _format_billing_response(credit_data)
     logger.info(
         "[BILLING_CREDITS] Credit check complete: free=%s, paid=%s, has_credit=%s",
-        response.free_uses_remaining, response.credits_remaining, response.has_credit,
+        response.free_uses_remaining,
+        response.credits_remaining,
+        response.has_credit,
     )
     return response
 

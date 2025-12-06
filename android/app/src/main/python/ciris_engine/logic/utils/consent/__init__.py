@@ -1,1 +1,0 @@
-"""Consent utilities module."""

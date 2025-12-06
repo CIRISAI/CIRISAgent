@@ -1,0 +1,25 @@
+{
+  "module": {
+    "name": "mcp_common",
+    "version": "1.0.0",
+    "description": "Shared utilities for MCP client and server adapters including protocol helpers and schema converters",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [],
+  "capabilities": [],
+  "dependencies": {
+    "protocols": [],
+    "schemas": [],
+    "external": {}
+  },
+  "exports": {
+    "protocol": "mcp_common.protocol",
+    "schemas": "mcp_common.schemas"
+  },
+  "configuration": {},
+  "metadata": {
+    "type": "library",
+    "description": "Shared MCP utilities - no standalone services"
+  }
+}

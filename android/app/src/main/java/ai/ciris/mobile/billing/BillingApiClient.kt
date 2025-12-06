@@ -426,13 +426,21 @@ class BillingApiClient(
 
             if (response.isSuccessful && responseBody != null) {
                 val result = gson.fromJson(responseBody, BalanceCheckResponse::class.java)
-                Log.i(TAG, "Parsed balance: creditsRemaining=${result.creditsRemaining}, freeUsesRemaining=${result.freeUsesRemaining}, hasCredit=${result.hasCredit}")
-                val totalCredits = result.getTotalCredits()
-                Log.i(TAG, "Total credits calculated: $totalCredits")
-                BalanceResult(
-                    success = true,
-                    balance = totalCredits
-                )
+                Log.i(TAG, "Parsed balance: creditsRemaining=${result.creditsRemaining}, freeUsesRemaining=${result.freeUsesRemaining}, dailyFreeUsesRemaining=${result.dailyFreeUsesRemaining}, hasCredit=${result.hasCredit}, planName=${result.planName}")
+
+                // Check if server is returning "unlimited" fallback (credit provider not yet initialized)
+                // This returns 999+999=1998 which is confusing - treat as "not ready"
+                if (result.planName == "unlimited") {
+                    Log.w(TAG, "Server returned 'unlimited' plan - credit provider not yet ready")
+                    BalanceResult(success = false, error = "Credit provider initializing")
+                } else {
+                    val totalCredits = result.getTotalCredits()
+                    Log.i(TAG, "Total credits calculated: $totalCredits")
+                    BalanceResult(
+                        success = true,
+                        balance = totalCredits
+                    )
+                }
             } else if (response.code == 401 && allowRetry) {
                 // API key is stale/invalid - refresh and retry once
                 Log.w(TAG, "Balance check got 401 - API key stale, refreshing...")
@@ -498,16 +506,17 @@ data class BalanceCheckResponse(
     @SerializedName("has_credit") val hasCredit: Boolean = false,
     @SerializedName("credits_remaining") val creditsRemaining: Int = 0,
     @SerializedName("free_uses_remaining") val freeUsesRemaining: Int = 0,
+    @SerializedName("daily_free_uses_remaining") val dailyFreeUsesRemaining: Int = 0,
     @SerializedName("total_uses") val totalUses: Int = 0,
     @SerializedName("plan_name") val planName: String? = null,
     @SerializedName("purchase_required") val purchaseRequired: Boolean = false,
     @SerializedName("purchase_options") val purchaseOptions: Map<String, Any>? = null
 ) {
     /**
-     * Get the total available credits.
+     * Get total credits available (paid + free + daily free).
      */
     fun getTotalCredits(): Int {
-        return creditsRemaining + freeUsesRemaining
+        return creditsRemaining + freeUsesRemaining + dailyFreeUsesRemaining
     }
 }
 

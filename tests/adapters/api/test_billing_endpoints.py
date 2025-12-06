@@ -170,6 +170,7 @@ class TestGetCredits:
             result.has_credit = True
             result.credits_remaining = 45
             result.free_uses_remaining = 5
+            result.daily_free_uses_remaining = 0
             return result
 
         resource_monitor.check_credit = AsyncMock(side_effect=check_credit_success)

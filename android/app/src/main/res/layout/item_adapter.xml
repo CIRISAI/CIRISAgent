@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="8dp"
+    android:layout_marginVertical="4dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="#FFFFFF">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!-- Header row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Status indicator -->
+            <View
+                android:id="@+id/adapterStatusDot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:background="@drawable/status_dot_green" />
+
+            <!-- Adapter name -->
+            <TextView
+                android:id="@+id/adapterName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:text="Discord Adapter"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1F2937" />
+
+            <!-- Type badge -->
+            <TextView
+                android:id="@+id/adapterType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DISCORD"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/badge_primary"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp" />
+
+        </LinearLayout>
+
+        <!-- Adapter ID -->
+        <TextView
+            android:id="@+id/adapterId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="ID: discord_123456"
+            android:textSize="11sp"
+            android:textColor="#9CA3AF"
+            android:fontFamily="monospace" />
+
+        <!-- Status text -->
+        <TextView
+            android:id="@+id/adapterStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Running"
+            android:textSize="12sp"
+            android:textColor="#10B981" />
+
+        <!-- Action buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <Button
+                android:id="@+id/reloadButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="Reload"
+                android:textSize="11sp"
+                android:textColor="#3B82F6"
+                android:background="@drawable/button_outline_blue"
+                android:paddingHorizontal="12dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp" />
+
+            <Button
+                android:id="@+id/removeButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:text="Remove"
+                android:textSize="11sp"
+                android:textColor="@color/status_red"
+                android:background="@drawable/button_outline_red"
+                android:paddingHorizontal="12dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

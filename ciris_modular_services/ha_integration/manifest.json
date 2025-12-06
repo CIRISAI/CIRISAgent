@@ -1,0 +1,119 @@
+{
+  "module": {
+    "name": "ha_integration",
+    "version": "1.0.0",
+    "description": "Enhanced Home Assistant integration with CIRIS multi-modal capabilities including event detection and camera frame extraction",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "COMMUNICATION",
+    "priority": "MEDIUM",
+    "class": "ha_integration.service.HAIntegrationService",
+    "capabilities": [
+      "ha_chat_bridge",
+      "ha_device_control",
+      "ha_automation_trigger",
+      "ha_sensor_data",
+      "ha_event_detection",
+      "ha_camera_frames",
+      "provider:home_assistant"
+    ]
+  }],
+  "capabilities": [
+    "ha_chat_bridge",
+    "ha_device_control",
+    "ha_automation_trigger",
+    "ha_sensor_data",
+    "ha_event_detection",
+    "ha_camera_frames",
+    "provider:home_assistant",
+    "modality:vision:camera",
+    "modality:event:motion",
+    "modality:event:person",
+    "modality:event:vehicle",
+    "domain:home_automation"
+  ],
+  "prohibited_capabilities": [
+    "medical",
+    "health",
+    "clinical",
+    "patient",
+    "vital",
+    "diagnosis",
+    "treatment"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.CommunicationService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.core"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0",
+      "opencv-python": ">=4.5.0",
+      "numpy": ">=1.20.0"
+    }
+  },
+  "exports": {
+    "service_class": "ha_integration.service.HAIntegrationService",
+    "schemas": [
+      "ha_integration.schemas.DetectionEvent",
+      "ha_integration.schemas.CameraFrame",
+      "ha_integration.schemas.HADeviceState"
+    ],
+    "capabilities": [
+      "ha_chat_bridge",
+      "ha_device_control",
+      "ha_automation_trigger",
+      "ha_sensor_data",
+      "ha_event_detection",
+      "ha_camera_frames"
+    ]
+  },
+  "configuration": {
+    "homeassistant_url": {
+      "type": "string",
+      "env": "HOME_ASSISTANT_URL",
+      "default": "http://homeassistant.local:8123",
+      "description": "Home Assistant instance URL"
+    },
+    "homeassistant_token": {
+      "type": "string",
+      "env": "HOME_ASSISTANT_TOKEN",
+      "default": null,
+      "description": "Home Assistant Long-Lived Access Token (required)"
+    },
+    "go2rtc_server_url": {
+      "type": "string",
+      "env": "GO2RTC_SERVER_URL",
+      "default": "http://127.0.0.1:8554",
+      "description": "go2rtc server URL for WebRTC camera streams"
+    },
+    "webrtc_camera_urls": {
+      "type": "string",
+      "env": "WEBRTC_CAMERA_URLS",
+      "default": "",
+      "description": "Comma-separated camera definitions: name:rtsp_url,name2:rtsp_url2"
+    },
+    "event_detection_sensitivity": {
+      "type": "float",
+      "env": "EVENT_DETECTION_SENSITIVITY",
+      "default": 0.7,
+      "description": "Sensitivity threshold for event detection (0.0-1.0)"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "default": 30,
+      "description": "Entity cache time-to-live in seconds"
+    }
+  },
+  "metadata": {
+    "api": "Home Assistant WebSocket/REST API",
+    "requires_api_key": true,
+    "safe_domain": "home_automation",
+    "hardware_notes": "Designed for CIRISHome hardware stack: Jetson + HA Yellow + Voice PE",
+    "critical_note": "Actively filters out medical capabilities"
+  }
+}

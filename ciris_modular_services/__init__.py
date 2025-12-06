@@ -8,6 +8,9 @@ This package contains optional service modules that can be dynamically loaded:
 - weather_wisdom: Weather forecasting wise authority
 - sensor_wisdom: Home automation sensor integration
 - external_data_sql: GDPR/DSAR SQL database tools
+- mcp_client: MCP client adapter for connecting to external MCP servers
+- mcp_server: MCP server adapter for exposing CIRIS as an MCP server
+- mcp_common: Shared utilities for MCP client and server
 
 These modules are discovered at runtime via the service loader mechanism.
 """
@@ -19,4 +22,7 @@ __all__ = [
     "weather_wisdom",
     "sensor_wisdom",
     "external_data_sql",
+    "mcp_client",
+    "mcp_server",
+    "mcp_common",
 ]

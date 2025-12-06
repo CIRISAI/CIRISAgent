@@ -357,7 +357,40 @@ class CIRISRuntime:
     def set_preload_tasks(self, tasks: List[str]) -> None:
         """Set tasks to be loaded after successful WORK state transition."""
         self._preload_tasks = tasks.copy()
-        logger.info(f"Set {len(self._preload_tasks)} preload tasks to be loaded after WORK state transition")
+
+    async def request_state_transition(self, target_state: str, reason: str) -> bool:
+        """Request a cognitive state transition.
+
+        Args:
+            target_state: Target state name (e.g., "DREAM", "PLAY", "SOLITUDE", "WORK")
+            reason: Reason for the transition request
+
+        Returns:
+            True if transition was successful, False otherwise
+        """
+        if not self.agent_processor:
+            logger.error("Cannot transition state: agent processor not initialized")
+            return False
+
+        # Convert string to AgentState enum (values are lowercase)
+        try:
+            target = AgentState(target_state.lower())
+        except ValueError:
+            logger.error(f"Invalid target state: {target_state}")
+            return False
+
+        current_state = self.agent_processor.state_manager.get_state()
+        logger.info(f"State transition requested: {current_state.value} -> {target.value} (reason: {reason})")
+
+        # Use the state manager's transition_to method
+        success = await self.agent_processor.state_manager.transition_to(target)
+
+        if success:
+            logger.info(f"State transition successful: {current_state.value} -> {target.value}")
+        else:
+            logger.warning(f"State transition failed: {current_state.value} -> {target.value}")
+
+        return success
 
     def get_preload_tasks(self) -> List[str]:
         """Get the list of preload tasks."""
@@ -1097,9 +1130,18 @@ class CIRISRuntime:
         # Try to get cognitive behaviors from template
         cognitive_behaviors = self._get_cognitive_behaviors_from_template()
 
-        # If no template available (pre-1.7.0 agent upgrade), create legacy-compatible config
+        # If no template available, use Covenant-compliant defaults (all states enabled)
+        # This applies to fresh installs without templates (e.g., QA testing, API-only mode)
+        # Note: The old pre-1.7 upgrade logic disabled PLAY/DREAM/SOLITUDE, but this was
+        # overly conservative. Default behavior should enable all states - users can disable
+        # specific states via template configuration if needed.
         if not cognitive_behaviors:
-            cognitive_behaviors = self._create_legacy_cognitive_behaviors()
+            from ciris_engine.schemas.config.cognitive_state_behaviors import (
+                CognitiveStateBehaviors,
+            )
+
+            logger.info("[COGNITIVE_MIGRATION] No template - using Covenant-compliant defaults (all states enabled)")
+            cognitive_behaviors = CognitiveStateBehaviors()
 
         try:
             await self._save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)

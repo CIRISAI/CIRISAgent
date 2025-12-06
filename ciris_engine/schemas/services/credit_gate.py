@@ -44,6 +44,9 @@ class CreditCheckResult(BaseModel):
     has_credit: bool = Field(..., description="Whether the account has sufficient credit to proceed")
     credits_remaining: Optional[int] = Field(None, description="Remaining paid credits in provider-specific units")
     free_uses_remaining: Optional[int] = Field(None, description="Remaining free uses (CIRIS Billing specific)")
+    daily_free_uses_remaining: Optional[int] = Field(
+        None, description="Remaining daily free uses (CIRIS Billing specific)"
+    )
     total_uses: Optional[int] = Field(None, description="Total uses ever made (CIRIS Billing specific)")
     purchase_required: Optional[bool] = Field(None, description="Whether purchase is required (CIRIS Billing specific)")
     purchase_options: Optional[Dict[str, int]] = Field(

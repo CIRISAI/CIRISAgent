@@ -36,6 +36,9 @@ GUI_STATIC_DIR="$PROJECT_ROOT/android_gui_static"
 ASSETS_DIR="$ANDROID_DIR/app/src/main/assets/public"
 PYTHON_GUI_DIR="$ANDROID_DIR/app/src/main/python/android_gui_static"
 WHEELS_DIR="$ANDROID_DIR/app/wheels"
+PYTHON_SRC_DIR="$ANDROID_DIR/app/src/main/python"
+MAIN_CIRIS_ENGINE="$PROJECT_ROOT/ciris_engine"
+MAIN_MODULAR_SERVICES="$PROJECT_ROOT/ciris_modular_services"
 
 # Colors
 RED='\033[0;31m'
@@ -294,6 +297,42 @@ copy_web_assets() {
     log_success "Web assets copied to all 3 locations"
 }
 
+# Sync Python sources from main repo
+sync_python_sources() {
+    print_header "Syncing Python Sources from Main Repo"
+
+    # Sync ciris_engine
+    log_step "Syncing ciris_engine..."
+    if [ -d "$MAIN_CIRIS_ENGINE" ]; then
+        rm -rf "$PYTHON_SRC_DIR/ciris_engine"
+        cp -r "$MAIN_CIRIS_ENGINE" "$PYTHON_SRC_DIR/ciris_engine"
+        # Remove __pycache__ directories
+        find "$PYTHON_SRC_DIR/ciris_engine" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        local count1
+        count1=$(find "$PYTHON_SRC_DIR/ciris_engine" -name "*.py" | wc -l)
+        log_info "  -> $count1 Python files"
+    else
+        log_error "Main ciris_engine not found at $MAIN_CIRIS_ENGINE"
+        exit 1
+    fi
+
+    # Sync ciris_modular_services
+    log_step "Syncing ciris_modular_services..."
+    if [ -d "$MAIN_MODULAR_SERVICES" ]; then
+        rm -rf "$PYTHON_SRC_DIR/ciris_modular_services"
+        cp -r "$MAIN_MODULAR_SERVICES" "$PYTHON_SRC_DIR/ciris_modular_services"
+        # Remove __pycache__ directories
+        find "$PYTHON_SRC_DIR/ciris_modular_services" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        local count2
+        count2=$(find "$PYTHON_SRC_DIR/ciris_modular_services" -name "*.py" | wc -l)
+        log_info "  -> $count2 Python files"
+    else
+        log_warn "ciris_modular_services not found at $MAIN_MODULAR_SERVICES - skipping"
+    fi
+
+    log_success "Python sources synced from main repo"
+}
+
 # Build pydantic-core wheels
 build_wheels() {
     if [ "$BUILD_WHEELS" != "true" ]; then
@@ -515,6 +554,7 @@ main() {
     ensure_web_source
     build_web_assets
     copy_web_assets
+    sync_python_sources
     build_wheels
     build_android
     validate_build

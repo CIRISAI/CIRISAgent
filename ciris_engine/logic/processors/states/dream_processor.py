@@ -726,8 +726,42 @@ class DreamProcessor(BaseProcessor):
             # Announce dream completion
             await self._announce_dream_exit()
 
+            # Request transition back to WORK state
+            await self._request_work_transition()
+
         except Exception as e:
             logger.error(f"Error in exit phase: {e}")
+
+    async def _request_work_transition(self) -> None:
+        """Request a transition back to WORK state after dream completes."""
+        try:
+            if not self.service_registry:
+                logger.warning("No service registry available, cannot auto-transition to WORK")
+                return
+
+            from ciris_engine.schemas.runtime.enums import ServiceType
+
+            # Get RuntimeControlService from registry
+            services = self.service_registry.get_services_by_type(ServiceType.RUNTIME_CONTROL)
+            if not services:
+                logger.warning("No RuntimeControlService available, cannot auto-transition to WORK")
+                return
+
+            runtime_control = services[0]
+            if hasattr(runtime_control, "request_state_transition"):
+                logger.info("Dream completed, requesting transition back to WORK state")
+                success = await runtime_control.request_state_transition(
+                    target_state="work", reason="Dream cycle completed - all tasks finished"
+                )
+                if success:
+                    logger.info("Successfully transitioned back to WORK state after dream")
+                else:
+                    logger.warning("Failed to transition back to WORK state after dream")
+            else:
+                logger.warning("RuntimeControlService does not support state transitions")
+
+        except Exception as e:
+            logger.error(f"Error requesting WORK transition: {e}")
 
     async def _recall_recent_ponder_questions(self) -> List[str]:
         """Recall recent PONDER questions from memory."""

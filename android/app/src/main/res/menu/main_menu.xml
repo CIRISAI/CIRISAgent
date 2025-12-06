@@ -16,6 +16,12 @@
                 android:id="@+id/action_dashboard"
                 android:title="System Details" />
             <item
+                android:id="@+id/action_telemetry"
+                android:title="Telemetry" />
+            <item
+                android:id="@+id/action_adapters"
+                android:title="Adapters" />
+            <item
                 android:id="@+id/action_tools"
                 android:title="Tools" />
         </menu>
@@ -34,6 +40,9 @@
             <item
                 android:id="@+id/action_runtime"
                 android:title="Runtime Control" />
+            <item
+                android:id="@+id/action_sessions"
+                android:title="Cognitive Sessions" />
             <item
                 android:id="@+id/action_config"
                 android:title="Config" />

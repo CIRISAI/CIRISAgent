@@ -1115,21 +1115,47 @@ class MainActivity : AppCompatActivity() {
                     // Short delay to let user see status
                     delay(300)
 
-                    // Hide splash/console, show toolbar and Kotlin interact fragment
+                    // Hide splash/console, show toolbar
                     splashContainer.visibility = View.GONE
                     consoleContainer.visibility = View.GONE
                     findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
-                    showInteractFragment()
+
+                    // Check if setup is required - show WebView with setup wizard, otherwise Kotlin interact fragment
+                    val setupRequired = checkSetupStatus()
+                    if (setupRequired) {
+                        Log.i(TAG, "Setup required - showing WebView with setup wizard")
+                        webView.visibility = View.VISIBLE
+                        fragmentContainer.visibility = View.GONE
+                        loadUI()  // Load index.html which will redirect to /setup
+                    } else {
+                        Log.i(TAG, "Setup complete - showing Kotlin interact fragment")
+                        showInteractFragment()
+                    }
                     loadCreditsBalance()
                 }
             }
         } else {
-            // Hide splash/console, show toolbar and Kotlin interact fragment (no token exchange needed for API key auth)
+            // Hide splash/console, show toolbar
             splashContainer.visibility = View.GONE
             consoleContainer.visibility = View.GONE
             findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
-            showInteractFragment()
-            loadCreditsBalance()
+
+            // Check if setup is required - show WebView with setup wizard, otherwise Kotlin interact fragment
+            CoroutineScope(Dispatchers.IO).launch {
+                val setupRequired = checkSetupStatus()
+                withContext(Dispatchers.Main) {
+                    if (setupRequired) {
+                        Log.i(TAG, "Setup required (API key auth) - showing WebView with setup wizard")
+                        webView.visibility = View.VISIBLE
+                        fragmentContainer.visibility = View.GONE
+                        loadUI()  // Load index.html which will redirect to /setup
+                    } else {
+                        Log.i(TAG, "Setup complete (API key auth) - showing Kotlin interact fragment")
+                        showInteractFragment()
+                    }
+                    loadCreditsBalance()
+                }
+            }
         }
     }
 
@@ -1287,8 +1313,10 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Load and display the user's credit balance in the toolbar.
+     * Retries up to 6 times if credit provider is still initializing.
+     * (Billing provider takes ~11 seconds to initialize on fresh start)
      */
-    private fun loadCreditsBalance() {
+    private fun loadCreditsBalance(retryCount: Int = 0) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val billingApiClient = BillingApiClient(this@MainActivity)
@@ -1299,6 +1327,12 @@ class MainActivity : AppCompatActivity() {
                         creditsCountText.text = result.balance.toString()
                     } else {
                         creditsCountText.text = "--"
+                        // Retry if credit provider is still initializing (up to 6 times = 12 seconds)
+                        if (result.error == "Credit provider initializing" && retryCount < 6) {
+                            Log.i(TAG, "Credit provider initializing, retrying in 2 seconds (attempt ${retryCount + 1}/6)")
+                            delay(2000)
+                            loadCreditsBalance(retryCount + 1)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -1502,6 +1536,45 @@ class MainActivity : AppCompatActivity() {
             .replace(R.id.fragmentContainer, fragment, "interact_fragment")
             .addToBackStack("interact")
             .commit()
+
+        // Refresh credits balance when showing interact fragment
+        loadCreditsBalance()
+    }
+
+    private fun showAdaptersFragment() {
+        Log.i(TAG, "Showing AdaptersFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = AdaptersFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "adapters_fragment")
+            .addToBackStack("adapters")
+            .commit()
+    }
+
+    private fun showTelemetryFragment() {
+        Log.i(TAG, "Showing TelemetryFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = TelemetryFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "telemetry_fragment")
+            .addToBackStack("telemetry")
+            .commit()
+    }
+
+    private fun showSessionsFragment() {
+        Log.i(TAG, "Showing SessionsFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = SessionsFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "sessions_fragment")
+            .addToBackStack("sessions")
+            .commit()
     }
 
     private fun hideFragmentShowWebView() {
@@ -1576,6 +1649,14 @@ class MainActivity : AppCompatActivity() {
                 navigateToWebPage("/tools")
                 true
             }
+            R.id.action_telemetry -> {
+                showTelemetryFragment()
+                true
+            }
+            R.id.action_adapters -> {
+                showAdaptersFragment()
+                true
+            }
             // Admin submenu items
             R.id.action_admin_system -> {
                 navigateToWebPage("/system")
@@ -1583,6 +1664,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_runtime -> {
                 navigateToWebPage("/runtime")
+                true
+            }
+            R.id.action_sessions -> {
+                showSessionsFragment()
                 true
             }
             R.id.action_config -> {

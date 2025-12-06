@@ -1,18 +1,25 @@
 package ai.ciris.mobile
 
 import android.os.Bundle
+import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.CoroutineScope
@@ -22,15 +29,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
  * AdaptersFragment - Adapter Management UI
  *
  * Displays a list of adapters (Discord, API, CLI, etc.) with their status
- * and provides options to reload or remove adapters.
+ * and provides options to reload, remove, or add new adapters.
+ * Uses the /v1/system/adapters/types endpoint to dynamically display
+ * available adapter types and their configuration fields.
  */
 class AdaptersFragment : Fragment() {
 
@@ -42,6 +53,7 @@ class AdaptersFragment : Fragment() {
     private lateinit var loadingIndicator: ProgressBar
     private lateinit var emptyState: View
     private lateinit var refreshButton: ImageButton
+    private lateinit var addAdapterFab: FloatingActionButton
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -54,6 +66,7 @@ class AdaptersFragment : Fragment() {
     private var accessToken: String? = null
     private var pollingJob: Job? = null
     private var isConnected = false
+    private var cachedModuleTypes: ModuleTypesData? = null
 
     companion object {
         private const val TAG = "AdaptersFragment"
@@ -92,6 +105,7 @@ class AdaptersFragment : Fragment() {
         loadingIndicator = view.findViewById(R.id.loadingIndicator)
         emptyState = view.findViewById(R.id.emptyState)
         refreshButton = view.findViewById(R.id.refreshButton)
+        addAdapterFab = view.findViewById(R.id.addAdapterFab)
 
         // Setup RecyclerView
         adapter = AdapterListAdapter(adapterItems, ::onReloadAdapter, ::onRemoveAdapter)
@@ -101,6 +115,11 @@ class AdaptersFragment : Fragment() {
         // Refresh button
         refreshButton.setOnClickListener {
             fetchAdapters()
+        }
+
+        // Add adapter FAB
+        addAdapterFab.setOnClickListener {
+            showAddAdapterDialog()
         }
 
         // Initial fetch
@@ -290,9 +309,254 @@ class AdaptersFragment : Fragment() {
             }
         }
     }
+
+    // ===== Add Adapter Functionality =====
+
+    private fun showAddAdapterDialog() {
+        // First fetch available module types
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val moduleTypes = fetchModuleTypes()
+                withContext(Dispatchers.Main) {
+                    if (moduleTypes != null) {
+                        cachedModuleTypes = moduleTypes
+                        showModuleTypeSelectionDialog(moduleTypes)
+                    } else {
+                        Toast.makeText(context, "Failed to load adapter types", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching module types", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchModuleTypes(): ModuleTypesData? {
+        val request = Request.Builder()
+            .url("$BASE_URL/v1/system/adapters/types")
+            .apply {
+                accessToken?.let { addHeader("Authorization", "Bearer $it") }
+            }
+            .build()
+
+        val response = client.newCall(request).execute()
+        val body = response.body?.string() ?: return null
+
+        if (response.isSuccessful) {
+            val typesResponse = gson.fromJson(body, ModuleTypesResponse::class.java)
+            return typesResponse.data
+        }
+        return null
+    }
+
+    private fun showModuleTypeSelectionDialog(data: ModuleTypesData) {
+        val allModules = data.coreModules + data.modularServices
+        if (allModules.isEmpty()) {
+            Toast.makeText(context, "No adapter types available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val moduleNames = allModules.map { module ->
+            val source = if (module.moduleSource == "core") "[Core]" else "[Modular]"
+            "$source ${module.name}"
+        }.toTypedArray()
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Select Adapter Type")
+            .setItems(moduleNames) { _, which ->
+                val selectedModule = allModules[which]
+                showConfigurationDialog(selectedModule)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showConfigurationDialog(module: ModuleTypeInfo) {
+        val context = requireContext()
+        val configParams = module.configurationSchema
+
+        // Create a scrollable container for config fields
+        val scrollView = ScrollView(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
+        }
+        scrollView.addView(container)
+
+        // Add description
+        val descText = TextView(context).apply {
+            text = module.description
+            setTextColor(resources.getColor(android.R.color.darker_gray, null))
+            setPadding(0, 0, 0, 24)
+        }
+        container.addView(descText)
+
+        // Track input fields for later retrieval
+        val inputFields = mutableMapOf<String, TextInputEditText>()
+
+        // Add external dependencies warning if needed
+        if (module.requiresExternalDeps && module.externalDependencies.isNotEmpty()) {
+            val depsWarning = TextView(context).apply {
+                text = "Requires: ${module.externalDependencies.keys.joinToString(", ")}"
+                setTextColor(resources.getColor(android.R.color.holo_orange_dark, null))
+                setPadding(0, 0, 0, 16)
+            }
+            container.addView(depsWarning)
+        }
+
+        // Create input fields for each configuration parameter
+        configParams.forEach { param ->
+            val inputLayout = TextInputLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = 16
+                }
+                hint = buildParamHint(param)
+                boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+            }
+
+            val editText = TextInputEditText(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                // Set input type based on parameter type
+                inputType = when (param.paramType) {
+                    "integer", "float" -> InputType.TYPE_CLASS_NUMBER
+                    "boolean" -> InputType.TYPE_CLASS_TEXT
+                    else -> {
+                        if (param.sensitivity == "HIGH") {
+                            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                        } else {
+                            InputType.TYPE_CLASS_TEXT
+                        }
+                    }
+                }
+                // Set default value if available
+                param.default?.let { default ->
+                    setText(default.toString())
+                }
+            }
+
+            inputLayout.addView(editText)
+            container.addView(inputLayout)
+            inputFields[param.name] = editText
+        }
+
+        AlertDialog.Builder(context)
+            .setTitle("Configure ${module.name}")
+            .setView(scrollView)
+            .setPositiveButton("Add") { _, _ ->
+                submitAdapterConfig(module, inputFields)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun buildParamHint(param: ModuleConfigParameter): String {
+        val builder = StringBuilder(param.name)
+        if (param.required) {
+            builder.append(" *")
+        }
+        param.envVar?.let {
+            builder.append(" (env: $it)")
+        }
+        if (param.description.isNotEmpty()) {
+            builder.append("\n${param.description}")
+        }
+        return builder.toString()
+    }
+
+    private fun submitAdapterConfig(module: ModuleTypeInfo, fields: Map<String, TextInputEditText>) {
+        // Collect configuration values
+        val settings = mutableMapOf<String, Any?>()
+        var hasError = false
+
+        module.configurationSchema.forEach { param ->
+            val value = fields[param.name]?.text?.toString() ?: ""
+
+            if (param.required && value.isEmpty()) {
+                Toast.makeText(context, "${param.name} is required", Toast.LENGTH_SHORT).show()
+                hasError = true
+                return@forEach
+            }
+
+            if (value.isNotEmpty()) {
+                // Convert to appropriate type
+                val typedValue: Any? = when (param.paramType) {
+                    "integer" -> value.toIntOrNull()
+                    "float" -> value.toDoubleOrNull()
+                    "boolean" -> value.lowercase() in listOf("true", "1", "yes")
+                    else -> value
+                }
+                settings[param.name] = typedValue
+            }
+        }
+
+        if (hasError) return
+
+        // Submit to API
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val requestBody = mapOf(
+                    "config" to mapOf(
+                        "adapter_type" to module.moduleId,
+                        "enabled" to true,
+                        "settings" to settings
+                    ),
+                    "auto_start" to true
+                )
+                val jsonBody = gson.toJson(requestBody)
+                    .toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/${module.moduleId}")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        Toast.makeText(context, "Adapter added successfully", Toast.LENGTH_SHORT).show()
+                        fetchAdapters()
+                    } else {
+                        val errorMsg = try {
+                            gson.fromJson(responseBody, ErrorResponse::class.java).detail
+                                ?: "Failed to add adapter"
+                        } catch (e: Exception) {
+                            "Failed to add adapter: ${response.code}"
+                        }
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding adapter", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 }
 
-// Data classes
+// Data classes for existing adapter list
 data class AdapterItem(
     val id: String,
     val name: String,
@@ -316,6 +580,51 @@ data class AdapterInfo(
     @SerializedName("adapter_type") val adapterType: String,
     val status: String,
     @SerializedName("channels_count") val channelsCount: Int
+)
+
+// Data classes for module types API
+data class ModuleTypesResponse(
+    val success: Boolean,
+    val data: ModuleTypesData?
+)
+
+data class ModuleTypesData(
+    @SerializedName("core_modules") val coreModules: List<ModuleTypeInfo>,
+    @SerializedName("modular_services") val modularServices: List<ModuleTypeInfo>,
+    @SerializedName("total_core") val totalCore: Int,
+    @SerializedName("total_modular") val totalModular: Int
+)
+
+data class ModuleTypeInfo(
+    @SerializedName("module_id") val moduleId: String,
+    val name: String,
+    val version: String,
+    val description: String,
+    val author: String,
+    @SerializedName("module_source") val moduleSource: String,
+    @SerializedName("service_types") val serviceTypes: List<String> = emptyList(),
+    val capabilities: List<String> = emptyList(),
+    @SerializedName("configuration_schema") val configurationSchema: List<ModuleConfigParameter> = emptyList(),
+    @SerializedName("requires_external_deps") val requiresExternalDeps: Boolean = false,
+    @SerializedName("external_dependencies") val externalDependencies: Map<String, String> = emptyMap(),
+    @SerializedName("is_mock") val isMock: Boolean = false,
+    @SerializedName("safe_domain") val safeDomain: String? = null,
+    val prohibited: List<String> = emptyList(),
+    val metadata: Map<String, Any>? = null
+)
+
+data class ModuleConfigParameter(
+    val name: String,
+    @SerializedName("param_type") val paramType: String,
+    val default: Any? = null,
+    val description: String = "",
+    @SerializedName("env_var") val envVar: String? = null,
+    val required: Boolean = true,
+    val sensitivity: String? = null
+)
+
+data class ErrorResponse(
+    val detail: String?
 )
 
 // RecyclerView Adapter

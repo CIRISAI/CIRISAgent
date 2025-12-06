@@ -6,7 +6,7 @@ Provides typed schemas in service loading and module manifests.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,6 +94,71 @@ class ConfigurationParameter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DiscoveredInstance(BaseModel):
+    """A discovered service instance (e.g., Home Assistant)."""
+
+    name: str = Field(..., description="Instance name")
+    host: str = Field(..., description="Host address")
+    port: int = Field(..., description="Port number")
+    addresses: List[str] = Field(default_factory=list, description="List of IP addresses")
+    base_url: Optional[str] = Field(None, description="Base URL for API access")
+    version: Optional[str] = Field(None, description="Service version")
+    location_name: Optional[str] = Field(None, description="Location name if available")
+    uuid: Optional[str] = Field(None, description="Unique identifier")
+    requires_api_password: bool = Field(False, description="Whether API password is required")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SelectionOption(BaseModel):
+    """An option for user selection."""
+
+    id: str = Field(..., description="Option ID")
+    name: str = Field(..., description="Option name")
+    description: Optional[str] = Field(None, description="Option description")
+    metadata: Optional[Dict[str, str]] = Field(None, description="String metadata only")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class OAuthConfig(BaseModel):
+    """OAuth configuration for a module."""
+
+    provider_name: str = Field(..., description="Provider name registered via /v1/auth/oauth/providers")
+    authorization_path: str = Field(..., description="Authorization endpoint path (e.g., '/auth/authorize')")
+    token_path: str = Field(..., description="Token endpoint path (e.g., '/auth/token')")
+    client_id_source: Literal["static", "indieauth"] = Field(..., description="How to obtain client ID")
+    scopes: List[str] = Field(default_factory=list, description="OAuth scopes to request")
+    pkce_required: bool = Field(True, description="Whether PKCE is required")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConfigurationStep(BaseModel):
+    """A step in the configuration workflow."""
+
+    step_id: str = Field(..., description="Unique step identifier")
+    step_type: Literal["discovery", "oauth", "select", "confirm"] = Field(..., description="Type of configuration step")
+    title: str = Field(..., description="Step title for UI")
+    description: str = Field(..., description="Step description for UI")
+    discovery_method: Optional[str] = Field(None, description="Discovery method name (for discovery steps)")
+    oauth_config: Optional[OAuthConfig] = Field(None, description="OAuth configuration (for oauth steps)")
+    depends_on: List[str] = Field(default_factory=list, description="Step IDs this depends on")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class InteractiveConfiguration(BaseModel):
+    """Interactive configuration definition."""
+
+    required: bool = Field(False, description="Whether configuration is required for module to function")
+    workflow_type: Literal["wizard", "discovery_then_config"] = Field(..., description="Type of configuration workflow")
+    steps: List[ConfigurationStep] = Field(..., description="Configuration steps in order")
+    completion_method: str = Field(..., description="Method name to call on completion")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ServiceManifest(BaseModel):
     """Complete service module manifest."""
 
@@ -108,6 +173,9 @@ class ServiceManifest(BaseModel):
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
     prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")
+    interactive_config: Optional[InteractiveConfiguration] = Field(
+        None, description="Interactive configuration workflow definition"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

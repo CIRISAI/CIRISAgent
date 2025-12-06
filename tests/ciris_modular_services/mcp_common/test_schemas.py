@@ -191,32 +191,38 @@ class TestMCPListResults:
 
     def test_list_tools_result(self) -> None:
         """Test tools list result."""
-        result = MCPListToolsResult(tools=[
-            MCPToolInfo(
-                name="tool1",
-                description="First tool",
-                inputSchema=MCPToolInputSchema(),
-            ),
-            MCPToolInfo(
-                name="tool2",
-                description="Second tool",
-                inputSchema=MCPToolInputSchema(),
-            ),
-        ])
+        result = MCPListToolsResult(
+            tools=[
+                MCPToolInfo(
+                    name="tool1",
+                    description="First tool",
+                    inputSchema=MCPToolInputSchema(),
+                ),
+                MCPToolInfo(
+                    name="tool2",
+                    description="Second tool",
+                    inputSchema=MCPToolInputSchema(),
+                ),
+            ]
+        )
         assert len(result.tools) == 2
 
     def test_list_resources_result(self) -> None:
         """Test resources list result."""
-        result = MCPListResourcesResult(resources=[
-            MCPResourceInfo(uri="res1", name="Resource 1"),
-        ])
+        result = MCPListResourcesResult(
+            resources=[
+                MCPResourceInfo(uri="res1", name="Resource 1"),
+            ]
+        )
         assert len(result.resources) == 1
 
     def test_list_prompts_result(self) -> None:
         """Test prompts list result."""
-        result = MCPListPromptsResult(prompts=[
-            MCPPromptInfo(name="prompt1"),
-        ])
+        result = MCPListPromptsResult(
+            prompts=[
+                MCPPromptInfo(name="prompt1"),
+            ]
+        )
         assert len(result.prompts) == 1
 
 

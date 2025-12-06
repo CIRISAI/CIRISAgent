@@ -148,7 +148,17 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 service_registry=getattr(self.runtime, "service_registry", None),
             )
 
-            adapter_kwargs = config_params.settings if config_params else {}
+            # Build adapter kwargs from config
+            # For complex adapters (MCP), use adapter_config for nested structures
+            # For simple adapters, use settings for flat primitives
+            adapter_kwargs: Dict[str, Any] = {}
+            if config_params:
+                # First add simple settings as kwargs
+                if config_params.settings:
+                    adapter_kwargs.update(config_params.settings)
+                # For adapters that need nested configs (MCP), pass adapter_config
+                if config_params.adapter_config:
+                    adapter_kwargs["adapter_config"] = config_params.adapter_config
 
             # All adapters must support context - no fallback
             # Type ignore: adapter_class is dynamically loaded, mypy can't verify constructor signature
@@ -194,7 +204,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # self.runtime.adapters.append(adapter)
             self.loaded_adapters[adapter_id] = instance
 
-            logger.info(f"Successfully loaded and started adapter {adapter_id}")
+            logger.info(f"Successfully loaded and started adapter {adapter_id} (adapter_manager id: {id(self)})")
             return AdapterOperationResult(
                 success=True,
                 adapter_id=adapter_id,
@@ -240,6 +250,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns None if eligible, AdapterOperationResult with error if not eligible.
         """
         if adapter_id not in self.loaded_adapters:
+            logger.warning(
+                f"Adapter unload failed: '{adapter_id}' not found. "
+                f"Loaded adapters: {list(self.loaded_adapters.keys())}. "
+                f"adapter_manager id: {id(self)}"
+            )
             return self._create_adapter_operation_result(
                 success=False,
                 adapter_id=adapter_id,
@@ -254,20 +269,44 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         if instance.adapter_type not in communication_adapter_types:
             return None  # Non-communication adapters are always eligible
 
-        # Count remaining communication adapters
+        # Count remaining communication adapters from dynamically loaded adapters
         remaining_comm_adapters = sum(
             1
             for aid, inst in self.loaded_adapters.items()
             if aid != adapter_id and inst.adapter_type in communication_adapter_types
         )
 
+        # Also count bootstrap adapters from runtime.adapters (these are NOT in loaded_adapters)
+        if hasattr(self.runtime, "adapters") and self.runtime.adapters:
+            for bootstrap_adapter in self.runtime.adapters:
+                adapter_type = getattr(bootstrap_adapter, "adapter_type", None)
+                adapter_class = type(bootstrap_adapter).__name__
+                logger.warning(f"Bootstrap adapter check: class={adapter_class}, adapter_type={adapter_type}")
+                # Check both adapter_type attribute and class name patterns
+                if adapter_type in communication_adapter_types:
+                    remaining_comm_adapters += 1
+                elif (
+                    "api" in adapter_class.lower()
+                    or "cli" in adapter_class.lower()
+                    or "discord" in adapter_class.lower()
+                ):
+                    remaining_comm_adapters += 1
+                    logger.warning(f"Counted bootstrap adapter {adapter_class} based on class name")
+
+        logger.warning(
+            f"Adapter unload eligibility check: adapter_id={adapter_id}, "
+            f"remaining_comm_adapters={remaining_comm_adapters}"
+        )
+
         if remaining_comm_adapters == 0:
+            error_msg = f"Unable to unload last adapter providing COMM service: {adapter_id}"
+            logger.error(error_msg)
             return self._create_adapter_operation_result(
                 success=False,
                 adapter_id=adapter_id,
                 adapter_type=instance.adapter_type,
-                message=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
-                error=f"Cannot unload {adapter_id}: it is one of the last communication-capable adapters",
+                message=error_msg,
+                error=error_msg,
             )
 
         return None  # Eligible for unload
@@ -324,6 +363,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns:
             AdapterOperationResult with success status and details
         """
+        logger.warning(
+            f"RuntimeAdapterManager.unload_adapter called: adapter_id={adapter_id}, "
+            f"loaded_adapters={list(self.loaded_adapters.keys())}, "
+            f"adapter_manager_id={id(self)}"
+        )
         try:
             # Validate adapter eligibility - fail fast if not eligible
             eligibility_error = self._validate_adapter_unload_eligibility(adapter_id)
@@ -473,11 +517,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         is_running=instance.is_running,
                         loaded_at=instance.loaded_at,
                         services_registered=instance.services_registered,
-                        config_params=AdapterConfig(
-                            adapter_type=instance.adapter_type,
-                            enabled=instance.is_running,
-                            settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
-                        ),
+                        config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                         metrics=metrics,
                         last_activity=None,
                         tools=tools,
@@ -613,11 +653,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 is_running=instance.is_running,
                 loaded_at=instance.loaded_at,
                 services_registered=instance.services_registered,
-                config_params=AdapterConfig(
-                    adapter_type=instance.adapter_type,
-                    enabled=instance.is_running,
-                    settings=self._sanitize_config_params(instance.adapter_type, instance.config_params),
-                ),
+                config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
                 metrics=metrics,
                 last_activity=None,
                 tools=tools,

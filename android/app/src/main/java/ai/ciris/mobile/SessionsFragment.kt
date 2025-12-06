@@ -246,6 +246,7 @@ class SessionsFragment : Fragment() {
     }
 
     private fun performStateTransition(targetState: String) {
+        Log.i(TAG, "[STATE_TRANSITION] Starting transition to: $targetState")
         loadingIndicator.visibility = View.VISIBLE
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -255,24 +256,39 @@ class SessionsFragment : Fragment() {
                     "target_state" to targetState,
                     "reason" to "Requested via Android Sessions UI"
                 )
+                val jsonBody = gson.toJson(transitionBody)
+                val url = "$BASE_URL/v1/system/state/transition"
+
+                Log.i(TAG, "[STATE_TRANSITION] URL: $url")
+                Log.i(TAG, "[STATE_TRANSITION] Body: $jsonBody")
+                Log.i(TAG, "[STATE_TRANSITION] Has token: ${accessToken != null}")
 
                 val request = Request.Builder()
-                    .url("$BASE_URL/v1/system/state/transition")
-                    .post(gson.toJson(transitionBody).toRequestBody("application/json".toMediaType()))
+                    .url(url)
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
                     .apply {
-                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        accessToken?.let {
+                            addHeader("Authorization", "Bearer $it")
+                            Log.d(TAG, "[STATE_TRANSITION] Token prefix: ${it.take(20)}...")
+                        }
                     }
                     .build()
 
+                Log.i(TAG, "[STATE_TRANSITION] Making request...")
                 val response = client.newCall(request).execute()
                 val body = response.body?.string()
+
+                Log.i(TAG, "[STATE_TRANSITION] Response code: ${response.code}")
+                Log.i(TAG, "[STATE_TRANSITION] Response body: $body")
 
                 withContext(Dispatchers.Main) {
                     loadingIndicator.visibility = View.GONE
 
                     if (response.isSuccessful && body != null) {
+                        Log.i(TAG, "[STATE_TRANSITION] Parsing successful response")
                         val transitionResponse = gson.fromJson(body, StateTransitionResponse::class.java)
                         if (transitionResponse.data?.success == true) {
+                            Log.i(TAG, "[STATE_TRANSITION] SUCCESS: Transitioned to ${transitionResponse.data.currentState}")
                             Toast.makeText(
                                 context,
                                 "Transitioned to ${transitionResponse.data.currentState}",
@@ -281,24 +297,23 @@ class SessionsFragment : Fragment() {
                             // Refresh state immediately
                             fetchProcessorStates()
                         } else {
-                            Toast.makeText(
-                                context,
-                                transitionResponse.data?.message ?: "Transition not initiated",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            val msg = transitionResponse.data?.message ?: "Transition not initiated"
+                            Log.w(TAG, "[STATE_TRANSITION] Not initiated: $msg")
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     } else {
+                        Log.e(TAG, "[STATE_TRANSITION] FAIL: code=${response.code}, body=$body")
                         val errorMsg = when (response.code) {
                             400 -> "Invalid state requested"
                             401 -> "Authentication required"
-                            503 -> "State transition not supported"
+                            503 -> "State transition not supported (503)"
                             else -> "Failed to request state transition (${response.code})"
                         }
                         Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error requesting state transition", e)
+                Log.e(TAG, "[STATE_TRANSITION] EXCEPTION: ${e.javaClass.simpleName}: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     loadingIndicator.visibility = View.GONE
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()

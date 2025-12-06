@@ -364,6 +364,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
             # Convert string to AgentState enum (values are lowercase)
             from ciris_engine.schemas.processors.states import AgentState
+
             try:
                 target = AgentState(target_state.lower())
             except ValueError:
@@ -373,8 +374,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             current_state = agent_processor.state_manager.get_state()
             logger.info(f"State transition requested: {current_state.value} -> {target.value} (reason: {reason})")
 
-            # Use the state manager's transition_to method
-            success = await agent_processor.state_manager.transition_to(target)
+            # Use the agent processor's _handle_state_transition method to properly
+            # start/stop state-specific processors (like DreamProcessor)
+            if hasattr(agent_processor, "_handle_state_transition"):
+                await agent_processor._handle_state_transition(target)
+                # Verify the transition happened
+                success = agent_processor.state_manager.get_state() == target
+            else:
+                # Fallback to just state manager if _handle_state_transition not available
+                success = await agent_processor.state_manager.transition_to(target)
 
             if success:
                 self._state_transitions += 1

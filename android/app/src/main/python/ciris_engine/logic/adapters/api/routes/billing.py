@@ -326,7 +326,11 @@ async def get_credits(
     """
     logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
     user_identity = _extract_user_identity(auth, request)
-    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+    agent_id = (
+        request.app.state.runtime.agent_identity.agent_id
+        if hasattr(request.app.state, "runtime") and request.app.state.runtime.agent_identity
+        else "pending"
+    )
     logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check if we have a resource monitor with credit provider
@@ -359,9 +363,7 @@ async def get_credits(
     account, _ = _derive_credit_account(auth, request)
 
     context = CreditContext(
-        agent_id=(
-            request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
-        ),
+        agent_id=agent_id,  # Use the already-derived agent_id from above
         channel_id="api:frontend",
         request_id=None,
     )
@@ -446,7 +448,11 @@ async def initiate_purchase(
     # Billing enabled - proceed with purchase
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
-    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+    agent_id = (
+        request.app.state.runtime.agent_identity.agent_id
+        if hasattr(request.app.state, "runtime") and request.app.state.runtime.agent_identity
+        else "pending"
+    )
 
     # Get user email (needed for Stripe) - extract from OAuth profile
     customer_email = user_identity.get("customer_email")

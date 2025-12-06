@@ -207,15 +207,18 @@ class TestMCPServerAdapterConfig:
 
         assert len(exposed) == 0
 
-    @patch.dict(os.environ, {
-        "MCP_SERVER_ID": "env-server",
-        "MCP_SERVER_NAME": "Environment Server",
-        "MCP_SERVER_TRANSPORT": "sse",
-        "MCP_SERVER_HOST": "0.0.0.0",
-        "MCP_SERVER_PORT": "8080",
-        "MCP_SERVER_REQUIRE_AUTH": "true",
-        "MCP_SERVER_API_KEYS": "key1,key2,key3",
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "MCP_SERVER_ID": "env-server",
+            "MCP_SERVER_NAME": "Environment Server",
+            "MCP_SERVER_TRANSPORT": "sse",
+            "MCP_SERVER_HOST": "0.0.0.0",
+            "MCP_SERVER_PORT": "8080",
+            "MCP_SERVER_REQUIRE_AUTH": "true",
+            "MCP_SERVER_API_KEYS": "key1,key2,key3",
+        },
+    )
     def test_load_env_vars(self) -> None:
         """Test loading configuration from environment variables."""
         config = MCPServerAdapterConfig()

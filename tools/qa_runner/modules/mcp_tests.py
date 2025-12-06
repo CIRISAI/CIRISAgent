@@ -220,9 +220,7 @@ class MCPTests:
         """Verify multiple MCP client adapters are loaded."""
         adapters = await self._list_adapters()
 
-        mcp_clients = [
-            a for a in adapters if a.get("adapter_id", "").startswith("mcp_test_client")
-        ]
+        mcp_clients = [a for a in adapters if a.get("adapter_id", "").startswith("mcp_test_client")]
 
         if len(mcp_clients) < 2:
             raise ValueError(f"Expected at least 2 MCP client adapters, found {len(mcp_clients)}")
@@ -290,9 +288,7 @@ class MCPTests:
         """Verify multiple MCP server adapters are loaded."""
         adapters = await self._list_adapters()
 
-        mcp_servers = [
-            a for a in adapters if a.get("adapter_id", "").startswith("mcp_test_server")
-        ]
+        mcp_servers = [a for a in adapters if a.get("adapter_id", "").startswith("mcp_test_server")]
 
         if len(mcp_servers) < 2:
             raise ValueError(f"Expected at least 2 MCP server adapters, found {len(mcp_servers)}")
@@ -566,7 +562,9 @@ class MCPTests:
                     failed += 1
 
         success_rate = (successful / num_requests) * 100
-        self.console.print(f"     [dim]Concurrent requests: {successful}/{num_requests} succeeded ({success_rate:.0f}%)[/dim]")
+        self.console.print(
+            f"     [dim]Concurrent requests: {successful}/{num_requests} succeeded ({success_rate:.0f}%)[/dim]"
+        )
 
         # Per MCP best practices, require >99% success rate
         if success_rate < 99:
@@ -613,10 +611,7 @@ class MCPTests:
         """Verify all test MCP adapters were removed."""
         adapters = await self._list_adapters()
 
-        test_adapters = [
-            a for a in adapters
-            if a.get("adapter_id", "").startswith("mcp_test_")
-        ]
+        test_adapters = [a for a in adapters if a.get("adapter_id", "").startswith("mcp_test_")]
 
         if test_adapters:
             remaining = [a.get("adapter_id") for a in test_adapters]
@@ -657,11 +652,7 @@ class MCPTests:
         if isinstance(result, dict):
             # Check if the operation itself failed (AdapterOperationResult.success)
             if result.get("success") is False:
-                error = (
-                    result.get("error")
-                    or result.get("message")
-                    or "Operation failed (no error message)"
-                )
+                error = result.get("error") or result.get("message") or "Operation failed (no error message)"
                 raise ValueError(f"Adapter load failed: {error}")
 
             self.console.print(f"     [dim]Loaded adapter: {adapter_id}[/dim]")
@@ -714,9 +705,7 @@ class MCPTests:
         audit_response = await self.client.audit.query_entries(start_time=cutoff, limit=50)
 
         for entry in audit_response.entries:
-            entry_dict: Dict[str, Any] = (
-                entry.model_dump() if hasattr(entry, "model_dump") else dict(entry)
-            )
+            entry_dict: Dict[str, Any] = entry.model_dump() if hasattr(entry, "model_dump") else dict(entry)
             entry_str = str(entry_dict)
 
             if search_text.lower() in entry_str.lower():

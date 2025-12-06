@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError, field_serializer
 
 from ciris_engine.constants import CIRIS_VERSION
+from ciris_engine.logic.utils.path_resolution import get_package_root
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolParameterSchema
 from ciris_engine.schemas.api.responses import SuccessResponse
@@ -34,7 +35,6 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.path_resolution import get_package_root
 from ciris_engine.utils.serialization import serialize_timestamp
 
 from ..constants import (
@@ -756,9 +756,11 @@ async def transition_cognitive_state(
     """
     try:
         target_state = body.target_state.upper()
+        logger.info(f"[STATE_TRANSITION] Request received: target_state={target_state}, reason={body.reason}")
 
         # Validate target state
         if target_state not in VALID_COGNITIVE_STATES:
+            logger.error(f"[STATE_TRANSITION] FAIL: Invalid target state '{target_state}'")
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid target state '{target_state}'. Must be one of: {', '.join(sorted(VALID_COGNITIVE_STATES))}",
@@ -766,23 +768,45 @@ async def transition_cognitive_state(
 
         # Get current state
         previous_state = _get_cognitive_state(request)
+        logger.info(f"[STATE_TRANSITION] Current state: {previous_state}")
 
-        # Get runtime control service
-        runtime_control = _get_runtime_control_service(request)
+        # Get runtime control service - FAIL FAST with detailed logging
+        runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+        if not runtime_control:
+            runtime_control = getattr(request.app.state, "runtime_control_service", None)
 
-        # Check if request_state_transition is available
-        if not hasattr(runtime_control, "request_state_transition"):
+        if not runtime_control:
+            logger.error("[STATE_TRANSITION] FAIL: No runtime control service available in app.state")
+            logger.error(f"[STATE_TRANSITION] Available app.state attrs: {dir(request.app.state)}")
+            raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+
+        # Log service type for debugging
+        service_type = type(runtime_control).__name__
+        service_module = type(runtime_control).__module__
+        logger.info(f"[STATE_TRANSITION] Runtime control service: {service_type} from {service_module}")
+
+        # Check if request_state_transition is available - FAIL LOUD
+        has_method = hasattr(runtime_control, "request_state_transition")
+        logger.info(f"[STATE_TRANSITION] Has request_state_transition method: {has_method}")
+
+        if not has_method:
+            available_methods = [m for m in dir(runtime_control) if not m.startswith("_")]
+            logger.error(f"[STATE_TRANSITION] FAIL: Service {service_type} missing request_state_transition")
+            logger.error(f"[STATE_TRANSITION] Available methods: {available_methods}")
             raise HTTPException(
                 status_code=503,
-                detail="State transition not supported by current runtime control service",
+                detail=f"State transition not supported by {service_type}. Missing request_state_transition method.",
             )
 
         # Request the transition
         reason = body.reason or f"Requested via API from {previous_state or 'UNKNOWN'}"
+        logger.info(f"[STATE_TRANSITION] Calling request_state_transition({target_state}, {reason})")
         success = await runtime_control.request_state_transition(target_state, reason)
+        logger.info(f"[STATE_TRANSITION] Transition result: success={success}")
 
         # Get current state after transition attempt
         current_state = _get_cognitive_state(request) or target_state
+        logger.info(f"[STATE_TRANSITION] Post-transition state: {current_state}")
 
         if success:
             message = f"Transition to {target_state} initiated successfully"
@@ -801,7 +825,10 @@ async def transition_cognitive_state(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"State transition failed: {e}")
+        logger.error(f"[STATE_TRANSITION] FAIL: Unexpected error: {type(e).__name__}: {e}")
+        import traceback
+
+        logger.error(f"[STATE_TRANSITION] Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1441,6 +1468,7 @@ async def list_module_types(
 
         try:
             import importlib.resources
+
             import ciris_modular_services
 
             # Get the package path - works with both filesystem and AssetFinder
@@ -1482,9 +1510,15 @@ async def list_module_types(
                     # iterdir() may fail on Android AssetFinder - try known service names
                     logger.debug(f"iterdir failed ({e}), trying known service names")
                     known_services = [
-                        "mcp_client", "mcp_server", "mock_llm", "reddit",
-                        "geo_wisdom", "sensor_wisdom", "weather_wisdom",
-                        "external_data_sql", "mcp_common"
+                        "mcp_client",
+                        "mcp_server",
+                        "mock_llm",
+                        "reddit",
+                        "geo_wisdom",
+                        "sensor_wisdom",
+                        "weather_wisdom",
+                        "external_data_sql",
+                        "mcp_common",
                     ]
                     for svc_name in known_services:
                         try:

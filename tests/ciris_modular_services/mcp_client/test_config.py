@@ -195,14 +195,17 @@ class TestMCPAdapterConfig:
         wise_servers = config.get_servers_for_bus(MCPBusType.WISE)
         assert len(wise_servers) == 2
 
-    @patch.dict(os.environ, {
-        "MCP_ADAPTER_ID": "test_adapter",
-        "MCP_LOG_LEVEL": "DEBUG",
-        "MCP_SERVER_WEATHER_COMMAND": "npx",
-        "MCP_SERVER_WEATHER_ARGS": "-y,@weather/server",
-        "MCP_SERVER_WEATHER_TRANSPORT": "stdio",
-        "MCP_SERVER_WEATHER_BUSES": "tool,wise",
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "MCP_ADAPTER_ID": "test_adapter",
+            "MCP_LOG_LEVEL": "DEBUG",
+            "MCP_SERVER_WEATHER_COMMAND": "npx",
+            "MCP_SERVER_WEATHER_ARGS": "-y,@weather/server",
+            "MCP_SERVER_WEATHER_TRANSPORT": "stdio",
+            "MCP_SERVER_WEATHER_BUSES": "tool,wise",
+        },
+    )
     def test_load_env_vars(self) -> None:
         """Test loading configuration from environment variables."""
         config = MCPAdapterConfig()

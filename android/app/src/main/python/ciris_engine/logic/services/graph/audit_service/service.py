@@ -1040,6 +1040,34 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
             cursor = conn.cursor()
 
+            # Set PRAGMA statements for stability and corruption prevention
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+
+            # Check database integrity
+            integrity_result = cursor.execute("PRAGMA integrity_check").fetchone()
+            if integrity_result[0] != "ok":
+                logger.error(f"Audit database integrity check failed: {integrity_result}")
+                # Close and recreate the database
+                conn.close()
+                import os
+
+                db_path_str = str(self.db_path)
+                # Remove corrupted database and WAL/SHM files
+                for ext in ["", "-wal", "-shm"]:
+                    try:
+                        os.remove(db_path_str + ext)
+                    except OSError:
+                        pass
+                logger.warning("Corrupted audit database removed, recreating...")
+                conn = sqlite3.connect(db_path_str, check_same_thread=False)
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+
             # Audit log table
             cursor.execute(
                 """
@@ -1097,6 +1125,10 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         await asyncio.to_thread(_create_tables)
         self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        # Apply PRAGMA settings to persistent connection
+        self._db_connection.execute("PRAGMA journal_mode=WAL")
+        self._db_connection.execute("PRAGMA busy_timeout=5000")
+        self._db_connection.execute("PRAGMA synchronous=NORMAL")
 
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
         """Add an entry to the hash chain.

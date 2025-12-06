@@ -167,68 +167,176 @@ class TelemetryFragment : Fragment() {
 
     private suspend fun fetchTelemetryInternal() {
         try {
-            val request = Request.Builder()
-                .url("$BASE_URL/v1/telemetry/unified")
+            // Fetch overview data
+            val overviewRequest = Request.Builder()
+                .url("$BASE_URL/v1/telemetry/overview")
                 .apply {
                     accessToken?.let { addHeader("Authorization", "Bearer $it") }
                 }
                 .build()
 
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: return
+            val overviewResponse = client.newCall(overviewRequest).execute()
+            val overviewBody = overviewResponse.body?.string()
 
-            if (response.isSuccessful) {
-                val telemetry = gson.fromJson(body, UnifiedTelemetryResponse::class.java)
+            // Fetch runtime state (for cognitive state)
+            val runtimeRequest = Request.Builder()
+                .url("$BASE_URL/v1/system/runtime/state")
+                .apply {
+                    accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                }
+                .build()
+
+            val runtimeResponse = client.newCall(runtimeRequest).execute()
+            val runtimeBody = runtimeResponse.body?.string()
+
+            // Fetch resources (for disk usage)
+            val resourcesRequest = Request.Builder()
+                .url("$BASE_URL/v1/system/resources")
+                .apply {
+                    accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                }
+                .build()
+
+            val resourcesResponse = client.newCall(resourcesRequest).execute()
+            val resourcesBody = resourcesResponse.body?.string()
+
+            if (overviewResponse.isSuccessful && overviewBody != null) {
+                Log.d(TAG, "Telemetry overview: $overviewBody")
+                val overview = gson.fromJson(overviewBody, TelemetryOverviewWrapper::class.java)
+
+                // Parse runtime state for cognitive state
+                var cogState = overview.data.cognitiveState
+                if (runtimeResponse.isSuccessful && runtimeBody != null) {
+                    try {
+                        Log.d(TAG, "Runtime state: $runtimeBody")
+                        val runtime = gson.fromJson(runtimeBody, RuntimeStateWrapper::class.java)
+                        if (runtime.data.cognitiveState.isNotEmpty() && runtime.data.cognitiveState != "UNKNOWN") {
+                            cogState = runtime.data.cognitiveState
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse runtime state", e)
+                    }
+                }
+                // Fall back to WORK if still UNKNOWN
+                if (cogState == "UNKNOWN") {
+                    cogState = "WORK"
+                }
+
+                // Parse resources for disk usage
+                var diskUsedMb = 0.0
+                if (resourcesResponse.isSuccessful && resourcesBody != null) {
+                    try {
+                        Log.d(TAG, "Resources: $resourcesBody")
+                        val resources = gson.fromJson(resourcesBody, ResourcesWrapper::class.java)
+                        diskUsedMb = resources.data.currentUsage.diskUsedMb
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse resources", e)
+                    }
+                }
+
                 withContext(Dispatchers.Main) {
-                    updateUI(telemetry)
+                    updateUI(overview.data, cogState, diskUsedMb)
                 }
             } else {
-                Log.w(TAG, "Failed to fetch telemetry: ${response.code}")
+                Log.w(TAG, "Failed to fetch telemetry: ${overviewResponse.code}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching telemetry", e)
         }
     }
 
-    private fun updateUI(telemetry: UnifiedTelemetryResponse) {
+    private fun updateUI(telemetry: SystemOverviewData, cogState: String, diskUsedMb: Double) {
         // Services overview
-        servicesOnline.text = "${telemetry.servicesOnline}/${telemetry.servicesTotal}"
+        val totalServices = telemetry.healthyServices + telemetry.degradedServices
+        servicesOnline.text = "${telemetry.healthyServices}/$totalServices"
         servicesOnline.setTextColor(
-            if (telemetry.servicesOnline == telemetry.servicesTotal)
+            if (telemetry.degradedServices == 0)
                 resources.getColor(R.color.status_green, null)
             else
                 resources.getColor(R.color.status_yellow, null)
         )
 
-        // Cognitive state
-        cognitiveState.text = telemetry.cognitiveState ?: "UNKNOWN"
+        // Cognitive state - display properly formatted (from runtime state)
+        val stateText = cogState.uppercase()
+        cognitiveState.text = stateText
+        // Color code the cognitive state
+        val stateColor = when (stateText) {
+            "WORK" -> resources.getColor(R.color.status_green, null)
+            "PLAY" -> resources.getColor(R.color.status_blue, null)
+            "SOLITUDE", "DREAM" -> resources.getColor(R.color.status_yellow, null)
+            "WAKEUP", "SHUTDOWN" -> resources.getColor(R.color.status_orange, null)
+            else -> resources.getColor(R.color.text_secondary, null)
+        }
+        cognitiveState.setTextColor(stateColor)
 
-        // Resource usage
-        val cpuPercent = (telemetry.cpuPercent ?: 0.0).toInt()
+        // Resource usage - using the actual fields from SystemOverview
+        val cpuPercent = telemetry.cpuPercent.toInt()
         cpuUsage.text = "$cpuPercent%"
-        cpuProgress.progress = cpuPercent
+        cpuProgress.progress = cpuPercent.coerceIn(0, 100)
 
-        val memoryMb = ((telemetry.memoryBytes ?: 0) / 1024 / 1024).toInt()
-        val memoryPercent = ((telemetry.memoryPercent ?: 0.0) * 100).toInt()
+        val memoryMb = telemetry.memoryMb.toInt()
         memoryUsage.text = "$memoryMb MB"
-        memoryProgress.progress = memoryPercent.coerceIn(0, 100)
+        // Assume 4GB max for progress bar (CIRIS targets 4GB RAM max)
+        val memoryPercent = (memoryMb * 100 / 4096).coerceIn(0, 100)
+        memoryProgress.progress = memoryPercent
 
-        val dbMb = ((telemetry.databaseBytes ?: 0) / 1024 / 1024).toInt()
-        dbSize.text = "$dbMb MB"
-        dbProgress.progress = (dbMb * 100 / 1024).coerceIn(0, 100) // Assuming 1GB max
+        // Disk usage - from /system/resources endpoint
+        val diskGb = diskUsedMb / 1024.0
+        dbSize.text = if (diskGb >= 1.0) {
+            String.format("%.1f GB", diskGb)
+        } else {
+            String.format("%.0f MB", diskUsedMb)
+        }
+        // Assume 10GB max for progress bar
+        val diskPercent = ((diskUsedMb / 10240.0) * 100).toInt().coerceIn(0, 100)
+        dbProgress.progress = diskPercent
 
-        // Service health list
+        // Service health list - we don't have individual service info from overview
+        // but we can show summary
         serviceItems.clear()
-        telemetry.services?.forEach { (name, info) ->
+        // Add summary items based on healthy/degraded counts
+        if (telemetry.healthyServices > 0) {
             serviceItems.add(
                 ServiceHealthItem(
-                    name = name,
-                    healthy = info.healthy,
-                    status = if (info.healthy) "Healthy" else "Unhealthy"
+                    name = "Healthy Services",
+                    healthy = true,
+                    status = "${telemetry.healthyServices} services"
                 )
             )
         }
-        serviceItems.sortBy { it.name }
+        if (telemetry.degradedServices > 0) {
+            serviceItems.add(
+                ServiceHealthItem(
+                    name = "Degraded Services",
+                    healthy = false,
+                    status = "${telemetry.degradedServices} services"
+                )
+            )
+        }
+        // Add activity metrics
+        serviceItems.add(
+            ServiceHealthItem(
+                name = "Messages (24h)",
+                healthy = true,
+                status = "${telemetry.messagesProcessed24h}"
+            )
+        )
+        serviceItems.add(
+            ServiceHealthItem(
+                name = "Tasks (24h)",
+                healthy = true,
+                status = "${telemetry.tasksCompleted24h}"
+            )
+        )
+        if (telemetry.errors24h > 0) {
+            serviceItems.add(
+                ServiceHealthItem(
+                    name = "Errors (24h)",
+                    healthy = false,
+                    status = "${telemetry.errors24h}"
+                )
+            )
+        }
         servicesAdapter.notifyDataSetChanged()
     }
 
@@ -296,21 +404,59 @@ class TelemetryFragment : Fragment() {
     }
 }
 
-// Data classes
-data class UnifiedTelemetryResponse(
-    @SerializedName("services_online") val servicesOnline: Int,
-    @SerializedName("services_total") val servicesTotal: Int,
-    @SerializedName("cognitive_state") val cognitiveState: String?,
-    @SerializedName("cpu_percent") val cpuPercent: Double?,
-    @SerializedName("memory_bytes") val memoryBytes: Long?,
-    @SerializedName("memory_percent") val memoryPercent: Double?,
-    @SerializedName("database_bytes") val databaseBytes: Long?,
-    val services: Map<String, ServiceInfo>?
+// Data classes - matches SystemOverview from /telemetry/overview
+
+/**
+ * Wrapper for SuccessResponse format from API.
+ */
+data class TelemetryOverviewWrapper(
+    val data: SystemOverviewData,
+    val metadata: ResponseMetadata?
 )
 
-data class ServiceInfo(
-    val healthy: Boolean,
-    val status: String?
+data class ResponseMetadata(
+    val timestamp: String?,
+    @SerializedName("request_id") val requestId: String?,
+    @SerializedName("duration_ms") val durationMs: Int?
+)
+
+/**
+ * SystemOverview data from /telemetry/overview endpoint.
+ * Matches ciris_engine.logic.adapters.api.routes.telemetry_models.SystemOverview
+ */
+data class SystemOverviewData(
+    // Core metrics
+    @SerializedName("uptime_seconds") val uptimeSeconds: Double = 0.0,
+    @SerializedName("cognitive_state") val cognitiveState: String = "UNKNOWN",
+    @SerializedName("messages_processed_24h") val messagesProcessed24h: Int = 0,
+    @SerializedName("thoughts_processed_24h") val thoughtsProcessed24h: Int = 0,
+    @SerializedName("tasks_completed_24h") val tasksCompleted24h: Int = 0,
+    @SerializedName("errors_24h") val errors24h: Int = 0,
+
+    // Resource usage
+    @SerializedName("tokens_last_hour") val tokensLastHour: Double = 0.0,
+    @SerializedName("cost_last_hour_cents") val costLastHourCents: Double = 0.0,
+    @SerializedName("tokens_24h") val tokens24h: Double = 0.0,
+    @SerializedName("cost_24h_cents") val cost24hCents: Double = 0.0,
+    @SerializedName("memory_mb") val memoryMb: Double = 0.0,
+    @SerializedName("cpu_percent") val cpuPercent: Double = 0.0,
+
+    // Service health
+    @SerializedName("healthy_services") val healthyServices: Int = 0,
+    @SerializedName("degraded_services") val degradedServices: Int = 0,
+    @SerializedName("error_rate_percent") val errorRatePercent: Double = 0.0,
+
+    // Agent activity
+    @SerializedName("current_task") val currentTask: String? = null,
+    @SerializedName("reasoning_depth") val reasoningDepth: Int = 0,
+    @SerializedName("active_deferrals") val activeDeferrals: Int = 0,
+    @SerializedName("recent_incidents") val recentIncidents: Int = 0,
+
+    // Telemetry metrics
+    @SerializedName("total_metrics") val totalMetrics: Int = 0,
+    @SerializedName("active_services") val activeServices: Int = 0,
+    @SerializedName("metrics_per_second") val metricsPerSecond: Double = 0.0,
+    @SerializedName("cache_hit_rate") val cacheHitRate: Double = 0.0
 )
 
 data class ServiceHealthItem(
@@ -353,3 +499,32 @@ class ServiceHealthAdapter(
 
     override fun getItemCount() = items.size
 }
+
+// Data classes for /system/runtime/state endpoint
+data class RuntimeStateWrapper(
+    val data: RuntimeStateData,
+    val metadata: ResponseMetadata?
+)
+
+data class RuntimeStateData(
+    @SerializedName("cognitive_state") val cognitiveState: String = "UNKNOWN",
+    @SerializedName("processor_state") val processorState: String = "",
+    @SerializedName("queue_depth") val queueDepth: Int = 0
+)
+
+// Data classes for /system/resources endpoint
+data class ResourcesWrapper(
+    val data: ResourcesData,
+    val metadata: ResponseMetadata?
+)
+
+data class ResourcesData(
+    @SerializedName("current_usage") val currentUsage: CurrentUsage = CurrentUsage()
+)
+
+data class CurrentUsage(
+    @SerializedName("cpu_percent") val cpuPercent: Double = 0.0,
+    @SerializedName("memory_mb") val memoryMb: Double = 0.0,
+    @SerializedName("memory_percent") val memoryPercent: Double = 0.0,
+    @SerializedName("disk_used_mb") val diskUsedMb: Double = 0.0
+)

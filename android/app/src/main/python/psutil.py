@@ -134,7 +134,7 @@ def cpu_count(logical: bool = True) -> int:
 
 
 def disk_usage(path: str):
-    """Return disk usage statistics for the given path."""
+    """Return disk usage statistics for the given path (filesystem level)."""
     try:
         stat = os.statvfs(path)
         total = stat.f_blocks * stat.f_frsize
@@ -145,6 +145,152 @@ def disk_usage(path: str):
     except (OSError, IOError):
         # Return dummy values
         return sdiskusage(total=16 * 1024**3, used=8 * 1024**3, free=8 * 1024**3, percent=50.0)
+
+
+# Named tuple for app-specific storage breakdown
+sappstorage = namedtuple(
+    "sappstorage",
+    ["total", "databases", "files", "cache", "chaquopy", "other"],
+)
+
+
+def _get_directory_size(path: str) -> int:
+    """Calculate the total size of all files in a directory tree.
+
+    Handles permission errors gracefully and skips inaccessible files.
+    """
+    if not os.path.exists(path):
+        return 0
+
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    # Use lstat to not follow symlinks
+                    total_size += os.lstat(filepath).st_size
+                except (OSError, IOError):
+                    # Skip files we can't access
+                    pass
+    except (OSError, IOError):
+        pass
+
+    return total_size
+
+
+def app_storage_usage(data_dir: Optional[str] = None) -> sappstorage:
+    """Return app-specific storage usage breakdown.
+
+    This calculates actual storage used by the app's data directories,
+    not the filesystem-level stats from disk_usage().
+
+    Args:
+        data_dir: Base data directory. If None, tries to detect from environment.
+                  On Android/Chaquopy, this is typically the app's files directory.
+
+    Returns:
+        sappstorage namedtuple with:
+        - total: Total bytes used by the app
+        - databases: Bytes used by SQLite databases
+        - files: Bytes in the files directory
+        - cache: Bytes in cache directories
+        - chaquopy: Bytes used by Chaquopy/Python environment
+        - other: Bytes in other locations
+    """
+    # Try to detect the data directory
+    if data_dir is None:
+        # On Android via Chaquopy, check environment variables
+        data_dir = os.environ.get("HOME", "")
+        if not data_dir:
+            # Fallback: try to find from current working directory
+            cwd = os.getcwd()
+            # Chaquopy apps typically run from /data/data/<package>/files/chaquopy
+            if "/files/" in cwd:
+                data_dir = cwd.split("/files/")[0] + "/files"
+            else:
+                data_dir = cwd
+
+    # Ensure we have a valid base path
+    if not data_dir or not os.path.exists(data_dir):
+        return sappstorage(total=0, databases=0, files=0, cache=0, chaquopy=0, other=0)
+
+    # Find the app's root data directory (parent of 'files')
+    if data_dir.endswith("/files"):
+        app_root = os.path.dirname(data_dir)
+    elif "/files" in data_dir:
+        app_root = data_dir.split("/files")[0]
+    else:
+        app_root = data_dir
+
+    # Calculate sizes for different categories
+    databases_size = 0
+    files_size = 0
+    cache_size = 0
+    chaquopy_size = 0
+    other_size = 0
+
+    # Databases directory (SQLite databases including CIRIS db)
+    databases_dir = os.path.join(app_root, "databases")
+    databases_size = _get_directory_size(databases_dir)
+
+    # Also check for databases in files directory (Chaquopy may store them there)
+    files_dir = os.path.join(app_root, "files")
+    if os.path.exists(files_dir):
+        for item in os.listdir(files_dir) if os.path.exists(files_dir) else []:
+            item_path = os.path.join(files_dir, item)
+            if item == "chaquopy":
+                chaquopy_size = _get_directory_size(item_path)
+            elif item.endswith(".db") or item.endswith(".sqlite") or item.endswith(".sqlite3"):
+                try:
+                    databases_size += os.lstat(item_path).st_size
+                except (OSError, IOError):
+                    pass
+            elif os.path.isdir(item_path):
+                # Check for databases in subdirectories (like CIRIS data)
+                subdir_size = _get_directory_size(item_path)
+                # Check if this directory contains databases
+                has_db = False
+                try:
+                    for f in os.listdir(item_path):
+                        if f.endswith((".db", ".sqlite", ".sqlite3")):
+                            has_db = True
+                            break
+                except (OSError, IOError):
+                    pass
+                if has_db:
+                    databases_size += subdir_size
+                else:
+                    files_size += subdir_size
+            else:
+                try:
+                    files_size += os.lstat(item_path).st_size
+                except (OSError, IOError):
+                    pass
+
+    # Cache directory
+    cache_dir = os.path.join(app_root, "cache")
+    cache_size = _get_directory_size(cache_dir)
+
+    # Check for code_cache as well (Android's compiled code cache)
+    code_cache_dir = os.path.join(app_root, "code_cache")
+    cache_size += _get_directory_size(code_cache_dir)
+
+    # Shared preferences and other directories
+    for dirname in ["shared_prefs", "app_webview", "no_backup"]:
+        dir_path = os.path.join(app_root, dirname)
+        other_size += _get_directory_size(dir_path)
+
+    total = databases_size + files_size + cache_size + chaquopy_size + other_size
+
+    return sappstorage(
+        total=total,
+        databases=databases_size,
+        files=files_size,
+        cache=cache_size,
+        chaquopy=chaquopy_size,
+        other=other_size,
+    )
 
 
 def net_io_counters():

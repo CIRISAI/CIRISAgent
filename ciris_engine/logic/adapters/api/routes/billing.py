@@ -42,6 +42,7 @@ class CreditStatusResponse(BaseModel):
     has_credit: bool = Field(..., description="Whether user has available credit")
     credits_remaining: int = Field(..., description="Remaining paid credits")
     free_uses_remaining: int = Field(..., description="Remaining free uses")
+    daily_free_uses_remaining: int = Field(0, description="Remaining daily free uses")
     total_uses: int = Field(..., description="Total uses so far")
     plan_name: Optional[str] = Field(None, description="Current plan name")
     purchase_required: bool = Field(..., description="Whether purchase is required to continue")
@@ -303,6 +304,7 @@ def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
         has_credit=credit_data["has_credit"],
         credits_remaining=credit_data.get("credits_remaining", 0),
         free_uses_remaining=credit_data.get("free_uses_remaining", 0),
+        daily_free_uses_remaining=credit_data.get("daily_free_uses_remaining", 0),
         total_uses=credit_data.get("total_uses", 0),
         plan_name=credit_data.get("plan_name"),
         purchase_required=credit_data.get("purchase_required", False),
@@ -326,7 +328,11 @@ async def get_credits(
     """
     logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
     user_identity = _extract_user_identity(auth, request)
-    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+    agent_id = (
+        request.app.state.runtime.agent_identity.agent_id
+        if hasattr(request.app.state, "runtime") and request.app.state.runtime.agent_identity
+        else "pending"
+    )
     logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check if we have a resource monitor with credit provider
@@ -359,9 +365,7 @@ async def get_credits(
     account, _ = _derive_credit_account(auth, request)
 
     context = CreditContext(
-        agent_id=(
-            request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
-        ),
+        agent_id=agent_id,  # Use the already-derived agent_id from above
         channel_id="api:frontend",
         request_id=None,
     )
@@ -395,6 +399,7 @@ async def get_credits(
             has_credit=result.has_credit,
             credits_remaining=result.credits_remaining or 0,
             free_uses_remaining=result.free_uses_remaining or 0,
+            daily_free_uses_remaining=result.daily_free_uses_remaining or 0,
             total_uses=0,  # Not tracked in JWT mode
             plan_name="CIRIS Mobile",
             purchase_required=not result.has_credit,
@@ -446,7 +451,11 @@ async def initiate_purchase(
     # Billing enabled - proceed with purchase
     billing_client = _get_billing_client(request)
     user_identity = _extract_user_identity(auth, request)
-    agent_id = request.app.state.runtime.agent_identity.agent_id if hasattr(request.app.state, "runtime") else "unknown"
+    agent_id = (
+        request.app.state.runtime.agent_identity.agent_id
+        if hasattr(request.app.state, "runtime") and request.app.state.runtime.agent_identity
+        else "pending"
+    )
 
     # Get user email (needed for Stripe) - extract from OAuth profile
     customer_email = user_identity.get("customer_email")

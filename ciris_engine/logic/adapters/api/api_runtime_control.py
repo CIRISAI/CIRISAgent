@@ -76,24 +76,64 @@ class APIRuntimeControlService(Service):
     async def request_state_transition(self, target_state: str, reason: str) -> bool:
         """Request cognitive state transition."""
         try:
+            runtime_type = type(self.runtime).__name__
             current_state = getattr(self.runtime, "current_state", "UNKNOWN")
 
-            logger.info(f"API requesting state transition: {current_state} -> {target_state} " f"(reason: {reason})")
+            logger.info(f"[API_RUNTIME_CONTROL] State transition request received")
+            logger.info(f"[API_RUNTIME_CONTROL] Runtime type: {runtime_type}")
+            logger.info(f"[API_RUNTIME_CONTROL] Current state: {current_state}")
+            logger.info(f"[API_RUNTIME_CONTROL] Target state: {target_state}")
+            logger.info(f"[API_RUNTIME_CONTROL] Reason: {reason}")
+
+            # Check what methods are available
+            has_request_state_transition = hasattr(self.runtime, "request_state_transition")
+            has_transition_to_state = hasattr(self.runtime, "transition_to_state")
+            has_agent_processor = hasattr(self.runtime, "agent_processor")
+
+            logger.info(f"[API_RUNTIME_CONTROL] runtime.request_state_transition: {has_request_state_transition}")
+            logger.info(f"[API_RUNTIME_CONTROL] runtime.transition_to_state: {has_transition_to_state}")
+            logger.info(f"[API_RUNTIME_CONTROL] runtime.agent_processor: {has_agent_processor}")
 
             # Use runtime's state transition if available
-            if hasattr(self.runtime, "request_state_transition"):
-                return await self.runtime.request_state_transition(target_state, reason)  # type: ignore[no-any-return]
+            if has_request_state_transition:
+                logger.info("[API_RUNTIME_CONTROL] Delegating to runtime.request_state_transition()")
+                result = await self.runtime.request_state_transition(target_state, reason)  # type: ignore[no-any-return]
+                logger.info(f"[API_RUNTIME_CONTROL] Result: {result}")
+                return result
 
             # Otherwise try direct transition
-            if hasattr(self.runtime, "transition_to_state"):
+            if has_transition_to_state:
+                logger.info("[API_RUNTIME_CONTROL] Delegating to runtime.transition_to_state()")
                 await self.runtime.transition_to_state(target_state)
                 return True
 
-            logger.error("Runtime does not support state transitions")
+            # Try using agent_processor directly
+            if has_agent_processor and self.runtime.agent_processor:
+                agent_processor = self.runtime.agent_processor
+                if hasattr(agent_processor, "state_manager"):
+                    logger.info("[API_RUNTIME_CONTROL] Using agent_processor.state_manager.transition_to()")
+                    from ciris_engine.schemas.processors.states import AgentState
+
+                    try:
+                        target = AgentState(target_state.lower())
+                        result = await agent_processor.state_manager.transition_to(target)
+                        logger.info(f"[API_RUNTIME_CONTROL] Direct state_manager result: {result}")
+                        return result
+                    except ValueError:
+                        logger.error(f"[API_RUNTIME_CONTROL] Invalid state: {target_state}")
+                        return False
+
+            logger.error("[API_RUNTIME_CONTROL] FAIL: Runtime does not support state transitions")
+            logger.error(
+                f"[API_RUNTIME_CONTROL] Available runtime methods: {[m for m in dir(self.runtime) if not m.startswith('_')]}"
+            )
             return False
 
         except Exception as e:
-            logger.error(f"State transition failed: {e}")
+            logger.error(f"[API_RUNTIME_CONTROL] State transition failed: {type(e).__name__}: {e}")
+            import traceback
+
+            logger.error(f"[API_RUNTIME_CONTROL] Traceback:\n{traceback.format_exc()}")
             return False
 
     def get_runtime_status(self) -> JSONDict:

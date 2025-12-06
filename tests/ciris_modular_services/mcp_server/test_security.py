@@ -5,10 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ciris_modular_services.mcp_server.config import (
-    AuthMethod,
-    MCPServerSecurityConfig,
-)
+from ciris_modular_services.mcp_server.config import AuthMethod, MCPServerSecurityConfig
 from ciris_modular_services.mcp_server.security import (
     AuthResult,
     ClientSession,
@@ -162,9 +159,7 @@ class TestMCPServerAuthenticator:
         )
 
     @pytest.mark.asyncio
-    async def test_auth_without_requirement(
-        self, config_no_auth: MCPServerSecurityConfig
-    ) -> None:
+    async def test_auth_without_requirement(self, config_no_auth: MCPServerSecurityConfig) -> None:
         """Test authentication when not required."""
         auth = MCPServerAuthenticator(config_no_auth)
 
@@ -177,9 +172,7 @@ class TestMCPServerAuthenticator:
         assert session.auth_method == AuthMethod.NONE
 
     @pytest.mark.asyncio
-    async def test_auth_with_valid_api_key(
-        self, config_api_key: MCPServerSecurityConfig
-    ) -> None:
+    async def test_auth_with_valid_api_key(self, config_api_key: MCPServerSecurityConfig) -> None:
         """Test authentication with valid API key."""
         auth = MCPServerAuthenticator(config_api_key)
 
@@ -193,9 +186,7 @@ class TestMCPServerAuthenticator:
         assert session.auth_method == AuthMethod.API_KEY
 
     @pytest.mark.asyncio
-    async def test_auth_with_invalid_api_key(
-        self, config_api_key: MCPServerSecurityConfig
-    ) -> None:
+    async def test_auth_with_invalid_api_key(self, config_api_key: MCPServerSecurityConfig) -> None:
         """Test authentication with invalid API key."""
         auth = MCPServerAuthenticator(config_api_key)
 
@@ -208,9 +199,7 @@ class TestMCPServerAuthenticator:
         assert session is None
 
     @pytest.mark.asyncio
-    async def test_auth_missing_credentials(
-        self, config_api_key: MCPServerSecurityConfig
-    ) -> None:
+    async def test_auth_missing_credentials(self, config_api_key: MCPServerSecurityConfig) -> None:
         """Test authentication with missing credentials."""
         auth = MCPServerAuthenticator(config_api_key)
 
@@ -222,9 +211,7 @@ class TestMCPServerAuthenticator:
         assert session is None
 
     @pytest.mark.asyncio
-    async def test_blocked_client(
-        self, config_with_allowlist: MCPServerSecurityConfig
-    ) -> None:
+    async def test_blocked_client(self, config_with_allowlist: MCPServerSecurityConfig) -> None:
         """Test blocked client is rejected."""
         auth = MCPServerAuthenticator(config_with_allowlist)
 
@@ -236,9 +223,7 @@ class TestMCPServerAuthenticator:
         assert session is None
 
     @pytest.mark.asyncio
-    async def test_client_not_in_allowlist(
-        self, config_with_allowlist: MCPServerSecurityConfig
-    ) -> None:
+    async def test_client_not_in_allowlist(self, config_with_allowlist: MCPServerSecurityConfig) -> None:
         """Test client not in allowlist is rejected."""
         auth = MCPServerAuthenticator(config_with_allowlist)
 
@@ -250,9 +235,7 @@ class TestMCPServerAuthenticator:
         assert session is None
 
     @pytest.mark.asyncio
-    async def test_allowed_client(
-        self, config_with_allowlist: MCPServerSecurityConfig
-    ) -> None:
+    async def test_allowed_client(self, config_with_allowlist: MCPServerSecurityConfig) -> None:
         """Test allowed client is accepted."""
         auth = MCPServerAuthenticator(config_with_allowlist)
 
@@ -264,9 +247,7 @@ class TestMCPServerAuthenticator:
         assert session is not None
 
     @pytest.mark.asyncio
-    async def test_session_management(
-        self, config_no_auth: MCPServerSecurityConfig
-    ) -> None:
+    async def test_session_management(self, config_no_auth: MCPServerSecurityConfig) -> None:
         """Test session get and end."""
         auth = MCPServerAuthenticator(config_no_auth)
 
@@ -304,9 +285,7 @@ class TestMCPServerSecurityManager:
         return MCPServerSecurityManager(config)
 
     @pytest.mark.asyncio
-    async def test_authenticate_client(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    async def test_authenticate_client(self, security_manager: MCPServerSecurityManager) -> None:
         """Test client authentication through manager."""
         result, session = await security_manager.authenticate_client(
             client_info={"name": "test", "version": "1.0"},
@@ -315,9 +294,7 @@ class TestMCPServerSecurityManager:
         assert session is not None
 
     @pytest.mark.asyncio
-    async def test_authorize_request(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    async def test_authorize_request(self, security_manager: MCPServerSecurityManager) -> None:
         """Test request authorization."""
         _, session = await security_manager.authenticate_client(
             client_info={"name": "test", "version": "1.0"},
@@ -332,9 +309,7 @@ class TestMCPServerSecurityManager:
         assert authorized is True
 
     @pytest.mark.asyncio
-    async def test_authorize_request_no_permission(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    async def test_authorize_request_no_permission(self, security_manager: MCPServerSecurityManager) -> None:
         """Test request authorization when no permission."""
         _, session = await security_manager.authenticate_client(
             client_info={"name": "test", "version": "1.0"},
@@ -353,9 +328,7 @@ class TestMCPServerSecurityManager:
         assert "No permission" in reason
 
     @pytest.mark.asyncio
-    async def test_record_request(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    async def test_record_request(self, security_manager: MCPServerSecurityManager) -> None:
         """Test request recording for audit."""
         await security_manager.record_request(
             client_id="test_client",
@@ -372,18 +345,14 @@ class TestMCPServerSecurityManager:
         assert records[0]["result"] == "success"
 
     @pytest.mark.asyncio
-    async def test_rate_limit_integration(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    async def test_rate_limit_integration(self, security_manager: MCPServerSecurityManager) -> None:
         """Test rate limiting through manager."""
         acquired = await security_manager.acquire_rate_limit("client1")
         assert acquired is True
 
         await security_manager.release_rate_limit("client1")
 
-    def test_get_metrics(
-        self, security_manager: MCPServerSecurityManager
-    ) -> None:
+    def test_get_metrics(self, security_manager: MCPServerSecurityManager) -> None:
         """Test getting security metrics."""
         metrics = security_manager.get_metrics()
         assert "active_sessions" in metrics

@@ -197,13 +197,18 @@ class AdaptersFragment : Fragment() {
 
         adapterItems.clear()
         data.adapters.forEach { adapterInfo ->
+            // Determine status - use explicit status field or derive from is_running
+            val statusText = adapterInfo.status
+                ?: if (adapterInfo.isRunning == true) "running" else "stopped"
+            val isHealthy = adapterInfo.isRunning == true || adapterInfo.status == "running"
+
             adapterItems.add(
                 AdapterItem(
                     id = adapterInfo.adapterId,
                     name = adapterInfo.adapterType.replaceFirstChar { it.uppercase() },
                     type = adapterInfo.adapterType.uppercase(),
-                    status = adapterInfo.status,
-                    isHealthy = adapterInfo.status == "running"
+                    status = statusText,
+                    isHealthy = isHealthy
                 )
             )
         }
@@ -244,21 +249,46 @@ class AdaptersFragment : Fragment() {
     private fun performReload(adapterId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Find the adapter to get its config for reload
+                val adapterItem = adapterItems.find { it.id == adapterId }
+                val reloadBody = mapOf(
+                    "config" to mapOf(
+                        "adapter_type" to (adapterItem?.type?.lowercase() ?: "unknown"),
+                        "enabled" to true
+                    ),
+                    "auto_start" to true
+                )
+                val jsonBody = gson.toJson(reloadBody)
+                    .toRequestBody("application/json".toMediaType())
+
                 val request = Request.Builder()
                     .url("$BASE_URL/v1/system/adapters/$adapterId/reload")
-                    .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+                    .put(jsonBody)
                     .apply {
                         accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
                     }
                     .build()
 
                 val response = client.newCall(request).execute()
+                val responseBody = response.body?.string()
+
                 withContext(Dispatchers.Main) {
                     if (response.isSuccessful) {
-                        Toast.makeText(context, "Adapter reloaded", Toast.LENGTH_SHORT).show()
-                        fetchAdapters()
+                        // Parse response to check if reload succeeded
+                        val result = try {
+                            gson.fromJson(responseBody, GenericResponse::class.java)
+                        } catch (e: Exception) { null }
+
+                        if (result?.data?.success != false) {
+                            Toast.makeText(context, "Adapter reloaded", Toast.LENGTH_SHORT).show()
+                            fetchAdapters()
+                        } else {
+                            val error = result.data?.error ?: "Unknown error"
+                            Toast.makeText(context, "Reload failed: $error", Toast.LENGTH_SHORT).show()
+                        }
                     } else {
-                        Toast.makeText(context, "Failed to reload adapter", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Failed to reload adapter: ${response.code}", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
@@ -427,10 +457,7 @@ class AdaptersFragment : Fragment() {
             }
 
             val editText = TextInputEditText(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
+                // Don't set layoutParams - TextInputLayout handles it internally
                 // Set input type based on parameter type
                 inputType = when (param.paramType) {
                     "integer", "float" -> InputType.TYPE_CLASS_NUMBER
@@ -506,22 +533,39 @@ class AdaptersFragment : Fragment() {
 
         if (hasError) return
 
+        // Generate a unique adapter ID
+        val adapterId = "${module.moduleId}_${System.currentTimeMillis()}"
+
         // Submit to API
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val requestBody = mapOf(
-                    "config" to mapOf(
+                // Build config based on adapter type
+                // MCP adapters need nested adapter_config, others use flat settings
+                val config: Map<String, Any?> = if (module.moduleId in listOf("mcp", "mcp_server")) {
+                    mapOf(
+                        "adapter_type" to module.moduleId,
+                        "enabled" to true,
+                        "settings" to emptyMap<String, Any>(),  // Simple settings (flat primitives)
+                        "adapter_config" to settings  // Complex nested config for MCP
+                    )
+                } else {
+                    mapOf(
                         "adapter_type" to module.moduleId,
                         "enabled" to true,
                         "settings" to settings
-                    ),
+                    )
+                }
+
+                val requestBody = mapOf(
+                    "config" to config,
                     "auto_start" to true
                 )
                 val jsonBody = gson.toJson(requestBody)
                     .toRequestBody("application/json".toMediaType())
 
+                // Include adapter_id as query parameter (per MCP tests pattern)
                 val request = Request.Builder()
-                    .url("$BASE_URL/v1/system/adapters/${module.moduleId}")
+                    .url("$BASE_URL/v1/system/adapters/${module.moduleId}?adapter_id=$adapterId")
                     .post(jsonBody)
                     .apply {
                         accessToken?.let { addHeader("Authorization", "Bearer $it") }
@@ -534,8 +578,18 @@ class AdaptersFragment : Fragment() {
 
                 withContext(Dispatchers.Main) {
                     if (response.isSuccessful) {
-                        Toast.makeText(context, "Adapter added successfully", Toast.LENGTH_SHORT).show()
-                        fetchAdapters()
+                        // Parse response to check if operation succeeded
+                        val result = try {
+                            gson.fromJson(responseBody, GenericResponse::class.java)
+                        } catch (e: Exception) { null }
+
+                        if (result?.data?.success != false) {
+                            Toast.makeText(context, "Adapter added successfully", Toast.LENGTH_SHORT).show()
+                            fetchAdapters()
+                        } else {
+                            val error = result.data?.error ?: result.data?.message ?: "Operation failed"
+                            Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
+                        }
                     } else {
                         val errorMsg = try {
                             gson.fromJson(responseBody, ErrorResponse::class.java).detail
@@ -576,15 +630,17 @@ data class AdapterListData(
 )
 
 data class AdapterInfo(
-    @SerializedName("adapter_id") val adapterId: String,
-    @SerializedName("adapter_type") val adapterType: String,
-    val status: String,
-    @SerializedName("channels_count") val channelsCount: Int
+    @SerializedName("adapter_id") val adapterId: String = "",
+    @SerializedName("adapter_type") val adapterType: String = "",
+    val status: String? = null,
+    @SerializedName("is_running") val isRunning: Boolean? = null,
+    @SerializedName("channels_count") val channelsCount: Int = 0,
+    @SerializedName("services_registered") val servicesRegistered: List<String> = emptyList()
 )
 
 // Data classes for module types API
+// Note: API returns SuccessResponse format with just data (no success field at top level)
 data class ModuleTypesResponse(
-    val success: Boolean,
     val data: ModuleTypesData?
 )
 
@@ -625,6 +681,20 @@ data class ModuleConfigParameter(
 
 data class ErrorResponse(
     val detail: String?
+)
+
+// Generic response for adapter operations (matches MCP tests response format)
+data class GenericResponse(
+    val success: Boolean? = null,
+    val data: AdapterOperationResult? = null
+)
+
+data class AdapterOperationResult(
+    val success: Boolean? = null,
+    @SerializedName("adapter_id") val adapterId: String? = null,
+    val error: String? = null,
+    val message: String? = null,
+    @SerializedName("is_running") val isRunning: Boolean? = null
 )
 
 // RecyclerView Adapter

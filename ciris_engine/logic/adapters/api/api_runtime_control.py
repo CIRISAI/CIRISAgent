@@ -79,7 +79,7 @@ class APIRuntimeControlService(Service):
             runtime_type = type(self.runtime).__name__
             current_state = getattr(self.runtime, "current_state", "UNKNOWN")
 
-            logger.info(f"[API_RUNTIME_CONTROL] State transition request received")
+            logger.info("[API_RUNTIME_CONTROL] State transition request received")
             logger.info(f"[API_RUNTIME_CONTROL] Runtime type: {runtime_type}")
             logger.info(f"[API_RUNTIME_CONTROL] Current state: {current_state}")
             logger.info(f"[API_RUNTIME_CONTROL] Target state: {target_state}")

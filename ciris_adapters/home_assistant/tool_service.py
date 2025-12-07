@@ -153,18 +153,54 @@ class HAToolService:
         self._started = False
         logger.info("HAToolService stopped")
 
-    async def list_tools(self) -> List[str]:
-        """List available tool names."""
+    # =========================================================================
+    # ToolServiceProtocol Implementation
+    # =========================================================================
+    # The protocol requires these methods for tool discovery:
+    # - get_available_tools() -> List[str]  : Used by system snapshot
+    # - get_tool_info(name) -> ToolInfo     : Used by system snapshot per-tool
+    # - get_all_tool_info() -> List[ToolInfo]: Used by /tools API endpoint
+    # - list_tools() -> List[str]           : Legacy alias for get_available_tools
+    # - get_tool_schema(name) -> schema     : Get parameter schema
+    # - validate_parameters(name, params)   : Validate without executing
+    # - get_tool_result(correlation_id)     : Get async result (not used here)
+    # =========================================================================
+
+    async def get_available_tools(self) -> List[str]:
+        """Get available tool names. Used by system snapshot tool collection."""
         return list(self.TOOL_DEFINITIONS.keys())
+
+    async def list_tools(self) -> List[str]:
+        """Legacy alias for get_available_tools()."""
+        return await self.get_available_tools()
+
+    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
+        """Get detailed info for a specific tool. Used by system snapshot."""
+        return self.TOOL_DEFINITIONS.get(tool_name)
+
+    async def get_all_tool_info(self) -> List[ToolInfo]:
+        """Get info for all tools. Used by /tools API endpoint."""
+        return list(self.TOOL_DEFINITIONS.values())
 
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a tool."""
         tool_info = self.TOOL_DEFINITIONS.get(tool_name)
         return tool_info.parameters if tool_info else None
 
-    async def get_all_tool_info(self) -> List[ToolInfo]:
-        """Get info for all available tools."""
-        return list(self.TOOL_DEFINITIONS.values())
+    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+        """Validate parameters for a tool without executing it."""
+        if tool_name not in self.TOOL_DEFINITIONS:
+            return False
+        tool_info = self.TOOL_DEFINITIONS[tool_name]
+        if not tool_info.parameters:
+            return True
+        # Basic validation: check required fields are present
+        required = tool_info.parameters.required or []
+        return all(param in parameters for param in required)
+
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
+        """Get result of previously executed tool. Not implemented for sync HA tools."""
+        return None
 
     async def execute_tool(
         self,

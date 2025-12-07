@@ -3,6 +3,7 @@ package ai.ciris.mobile.auth
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.util.Base64
 import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -10,6 +11,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.tasks.Task
+import org.json.JSONObject
 
 /**
  * Helper for Google Sign-In authentication.
@@ -25,6 +27,10 @@ class GoogleSignInHelper(private val context: Context) {
 
         // Web client ID from Google Cloud Console (CIRIS Mobile)
         private const val WEB_CLIENT_ID = "265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com"
+
+        // Minimum token validity in seconds - if token expires sooner, force refresh
+        // Set to 5 minutes to ensure token is valid for the entire session
+        private const val MIN_TOKEN_VALIDITY_SECONDS = 300L
     }
 
     private val googleSignInClient: GoogleSignInClient
@@ -138,13 +144,96 @@ class GoogleSignInHelper(private val context: Context) {
     }
 
     /**
+     * Get the expiry time (in seconds since epoch) from a JWT token.
+     * Returns null if parsing fails.
+     */
+    private fun getTokenExpiry(idToken: String): Long? {
+        return try {
+            // JWT has 3 parts: header.payload.signature
+            val parts = idToken.split(".")
+            if (parts.size != 3) {
+                Log.w(TAG, "Invalid JWT format: expected 3 parts, got ${parts.size}")
+                return null
+            }
+
+            // Decode the payload (second part)
+            val payload = String(Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_WRAP))
+            val json = JSONObject(payload)
+            val exp = json.optLong("exp", 0L)
+
+            if (exp > 0) {
+                Log.d(TAG, "Token expiry: $exp (${(exp - System.currentTimeMillis() / 1000)}s remaining)")
+                exp
+            } else {
+                Log.w(TAG, "No 'exp' claim in JWT payload")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse JWT: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Check if a token has sufficient validity remaining.
+     * Returns true if token expires in more than MIN_TOKEN_VALIDITY_SECONDS.
+     */
+    private fun isTokenValid(idToken: String?): Boolean {
+        if (idToken == null) return false
+
+        val expiry = getTokenExpiry(idToken) ?: return false
+        val nowSeconds = System.currentTimeMillis() / 1000
+        val remainingSeconds = expiry - nowSeconds
+
+        Log.d(TAG, "Token validity check: ${remainingSeconds}s remaining, need ${MIN_TOKEN_VALIDITY_SECONDS}s")
+        return remainingSeconds > MIN_TOKEN_VALIDITY_SECONDS
+    }
+
+    /**
      * Silent sign-in attempt (no UI).
      * Use this to restore sign-in state on app launch.
+     *
+     * If the cached token is close to expiry (< 5 minutes), this will
+     * clear the cached auth and force a fresh sign-in to get a new token.
      */
     fun silentSignIn(onResult: (SignInResult) -> Unit) {
+        // First, check if cached token is still valid
+        val cachedAccount = getLastSignedInAccount()
+        val cachedToken = cachedAccount?.idToken
+
+        if (cachedToken != null && isTokenValid(cachedToken)) {
+            Log.i(TAG, "Cached token still valid, using it")
+            onResult(SignInResult.Success(cachedAccount))
+            return
+        }
+
+        if (cachedToken != null) {
+            Log.i(TAG, "Cached token expired or close to expiry, forcing fresh sign-in")
+            // Clear the cached account to force Google to fetch a fresh token
+            googleSignInClient.signOut().addOnCompleteListener {
+                Log.d(TAG, "Cleared cached auth, now performing silent sign-in")
+                performSilentSignIn(onResult)
+            }
+        } else {
+            Log.i(TAG, "No cached token, performing silent sign-in")
+            performSilentSignIn(onResult)
+        }
+    }
+
+    /**
+     * Internal method to perform the actual silent sign-in.
+     */
+    private fun performSilentSignIn(onResult: (SignInResult) -> Unit) {
         googleSignInClient.silentSignIn()
             .addOnSuccessListener { account ->
-                Log.i(TAG, "Silent sign-in successful: ${account.email}")
+                val token = account.idToken
+                if (token != null) {
+                    val expiry = getTokenExpiry(token)
+                    val remaining = expiry?.let { it - System.currentTimeMillis() / 1000 }
+                    Log.i(TAG, "Silent sign-in successful: ${account.email}, token valid for ${remaining}s")
+                } else {
+                    Log.i(TAG, "Silent sign-in successful: ${account.email} (no ID token)")
+                }
                 onResult(SignInResult.Success(account))
             }
             .addOnFailureListener { e ->

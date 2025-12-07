@@ -17,8 +17,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_DIR="${1:-/tmp/ciris-device-logs}"
+OUTPUT_DIR="/tmp/ciris-device-logs"
 LIVE_MODE="false"
+DEVICE=""
 
 # Package and paths
 PACKAGE="ai.ciris.mobile"
@@ -43,17 +44,22 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse args
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -s)
+            DEVICE="$2"
+            shift 2
+            ;;
         --live)
             LIVE_MODE="true"
             shift
             ;;
         --help|-h)
-            echo "Usage: $0 [output_dir] [options]"
+            echo "Usage: $0 [options] [output_dir]"
             echo ""
             echo "Arguments:"
             echo "  output_dir     Directory to save logs (default: /tmp/ciris-device-logs)"
             echo ""
             echo "Options:"
+            echo "  -s DEVICE      Specify device (like adb -s)"
             echo "  --live         Live tail the Python logs"
             echo "  --help         Show this help"
             echo ""
@@ -114,12 +120,24 @@ main() {
         exit 1
     fi
 
+    # Use specified device or first available
     local device
-    device=$("$ADB" devices | grep -w "device" | grep -v "List" | head -1 | cut -f1)
+    local ADB_DEVICE_FLAG=""
+    if [ -n "$DEVICE" ]; then
+        device="$DEVICE"
+        ADB_DEVICE_FLAG="-s $DEVICE"
+    else
+        device=$("$ADB" devices | grep -w "device" | grep -v "List" | head -1 | cut -f1)
+    fi
     log_info "Device: $device"
 
+    # Create adb command function that includes device flag
+    adb_cmd() {
+        "$ADB" $ADB_DEVICE_FLAG "$@"
+    }
+
     # Check if this is a debug build (run-as will work)
-    if "$ADB" shell "run-as $PACKAGE ls" &>/dev/null; then
+    if adb_cmd shell "run-as $PACKAGE ls" &>/dev/null; then
         CAN_RUN_AS="true"
         log_info "Debug build detected - full file access available"
     else
@@ -132,9 +150,9 @@ main() {
         log_info "Live tailing Python logs... (Ctrl+C to stop)"
         echo ""
         if [ "$CAN_RUN_AS" = "true" ]; then
-            "$ADB" shell "run-as $PACKAGE tail -f $LOGS_DIR/latest.log"
+            adb_cmd shell "run-as $PACKAGE tail -f $LOGS_DIR/latest.log"
         else
-            "$ADB" logcat -v time 'python.stdout:*' 'python.stderr:*' '*:S'
+            adb_cmd logcat -v time 'python.stdout:*' 'python.stderr:*' '*:S'
         fi
         exit 0
     fi
@@ -149,29 +167,29 @@ main() {
     log_info "Collecting app info..."
     {
         echo "=== Device Info ==="
-        "$ADB" shell getprop ro.product.model
-        "$ADB" shell getprop ro.build.version.release
+        adb_cmd shell getprop ro.product.model
+        adb_cmd shell getprop ro.build.version.release
         echo ""
 
         echo "=== Package Info ==="
-        "$ADB" shell dumpsys package $PACKAGE | grep -E "(versionName|versionCode|firstInstallTime|lastUpdateTime)"
+        adb_cmd shell dumpsys package $PACKAGE | grep -E "(versionName|versionCode|firstInstallTime|lastUpdateTime)"
         echo ""
 
         echo "=== Storage Usage ==="
-        "$ADB" shell du -h "$APP_DATA" 2>/dev/null || echo "Not accessible"
+        adb_cmd shell du -h "$APP_DATA" 2>/dev/null || echo "Not accessible"
         echo ""
 
         echo "=== Process Info ==="
-        "$ADB" shell ps | grep -E "(python|ciris)" || echo "No CIRIS processes running"
+        adb_cmd shell ps | grep -E "(python|ciris)" || echo "No CIRIS processes running"
     } > "$OUTPUT_DIR/app_info.txt" 2>&1
     log_success "  app_info.txt"
 
     # 2. Get logcat output
     log_info "Collecting logcat..."
-    "$ADB" logcat -d -v time 'python.stdout:*' 'python.stderr:*' '*:S' > "$OUTPUT_DIR/logcat_python.txt" 2>&1
+    adb_cmd logcat -d -v time 'python.stdout:*' 'python.stderr:*' '*:S' > "$OUTPUT_DIR/logcat_python.txt" 2>&1
     log_success "  logcat_python.txt"
 
-    "$ADB" logcat -d -v time 'AndroidRuntime:E' '*:S' > "$OUTPUT_DIR/logcat_crashes.txt" 2>&1
+    adb_cmd logcat -d -v time 'AndroidRuntime:E' '*:S' > "$OUTPUT_DIR/logcat_crashes.txt" 2>&1
     log_success "  logcat_crashes.txt"
 
     # If we have run-as access, get more files
@@ -187,19 +205,19 @@ main() {
         )
 
         for log_file in "${log_files[@]}"; do
-            if "$ADB" shell "run-as $PACKAGE test -f $LOGS_DIR/$log_file" 2>/dev/null; then
-                "$ADB" shell "run-as $PACKAGE cat $LOGS_DIR/$log_file" > "$OUTPUT_DIR/logs/$log_file" 2>&1
+            if adb_cmd shell "run-as $PACKAGE test -f $LOGS_DIR/$log_file" 2>/dev/null; then
+                adb_cmd shell "run-as $PACKAGE cat $LOGS_DIR/$log_file" > "$OUTPUT_DIR/logs/$log_file" 2>&1
                 log_success "  logs/$log_file"
             fi
         done
 
         # Get dated logs (last 3 days)
-        for log_file in $("$ADB" shell "run-as $PACKAGE ls -t $LOGS_DIR/*.log 2>/dev/null" | head -5); do
+        for log_file in $(adb_cmd shell "run-as $PACKAGE ls -t $LOGS_DIR/*.log 2>/dev/null" | head -5); do
             log_file=$(echo "$log_file" | tr -d '\r')
             if [ -n "$log_file" ]; then
                 local basename
                 basename=$(basename "$log_file")
-                "$ADB" shell "run-as $PACKAGE cat $log_file" > "$OUTPUT_DIR/logs/$basename" 2>&1
+                adb_cmd shell "run-as $PACKAGE cat $log_file" > "$OUTPUT_DIR/logs/$basename" 2>&1
                 log_success "  logs/$basename"
             fi
         done
@@ -208,11 +226,11 @@ main() {
         log_info "Collecting database files..."
         mkdir -p "$OUTPUT_DIR/databases"
 
-        for db_file in $("$ADB" shell "run-as $PACKAGE find $APP_FILES -name '*.db' 2>/dev/null" | tr -d '\r'); do
+        for db_file in $(adb_cmd shell "run-as $PACKAGE find $APP_FILES -name '*.db' 2>/dev/null" | tr -d '\r'); do
             if [ -n "$db_file" ]; then
                 local basename
                 basename=$(basename "$db_file")
-                "$ADB" shell "run-as $PACKAGE cat $db_file" > "$OUTPUT_DIR/databases/$basename" 2>&1
+                adb_cmd shell "run-as $PACKAGE cat $db_file" > "$OUTPUT_DIR/databases/$basename" 2>&1
                 log_success "  databases/$basename"
             fi
         done
@@ -221,18 +239,18 @@ main() {
         log_info "Collecting shared preferences..."
         mkdir -p "$OUTPUT_DIR/prefs"
 
-        for pref_file in $("$ADB" shell "run-as $PACKAGE ls $PREFS_DIR/*.xml 2>/dev/null" | tr -d '\r'); do
+        for pref_file in $(adb_cmd shell "run-as $PACKAGE ls $PREFS_DIR/*.xml 2>/dev/null" | tr -d '\r'); do
             if [ -n "$pref_file" ]; then
                 local basename
                 basename=$(basename "$pref_file")
-                "$ADB" shell "run-as $PACKAGE cat $pref_file" > "$OUTPUT_DIR/prefs/$basename" 2>&1
+                adb_cmd shell "run-as $PACKAGE cat $pref_file" > "$OUTPUT_DIR/prefs/$basename" 2>&1
                 log_success "  prefs/$basename"
             fi
         done
 
         # 6. List files in app directory
         log_info "Collecting file listing..."
-        "$ADB" shell "run-as $PACKAGE find $APP_FILES -type f 2>/dev/null" > "$OUTPUT_DIR/file_listing.txt" 2>&1
+        adb_cmd shell "run-as $PACKAGE find $APP_FILES -type f 2>/dev/null" > "$OUTPUT_DIR/file_listing.txt" 2>&1
         log_success "  file_listing.txt"
 
     else

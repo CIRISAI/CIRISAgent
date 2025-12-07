@@ -18,12 +18,27 @@ IS_RUNNING_DESC = "Whether adapter is running"
 
 
 class AdapterConfig(BaseModel):
-    """Configuration for an adapter."""
+    """Configuration for an adapter.
+
+    This schema supports two configuration approaches:
+    1. Simple adapters (CLI, API, Discord): Use `settings` dict with flat primitives
+    2. Complex adapters (MCP): Use `adapter_config` dict for nested structures
+
+    The adapter's own typed config class (e.g., MCPAdapterConfig, DiscordAdapterConfig)
+    performs full validation when the adapter is loaded.
+    """
 
     adapter_type: str = Field(..., description="Type of adapter (cli, api, discord, etc.)")
     enabled: bool = Field(True, description="Whether adapter is enabled")
     settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = Field(
-        default_factory=dict, description="Adapter-specific settings"
+        default_factory=dict,
+        description="Simple adapter settings (flat primitives only). "
+        "Use adapter_config for complex nested configurations.",
+    )
+    adapter_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Full adapter configuration for adapters requiring nested objects "
+        "(e.g., MCP servers with bus_bindings). Validated by the adapter's typed config class.",
     )
 
 
@@ -114,3 +129,50 @@ class CommunicationAdapterStatus(BaseModel):
     communication_adapters: List[CommunicationAdapterInfo] = Field(..., description="List of adapters")
     safe_to_unload: bool = Field(..., description="Whether safe to unload")
     warning_message: Optional[str] = Field(None, description="Warning message")
+
+
+class ModuleConfigParameter(BaseModel):
+    """Configuration parameter definition for a module."""
+
+    name: str = Field(..., description="Parameter name")
+    param_type: str = Field(..., description="Parameter type (string, integer, float, boolean, array)")
+    default: Optional[Union[str, int, float, bool, List[str]]] = Field(None, description="Default value")
+    description: str = Field(..., description="Parameter description")
+    env_var: Optional[str] = Field(None, description="Environment variable name")
+    required: bool = Field(True, description="Whether parameter is required")
+    sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
+
+
+class ModuleTypeInfo(BaseModel):
+    """Information about an available module/adapter type."""
+
+    module_id: str = Field(..., description="Unique module identifier (e.g., 'api', 'mcp_client')")
+    name: str = Field(..., description="Human-readable module name")
+    version: str = Field(..., description="Module version")
+    description: str = Field(..., description="Module description")
+    author: str = Field(..., description="Module author")
+    module_source: str = Field(..., description="Source: 'core' for built-in or 'modular' for plugin")
+    service_types: List[str] = Field(
+        default_factory=list, description="Service types provided (e.g., TOOL, COMMUNICATION)"
+    )
+    capabilities: List[str] = Field(default_factory=list, description="Capabilities provided")
+    configuration_schema: List[ModuleConfigParameter] = Field(
+        default_factory=list, description="Configuration parameters and their types"
+    )
+    requires_external_deps: bool = Field(False, description="Whether module requires external packages")
+    external_dependencies: Dict[str, str] = Field(
+        default_factory=dict, description="External package dependencies with version constraints"
+    )
+    is_mock: bool = Field(False, description="Whether this is a mock/test module")
+    safe_domain: Optional[str] = Field(None, description="Safe domain classification")
+    prohibited: List[str] = Field(default_factory=list, description="Prohibited use cases")
+    metadata: Optional[Dict[str, Union[str, bool, List[str]]]] = Field(None, description="Additional metadata")
+
+
+class ModuleTypesResponse(BaseModel):
+    """Response containing all available module types."""
+
+    core_modules: List[ModuleTypeInfo] = Field(..., description="Built-in core adapters")
+    modular_services: List[ModuleTypeInfo] = Field(..., description="Dynamically loaded modular services")
+    total_core: int = Field(..., description="Total number of core modules")
+    total_modular: int = Field(..., description="Total number of modular services")

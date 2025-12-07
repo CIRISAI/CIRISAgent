@@ -72,9 +72,14 @@ SKIP_BUILD=false
 SKIP_WEB=false
 CLEAR_DATA=false
 VERIFY_APK=false
+TARGET_DEVICE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -s)
+            TARGET_DEVICE="$2"
+            shift 2
+            ;;
         --skip-build)
             SKIP_BUILD=true
             shift
@@ -95,6 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
+            echo "  -s DEVICE       Target specific device (serial number or emulator-5554)"
             echo "  --skip-build    Skip gradle build, use existing APK"
             echo "  --skip-web      Skip web asset copy (use existing assets)"
             echo "  --clear-data    Clear app data after install"
@@ -129,18 +135,43 @@ if ! ADB=$(find_adb); then
 fi
 log_info "ADB: $ADB"
 
-# Verify device connection early
-log_step "Checking device connection..."
-if ! "$ADB" devices | grep -w "device" | grep -v "List" > /dev/null; then
-    log_error "No device connected. Please connect a device or start an emulator."
-    echo ""
-    echo "Available devices:"
-    "$ADB" devices
-    exit 1
+# Set up device flag for ADB commands
+ADB_DEVICE_FLAG=""
+if [[ -n "$TARGET_DEVICE" ]]; then
+    ADB_DEVICE_FLAG="-s $TARGET_DEVICE"
+    DEVICE="$TARGET_DEVICE"
 fi
 
-DEVICE=$("$ADB" devices | grep -w "device" | grep -v "List" | head -1 | cut -f1)
-DEVICE_MODEL=$("$ADB" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || echo "Unknown")
+# Create adb command function that includes device flag
+adb_cmd() {
+    "$ADB" $ADB_DEVICE_FLAG "$@"
+}
+
+# Verify device connection early
+log_step "Checking device connection..."
+if [[ -n "$TARGET_DEVICE" ]]; then
+    # Check specific device
+    if ! "$ADB" devices | grep "^$TARGET_DEVICE" | grep -w "device" > /dev/null; then
+        log_error "Device $TARGET_DEVICE not connected or not ready."
+        echo ""
+        echo "Available devices:"
+        "$ADB" devices
+        exit 1
+    fi
+else
+    # Auto-detect device
+    if ! "$ADB" devices | grep -w "device" | grep -v "List" > /dev/null; then
+        log_error "No device connected. Please connect a device or start an emulator."
+        echo ""
+        echo "Available devices:"
+        "$ADB" devices
+        exit 1
+    fi
+    DEVICE=$("$ADB" devices | grep -w "device" | grep -v "List" | head -1 | cut -f1)
+    ADB_DEVICE_FLAG="-s $DEVICE"
+fi
+
+DEVICE_MODEL=$(adb_cmd shell getprop ro.product.model 2>/dev/null | tr -d '\r' || echo "Unknown")
 log_success "Device: $DEVICE ($DEVICE_MODEL)"
 
 # Ensure Java 17
@@ -242,7 +273,7 @@ fi
 
 # Install APK
 log_step "Installing APK..."
-if ! "$ADB" install -r "$APK_PATH"; then
+if ! adb_cmd install -r "$APK_PATH"; then
     log_error "Failed to install APK"
     exit 1
 fi
@@ -251,15 +282,15 @@ log_success "APK installed"
 # Clear data if requested
 if [[ "$CLEAR_DATA" == "true" ]]; then
     log_step "Clearing app data..."
-    "$ADB" shell pm clear "$PACKAGE"
+    adb_cmd shell pm clear "$PACKAGE"
     log_success "App data cleared"
 fi
 
 # Clear logcat and launch
 log_step "Launching app..."
-"$ADB" logcat -c
+adb_cmd logcat -c
 # Use monkey to launch - works better than am start with some devices
-"$ADB" shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+adb_cmd shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 log_success "App launched!"
 
 # Print helpful commands

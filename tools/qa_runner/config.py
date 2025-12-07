@@ -34,6 +34,8 @@ class QAModule(Enum):
     SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
     SETUP = "setup"  # Setup wizard testing (first-run configuration)
     STATE_TRANSITIONS = "state_transitions"  # Cognitive state behavior testing
+    COGNITIVE_STATE_API = "cognitive_state"  # Cognitive state transition API testing
+    MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -196,6 +198,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.STATE_TRANSITIONS:
             # State transition tests use SDK client pattern
+            return []  # Will be handled separately by runner
+        elif module == QAModule.MCP:
+            # MCP tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

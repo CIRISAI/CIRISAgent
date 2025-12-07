@@ -1347,7 +1347,11 @@ class AgentProcessor:
 
         elif target_state == AgentState.WORK and current_state == AgentState.DREAM:
             if self.dream_processor:
-                await self.dream_processor.stop_dreaming()
+                # Check if dream is already stopping (e.g., called from within _exit_phase)
+                # to avoid deadlock when awaiting the dream task from within itself
+                is_already_stopping = self.dream_processor._stop_event and self.dream_processor._stop_event.is_set()
+                if not is_already_stopping:
+                    await self.dream_processor.stop_dreaming()
                 summary = self.dream_processor.get_dream_summary()
                 logger.info(f"Dream summary: {summary}")
             else:

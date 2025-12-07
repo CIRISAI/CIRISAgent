@@ -134,7 +134,7 @@ def cpu_count(logical: bool = True) -> int:
 
 
 def disk_usage(path: str):
-    """Return disk usage statistics for the given path."""
+    """Return disk usage statistics for the given path (filesystem level)."""
     try:
         stat = os.statvfs(path)
         total = stat.f_blocks * stat.f_frsize
@@ -145,6 +145,178 @@ def disk_usage(path: str):
     except (OSError, IOError):
         # Return dummy values
         return sdiskusage(total=16 * 1024**3, used=8 * 1024**3, free=8 * 1024**3, percent=50.0)
+
+
+# Named tuple for app-specific storage breakdown
+sappstorage = namedtuple(
+    "sappstorage",
+    ["total", "databases", "files", "cache", "chaquopy", "other"],
+)
+
+# Constants
+_FILES_DIR_SUFFIX = "/files"
+_DB_EXTENSIONS = (".db", ".sqlite", ".sqlite3")
+
+
+def _get_directory_size(path: str) -> int:
+    """Calculate the total size of all files in a directory tree.
+
+    Handles permission errors gracefully and skips inaccessible files.
+    """
+    if not os.path.exists(path):
+        return 0
+
+    total_size = 0
+    try:
+        for dirpath, _dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.lstat(filepath).st_size
+                except (OSError, IOError):
+                    pass
+    except (OSError, IOError):
+        pass
+
+    return total_size
+
+
+def _get_file_size_safe(path: str) -> int:
+    """Get file size safely, returning 0 on error."""
+    try:
+        return os.lstat(path).st_size
+    except (OSError, IOError):
+        return 0
+
+
+def _directory_contains_databases(dir_path: str) -> bool:
+    """Check if a directory contains any database files."""
+    try:
+        return any(f.endswith(_DB_EXTENSIONS) for f in os.listdir(dir_path))
+    except (OSError, IOError):
+        return False
+
+
+def _detect_data_directory() -> str:
+    """Detect the app's data directory from environment or CWD."""
+    data_dir = os.environ.get("HOME", "")
+    if data_dir:
+        return data_dir
+
+    cwd = os.getcwd()
+    files_marker = _FILES_DIR_SUFFIX + "/"
+    if files_marker in cwd:
+        return cwd.split(files_marker)[0] + _FILES_DIR_SUFFIX
+    return cwd
+
+
+def _find_app_root(data_dir: str) -> str:
+    """Find the app's root data directory (parent of 'files')."""
+    if data_dir.endswith(_FILES_DIR_SUFFIX):
+        return os.path.dirname(data_dir)
+    if _FILES_DIR_SUFFIX in data_dir:
+        return data_dir.split(_FILES_DIR_SUFFIX)[0]
+    return data_dir
+
+
+def _categorize_files_item(item_path: str, item_name: str) -> tuple[int, int, int]:
+    """Categorize a single item in the files directory.
+
+    Returns (databases_size, files_size, chaquopy_size).
+    """
+    if item_name == "chaquopy":
+        return (0, 0, _get_directory_size(item_path))
+
+    if item_name.endswith(_DB_EXTENSIONS):
+        return (_get_file_size_safe(item_path), 0, 0)
+
+    if os.path.isdir(item_path):
+        subdir_size = _get_directory_size(item_path)
+        if _directory_contains_databases(item_path):
+            return (subdir_size, 0, 0)
+        return (0, subdir_size, 0)
+
+    return (0, _get_file_size_safe(item_path), 0)
+
+
+def _scan_files_directory(files_dir: str) -> tuple[int, int, int]:
+    """Scan files directory and categorize contents.
+
+    Returns (databases_size, files_size, chaquopy_size).
+    """
+    if not os.path.exists(files_dir):
+        return (0, 0, 0)
+
+    databases_size = 0
+    files_size = 0
+    chaquopy_size = 0
+
+    try:
+        for item in os.listdir(files_dir):
+            item_path = os.path.join(files_dir, item)
+            db, fs, cq = _categorize_files_item(item_path, item)
+            databases_size += db
+            files_size += fs
+            chaquopy_size += cq
+    except (OSError, IOError):
+        pass
+
+    return (databases_size, files_size, chaquopy_size)
+
+
+def _empty_storage() -> sappstorage:
+    """Return an empty storage result."""
+    return sappstorage(total=0, databases=0, files=0, cache=0, chaquopy=0, other=0)
+
+
+def app_storage_usage(data_dir: Optional[str] = None) -> sappstorage:
+    """Return app-specific storage usage breakdown.
+
+    This calculates actual storage used by the app's data directories,
+    not the filesystem-level stats from disk_usage().
+
+    Args:
+        data_dir: Base data directory. If None, tries to detect from environment.
+                  On Android/Chaquopy, this is typically the app's files directory.
+
+    Returns:
+        sappstorage namedtuple with storage breakdown by category.
+    """
+    if data_dir is None:
+        data_dir = _detect_data_directory()
+
+    if not data_dir or not os.path.exists(data_dir):
+        return _empty_storage()
+
+    app_root = _find_app_root(data_dir)
+
+    # Databases directory
+    databases_size = _get_directory_size(os.path.join(app_root, "databases"))
+
+    # Scan files directory
+    files_dir = os.path.join(app_root, "files")
+    db_from_files, files_size, chaquopy_size = _scan_files_directory(files_dir)
+    databases_size += db_from_files
+
+    # Cache directories
+    cache_size = _get_directory_size(os.path.join(app_root, "cache"))
+    cache_size += _get_directory_size(os.path.join(app_root, "code_cache"))
+
+    # Other directories
+    other_size = sum(
+        _get_directory_size(os.path.join(app_root, d)) for d in ["shared_prefs", "app_webview", "no_backup"]
+    )
+
+    total = databases_size + files_size + cache_size + chaquopy_size + other_size
+
+    return sappstorage(
+        total=total,
+        databases=databases_size,
+        files=files_size,
+        cache=cache_size,
+        chaquopy=chaquopy_size,
+        other=other_size,
+    )
 
 
 def net_io_counters():

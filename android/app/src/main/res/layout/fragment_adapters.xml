@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/adaptersRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FAFAFA">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:background="#FFFFFF"
+            android:elevation="2dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Adapters"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1F2937" />
+
+            <!-- Refresh button -->
+            <ImageButton
+                android:id="@+id/refreshButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_rotate"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Refresh"
+                android:tint="#6B7280" />
+
+        </LinearLayout>
+
+        <!-- Status bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:background="#F3F4F6"
+            android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/status_dot_red" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Loading..."
+                android:textSize="12sp"
+                android:textColor="#6B7280" />
+
+            <TextView
+                android:id="@+id/adapterCountText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 adapters"
+                android:textSize="12sp"
+                android:textColor="#6B7280" />
+
+        </LinearLayout>
+
+        <!-- Loading indicator -->
+        <ProgressBar
+            android:id="@+id/loadingIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="32dp"
+            android:visibility="gone" />
+
+        <!-- Empty state -->
+        <LinearLayout
+            android:id="@+id/emptyState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="No adapters found"
+                android:textSize="16sp"
+                android:textColor="#9CA3AF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Tap + to add an adapter"
+                android:textSize="12sp"
+                android:textColor="#D1D5DB" />
+
+        </LinearLayout>
+
+        <!-- Adapter list -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/adaptersRecyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:padding="8dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical" />
+
+    </LinearLayout>
+
+    <!-- FAB for adding new adapter -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/addAdapterFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:contentDescription="Add Adapter"
+        android:src="@android:drawable/ic_input_add"
+        app:backgroundTint="#3B82F6"
+        app:tint="#FFFFFF" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

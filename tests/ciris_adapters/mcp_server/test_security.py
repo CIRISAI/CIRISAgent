@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ciris_modular_services.mcp_server.config import AuthMethod, MCPServerSecurityConfig
-from ciris_modular_services.mcp_server.security import (
+from ciris_adapters.mcp_server.config import AuthMethod, MCPServerSecurityConfig
+from ciris_adapters.mcp_server.security import (
     AuthResult,
     ClientSession,
     MCPServerAuthenticator,

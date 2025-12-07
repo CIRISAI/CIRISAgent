@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ciris_modular_services.reddit.observer import RedditObserver
+from ciris_adapters.reddit.observer import RedditObserver
 
 
 class TestObserverAutoPurge:
@@ -14,7 +14,7 @@ class TestObserverAutoPurge:
     @pytest.fixture
     def mock_observer(self, reddit_credentials, mock_reddit_api_client, mock_time_service):
         """Create mock observer for testing."""
-        with patch("ciris_modular_services.reddit.observer.RedditAPIClient", return_value=mock_reddit_api_client):
+        with patch("ciris_adapters.reddit.observer.RedditAPIClient", return_value=mock_reddit_api_client):
             observer = RedditObserver(
                 credentials=reddit_credentials, subreddit="test", poll_interval=15.0, time_service=mock_time_service
             )
@@ -178,7 +178,7 @@ class TestObserverAutoPurge:
         mock_observer._seen_posts["test123"] = None
 
         # Capture logs
-        with patch("ciris_modular_services.reddit.observer.logger") as mock_logger:
+        with patch("ciris_adapters.reddit.observer.logger") as mock_logger:
             await mock_observer.purge_deleted_content("test123", "submission")
 
             # Verify audit log was created
@@ -264,7 +264,7 @@ class TestObserverAlreadyHandled:
     @pytest.fixture
     def mock_observer_with_occurrence(self, reddit_credentials, mock_reddit_api_client, mock_time_service):
         """Create mock observer with specific occurrence_id."""
-        with patch("ciris_modular_services.reddit.observer.RedditAPIClient", return_value=mock_reddit_api_client):
+        with patch("ciris_adapters.reddit.observer.RedditAPIClient", return_value=mock_reddit_api_client):
             observer = RedditObserver(
                 credentials=reddit_credentials,
                 subreddit="test",

@@ -501,11 +501,11 @@ class RedditModqueueResponse(BaseModel):
 - **Deletion Pattern**: Lines 297-367 (get_deletion_status)
 
 ### Reddit Module
-- **Service**: `ciris_modular_services/reddit/service.py` (1,188 lines)
-- **Schemas**: `ciris_modular_services/reddit/schemas.py` (356 lines)
-- **Observer**: `ciris_modular_services/reddit/observer.py` (162 lines)
-- **Protocol**: `ciris_modular_services/reddit/protocol.py`
-- **README**: `ciris_modular_services/reddit/README.md`
+- **Service**: `ciris_adapters/reddit/service.py` (1,188 lines)
+- **Schemas**: `ciris_adapters/reddit/schemas.py` (356 lines)
+- **Observer**: `ciris_adapters/reddit/observer.py` (162 lines)
+- **Protocol**: `ciris_adapters/reddit/protocol.py`
+- **README**: `ciris_adapters/reddit/README.md`
 
 ### External Documentation
 - **Reddit API Terms**: https://www.reddit.com/wiki/api

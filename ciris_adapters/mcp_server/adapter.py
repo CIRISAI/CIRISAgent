@@ -12,12 +12,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
-from ciris_engine.logic.adapters.base import Service
-from ciris_engine.logic.registries.base import Priority
-from ciris_engine.schemas.adapters import AdapterServiceRegistration
-from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.types import JSONDict
-from ciris_modular_services.mcp_common.protocol import (
+from ciris_adapters.mcp_common.protocol import (
     ClientCapabilities,
     InitializeResult,
     MCPErrorCode,
@@ -29,6 +24,11 @@ from ciris_modular_services.mcp_common.protocol import (
     create_success_response,
     validate_mcp_message,
 )
+from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.registries.base import Priority
+from ciris_engine.schemas.adapters import AdapterServiceRegistration
+from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.types import JSONDict
 
 from .config import MCPServerAdapterConfig, TransportType
 from .handlers import MCPPromptHandler, MCPResourceHandler, MCPToolHandler

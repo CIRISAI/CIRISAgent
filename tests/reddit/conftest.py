@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
-from ciris_modular_services.reddit.schemas import (
+from ciris_adapters.reddit.schemas import (
     RedditChannelReference,
     RedditCommentResult,
     RedditCommentSummary,

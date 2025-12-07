@@ -1,7 +1,7 @@
 REDDIT ADAPTER ANALYSIS - EXECUTIVE SUMMARY
 ============================================
 
-LOCATION: /home/emoore/CIRISAgent/ciris_modular_services/reddit/
+LOCATION: /home/emoore/CIRISAgent/ciris_adapters/reddit/
 
 FILES:
   __init__.py                           - Package exports (3 classes)
@@ -221,12 +221,12 @@ Documentation:           Good
 KEY FILES & ABSOLUTE PATHS
 ============================================
 
-Main service:        /home/emoore/CIRISAgent/ciris_modular_services/reddit/service.py
-Observer:            /home/emoore/CIRISAgent/ciris_modular_services/reddit/observer.py
-Schemas:             /home/emoore/CIRISAgent/ciris_modular_services/reddit/schemas.py
-Protocol:            /home/emoore/CIRISAgent/ciris_modular_services/reddit/protocol.py
-README:              /home/emoore/CIRISAgent/ciris_modular_services/reddit/README.md
-Manifest:            /home/emoore/CIRISAgent/ciris_modular_services/reddit/manifest.json
+Main service:        /home/emoore/CIRISAgent/ciris_adapters/reddit/service.py
+Observer:            /home/emoore/CIRISAgent/ciris_adapters/reddit/observer.py
+Schemas:             /home/emoore/CIRISAgent/ciris_adapters/reddit/schemas.py
+Protocol:            /home/emoore/CIRISAgent/ciris_adapters/reddit/protocol.py
+README:              /home/emoore/CIRISAgent/ciris_adapters/reddit/README.md
+Manifest:            /home/emoore/CIRISAgent/ciris_adapters/reddit/manifest.json
 
 ============================================
 RECOMMENDATIONS (Priority Order)

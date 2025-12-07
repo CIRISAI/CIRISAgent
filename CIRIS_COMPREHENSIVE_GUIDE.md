@@ -804,8 +804,8 @@ The SQL External Data Service implements:
 ### Detailed Documentation
 
 For comprehensive implementation details, see:
-- **[SQL External Data Service README](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/README.md)** - Complete service documentation
-- **[Privacy Schema Examples](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/examples/)** - Real-world configurations
+- **[SQL External Data Service README](/home/emoore/CIRISAgent/ciris_adapters/external_data_sql/README.md)** - Complete service documentation
+- **[Privacy Schema Examples](/home/emoore/CIRISAgent/ciris_adapters/external_data_sql/examples/)** - Real-world configurations
 - **[DSAR Automation Guide](/home/emoore/CIRISAgent/docs/DSAR_AUTOMATION.md)** - Multi-source DSAR orchestration
 
 ---

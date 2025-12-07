@@ -1,13 +1,13 @@
 # CodeQL Configuration for GitHub Code Quality
 # This configuration limits code quality analysis to production code directories
-# Mirrors SonarCloud configuration scope: ciris_engine/ and ciris_modular_services/
+# Mirrors SonarCloud configuration scope: ciris_engine/ and ciris_adapters/
 
 name: "CIRIS Code Quality Config"
 
 # Include only production code directories
 paths:
   - ciris_engine
-  - ciris_modular_services
+  - ciris_adapters
 
 # Exclude test files, tools, documentation, and other non-production code
 # This matches the SonarCloud exclusion pattern

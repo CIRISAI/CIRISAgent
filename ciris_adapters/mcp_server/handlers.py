@@ -11,14 +11,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_modular_services.mcp_common.protocol import (
+from ciris_adapters.mcp_common.protocol import (
     MCPErrorCode,
     MCPMessage,
     MCPMessageType,
     create_error_response,
     create_success_response,
 )
-from ciris_modular_services.mcp_common.schemas import (
+from ciris_adapters.mcp_common.schemas import (
     MCPListPromptsResult,
     MCPListResourcesResult,
     MCPListToolsResult,
@@ -447,7 +447,7 @@ class MCPPromptHandler:
 
     def _register_default_prompts(self) -> None:
         """Register default CIRIS prompts."""
-        from ciris_modular_services.mcp_common.schemas import MCPPromptArgument
+        from ciris_adapters.mcp_common.schemas import MCPPromptArgument
 
         # Guidance prompt
         self._prompts_cache["guidance"] = MCPPromptInfo(
@@ -516,7 +516,7 @@ class MCPPromptHandler:
         if not self._should_expose_prompt(name):
             return
 
-        from ciris_modular_services.mcp_common.schemas import MCPPromptArgument
+        from ciris_adapters.mcp_common.schemas import MCPPromptArgument
 
         self._prompts_cache[name] = MCPPromptInfo(
             name=name,

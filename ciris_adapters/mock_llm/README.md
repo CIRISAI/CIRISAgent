@@ -46,7 +46,7 @@ When CIRIS starts with `--mock-llm` flag:
 2. Update manifest.json with your service details
 3. Implement required protocols
 4. Define schemas for your data structures
-5. Place in ciris_modular_services/ directory
+5. Place in ciris_adapters/ directory
 6. CIRIS will auto-discover on startup
 
 ## Testing

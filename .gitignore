@@ -100,4 +100,4 @@ android_gui_static/
 
 # Android synced Python code (copied by build-android.sh, not source of truth)
 android/app/src/main/python/ciris_engine/
-android/app/src/main/python/ciris_modular_services/
+android/app/src/main/python/ciris_adapters/

@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from ciris_modular_services.reddit.schemas import RedditDisclosureRequest
-from ciris_modular_services.reddit.service import RedditToolService
+from ciris_adapters.reddit.schemas import RedditDisclosureRequest
+from ciris_adapters.reddit.service import RedditToolService
 
 
 class TestTransparencyCompliance:

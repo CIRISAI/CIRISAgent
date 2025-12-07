@@ -282,7 +282,7 @@ Beyond the 22 core services, CIRIS supports **modular tool services** that can b
 **Purpose**: DSAR/GDPR compliance for external SQL databases
 **Protocol**: `SQLDataSourceProtocol` (implements `ToolServiceProtocol`)
 **Bus**: `ToolBus` (dynamic tool registration)
-**Location**: `ciris_modular_services/external_data_sql/`
+**Location**: `ciris_adapters/external_data_sql/`
 
 **Architecture Patterns**:
 
@@ -1099,7 +1099,7 @@ Key decisions that shaped CIRIS:
 
 ### Adding a Modular Service
 
-1. Create directory in `ciris_modular_services/`
+1. Create directory in `ciris_adapters/`
 2. Define manifest.json with service metadata
 3. Implement protocol extending `ToolServiceProtocol` (for tools)
 4. Create Pydantic schemas (no Dict[str, Any])

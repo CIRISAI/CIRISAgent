@@ -13,14 +13,14 @@ from unittest.mock import Mock
 import pytest
 import pytest_asyncio
 
-from ciris_engine.protocols.services import TimeServiceProtocol
-from ciris_modular_services.external_data_sql.schemas import (
+from ciris_adapters.external_data_sql.schemas import (
     PrivacyColumnMapping,
     PrivacySchemaConfig,
     PrivacyTableMapping,
     SQLConnectorConfig,
     SQLDialect,
 )
+from ciris_engine.protocols.services import TimeServiceProtocol
 
 
 # Helper class that mimics SQLToolService for metadata testing
@@ -28,7 +28,7 @@ class SQLServiceMetadataTestHelper:
     """Minimal helper for testing get_service_metadata() without full service instantiation."""
 
     def __init__(self, config=None):
-        from ciris_modular_services.external_data_sql.dialects import get_dialect
+        from ciris_adapters.external_data_sql.dialects import get_dialect
 
         self._config = config
         self._connector_id = config.connector_id if config else "sql"

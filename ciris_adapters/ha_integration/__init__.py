@@ -12,9 +12,15 @@ Designed for the CIRISHome hardware stack:
 - Home Assistant Yellow for smart home control
 - Voice PE for voice interaction
 
+Interactive Configuration:
+- mDNS/Zeroconf discovery for Home Assistant instances
+- OAuth2 authentication using HA's IndieAuth-style flow
+- Feature selection and camera configuration
+
 SAFE DOMAIN: Home automation only. Medical/health capabilities are prohibited.
 """
 
+from .configurable import HAConfigurableAdapter
 from .schemas import (
     CameraAnalysisResult,
     CameraFrame,
@@ -30,7 +36,11 @@ from .schemas import (
 from .service import HAIntegrationService
 
 __all__ = [
+    # Service
     "HAIntegrationService",
+    # Configurable adapter
+    "HAConfigurableAdapter",
+    # Schemas
     "DetectionEvent",
     "CameraFrame",
     "CameraStatus",

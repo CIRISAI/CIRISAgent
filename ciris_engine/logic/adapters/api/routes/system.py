@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, ValidationError, field_serializer
 
 from ciris_engine.constants import CIRIS_VERSION
@@ -217,6 +217,16 @@ class ToolInfoResponse(BaseModel):
 # Adapter Configuration Response Models
 
 
+class ConfigStepInfo(BaseModel):
+    """Information about a configuration step."""
+
+    step_id: str = Field(..., description="Unique step identifier")
+    step_type: str = Field(..., description="Type of step (discovery, oauth, select, confirm)")
+    title: str = Field(..., description="Step title")
+    description: str = Field(..., description="Step description")
+    optional: bool = Field(False, description="Whether this step is optional")
+
+
 class ConfigurableAdapterInfo(BaseModel):
     """Information about an adapter that supports interactive configuration."""
 
@@ -226,6 +236,7 @@ class ConfigurableAdapterInfo(BaseModel):
     workflow_type: str = Field(..., description="Type of configuration workflow")
     step_count: int = Field(..., description="Number of steps in the configuration workflow")
     requires_oauth: bool = Field(False, description="Whether this adapter requires OAuth authentication")
+    steps: List[ConfigStepInfo] = Field(default_factory=list, description="Configuration steps")
 
 
 class ConfigurableAdaptersResponse(BaseModel):
@@ -1885,6 +1896,16 @@ async def list_configurable_adapters(
                     workflow_type=manifest.workflow_type,
                     step_count=len(manifest.steps),
                     requires_oauth=requires_oauth,
+                    steps=[
+                        ConfigStepInfo(
+                            step_id=step.step_id,
+                            step_type=step.step_type,
+                            title=step.title,
+                            description=step.description,
+                            optional=getattr(step, "optional", False),
+                        )
+                        for step in manifest.steps
+                    ],
                 )
             )
 
@@ -2253,21 +2274,81 @@ async def execute_configuration_step(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/adapters/configure/{session_id}/status")
+async def get_session_status(
+    session_id: str,
+    request: Request,
+) -> SuccessResponse[ConfigurationSessionResponse]:
+    """
+    Get the current status of a configuration session.
+
+    Useful for polling after OAuth callback to check if authentication completed.
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+        session = config_service.get_session(session_id)
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Get adapter steps from the adapter manifest (InteractiveConfiguration)
+        current_step = None
+        total_steps = 0
+        manifest = config_service._adapter_manifests.get(session.adapter_type)
+        if manifest and manifest.steps:
+            steps = manifest.steps
+            total_steps = len(steps)
+            if session.current_step_index < len(steps):
+                # Use the ConfigurationStep directly from the manifest
+                current_step = steps[session.current_step_index]
+
+        response = ConfigurationSessionResponse(
+            session_id=session.session_id,
+            adapter_type=session.adapter_type,
+            status=session.status.value,
+            current_step_index=session.current_step_index,
+            current_step=current_step,
+            total_steps=total_steps,
+            created_at=session.created_at,
+        )
+
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/adapters/configure/{session_id}/oauth/callback")
 async def oauth_callback(
     session_id: str,
     code: str,
     state: str,
     request: Request,
-) -> JSONDict:
+) -> Response:
     """
     Handle OAuth callback from external service.
 
     This endpoint is called by OAuth providers after user authorization.
     It processes the authorization code and advances the configuration workflow.
+    Returns HTML that redirects back to the app or shows success message.
 
     No authentication required (OAuth state validation provides security).
     """
+    logger.info("=" * 60)
+    logger.info("[OAUTH CALLBACK] *** CALLBACK RECEIVED ***")
+    logger.info(f"[OAUTH CALLBACK] Full URL: {request.url}")
+    logger.info(f"[OAUTH CALLBACK] Path: {request.url.path}")
+    logger.info(f"[OAUTH CALLBACK] session_id: {session_id}")
+    logger.info(f"[OAUTH CALLBACK] state: {state}")
+    logger.info(f"[OAUTH CALLBACK] code length: {len(code)}")
+    logger.info(
+        f"[OAUTH CALLBACK] code preview: {code[:20]}..." if len(code) > 20 else f"[OAUTH CALLBACK] code: {code}"
+    )
+    logger.info(f"[OAUTH CALLBACK] Headers: {dict(request.headers)}")
+    logger.info("=" * 60)
     try:
         config_service = _get_adapter_config_service(request)
 
@@ -2283,21 +2364,123 @@ async def oauth_callback(
         result = await config_service.execute_step(session_id, {"code": code, "state": state})
 
         if not result.success:
-            return {
-                "status": "error",
-                "message": result.error or "OAuth callback failed",
-            }
+            error_html = f"""<!DOCTYPE html>
+<html>
+<head><title>OAuth Failed</title></head>
+<body style="font-family: sans-serif; text-align: center; padding: 50px;">
+    <h1 style="color: #d32f2f;">Authentication Failed</h1>
+    <p>{result.error or "OAuth callback failed"}</p>
+    <p>Please close this window and try again in the app.</p>
+</body>
+</html>"""
+            return Response(content=error_html, media_type="text/html")
 
-        return {
-            "status": "success",
-            "message": "OAuth authentication successful",
-            "session_id": session_id,
-        }
+        # Return HTML that tells user to go back to app
+        # Try to use deep link to return to app automatically
+        success_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>OAuth Success</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="font-family: sans-serif; text-align: center; padding: 50px; background: #f5f5f5;">
+    <div style="background: white; padding: 40px; border-radius: 10px; max-width: 400px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <h1 style="color: #4caf50; margin-bottom: 20px;">✓ Connected!</h1>
+        <p style="color: #666; font-size: 18px;">Authentication successful.</p>
+        <p style="color: #888; margin-top: 20px;">You can close this window and return to the CIRIS app.</p>
+        <p style="color: #aaa; font-size: 12px; margin-top: 30px;">Session: {session_id[:8]}...</p>
+    </div>
+</body>
+</html>"""
+        return Response(content=success_html, media_type="text/html")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error handling OAuth callback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/adapters/oauth/callback")
+async def oauth_deeplink_callback(
+    code: str,
+    state: str,
+    request: Request,
+    provider: Optional[str] = None,
+    source: Optional[str] = None,
+) -> SuccessResponse[Dict[str, Any]]:
+    """
+    Handle OAuth callback forwarded from Android deep link (ciris://oauth/callback).
+
+    This endpoint receives OAuth callbacks that were forwarded from OAuthCallbackActivity
+    on Android. The Android app uses a deep link (ciris://oauth/callback) to receive
+    the OAuth redirect from the system browser, then forwards to this endpoint.
+
+    This is a generic endpoint that works for any OAuth2 provider (Home Assistant,
+    Discord, Google, Microsoft, Reddit, etc.) - the state parameter contains the
+    session_id which identifies the configuration session.
+
+    Args:
+        code: Authorization code from OAuth provider
+        state: State parameter (contains session_id for session lookup)
+        provider: Optional provider hint (home_assistant, discord, etc.)
+        source: Source of callback (deeplink indicates forwarded from Android)
+
+    Returns:
+        Success response with callback processing result
+    """
+    logger.info("=" * 60)
+    logger.info("[OAUTH DEEPLINK CALLBACK] *** FORWARDED CALLBACK RECEIVED ***")
+    logger.info(f"[OAUTH DEEPLINK CALLBACK] Full URL: {request.url}")
+    logger.info(f"[OAUTH DEEPLINK CALLBACK] state (session_id): {state}")
+    logger.info(f"[OAUTH DEEPLINK CALLBACK] provider: {provider}")
+    logger.info(f"[OAUTH DEEPLINK CALLBACK] source: {source}")
+    logger.info(f"[OAUTH DEEPLINK CALLBACK] code length: {len(code)}")
+    logger.info("=" * 60)
+
+    try:
+        config_service = _get_adapter_config_service(request)
+
+        # The state parameter IS the session_id
+        session_id = state
+
+        # Handle provider-prefixed state (e.g., "ha:actual_session_id")
+        if ":" in state:
+            parts = state.split(":", 1)
+            if len(parts) == 2 and len(parts[0]) < 20:
+                # Looks like "provider:session_id"
+                provider = provider or parts[0]
+                session_id = parts[1]
+                logger.info(f"[OAUTH DEEPLINK CALLBACK] Extracted provider={provider}, session_id={session_id}")
+
+        # Verify session exists
+        session = config_service.get_session(session_id)
+        if not session:
+            logger.error(f"[OAUTH DEEPLINK CALLBACK] Session not found: {session_id}")
+            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+
+        # Execute the OAuth callback step
+        result = await config_service.execute_step(session_id, {"code": code, "state": state})
+
+        if not result.success:
+            logger.error(f"[OAUTH DEEPLINK CALLBACK] OAuth step failed: {result.error}")
+            raise HTTPException(status_code=400, detail=result.error or "OAuth callback failed")
+
+        logger.info(f"[OAUTH DEEPLINK CALLBACK] Successfully processed OAuth callback for session {session_id}")
+
+        return SuccessResponse(
+            data={
+                "session_id": session_id,
+                "success": True,
+                "message": "OAuth callback processed successfully",
+                "next_step": result.next_step_index,
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[OAUTH DEEPLINK CALLBACK] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2331,9 +2514,60 @@ async def complete_configuration(
         # Complete the session and apply config
         success = await adapter_config_service.complete_session(session_id)
         persisted = False
+        adapter_started = False
 
         if success:
             message = f"Configuration applied successfully for {session.adapter_type}"
+            logger.info(f"[COMPLETE_CONFIG] Config applied, attempting to start adapter for {session.adapter_type}")
+
+            # Load the adapter using RuntimeControlService.load_adapter for proper registration
+            # This ensures the adapter appears in the adapters list and gets tools registered
+            # IMPORTANT: Use main_runtime_control_service to match what list_adapters uses
+            try:
+                runtime_control_service = getattr(request.app.state, "main_runtime_control_service", None)
+                if not runtime_control_service:
+                    # Fallback to runtime_control_service
+                    runtime_control_service = getattr(request.app.state, "runtime_control_service", None)
+                if not runtime_control_service:
+                    # Try to get from service registry
+                    service_registry = getattr(request.app.state, "service_registry", None)
+                    if service_registry:
+                        from ciris_engine.schemas.runtime.enums import ServiceType
+
+                        runtime_control_service = await service_registry.get_service(
+                            handler="api", service_type=ServiceType.RUNTIME_CONTROL
+                        )
+
+                if runtime_control_service:
+                    logger.info(f"[COMPLETE_CONFIG] Loading adapter via RuntimeControlService.load_adapter")
+
+                    # Build config dict for the adapter from collected config
+                    adapter_config = dict(session.collected_config)
+
+                    # Generate a unique adapter_id
+                    import uuid
+
+                    adapter_id = f"{session.adapter_type}_{uuid.uuid4().hex[:8]}"
+
+                    load_result = await runtime_control_service.load_adapter(
+                        adapter_type=session.adapter_type,
+                        adapter_id=adapter_id,
+                        config=adapter_config,
+                    )
+
+                    if load_result.success:
+                        adapter_started = True
+                        message += f" - adapter '{adapter_id}' loaded and started"
+                        logger.info(f"[COMPLETE_CONFIG] Adapter loaded successfully: {adapter_id}")
+                    else:
+                        message += f" - adapter load failed: {load_result.error}"
+                        logger.error(f"[COMPLETE_CONFIG] Adapter load failed: {load_result.error}")
+                else:
+                    logger.warning("[COMPLETE_CONFIG] RuntimeControlService not available, adapter not loaded")
+                    message += " - runtime control service unavailable"
+            except Exception as e:
+                logger.error(f"Error loading adapter after config: {e}", exc_info=True)
+                message += f" - adapter load error: {e}"
 
             # Persist if requested
             if body.persist:

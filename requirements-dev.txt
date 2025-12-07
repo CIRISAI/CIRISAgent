@@ -24,3 +24,6 @@ astunparse>=1.6.3,<2.0.0
 
 # QA Testing Tools
 websocket-client>=1.6.0,<2.0.0  # For QA runner WebSocket testing
+
+# Network Discovery (for testing mDNS features)
+zeroconf>=0.39.0,<1.0.0  # 0.39.x for Python 3.10, 0.80+ for Python 3.11+

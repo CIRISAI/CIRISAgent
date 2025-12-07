@@ -1,0 +1,104 @@
+{
+  "module": {
+    "name": "navigation",
+    "version": "1.0.0",
+    "description": "Navigation tool service using OpenStreetMap for geocoding and routing",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "TOOL",
+    "priority": "NORMAL",
+    "class": "navigation.service.NavigationToolService",
+    "capabilities": [
+      "navigation:geocode",
+      "navigation:reverse_geocode",
+      "navigation:route",
+      "domain:navigation"
+    ]
+  }],
+  "capabilities": [
+    "navigation:geocode",
+    "navigation:reverse_geocode",
+    "navigation:route",
+    "domain:navigation"
+  ],
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "user_agent",
+        "step_type": "input",
+        "title": "Configure User Agent",
+        "description": "Enter a user agent for OpenStreetMap API requests (required by OSM policy)",
+        "field": "user_agent",
+        "required": true,
+        "placeholder": "CIRIS/1.0 (your.email@example.com)",
+        "validation": {
+          "min_length": 10,
+          "pattern": ".*"
+        }
+      },
+      {
+        "step_id": "rate_limit",
+        "step_type": "select",
+        "title": "Configure Rate Limiting",
+        "description": "Select how long to wait between API requests (OSM recommends 1+ seconds)",
+        "field": "rate_limit_seconds",
+        "required": false,
+        "optional": true,
+        "options_method": "get_config_options"
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your Navigation configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolServiceProtocol",
+      "ciris_engine.protocols.adapters.configurable.ConfigurableAdapterProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0"
+    }
+  },
+  "exports": {
+    "service_class": "navigation.service.NavigationToolService",
+    "configurable": "navigation.configurable.NavigationConfigurableAdapter",
+    "capabilities": [
+      "navigation:geocode",
+      "navigation:reverse_geocode",
+      "navigation:route",
+      "domain:navigation"
+    ]
+  },
+  "configuration": {
+    "osm_user_agent": {
+      "type": "string",
+      "env": "CIRIS_OSM_USER_AGENT",
+      "default": "CIRIS/1.0 (contact@ciris.ai)",
+      "description": "User agent for OpenStreetMap API (required by OSM policy)"
+    },
+    "rate_limit_seconds": {
+      "type": "float",
+      "default": 1.0,
+      "description": "Minimum seconds between OSM API requests"
+    }
+  },
+  "metadata": {
+    "api": "OpenStreetMap Nominatim + OSRM",
+    "requires_api_key": false,
+    "safe_domain": "navigation",
+    "data_source": true,
+    "data_source_type": "rest"
+  }
+}

@@ -29,6 +29,9 @@ ACTIVITY="$PACKAGE/.MainActivity"
 GUI_STATIC_DIR="$PROJECT_ROOT/android_gui_static"
 ASSETS_DIR="$ANDROID_DIR/app/src/main/assets/public"
 PYTHON_GUI_DIR="$ANDROID_DIR/app/src/main/python/android_gui_static"
+PYTHON_SRC_DIR="$ANDROID_DIR/app/src/main/python"
+MAIN_CIRIS_ENGINE="$PROJECT_ROOT/ciris_engine"
+MAIN_CIRIS_ADAPTERS="$PROJECT_ROOT/ciris_adapters"
 APK_PATH="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
 # Colors for output
@@ -70,6 +73,7 @@ find_adb() {
 # Parse arguments
 SKIP_BUILD=false
 SKIP_WEB=false
+SKIP_PYTHON=false
 CLEAR_DATA=false
 VERIFY_APK=false
 TARGET_DEVICE=""
@@ -88,6 +92,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_WEB=true
             shift
             ;;
+        --skip-python)
+            SKIP_PYTHON=true
+            shift
+            ;;
         --clear-data)
             CLEAR_DATA=true
             shift
@@ -103,6 +111,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -s DEVICE       Target specific device (serial number or emulator-5554)"
             echo "  --skip-build    Skip gradle build, use existing APK"
             echo "  --skip-web      Skip web asset copy (use existing assets)"
+            echo "  --skip-python   Skip Python source sync (use existing sources)"
             echo "  --clear-data    Clear app data after install"
             echo "  --verify        Verify APK contents before deploy"
             echo "  --help          Show this help message"
@@ -183,6 +192,39 @@ fi
 log_info "Java: $JAVA_HOME"
 
 cd "$ANDROID_DIR"
+
+# Sync Python sources if not skipping
+if [[ "$SKIP_PYTHON" != "true" && "$SKIP_BUILD" != "true" ]]; then
+    log_step "Syncing Python sources from main project..."
+
+    # Sync ciris_engine
+    if [[ -d "$MAIN_CIRIS_ENGINE" ]]; then
+        rm -rf "$PYTHON_SRC_DIR/ciris_engine"
+        cp -r "$MAIN_CIRIS_ENGINE" "$PYTHON_SRC_DIR/ciris_engine"
+        find "$PYTHON_SRC_DIR/ciris_engine" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        engine_count=$(find "$PYTHON_SRC_DIR/ciris_engine" -name "*.py" | wc -l)
+        log_info "  -> ciris_engine: $engine_count Python files"
+    else
+        log_error "ciris_engine not found at $MAIN_CIRIS_ENGINE"
+        exit 1
+    fi
+
+    # Sync ciris_adapters
+    if [[ -d "$MAIN_CIRIS_ADAPTERS" ]]; then
+        rm -rf "$PYTHON_SRC_DIR/ciris_adapters"
+        cp -r "$MAIN_CIRIS_ADAPTERS" "$PYTHON_SRC_DIR/ciris_adapters"
+        find "$PYTHON_SRC_DIR/ciris_adapters" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        adapters_count=$(find "$PYTHON_SRC_DIR/ciris_adapters" -name "*.py" | wc -l)
+        log_info "  -> ciris_adapters: $adapters_count Python files"
+    else
+        log_error "ciris_adapters not found at $MAIN_CIRIS_ADAPTERS"
+        exit 1
+    fi
+
+    log_success "Python sources synced"
+elif [[ "$SKIP_PYTHON" == "true" ]]; then
+    log_info "Skipping Python source sync (--skip-python)"
+fi
 
 # Copy web assets if not skipping
 if [[ "$SKIP_WEB" != "true" && "$SKIP_BUILD" != "true" ]]; then

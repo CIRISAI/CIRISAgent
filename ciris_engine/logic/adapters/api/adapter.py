@@ -254,6 +254,42 @@ class ApiPlatform(Service):
             else:
                 logger.warning(f"Runtime attribute '{runtime_attr}' is None - skipping injection")
 
+    def _inject_adapter_manager_to_api_runtime_control(self) -> None:
+        """Inject main RuntimeControlService's adapter_manager into APIRuntimeControlService.
+
+        This ensures a single source of truth for loaded adapters. Without this,
+        adapters loaded via one service won't be visible in the other.
+
+        CRITICAL: This must be called after _inject_services() so main_runtime_control_service
+        is available in app.state.
+        """
+        main_runtime_control = getattr(self.app.state, "main_runtime_control_service", None)
+        if not main_runtime_control:
+            raise RuntimeError(
+                "CRITICAL: main_runtime_control_service not available in app.state. "
+                "This indicates a startup sequencing issue. Cannot inject adapter_manager."
+            )
+
+        # Trigger lazy initialization of adapter_manager if needed
+        # The main RuntimeControlService has _ensure_adapter_manager_initialized() for this
+        if hasattr(main_runtime_control, "_ensure_adapter_manager_initialized"):
+            main_runtime_control._ensure_adapter_manager_initialized()
+
+        adapter_manager = getattr(main_runtime_control, "adapter_manager", None)
+        if not adapter_manager:
+            raise RuntimeError(
+                "CRITICAL: main_runtime_control_service has no adapter_manager even after "
+                "_ensure_adapter_manager_initialized(). This indicates the main RuntimeControlService "
+                "has no runtime reference. Check service initialization order."
+            )
+
+        # Inject into APIRuntimeControlService
+        self.runtime_control.adapter_manager = adapter_manager
+        logger.info(
+            f"Injected main RuntimeControlService's adapter_manager (id: {id(adapter_manager)}) "
+            f"into APIRuntimeControlService - single source of truth established"
+        )
+
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""
         # CRITICAL: Preserve existing APIAuthService if it already exists (has stored API keys)
@@ -377,17 +413,10 @@ class ApiPlatform(Service):
         # Find ciris_adapters directory - try multiple methods for Android compatibility
         adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
 
-        # Known adapters with interactive configuration
-        # Used as fallback when filesystem discovery doesn't work (Android/Chaquopy)
-        KNOWN_CONFIGURABLE_ADAPTERS = [
-            "ha_integration",
-            "sample_adapter",
-        ]
-
         if not adapters_dir.exists():
-            # Fallback for Android: use importlib.resources to read manifests
+            # Fallback for Android: use importlib.resources to discover adapters dynamically
             logger.info(f"Filesystem adapters directory not found ({adapters_dir}), using importlib discovery")
-            self._discover_adapters_via_importlib(KNOWN_CONFIGURABLE_ADAPTERS)
+            self._discover_adapters_via_importlib()
             return
 
         registered_count = 0
@@ -466,17 +495,32 @@ class ApiPlatform(Service):
 
         logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
 
-    def _discover_adapters_via_importlib(self, adapter_names: list) -> None:
-        """Discover adapters using importlib (Android/Chaquopy compatible).
+    def _discover_adapters_via_importlib(self) -> None:
+        """Discover adapters dynamically using importlib (Android/Chaquopy compatible).
 
-        Args:
-            adapter_names: List of adapter package names to discover
+        Uses pkgutil.iter_modules to find all subpackages in ciris_adapters,
+        then checks each for a manifest.json with interactive_config.
         """
         import importlib
         import importlib.resources
         import json
+        import pkgutil
 
         from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        # Dynamically discover all adapter subpackages
+        try:
+            import ciris_adapters
+
+            adapter_names = [
+                name
+                for importer, name, ispkg in pkgutil.iter_modules(ciris_adapters.__path__)
+                if ispkg and not name.startswith("_")
+            ]
+            logger.info(f"Discovered {len(adapter_names)} adapter packages via pkgutil: {adapter_names}")
+        except ImportError:
+            logger.warning("ciris_adapters package not found, no adapters to discover")
+            return
 
         registered_count = 0
 
@@ -506,15 +550,19 @@ class ApiPlatform(Service):
                             manifest_text = f.read()
 
                     manifest_data = json.loads(manifest_text)
+                    logger.info(f"Successfully read manifest for {adapter_name}")
 
                 except Exception as e:
-                    logger.debug(f"Could not read manifest for {adapter_name}: {e}")
+                    logger.warning(f"Could not read manifest for {adapter_name}: {e}")
                     continue
 
                 # Check if this adapter has interactive configuration
                 interactive_config_data = manifest_data.get("interactive_config")
                 if not interactive_config_data:
+                    logger.debug(f"Adapter {adapter_name} has no interactive_config, skipping")
                     continue
+
+                logger.info(f"Found interactive_config for adapter: {adapter_name}")
 
                 # Parse steps into ConfigurationStep objects
                 steps = []
@@ -585,8 +633,14 @@ class ApiPlatform(Service):
             logger.debug("No config_service available - skipping persisted adapter restoration")
             return
 
+        # Get runtime control service for loading adapters
+        runtime_control_service = self.runtime_control
+
         try:
-            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(config_service)
+            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(
+                config_service=config_service,
+                runtime_control_service=runtime_control_service,
+            )
             if restored_count > 0:
                 logger.info(f"Restored {restored_count} persisted adapter configuration(s)")
         except Exception as e:
@@ -633,6 +687,10 @@ class ApiPlatform(Service):
 
         # Inject services now that they're initialized
         self._inject_services()
+
+        # Inject main RuntimeControlService's adapter_manager into APIRuntimeControlService
+        # This ensures a single source of truth for loaded adapters
+        self._inject_adapter_manager_to_api_runtime_control()
 
         # Discover and register configurable adapters
         self._discover_and_register_configurable_adapters()

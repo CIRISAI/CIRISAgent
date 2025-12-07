@@ -92,6 +92,11 @@ android {
                 install "croniter==2.0.7"
                 install "python-dateutil==2.8.2"  // croniter dependency
 
+                // Network discovery (pure Python - mDNS/DNS-SD for Home Assistant)
+                // Note: zeroconf 0.40+ requires Python 3.11+, so we use 0.39.4 for Python 3.10
+                install "zeroconf==0.39.4"
+                install "ifaddr==0.2.0"  // zeroconf dependency for network interface detection
+
                 // Note: psutil is NOT included - it requires native compilation
                 // Instead, we provide an android-specific stub at src/main/python/psutil.py
 
@@ -278,6 +283,9 @@ dependencies {
 
     // WebView for bundled UI
     implementation "androidx.webkit:webkit:1.9.0"
+
+    // Chrome Custom Tabs for OAuth flows (allows password manager access)
+    implementation "androidx.browser:browser:1.7.0"
 
     // Google Play Billing for in-app purchases (7.0.0+ required by Google Play policy)
     implementation "com.android.billingclient:billing-ktx:7.1.1"

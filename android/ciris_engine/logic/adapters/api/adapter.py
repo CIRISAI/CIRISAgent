@@ -1,0 +1,834 @@
+"""
+API adapter for CIRIS v1.
+
+Provides RESTful API and WebSocket interfaces to the CIRIS agent.
+"""
+
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, List, Optional
+
+import uvicorn
+from fastapi import FastAPI
+from uvicorn import Server
+
+from ciris_engine.logic import persistence
+from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
+from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
+from ciris_engine.schemas.adapters import AdapterServiceRegistration
+from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
+from ciris_engine.schemas.runtime.system_context import ChannelContext
+from ciris_engine.schemas.telemetry.core import (
+    ServiceCorrelation,
+    ServiceCorrelationStatus,
+    ServiceRequestData,
+    ServiceResponseData,
+)
+
+from .api_communication import APICommunicationService
+from .api_observer import APIObserver
+from .api_runtime_control import APIRuntimeControlService
+from .api_tools import APIToolService
+from .app import create_app
+from .config import APIAdapterConfig
+from .service_configuration import ApiServiceConfiguration
+from .services.auth_service import APIAuthService
+
+logger = logging.getLogger(__name__)
+
+
+class ApiPlatform(Service):
+    """API adapter platform for CIRIS v1."""
+
+    config: APIAdapterConfig  # type: ignore[assignment]
+
+    def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
+        """Initialize API adapter."""
+        # Import moved to top-level to avoid forward reference issues
+
+        super().__init__(config=kwargs.get("adapter_config"))
+        self.runtime = runtime
+
+        # Start with default configuration
+        self.config = APIAdapterConfig()
+
+        # Load environment variables first (provides defaults)
+        self.config.load_env_vars()
+
+        # Then apply user-provided configuration (takes precedence over env vars)
+        # NOTE: Do NOT call load_env_vars() after this - the config dict already
+        # represents the final desired config with CLI args taking precedence.
+        # Calling load_env_vars() would override CLI args with .env values.
+        if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
+            if isinstance(kwargs["adapter_config"], APIAdapterConfig):
+                self.config = kwargs["adapter_config"]
+                # Don't call load_env_vars() - config object already has correct values
+            elif isinstance(kwargs["adapter_config"], dict):
+                # Create config from dict - this contains final merged values
+                self.config = APIAdapterConfig(**kwargs["adapter_config"])
+                # Don't call load_env_vars() - dict already has correct values from main.py
+            # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
+
+        # Create FastAPI app - services will be injected later in start()
+        self.app: FastAPI = create_app(runtime, self.config)
+        self._server: Server | None = None
+        self._server_task: asyncio.Task[Any] | None = None
+
+        # Message observer for handling incoming messages (will be created in start())
+        self.message_observer: APIObserver | None = None
+
+        # Communication service for API responses
+        self.communication = APICommunicationService(config=self.config)
+        # Pass time service if available
+        if hasattr(runtime, "time_service"):
+            self.communication._time_service = runtime.time_service
+        # Pass app state reference for message tracking
+        self.communication._app_state = self.app.state  # type: ignore[attr-defined]
+
+        # Runtime control service
+        self.runtime_control = APIRuntimeControlService(runtime, time_service=getattr(runtime, "time_service", None))
+
+        # Tool service
+        self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
+
+        # Adapter configuration service for interactive adapter setup
+        self.adapter_configuration_service = AdapterConfigurationService()
+
+        # Debug logging
+        logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
+        if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
+            logger.debug(f"[DEBUG] adapter_config type: {type(kwargs['adapter_config'])}")
+            if hasattr(kwargs["adapter_config"], "host"):
+                logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
+
+        logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
+
+    def get_services_to_register(self) -> List[AdapterServiceRegistration]:
+        """Get services provided by this adapter."""
+        registrations = []
+
+        # Register communication service with all capabilities
+        registrations.append(
+            AdapterServiceRegistration(
+                service_type=ServiceType.COMMUNICATION,
+                provider=self.communication,
+                priority=Priority.CRITICAL,
+                capabilities=["send_message", "fetch_messages"],
+            )
+        )
+
+        # Register runtime control service
+        registrations.append(
+            AdapterServiceRegistration(
+                service_type=ServiceType.RUNTIME_CONTROL,
+                provider=self.runtime_control,
+                priority=Priority.CRITICAL,
+                capabilities=[
+                    "pause_processing",
+                    "resume_processing",
+                    "request_state_transition",
+                    "get_runtime_status",
+                ],
+            )
+        )
+
+        # Register tool service
+        registrations.append(
+            AdapterServiceRegistration(
+                service_type=ServiceType.TOOL,
+                provider=self.tool_service,
+                priority=Priority.CRITICAL,
+                capabilities=[
+                    "execute_tool",
+                    "get_available_tools",
+                    "get_tool_result",
+                    "validate_parameters",
+                    "get_tool_info",
+                    "get_all_tool_info",
+                ],
+            )
+        )
+
+        return registrations
+
+    def _inject_services(self) -> None:
+        """Inject services into FastAPI app state after initialization."""
+        logger.info("Injecting services into FastAPI app state...")
+
+        # Store adapter config for routes to access
+        self.app.state.api_config = self.config
+        self.app.state.agent_template = getattr(self.runtime, "agent_template", None)
+        self.app.state.db_path = getattr(self.runtime.essential_config, "database_path", None)
+        logger.info(f"Injected API config with interaction_timeout={self.config.interaction_timeout}s")
+
+        # Get service mappings from declarative configuration
+        service_mappings = ApiServiceConfiguration.get_current_mappings_as_tuples()
+
+        # Inject services using mapping
+        for runtime_attr, app_attrs, handler_name in service_mappings:
+            # Convert handler name to actual method if provided
+            handler = getattr(self, handler_name) if handler_name else None
+            self._inject_service(runtime_attr, app_attrs, handler)
+
+        # Inject adapter-created services using configuration
+        for adapter_service in ApiServiceConfiguration.ADAPTER_CREATED_SERVICES:
+            service = getattr(self, adapter_service.attr_name)
+            setattr(self.app.state, adapter_service.app_state_name, service)
+            logger.info(f"Injected {adapter_service.app_state_name} ({adapter_service.description})")
+
+        # Set up message handling
+        self._setup_message_handling()
+
+    def reinject_services(self) -> None:
+        """Re-inject services after they become available (e.g., after first-run setup).
+
+        This is called from resume_from_first_run() to update the FastAPI app state
+        with services that were None during initial adapter startup in first-run mode.
+        """
+        logger.info("Re-injecting services into FastAPI app state after first-run setup...")
+
+        # Get service mappings from declarative configuration
+        service_mappings = ApiServiceConfiguration.get_current_mappings_as_tuples()
+
+        # Count how many services we successfully inject
+        injected_count = 0
+        skipped_count = 0
+
+        # Re-inject services using mapping
+        for runtime_attr, app_attrs, handler_name in service_mappings:
+            runtime = self.runtime
+            if hasattr(runtime, runtime_attr) and getattr(runtime, runtime_attr) is not None:
+                service = getattr(runtime, runtime_attr)
+                setattr(self.app.state, app_attrs, service)
+
+                # Call special handler if provided
+                if handler_name:
+                    handler = getattr(self, handler_name)
+                    handler(service)
+
+                injected_count += 1
+                logger.debug(f"Re-injected {runtime_attr}")
+            else:
+                skipped_count += 1
+
+        logger.info(f"Re-injection complete: {injected_count} services injected, {skipped_count} still unavailable")
+
+    def _log_service_registry(self, service: Any) -> None:
+        """Log service registry details."""
+        try:
+            all_services = service.get_all_services()
+            service_count = len(all_services) if hasattr(all_services, "__len__") else 0
+            logger.info(f"[API] Injected service_registry {id(service)} with {service_count} services")
+            service_names = [s.__class__.__name__ for s in all_services] if all_services else []
+            logger.info(f"[API] Services in injected registry: {service_names}")
+        except (TypeError, AttributeError):
+            logger.info("[API] Injected service_registry (mock or test mode)")
+
+    def _inject_service(
+        self, runtime_attr: str, app_state_name: str, handler: Callable[[Any], None] | None = None
+    ) -> None:
+        """Inject a single service from runtime to app state."""
+        runtime = self.runtime
+        if hasattr(runtime, runtime_attr) and getattr(runtime, runtime_attr) is not None:
+            service = getattr(runtime, runtime_attr)
+            setattr(self.app.state, app_state_name, service)
+
+            # Call special handler if provided
+            if handler:
+                handler(service)
+
+            # Special logging for service_registry
+            if runtime_attr == "service_registry":
+                self._log_service_registry(service)
+            else:
+                logger.info(f"Injected {runtime_attr}")
+        else:
+            # Log when service is not injected
+            if not hasattr(runtime, runtime_attr):
+                logger.warning(f"Runtime does not have attribute '{runtime_attr}' - skipping injection")
+            else:
+                logger.warning(f"Runtime attribute '{runtime_attr}' is None - skipping injection")
+
+    def _handle_auth_service(self, auth_service: Any) -> None:
+        """Special handler for authentication service."""
+        # CRITICAL: Preserve existing APIAuthService if it already exists (has stored API keys)
+        # During re-injection after first-run setup, we must NOT create a new instance
+        # because the existing instance has in-memory API keys that would be lost!
+        existing_auth_service = getattr(self.app.state, "auth_service", None)
+        if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
+            # Update the existing instance's auth_service reference but preserve API keys
+            existing_auth_service._auth_service = auth_service
+            logger.info(
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference"
+            )
+        else:
+            # First time initialization - create new instance
+            self.app.state.auth_service = APIAuthService(auth_service)
+            logger.info("Initialized APIAuthService with authentication service for persistence")
+
+    def _handle_bus_manager(self, bus_manager: Any) -> None:
+        """Special handler for bus manager - inject individual buses into app.state."""
+        # Inject tool_bus and memory_bus for DSAR multi-source operations
+        self.app.state.tool_bus = bus_manager.tool
+        self.app.state.memory_bus = bus_manager.memory
+        logger.info("Injected tool_bus and memory_bus from bus_manager for multi-source DSAR operations")
+
+    def _setup_message_handling(self) -> None:
+        """Set up message handling and correlation tracking."""
+        # Store message ID to channel mapping for response routing
+        self.app.state.message_channel_map = {}
+
+        # Create and assign message handler
+        self.app.state.on_message = self._create_message_handler()
+        logger.info("Set up message handler via observer pattern with correlation tracking")
+
+    def _create_message_handler(self) -> Callable[[IncomingMessage], Awaitable[MessageHandlingResult]]:
+        """Create the message handler function."""
+
+        async def handle_message_via_observer(msg: IncomingMessage) -> MessageHandlingResult:
+            """Handle incoming messages by creating passive observations."""
+            try:
+                logger.info(f"handle_message_via_observer called for message {msg.message_id}")
+                if self.message_observer:
+                    # Store the message ID to channel mapping
+                    self.app.state.message_channel_map[msg.channel_id] = msg.message_id
+
+                    # Create correlation
+                    await self._create_message_correlation(msg)
+
+                    # Pass to observer for task creation and get result
+                    result = await self.message_observer.handle_incoming_message(msg)
+                    if result:
+                        logger.info(f"Message {msg.message_id} passed to observer, result: {result.status}")
+                        return result
+                    else:
+                        logger.warning(f"Message {msg.message_id} passed to observer but no result returned")
+                        # Return a default result for backward compatibility with tests
+                        from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus
+
+                        return MessageHandlingResult(
+                            status=MessageHandlingStatus.TASK_CREATED,
+                            message_id=msg.message_id,
+                            channel_id=msg.channel_id or "unknown",
+                        )
+                else:
+                    logger.error("Message observer not available")
+                    raise RuntimeError("Message observer not available")
+            except Exception as e:
+                logger.error(f"Error in handle_message_via_observer: {e}", exc_info=True)
+                raise
+
+        return handle_message_via_observer
+
+    async def _create_message_correlation(self, msg: Any) -> None:
+        """Create an observe correlation for incoming message."""
+        correlation_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+
+        # Create correlation for the incoming message
+        correlation = ServiceCorrelation(
+            correlation_id=correlation_id,
+            service_type="api",
+            handler_name="APIAdapter",
+            action_type="observe",
+            request_data=ServiceRequestData(
+                service_type="api",
+                method_name="observe",
+                channel_id=msg.channel_id,
+                parameters={
+                    "content": msg.content,
+                    "author_id": msg.author_id,
+                    "author_name": msg.author_name,
+                    "message_id": msg.message_id,
+                },
+                request_timestamp=now,
+            ),
+            response_data=ServiceResponseData(
+                success=True, result_summary="Message observed", execution_time_ms=0, response_timestamp=now
+            ),
+            status=ServiceCorrelationStatus.COMPLETED,
+            created_at=now,
+            updated_at=now,
+            timestamp=now,
+        )
+
+        # Get time service if available
+        time_service = getattr(self.runtime, "time_service", None)
+        persistence.add_correlation(correlation, time_service)
+        logger.debug(f"Created observe correlation for message {msg.message_id}")
+
+    def _discover_and_register_configurable_adapters(self) -> None:
+        """Discover and register adapters that support interactive configuration.
+
+        Scans the ciris_adapters directory for adapter manifests that define
+        interactive_config sections and registers them with the AdapterConfigurationService.
+        """
+        import importlib
+        import json
+        from pathlib import Path
+
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        # Find ciris_adapters directory - try multiple methods for Android compatibility
+        adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
+
+        if not adapters_dir.exists():
+            # Fallback for Android: use importlib.resources to discover adapters dynamically
+            logger.info(f"Filesystem adapters directory not found ({adapters_dir}), using importlib discovery")
+            self._discover_adapters_via_importlib()
+            return
+
+        registered_count = 0
+
+        for adapter_path in adapters_dir.iterdir():
+            if not adapter_path.is_dir():
+                continue
+
+            manifest_path = adapter_path / "manifest.json"
+            if not manifest_path.exists():
+                continue
+
+            try:
+                with open(manifest_path) as f:
+                    manifest_data = json.load(f)
+
+                # Check if this adapter has interactive configuration
+                interactive_config_data = manifest_data.get("interactive_config")
+                if not interactive_config_data:
+                    continue
+
+                # Parse steps into ConfigurationStep objects
+                steps = []
+                for step_data in interactive_config_data.get("steps", []):
+                    step = ConfigurationStep(
+                        step_id=step_data["step_id"],
+                        step_type=step_data["step_type"],
+                        title=step_data.get("title", step_data["step_id"]),
+                        description=step_data.get("description", ""),
+                        discovery_method=step_data.get("discovery_method"),
+                    )
+                    steps.append(step)
+
+                # Create InteractiveConfiguration
+                interactive_config = InteractiveConfiguration(
+                    required=interactive_config_data.get("required", False),
+                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
+                    steps=steps,
+                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
+                )
+
+                # Get adapter type (directory name)
+                adapter_type = adapter_path.name
+
+                # Try to load the configurable adapter class
+                exports = manifest_data.get("exports", {})
+                configurable_class_path = exports.get("configurable")
+
+                if configurable_class_path:
+                    try:
+                        # Parse module and class name
+                        module_path, class_name = configurable_class_path.rsplit(".", 1)
+                        # Prepend ciris_adapters if not already present
+                        if not module_path.startswith("ciris_adapters"):
+                            module_path = f"ciris_adapters.{module_path}"
+                        module = importlib.import_module(module_path)
+                        configurable_class = getattr(module, class_name)
+                        adapter_instance = configurable_class()
+
+                        # Register with the configuration service
+                        self.adapter_configuration_service.register_adapter_config(
+                            adapter_type=adapter_type,
+                            interactive_config=interactive_config,
+                            adapter_instance=adapter_instance,
+                        )
+                        registered_count += 1
+                        logger.info(f"Registered configurable adapter: {adapter_type}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+                else:
+                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+
+            except Exception as e:
+                logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+
+    def _discover_adapters_via_importlib(self) -> None:
+        """Discover adapters dynamically using importlib (Android/Chaquopy compatible).
+
+        Uses pkgutil.iter_modules to find all subpackages in ciris_adapters,
+        then checks each for a manifest.json with interactive_config.
+        """
+        import importlib
+        import importlib.resources
+        import json
+        import pkgutil
+
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        # Dynamically discover all adapter subpackages
+        try:
+            import ciris_adapters
+
+            adapter_names = [
+                name
+                for importer, name, ispkg in pkgutil.iter_modules(ciris_adapters.__path__)
+                if ispkg and not name.startswith("_")
+            ]
+            logger.info(f"Discovered {len(adapter_names)} adapter packages via pkgutil: {adapter_names}")
+        except ImportError:
+            logger.warning("ciris_adapters package not found, no adapters to discover")
+            return
+
+        registered_count = 0
+
+        for adapter_name in adapter_names:
+            try:
+                # Try to import the adapter package to verify it exists
+                try:
+                    adapter_pkg = importlib.import_module(f"ciris_adapters.{adapter_name}")
+                except ImportError:
+                    logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
+                    continue
+
+                # Read manifest.json using importlib.resources
+                try:
+                    # Python 3.9+ compatible approach
+                    import importlib.resources as pkg_resources
+
+                    package_name = f"ciris_adapters.{adapter_name}"
+                    try:
+                        # Try files() API first (Python 3.9+)
+                        files = pkg_resources.files(package_name)
+                        manifest_path = files.joinpath("manifest.json")
+                        manifest_text = manifest_path.read_text()
+                    except (TypeError, AttributeError):
+                        # Fallback for older API
+                        with pkg_resources.open_text(package_name, "manifest.json") as f:
+                            manifest_text = f.read()
+
+                    manifest_data = json.loads(manifest_text)
+                    logger.info(f"Successfully read manifest for {adapter_name}")
+
+                except Exception as e:
+                    logger.warning(f"Could not read manifest for {adapter_name}: {e}")
+                    continue
+
+                # Check if this adapter has interactive configuration
+                interactive_config_data = manifest_data.get("interactive_config")
+                if not interactive_config_data:
+                    logger.debug(f"Adapter {adapter_name} has no interactive_config, skipping")
+                    continue
+
+                logger.info(f"Found interactive_config for adapter: {adapter_name}")
+
+                # Parse steps into ConfigurationStep objects
+                steps = []
+                for step_data in interactive_config_data.get("steps", []):
+                    step = ConfigurationStep(
+                        step_id=step_data["step_id"],
+                        step_type=step_data["step_type"],
+                        title=step_data.get("title", step_data["step_id"]),
+                        description=step_data.get("description", ""),
+                        discovery_method=step_data.get("discovery_method"),
+                    )
+                    steps.append(step)
+
+                # Create InteractiveConfiguration
+                interactive_config = InteractiveConfiguration(
+                    required=interactive_config_data.get("required", False),
+                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
+                    steps=steps,
+                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
+                )
+
+                # Get adapter type
+                adapter_type = adapter_name
+
+                # Try to load the configurable adapter class
+                exports = manifest_data.get("exports", {})
+                configurable_class_path = exports.get("configurable")
+
+                if configurable_class_path:
+                    try:
+                        # Parse module and class name
+                        module_path, class_name = configurable_class_path.rsplit(".", 1)
+                        # Prepend ciris_adapters if not already present
+                        if not module_path.startswith("ciris_adapters"):
+                            module_path = f"ciris_adapters.{module_path}"
+                        module = importlib.import_module(module_path)
+                        configurable_class = getattr(module, class_name)
+                        adapter_instance = configurable_class()
+
+                        # Register with the configuration service
+                        self.adapter_configuration_service.register_adapter_config(
+                            adapter_type=adapter_type,
+                            interactive_config=interactive_config,
+                            adapter_instance=adapter_instance,
+                        )
+                        registered_count += 1
+                        logger.info(f"Registered configurable adapter (via importlib): {adapter_type}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+                else:
+                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+
+            except Exception as e:
+                logger.warning(f"Failed to process adapter {adapter_name}: {e}")
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) via importlib")
+
+    async def _restore_persisted_adapter_configs(self) -> None:
+        """Restore adapter configurations that were persisted for load-on-startup.
+
+        This is called during API adapter startup to restore adapters that were
+        previously configured and marked for automatic loading.
+        """
+        # Get config service from runtime
+        config_service = getattr(self.runtime, "config_service", None)
+        if not config_service:
+            logger.debug("No config_service available - skipping persisted adapter restoration")
+            return
+
+        try:
+            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(config_service)
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} persisted adapter configuration(s)")
+        except Exception as e:
+            logger.warning(f"Failed to restore persisted adapter configurations: {e}")
+
+    async def start(self) -> None:
+        """Start the API server."""
+        logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
+        await super().start()
+
+        # Track start time for metrics
+        import time
+
+        self._start_time = time.time()
+
+        # Start the communication service
+        await self.communication.start()
+        logger.info("Started API communication service")
+
+        # Start the tool service
+        await self.tool_service.start()
+        logger.info("Started API tool service")
+
+        # Create message observer for handling incoming messages
+        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor_service", None)
+        logger.info(
+            f"[OBSERVER_INIT] resource_monitor_service from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
+        )
+
+        self.message_observer = APIObserver(
+            on_observe=lambda _: asyncio.sleep(0),
+            bus_manager=getattr(self.runtime, "bus_manager", None),
+            memory_service=getattr(self.runtime, "memory_service", None),
+            agent_id=getattr(self.runtime, "agent_id", None),
+            filter_service=getattr(self.runtime, "adaptive_filter_service", None),
+            secrets_service=getattr(self.runtime, "secrets_service", None),
+            time_service=getattr(self.runtime, "time_service", None),
+            agent_occurrence_id=getattr(self.runtime.essential_config, "agent_occurrence_id", "default"),
+            origin_service="api",
+            resource_monitor=resource_monitor_from_runtime,
+        )
+        await self.message_observer.start()
+        logger.info("Started API message observer")
+
+        # Inject services now that they're initialized
+        self._inject_services()
+
+        # Discover and register configurable adapters
+        self._discover_and_register_configurable_adapters()
+
+        # Restore any persisted adapter configurations from previous sessions
+        await self._restore_persisted_adapter_configs()
+
+        # Start runtime control service now that services are available
+        await self.runtime_control.start()
+        logger.info("Started API runtime control service")
+
+        # Configure uvicorn
+        config = uvicorn.Config(
+            self.app,
+            host=self.config.host,
+            port=self.config.port,
+            log_level="info",
+            access_log=True,
+            timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
+        )
+
+        # Create and start server
+        self._server = uvicorn.Server(config)
+        assert self._server is not None
+        self._server_task = asyncio.create_task(self._server.serve())
+
+        logger.info(f"API server starting on http://{self.config.host}:{self.config.port}")
+
+        # Wait a moment for server to start
+        await asyncio.sleep(1)
+
+    async def stop(self) -> None:
+        """Stop the API server."""
+        logger.info("Stopping API server...")
+
+        # Stop runtime control service
+        await self.runtime_control.stop()
+
+        # Stop communication service
+        await self.communication.stop()
+
+        # Stop tool service
+        await self.tool_service.stop()
+
+        # Stop server
+        if self._server:
+            self._server.should_exit = True
+            if self._server_task:
+                await self._server_task
+
+        await super().stop()
+
+    def get_channel_list(self) -> List[ChannelContext]:
+        """
+        Get list of available API channels from correlations.
+
+        Returns:
+            List of ChannelContext objects for API channels.
+        """
+        from datetime import datetime
+
+        # Get active channels from last 30 days
+        channels_data = get_active_channels_by_adapter("api", since_days=30)
+
+        # Convert to ChannelContext objects
+        channels = []
+        for data in channels_data:
+            # Determine allowed actions based on admin status
+            is_admin = is_admin_channel(data.channel_id)
+            allowed_actions = ["speak", "observe", "memorize", "recall", "tool"]
+            if is_admin:
+                allowed_actions.extend(["wa_defer", "runtime_control"])
+
+            channel = ChannelContext(
+                channel_id=data.channel_id,
+                channel_type="api",
+                created_at=data.last_activity if data.last_activity else datetime.now(timezone.utc),
+                channel_name=data.channel_name or data.channel_id,  # API channels use ID as name if no name
+                is_private=False,  # API channels are not private
+                participants=[],  # Could track user IDs if needed
+                is_active=data.is_active,
+                last_activity=data.last_activity,
+                message_count=data.message_count,
+                allowed_actions=allowed_actions,
+                moderation_level="standard",
+            )
+            channels.append(channel)
+
+        return channels
+
+    def is_healthy(self) -> bool:
+        """Check if the API server is healthy and running."""
+        if self._server is None or self._server_task is None:
+            return False
+
+        # Check if the server task is still running
+        return not self._server_task.done()
+
+    def get_metrics(self) -> dict[str, float]:
+        """Get all metrics including base, custom, and v1.4.3 specific."""
+        # Initialize base metrics
+        import time
+
+        uptime = time.time() - self._start_time if hasattr(self, "_start_time") else 0.0
+        metrics = {
+            "uptime_seconds": uptime,
+            "healthy": self.is_healthy(),
+        }
+
+        # Add v1.4.3 specific metrics
+        try:
+            # Get metrics from communication service
+            comm_status = self.communication.get_status()
+            comm_metrics = comm_status.metrics if hasattr(comm_status, "metrics") else {}
+
+            # Get active WebSocket connections count
+            active_connections = 0
+            if hasattr(self.communication, "_websocket_clients"):
+                try:
+                    active_connections = len(self.communication._websocket_clients)
+                except (TypeError, AttributeError):
+                    active_connections = 0
+
+            # Extract values with defaults
+            requests_total = float(comm_metrics.get("requests_handled", 0))
+            errors_total = float(comm_metrics.get("error_count", 0))
+            avg_response_time = float(comm_metrics.get("avg_response_time_ms", 0.0))
+
+            metrics.update(
+                {
+                    "api_requests_total": requests_total,
+                    "api_errors_total": errors_total,
+                    "api_response_time_ms": avg_response_time,
+                    "api_active_connections": float(active_connections),
+                }
+            )
+
+        except Exception as e:
+            logger.warning(f"Failed to get API adapter metrics: {e}")
+            # Return zeros on error rather than failing
+            metrics.update(
+                {
+                    "api_requests_total": 0.0,
+                    "api_errors_total": 0.0,
+                    "api_response_time_ms": 0.0,
+                    "api_active_connections": 0.0,
+                }
+            )
+
+        return metrics
+
+    async def run_lifecycle(self, agent_run_task: Optional[asyncio.Task[Any]]) -> None:
+        """Run the adapter lifecycle - API runs until agent stops."""
+        logger.info("API adapter running lifecycle")
+
+        try:
+            # In first-run mode, agent_run_task is None - just keep server running
+            if agent_run_task is None:
+                logger.info("First-run mode: API server will run until manually stopped")
+                # Just wait for server task to complete (or CTRL+C)
+                if self._server_task:
+                    await self._server_task
+                return
+
+            # Normal mode: Wait for either the agent task or server task to complete
+            while not agent_run_task.done():
+                # Check if server is still running
+                if not self._server_task or self._server_task.done():
+                    # Server stopped unexpectedly
+                    if self._server_task:
+                        exc = self._server_task.exception()
+                        if exc:
+                            logger.error(f"API server stopped with error: {exc}")
+                            raise exc
+                    logger.warning("API server stopped unexpectedly")
+                    break
+
+                await asyncio.sleep(0.1)
+
+        except asyncio.CancelledError:
+            logger.info("API adapter lifecycle cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"API adapter lifecycle error: {e}")
+            raise
+        finally:
+            logger.info("API adapter lifecycle ending")

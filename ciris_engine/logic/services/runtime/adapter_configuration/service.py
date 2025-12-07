@@ -219,24 +219,59 @@ class AdapterConfigurationService:
         if step.step_type == "discovery":
             items = await adapter.discover(step.discovery_method or "default")
             session.step_results[step.step_id] = items
+            logger.info(f"[DISCOVERY STEP] Returning {len(items)} discovered items to client")
+            for item in items:
+                logger.info(
+                    f"[DISCOVERY STEP]   → {item.get('label', 'unknown')} - {item.get('metadata', {}).get('url', 'no url')}"
+                )
+
+            # Advance step index if items were found
+            if items:
+                session.current_step_index += 1
+                logger.info(f"[DISCOVERY STEP] Advanced to step index {session.current_step_index}")
+
+            next_idx = session.current_step_index if items else None
+            logger.info(
+                f"[DISCOVERY STEP] next_step_index={next_idx} (advancing={'yes' if items else 'no - no items found'})"
+            )
             return StepResult(
                 step_id=step.step_id,
                 success=True,
                 data={"discovered_items": items},
-                next_step_index=session.current_step_index + 1 if items else None,
+                next_step_index=next_idx,
             )
 
         elif step.step_type == "oauth":
+            logger.info(f"[OAUTH STEP] Executing OAuth step for session {session.session_id}")
+            logger.info(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
+            logger.info(f"[OAUTH STEP] collected_config before: {session.collected_config}")
+
+            # Extract base_url from step_data if provided (from Kotlin executeOAuthStep)
+            if "base_url" in step_data and step_data["base_url"]:
+                session.collected_config["base_url"] = step_data["base_url"]
+                logger.info(f"[OAUTH STEP] Stored base_url from step_data: {step_data['base_url']}")
+
+            logger.info(f"[OAUTH STEP] collected_config after: {session.collected_config}")
+
             if "code" in step_data:
                 # Handle OAuth callback
+                logger.info(f"[OAUTH STEP] Processing OAuth callback with code")
+                # Pass callback_base_url and redirect_uri if stored during OAuth URL generation
+                callback_base_url = session.collected_config.get("callback_base_url")
+                redirect_uri = session.collected_config.get("redirect_uri")
+                platform = session.collected_config.get("platform")
                 tokens = await adapter.handle_oauth_callback(
                     code=step_data["code"],
                     state=step_data.get("state", ""),
                     base_url=session.collected_config.get("base_url", ""),
+                    callback_base_url=callback_base_url,
+                    redirect_uri=redirect_uri,
+                    platform=platform,
                 )
                 session.collected_config["oauth_tokens"] = tokens
                 session.status = SessionStatus.ACTIVE
                 session.current_step_index += 1
+                logger.info(f"[OAUTH STEP] Callback processed, advancing to step {session.current_step_index}")
                 return StepResult(
                     step_id=step.step_id,
                     success=True,
@@ -244,12 +279,54 @@ class AdapterConfigurationService:
                 )
             else:
                 # Generate OAuth URL
+                base_url = session.collected_config.get("base_url", "")
+                logger.info(f"[OAUTH STEP] Generating OAuth URL with base_url={base_url}")
+
+                if not base_url:
+                    logger.error("[OAUTH STEP] ERROR: No base_url in collected_config!")
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=False,
+                        error="No base_url configured. Please select a Home Assistant instance first.",
+                    )
+
                 session.pkce_verifier = secrets.token_urlsafe(32)
                 code_challenge = self._generate_pkce_challenge(session.pkce_verifier)
-                oauth_url = await adapter.get_oauth_url(
-                    base_url=session.collected_config.get("base_url", ""),
-                    state=session.session_id,
-                )
+
+                # Get callback_base_url from step_data if provided (for local/mobile OAuth)
+                callback_base_url = step_data.get("callback_base_url")
+                if callback_base_url:
+                    logger.info(f"[OAUTH STEP] Using local callback base URL: {callback_base_url}")
+                    # Store for use during callback token exchange
+                    session.collected_config["callback_base_url"] = callback_base_url
+
+                # Get redirect_uri and platform from step_data (for Android deep link)
+                redirect_uri = step_data.get("redirect_uri")
+                platform = step_data.get("platform")
+                if redirect_uri:
+                    logger.info(f"[OAUTH STEP] Using custom redirect URI: {redirect_uri} (platform: {platform})")
+                    session.collected_config["redirect_uri"] = redirect_uri
+                    session.collected_config["platform"] = platform
+
+                try:
+                    # Pass all OAuth parameters to the adapter
+                    # For adapters that don't support redirect_uri/platform, they'll be ignored
+                    oauth_url = await adapter.get_oauth_url(
+                        base_url=base_url,
+                        state=session.session_id,
+                        callback_base_url=callback_base_url,
+                        redirect_uri=redirect_uri,
+                        platform=platform,
+                    )
+                    logger.info(f"[OAUTH STEP] Generated OAuth URL: {oauth_url}")
+                except Exception as e:
+                    logger.error(f"[OAUTH STEP] Failed to generate OAuth URL: {e}")
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=False,
+                        error=f"Failed to get OAuth URL: {str(e)}",
+                    )
+
                 session.status = SessionStatus.AWAITING_OAUTH
                 return StepResult(
                     step_id=step.step_id,
@@ -259,16 +336,31 @@ class AdapterConfigurationService:
                 )
 
         elif step.step_type == "select":
-            if "selection" in step_data:
-                session.collected_config[step.step_id] = step_data["selection"]
+            # Accept both "selection" and "selected" for compatibility
+            # Log all incoming data for debugging
+            logger.info(
+                f"[SELECT STEP] Processing step {step.step_id}, step_data keys: {list(step_data.keys()) if step_data else 'None'}"
+            )
+            logger.info(f"[SELECT STEP] Raw step_data: {step_data}")
+
+            selection = step_data.get("selection") or step_data.get("selected")
+            logger.info(f"[SELECT STEP] Extracted selection: {selection}")
+
+            if selection:
+                session.collected_config[step.step_id] = selection
                 session.current_step_index += 1
+                logger.info(
+                    f"[SELECT STEP] Stored selection for {step.step_id}: {selection}, advancing to step {session.current_step_index}"
+                )
                 return StepResult(
                     step_id=step.step_id,
                     success=True,
                     next_step_index=session.current_step_index,
                 )
             else:
+                logger.info(f"[SELECT STEP] No selection provided, fetching options for {step.step_id}")
                 options = await adapter.get_config_options(step.step_id, session.collected_config)
+                logger.info(f"[SELECT STEP] Got {len(options) if options else 0} options for {step.step_id}")
                 return StepResult(
                     step_id=step.step_id,
                     success=True,
@@ -452,7 +544,7 @@ class AdapterConfigurationService:
 
         return persisted_configs
 
-    async def restore_persisted_adapters(self, config_service: Any) -> int:
+    async def restore_persisted_adapters(self, config_service: Any, runtime_control_service: Any = None) -> int:
         """Restore and apply all persisted adapter configurations.
 
         This should be called during API adapter startup to restore
@@ -460,6 +552,7 @@ class AdapterConfigurationService:
 
         Args:
             config_service: GraphConfigService instance
+            runtime_control_service: RuntimeControlService for loading adapters
 
         Returns:
             Number of adapters successfully restored
@@ -481,11 +574,35 @@ class AdapterConfigurationService:
                     continue
 
                 success = await adapter.apply_config(config)
-                if success:
-                    restored_count += 1
-                    logger.info(f"Restored adapter from persisted config: {adapter_type}")
-                else:
+                if not success:
                     logger.warning(f"Failed to apply persisted config for {adapter_type}")
+                    continue
+
+                logger.info(f"Applied persisted config for adapter: {adapter_type}")
+
+                # Now load the adapter instance using RuntimeControlService
+                if runtime_control_service:
+                    import uuid
+
+                    adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
+
+                    load_result = await runtime_control_service.load_adapter(
+                        adapter_type=adapter_type,
+                        adapter_id=adapter_id,
+                        config=config,
+                    )
+
+                    if load_result.success:
+                        restored_count += 1
+                        logger.info(f"Restored and loaded adapter: {adapter_type} as {adapter_id}")
+                    else:
+                        logger.warning(
+                            f"Config applied but adapter load failed for {adapter_type}: {load_result.error}"
+                        )
+                else:
+                    # Config applied but no runtime control to load the adapter
+                    logger.warning(f"Config applied for {adapter_type} but no runtime_control_service to load it")
+                    restored_count += 1  # Count as restored since config is applied
 
             except Exception as e:
                 logger.error(f"Error restoring adapter {adapter_type}: {e}")

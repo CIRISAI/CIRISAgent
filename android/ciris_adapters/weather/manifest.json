@@ -1,0 +1,156 @@
+{
+  "module": {
+    "name": "weather",
+    "version": "1.0.0",
+    "description": "Weather tool service using NOAA National Weather Service API",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "TOOL",
+    "priority": "NORMAL",
+    "class": "weather.service.WeatherToolService",
+    "capabilities": [
+      "weather:current",
+      "weather:forecast",
+      "weather:alerts",
+      "domain:weather"
+    ]
+  }],
+  "capabilities": [
+    "weather:current",
+    "weather:forecast",
+    "weather:alerts",
+    "domain:weather"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0"
+    }
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "user_agent",
+        "step_type": "input",
+        "title": "NOAA User Agent",
+        "description": "Enter a user agent for NOAA Weather API (required by NOAA, e.g., 'MyApp/1.0 (contact@example.com)')",
+        "field": "user_agent",
+        "input_type": "text",
+        "placeholder": "CIRIS/1.0 (contact@ciris.ai)",
+        "required": true,
+        "default": "CIRIS/1.0 (contact@ciris.ai)"
+      },
+      {
+        "step_id": "owm_api_key",
+        "step_type": "input",
+        "title": "OpenWeatherMap API Key (Optional)",
+        "description": "Enter your OpenWeatherMap API key for international coverage. Leave blank to use NOAA only (US-only). Get a free key at https://openweathermap.org/api",
+        "field": "owm_api_key",
+        "input_type": "password",
+        "placeholder": "Enter API key or leave blank",
+        "required": false,
+        "optional": true
+      },
+      {
+        "step_id": "select_units",
+        "step_type": "select",
+        "title": "Temperature Units",
+        "description": "Select your preferred temperature and wind speed units",
+        "field": "units",
+        "options_method": "get_config_options",
+        "required": false,
+        "default": "imperial",
+        "optional": true
+      },
+      {
+        "step_id": "default_location",
+        "step_type": "input",
+        "title": "Default Location (Optional)",
+        "description": "Enter a default location as 'latitude,longitude' (e.g., '40.7128,-74.0060' for NYC) or leave blank",
+        "field": "default_location",
+        "input_type": "text",
+        "placeholder": "40.7128,-74.0060",
+        "required": false,
+        "optional": true
+      },
+      {
+        "step_id": "update_interval",
+        "step_type": "input",
+        "title": "Cache Update Interval (Optional)",
+        "description": "How often to refresh cached weather data in seconds (minimum 60, default 300)",
+        "field": "update_interval",
+        "input_type": "number",
+        "placeholder": "300",
+        "required": false,
+        "default": 300,
+        "optional": true
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your Weather service configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "exports": {
+    "service_class": "weather.service.WeatherToolService",
+    "configurable": "weather.configurable.WeatherConfigurableAdapter",
+    "capabilities": [
+      "weather:current",
+      "weather:forecast",
+      "weather:alerts",
+      "domain:weather"
+    ]
+  },
+  "configuration": {
+    "noaa_user_agent": {
+      "type": "string",
+      "env": "CIRIS_NOAA_USER_AGENT",
+      "default": "CIRIS/1.0 (contact@ciris.ai)",
+      "description": "User agent for NOAA Weather API (required)"
+    },
+    "openweathermap_api_key": {
+      "type": "string",
+      "env": "CIRIS_OPENWEATHERMAP_API_KEY",
+      "default": null,
+      "description": "Optional OpenWeatherMap API key for fallback (international locations)"
+    },
+    "units": {
+      "type": "string",
+      "env": "CIRIS_WEATHER_UNITS",
+      "default": "imperial",
+      "description": "Temperature and wind speed units (imperial, metric, kelvin)"
+    },
+    "default_location": {
+      "type": "string",
+      "env": "CIRIS_WEATHER_DEFAULT_LOCATION",
+      "default": null,
+      "description": "Default location as 'latitude,longitude' or city name"
+    },
+    "update_interval": {
+      "type": "integer",
+      "env": "CIRIS_WEATHER_UPDATE_INTERVAL",
+      "default": 300,
+      "description": "Cache update interval in seconds (minimum 60)"
+    }
+  },
+  "metadata": {
+    "primary_api": "NOAA National Weather Service",
+    "fallback_api": "OpenWeatherMap",
+    "requires_api_key": false,
+    "safe_domain": "weather",
+    "data_source": true,
+    "data_source_type": "rest"
+  }
+}

@@ -64,7 +64,14 @@ class ConfigurableAdapterProtocol(Protocol):
         """
         ...
 
-    async def get_oauth_url(self, base_url: str, state: str) -> str:
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> str:
         """Generate OAuth authorization URL for user redirect.
 
         Creates a properly formatted OAuth authorization URL that the
@@ -74,17 +81,34 @@ class ConfigurableAdapterProtocol(Protocol):
         Args:
             base_url: Base URL of the OAuth provider (e.g., discovered instance)
             state: State parameter for CSRF protection (managed by CIRIS)
+            callback_base_url: Optional base URL for OAuth callback (e.g., http://127.0.0.1:8080)
+                             Used for local/mobile deployments where callback should go
+                             to a local server instead of production.
+            redirect_uri: Optional explicit redirect URI. For Android deep links,
+                        this would be "ciris://oauth/callback". If not provided,
+                        the callback_base_url or default production callback is used.
+            platform: Optional platform hint (android, ios, web, desktop).
+                    Used for platform-specific OAuth handling.
 
         Returns:
             Full OAuth authorization URL including all required parameters
 
         Example:
+            >>> # Standard OAuth
             >>> url = await adapter.get_oauth_url(
             ...     "https://homeassistant.local:8123",
             ...     "csrf_token_abc123"
             ... )
             >>> url
             "https://homeassistant.local:8123/auth/authorize?client_id=...&state=csrf_token_abc123"
+
+            >>> # Android deep link OAuth
+            >>> url = await adapter.get_oauth_url(
+            ...     "https://homeassistant.local:8123",
+            ...     "csrf_token_abc123",
+            ...     redirect_uri="ciris://oauth/callback",
+            ...     platform="android"
+            ... )
         """
         ...
 

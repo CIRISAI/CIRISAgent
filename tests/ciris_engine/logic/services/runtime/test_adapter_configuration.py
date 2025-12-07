@@ -451,6 +451,71 @@ class TestAdapterConfigurationService:
         assert session.collected_config["select_item"] == "opt1"
 
     @pytest.mark.asyncio
+    async def test_execute_step_select_with_selected_parameter(self) -> None:
+        """Test select step advances when 'selected' parameter is provided (Android compatibility).
+
+        The Android client sends 'selected' instead of 'selection' for compatibility.
+        The service should accept both parameter names.
+        """
+        select_config = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="select_features",
+                    step_type="select",
+                    title="Select Features",
+                    description="Choose features to enable",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+        self.service.register_adapter_config(
+            adapter_type="test_select_android",
+            interactive_config=select_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_select_android", "user_123")
+        # Use 'selected' parameter like Android client does
+        result = await self.service.execute_step(session.session_id, {"selected": ["feature1", "feature2"]})
+
+        assert result.success is True
+        assert result.next_step_index == 1
+        assert session.collected_config["select_features"] == ["feature1", "feature2"]
+
+    @pytest.mark.asyncio
+    async def test_execute_step_select_prefers_selection_over_selected(self) -> None:
+        """Test that 'selection' takes priority when both parameters are provided."""
+        select_config = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="select_item",
+                    step_type="select",
+                    title="Select Item",
+                    description="Choose an item",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+        self.service.register_adapter_config(
+            adapter_type="test_select_both",
+            interactive_config=select_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_select_both", "user_123")
+        # Provide both parameters - 'selection' should take priority
+        result = await self.service.execute_step(session.session_id, {"selection": "opt1", "selected": "opt2"})
+
+        assert result.success is True
+        assert session.collected_config["select_item"] == "opt1"
+
+    @pytest.mark.asyncio
     async def test_execute_step_input(self) -> None:
         """Test input step collects configuration data."""
         input_config = InteractiveConfiguration(
@@ -959,3 +1024,132 @@ class TestAdapterConfigurationPersistence:
         )
 
         assert success is False
+
+
+class TestConfigurationSessionStatusEndpoint:
+    """Tests for configuration session status response field requirements.
+
+    These tests verify that session status responses include all required
+    fields for proper wizard navigation on mobile clients.
+    """
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.service = AdapterConfigurationService()
+        self.mock_adapter = MockConfigurableAdapter()
+        self.test_config = create_test_config()
+
+    def test_session_has_created_at(self) -> None:
+        """Test session includes created_at timestamp."""
+        session = AdapterConfigSession(
+            session_id="test_session",
+            adapter_type="homeassistant",
+            user_id="user_123",
+        )
+
+        assert session.created_at is not None
+        assert isinstance(session.created_at, datetime)
+
+    def test_manifest_provides_total_steps(self) -> None:
+        """Test manifest steps list provides total_steps count."""
+        config = create_test_config()
+
+        assert config.steps is not None
+        assert len(config.steps) == 5  # discover, oauth, select_entities, settings, confirm
+
+    def test_get_current_step_from_manifest(self) -> None:
+        """Test getting current step from manifest by index."""
+        config = create_test_config()
+
+        # Verify we can access step by index
+        assert config.steps[0].step_id == "discover"
+        assert config.steps[0].step_type == "discovery"
+        assert config.steps[1].step_id == "oauth"
+        assert config.steps[1].step_type == "oauth"
+
+    @pytest.mark.asyncio
+    async def test_session_status_after_oauth_step(self) -> None:
+        """Test session tracks step progression correctly after OAuth."""
+        self.service.register_adapter_config(
+            adapter_type="homeassistant",
+            interactive_config=self.test_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        # Start session
+        session = await self.service.start_session("homeassistant", "user_123")
+        assert session.current_step_index == 0
+
+        # Execute discovery step
+        self.mock_adapter.discover_results = [{"id": "ha_1", "label": "Home Assistant", "description": "192.168.1.50"}]
+        result = await self.service.execute_step(session.session_id, {})
+        assert result.success is True
+
+        # Session should advance
+        updated_session = self.service.get_session(session.session_id)
+        assert updated_session is not None
+        assert updated_session.current_step_index == 1
+
+    def test_session_tracks_completed_steps(self) -> None:
+        """Test session step_results tracks completed step IDs."""
+        session = AdapterConfigSession(
+            session_id="test_session",
+            adapter_type="homeassistant",
+            user_id="user_123",
+        )
+
+        # Simulate completing steps
+        session.step_results["discover"] = {"items": []}
+        session.step_results["oauth"] = {"access_token": "token123"}
+
+        # Verify step tracking
+        completed_step_ids = list(session.step_results.keys())
+        assert "discover" in completed_step_ids
+        assert "oauth" in completed_step_ids
+        assert len(completed_step_ids) == 2
+
+    @pytest.mark.asyncio
+    async def test_session_status_contains_all_required_fields(self) -> None:
+        """Test that session status provides all fields needed for UI."""
+        self.service.register_adapter_config(
+            adapter_type="homeassistant",
+            interactive_config=self.test_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("homeassistant", "user_123")
+        manifest = self.service._adapter_manifests.get("homeassistant")
+
+        # Verify all required fields are available
+        assert session.session_id is not None
+        assert session.adapter_type == "homeassistant"
+        assert session.status == SessionStatus.ACTIVE
+        assert session.current_step_index == 0
+        assert session.created_at is not None
+        assert manifest is not None
+        assert len(manifest.steps) > 0
+
+        # Current step should be accessible
+        current_step = manifest.steps[session.current_step_index]
+        assert current_step.step_id == "discover"
+
+    @pytest.mark.asyncio
+    async def test_manifest_access_for_total_steps(self) -> None:
+        """Test that manifest provides total_steps for status response."""
+        self.service.register_adapter_config(
+            adapter_type="homeassistant",
+            interactive_config=self.test_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("homeassistant", "user_123")
+
+        # Get manifest for total_steps
+        manifest = self.service._adapter_manifests.get(session.adapter_type)
+        assert manifest is not None
+
+        total_steps = len(manifest.steps)
+        assert total_steps == 5
+
+        # Verify step index is within bounds
+        assert session.current_step_index < total_steps

@@ -716,6 +716,25 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
+                    // Intercept /login page -> launch native LoginActivity
+                    // The web GUI redirects to /login on 401, but on mobile we use native login
+                    // LoginActivity supports both Google OAuth AND local username/password
+                    if (url != null) {
+                        val isLoginPage = url.endsWith("/login") ||
+                                         url.endsWith("/login/") ||
+                                         url.contains("/login?") ||
+                                         url.contains("/login/index.html")
+                        if (isLoginPage) {
+                            Log.i(TAG, "Intercepting login page - launching native LoginActivity: $url")
+                            // Launch native LoginActivity instead of web login
+                            val intent = Intent(this@MainActivity, ai.ciris.mobile.auth.LoginActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                            return true
+                        }
+                    }
+
                     // Only allow localhost/127.0.0.1
                     if (url != null && (url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1"))) {
                         return false

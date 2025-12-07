@@ -383,7 +383,7 @@ class AdaptersFragment : Fragment() {
     }
 
     private fun showModuleTypeSelectionDialog(data: ModuleTypesData) {
-        val allModules = data.coreModules + data.modularServices
+        val allModules = data.coreModules + data.adapters
         if (allModules.isEmpty()) {
             Toast.makeText(context, "No adapter types available", Toast.LENGTH_SHORT).show()
             return
@@ -646,9 +646,9 @@ data class ModuleTypesResponse(
 
 data class ModuleTypesData(
     @SerializedName("core_modules") val coreModules: List<ModuleTypeInfo>,
-    @SerializedName("modular_services") val modularServices: List<ModuleTypeInfo>,
+    @SerializedName("adapters") val adapters: List<ModuleTypeInfo>,
     @SerializedName("total_core") val totalCore: Int,
-    @SerializedName("total_modular") val totalModular: Int
+    @SerializedName("total_adapters") val totalAdapters: Int
 )
 
 data class ModuleTypeInfo(

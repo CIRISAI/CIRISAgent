@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ciris_modular_services.reddit.schemas import (
+from ciris_adapters.reddit.schemas import (
     RedditChannelReference,
     RedditChannelType,
     RedditCredentials,

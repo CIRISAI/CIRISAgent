@@ -34,7 +34,7 @@
       "ciris_engine.schemas.runtime.enums"
     ],
     "internal": [
-      "ciris_modular_services.mcp_common"
+      "ciris_adapters.mcp_common"
     ],
     "external": {
       "mcp": ">=1.0.0"

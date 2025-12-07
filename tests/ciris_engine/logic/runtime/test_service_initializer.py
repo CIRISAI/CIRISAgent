@@ -495,25 +495,25 @@ class TestServiceInitializer:
             assert service_initializer.llm_service is not None
 
 
-class TestModularServiceLoading:
-    """Test cases for modular service loading integration."""
+class TestAdapterLoading:
+    """Test cases for adapter loading integration."""
 
     @pytest.fixture
     def temp_services_dir(self, tmp_path):
-        """Create temporary modular services directory."""
-        services_dir = tmp_path / "ciris_modular_services"
+        """Create temporary adapters directory."""
+        services_dir = tmp_path / "ciris_adapters"
         services_dir.mkdir()
         return services_dir
 
     @pytest.fixture
     def mock_essential_config(self):
-        """Create mock essential config for modular service tests."""
+        """Create mock essential config for adapter tests."""
         temp_dir = tempfile.mkdtemp()
         config = Mock(spec=EssentialConfig)
         config.data_dir = temp_dir
         config.db_path = os.path.join(temp_dir, "test.db")
         config.log_level = "INFO"
-        config.agent_occurrence_id = "default"  # Add occurrence_id for modular service injection
+        config.agent_occurrence_id = "default"  # Add occurrence_id for adapter injection
 
         # Add database attribute
         mock_database = Mock()
@@ -588,19 +588,19 @@ class TestModularServiceLoading:
         )
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_not_found(self, mock_service_initializer):
-        """Test loading a modular service that doesn't exist."""
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+    async def test_load_adapter_not_found(self, mock_service_initializer):
+        """Test loading a adapter that doesn't exist."""
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = []
             mock_loader_class.return_value = mock_loader
 
-            with pytest.raises(ValueError, match="Modular service 'nonexistent' not found"):
-                await mock_service_initializer._load_modular_service("nonexistent")
+            with pytest.raises(ValueError, match="Adapter 'nonexistent' not found"):
+                await mock_service_initializer._load_adapter("nonexistent")
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_communication_adapter(self, mock_service_initializer, test_manifest):
-        """Test loading a COMMUNICATION type modular service."""
+    async def test_load_adapter_communication_adapter(self, mock_service_initializer, test_manifest):
+        """Test loading a COMMUNICATION type adapter."""
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create mock service class
@@ -608,13 +608,13 @@ class TestModularServiceLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
-            await mock_service_initializer._load_modular_service("test_adapter")
+            await mock_service_initializer._load_adapter("test_adapter")
 
             # Verify service was registered with ServiceRegistry
             mock_service_initializer.service_registry.register_service.assert_called_once()
@@ -628,8 +628,8 @@ class TestModularServiceLoading:
             assert "modular:test_adapter" in mock_service_initializer.loaded_modules
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_tool_type(self, mock_service_initializer):
-        """Test loading a TOOL type modular service."""
+    async def test_load_adapter_tool_type(self, mock_service_initializer):
+        """Test loading a TOOL type adapter."""
         from ciris_engine.schemas.runtime.enums import ServiceType
         from ciris_engine.schemas.runtime.manifest import (
             ModuleInfo,
@@ -661,13 +661,13 @@ class TestModularServiceLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [tool_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
-            await mock_service_initializer._load_modular_service("tool_service")
+            await mock_service_initializer._load_adapter("tool_service")
 
             # Verify service was registered with ServiceRegistry
             mock_service_initializer.service_registry.register_service.assert_called_once()
@@ -677,8 +677,8 @@ class TestModularServiceLoading:
             assert "execute_tool" in call_args[1]["capabilities"]
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_llm_type(self, mock_service_initializer):
-        """Test loading an LLM type modular service."""
+    async def test_load_adapter_llm_type(self, mock_service_initializer):
+        """Test loading an LLM type adapter."""
         from ciris_engine.schemas.runtime.enums import ServiceType
         from ciris_engine.schemas.runtime.manifest import (
             ModuleInfo,
@@ -710,13 +710,13 @@ class TestModularServiceLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [llm_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
-            await mock_service_initializer._load_modular_service("llm_service")
+            await mock_service_initializer._load_adapter("llm_service")
 
             # Verify service was registered with ServiceRegistry
             mock_service_initializer.service_registry.register_service.assert_called_once()
@@ -726,64 +726,64 @@ class TestModularServiceLoading:
             assert call_kwargs["capabilities"] == ["text_generation"]
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_case_insensitive_match(self, mock_service_initializer, test_manifest):
+    async def test_load_adapter_case_insensitive_match(self, mock_service_initializer, test_manifest):
         """Test that service name matching is case-insensitive."""
         mock_service_class = Mock()
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Test with uppercase
-            await mock_service_initializer._load_modular_service("TEST_ADAPTER")
+            await mock_service_initializer._load_adapter("TEST_ADAPTER")
 
             # Verify service was loaded
             assert "modular:TEST_ADAPTER" in mock_service_initializer.loaded_modules
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_adapter_suffix_handling(self, mock_service_initializer, test_manifest):
+    async def test_load_adapter_adapter_suffix_handling(self, mock_service_initializer, test_manifest):
         """Test that _adapter suffix is handled correctly."""
         mock_service_class = Mock()
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
             mock_loader_class.return_value = mock_loader
 
             # Should match "test" even though manifest is "test_adapter"
-            await mock_service_initializer._load_modular_service("test")
+            await mock_service_initializer._load_adapter("test")
 
             # Verify service was loaded
             assert "modular:test" in mock_service_initializer.loaded_modules
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_load_failure(self, mock_service_initializer, test_manifest):
+    async def test_load_adapter_load_failure(self, mock_service_initializer, test_manifest):
         """Test handling when service class fails to load."""
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = None  # Load failure
             mock_loader_class.return_value = mock_loader
 
             # Should not raise, just log error
-            await mock_service_initializer._load_modular_service("test_adapter")
+            await mock_service_initializer._load_adapter("test_adapter")
 
             # Verify service was NOT registered
             mock_service_initializer.bus_manager.communication.register_service.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_load_modular_service_instantiation_failure(self, mock_service_initializer, test_manifest):
+    async def test_load_adapter_instantiation_failure(self, mock_service_initializer, test_manifest):
         """Test handling when service instantiation fails."""
         mock_service_class = Mock(side_effect=Exception("Instantiation failed"))
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -791,7 +791,7 @@ class TestModularServiceLoading:
 
             # Should raise the exception
             with pytest.raises(Exception, match="Instantiation failed"):
-                await mock_service_initializer._load_modular_service("test_adapter")
+                await mock_service_initializer._load_adapter("test_adapter")
 
     @pytest.mark.asyncio
     async def test_load_modules_with_modular_prefix(self, mock_service_initializer, test_manifest):
@@ -800,7 +800,7 @@ class TestModularServiceLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -814,10 +814,10 @@ class TestModularServiceLoading:
 
     @pytest.mark.asyncio
     async def test_load_modules_loads_mock_services(self, mock_service_initializer):
-        """Test that MOCK modular services are loaded via load_modules.
+        """Test that MOCK adapters are loaded via load_modules.
 
-        Note: The MOCK filtering happens in ModularServiceLoader.initialize_modular_services,
-        not in ServiceInitializer._load_modular_service. This is by design - load_modules
+        Note: The MOCK filtering happens in AdapterLoader.initialize_adapters,
+        not in ServiceInitializer._load_adapter. This is by design - load_modules
         is a direct loader that doesn't filter MOCK services.
         """
         from ciris_engine.schemas.runtime.enums import ServiceType
@@ -851,7 +851,7 @@ class TestModularServiceLoading:
         mock_service_instance = Mock()
         mock_service_class.return_value = mock_service_instance
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [mock_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -865,7 +865,7 @@ class TestModularServiceLoading:
 
     @pytest.mark.asyncio
     async def test_runtime_dependency_injection_success(self, mock_service_initializer, test_manifest):
-        """Test successful runtime dependency injection into modular service."""
+        """Test successful runtime dependency injection into adapter."""
         # Create mock service class that accepts runtime dependencies
         mock_service_instance = Mock()
 
@@ -882,7 +882,7 @@ class TestModularServiceLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -894,7 +894,7 @@ class TestModularServiceLoading:
             mock_service_initializer.secrets_service = Mock()
             mock_service_initializer.time_service = Mock()
 
-            await mock_service_initializer._load_modular_service("test_adapter")
+            await mock_service_initializer._load_adapter("test_adapter")
 
             # Verify service was instantiated with runtime dependencies
             mock_service_class.assert_called_once()
@@ -923,7 +923,7 @@ class TestModularServiceLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -935,7 +935,7 @@ class TestModularServiceLoading:
             mock_service_initializer.secrets_service = Mock()
             mock_service_initializer.time_service = Mock()
 
-            await mock_service_initializer._load_modular_service("test_adapter")
+            await mock_service_initializer._load_adapter("test_adapter")
 
             # Verify service was instantiated twice:
             # 1. First with runtime dependencies (raised TypeError)
@@ -971,7 +971,7 @@ class TestModularServiceLoading:
 
         mock_service_class = Mock(side_effect=mock_service_constructor)
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.ModularServiceLoader") as mock_loader_class:
+        with patch("ciris_engine.logic.runtime.adapter_loader.AdapterLoader") as mock_loader_class:
             mock_loader = Mock()
             mock_loader.discover_services.return_value = [test_manifest]
             mock_loader.load_service_class.return_value = mock_service_class
@@ -983,7 +983,7 @@ class TestModularServiceLoading:
             mock_service_initializer.secrets_service = None
             mock_service_initializer.time_service = None
 
-            await mock_service_initializer._load_modular_service("test_adapter")
+            await mock_service_initializer._load_adapter("test_adapter")
 
             # Verify service was instantiated with None dependencies
             mock_service_class.assert_called_once()

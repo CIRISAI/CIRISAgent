@@ -2,7 +2,7 @@
 
 import pytest
 
-from ciris_modular_services.mcp_common.protocol import (
+from ciris_adapters.mcp_common.protocol import (
     MCPCapability,
     MCPError,
     MCPErrorCode,

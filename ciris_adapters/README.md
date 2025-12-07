@@ -13,7 +13,7 @@ Services should be:
 ## Directory Structure
 
 ```
-ciris_modular_services/
+ciris_adapters/
 ├── mock_llm/              # Example: Mock LLM service (test only)
 ├── your_service/          # Your modular service here
 └── README.md              # This file

@@ -358,7 +358,7 @@ def main():
                 path_str = str(filepath)
 
                 # Skip SDK and modular services from production analysis
-                if any(exclude in path_str for exclude in ["ciris_sdk/", "ciris_modular_services/"]):
+                if any(exclude in path_str for exclude in ["ciris_sdk/", "ciris_adapters/"]):
                     continue
 
                 if path_str.startswith("./tests/") or path_str.startswith("tests/"):

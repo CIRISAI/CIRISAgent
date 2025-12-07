@@ -8,13 +8,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from ciris_modular_services.reddit.observer import RedditObserver
-from ciris_modular_services.reddit.schemas import (
-    RedditCommentSummary,
-    RedditCredentials,
-    RedditMessage,
-    RedditTimelineEntry,
-)
+from ciris_adapters.reddit.observer import RedditObserver
+from ciris_adapters.reddit.schemas import RedditCommentSummary, RedditCredentials, RedditMessage, RedditTimelineEntry
 
 
 @pytest.fixture

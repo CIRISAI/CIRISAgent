@@ -10,7 +10,7 @@ This directory contains a comprehensive analysis of the Reddit adapter implement
 - **Lines of Code**: ~1,900 (service: 1,188, observer: 162, schemas: 356)
 - **Test Coverage**: 0% (no dedicated tests)
 - **Type Safety**: ~95% (excellent)
-- **Location**: `/home/emoore/CIRISAgent/ciris_modular_services/reddit/`
+- **Location**: `/home/emoore/CIRISAgent/ciris_adapters/reddit/`
 
 ## Analysis Documents
 
@@ -147,7 +147,7 @@ This directory contains a comprehensive analysis of the Reddit adapter implement
 
 ### Implementation Source Files
 ```
-/home/emoore/CIRISAgent/ciris_modular_services/reddit/
+/home/emoore/CIRISAgent/ciris_adapters/reddit/
 ├── __init__.py              # Package exports
 ├── README.md                # Module documentation
 ├── manifest.json            # Service declaration
@@ -277,7 +277,7 @@ Channel Types Supported:  4 (subreddit, submission, comment, user)
 
 1. **Read REDDIT_ADAPTER_ANALYSIS.md** for comprehensive technical understanding
 2. **Consult REDDIT_ADAPTER_SUMMARY.txt** for quick reference
-3. **Review source files** at `/home/emoore/CIRISAgent/ciris_modular_services/reddit/`
+3. **Review source files** at `/home/emoore/CIRISAgent/ciris_adapters/reddit/`
 4. **Implement Priority 1** (test suite) before public deployment
 5. **Track recommendations** using deployment checklist
 
@@ -288,7 +288,7 @@ Channel Types Supported:  4 (subreddit, submission, comment, user)
 For questions about this analysis:
 - Review the referenced sections in REDDIT_ADAPTER_ANALYSIS.md
 - Consult the code comments in service.py (1,188 lines)
-- Check the README at `/home/emoore/CIRISAgent/ciris_modular_services/reddit/README.md`
+- Check the README at `/home/emoore/CIRISAgent/ciris_adapters/reddit/README.md`
 
 For implementation questions:
 - See CLAUDE.md for CIRIS development guidelines

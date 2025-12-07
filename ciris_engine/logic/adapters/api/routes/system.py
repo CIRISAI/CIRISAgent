@@ -1467,7 +1467,7 @@ def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
     import importlib
 
     try:
-        submodule = importlib.import_module(f"ciris_modular_services.{service_name}")
+        submodule = importlib.import_module(f"ciris_adapters.{service_name}")
         if not hasattr(submodule, "__path__"):
             return None
         manifest_file = Path(submodule.__path__[0]) / MANIFEST_FILENAME
@@ -1483,7 +1483,7 @@ def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
 
 async def _discover_services_from_directory(services_base: Path) -> List[ModuleTypeInfo]:
     """Discover modular services by iterating the services directory."""
-    modular_services: List[ModuleTypeInfo] = []
+    adapters: List[ModuleTypeInfo] = []
 
     for item in services_base.iterdir():
         if not item.is_dir() or item.name.startswith("_"):
@@ -1492,7 +1492,7 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
         # Try importlib-based loading first (Android compatibility)
         module_info = _try_load_service_manifest(item.name)
         if module_info:
-            modular_services.append(module_info)
+            adapters.append(module_info)
             logger.debug("Discovered modular service: %s", item.name)
             continue
 
@@ -1501,34 +1501,34 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
         manifest_data = await _read_manifest_async(manifest_path)
         if manifest_data:
             module_info = _parse_manifest_to_module_info(manifest_data, item.name)
-            modular_services.append(module_info)
+            adapters.append(module_info)
             logger.debug("Discovered modular service (direct): %s", item.name)
 
-    return modular_services
+    return adapters
 
 
 async def _discover_services_by_name() -> List[ModuleTypeInfo]:
     """Discover modular services from known service names (Android fallback)."""
-    modular_services: List[ModuleTypeInfo] = []
+    adapters: List[ModuleTypeInfo] = []
 
     for svc_name in KNOWN_MODULAR_SERVICES:
         module_info = _try_load_service_manifest(svc_name)
         if module_info:
-            modular_services.append(module_info)
+            adapters.append(module_info)
             logger.debug("Discovered modular service (known): %s", svc_name)
 
-    return modular_services
+    return adapters
 
 
-async def _discover_modular_services() -> List[ModuleTypeInfo]:
+async def _discover_adapters() -> List[ModuleTypeInfo]:
     """Discover all available modular services."""
     try:
-        import ciris_modular_services
+        import ciris_adapters
 
-        if not hasattr(ciris_modular_services, "__path__"):
+        if not hasattr(ciris_adapters, "__path__"):
             return []
 
-        services_base = Path(ciris_modular_services.__path__[0])
+        services_base = Path(ciris_adapters.__path__[0])
         logger.debug("Modular services base path: %s", services_base)
 
         try:
@@ -1538,7 +1538,7 @@ async def _discover_modular_services() -> List[ModuleTypeInfo]:
             return await _discover_services_by_name()
 
     except ImportError as e:
-        logger.debug("ciris_modular_services not available: %s", e)
+        logger.debug("ciris_adapters not available: %s", e)
         return []
 
 
@@ -1565,13 +1565,13 @@ async def list_module_types(
         core_modules = [_get_core_adapter_info(t) for t in core_adapter_types]
 
         # Discover modular services
-        modular_services = await _discover_modular_services()
+        adapters = await _discover_adapters()
 
         response = ModuleTypesResponse(
             core_modules=core_modules,
-            modular_services=modular_services,
+            adapters=adapters,
             total_core=len(core_modules),
-            total_modular=len(modular_services),
+            total_adapters=len(adapters),
         )
 
         return SuccessResponse(data=response)

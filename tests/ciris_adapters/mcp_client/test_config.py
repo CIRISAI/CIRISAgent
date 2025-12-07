@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_modular_services.mcp_client.config import (
+from ciris_adapters.mcp_client.config import (
     MCPAdapterConfig,
     MCPBusBinding,
     MCPBusType,

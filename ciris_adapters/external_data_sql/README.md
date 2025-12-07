@@ -172,7 +172,7 @@ print(f"Privacy schema configured: {metadata['privacy_schema_configured']}")
 You can still initialize with static configuration for simple use cases:
 
 ```python
-from ciris_modular_services.external_data_sql import SQLToolService, SQLConnectorConfig, PrivacySchemaConfig
+from ciris_adapters.external_data_sql import SQLToolService, SQLConnectorConfig, PrivacySchemaConfig
 
 # Define privacy schema
 privacy_schema = PrivacySchemaConfig(
@@ -517,7 +517,7 @@ result2 = await sql_service.execute_tool(
 ## File Structure
 
 ```
-ciris_modular_services/external_data_sql/
+ciris_adapters/external_data_sql/
 ├── manifest.json          # Service declaration
 ├── protocol.py            # SQLDataSourceProtocol
 ├── schemas.py             # Pydantic models

@@ -2,7 +2,7 @@
 
 import pytest
 
-from ciris_modular_services.mcp_common.schemas import (
+from ciris_adapters.mcp_common.schemas import (
     MCPListPromptsResult,
     MCPListResourcesResult,
     MCPListToolsResult,

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ciris_modular_services.mcp_client.config import MCPBusBinding, MCPBusType, MCPSecurityConfig, MCPServerConfig
-from ciris_modular_services.mcp_client.security import (
+from ciris_adapters.mcp_client.config import MCPBusBinding, MCPBusType, MCPSecurityConfig, MCPServerConfig
+from ciris_adapters.mcp_client.security import (
     InputValidator,
     MCPSecurityManager,
     RateLimiter,

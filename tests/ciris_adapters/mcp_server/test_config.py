@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_modular_services.mcp_server.config import (
+from ciris_adapters.mcp_server.config import (
     AuthMethod,
     MCPServerAdapterConfig,
     MCPServerExposureConfig,

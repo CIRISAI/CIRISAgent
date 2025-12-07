@@ -90,7 +90,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
 ### Mock LLM Provider
 
-**File**: `ciris_modular_services/mock_llm/service.py`
+**File**: `ciris_adapters/mock_llm/service.py`
 
 ```python
 class MockLLMService(BaseService, MockLLMServiceProtocol):

@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_modular_services.reddit.observer import RedditObserver
-from ciris_modular_services.reddit.schemas import RedditCredentials
-from ciris_modular_services.reddit.service import RedditCommunicationService
+from ciris_adapters.reddit.observer import RedditObserver
+from ciris_adapters.reddit.schemas import RedditCredentials
+from ciris_adapters.reddit.service import RedditCommunicationService
 
 
 class TestRedditObserverOccurrenceID:
@@ -68,7 +68,7 @@ class TestRedditObserverOccurrenceID:
 
     def test_observer_occurrence_id_propagation_to_base(self, mock_credentials, mock_bus_manager, mock_memory_service):
         """Test that occurrence_id is passed to BaseObserver.__init__()."""
-        with patch("ciris_modular_services.reddit.observer.BaseObserver.__init__") as mock_base_init:
+        with patch("ciris_adapters.reddit.observer.BaseObserver.__init__") as mock_base_init:
             mock_base_init.return_value = None
 
             observer = RedditObserver(
@@ -116,7 +116,7 @@ class TestRedditObserverOccurrenceID:
         )
 
         # Mock the RedditObserver to capture initialization parameters
-        with patch("ciris_modular_services.reddit.observer.RedditObserver") as mock_observer_class:
+        with patch("ciris_adapters.reddit.observer.RedditObserver") as mock_observer_class:
             mock_observer_instance = MagicMock()
             mock_observer_instance.start = AsyncMock()
             mock_observer_class.return_value = mock_observer_instance
@@ -146,7 +146,7 @@ class TestRedditObserverOccurrenceID:
         # Mock the API client to avoid actual Reddit authentication
         with patch.object(service._client, "start", new_callable=AsyncMock):
             # Mock observer's API client start (observer has its own client)
-            with patch("ciris_modular_services.reddit.service.RedditAPIClient.start", new_callable=AsyncMock):
+            with patch("ciris_adapters.reddit.service.RedditAPIClient.start", new_callable=AsyncMock):
                 # Start the service (creates observer)
                 await service.start()
 

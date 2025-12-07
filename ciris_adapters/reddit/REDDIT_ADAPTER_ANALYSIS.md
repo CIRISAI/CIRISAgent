@@ -5,14 +5,14 @@
 The CIRIS codebase contains a **complete, production-ready Reddit adapter** implementation as a modular service. The adapter provides full Reddit integration with tool, communication, and observation capabilities. The implementation uses **httpx for HTTP requests** instead of PRAW (Python Reddit API Wrapper), providing direct OAuth2 handling.
 
 **Status**: IMPLEMENTED (1,188 lines of production code)
-**Location**: `/home/emoore/CIRISAgent/ciris_modular_services/reddit/`
+**Location**: `/home/emoore/CIRISAgent/ciris_adapters/reddit/`
 
 ---
 
 ## 1. Directory Structure
 
 ```
-ciris_modular_services/reddit/
+ciris_adapters/reddit/
 ├── __init__.py              # Package exports
 ├── README.md                # Complete documentation
 ├── manifest.json            # Module declaration (JSON)
@@ -337,7 +337,7 @@ Moderation tools are well-designed with type safety and integrated anti-spoofing
    - Reddit policy compliant (includes contact URL)
 
 2. **README Documentation**
-   - Comprehensive module documentation at `/ciris_modular_services/reddit/README.md`
+   - Comprehensive module documentation at `/ciris_adapters/reddit/README.md`
    - Explains capabilities, configuration, and channel references
    - Safety section: "Adheres to the CIRIS covenant"
 
@@ -656,7 +656,7 @@ RedditSubmissionSummary   ✅ Full metadata response
 
 | Aspect | Status | Notes |
 |--------|--------|-------|
-| **Directory Structure** | ✅ Complete | Modular service at `/ciris_modular_services/reddit/` |
+| **Directory Structure** | ✅ Complete | Modular service at `/ciris_adapters/reddit/` |
 | **Reddit API Integration** | ✅ Complete | Custom httpx-based client, no PRAW dependency |
 | **Bot Identification** | ✅ Complete | User-Agent clearly identifies as CIRIS |
 | **Data Retention** | ⚠️ Partial | Token expiration + cache limits, but no deletion API |

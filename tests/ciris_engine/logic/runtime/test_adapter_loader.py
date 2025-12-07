@@ -1,5 +1,5 @@
 """
-Comprehensive tests for ModularServiceLoader.
+Comprehensive tests for AdapterLoader.
 
 Tests dynamic service discovery, loading, and initialization using proper Pydantic schemas.
 """
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.logic.runtime.modular_service_loader import ModularServiceLoader
+from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
 from ciris_engine.protocols.services import ServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import (
@@ -59,7 +59,7 @@ class MockService(ServiceProtocol):
 @pytest.fixture
 def temp_services_dir(tmp_path):
     """Create temporary services directory structure."""
-    services_dir = tmp_path / "ciris_modular_services"
+    services_dir = tmp_path / "ciris_adapters"
     services_dir.mkdir()
     return services_dir
 
@@ -136,43 +136,43 @@ def service_with_manifest(temp_services_dir, valid_manifest):
     # Create a simple Python module
     init_file = service_dir / "__init__.py"
     init_file.write_text(
-        "from ciris_engine.logic.runtime.test_modular_service_loader import MockService\n" "__all__ = ['MockService']"
+        "from ciris_engine.logic.runtime.test_adapter_loader import MockService\n" "__all__ = ['MockService']"
     )
 
     return service_dir
 
 
-class TestModularServiceLoader:
-    """Test suite for ModularServiceLoader."""
+class TestAdapterLoader:
+    """Test suite for AdapterLoader."""
 
     def test_initialization(self, temp_services_dir):
         """Test loader initialization with custom directory."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         assert loader.services_dir == temp_services_dir
         assert loader.loaded_services == {}
 
     def test_initialization_default_dir(self):
         """Test loader initialization with default directory."""
-        loader = ModularServiceLoader()
-        assert loader.services_dir == Path("ciris_modular_services")
+        loader = AdapterLoader()
+        assert loader.services_dir == Path("ciris_adapters")
         assert loader.loaded_services == {}
 
     def test_discover_services_empty_dir(self, temp_services_dir):
         """Test service discovery with empty directory."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         services = loader.discover_services()
         assert services == []
 
     def test_discover_services_no_dir(self, tmp_path):
         """Test service discovery when directory doesn't exist."""
         non_existent = tmp_path / "non_existent"
-        loader = ModularServiceLoader(services_dir=non_existent)
+        loader = AdapterLoader(services_dir=non_existent)
         services = loader.discover_services()
         assert services == []
 
     def test_discover_services_with_manifest(self, service_with_manifest, temp_services_dir):
         """Test discovering service with valid manifest."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         services = loader.discover_services()
 
         assert len(services) == 1
@@ -200,7 +200,7 @@ class TestModularServiceLoader:
         )
         (valid_dir / "manifest.json").write_text(manifest.model_dump_json())
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         services = loader.discover_services()
 
         assert len(services) == 1
@@ -212,39 +212,39 @@ class TestModularServiceLoader:
         service_dir.mkdir()
         (service_dir / "manifest.json").write_text(json.dumps(invalid_manifest))
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
-        with patch("ciris_engine.logic.runtime.modular_service_loader.logger") as mock_logger:
+        loader = AdapterLoader(services_dir=temp_services_dir)
+        with patch("ciris_engine.logic.runtime.adapter_loader.logger") as mock_logger:
             services = loader.discover_services()
             assert services == []
 
     def test_validate_manifest_valid(self, valid_manifest):
         """Test validation of valid manifest."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
         assert loader.validate_manifest(valid_manifest) is True
 
     def test_validate_manifest_with_errors(self, valid_manifest):
         """Test validation of manifest with errors."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         # Mock the validate_manifest method to return errors
         with patch.object(ServiceManifest, "validate_manifest", return_value=["Error 1", "Error 2"]):
-            with patch("ciris_engine.logic.runtime.modular_service_loader.logger") as mock_logger:
+            with patch("ciris_engine.logic.runtime.adapter_loader.logger") as mock_logger:
                 result = loader.validate_manifest(valid_manifest)
                 assert result is False
                 assert mock_logger.error.call_count == 2
 
     def test_check_dependencies_no_deps(self, mock_manifest):
         """Test dependency check with no dependencies."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
         mock_manifest.dependencies = None
         assert loader.check_dependencies(mock_manifest) is True
 
     def test_check_dependencies_valid(self, valid_manifest):
         """Test dependency check with valid dependencies."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         # Mock importlib to simulate successful imports
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_module = MagicMock()
             mock_module.ServiceProtocol = MagicMock()
             mock_import.return_value = mock_module
@@ -253,9 +253,9 @@ class TestModularServiceLoader:
 
     def test_check_dependencies_missing_protocol(self, valid_manifest):
         """Test dependency check with missing protocol."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_module = MagicMock(spec=[])  # Empty spec means no attributes
             mock_import.return_value = mock_module
 
@@ -264,9 +264,9 @@ class TestModularServiceLoader:
 
     def test_check_dependencies_import_error(self, valid_manifest):
         """Test dependency check with import error."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_import.side_effect = ImportError("Module not found")
 
             result = loader.check_dependencies(valid_manifest)
@@ -274,7 +274,7 @@ class TestModularServiceLoader:
 
     def test_load_service_invalid_manifest(self, valid_manifest):
         """Test loading service with invalid manifest."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         with patch.object(loader, "validate_manifest", return_value=False):
             result = loader.load_service(valid_manifest)
@@ -282,7 +282,7 @@ class TestModularServiceLoader:
 
     def test_load_service_failed_dependencies(self, valid_manifest):
         """Test loading service with failed dependencies."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         with patch.object(loader, "check_dependencies", return_value=False):
             result = loader.load_service(valid_manifest)
@@ -290,7 +290,7 @@ class TestModularServiceLoader:
 
     def test_load_service_missing_path(self, valid_manifest):
         """Test loading service without path information."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         # Don't set _path attribute
         result = loader.load_service(valid_manifest)
@@ -298,10 +298,10 @@ class TestModularServiceLoader:
 
     def test_load_service_success(self, valid_manifest, temp_services_dir):
         """Test successful service loading."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(valid_manifest, "_path", temp_services_dir / "test_service")
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_module = MagicMock()
             mock_module.MockService = MockService
             mock_import.return_value = mock_module
@@ -326,10 +326,10 @@ class TestModularServiceLoader:
             exports={"service_class": "legacy.LegacyService"},  # Legacy format
         )
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(manifest, "_path", temp_services_dir / "legacy_service")
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_module = MagicMock()
             mock_module.LegacyService = MockService
             mock_import.return_value = mock_module
@@ -344,7 +344,7 @@ class TestModularServiceLoader:
             services=[],  # No services defined
         )
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(manifest, "_path", temp_services_dir / "no_class")
 
         result = loader.load_service(manifest)
@@ -352,10 +352,10 @@ class TestModularServiceLoader:
 
     def test_load_service_import_error(self, valid_manifest, temp_services_dir):
         """Test handling import error during service loading."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(valid_manifest, "_path", temp_services_dir / "test_service")
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_import.side_effect = ImportError("Cannot import module")
 
             result = loader.load_service(valid_manifest)
@@ -363,7 +363,7 @@ class TestModularServiceLoader:
 
     def test_get_service_metadata(self, valid_manifest):
         """Test getting metadata for loaded service."""
-        loader = ModularServiceLoader()
+        loader = AdapterLoader()
 
         # Add metadata
         metadata = ServiceMetadata(
@@ -385,48 +385,48 @@ class TestModularServiceLoader:
         assert loader.get_service_metadata("non_existent") is None
 
     @pytest.mark.asyncio
-    async def test_initialize_modular_services_empty(self, temp_services_dir):
+    async def test_initialize_adapters_empty(self, temp_services_dir):
         """Test initialization with no services."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         mock_registry = MagicMock()
         mock_config = MagicMock()
 
-        result = await loader.initialize_modular_services(mock_registry, mock_config)
+        result = await loader.initialize_adapters(mock_registry, mock_config)
 
         assert isinstance(result, ModuleLoadResult)
-        assert result.module_name == "modular_services"
+        assert result.module_name == "adapters"
         assert result.success is True
         assert result.services_loaded == []
         assert result.errors == []
 
     @pytest.mark.asyncio
-    async def test_initialize_modular_services_skip_mock_in_production(self, temp_services_dir, mock_manifest):
+    async def test_initialize_adapters_skip_mock_in_production(self, temp_services_dir, mock_manifest):
         """Test that mock services are skipped in production mode."""
         # Create mock service directory
         service_dir = temp_services_dir / "mock_service"
         service_dir.mkdir()
         (service_dir / "manifest.json").write_text(mock_manifest.model_dump_json())
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         mock_registry = MagicMock()
         mock_config = MagicMock()
         mock_config.mock_llm = False  # Production mode
 
-        result = await loader.initialize_modular_services(mock_registry, mock_config)
+        result = await loader.initialize_adapters(mock_registry, mock_config)
 
         assert result.success is True
         assert len(result.warnings) == 1
         assert "Skipping mock service in production" in result.warnings[0]
 
     @pytest.mark.asyncio
-    async def test_initialize_modular_services_success(self, temp_services_dir, valid_manifest):
+    async def test_initialize_adapters_success(self, temp_services_dir, valid_manifest):
         """Test successful service initialization and registration."""
         # Create service directory
         service_dir = temp_services_dir / "test_service"
         service_dir.mkdir()
         (service_dir / "manifest.json").write_text(valid_manifest.model_dump_json())
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         mock_registry = MagicMock()
         mock_config = MagicMock()
         mock_config.mock_llm = False
@@ -447,7 +447,7 @@ class TestModularServiceLoader:
             return MockService
 
         with patch.object(loader, "load_service", side_effect=mock_load_service):
-            result = await loader.initialize_modular_services(mock_registry, mock_config)
+            result = await loader.initialize_adapters(mock_registry, mock_config)
 
             assert result.success is True
             assert len(result.services_loaded) == 1
@@ -464,14 +464,14 @@ class TestModularServiceLoader:
             assert "test_capability" in call_args.kwargs["capabilities"]
 
     @pytest.mark.asyncio
-    async def test_initialize_modular_services_init_error(self, temp_services_dir, valid_manifest):
+    async def test_initialize_adapters_init_error(self, temp_services_dir, valid_manifest):
         """Test handling of initialization errors."""
         # Create service directory
         service_dir = temp_services_dir / "test_service"
         service_dir.mkdir()
         (service_dir / "manifest.json").write_text(valid_manifest.model_dump_json())
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         mock_registry = MagicMock()
         mock_config = MagicMock()
 
@@ -481,21 +481,21 @@ class TestModularServiceLoader:
             mock_class.side_effect = Exception("Initialization failed")
             mock_load.return_value = mock_class
 
-            result = await loader.initialize_modular_services(mock_registry, mock_config)
+            result = await loader.initialize_adapters(mock_registry, mock_config)
 
             assert result.success is False
             assert len(result.errors) == 1
             assert "Failed to initialize test_service" in result.errors[0]
 
     @pytest.mark.asyncio
-    async def test_initialize_modular_services_with_configuration(self, temp_services_dir, valid_manifest):
+    async def test_initialize_adapters_with_configuration(self, temp_services_dir, valid_manifest):
         """Test service initialization with configuration parameters."""
         # Create service directory
         service_dir = temp_services_dir / "test_service"
         service_dir.mkdir()
         (service_dir / "manifest.json").write_text(valid_manifest.model_dump_json())
 
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         mock_registry = MagicMock()
         mock_config = MagicMock()
 
@@ -525,7 +525,7 @@ class TestModularServiceLoader:
             return mock_service_class
 
         with patch.object(loader, "load_service", side_effect=mock_load_with_metadata):
-            result = await loader.initialize_modular_services(mock_registry, mock_config)
+            result = await loader.initialize_adapters(mock_registry, mock_config)
 
             assert result.success is True
             # Verify default configuration values were passed
@@ -534,14 +534,14 @@ class TestModularServiceLoader:
 
     def test_sys_path_cleanup_on_error(self, valid_manifest, temp_services_dir):
         """Test that sys.path is cleaned up even on error."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(valid_manifest, "_path", temp_services_dir / "test_service")
 
         original_path = sys.path.copy()
 
         # We need to patch check_dependencies to pass, then make the actual import fail
         with patch.object(loader, "check_dependencies", return_value=True):
-            with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+            with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
                 mock_import.side_effect = Exception("Import failed")
 
                 loader.load_service(valid_manifest)
@@ -551,12 +551,12 @@ class TestModularServiceLoader:
 
     def test_sys_path_cleanup_on_success(self, valid_manifest, temp_services_dir):
         """Test that sys.path is cleaned up after successful load."""
-        loader = ModularServiceLoader(services_dir=temp_services_dir)
+        loader = AdapterLoader(services_dir=temp_services_dir)
         setattr(valid_manifest, "_path", temp_services_dir / "test_service")
 
         original_path = sys.path.copy()
 
-        with patch("ciris_engine.logic.runtime.modular_service_loader.importlib.import_module") as mock_import:
+        with patch("ciris_engine.logic.runtime.adapter_loader.importlib.import_module") as mock_import:
             mock_module = MagicMock()
             mock_module.MockService = MockService
             mock_import.return_value = mock_module

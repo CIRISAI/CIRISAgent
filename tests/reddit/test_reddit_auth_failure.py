@@ -14,9 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_modular_services.reddit.error_handler import ErrorSeverity, RedditErrorHandler
-from ciris_modular_services.reddit.schemas import RedditCredentials
-from ciris_modular_services.reddit.service import RedditAPIClient
+from ciris_adapters.reddit.error_handler import ErrorSeverity, RedditErrorHandler
+from ciris_adapters.reddit.schemas import RedditCredentials
+from ciris_adapters.reddit.service import RedditAPIClient
 
 
 class TestAuthFailureDetection:

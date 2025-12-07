@@ -1,7 +1,7 @@
 """
-Dynamic loader for modular services.
+Dynamic loader for adapters.
 
-Discovers and loads services from the ciris_modular_services directory.
+Discovers and loads services from the ciris_adapters directory.
 """
 
 import importlib
@@ -18,19 +18,19 @@ from ciris_engine.schemas.runtime.manifest import ModuleLoadResult, ServiceManif
 logger = logging.getLogger(__name__)
 
 
-class ModularServiceLoader:
-    """Loads modular services from external packages."""
+class AdapterLoader:
+    """Loads adapters from external packages."""
 
     def __init__(self, services_dir: Path | None = None) -> None:
-        self.services_dir = services_dir or Path("ciris_modular_services")
+        self.services_dir = services_dir or Path("ciris_adapters")
         self.loaded_services: Dict[str, ServiceMetadata] = {}
 
     def discover_services(self) -> List[ServiceManifest]:
-        """Discover all modular services with valid manifests."""
+        """Discover all adapters with valid manifests."""
         services: List[ServiceManifest] = []
 
         if not self.services_dir.exists():
-            logger.info(f"Modular services directory not found: {self.services_dir}")
+            logger.info(f"Adapters directory not found: {self.services_dir}")
             return services
 
         for service_dir in self.services_dir.iterdir():
@@ -48,7 +48,7 @@ class ModularServiceLoader:
                     # Store path separately for loading
                     setattr(manifest, "_path", service_dir)
                     services.append(manifest)
-                    logger.info(f"Discovered modular service: {manifest.module.name}")
+                    logger.info(f"Discovered adapter: {manifest.module.name}")
                 except Exception as e:
                     logger.error(f"Failed to load manifest from {service_dir}: {e}")
 
@@ -178,7 +178,7 @@ class ModularServiceLoader:
             health_status="loaded",
         )
         self.loaded_services[service_name] = service_meta
-        logger.info(f"Successfully loaded modular service: {service_name}")
+        logger.info(f"Successfully loaded adapter: {service_name}")
 
         return service_class
 
@@ -186,9 +186,9 @@ class ModularServiceLoader:
         """Get metadata for a loaded service."""
         return self.loaded_services.get(service_name)
 
-    async def initialize_modular_services(self, service_registry: Any, config: Any) -> ModuleLoadResult:
-        """Initialize all discovered modular services."""
-        result = ModuleLoadResult(module_name="modular_services", success=True)
+    async def initialize_adapters(self, service_registry: Any, config: Any) -> ModuleLoadResult:
+        """Initialize all discovered adapters."""
+        result = ModuleLoadResult(module_name="adapters", success=True)
 
         # Discover services
         discovered = self.discover_services()
@@ -231,7 +231,7 @@ class ModularServiceLoader:
                 service_meta = self.loaded_services[manifest.module.name]
                 service_meta.health_status = "started"
                 result.services_loaded.append(service_meta)
-                logger.info(f"Initialized modular service: {manifest.module.name}")
+                logger.info(f"Initialized adapter: {manifest.module.name}")
 
                 # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
                 if manifest.module.is_mock:

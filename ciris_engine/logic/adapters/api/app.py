@@ -151,6 +151,8 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         # Adapter-created services
         app.state.communication_service = None
         app.state.tool_service = None
+        # Adapter configuration service (for interactive adapter setup)
+        app.state.adapter_configuration_service = None
         # Message buses (injected from bus_manager)
         app.state.tool_bus = None
         app.state.memory_bus = None

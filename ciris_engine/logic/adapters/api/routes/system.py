@@ -32,6 +32,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
 )
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.manifest import ConfigurationStep
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
@@ -211,6 +212,94 @@ class ToolInfoResponse(BaseModel):
     category: str = Field("general", description="Tool category")
     cost: float = Field(0.0, description="Cost to execute the tool")
     when_to_use: Optional[str] = Field(None, description="Guidance on when to use the tool")
+
+
+# Adapter Configuration Response Models
+
+
+class ConfigurableAdapterInfo(BaseModel):
+    """Information about an adapter that supports interactive configuration."""
+
+    adapter_type: str = Field(..., description="Type identifier for the adapter")
+    name: str = Field(..., description="Human-readable name")
+    description: str = Field(..., description="Description of the adapter")
+    workflow_type: str = Field(..., description="Type of configuration workflow")
+    step_count: int = Field(..., description="Number of steps in the configuration workflow")
+    requires_oauth: bool = Field(False, description="Whether this adapter requires OAuth authentication")
+
+
+class ConfigurableAdaptersResponse(BaseModel):
+    """Response containing list of configurable adapters."""
+
+    adapters: List[ConfigurableAdapterInfo] = Field(..., description="List of configurable adapters")
+    total_count: int = Field(..., description="Total number of configurable adapters")
+
+
+class ConfigurationSessionResponse(BaseModel):
+    """Response for starting a configuration session."""
+
+    session_id: str = Field(..., description="Unique session identifier")
+    adapter_type: str = Field(..., description="Adapter being configured")
+    status: str = Field(..., description="Current session status")
+    current_step_index: int = Field(..., description="Index of current step")
+    current_step: Optional[ConfigurationStep] = Field(None, description="Current step information")
+    total_steps: int = Field(..., description="Total number of steps in workflow")
+    created_at: datetime = Field(..., description="When session was created")
+
+    @field_serializer("created_at")
+    def serialize_ts(self, created_at: datetime, _info: Any) -> Optional[str]:
+        return serialize_timestamp(created_at, _info)
+
+
+class ConfigurationStatusResponse(BaseModel):
+    """Response for configuration session status."""
+
+    session_id: str = Field(..., description="Session identifier")
+    adapter_type: str = Field(..., description="Adapter being configured")
+    status: str = Field(..., description="Current session status")
+    current_step_index: int = Field(..., description="Index of current step")
+    current_step: Optional[ConfigurationStep] = Field(None, description="Current step information")
+    total_steps: int = Field(..., description="Total number of steps in workflow")
+    collected_config: Dict[str, Any] = Field(..., description="Configuration collected so far")
+    created_at: datetime = Field(..., description="When session was created")
+    updated_at: datetime = Field(..., description="When session was last updated")
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_times(self, dt: datetime, _info: Any) -> Optional[str]:
+        return serialize_timestamp(dt, _info)
+
+
+class StepExecutionRequest(BaseModel):
+    """Request to execute a configuration step."""
+
+    step_data: Dict[str, Any] = Field(default_factory=dict, description="Data for step execution")
+
+
+class StepExecutionResponse(BaseModel):
+    """Response from executing a configuration step."""
+
+    step_id: str = Field(..., description="ID of the executed step")
+    success: bool = Field(..., description="Whether step execution succeeded")
+    data: Dict[str, Any] = Field(default_factory=dict, description="Data returned by the step")
+    next_step_index: Optional[int] = Field(None, description="Index of next step to execute")
+    error: Optional[str] = Field(None, description="Error message if execution failed")
+    awaiting_callback: bool = Field(False, description="Whether step is waiting for external callback")
+
+
+class ConfigurationCompleteRequest(BaseModel):
+    """Request body for completing a configuration session."""
+
+    persist: bool = Field(default=False, description="If True, persist configuration for automatic loading on startup")
+
+
+class ConfigurationCompleteResponse(BaseModel):
+    """Response from completing a configuration session."""
+
+    success: bool = Field(..., description="Whether configuration was applied successfully")
+    adapter_type: str = Field(..., description="Adapter that was configured")
+    message: str = Field(..., description="Human-readable result message")
+    applied_config: Dict[str, Any] = Field(default_factory=dict, description="Configuration that was applied")
+    persisted: bool = Field(default=False, description="Whether configuration was persisted for startup")
 
 
 # Endpoints
@@ -1377,6 +1466,45 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
     )
 
 
+def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
+    """Check if an adapter should be filtered from public listings.
+
+    Filters out:
+    - Mock adapters (module.MOCK: true)
+    - Library modules (metadata.type: "library")
+    - Modules with no services (empty services array)
+    - Common/utility modules (name ends with _common)
+
+    Args:
+        manifest_data: The manifest JSON data
+
+    Returns:
+        True if the adapter should be filtered (hidden), False otherwise
+    """
+    module_info = manifest_data.get("module", {})
+    metadata = manifest_data.get("metadata", {})
+    services = manifest_data.get("services", [])
+
+    # Filter mock adapters
+    if module_info.get("MOCK", False):
+        return True
+
+    # Filter library modules
+    if isinstance(metadata, dict) and metadata.get("type") == "library":
+        return True
+
+    # Filter modules with no services (utility/common modules)
+    if not services:
+        return True
+
+    # Filter common modules by name pattern
+    module_name = module_info.get("name", "")
+    if module_name.endswith("_common") or module_name.endswith("common"):
+        return True
+
+    return False
+
+
 def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
     """Parse a module manifest into a ModuleTypeInfo."""
     module_info = manifest_data.get("module", {})
@@ -1462,8 +1590,16 @@ async def _read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
-    """Try to load a modular service manifest by name."""
+def _try_load_service_manifest(service_name: str, apply_filter: bool = True) -> Optional[ModuleTypeInfo]:
+    """Try to load a modular service manifest by name.
+
+    Args:
+        service_name: Name of the service to load
+        apply_filter: If True, filter out mock/common/library modules
+
+    Returns:
+        ModuleTypeInfo if found and not filtered, None otherwise
+    """
     import importlib
 
     try:
@@ -1475,6 +1611,12 @@ def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
             return None
         with open(manifest_file) as f:
             manifest_data = json.load(f)
+
+        # Filter out mock/common/library modules from public listings
+        if apply_filter and _should_filter_adapter(manifest_data):
+            logger.debug("Filtering adapter %s from listings (mock/common/library)", service_name)
+            return None
+
         return _parse_manifest_to_module_info(manifest_data, service_name)
     except Exception as e:
         logger.debug("Service %s not available: %s", service_name, e)
@@ -1482,7 +1624,10 @@ def _try_load_service_manifest(service_name: str) -> Optional[ModuleTypeInfo]:
 
 
 async def _discover_services_from_directory(services_base: Path) -> List[ModuleTypeInfo]:
-    """Discover modular services by iterating the services directory."""
+    """Discover modular services by iterating the services directory.
+
+    Filters out mock, common, and library modules from the listing.
+    """
     adapters: List[ModuleTypeInfo] = []
 
     for item in services_base.iterdir():
@@ -1490,6 +1635,7 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
             continue
 
         # Try importlib-based loading first (Android compatibility)
+        # Filter is applied inside _try_load_service_manifest
         module_info = _try_load_service_manifest(item.name)
         if module_info:
             adapters.append(module_info)
@@ -1500,6 +1646,11 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
         manifest_path = item / MANIFEST_FILENAME
         manifest_data = await _read_manifest_async(manifest_path)
         if manifest_data:
+            # Apply filter for direct file access path
+            if _should_filter_adapter(manifest_data):
+                logger.debug("Filtering adapter %s from listings (mock/common/library)", item.name)
+                continue
+
             module_info = _parse_manifest_to_module_info(manifest_data, item.name)
             adapters.append(module_info)
             logger.debug("Discovered modular service (direct): %s", item.name)
@@ -1578,6 +1729,172 @@ async def list_module_types(
 
     except Exception as e:
         logger.error("Error listing module types: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# NOTE: Static routes like /adapters/persisted and /adapters/configurable must come BEFORE
+# the parametrized route /adapters/{adapter_id} to avoid being captured by the path parameter.
+
+
+class PersistedConfigsResponse(BaseModel):
+    """Response for persisted adapter configurations."""
+
+    persisted_configs: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Map of adapter_type to configuration data",
+    )
+    count: int = Field(..., description="Number of persisted configurations")
+
+
+@router.get(
+    "/adapters/persisted",
+    response_model=SuccessResponse[PersistedConfigsResponse],
+)
+async def list_persisted_configurations(
+    request: Request,
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[PersistedConfigsResponse]:
+    """
+    List all persisted adapter configurations.
+
+    Returns configurations that are set to load on startup.
+
+    Requires ADMIN role.
+    """
+    try:
+        adapter_config_service = getattr(request.app.state, "adapter_configuration_service", None)
+        config_service = getattr(request.app.state, "config_service", None)
+
+        if not adapter_config_service:
+            raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+
+        persisted_configs: Dict[str, Dict[str, Any]] = {}
+        if config_service:
+            persisted_configs = await adapter_config_service.load_persisted_configs(config_service)
+
+        response = PersistedConfigsResponse(
+            persisted_configs=persisted_configs,
+            count=len(persisted_configs),
+        )
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing persisted configurations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RemovePersistedResponse(BaseModel):
+    """Response for removing a persisted configuration."""
+
+    success: bool = Field(..., description="Whether the removal succeeded")
+    adapter_type: str = Field(..., description="Adapter type that was removed")
+    message: str = Field(..., description="Status message")
+
+
+@router.delete(
+    "/adapters/{adapter_type}/persisted",
+    response_model=SuccessResponse[RemovePersistedResponse],
+)
+async def remove_persisted_configuration(
+    adapter_type: str,
+    request: Request,
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[RemovePersistedResponse]:
+    """
+    Remove a persisted adapter configuration.
+
+    This prevents the adapter from being automatically loaded on startup.
+
+    Requires ADMIN role.
+    """
+    try:
+        adapter_config_service = getattr(request.app.state, "adapter_configuration_service", None)
+        config_service = getattr(request.app.state, "config_service", None)
+
+        if not adapter_config_service:
+            raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+
+        if not config_service:
+            raise HTTPException(status_code=503, detail="Config service not available")
+
+        success = await adapter_config_service.remove_persisted_config(
+            adapter_type=adapter_type,
+            config_service=config_service,
+        )
+
+        if success:
+            message = f"Removed persisted configuration for {adapter_type}"
+        else:
+            message = f"No persisted configuration found for {adapter_type}"
+
+        response = RemovePersistedResponse(
+            success=success,
+            adapter_type=adapter_type,
+            message=message,
+        )
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error removing persisted configuration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_adapter_config_service(request: Request) -> Any:
+    """Get AdapterConfigurationService from app state."""
+    service = getattr(request.app.state, "adapter_configuration_service", None)
+    if not service:
+        raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+    return service
+
+
+@router.get("/adapters/configurable", response_model=SuccessResponse[ConfigurableAdaptersResponse])
+async def list_configurable_adapters(
+    request: Request, auth: AuthContext = Depends(require_admin)
+) -> SuccessResponse[ConfigurableAdaptersResponse]:
+    """
+    List adapters that support interactive configuration.
+
+    Returns information about all adapters that have defined interactive
+    configuration workflows, including their workflow types and step counts.
+
+    Requires ADMIN role.
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+        adapter_types = config_service.get_configurable_adapters()
+
+        # Build detailed info for each adapter
+        adapters = []
+        for adapter_type in adapter_types:
+            manifest = config_service._adapter_manifests.get(adapter_type)
+            if not manifest:
+                continue
+
+            # Check if any step is OAuth
+            requires_oauth = any(step.step_type == "oauth" for step in manifest.steps)
+
+            adapters.append(
+                ConfigurableAdapterInfo(
+                    adapter_type=adapter_type,
+                    name=adapter_type.replace("_", " ").title(),
+                    description=f"Interactive configuration for {adapter_type}",
+                    workflow_type=manifest.workflow_type,
+                    step_count=len(manifest.steps),
+                    requires_oauth=requires_oauth,
+                )
+            )
+
+        response = ConfigurableAdaptersResponse(adapters=adapters, total_count=len(adapters))
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing configurable adapters: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1790,6 +2107,263 @@ async def reload_adapter(
         raise
     except Exception as e:
         logger.error(f"Error reloading adapter: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Adapter Configuration Workflow Endpoints
+
+
+@router.post("/adapters/{adapter_type}/configure/start", response_model=SuccessResponse[ConfigurationSessionResponse])
+async def start_adapter_configuration(
+    adapter_type: str,
+    request: Request,
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[ConfigurationSessionResponse]:
+    """
+    Start interactive configuration session for an adapter.
+
+    Creates a new configuration session and returns the session ID along with
+    information about the first step in the workflow.
+
+    Requires ADMIN role.
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+
+        # Start the session
+        session = await config_service.start_session(adapter_type=adapter_type, user_id=auth.user_id)
+
+        # Get manifest to access steps
+        manifest = config_service._adapter_manifests.get(adapter_type)
+        if not manifest:
+            raise HTTPException(status_code=404, detail=f"Adapter '{adapter_type}' not found")
+
+        # Get current step
+        current_step = manifest.steps[0] if manifest.steps else None
+
+        response = ConfigurationSessionResponse(
+            session_id=session.session_id,
+            adapter_type=session.adapter_type,
+            status=session.status.value,
+            current_step_index=session.current_step_index,
+            current_step=current_step,
+            total_steps=len(manifest.steps),
+            created_at=session.created_at,
+        )
+
+        return SuccessResponse(data=response)
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting configuration session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/adapters/configure/{session_id}", response_model=SuccessResponse[ConfigurationStatusResponse])
+async def get_configuration_status(
+    session_id: str,
+    request: Request,
+    auth: AuthContext = Depends(require_observer),
+) -> SuccessResponse[ConfigurationStatusResponse]:
+    """
+    Get current status of a configuration session.
+
+    Returns complete session state including current step, collected configuration,
+    and session status.
+
+    Requires OBSERVER role.
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+        session = config_service.get_session(session_id)
+
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+        # Get manifest to access steps
+        manifest = config_service._adapter_manifests.get(session.adapter_type)
+        if not manifest:
+            raise HTTPException(status_code=500, detail=f"Manifest for '{session.adapter_type}' not found")
+
+        # Get current step
+        current_step = None
+        if session.current_step_index < len(manifest.steps):
+            current_step = manifest.steps[session.current_step_index]
+
+        response = ConfigurationStatusResponse(
+            session_id=session.session_id,
+            adapter_type=session.adapter_type,
+            status=session.status.value,
+            current_step_index=session.current_step_index,
+            current_step=current_step,
+            total_steps=len(manifest.steps),
+            collected_config=session.collected_config,
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+        )
+
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting configuration status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/adapters/configure/{session_id}/step", response_model=SuccessResponse[StepExecutionResponse])
+async def execute_configuration_step(
+    session_id: str,
+    request: Request,
+    body: StepExecutionRequest = Body(...),
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[StepExecutionResponse]:
+    """
+    Execute the current configuration step.
+
+    The body contains step-specific data such as user selections, input values,
+    or OAuth callback data. The step type determines what data is expected.
+
+    Requires ADMIN role.
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+
+        # Execute the step
+        result = await config_service.execute_step(session_id, body.step_data)
+
+        response = StepExecutionResponse(
+            step_id=result.step_id,
+            success=result.success,
+            data=result.data,
+            next_step_index=result.next_step_index,
+            error=result.error,
+            awaiting_callback=result.awaiting_callback,
+        )
+
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing configuration step: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/adapters/configure/{session_id}/oauth/callback")
+async def oauth_callback(
+    session_id: str,
+    code: str,
+    state: str,
+    request: Request,
+) -> JSONDict:
+    """
+    Handle OAuth callback from external service.
+
+    This endpoint is called by OAuth providers after user authorization.
+    It processes the authorization code and advances the configuration workflow.
+
+    No authentication required (OAuth state validation provides security).
+    """
+    try:
+        config_service = _get_adapter_config_service(request)
+
+        # Verify session exists and state matches
+        session = config_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if state != session_id:
+            raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+        # Execute the OAuth callback step
+        result = await config_service.execute_step(session_id, {"code": code, "state": state})
+
+        if not result.success:
+            return {
+                "status": "error",
+                "message": result.error or "OAuth callback failed",
+            }
+
+        return {
+            "status": "success",
+            "message": "OAuth authentication successful",
+            "session_id": session_id,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error handling OAuth callback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/adapters/configure/{session_id}/complete", response_model=SuccessResponse[ConfigurationCompleteResponse])
+async def complete_configuration(
+    session_id: str,
+    request: Request,
+    body: ConfigurationCompleteRequest = Body(default=ConfigurationCompleteRequest()),
+    auth: AuthContext = Depends(require_admin),
+) -> SuccessResponse[ConfigurationCompleteResponse]:
+    """
+    Finalize and apply the configuration.
+
+    Validates the collected configuration and applies it to the adapter.
+    Once completed, the adapter should be ready to use with the new configuration.
+
+    If `persist` is True, the configuration will be saved for automatic loading
+    on startup, allowing the adapter to be automatically configured when the
+    system restarts.
+
+    Requires ADMIN role.
+    """
+    try:
+        adapter_config_service = _get_adapter_config_service(request)
+
+        # Get session for adapter type
+        session = adapter_config_service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+        # Complete the session and apply config
+        success = await adapter_config_service.complete_session(session_id)
+        persisted = False
+
+        if success:
+            message = f"Configuration applied successfully for {session.adapter_type}"
+
+            # Persist if requested
+            if body.persist:
+                graph_config_service = getattr(request.app.state, "config_service", None)
+                persisted = await adapter_config_service.persist_adapter_config(
+                    adapter_type=session.adapter_type,
+                    config=session.collected_config,
+                    config_service=graph_config_service,
+                )
+                if persisted:
+                    message += " and persisted for startup"
+                else:
+                    message += " (persistence failed)"
+        else:
+            message = f"Configuration validation or application failed for {session.adapter_type}"
+
+        response = ConfigurationCompleteResponse(
+            success=success,
+            adapter_type=session.adapter_type,
+            message=message,
+            applied_config=session.collected_config if success else {},
+            persisted=persisted,
+        )
+
+        return SuccessResponse(data=response)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error completing configuration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

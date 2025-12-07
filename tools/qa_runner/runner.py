@@ -240,6 +240,7 @@ class QARunner:
             QAModule.STATE_TRANSITIONS,
             QAModule.COGNITIVE_STATE_API,
             QAModule.MCP,
+            QAModule.ADAPTER_CONFIG,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -802,6 +803,7 @@ class QARunner:
         from ciris_sdk.client import CIRISClient
 
         from .modules import BillingTests, ConsentTests, DSARTests, MCPTests, MessageIDDebugTests, PartnershipTests
+        from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
@@ -828,6 +830,7 @@ class QARunner:
             QAModule.STATE_TRANSITIONS: StateTransitionTests,
             QAModule.COGNITIVE_STATE_API: CognitiveStateAPITests,
             QAModule.MCP: MCPTests,
+            QAModule.ADAPTER_CONFIG: AdapterConfigTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

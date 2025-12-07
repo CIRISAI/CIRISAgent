@@ -1,0 +1,149 @@
+{
+  "module": {
+    "name": "sample_adapter",
+    "version": "1.0.0",
+    "description": "Reference adapter demonstrating all bus types and interactive configuration",
+    "author": "CIRIS Team",
+    "reference": true,
+    "for_qa": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "sample_adapter.services.SampleToolService",
+      "capabilities": [
+        "tool:sample",
+        "tool:sample:echo",
+        "tool:sample:status",
+        "tool:sample:config"
+      ]
+    },
+    {
+      "type": "COMMUNICATION",
+      "priority": "LOW",
+      "class": "sample_adapter.services.SampleCommunicationService",
+      "capabilities": [
+        "communication:send_message",
+        "communication:fetch_messages"
+      ]
+    },
+    {
+      "type": "WISE_AUTHORITY",
+      "priority": "NORMAL",
+      "class": "sample_adapter.services.SampleWisdomService",
+      "capabilities": [
+        "get_guidance",
+        "fetch_guidance",
+        "domain:sample"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:sample",
+    "tool:sample:echo",
+    "tool:sample:status",
+    "tool:sample:config",
+    "communication:send_message",
+    "communication:fetch_messages",
+    "get_guidance",
+    "fetch_guidance",
+    "domain:sample"
+  ],
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "discover",
+        "step_type": "discovery",
+        "title": "Discover Services",
+        "description": "Find available sample services on your network",
+        "discovery_method": "mock_discovery"
+      },
+      {
+        "step_id": "oauth",
+        "step_type": "oauth",
+        "title": "Authenticate",
+        "description": "Sign in to the sample service",
+        "oauth_config": {
+          "provider_name": "Sample Provider",
+          "authorization_path": "/oauth/authorize",
+          "token_path": "/oauth/token",
+          "client_id_source": "static",
+          "scopes": ["read", "write"],
+          "pkce_required": true
+        }
+      },
+      {
+        "step_id": "select_features",
+        "step_type": "select",
+        "title": "Select Features",
+        "description": "Choose which features to enable",
+        "depends_on": ["oauth"]
+      },
+      {
+        "step_id": "settings",
+        "step_type": "input",
+        "title": "Configure Settings",
+        "description": "Set poll interval and other options"
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your settings"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService",
+      "ciris_engine.protocols.services.CommunicationService",
+      "ciris_engine.protocols.services.WiseAuthorityService",
+      "ciris_engine.protocols.adapters.configurable.ConfigurableAdapterProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.runtime.messages",
+      "ciris_engine.schemas.runtime.manifest"
+    ]
+  },
+  "exports": {
+    "tool_service": "sample_adapter.services.SampleToolService",
+    "communication_service": "sample_adapter.services.SampleCommunicationService",
+    "wisdom_service": "sample_adapter.services.SampleWisdomService",
+    "configurable": "sample_adapter.configurable.SampleConfigurableAdapter"
+  },
+  "configuration": {
+    "sample_url": {
+      "type": "string",
+      "env": "CIRIS_SAMPLE_URL",
+      "default": "http://localhost:9999",
+      "description": "Sample service URL"
+    },
+    "sample_token": {
+      "type": "string",
+      "env": "CIRIS_SAMPLE_TOKEN",
+      "default": null,
+      "description": "Sample service access token"
+    },
+    "poll_interval": {
+      "type": "integer",
+      "default": 30,
+      "description": "Polling interval in seconds"
+    },
+    "enabled_features": {
+      "type": "array",
+      "default": ["echo", "status"],
+      "description": "List of enabled features"
+    }
+  },
+  "metadata": {
+    "reference": true,
+    "for_qa": true,
+    "description": "This adapter serves as a reference implementation for adapter developers and for QA testing",
+    "oauth_mock_note": "Uses RFC 8252 loopback redirect (http://127.0.0.1:PORT/callback) for OAuth mock testing"
+  }
+}

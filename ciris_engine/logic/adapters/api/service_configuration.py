@@ -169,4 +169,9 @@ ApiServiceConfiguration.ADAPTER_CREATED_SERVICES = [
         "APICommunicationService - Handles API message sending and response routing",
     ),
     AdapterService("tool_service", "tool_service", "APIToolService - Provides tool execution capabilities for the API"),
+    AdapterService(
+        "adapter_configuration_service",
+        "adapter_configuration_service",
+        "AdapterConfigurationService - Manages interactive adapter configuration workflows",
+    ),
 ]

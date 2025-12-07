@@ -36,6 +36,7 @@ class QAModule(Enum):
     STATE_TRANSITIONS = "state_transitions"  # Cognitive state behavior testing
     COGNITIVE_STATE_API = "cognitive_state"  # Cognitive state transition API testing
     MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
+    ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -201,6 +202,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.MCP:
             # MCP tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.ADAPTER_CONFIG:
+            # Adapter configuration tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

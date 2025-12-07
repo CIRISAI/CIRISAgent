@@ -6,7 +6,7 @@ Provides typed schemas in service loading and module manifests.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,6 +94,66 @@ class ConfigurationParameter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class AdapterOAuthConfig(BaseModel):
+    """OAuth configuration for adapter authentication workflows.
+
+    This is distinct from OAuthConfig in wise_authority, which handles full
+    OAuth provider configuration. This schema is for adapter configuration
+    workflows that need OAuth authentication.
+    """
+
+    provider_name: str = Field(..., description="OAuth provider name")
+    authorization_path: str = Field("/auth/authorize", description="OAuth authorization endpoint path")
+    token_path: str = Field("/auth/token", description="OAuth token endpoint path")
+    client_id_source: Literal["static", "indieauth"] = Field(
+        "indieauth", description="Source of client ID (static value or IndieAuth discovery)"
+    )
+    scopes: List[str] = Field(default_factory=list, description="OAuth scopes to request")
+    pkce_required: bool = Field(True, description="Whether PKCE is required for this OAuth flow")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConfigurationStep(BaseModel):
+    """A step in an adapter configuration workflow."""
+
+    step_id: str = Field(..., description="Unique identifier for this step")
+    step_type: Literal["discovery", "oauth", "select", "input", "confirm"] = Field(
+        ..., description="Type of configuration step"
+    )
+    title: str = Field(..., description="Human-readable step title")
+    description: str = Field(..., description="Description of what this step does")
+    discovery_method: Optional[str] = Field(
+        None, description="Discovery method name (e.g., 'mdns', 'api_scan') for discovery steps"
+    )
+    oauth_config: Optional[AdapterOAuthConfig] = Field(None, description="OAuth configuration for oauth steps")
+    options_method: Optional[str] = Field(
+        None, description="Method name to call for retrieving options in select steps"
+    )
+    depends_on: List[str] = Field(
+        default_factory=list, description="List of step_ids that must complete before this step"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class InteractiveConfiguration(BaseModel):
+    """Interactive configuration definition for adapters.
+
+    Enables adapters to define multi-step configuration workflows including
+    discovery, OAuth authentication, and user input steps.
+    """
+
+    required: bool = Field(False, description="Whether interactive configuration is required")
+    workflow_type: Literal["wizard", "discovery_then_config"] = Field(
+        "wizard", description="Type of configuration workflow"
+    )
+    steps: List[ConfigurationStep] = Field(default_factory=list, description="Ordered list of configuration steps")
+    completion_method: str = Field("apply_config", description="Method name to call when configuration is complete")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ServiceManifest(BaseModel):
     """Complete service module manifest."""
 
@@ -108,6 +168,9 @@ class ServiceManifest(BaseModel):
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
     prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")
+    interactive_config: Optional[InteractiveConfiguration] = Field(
+        None, description="Interactive configuration workflow for adapters"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

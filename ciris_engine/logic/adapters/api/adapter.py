@@ -18,6 +18,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
@@ -94,6 +95,9 @@ class ApiPlatform(Service):
 
         # Tool service
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
+
+        # Adapter configuration service for interactive adapter setup
+        self.adapter_configuration_service = AdapterConfigurationService()
 
         # Debug logging
         logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
@@ -358,6 +362,119 @@ class ApiPlatform(Service):
         persistence.add_correlation(correlation, time_service)
         logger.debug(f"Created observe correlation for message {msg.message_id}")
 
+    def _discover_and_register_configurable_adapters(self) -> None:
+        """Discover and register adapters that support interactive configuration.
+
+        Scans the ciris_adapters directory for adapter manifests that define
+        interactive_config sections and registers them with the AdapterConfigurationService.
+        """
+        import importlib
+        import json
+        from pathlib import Path
+
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        # Find ciris_adapters directory
+        adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
+        if not adapters_dir.exists():
+            logger.warning(f"Adapters directory not found: {adapters_dir}")
+            return
+
+        registered_count = 0
+
+        for adapter_path in adapters_dir.iterdir():
+            if not adapter_path.is_dir():
+                continue
+
+            manifest_path = adapter_path / "manifest.json"
+            if not manifest_path.exists():
+                continue
+
+            try:
+                with open(manifest_path) as f:
+                    manifest_data = json.load(f)
+
+                # Check if this adapter has interactive configuration
+                interactive_config_data = manifest_data.get("interactive_config")
+                if not interactive_config_data:
+                    continue
+
+                # Parse steps into ConfigurationStep objects
+                steps = []
+                for step_data in interactive_config_data.get("steps", []):
+                    step = ConfigurationStep(
+                        step_id=step_data["step_id"],
+                        step_type=step_data["step_type"],
+                        title=step_data.get("title", step_data["step_id"]),
+                        description=step_data.get("description", ""),
+                        discovery_method=step_data.get("discovery_method"),
+                    )
+                    steps.append(step)
+
+                # Create InteractiveConfiguration
+                interactive_config = InteractiveConfiguration(
+                    required=interactive_config_data.get("required", False),
+                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
+                    steps=steps,
+                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
+                )
+
+                # Get adapter type (directory name)
+                adapter_type = adapter_path.name
+
+                # Try to load the configurable adapter class
+                exports = manifest_data.get("exports", {})
+                configurable_class_path = exports.get("configurable")
+
+                if configurable_class_path:
+                    try:
+                        # Parse module and class name
+                        module_path, class_name = configurable_class_path.rsplit(".", 1)
+                        # Prepend ciris_adapters if not already present
+                        if not module_path.startswith("ciris_adapters"):
+                            module_path = f"ciris_adapters.{module_path}"
+                        module = importlib.import_module(module_path)
+                        configurable_class = getattr(module, class_name)
+                        adapter_instance = configurable_class()
+
+                        # Register with the configuration service
+                        self.adapter_configuration_service.register_adapter_config(
+                            adapter_type=adapter_type,
+                            interactive_config=interactive_config,
+                            adapter_instance=adapter_instance,
+                        )
+                        registered_count += 1
+                        logger.info(f"Registered configurable adapter: {adapter_type}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+                else:
+                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+
+            except Exception as e:
+                logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+
+    async def _restore_persisted_adapter_configs(self) -> None:
+        """Restore adapter configurations that were persisted for load-on-startup.
+
+        This is called during API adapter startup to restore adapters that were
+        previously configured and marked for automatic loading.
+        """
+        # Get config service from runtime
+        config_service = getattr(self.runtime, "config_service", None)
+        if not config_service:
+            logger.debug("No config_service available - skipping persisted adapter restoration")
+            return
+
+        try:
+            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(config_service)
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} persisted adapter configuration(s)")
+        except Exception as e:
+            logger.warning(f"Failed to restore persisted adapter configurations: {e}")
+
     async def start(self) -> None:
         """Start the API server."""
         logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
@@ -399,6 +516,12 @@ class ApiPlatform(Service):
 
         # Inject services now that they're initialized
         self._inject_services()
+
+        # Discover and register configurable adapters
+        self._discover_and_register_configurable_adapters()
+
+        # Restore any persisted adapter configurations from previous sessions
+        await self._restore_persisted_adapter_configs()
 
         # Start runtime control service now that services are available
         await self.runtime_control.start()

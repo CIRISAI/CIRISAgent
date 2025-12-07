@@ -2,6 +2,7 @@
 QA test modules for different components.
 """
 
+from .adapter_config_tests import AdapterConfigTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
@@ -20,6 +21,7 @@ from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
 
 __all__ = [
+    "AdapterConfigTests",
     "APITestModule",
     "CognitiveStateAPITests",
     "HandlerTestModule",

@@ -156,10 +156,10 @@ class MCPTests:
         """Load first MCP client adapter via API."""
         adapter_id = "mcp_test_client_1"
         await self._load_adapter(
-            adapter_type="mcp",
+            adapter_type="mcp_client",
             adapter_id=adapter_id,
             config={
-                "adapter_type": "mcp",
+                "adapter_type": "mcp_client",
                 "enabled": True,
                 "settings": {},  # Simple settings (flat primitives only)
                 "adapter_config": {  # Complex nested config goes here
@@ -188,10 +188,10 @@ class MCPTests:
         """Load second MCP client adapter via API."""
         adapter_id = "mcp_test_client_2"
         await self._load_adapter(
-            adapter_type="mcp",
+            adapter_type="mcp_client",
             adapter_id=adapter_id,
             config={
-                "adapter_type": "mcp",
+                "adapter_type": "mcp_client",
                 "enabled": True,
                 "settings": {},  # Simple settings (flat primitives only)
                 "adapter_config": {  # Complex nested config goes here
@@ -410,7 +410,7 @@ class MCPTests:
             headers=headers,
             json={
                 "config": {
-                    "adapter_type": "mcp",
+                    "adapter_type": "mcp_client",
                     "enabled": True,
                     "settings": {
                         "server_id": "test-server-1-reloaded",
@@ -445,7 +445,7 @@ class MCPTests:
             headers=headers,
             json={
                 "config": {
-                    "adapter_type": "mcp",
+                    "adapter_type": "mcp_client",
                     "enabled": True,
                     "settings": {
                         # Missing required server_id

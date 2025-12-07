@@ -179,6 +179,21 @@ class HomeAssistantAdapter(Service):
             error=None,
         )
 
+    async def get_active_channels(self) -> List[dict]:
+        """Get active communication channels from HA communication service."""
+        channels = []
+        if self.communication_service and self._running:
+            channel_ids = await self.communication_service.get_channels()
+            for ch_id in channel_ids:
+                channels.append({
+                    "channel_id": ch_id,
+                    "channel_type": "home_assistant",
+                    "platform": "home_assistant",
+                    "name": ch_id.replace("ha_", "HA ").replace("_", " ").title(),
+                    "is_active": True,
+                })
+        return channels
+
 
 # Export as Adapter for load_adapter() compatibility
 Adapter = HomeAssistantAdapter

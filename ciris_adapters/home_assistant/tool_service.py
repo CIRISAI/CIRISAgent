@@ -162,7 +162,7 @@ class HAToolService:
         tool_info = self.TOOL_DEFINITIONS.get(tool_name)
         return tool_info.parameters if tool_info else None
 
-    def get_all_tool_info(self) -> List[ToolInfo]:
+    async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get info for all available tools."""
         return list(self.TOOL_DEFINITIONS.values())
 

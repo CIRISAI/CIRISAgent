@@ -374,10 +374,20 @@ class ApiPlatform(Service):
 
         from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
 
-        # Find ciris_adapters directory
+        # Find ciris_adapters directory - try multiple methods for Android compatibility
         adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
+
+        # Known adapters with interactive configuration
+        # Used as fallback when filesystem discovery doesn't work (Android/Chaquopy)
+        KNOWN_CONFIGURABLE_ADAPTERS = [
+            "ha_integration",
+            "sample_adapter",
+        ]
+
         if not adapters_dir.exists():
-            logger.warning(f"Adapters directory not found: {adapters_dir}")
+            # Fallback for Android: use importlib.resources to read manifests
+            logger.info(f"Filesystem adapters directory not found ({adapters_dir}), using importlib discovery")
+            self._discover_adapters_via_importlib(KNOWN_CONFIGURABLE_ADAPTERS)
             return
 
         registered_count = 0
@@ -455,6 +465,113 @@ class ApiPlatform(Service):
                 logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
 
         logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+
+    def _discover_adapters_via_importlib(self, adapter_names: list) -> None:
+        """Discover adapters using importlib (Android/Chaquopy compatible).
+
+        Args:
+            adapter_names: List of adapter package names to discover
+        """
+        import importlib
+        import importlib.resources
+        import json
+
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        registered_count = 0
+
+        for adapter_name in adapter_names:
+            try:
+                # Try to import the adapter package to verify it exists
+                try:
+                    adapter_pkg = importlib.import_module(f"ciris_adapters.{adapter_name}")
+                except ImportError:
+                    logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
+                    continue
+
+                # Read manifest.json using importlib.resources
+                try:
+                    # Python 3.9+ compatible approach
+                    import importlib.resources as pkg_resources
+
+                    package_name = f"ciris_adapters.{adapter_name}"
+                    try:
+                        # Try files() API first (Python 3.9+)
+                        files = pkg_resources.files(package_name)
+                        manifest_path = files.joinpath("manifest.json")
+                        manifest_text = manifest_path.read_text()
+                    except (TypeError, AttributeError):
+                        # Fallback for older API
+                        with pkg_resources.open_text(package_name, "manifest.json") as f:
+                            manifest_text = f.read()
+
+                    manifest_data = json.loads(manifest_text)
+
+                except Exception as e:
+                    logger.debug(f"Could not read manifest for {adapter_name}: {e}")
+                    continue
+
+                # Check if this adapter has interactive configuration
+                interactive_config_data = manifest_data.get("interactive_config")
+                if not interactive_config_data:
+                    continue
+
+                # Parse steps into ConfigurationStep objects
+                steps = []
+                for step_data in interactive_config_data.get("steps", []):
+                    step = ConfigurationStep(
+                        step_id=step_data["step_id"],
+                        step_type=step_data["step_type"],
+                        title=step_data.get("title", step_data["step_id"]),
+                        description=step_data.get("description", ""),
+                        discovery_method=step_data.get("discovery_method"),
+                    )
+                    steps.append(step)
+
+                # Create InteractiveConfiguration
+                interactive_config = InteractiveConfiguration(
+                    required=interactive_config_data.get("required", False),
+                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
+                    steps=steps,
+                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
+                )
+
+                # Get adapter type
+                adapter_type = adapter_name
+
+                # Try to load the configurable adapter class
+                exports = manifest_data.get("exports", {})
+                configurable_class_path = exports.get("configurable")
+
+                if configurable_class_path:
+                    try:
+                        # Parse module and class name
+                        module_path, class_name = configurable_class_path.rsplit(".", 1)
+                        # Prepend ciris_adapters if not already present
+                        if not module_path.startswith("ciris_adapters"):
+                            module_path = f"ciris_adapters.{module_path}"
+                        module = importlib.import_module(module_path)
+                        configurable_class = getattr(module, class_name)
+                        adapter_instance = configurable_class()
+
+                        # Register with the configuration service
+                        self.adapter_configuration_service.register_adapter_config(
+                            adapter_type=adapter_type,
+                            interactive_config=interactive_config,
+                            adapter_instance=adapter_instance,
+                        )
+                        registered_count += 1
+                        logger.info(f"Registered configurable adapter (via importlib): {adapter_type}")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+                else:
+                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+
+            except Exception as e:
+                logger.warning(f"Failed to process adapter {adapter_name}: {e}")
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) via importlib")
 
     async def _restore_persisted_adapter_configs(self) -> None:
         """Restore adapter configurations that were persisted for load-on-startup.

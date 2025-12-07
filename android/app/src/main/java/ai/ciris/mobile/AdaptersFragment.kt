@@ -119,9 +119,9 @@ class AdaptersFragment : Fragment() {
             fetchAdapters()
         }
 
-        // Add adapter FAB - show menu with options
+        // Add adapter FAB - show available adapter types directly
         addAdapterFab.setOnClickListener {
-            showAdapterActionsMenu()
+            showAddAdapterDialog()
         }
 
         // Initial fetch

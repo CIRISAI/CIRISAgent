@@ -435,7 +435,8 @@ class AdapterConfigurationService:
         try:
             # Query all adapter startup configurations
             # Pattern: adapter.startup.*
-            all_configs = await config_service.get_all_with_prefix("adapter.startup.")
+            # Use list_configs which is the correct method on GraphConfigService
+            all_configs = await config_service.list_configs(prefix="adapter.startup.")
 
             for key, value in all_configs.items():
                 if isinstance(value, dict) and value.get("load_on_startup"):

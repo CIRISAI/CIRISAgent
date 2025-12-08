@@ -186,63 +186,76 @@ class AdapterLoader:
         """Get metadata for a loaded service."""
         return self.loaded_services.get(service_name)
 
+    def _should_skip_manifest(self, manifest: Any, config: Any) -> Optional[str]:
+        """Check if manifest should be skipped. Returns skip reason or None."""
+        if not getattr(config, "mock_llm", False) and manifest.module.is_mock:
+            return f"Skipping mock service in production: {manifest.module.name}"
+        return None
+
+    def _build_service_config(self, manifest: Any) -> dict[str, Any]:
+        """Build configuration dict from manifest defaults."""
+        service_config = {}
+        if manifest.configuration:
+            for key, param in manifest.configuration.items():
+                service_config[key] = param.default
+        return service_config
+
+    def _register_service_declarations(self, manifest: Any, service_instance: Any, service_registry: Any) -> None:
+        """Register all service declarations from manifest."""
+        for service_decl in manifest.services:
+            service_registry.register_global(
+                service_type=service_decl.type,
+                provider=service_instance,
+                priority=ServicePriority[service_decl.priority.value],
+                capabilities=service_decl.capabilities or manifest.capabilities or [],
+                metadata=self.loaded_services[manifest.module.name].model_dump(),
+            )
+
+    def _log_mock_llm_startup(self, manifest: Any) -> None:
+        """Log mock LLM service startup if applicable."""
+        if manifest.module.is_mock:
+            for service_decl in manifest.services:
+                if service_decl.type == ServiceType.LLM:
+                    logger.warning("[SERVICE 14/22] MockLLMService STARTED")
+
+    async def _initialize_single_adapter(self, manifest: Any, service_registry: Any, result: ModuleLoadResult) -> None:
+        """Initialize a single adapter from manifest."""
+        service_class = self.load_service(manifest)
+        if not service_class:
+            return
+
+        try:
+            service_config = self._build_service_config(manifest)
+            service_instance = service_class(**service_config)
+            await service_instance.start()
+
+            self._register_service_declarations(manifest, service_instance, service_registry)
+
+            service_meta = self.loaded_services[manifest.module.name]
+            service_meta.health_status = "started"
+            result.services_loaded.append(service_meta)
+            logger.info(f"Initialized adapter: {manifest.module.name}")
+
+            self._log_mock_llm_startup(manifest)
+
+        except Exception as e:
+            error_msg = f"Failed to initialize {manifest.module.name}: {e}"
+            logger.error(error_msg)
+            result.errors.append(error_msg)
+            result.success = False
+
     async def initialize_adapters(self, service_registry: Any, config: Any) -> ModuleLoadResult:
         """Initialize all discovered adapters."""
         result = ModuleLoadResult(module_name="adapters", success=True)
-
-        # Discover services
         discovered = self.discover_services()
 
         for manifest in discovered:
-            # Skip if production mode and service is test-only
-            if not getattr(config, "mock_llm", False) and manifest.module.is_mock:
-                msg = f"Skipping mock service in production: {manifest.module.name}"
-                logger.info(msg)
-                result.warnings.append(msg)
+            skip_reason = self._should_skip_manifest(manifest, config)
+            if skip_reason:
+                logger.info(skip_reason)
+                result.warnings.append(skip_reason)
                 continue
 
-            # Load service class
-            service_class = self.load_service(manifest)
-            if not service_class:
-                continue
-
-            try:
-                # Initialize service
-                service_config = {}
-                if manifest.configuration:
-                    # Extract default values from configuration
-                    for key, param in manifest.configuration.items():
-                        service_config[key] = param.default
-
-                service_instance = service_class(**service_config)
-                await service_instance.start()
-
-                # Register with service registry
-                for service_decl in manifest.services:
-                    service_registry.register_global(
-                        service_type=service_decl.type,
-                        provider=service_instance,
-                        priority=ServicePriority[service_decl.priority.value],
-                        capabilities=service_decl.capabilities or manifest.capabilities or [],
-                        metadata=self.loaded_services[manifest.module.name].model_dump(),
-                    )
-
-                # Update result
-                service_meta = self.loaded_services[manifest.module.name]
-                service_meta.health_status = "started"
-                result.services_loaded.append(service_meta)
-                logger.info(f"Initialized adapter: {manifest.module.name}")
-
-                # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
-                if manifest.module.is_mock:
-                    for service_decl in manifest.services:
-                        if service_decl.type == ServiceType.LLM:
-                            logger.warning("[SERVICE 14/22] MockLLMService STARTED")
-
-            except Exception as e:
-                error_msg = f"Failed to initialize {manifest.module.name}: {e}"
-                logger.error(error_msg)
-                result.errors.append(error_msg)
-                result.success = False
+            await self._initialize_single_adapter(manifest, service_registry, result)
 
         return result

@@ -664,6 +664,44 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         return hashlib.sha256(key_pem.encode()).hexdigest()[:16]
 
+    def _ensure_adapter_manager(self) -> bool:
+        """Lazy-initialize adapter_manager if needed. Returns True if available."""
+        if self.adapter_manager:
+            return True
+
+        if not self.runtime:
+            return False
+
+        if self._time_service is None:
+            from ciris_engine.logic.services.lifecycle.time import TimeService
+
+            self._time_service = TimeService()
+
+        from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+        self.adapter_manager = RuntimeAdapterManager(cast(CIRISRuntime, self.runtime), self._time_service)
+        logger.info("Lazy-initialized adapter_manager")
+        return True
+
+    def _convert_to_adapter_config(
+        self, adapter_type: str, config: Optional[Dict[str, object]]
+    ) -> Optional[AdapterConfig]:
+        """Convert config dict to AdapterConfig if needed."""
+        if not config:
+            return None
+
+        if isinstance(config, AdapterConfig):
+            return config
+
+        if "adapter_type" in config:
+            return AdapterConfig(**config)
+
+        return AdapterConfig(
+            adapter_type=adapter_type,
+            enabled=True,
+            adapter_config=config,
+        )
+
     # Adapter Management Methods
     async def load_adapter(
         self,
@@ -673,20 +711,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         auto_start: bool = True,
     ) -> AdapterOperationResponse:
         """Load a new adapter instance."""
-        # AdapterStatus is already imported at module level
-
-        # Lazy initialization of adapter_manager if needed
-        if not self.adapter_manager and self.runtime:
-            if self._time_service is None:
-                from ciris_engine.logic.services.lifecycle.time import TimeService
-
-                self._time_service = TimeService()
-            from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-
-            self.adapter_manager = RuntimeAdapterManager(cast(CIRISRuntime, self.runtime), self._time_service)
-            logger.info("Lazy-initialized adapter_manager in load_adapter")
-
-        if not self.adapter_manager:
+        if not self._ensure_adapter_manager():
             return AdapterOperationResponse(
                 success=False,
                 timestamp=self._now(),
@@ -696,24 +721,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error="Adapter manager not available",
             )
 
-        # Convert config dict to AdapterConfig if needed
-        adapter_config = None
-        if config:
-            if isinstance(config, dict):
-                # If config already has adapter_type, use it directly
-                # Otherwise, wrap the config in the proper structure
-                if "adapter_type" in config:
-                    adapter_config = AdapterConfig(**config)
-                else:
-                    # Wrap the collected config in AdapterConfig structure
-                    adapter_config = AdapterConfig(
-                        adapter_type=adapter_type,
-                        enabled=True,
-                        adapter_config=config,  # Pass full config for complex adapters
-                    )
-            else:
-                adapter_config = config
-
+        assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
+        adapter_config = self._convert_to_adapter_config(adapter_type, config)
         result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
 
         return AdapterOperationResponse(
@@ -734,20 +743,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             f"has_runtime={self.runtime is not None}, "
             f"service_id={id(self)}"
         )
-        # AdapterStatus is already imported at module level
 
-        # Lazy initialization of adapter_manager if needed
-        if not self.adapter_manager and self.runtime:
-            if self._time_service is None:
-                from ciris_engine.logic.services.lifecycle.time import TimeService
-
-                self._time_service = TimeService()
-            from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-
-            self.adapter_manager = RuntimeAdapterManager(cast(CIRISRuntime, self.runtime), self._time_service)
-            logger.info("Lazy-initialized adapter_manager in unload_adapter")
-
-        if not self.adapter_manager:
+        if not self._ensure_adapter_manager():
             return AdapterOperationResponse(
                 success=False,
                 timestamp=self._now(),
@@ -757,10 +754,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error="Adapter manager not available",
             )
 
-        # Call adapter manager (note: it doesn't use force parameter)
+        assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         result = await self.adapter_manager.unload_adapter(adapter_id)
 
-        # Convert AdapterOperationResult to AdapterOperationResponse
         return AdapterOperationResponse(
             success=result.success,
             adapter_id=result.adapter_id,

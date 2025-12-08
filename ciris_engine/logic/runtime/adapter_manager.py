@@ -767,6 +767,44 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 details={},
             )
 
+    def _get_service_type_value(self, reg: Any) -> ServiceType:
+        """Extract ServiceType enum from registration."""
+        if hasattr(reg, "service_type") and isinstance(reg.service_type, ServiceType):
+            return reg.service_type
+        return ServiceType(str(reg.service_type))
+
+    def _build_service_key(self, reg: Any, instance: AdapterInstance) -> str:
+        """Build service key from registration."""
+        service_type_str = reg.service_type.value if hasattr(reg.service_type, "value") else str(reg.service_type)
+        provider_name = (
+            reg.provider.__class__.__name__ if hasattr(reg, "provider") else instance.adapter.__class__.__name__
+        )
+        return f"{service_type_str}:{provider_name}"
+
+    def _register_single_service(self, reg: Any, instance: AdapterInstance) -> None:
+        """Register a single service from registration."""
+        if not self.runtime.service_registry:
+            return
+
+        service_key = self._build_service_key(reg, instance)
+        provider = getattr(reg, "provider", instance.adapter)
+        priority = getattr(reg, "priority", Priority.NORMAL)
+        capabilities = getattr(reg, "capabilities", [])
+
+        if not hasattr(provider, "adapter_id"):
+            provider.adapter_id = instance.adapter_id
+
+        self.runtime.service_registry.register_service(
+            service_type=self._get_service_type_value(reg),
+            provider=provider,
+            priority=priority,
+            capabilities=capabilities,
+            priority_group=getattr(reg, "priority_group", 0),
+            strategy=getattr(reg, "strategy", SelectionStrategy.FALLBACK),
+        )
+        instance.services_registered.append(f"global:{service_key}")
+        logger.info(f"Registered {service_key} from adapter {instance.adapter_id}")
+
     def _register_adapter_services(self, instance: AdapterInstance) -> None:
         """Register services for an adapter instance"""
         try:
@@ -785,47 +823,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         f"Adapter {instance.adapter.__class__.__name__} provided invalid ServiceRegistration: {reg}"
                     )
                     continue
-
-                # Handle both ServiceType enum and string
-                service_type_str = (
-                    reg.service_type.value if hasattr(reg.service_type, "value") else str(reg.service_type)
-                )
-                provider_name = (
-                    reg.provider.__class__.__name__ if hasattr(reg, "provider") else instance.adapter.__class__.__name__
-                )
-                service_key = f"{service_type_str}:{provider_name}"
-
-                # All services are global now
-                # AdapterServiceRegistration doesn't have priority_group or strategy
-                # Get provider from reg if available, otherwise use adapter itself
-                provider = getattr(reg, "provider", instance.adapter)
-                priority = getattr(reg, "priority", Priority.NORMAL)
-                capabilities = getattr(reg, "capabilities", [])
-
-                # Set adapter_id on the provider so context enrichment can identify it
-                if not hasattr(provider, "adapter_id"):
-                    provider.adapter_id = instance.adapter_id
-
-                # Handle both string and enum service_type
-                # AdapterServiceRegistration has ServiceType enum, ServiceRegistration has string
-                service_type_val: ServiceType
-                if hasattr(reg, "service_type") and isinstance(reg.service_type, ServiceType):
-                    service_type_val = reg.service_type
-                else:
-                    # Must be a string from ServiceRegistration
-                    service_type_val = ServiceType(str(reg.service_type))
-
-                self.runtime.service_registry.register_service(
-                    service_type=service_type_val,  # Ensure it's a ServiceType enum
-                    provider=provider,
-                    priority=priority,
-                    capabilities=capabilities,
-                    priority_group=getattr(reg, "priority_group", 0),  # Default to 0
-                    strategy=getattr(reg, "strategy", SelectionStrategy.FALLBACK),  # Default strategy
-                )
-                instance.services_registered.append(f"global:{service_key}")
-
-                logger.info(f"Registered {service_key} from adapter {instance.adapter_id}")
+                self._register_single_service(reg, instance)
 
         except Exception as e:
             logger.error(f"Error registering services for adapter {instance.adapter_id}: {e}", exc_info=True)

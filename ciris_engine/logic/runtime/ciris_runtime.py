@@ -1708,6 +1708,27 @@ class CIRISRuntime:
             log_step(5, total_steps, "⚠️ No template available - using default cognitive behaviors")
             await self._migrate_cognitive_state_behaviors_to_graph(force_from_template=False)
 
+    def _set_service_runtime_references(self) -> None:
+        """Set runtime references on services that need them."""
+        if self.audit_service:
+            self.audit_service._runtime = self  # type: ignore[attr-defined]
+            logger.debug("Set runtime reference on audit service for trace correlations")
+
+        if self.visibility_service:
+            self.visibility_service._runtime = self  # type: ignore[attr-defined]
+            logger.debug("Set runtime reference on visibility service for trace retrieval")
+
+        if self.runtime_control_service:
+            if hasattr(self.runtime_control_service, "_set_runtime"):
+                self.runtime_control_service._set_runtime(self)
+            else:
+                self.runtime_control_service.runtime = self  # type: ignore[attr-defined]
+            logger.info("Updated runtime control service with runtime reference")
+
+        if self.telemetry_service and hasattr(self.telemetry_service, "_set_runtime"):
+            self.telemetry_service._set_runtime(self)
+            logger.info("Updated telemetry service with runtime reference for aggregator")
+
     async def _resume_initialize_core_services(
         self, config: "EssentialConfig", log_step: Callable[[int, int, str], None], total_steps: int
     ) -> None:
@@ -1718,44 +1739,24 @@ class CIRISRuntime:
             f"Initializing core services... service_initializer={self.service_initializer is not None}, "
             f"agent_identity={self.agent_identity is not None}",
         )
-        if self.service_initializer and self.agent_identity:
-            await self.service_initializer.initialize_all_services(
-                config,
-                self.essential_config,
-                self.agent_identity.agent_id,
-                self.startup_channel_id,
-                self.modules_to_load,
-            )
-            log_step(6, total_steps, "✓ Core services initialized")
-
-            # Set runtime references on services that need them (same as _initialize_services)
-            if self.audit_service:
-                self.audit_service._runtime = self  # type: ignore[attr-defined]
-                logger.debug("Set runtime reference on audit service for trace correlations")
-
-            if self.visibility_service:
-                self.visibility_service._runtime = self  # type: ignore[attr-defined]
-                logger.debug("Set runtime reference on visibility service for trace retrieval")
-
-            if self.runtime_control_service:
-                if hasattr(self.runtime_control_service, "_set_runtime"):
-                    self.runtime_control_service._set_runtime(self)
-                else:
-                    self.runtime_control_service.runtime = self  # type: ignore[attr-defined]
-                logger.info("Updated runtime control service with runtime reference")
-
-            if self.telemetry_service:
-                if hasattr(self.telemetry_service, "_set_runtime"):
-                    self.telemetry_service._set_runtime(self)
-                    logger.info("Updated telemetry service with runtime reference for aggregator")
-
-            if self.modules_to_load:
-                log_step(
-                    6, total_steps, f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}"
-                )
-                await self.service_initializer.load_modules(self.modules_to_load)
-        else:
+        if not (self.service_initializer and self.agent_identity):
             log_step(6, total_steps, "⚠️ Skipped core services - missing service_initializer or agent_identity")
+            return
+
+        await self.service_initializer.initialize_all_services(
+            config,
+            self.essential_config,
+            self.agent_identity.agent_id,
+            self.startup_channel_id,
+            self.modules_to_load,
+        )
+        log_step(6, total_steps, "✓ Core services initialized")
+
+        self._set_service_runtime_references()
+
+        if self.modules_to_load:
+            log_step(6, total_steps, f"Loading {len(self.modules_to_load)} external modules: {self.modules_to_load}")
+            await self.service_initializer.load_modules(self.modules_to_load)
 
     async def _resume_initialize_llm(self, log_step: Callable[[int, int, str], None], total_steps: int) -> None:
         """Initialize LLM service during resume."""

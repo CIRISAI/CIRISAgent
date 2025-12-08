@@ -52,50 +52,11 @@ class ApiPlatform(Service):
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize API adapter."""
-        # Import moved to top-level to avoid forward reference issues
-
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
 
-        # Start with default configuration
-        self.config = APIAdapterConfig()
-
-        # Load environment variables first (provides defaults)
-        self.config.load_env_vars()
-
-        # Then apply user-provided configuration (takes precedence over env vars)
-        # NOTE: Do NOT call load_env_vars() after this - the config dict already
-        # represents the final desired config with CLI args taking precedence.
-        # Calling load_env_vars() would override CLI args with .env values.
-        logger.info(f"[API_ADAPTER_INIT] kwargs keys: {list(kwargs.keys())}")
-        logger.info(f"[API_ADAPTER_INIT] adapter_config in kwargs: {'adapter_config' in kwargs}")
-        if "adapter_config" in kwargs:
-            logger.info(
-                f"[API_ADAPTER_INIT] adapter_config value: {kwargs['adapter_config']}, type: {type(kwargs['adapter_config'])}"
-            )
-        if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
-            if isinstance(kwargs["adapter_config"], APIAdapterConfig):
-                self.config = kwargs["adapter_config"]
-                logger.info(f"[API_ADAPTER_INIT] Using APIAdapterConfig object, port={self.config.port}")
-                # Don't call load_env_vars() - config object already has correct values
-            elif isinstance(kwargs["adapter_config"], dict):
-                # Create config from dict - this contains final merged values
-                self.config = APIAdapterConfig(**kwargs["adapter_config"])
-                logger.info(f"[API_ADAPTER_INIT] Created APIAdapterConfig from dict, port={self.config.port}")
-                # Don't call load_env_vars() - dict already has correct values from main.py
-            # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
-        elif "host" in kwargs or "port" in kwargs:
-            # Handle flat kwargs from adapter_manager (comes from settings dict)
-            # Only override the specific values that were provided
-            # Note: We only apply known APIAdapterConfig fields (host, port)
-            # Other kwargs like 'debug' from adapter_manager are ignored
-            if "host" in kwargs:
-                self.config.host = kwargs["host"]
-            if "port" in kwargs:
-                self.config.port = kwargs["port"]
-            logger.info(f"[API_ADAPTER_INIT] Applied flat kwargs: host={self.config.host}, port={self.config.port}")
-        else:
-            logger.info(f"[API_ADAPTER_INIT] No config provided, using env defaults, port={self.config.port}")
+        # Initialize and load configuration
+        self.config = self._load_config(kwargs)
 
         # Create FastAPI app - services will be injected later in start()
         self.app: FastAPI = create_app(runtime, self.config)
@@ -131,6 +92,52 @@ class ApiPlatform(Service):
                 logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
 
         logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
+
+    def _load_config(self, kwargs: dict[str, Any]) -> APIAdapterConfig:
+        """Load and merge configuration from various sources.
+
+        Priority (highest to lowest):
+        1. adapter_config parameter (APIAdapterConfig object or dict)
+        2. Flat kwargs (host, port)
+        3. Environment variables
+        """
+        config = APIAdapterConfig()
+        config.load_env_vars()
+
+        logger.info(f"[API_ADAPTER_INIT] kwargs keys: {list(kwargs.keys())}")
+        logger.info(f"[API_ADAPTER_INIT] adapter_config in kwargs: {'adapter_config' in kwargs}")
+
+        adapter_config = kwargs.get("adapter_config")
+        if adapter_config is not None:
+            logger.info(f"[API_ADAPTER_INIT] adapter_config value: {adapter_config}, type: {type(adapter_config)}")
+            config = self._apply_adapter_config(config, adapter_config)
+        elif "host" in kwargs or "port" in kwargs:
+            config = self._apply_flat_kwargs(config, kwargs)
+        else:
+            logger.info(f"[API_ADAPTER_INIT] No config provided, using env defaults, port={config.port}")
+
+        return config
+
+    def _apply_adapter_config(self, config: APIAdapterConfig, adapter_config: Any) -> APIAdapterConfig:
+        """Apply adapter_config parameter to configuration."""
+        if isinstance(adapter_config, APIAdapterConfig):
+            logger.info(f"[API_ADAPTER_INIT] Using APIAdapterConfig object, port={adapter_config.port}")
+            return adapter_config
+        elif isinstance(adapter_config, dict):
+            new_config = APIAdapterConfig(**adapter_config)
+            logger.info(f"[API_ADAPTER_INIT] Created APIAdapterConfig from dict, port={new_config.port}")
+            return new_config
+        # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
+        return config
+
+    def _apply_flat_kwargs(self, config: APIAdapterConfig, kwargs: dict[str, Any]) -> APIAdapterConfig:
+        """Apply flat kwargs (host, port) to configuration."""
+        if "host" in kwargs:
+            config.host = kwargs["host"]
+        if "port" in kwargs:
+            config.port = kwargs["port"]
+        logger.info(f"[API_ADAPTER_INIT] Applied flat kwargs: host={config.host}, port={config.port}")
+        return config
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter."""
@@ -447,11 +454,7 @@ class ApiPlatform(Service):
         Scans the ciris_adapters directory for adapter manifests that define
         interactive_config sections and registers them with the AdapterConfigurationService.
         """
-        import importlib
-        import json
         from pathlib import Path
-
-        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
 
         # Find ciris_adapters directory - try multiple methods for Android compatibility
         adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
@@ -463,75 +466,93 @@ class ApiPlatform(Service):
             return
 
         registered_count = 0
-
         for adapter_path in adapters_dir.iterdir():
-            if not adapter_path.is_dir():
-                continue
-
-            manifest_path = adapter_path / MANIFEST_FILENAME
-            if not manifest_path.exists():
-                continue
-
-            try:
-                with open(manifest_path) as f:
-                    manifest_data = json.load(f)
-
-                # Check if this adapter has interactive configuration
-                interactive_config_data = manifest_data.get("interactive_config")
-                if not interactive_config_data:
-                    continue
-
-                # Parse steps into ConfigurationStep objects, preserving all metadata
-                steps = []
-                for step_data in interactive_config_data.get("steps", []):
-                    # Use model_validate to preserve all step fields (oauth_config, fields, etc.)
-                    step = ConfigurationStep.model_validate(step_data)
-                    steps.append(step)
-
-                # Create InteractiveConfiguration
-                interactive_config = InteractiveConfiguration(
-                    required=interactive_config_data.get("required", False),
-                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
-                    steps=steps,
-                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
-                )
-
-                # Get adapter type (directory name)
-                adapter_type = adapter_path.name
-
-                # Try to load the configurable adapter class
-                exports = manifest_data.get("exports", {})
-                configurable_class_path = exports.get("configurable")
-
-                if configurable_class_path:
-                    try:
-                        # Parse module and class name
-                        module_path, class_name = configurable_class_path.rsplit(".", 1)
-                        # Prepend ciris_adapters if not already present
-                        if not module_path.startswith("ciris_adapters"):
-                            module_path = f"ciris_adapters.{module_path}"
-                        module = importlib.import_module(module_path)
-                        configurable_class = getattr(module, class_name)
-                        adapter_instance = configurable_class()
-
-                        # Register with the configuration service
-                        self.adapter_configuration_service.register_adapter_config(
-                            adapter_type=adapter_type,
-                            interactive_config=interactive_config,
-                            adapter_instance=adapter_instance,
-                        )
-                        registered_count += 1
-                        logger.info(f"Registered configurable adapter: {adapter_type}")
-
-                    except Exception as e:
-                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
-                else:
-                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
-
-            except Exception as e:
-                logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
+            if self._process_adapter_path(adapter_path):
+                registered_count += 1
 
         logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+
+    def _process_adapter_path(self, adapter_path: Any) -> bool:
+        """Process a single adapter directory and register if configurable.
+
+        Returns True if adapter was successfully registered.
+        """
+        import json
+
+        if not adapter_path.is_dir():
+            return False
+
+        manifest_path = adapter_path / MANIFEST_FILENAME
+        if not manifest_path.exists():
+            return False
+
+        try:
+            with open(manifest_path) as f:
+                manifest_data = json.load(f)
+            return self._register_adapter_from_manifest(manifest_data, adapter_path.name)
+        except Exception as e:
+            logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
+            return False
+
+    def _register_adapter_from_manifest(self, manifest_data: dict[str, Any], adapter_type: str) -> bool:
+        """Register an adapter from its manifest data.
+
+        Returns True if adapter was successfully registered.
+        """
+        interactive_config_data = manifest_data.get("interactive_config")
+        if not interactive_config_data:
+            return False
+
+        interactive_config = self._parse_interactive_config(interactive_config_data)
+        exports = manifest_data.get("exports", {})
+        configurable_class_path = exports.get("configurable")
+
+        if not configurable_class_path:
+            logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+            return False
+
+        return self._load_and_register_configurable(adapter_type, interactive_config, configurable_class_path)
+
+    def _parse_interactive_config(self, config_data: dict[str, Any]) -> Any:
+        """Parse interactive configuration data into InteractiveConfiguration object."""
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        steps = [ConfigurationStep.model_validate(step_data) for step_data in config_data.get("steps", [])]
+
+        return InteractiveConfiguration(
+            required=config_data.get("required", False),
+            workflow_type=config_data.get("workflow_type", "wizard"),
+            steps=steps,
+            completion_method=config_data.get("completion_method", "apply_config"),
+        )
+
+    def _load_and_register_configurable(
+        self, adapter_type: str, interactive_config: Any, configurable_class_path: str
+    ) -> bool:
+        """Load configurable class and register with configuration service.
+
+        Returns True if successful.
+        """
+        import importlib
+
+        try:
+            module_path, class_name = configurable_class_path.rsplit(".", 1)
+            if not module_path.startswith("ciris_adapters"):
+                module_path = f"ciris_adapters.{module_path}"
+            module = importlib.import_module(module_path)
+            configurable_class = getattr(module, class_name)
+            adapter_instance = configurable_class()
+
+            self.adapter_configuration_service.register_adapter_config(
+                adapter_type=adapter_type,
+                interactive_config=interactive_config,
+                adapter_instance=adapter_instance,
+            )
+            logger.info(f"Registered configurable adapter: {adapter_type}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+            return False
 
     def _discover_adapters_via_importlib(self) -> None:
         """Discover adapters dynamically using importlib (Android/Chaquopy compatible).
@@ -539,14 +560,21 @@ class ApiPlatform(Service):
         Uses pkgutil.iter_modules to find all subpackages in ciris_adapters,
         then checks each for a manifest.json with interactive_config.
         """
-        import importlib
-        import importlib.resources
-        import json
+        adapter_names = self._get_adapter_package_names()
+        if not adapter_names:
+            return
+
+        registered_count = 0
+        for adapter_name in adapter_names:
+            if self._process_adapter_via_importlib(adapter_name):
+                registered_count += 1
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) via importlib")
+
+    def _get_adapter_package_names(self) -> list[str]:
+        """Get list of adapter package names via pkgutil."""
         import pkgutil
 
-        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
-
-        # Dynamically discover all adapter subpackages
         try:
             import ciris_adapters
 
@@ -556,103 +584,63 @@ class ApiPlatform(Service):
                 if ispkg and not name.startswith("_")
             ]
             logger.info(f"Discovered {len(adapter_names)} adapter packages via pkgutil: {adapter_names}")
+            return adapter_names
         except ImportError:
             logger.warning("ciris_adapters package not found, no adapters to discover")
-            return
+            return []
 
-        registered_count = 0
+    def _process_adapter_via_importlib(self, adapter_name: str) -> bool:
+        """Process a single adapter package via importlib.
 
-        for adapter_name in adapter_names:
+        Returns True if adapter was successfully registered.
+        """
+        import importlib
+
+        try:
+            importlib.import_module(f"ciris_adapters.{adapter_name}")
+        except ImportError:
+            logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
+            return False
+
+        manifest_data = self._read_manifest_via_importlib(adapter_name)
+        if manifest_data is None:
+            return False
+
+        try:
+            return self._register_adapter_from_manifest(manifest_data, adapter_name)
+        except Exception as e:
+            logger.warning(f"Failed to process adapter {adapter_name}: {e}")
+            return False
+
+    def _read_manifest_via_importlib(self, adapter_name: str) -> dict[str, Any] | None:
+        """Read manifest.json using importlib.resources.
+
+        Returns manifest data dict or None if not found.
+        """
+        import importlib.resources as pkg_resources
+        import json
+
+        package_name = f"ciris_adapters.{adapter_name}"
+        try:
+            # Try files() API first (Python 3.9+)
+            files = pkg_resources.files(package_name)
+            manifest_path = files.joinpath(MANIFEST_FILENAME)
+            manifest_text = manifest_path.read_text()
+        except (TypeError, AttributeError):
+            # Fallback for older API
             try:
-                # Try to import the adapter package to verify it exists
-                try:
-                    importlib.import_module(f"ciris_adapters.{adapter_name}")
-                except ImportError:
-                    logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
-                    continue
-
-                # Read manifest.json using importlib.resources
-                try:
-                    # Python 3.9+ compatible approach
-                    import importlib.resources as pkg_resources
-
-                    package_name = f"ciris_adapters.{adapter_name}"
-                    try:
-                        # Try files() API first (Python 3.9+)
-                        files = pkg_resources.files(package_name)
-                        manifest_path = files.joinpath(MANIFEST_FILENAME)
-                        manifest_text = manifest_path.read_text()
-                    except (TypeError, AttributeError):
-                        # Fallback for older API
-                        with pkg_resources.open_text(package_name, MANIFEST_FILENAME) as f:
-                            manifest_text = f.read()
-
-                    manifest_data = json.loads(manifest_text)
-                    logger.info(f"Successfully read manifest for {adapter_name}")
-
-                except Exception as e:
-                    logger.warning(f"Could not read manifest for {adapter_name}: {e}")
-                    continue
-
-                # Check if this adapter has interactive configuration
-                interactive_config_data = manifest_data.get("interactive_config")
-                if not interactive_config_data:
-                    logger.debug(f"Adapter {adapter_name} has no interactive_config, skipping")
-                    continue
-
-                logger.info(f"Found interactive_config for adapter: {adapter_name}")
-
-                # Parse steps into ConfigurationStep objects, preserving all metadata
-                steps = []
-                for step_data in interactive_config_data.get("steps", []):
-                    # Use model_validate to preserve all step fields (oauth_config, fields, etc.)
-                    step = ConfigurationStep.model_validate(step_data)
-                    steps.append(step)
-
-                # Create InteractiveConfiguration
-                interactive_config = InteractiveConfiguration(
-                    required=interactive_config_data.get("required", False),
-                    workflow_type=interactive_config_data.get("workflow_type", "wizard"),
-                    steps=steps,
-                    completion_method=interactive_config_data.get("completion_method", "apply_config"),
-                )
-
-                # Get adapter type
-                adapter_type = adapter_name
-
-                # Try to load the configurable adapter class
-                exports = manifest_data.get("exports", {})
-                configurable_class_path = exports.get("configurable")
-
-                if configurable_class_path:
-                    try:
-                        # Parse module and class name
-                        module_path, class_name = configurable_class_path.rsplit(".", 1)
-                        # Prepend ciris_adapters if not already present
-                        if not module_path.startswith("ciris_adapters"):
-                            module_path = f"ciris_adapters.{module_path}"
-                        module = importlib.import_module(module_path)
-                        configurable_class = getattr(module, class_name)
-                        adapter_instance = configurable_class()
-
-                        # Register with the configuration service
-                        self.adapter_configuration_service.register_adapter_config(
-                            adapter_type=adapter_type,
-                            interactive_config=interactive_config,
-                            adapter_instance=adapter_instance,
-                        )
-                        registered_count += 1
-                        logger.info(f"Registered configurable adapter (via importlib): {adapter_type}")
-
-                    except Exception as e:
-                        logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
-                else:
-                    logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
-
+                with pkg_resources.open_text(package_name, MANIFEST_FILENAME) as f:
+                    manifest_text = f.read()
             except Exception as e:
-                logger.warning(f"Failed to process adapter {adapter_name}: {e}")
+                logger.warning(f"Could not read manifest for {adapter_name}: {e}")
+                return None
+        except Exception as e:
+            logger.warning(f"Could not read manifest for {adapter_name}: {e}")
+            return None
 
-        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) via importlib")
+        logger.info(f"Successfully read manifest for {adapter_name}")
+        result: dict[str, Any] = json.loads(manifest_text)
+        return result
 
     async def _restore_persisted_adapter_configs(self) -> None:
         """Restore adapter configurations that were persisted for load-on-startup.
@@ -781,9 +769,11 @@ class ApiPlatform(Service):
                 # uvicorn calls sys.exit(1) on startup failures - catch it!
                 logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")
                 self._startup_error = f"Server startup failed: {e}"
+                raise RuntimeError(self._startup_error) from e
             except Exception as e:
                 logger.error(f"[API_ADAPTER] Server error: {e}", exc_info=True)
                 self._startup_error = str(e)
+                raise RuntimeError(self._startup_error) from e
 
         self._server_task = asyncio.create_task(_run_server_safely())
 

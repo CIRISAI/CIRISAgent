@@ -1233,6 +1233,11 @@ class MainActivity : AppCompatActivity() {
 
                 // Step 2: Exchange Google ID token for CIRIS API token
                 val exchanged = exchangeGoogleIdToken()
+
+                // Check setup status on IO thread BEFORE switching to Main thread
+                // This prevents NetworkOnMainThreadException and ensures accurate status
+                val setupRequired = checkSetupStatus()
+
                 withContext(Dispatchers.Main) {
                     if (exchanged) {
                         Log.i(TAG, "Successfully exchanged Google ID token for CIRIS token")
@@ -1250,8 +1255,7 @@ class MainActivity : AppCompatActivity() {
                     consoleContainer.visibility = View.GONE
                     findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
 
-                    // Check if setup is required - show WebView with setup wizard, otherwise Kotlin interact fragment
-                    val setupRequired = checkSetupStatus()
+                    // Use the setup status we already fetched on IO thread
                     if (setupRequired) {
                         Log.i(TAG, "Setup required - showing WebView with setup wizard")
                         webView.visibility = View.VISIBLE

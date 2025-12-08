@@ -969,7 +969,10 @@ async def _run_context_enrichment_tools(
                 logger.info(f"[CONTEXT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
 
     if not enrichment_tools:
-        logger.debug("[CONTEXT_ENRICHMENT] No context enrichment tools found")
+        logger.info("[CONTEXT_ENRICHMENT] No context enrichment tools found in available_tools")
+        logger.info(f"[CONTEXT_ENRICHMENT] available_tools keys: {list(available_tools.keys())}")
+        for adapter_type, tools in available_tools.items():
+            logger.info(f"[CONTEXT_ENRICHMENT] {adapter_type} has {len(tools)} tools: {[t.name for t in tools]}")
         return enrichment_results
 
     # Execute each enrichment tool

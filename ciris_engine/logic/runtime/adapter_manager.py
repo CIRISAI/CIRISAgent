@@ -802,6 +802,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 priority = getattr(reg, "priority", Priority.NORMAL)
                 capabilities = getattr(reg, "capabilities", [])
 
+                # Set adapter_id on the provider so context enrichment can identify it
+                if not hasattr(provider, "adapter_id"):
+                    provider.adapter_id = instance.adapter_id  # type: ignore[attr-defined]
+
                 # Handle both string and enum service_type
                 # AdapterServiceRegistration has ServiceType enum, ServiceRegistration has string
                 service_type_val: ServiceType

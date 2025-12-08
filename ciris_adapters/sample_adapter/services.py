@@ -7,12 +7,17 @@ This module demonstrates how to implement services for each bus type:
 - WISE_AUTHORITY: SampleWisdomService
 
 Each service shows the minimum required interface plus best practices.
+
+Includes context enrichment tools that are automatically executed during
+context gathering to provide additional information for action selection.
 """
 
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +29,14 @@ class SampleToolService:
     external systems or perform specific operations.
 
     This service provides:
-    - echo: Returns input back (for testing)
-    - status: Returns adapter status
-    - config: Returns current configuration
+    - sample:echo: Returns input back (for testing)
+    - sample:status: Returns adapter status
+    - sample:config: Returns current configuration
+    - sample:list_items: Lists available items (CONTEXT ENRICHMENT TOOL)
+
+    The sample:list_items tool is marked with context_enrichment=True,
+    demonstrating how adapters can provide automatic context during
+    action selection.
 
     Example tool handler result:
         {
@@ -36,6 +46,61 @@ class SampleToolService:
         }
     """
 
+    # Tool definitions using ToolInfo schema for full protocol compliance
+    TOOL_DEFINITIONS: Dict[str, ToolInfo] = {
+        "sample:echo": ToolInfo(
+            name="sample:echo",
+            description="Echo back the input message",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "message": {
+                        "type": "string",
+                        "description": "Message to echo back",
+                    },
+                },
+                required=["message"],
+            ),
+        ),
+        "sample:status": ToolInfo(
+            name="sample:status",
+            description="Get adapter status and metrics",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[],
+            ),
+        ),
+        "sample:config": ToolInfo(
+            name="sample:config",
+            description="Get current adapter configuration (secrets redacted)",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={},
+                required=[],
+            ),
+        ),
+        # CONTEXT ENRICHMENT TOOL - automatically executed during context gathering
+        "sample:list_items": ToolInfo(
+            name="sample:list_items",
+            description="List all available sample items. Used for context enrichment.",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by category (optional)",
+                    },
+                },
+                required=[],
+            ),
+            # Mark for automatic context enrichment during action selection
+            context_enrichment=True,
+            # Default params when run for enrichment (empty = list all)
+            context_enrichment_params={},
+        ),
+    }
+
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the tool service.
 
@@ -44,6 +109,13 @@ class SampleToolService:
         """
         self.config = config or {}
         self._call_count = 0
+        # Mock items for context enrichment demo
+        self._items = [
+            {"id": "item_1", "name": "Widget A", "category": "widgets", "status": "active"},
+            {"id": "item_2", "name": "Widget B", "category": "widgets", "status": "active"},
+            {"id": "item_3", "name": "Gadget X", "category": "gadgets", "status": "inactive"},
+            {"id": "item_4", "name": "Gadget Y", "category": "gadgets", "status": "active"},
+        ]
         logger.info("SampleToolService initialized")
 
     async def start(self) -> None:
@@ -54,79 +126,170 @@ class SampleToolService:
         """Stop the service (required lifecycle method)."""
         logger.info("SampleToolService stopped")
 
+    # =========================================================================
+    # ToolServiceProtocol Implementation
+    # =========================================================================
+
+    async def get_available_tools(self) -> List[str]:
+        """Get available tool names. Used by system snapshot tool collection."""
+        return list(self.TOOL_DEFINITIONS.keys())
+
+    async def list_tools(self) -> List[str]:
+        """Legacy alias for get_available_tools()."""
+        return await self.get_available_tools()
+
+    async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
+        """Get detailed info for a specific tool. Used by system snapshot."""
+        return self.TOOL_DEFINITIONS.get(tool_name)
+
+    async def get_all_tool_info(self) -> List[ToolInfo]:
+        """Get info for all tools. Used by /tools API endpoint."""
+        return list(self.TOOL_DEFINITIONS.values())
+
+    async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
+        """Get parameter schema for a tool."""
+        tool_info = self.TOOL_DEFINITIONS.get(tool_name)
+        return tool_info.parameters if tool_info else None
+
+    async def validate_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> bool:
+        """Validate parameters for a tool without executing it."""
+        if tool_name not in self.TOOL_DEFINITIONS:
+            return False
+        tool_info = self.TOOL_DEFINITIONS[tool_name]
+        if not tool_info.parameters:
+            return True
+        # Basic validation: check required fields are present
+        required = tool_info.parameters.required or []
+        return all(param in parameters for param in required)
+
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
+        """Get result of previously executed tool. Not implemented for sync tools."""
+        return None
+
     def get_tools(self) -> List[Dict[str, Any]]:
-        """Return list of available tools.
+        """Return list of available tools (legacy format).
 
         Returns:
             List of tool definitions with name, description, and parameters
         """
         return [
             {
-                "name": "sample:echo",
-                "description": "Echo back the input message",
-                "parameters": {
-                    "message": {"type": "string", "required": True},
-                },
-            },
-            {
-                "name": "sample:status",
-                "description": "Get adapter status and metrics",
-                "parameters": {},
-            },
-            {
-                "name": "sample:config",
-                "description": "Get current adapter configuration",
-                "parameters": {},
-            },
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters.model_dump() if tool.parameters else {},
+            }
+            for tool in self.TOOL_DEFINITIONS.values()
         ]
 
-    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_tool(
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> ToolExecutionResult:
         """Execute a tool and return results.
 
         Args:
             tool_name: Name of the tool to execute
             parameters: Tool parameters
+            context: Optional execution context
 
         Returns:
-            Tool execution result
+            ToolExecutionResult with status, success, data, and error
         """
         self._call_count += 1
+        correlation_id = str(uuid4())
 
-        if tool_name == "sample:echo":
-            message = parameters.get("message", "")
-            return {
-                "success": True,
-                "data": {"echoed": message, "timestamp": datetime.now(timezone.utc).isoformat()},
-                "tool_name": tool_name,
-            }
+        if tool_name not in self.TOOL_DEFINITIONS:
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.NOT_FOUND,
+                success=False,
+                data=None,
+                error=f"Unknown tool: {tool_name}",
+                correlation_id=correlation_id,
+            )
 
-        elif tool_name == "sample:status":
-            return {
-                "success": True,
-                "data": {
-                    "status": "running",
-                    "call_count": self._call_count,
-                    "uptime_seconds": 0,  # Would track actual uptime in production
-                },
-                "tool_name": tool_name,
-            }
+        try:
+            if tool_name == "sample:echo":
+                message = parameters.get("message", "")
+                return ToolExecutionResult(
+                    tool_name=tool_name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"echoed": message, "timestamp": datetime.now(timezone.utc).isoformat()},
+                    error=None,
+                    correlation_id=correlation_id,
+                )
 
-        elif tool_name == "sample:config":
-            # Return safe subset of config (no secrets)
-            safe_config = {
-                k: v for k, v in self.config.items() if "token" not in k.lower() and "secret" not in k.lower()
-            }
-            return {
-                "success": True,
-                "data": {"config": safe_config},
-                "tool_name": tool_name,
-            }
+            elif tool_name == "sample:status":
+                return ToolExecutionResult(
+                    tool_name=tool_name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={
+                        "status": "running",
+                        "call_count": self._call_count,
+                        "uptime_seconds": 0,  # Would track actual uptime in production
+                    },
+                    error=None,
+                    correlation_id=correlation_id,
+                )
 
-        return {
-            "success": False,
-            "error": f"Unknown tool: {tool_name}",
-            "tool_name": tool_name,
-        }
+            elif tool_name == "sample:config":
+                # Return safe subset of config (no secrets)
+                safe_config = {
+                    k: v for k, v in self.config.items() if "token" not in k.lower() and "secret" not in k.lower()
+                }
+                return ToolExecutionResult(
+                    tool_name=tool_name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"config": safe_config},
+                    error=None,
+                    correlation_id=correlation_id,
+                )
+
+            elif tool_name == "sample:list_items":
+                # Context enrichment tool - list available items
+                category = parameters.get("category")
+                items = self._items
+                if category:
+                    items = [i for i in items if i.get("category") == category]
+
+                return ToolExecutionResult(
+                    tool_name=tool_name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={
+                        "count": len(items),
+                        "items": items,
+                        "filtered_by_category": category,
+                    },
+                    error=None,
+                    correlation_id=correlation_id,
+                )
+
+            # Fallback - should not reach here
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=f"Tool not implemented: {tool_name}",
+                correlation_id=correlation_id,
+            )
+
+        except Exception as e:
+            logger.error(f"Error executing tool {tool_name}: {e}")
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=str(e),
+                correlation_id=correlation_id,
+            )
 
 
 class SampleCommunicationService:

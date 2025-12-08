@@ -54,6 +54,7 @@ router = APIRouter(prefix="/system", tags=["system"])
 CAP_COMM_SEND_MESSAGE = "communication:send_message"
 CAP_COMM_FETCH_MESSAGES = "communication:fetch_messages"
 MANIFEST_FILENAME = "manifest.json"
+ERROR_ADAPTER_CONFIG_SERVICE_NOT_AVAILABLE = "Adapter configuration service not available"
 
 # Common communication capabilities for adapters
 COMM_CAPABILITIES = [CAP_COMM_SEND_MESSAGE, CAP_COMM_FETCH_MESSAGES]
@@ -1777,7 +1778,7 @@ async def list_persisted_configurations(
         config_service = getattr(request.app.state, "config_service", None)
 
         if not adapter_config_service:
-            raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+            raise HTTPException(status_code=503, detail=ERROR_ADAPTER_CONFIG_SERVICE_NOT_AVAILABLE)
 
         persisted_configs: Dict[str, Dict[str, Any]] = {}
         if config_service:
@@ -1825,7 +1826,7 @@ async def remove_persisted_configuration(
         config_service = getattr(request.app.state, "config_service", None)
 
         if not adapter_config_service:
-            raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+            raise HTTPException(status_code=503, detail=ERROR_ADAPTER_CONFIG_SERVICE_NOT_AVAILABLE)
 
         if not config_service:
             raise HTTPException(status_code=503, detail="Config service not available")
@@ -1858,7 +1859,7 @@ def _get_adapter_config_service(request: Request) -> Any:
     """Get AdapterConfigurationService from app state."""
     service = getattr(request.app.state, "adapter_configuration_service", None)
     if not service:
-        raise HTTPException(status_code=503, detail="Adapter configuration service not available")
+        raise HTTPException(status_code=503, detail=ERROR_ADAPTER_CONFIG_SERVICE_NOT_AVAILABLE)
     return service
 
 
@@ -2011,8 +2012,15 @@ async def load_adapter(
         if not adapter_id:
             adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
 
+        logger.info(f"[LOAD_ADAPTER] Loading adapter: type={adapter_type}, id={adapter_id}")
+        logger.debug(f"[LOAD_ADAPTER] Config: {body.config}, auto_start={body.auto_start}")
+
         result = await runtime_control.load_adapter(
             adapter_type=adapter_type, adapter_id=adapter_id, config=body.config, auto_start=body.auto_start
+        )
+
+        logger.info(
+            f"[LOAD_ADAPTER] Result: success={result.success}, adapter_id={result.adapter_id}, error={result.error}"
         )
 
         # Convert response
@@ -2028,7 +2036,7 @@ async def load_adapter(
         return SuccessResponse(data=response)
 
     except Exception as e:
-        logger.error(f"Error loading adapter: {e}")
+        logger.error(f"[LOAD_ADAPTER] Error loading adapter type={adapter_type}, id={adapter_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2514,7 +2522,6 @@ async def complete_configuration(
         # Complete the session and apply config
         success = await adapter_config_service.complete_session(session_id)
         persisted = False
-        adapter_started = False
 
         if success:
             message = f"Configuration applied successfully for {session.adapter_type}"
@@ -2539,7 +2546,7 @@ async def complete_configuration(
                         )
 
                 if runtime_control_service:
-                    logger.info(f"[COMPLETE_CONFIG] Loading adapter via RuntimeControlService.load_adapter")
+                    logger.info("[COMPLETE_CONFIG] Loading adapter via RuntimeControlService.load_adapter")
 
                     # Build config dict for the adapter from collected config
                     adapter_config = dict(session.collected_config)

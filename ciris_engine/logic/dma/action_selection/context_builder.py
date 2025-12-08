@@ -47,8 +47,8 @@ class ActionSelectionContextBuilder:
         self._tools_cached = True
         logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
 
-        # Pre-cache the original task for this thought
-        await self._cache_original_task(thought)
+        # Pre-cache the original task for this thought (sync operation)
+        self._cache_original_task(thought)
 
         return tool_count
 
@@ -64,7 +64,7 @@ class ActionSelectionContextBuilder:
         logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
         return tool_count
 
-    async def _cache_original_task(self, thought: Thought) -> None:
+    def _cache_original_task(self, thought: Thought) -> None:
         """Cache the original task that spawned this thought chain."""
         from ciris_engine.logic import persistence
 

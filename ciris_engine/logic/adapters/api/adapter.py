@@ -41,6 +41,9 @@ from .services.auth_service import APIAuthService
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MANIFEST_FILENAME = "manifest.json"
+
 
 class ApiPlatform(Service):
     """API adapter platform for CIRIS v1."""
@@ -64,20 +67,41 @@ class ApiPlatform(Service):
         # NOTE: Do NOT call load_env_vars() after this - the config dict already
         # represents the final desired config with CLI args taking precedence.
         # Calling load_env_vars() would override CLI args with .env values.
+        logger.info(f"[API_ADAPTER_INIT] kwargs keys: {list(kwargs.keys())}")
+        logger.info(f"[API_ADAPTER_INIT] adapter_config in kwargs: {'adapter_config' in kwargs}")
+        if "adapter_config" in kwargs:
+            logger.info(
+                f"[API_ADAPTER_INIT] adapter_config value: {kwargs['adapter_config']}, type: {type(kwargs['adapter_config'])}"
+            )
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             if isinstance(kwargs["adapter_config"], APIAdapterConfig):
                 self.config = kwargs["adapter_config"]
+                logger.info(f"[API_ADAPTER_INIT] Using APIAdapterConfig object, port={self.config.port}")
                 # Don't call load_env_vars() - config object already has correct values
             elif isinstance(kwargs["adapter_config"], dict):
                 # Create config from dict - this contains final merged values
                 self.config = APIAdapterConfig(**kwargs["adapter_config"])
+                logger.info(f"[API_ADAPTER_INIT] Created APIAdapterConfig from dict, port={self.config.port}")
                 # Don't call load_env_vars() - dict already has correct values from main.py
             # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
+        elif "host" in kwargs or "port" in kwargs:
+            # Handle flat kwargs from adapter_manager (comes from settings dict)
+            # Only override the specific values that were provided
+            # Note: We only apply known APIAdapterConfig fields (host, port)
+            # Other kwargs like 'debug' from adapter_manager are ignored
+            if "host" in kwargs:
+                self.config.host = kwargs["host"]
+            if "port" in kwargs:
+                self.config.port = kwargs["port"]
+            logger.info(f"[API_ADAPTER_INIT] Applied flat kwargs: host={self.config.host}, port={self.config.port}")
+        else:
+            logger.info(f"[API_ADAPTER_INIT] No config provided, using env defaults, port={self.config.port}")
 
         # Create FastAPI app - services will be injected later in start()
         self.app: FastAPI = create_app(runtime, self.config)
         self._server: Server | None = None
         self._server_task: asyncio.Task[Any] | None = None
+        self._startup_error: str | None = None  # Track server startup errors
 
         # Message observer for handling incoming messages (will be created in start())
         self.message_observer: APIObserver | None = None
@@ -444,7 +468,7 @@ class ApiPlatform(Service):
             if not adapter_path.is_dir():
                 continue
 
-            manifest_path = adapter_path / "manifest.json"
+            manifest_path = adapter_path / MANIFEST_FILENAME
             if not manifest_path.exists():
                 continue
 
@@ -542,7 +566,7 @@ class ApiPlatform(Service):
             try:
                 # Try to import the adapter package to verify it exists
                 try:
-                    adapter_pkg = importlib.import_module(f"ciris_adapters.{adapter_name}")
+                    importlib.import_module(f"ciris_adapters.{adapter_name}")
                 except ImportError:
                     logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
                     continue
@@ -556,11 +580,11 @@ class ApiPlatform(Service):
                     try:
                         # Try files() API first (Python 3.9+)
                         files = pkg_resources.files(package_name)
-                        manifest_path = files.joinpath("manifest.json")
+                        manifest_path = files.joinpath(MANIFEST_FILENAME)
                         manifest_text = manifest_path.read_text()
                     except (TypeError, AttributeError):
                         # Fallback for older API
-                        with pkg_resources.open_text(package_name, "manifest.json") as f:
+                        with pkg_resources.open_text(package_name, MANIFEST_FILENAME) as f:
                             manifest_text = f.read()
 
                     manifest_data = json.loads(manifest_text)
@@ -711,6 +735,30 @@ class ApiPlatform(Service):
         await self.runtime_control.start()
         logger.info("Started API runtime control service")
 
+        # Check if port is already in use before attempting to bind
+        # This prevents uvicorn from calling sys.exit(1) which crashes the entire process
+        import socket
+
+        port_available = False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                result = s.connect_ex(
+                    (self.config.host if self.config.host != "0.0.0.0" else "127.0.0.1", self.config.port)
+                )
+                # If connect succeeds (result == 0), port is in use
+                # If connect fails, port is available
+                port_available = result != 0
+        except Exception as e:
+            logger.warning(f"Could not check port availability: {e}, will attempt to start anyway")
+            port_available = True
+
+        if not port_available:
+            error_msg = f"Port {self.config.port} is already in use on {self.config.host}"
+            logger.error(f"[API_ADAPTER] {error_msg}")
+            self._startup_error = error_msg
+            raise RuntimeError(error_msg)
+
         # Configure uvicorn
         config = uvicorn.Config(
             self.app,
@@ -721,15 +769,34 @@ class ApiPlatform(Service):
             timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
         )
 
-        # Create and start server
+        # Create and start server with error handling wrapper
         self._server = uvicorn.Server(config)
         assert self._server is not None
-        self._server_task = asyncio.create_task(self._server.serve())
+
+        async def _run_server_safely() -> None:
+            """Run server and catch SystemExit to prevent process crash."""
+            try:
+                await self._server.serve()  # type: ignore[union-attr]
+            except SystemExit as e:
+                # uvicorn calls sys.exit(1) on startup failures - catch it!
+                logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")
+                self._startup_error = f"Server startup failed: {e}"
+            except Exception as e:
+                logger.error(f"[API_ADAPTER] Server error: {e}", exc_info=True)
+                self._startup_error = str(e)
+
+        self._server_task = asyncio.create_task(_run_server_safely())
 
         logger.info(f"API server starting on http://{self.config.host}:{self.config.port}")
 
-        # Wait a moment for server to start
+        # Wait a moment for server to start and check for immediate failures
         await asyncio.sleep(1)
+
+        # Check if server task failed immediately
+        if self._server_task.done():
+            error = getattr(self, "_startup_error", None)
+            if error:
+                raise RuntimeError(f"API server failed to start: {error}")
 
     async def stop(self) -> None:
         """Stop the API server."""

@@ -233,67 +233,81 @@ class ActionInstructionGenerator:
         for tool_service in tool_services:
             service_name = getattr(tool_service, "adapter_name", type(tool_service).__name__)
             try:
-                if hasattr(tool_service, "get_all_tool_info"):
-                    tool_infos = await tool_service.get_all_tool_info()
-                    logger.info(f"[TOOL_CACHE] {service_name}: Found {len(tool_infos)} tools via get_all_tool_info()")
-
-                    for tool_info in tool_infos:
-                        tool_name = tool_info.name
-                        tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
-
-                        enhanced_info = {
-                            "name": tool_name,
-                            "service": service_name,
-                            "description": tool_info.description,
-                            "parameters": tool_info.parameters.model_dump() if tool_info.parameters else {},
-                        }
-                        if hasattr(tool_info, "when_to_use") and tool_info.when_to_use:
-                            enhanced_info["when_to_use"] = tool_info.when_to_use
-
-                        all_tools[tool_key] = enhanced_info
-                        logger.debug(f"[TOOL_CACHE]   - {tool_name}: {tool_info.description[:50]}...")
-
-                elif hasattr(tool_service, "get_available_tools"):
-                    service_tools = await tool_service.get_available_tools()
-                    logger.info(
-                        f"[TOOL_CACHE] {service_name}: Found {len(service_tools)} tools via get_available_tools()"
-                    )
-
-                    if isinstance(service_tools, list):
-                        for tool_name in service_tools:
-                            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
-                            all_tools[tool_key] = {
-                                "name": tool_name,
-                                "description": "No description available",
-                                "service": service_name,
-                            }
-                    elif isinstance(service_tools, dict):
-                        for tool_name, tool_info in service_tools.items():
-                            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
-                            enhanced_info = {
-                                "name": tool_name,
-                                "service": service_name,
-                                "description": (
-                                    tool_info.get("description", "No description")
-                                    if isinstance(tool_info, dict)
-                                    else "No description"
-                                ),
-                            }
-                            if isinstance(tool_info, dict):
-                                if "parameters" in tool_info:
-                                    enhanced_info["parameters"] = tool_info["parameters"]
-                                if "when_to_use" in tool_info:
-                                    enhanced_info["when_to_use"] = tool_info["when_to_use"]
-                            all_tools[tool_key] = enhanced_info
-                else:
-                    logger.warning(f"[TOOL_CACHE] {service_name}: No get_all_tool_info or get_available_tools method!")
-
+                await self._cache_tools_from_service(tool_service, service_name, all_tools)
             except Exception as e:
                 logger.error(f"[TOOL_CACHE] {service_name}: FAILED to get tools: {e}")
 
         self._cached_tools = all_tools
         logger.info(f"[TOOL_CACHE] ✓ Cached {len(all_tools)} total tools: {list(all_tools.keys())}")
         return len(all_tools)
+
+    async def _cache_tools_from_service(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
+        """Cache tools from a single tool service into all_tools dict."""
+        if hasattr(tool_service, "get_all_tool_info"):
+            await self._cache_from_tool_info_api(tool_service, service_name, all_tools)
+        elif hasattr(tool_service, "get_available_tools"):
+            await self._cache_from_available_tools_api(tool_service, service_name, all_tools)
+        else:
+            logger.warning(f"[TOOL_CACHE] {service_name}: No get_all_tool_info or get_available_tools method!")
+
+    async def _cache_from_tool_info_api(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
+        """Cache tools using the get_all_tool_info() API."""
+        tool_infos = await tool_service.get_all_tool_info()
+        logger.info(f"[TOOL_CACHE] {service_name}: Found {len(tool_infos)} tools via get_all_tool_info()")
+
+        for tool_info in tool_infos:
+            tool_name = tool_info.name
+            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
+
+            enhanced_info: JSONDict = {
+                "name": tool_name,
+                "service": service_name,
+                "description": tool_info.description,
+                "parameters": tool_info.parameters.model_dump() if tool_info.parameters else {},
+            }
+            if hasattr(tool_info, "when_to_use") and tool_info.when_to_use:
+                enhanced_info["when_to_use"] = tool_info.when_to_use
+
+            all_tools[tool_key] = enhanced_info
+            logger.debug(f"[TOOL_CACHE]   - {tool_name}: {tool_info.description[:50]}...")
+
+    async def _cache_from_available_tools_api(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
+        """Cache tools using the get_available_tools() API."""
+        service_tools = await tool_service.get_available_tools()
+        logger.info(f"[TOOL_CACHE] {service_name}: Found {len(service_tools)} tools via get_available_tools()")
+
+        if isinstance(service_tools, list):
+            self._cache_tools_from_list(service_tools, service_name, all_tools)
+        elif isinstance(service_tools, dict):
+            self._cache_tools_from_dict(service_tools, service_name, all_tools)
+
+    def _cache_tools_from_list(self, service_tools: List[str], service_name: str, all_tools: JSONDict) -> None:
+        """Cache tools from a list of tool names."""
+        for tool_name in service_tools:
+            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
+            all_tools[tool_key] = {
+                "name": tool_name,
+                "description": "No description available",
+                "service": service_name,
+            }
+
+    def _cache_tools_from_dict(self, service_tools: Dict[str, Any], service_name: str, all_tools: JSONDict) -> None:
+        """Cache tools from a dict of tool name to tool info."""
+        for tool_name, tool_info in service_tools.items():
+            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
+            enhanced_info: JSONDict = {
+                "name": tool_name,
+                "service": service_name,
+                "description": (
+                    tool_info.get("description", "No description") if isinstance(tool_info, dict) else "No description"
+                ),
+            }
+            if isinstance(tool_info, dict):
+                if "parameters" in tool_info:
+                    enhanced_info["parameters"] = tool_info["parameters"]
+                if "when_to_use" in tool_info:
+                    enhanced_info["when_to_use"] = tool_info["when_to_use"]
+            all_tools[tool_key] = enhanced_info
 
     def _format_tools_for_prompt(self, all_tools: JSONDict) -> str:
         """Format cached tools into prompt text."""

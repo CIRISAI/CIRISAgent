@@ -255,7 +255,7 @@ class AdapterConfigurationService:
 
             if "code" in step_data:
                 # Handle OAuth callback
-                logger.info(f"[OAUTH STEP] Processing OAuth callback with code")
+                logger.info("[OAUTH STEP] Processing OAuth callback with code")
                 # Pass callback_base_url and redirect_uri if stored during OAuth URL generation
                 callback_base_url = session.collected_config.get("callback_base_url")
                 redirect_uri = session.collected_config.get("redirect_uri")
@@ -484,13 +484,17 @@ class AdapterConfigurationService:
         Returns:
             True if persistence succeeded, False otherwise
         """
+        logger.info(f"[ADAPTER_PERSIST] persist_adapter_config called for adapter_type={adapter_type}")
+        logger.debug(f"[ADAPTER_PERSIST] config to persist: {config}")
+
         if not config_service:
-            logger.warning("Cannot persist adapter config: no config_service available")
+            logger.warning("[ADAPTER_PERSIST] Cannot persist adapter config: no config_service available")
             return False
 
         try:
             # Store under a specific key pattern for easy retrieval
             config_key = f"adapter.startup.{adapter_type}"
+            logger.info(f"[ADAPTER_PERSIST] Using config_key={config_key}")
 
             # Create a persistence record
             persistence_data = {
@@ -499,14 +503,29 @@ class AdapterConfigurationService:
                 "persisted_at": datetime.now(timezone.utc).isoformat(),
                 "load_on_startup": True,
             }
+            logger.info(
+                f"[ADAPTER_PERSIST] persistence_data created: adapter_type={adapter_type}, load_on_startup=True, persisted_at={persistence_data['persisted_at']}"
+            )
 
             # Use config service to store
-            await config_service.set(config_key, persistence_data)
-            logger.info(f"Persisted startup configuration for adapter: {adapter_type}")
+            # Note: set_config requires key, value, and updated_by
+            logger.info(f"[ADAPTER_PERSIST] Calling config_service.set_config({config_key}, ...)")
+            await config_service.set_config(config_key, persistence_data, updated_by="adapter_configuration_service")
+            logger.info(f"[ADAPTER_PERSIST] Successfully persisted startup configuration for adapter: {adapter_type}")
+
+            # Verify the write by reading it back
+            try:
+                verify = await config_service.get(config_key)
+                logger.info(f"[ADAPTER_PERSIST] Verification read-back: key={config_key}, found={verify is not None}")
+                if verify:
+                    logger.debug(f"[ADAPTER_PERSIST] Verified data: {verify}")
+            except Exception as ve:
+                logger.warning(f"[ADAPTER_PERSIST] Verification read-back failed: {ve}")
+
             return True
 
         except Exception as e:
-            logger.error(f"Failed to persist adapter config for {adapter_type}: {e}")
+            logger.error(f"[ADAPTER_PERSIST] Failed to persist adapter config for {adapter_type}: {e}", exc_info=True)
             return False
 
     async def load_persisted_configs(self, config_service: Any) -> Dict[str, Dict[str, Any]]:
@@ -520,27 +539,42 @@ class AdapterConfigurationService:
         """
         persisted_configs: Dict[str, Dict[str, Any]] = {}
 
+        logger.info("[ADAPTER_PERSIST] load_persisted_configs called")
+
         if not config_service:
-            logger.debug("No config_service available for loading persisted configs")
+            logger.warning("[ADAPTER_PERSIST] No config_service available for loading persisted configs")
             return persisted_configs
 
         try:
             # Query all adapter startup configurations
             # Pattern: adapter.startup.*
             # Use list_configs which is the correct method on GraphConfigService
+            logger.info("[ADAPTER_PERSIST] Querying config_service.list_configs(prefix='adapter.startup.')")
             all_configs = await config_service.list_configs(prefix="adapter.startup.")
+            logger.info(
+                f"[ADAPTER_PERSIST] list_configs returned {len(all_configs)} entries: {list(all_configs.keys())}"
+            )
 
             for key, value in all_configs.items():
+                logger.debug(f"[ADAPTER_PERSIST] Checking key={key}, value_type={type(value)}, value={value}")
                 if isinstance(value, dict) and value.get("load_on_startup"):
                     adapter_type = value.get("adapter_type")
+                    has_config = value.get("config") is not None
+                    logger.info(
+                        f"[ADAPTER_PERSIST] Found startup config: key={key}, adapter_type={adapter_type}, has_config={has_config}, load_on_startup={value.get('load_on_startup')}"
+                    )
                     if adapter_type and value.get("config"):
                         persisted_configs[adapter_type] = value["config"]
-                        logger.debug(f"Loaded persisted config for adapter: {adapter_type}")
+                        logger.info(f"[ADAPTER_PERSIST] Added persisted config for adapter: {adapter_type}")
+                else:
+                    logger.debug(
+                        f"[ADAPTER_PERSIST] Skipping key={key}: is_dict={isinstance(value, dict)}, load_on_startup={value.get('load_on_startup') if isinstance(value, dict) else 'N/A'}"
+                    )
 
-            logger.info(f"Loaded {len(persisted_configs)} persisted adapter configuration(s)")
+            logger.info(f"[ADAPTER_PERSIST] Loaded {len(persisted_configs)} persisted adapter configuration(s)")
 
         except Exception as e:
-            logger.error(f"Failed to load persisted adapter configs: {e}")
+            logger.error(f"[ADAPTER_PERSIST] Failed to load persisted adapter configs: {e}", exc_info=True)
 
         return persisted_configs
 

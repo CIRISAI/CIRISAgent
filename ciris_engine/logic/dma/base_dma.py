@@ -256,9 +256,8 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             parts.append(f"Status: {task.status}")
 
         # Include parent task context if available (for subtasks)
-        if task.context:
-            if task.context.parent_task_id:
-                parts.append(f"Parent Task ID: {task.context.parent_task_id}")
+        if task.context and task.context.parent_task_id:
+            parts.append(f"Parent Task ID: {task.context.parent_task_id}")
 
         # Add follow-through guidance for non-initial thoughts
         if thought_depth > 0:

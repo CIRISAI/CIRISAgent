@@ -237,7 +237,7 @@ class AdapterLoader:
                 if manifest.module.is_mock:
                     for service_decl in manifest.services:
                         if service_decl.type == ServiceType.LLM:
-                            logger.warning(f"[SERVICE 14/22] MockLLMService STARTED")
+                            logger.warning("[SERVICE 14/22] MockLLMService STARTED")
 
             except Exception as e:
                 error_msg = f"Failed to initialize {manifest.module.name}: {e}"

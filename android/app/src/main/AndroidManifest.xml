@@ -9,7 +9,7 @@
     <!-- Google Play Billing permission -->
     <uses-permission android:name="com.android.vending.BILLING" />
 
-    <!-- Foreground service permission for keeping Python runtime alive -->
+    <!-- Foreground service permission for keeping Python runtime alive during OAuth -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
@@ -118,7 +118,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Foreground service to keep Python runtime alive during OAuth flows -->
+        <!-- Foreground service to keep Python runtime alive during OAuth browser flows -->
         <service
             android:name=".CirisBackgroundService"
             android:exported="false"

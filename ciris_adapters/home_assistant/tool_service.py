@@ -266,6 +266,7 @@ class HAToolService:
         except Exception as e:
             logger.error(f"[HA TOOL EXECUTE] Exception executing tool {tool_name}: {e}")
             import traceback
+
             logger.error(f"[HA TOOL EXECUTE] Traceback: {traceback.format_exc()}")
             logger.info("=" * 60)
             return ToolExecutionResult(

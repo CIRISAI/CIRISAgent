@@ -20,6 +20,10 @@ import androidx.core.app.NotificationCompat
  * - With foreground service: Python server stays running, OAuth callback works
  *
  * The service shows a persistent notification while CIRIS is running.
+ *
+ * Uses START_STICKY to ensure Python stays alive during OAuth browser flows.
+ * MainActivity has smart startup logic to detect and gracefully shutdown any
+ * stale server sessions before starting a new one (prevents "port already bound" errors).
  */
 class CirisBackgroundService : Service() {
 
@@ -59,7 +63,8 @@ class CirisBackgroundService : Service() {
 
         Log.i(TAG, "Foreground service is now running - Python runtime protected from background kill")
 
-        // START_STICKY: restart service if killed by system
+        // START_STICKY: Restart service if killed by system to keep Python alive during OAuth
+        // Smart startup in MainActivity handles stale sessions on app restart
         return START_STICKY
     }
 

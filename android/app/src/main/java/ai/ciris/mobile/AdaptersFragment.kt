@@ -565,8 +565,12 @@ class AdaptersFragment : Fragment() {
         val settings = mutableMapOf<String, Any?>()
         var hasError = false
 
+        Log.d(TAG, "[SUBMIT_CONFIG] Processing module: ${module.moduleId}")
+        Log.d(TAG, "[SUBMIT_CONFIG] Configuration schema: ${module.configurationSchema.map { "${it.name}:${it.paramType}" }}")
+
         module.configurationSchema.forEach { param ->
             val value = fields[param.name]?.text?.toString() ?: ""
+            Log.d(TAG, "[SUBMIT_CONFIG] Processing param: ${param.name}, type=${param.paramType}, value='$value'")
 
             if (param.required && value.isEmpty()) {
                 Toast.makeText(context, "${param.name} is required", Toast.LENGTH_SHORT).show()
@@ -582,6 +586,7 @@ class AdaptersFragment : Fragment() {
                     "boolean" -> value.lowercase() in listOf("true", "1", "yes")
                     else -> value
                 }
+                Log.d(TAG, "[SUBMIT_CONFIG] Converted ${param.name}: '$value' -> $typedValue (type=${typedValue?.javaClass?.simpleName})")
                 settings[param.name] = typedValue
             }
         }
@@ -590,6 +595,8 @@ class AdaptersFragment : Fragment() {
 
         // Generate a unique adapter ID
         val adapterId = "${module.moduleId}_${System.currentTimeMillis()}"
+        Log.d(TAG, "[SUBMIT_CONFIG] Generated adapter_id: $adapterId")
+        Log.d(TAG, "[SUBMIT_CONFIG] Final settings: $settings")
 
         // Submit to API
         CoroutineScope(Dispatchers.IO).launch {
@@ -615,13 +622,16 @@ class AdaptersFragment : Fragment() {
                     "config" to config,
                     "auto_start" to true
                 )
+
+                Log.d(TAG, "[SUBMIT_CONFIG] Request config: $config")
                 val jsonBody = gson.toJson(requestBody)
-                    .toRequestBody("application/json".toMediaType())
+                Log.d(TAG, "[SUBMIT_CONFIG] Request JSON: $jsonBody")
+                val jsonRequestBody = jsonBody.toRequestBody("application/json".toMediaType())
 
                 // Include adapter_id as query parameter (per MCP tests pattern)
                 val request = Request.Builder()
                     .url("$BASE_URL/v1/system/adapters/${module.moduleId}?adapter_id=$adapterId")
-                    .post(jsonBody)
+                    .post(jsonRequestBody)
                     .apply {
                         accessToken?.let { addHeader("Authorization", "Bearer $it") }
                         addHeader("Content-Type", "application/json")
@@ -631,6 +641,9 @@ class AdaptersFragment : Fragment() {
                 val response = client.newCall(request).execute()
                 val responseBody = response.body?.string()
 
+                Log.d(TAG, "[SUBMIT_CONFIG] Response code: ${response.code}")
+                Log.d(TAG, "[SUBMIT_CONFIG] Response body: $responseBody")
+
                 withContext(Dispatchers.Main) {
                     if (response.isSuccessful) {
                         // Parse response to check if operation succeeded
@@ -638,11 +651,14 @@ class AdaptersFragment : Fragment() {
                             gson.fromJson(responseBody, GenericResponse::class.java)
                         } catch (e: Exception) { null }
 
+                        Log.d(TAG, "[SUBMIT_CONFIG] Parsed result: success=${result?.data?.success}, error=${result?.data?.error}")
+
                         if (result?.data?.success != false) {
                             Toast.makeText(context, "Adapter added successfully", Toast.LENGTH_SHORT).show()
                             fetchAdapters()
                         } else {
                             val error = result.data?.error ?: result.data?.message ?: "Operation failed"
+                            Log.e(TAG, "[SUBMIT_CONFIG] Adapter add failed: $error")
                             Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
                         }
                     } else {
@@ -652,11 +668,12 @@ class AdaptersFragment : Fragment() {
                         } catch (e: Exception) {
                             "Failed to add adapter: ${response.code}"
                         }
+                        Log.e(TAG, "[SUBMIT_CONFIG] HTTP error: ${response.code}, message=$errorMsg")
                         Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error adding adapter", e)
+                Log.e(TAG, "[SUBMIT_CONFIG] Error adding adapter", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
@@ -865,9 +882,23 @@ class AdaptersFragment : Fragment() {
                 if (which < items.size) {
                     // Selected a discovered item
                     val selectedItem = items[which]
-                    val url = selectedItem.metadata?.get("url") as? String
-                        ?: selectedItem.metadata?.get("host")?.let { "http://$it:${selectedItem.metadata["port"]}" }
+                    Log.d(TAG, "[DISCOVERY] Selected item metadata: ${selectedItem.metadata}")
 
+                    // Build URL - handle port as number (Gson deserializes JSON numbers as Double)
+                    val url = selectedItem.metadata?.get("url") as? String
+                        ?: selectedItem.metadata?.get("host")?.let { host ->
+                            val portValue = selectedItem.metadata["port"]
+                            // Convert port to integer (JSON numbers come as Double from Gson)
+                            val port = when (portValue) {
+                                is Number -> portValue.toInt()
+                                is String -> portValue.toIntOrNull() ?: 8123
+                                else -> 8123
+                            }
+                            Log.d(TAG, "[DISCOVERY] Building URL from host=$host, port=$port (raw portValue=$portValue, type=${portValue?.javaClass?.simpleName})")
+                            "http://$host:$port"
+                        }
+
+                    Log.d(TAG, "[DISCOVERY] Final URL: $url")
                     if (url != null) {
                         proceedToNextStep(adapterInfo, session, mapOf("base_url" to url, "selected_instance" to selectedItem.id))
                     }

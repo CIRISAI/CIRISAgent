@@ -1016,16 +1016,125 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Check if a previous CIRIS server is still running on port 8080.
+     * Returns true if server responds to health check.
+     */
+    private fun isExistingServerRunning(): Boolean {
+        return try {
+            val url = URL("$SERVER_URL/v1/system/health")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 1000
+            connection.readTimeout = 1000
+            connection.requestMethod = "GET"
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Attempt to shut down an existing server gracefully via API.
+     * Uses saved CIRIS access token for authentication.
+     * Returns true if shutdown was triggered successfully.
+     */
+    private fun shutdownExistingServer(): Boolean {
+        return try {
+            Log.i(TAG, "[SmartStartup] Attempting graceful shutdown of existing server...")
+
+            // Get saved auth token for the shutdown request
+            val prefs = getSharedPreferences("ciris_prefs", MODE_PRIVATE)
+            val savedToken = prefs.getString("ciris_access_token", null)
+
+            val url = URL("$SERVER_URL/v1/system/shutdown")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 3000
+            connection.readTimeout = 5000
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+
+            // Add auth token if available
+            if (savedToken != null) {
+                connection.setRequestProperty("Authorization", "Bearer $savedToken")
+                Log.i(TAG, "[SmartStartup] Using saved auth token for shutdown")
+            } else {
+                Log.w(TAG, "[SmartStartup] No saved auth token - shutdown may fail with 401")
+            }
+
+            // Send empty body or shutdown command
+            connection.outputStream.bufferedWriter().use { it.write("{}") }
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            Log.i(TAG, "[SmartStartup] Shutdown response: $responseCode")
+            responseCode in 200..299
+        } catch (e: Exception) {
+            Log.w(TAG, "[SmartStartup] Graceful shutdown failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Wait for an existing server to fully shut down.
+     * Polls health endpoint until it fails (server is down).
+     */
+    private suspend fun waitForServerShutdown(maxWaitSeconds: Int = 10): Boolean {
+        var waitedSeconds = 0
+        while (waitedSeconds < maxWaitSeconds) {
+            if (!isExistingServerRunning()) {
+                Log.i(TAG, "[SmartStartup] Existing server has shut down after ${waitedSeconds}s")
+                return true
+            }
+            delay(1000)
+            waitedSeconds++
+        }
+        Log.w(TAG, "[SmartStartup] Existing server did not shut down within ${maxWaitSeconds}s")
+        return false
+    }
+
     private fun startPythonServer() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 withContext(Dispatchers.Main) {
                     appendToConsole("Starting CIRIS runtime...")
-                    // Start foreground service to keep Python alive during OAuth flows
+                    // Start foreground service EARLY to keep Python alive during OAuth flows
                     CirisBackgroundService.start(this@MainActivity)
                 }
 
                 Log.i(TAG, "Starting Python server...")
+
+                // Smart startup: Check for and handle existing server session
+                if (isExistingServerRunning()) {
+                    Log.i(TAG, "[SmartStartup] Detected existing server on port 8080")
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("Found existing server - shutting down...")
+                    }
+
+                    // Try graceful shutdown first
+                    if (shutdownExistingServer()) {
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("Waiting for previous session to end...")
+                        }
+                        val shutdownOk = waitForServerShutdown(10)
+                        if (shutdownOk) {
+                            withContext(Dispatchers.Main) {
+                                appendToConsole("✓ Previous session ended")
+                            }
+                            // Add a small delay to ensure port is fully released
+                            delay(500)
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                appendToConsole("⚠ Previous session still running - may fail to bind")
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("⚠ Could not reach previous session - proceeding anyway")
+                        }
+                    }
+                }
 
                 val python = Python.getInstance()
                 val mobileMain = python.getModule("mobile_main")
@@ -2003,8 +2112,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         // Stop token refresh manager
         tokenRefreshManager?.stop()
-        // Stop foreground service
+        // Stop background service - uses START_NOT_STICKY so won't auto-restart
         CirisBackgroundService.stop(this)
+        Log.i(TAG, "MainActivity destroyed, background service stopped")
         // Note: Python server continues running
         // In production, implement proper shutdown
     }

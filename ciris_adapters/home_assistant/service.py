@@ -126,7 +126,11 @@ class HAIntegrationService:
             return self._ha_token
         token = os.getenv("HOME_ASSISTANT_TOKEN")
         if token:
-            logger.debug(f"[HA TOKEN] Retrieved from env: {token[:20]}..." if len(token) > 20 else f"[HA TOKEN] Retrieved from env: {token}")
+            logger.debug(
+                f"[HA TOKEN] Retrieved from env: {token[:20]}..."
+                if len(token) > 20
+                else f"[HA TOKEN] Retrieved from env: {token}"
+            )
         return token
 
     @ha_token.setter
@@ -134,7 +138,9 @@ class HAIntegrationService:
         """Set HA token explicitly."""
         self._ha_token = value
         if value:
-            logger.info(f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set")
+            logger.info(
+                f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set"
+            )
 
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
@@ -278,7 +284,9 @@ class HAIntegrationService:
         if not token:
             logger.error("[HA DEVICE CONTROL] NO TOKEN AVAILABLE!")
             logger.error(f"  _ha_token (cached): {self._ha_token}")
-            logger.error(f"  HOME_ASSISTANT_TOKEN env: {os.getenv('HOME_ASSISTANT_TOKEN', '<not set>')[:20] if os.getenv('HOME_ASSISTANT_TOKEN') else '<not set>'}")
+            logger.error(
+                f"  HOME_ASSISTANT_TOKEN env: {os.getenv('HOME_ASSISTANT_TOKEN', '<not set>')[:20] if os.getenv('HOME_ASSISTANT_TOKEN') else '<not set>'}"
+            )
             logger.info("=" * 60)
             return HAAutomationResult(
                 entity_id=entity_id,
@@ -322,7 +330,11 @@ class HAIntegrationService:
                     status = response.status
                     response_text = await response.text()
                     logger.info(f"[HA DEVICE CONTROL] Response status: {status}")
-                    logger.info(f"[HA DEVICE CONTROL] Response body: {response_text[:500]}" if len(response_text) > 500 else f"[HA DEVICE CONTROL] Response body: {response_text}")
+                    logger.info(
+                        f"[HA DEVICE CONTROL] Response body: {response_text[:500]}"
+                        if len(response_text) > 500
+                        else f"[HA DEVICE CONTROL] Response body: {response_text}"
+                    )
 
                     success = status == 200
                     if not success:
@@ -344,6 +356,7 @@ class HAIntegrationService:
         except Exception as e:
             logger.error(f"[HA DEVICE CONTROL] Exception: {e}")
             import traceback
+
             logger.error(f"[HA DEVICE CONTROL] Traceback: {traceback.format_exc()}")
             logger.info("=" * 60)
             return HAAutomationResult(

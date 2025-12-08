@@ -110,7 +110,7 @@ class TestApiServiceConfiguration:
         assert hasattr(ApiServiceConfiguration, "ADAPTER_CREATED_SERVICES")
         services = ApiServiceConfiguration.ADAPTER_CREATED_SERVICES
 
-        assert len(services) == 3
+        assert len(services) == 4
         assert all(isinstance(s, AdapterService) for s in services)
 
         # Check specific services
@@ -118,6 +118,7 @@ class TestApiServiceConfiguration:
         assert "runtime_control" in service_names
         assert "communication" in service_names
         assert "tool_service" in service_names
+        assert "adapter_configuration_service" in service_names
 
 
 class TestAdapterService:

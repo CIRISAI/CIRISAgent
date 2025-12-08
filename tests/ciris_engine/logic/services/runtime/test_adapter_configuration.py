@@ -35,11 +35,28 @@ class MockConfigurableAdapter:
         """Return mock discovery results."""
         return self.discover_results
 
-    async def get_oauth_url(self, base_url: str, state: str) -> str:
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> str:
         """Return mock OAuth URL."""
         return f"{self.oauth_url}?state={state}"
 
-    async def handle_oauth_callback(self, code: str, state: str, base_url: str) -> Dict[str, Any]:
+    async def handle_oauth_callback(
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Return mock OAuth tokens."""
         return self.oauth_tokens
 
@@ -339,6 +356,8 @@ class TestAdapterConfigurationService:
         )
 
         session = await self.service.start_session("test_oauth", "user_123")
+        # Pre-populate base_url which is required for OAuth URL generation
+        session.collected_config["base_url"] = "http://localhost:8123"
         result = await self.service.execute_step(session.session_id, {})
 
         assert result.success is True
@@ -371,6 +390,8 @@ class TestAdapterConfigurationService:
         )
 
         session = await self.service.start_session("test_oauth", "user_123")
+        # Pre-populate base_url which is required for OAuth URL generation
+        session.collected_config["base_url"] = "http://localhost:8123"
 
         # First call generates URL
         await self.service.execute_step(session.session_id, {})
@@ -868,7 +889,7 @@ class TestAdapterConfigurationPersistence:
     async def test_load_persisted_configs(self) -> None:
         """Test loading persisted adapter configurations."""
         mock_config_service = AsyncMock()
-        mock_config_service.get_all_with_prefix = AsyncMock(
+        mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.startup.homeassistant": {
                     "adapter_type": "homeassistant",
@@ -900,7 +921,7 @@ class TestAdapterConfigurationPersistence:
     async def test_load_persisted_configs_filters_disabled(self) -> None:
         """Test load filters out configs with load_on_startup=False."""
         mock_config_service = AsyncMock()
-        mock_config_service.get_all_with_prefix = AsyncMock(
+        mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.startup.active": {
                     "adapter_type": "active",
@@ -931,7 +952,7 @@ class TestAdapterConfigurationPersistence:
         )
 
         mock_config_service = AsyncMock()
-        mock_config_service.get_all_with_prefix = AsyncMock(
+        mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.startup.homeassistant": {
                     "adapter_type": "homeassistant",
@@ -956,7 +977,7 @@ class TestAdapterConfigurationPersistence:
         )
 
         mock_config_service = AsyncMock()
-        mock_config_service.get_all_with_prefix = AsyncMock(
+        mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.startup.homeassistant": {
                     "adapter_type": "homeassistant",
@@ -974,7 +995,7 @@ class TestAdapterConfigurationPersistence:
     async def test_restore_persisted_adapters_unregistered(self) -> None:
         """Test restore skips adapters that aren't registered."""
         mock_config_service = AsyncMock()
-        mock_config_service.get_all_with_prefix = AsyncMock(
+        mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.startup.unknown": {
                     "adapter_type": "unknown",

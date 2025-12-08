@@ -284,6 +284,7 @@ class HAConfigurableAdapter:
         self,
         base_url: str,
         state: str,
+        code_challenge: Optional[str] = None,
         callback_base_url: Optional[str] = None,
         redirect_uri: Optional[str] = None,
         platform: Optional[str] = None,
@@ -302,9 +303,14 @@ class HAConfigurableAdapter:
         and platform="android" to use deep link callback. The deep link is handled
         by OAuthCallbackActivity which forwards to the local server.
 
+        Note: This adapter generates its own PKCE challenge internally using
+        _generate_pkce_challenge(). The code_challenge parameter is accepted
+        for protocol conformance but not used directly.
+
         Args:
             base_url: Base URL of the HA instance (e.g., http://192.168.1.100:8123)
             state: State parameter for CSRF protection (session_id)
+            code_challenge: PKCE code challenge (unused - HA adapter generates its own)
             callback_base_url: Optional base URL for OAuth callback (e.g., http://127.0.0.1:8080)
                              If provided, uses this for redirect_uri instead of client_id
             redirect_uri: Optional explicit redirect URI (e.g., ciris://oauth/callback for Android)
@@ -313,8 +319,8 @@ class HAConfigurableAdapter:
         Returns:
             Full OAuth authorization URL
         """
-        # Generate PKCE challenge
-        _, code_challenge = self._generate_pkce_challenge(state)
+        # Generate PKCE challenge (we always generate our own, ignore passed code_challenge)
+        _, generated_code_challenge = self._generate_pkce_challenge(state)
 
         # Determine redirect URI and client_id
         # Priority:
@@ -362,7 +368,7 @@ class HAConfigurableAdapter:
             "response_type": "code",
             "state": state,
             # PKCE for additional security
-            "code_challenge": code_challenge,
+            "code_challenge": generated_code_challenge,
             "code_challenge_method": "S256",
         }
 
@@ -376,6 +382,7 @@ class HAConfigurableAdapter:
         code: str,
         state: str,
         base_url: str,
+        code_verifier: Optional[str] = None,
         callback_base_url: Optional[str] = None,
         redirect_uri: Optional[str] = None,
         platform: Optional[str] = None,
@@ -384,10 +391,15 @@ class HAConfigurableAdapter:
 
         Performs the OAuth2 token exchange with Home Assistant's token endpoint.
 
+        Note: This adapter stores its own PKCE verifier internally in _pkce_verifiers
+        and retrieves it by state. The code_verifier parameter is accepted for
+        protocol conformance but will be overridden by the stored value if available.
+
         Args:
             code: Authorization code from OAuth callback
             state: State parameter for validation
             base_url: HA instance URL
+            code_verifier: PKCE verifier (optional - HA adapter uses internally stored one)
             callback_base_url: If provided, use this as client_id (for local OAuth)
             redirect_uri: If provided, the redirect_uri used in authorization (for Android deep links)
             platform: Platform hint (android, ios, web, desktop)
@@ -397,8 +409,10 @@ class HAConfigurableAdapter:
         """
         logger.info(f"Exchanging OAuth code for tokens (state: {state[:8]}...)")
 
-        # Get stored PKCE verifier
-        code_verifier = self._pkce_verifiers.pop(state, None)
+        # Get stored PKCE verifier (overrides any passed code_verifier)
+        stored_verifier = self._pkce_verifiers.pop(state, None)
+        if stored_verifier:
+            code_verifier = stored_verifier
 
         # Build token request
         token_url = f"{base_url.rstrip('/')}{self.OAUTH_TOKEN_PATH}"

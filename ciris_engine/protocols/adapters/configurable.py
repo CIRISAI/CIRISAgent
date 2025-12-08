@@ -68,6 +68,7 @@ class ConfigurableAdapterProtocol(Protocol):
         self,
         base_url: str,
         state: str,
+        code_challenge: Optional[str] = None,
         callback_base_url: Optional[str] = None,
         redirect_uri: Optional[str] = None,
         platform: Optional[str] = None,
@@ -81,6 +82,8 @@ class ConfigurableAdapterProtocol(Protocol):
         Args:
             base_url: Base URL of the OAuth provider (e.g., discovered instance)
             state: State parameter for CSRF protection (managed by CIRIS)
+            code_challenge: Optional PKCE code challenge (S256). Some adapters
+                          generate their own internally and ignore this parameter.
             callback_base_url: Optional base URL for OAuth callback (e.g., http://127.0.0.1:8080)
                              Used for local/mobile deployments where callback should go
                              to a local server instead of production.
@@ -112,7 +115,16 @@ class ConfigurableAdapterProtocol(Protocol):
         """
         ...
 
-    async def handle_oauth_callback(self, code: str, state: str, base_url: str) -> Dict[str, Any]:
+    async def handle_oauth_callback(
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Exchange OAuth authorization code for tokens.
 
         Called when the OAuth provider redirects back to CIRIS with an

@@ -134,7 +134,15 @@ class MCPServerConfigurableAdapter:
         logger.debug(f"Discovery called with type: {discovery_type} (not applicable for MCP Server)")
         return []
 
-    async def get_oauth_url(self, base_url: str, state: str, callback_base_url: Optional[str] = None) -> str:
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> str:
         """Generate OAuth URL (not applicable for MCP Server).
 
         MCP Server doesn't use OAuth for client authentication.
@@ -143,7 +151,10 @@ class MCPServerConfigurableAdapter:
         Args:
             base_url: Base URL (unused)
             state: State parameter (unused)
+            code_challenge: PKCE code challenge (unused)
             callback_base_url: Optional callback URL (unused)
+            redirect_uri: Redirect URI (unused)
+            platform: Platform hint (unused)
 
         Returns:
             Empty string
@@ -155,7 +166,14 @@ class MCPServerConfigurableAdapter:
         raise NotImplementedError("MCP Server does not use OAuth authentication")
 
     async def handle_oauth_callback(
-        self, code: str, state: str, base_url: str, callback_base_url: Optional[str] = None
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Handle OAuth callback (not applicable for MCP Server).
 
@@ -166,7 +184,10 @@ class MCPServerConfigurableAdapter:
             code: Authorization code (unused)
             state: State parameter (unused)
             base_url: Base URL (unused)
+            code_verifier: PKCE code verifier (unused)
             callback_base_url: Optional callback URL (unused)
+            redirect_uri: Redirect URI (unused)
+            platform: Platform hint (unused)
 
         Returns:
             Empty dict

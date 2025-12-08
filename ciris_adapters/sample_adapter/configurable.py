@@ -118,7 +118,15 @@ class SampleConfigurableAdapter:
         logger.warning(f"Unknown discovery type: {discovery_type}")
         return []
 
-    async def get_oauth_url(self, base_url: str, state: str) -> str:
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> str:
         """Generate OAuth authorization URL.
 
         Uses RFC 8252 loopback redirect for local testing:
@@ -129,6 +137,10 @@ class SampleConfigurableAdapter:
         Args:
             base_url: Base URL of the OAuth provider
             state: State parameter for CSRF protection
+            code_challenge: PKCE code challenge (unused in sample)
+            callback_base_url: Callback base URL (unused in sample)
+            redirect_uri: Redirect URI (unused in sample)
+            platform: Platform hint (unused in sample)
 
         Returns:
             Full OAuth authorization URL
@@ -152,7 +164,16 @@ class SampleConfigurableAdapter:
         logger.info(f"Generated OAuth URL for state: {state[:8]}...")
         return oauth_url
 
-    async def handle_oauth_callback(self, code: str, state: str, base_url: str) -> Dict[str, Any]:
+    async def handle_oauth_callback(
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Exchange OAuth authorization code for tokens.
 
         For QA testing, this returns mock tokens without network calls.
@@ -165,6 +186,10 @@ class SampleConfigurableAdapter:
             code: Authorization code from OAuth provider
             state: State parameter for validation
             base_url: Base URL of the OAuth provider
+            code_verifier: PKCE code verifier (unused in sample)
+            callback_base_url: Callback base URL (unused in sample)
+            redirect_uri: Redirect URI (unused in sample)
+            platform: Platform hint (unused in sample)
 
         Returns:
             Token response

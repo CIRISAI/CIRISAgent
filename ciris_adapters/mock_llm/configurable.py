@@ -73,12 +73,24 @@ class MockLLMConfigurableAdapter:
         logger.info("Mock LLM discovery called (no-op)")
         return []
 
-    async def get_oauth_url(self, base_url: str, state: str) -> str:
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> str:
         """Mock LLM doesn't use OAuth.
 
         Args:
             base_url: Base URL (unused)
             state: State parameter (unused)
+            code_challenge: PKCE code challenge (unused)
+            callback_base_url: Callback base URL (unused)
+            redirect_uri: Redirect URI (unused)
+            platform: Platform hint (unused)
 
         Returns:
             Empty string (OAuth not supported)
@@ -87,7 +99,14 @@ class MockLLMConfigurableAdapter:
         return ""
 
     async def handle_oauth_callback(
-        self, code: str, state: str, base_url: str, callback_base_url: Optional[str] = None
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Mock LLM doesn't use OAuth.
 
@@ -95,7 +114,10 @@ class MockLLMConfigurableAdapter:
             code: Authorization code (unused)
             state: State parameter (unused)
             base_url: Base URL (unused)
+            code_verifier: PKCE verifier (unused)
             callback_base_url: Callback base URL (unused)
+            redirect_uri: Redirect URI (unused)
+            platform: Platform hint (unused)
 
         Returns:
             Empty dict (OAuth not supported)

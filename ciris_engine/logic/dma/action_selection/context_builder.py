@@ -43,7 +43,7 @@ class ActionSelectionContextBuilder:
             self._instruction_generator = ActionInstructionGenerator(self.service_registry, self.bus_manager)
 
         # Pre-cache tools asynchronously
-        tool_count = await self._instruction_generator.pre_cache_tools()
+        tool_count: int = await self._instruction_generator.pre_cache_tools()
         self._tools_cached = True
         logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
 
@@ -59,7 +59,7 @@ class ActionSelectionContextBuilder:
 
             self._instruction_generator = ActionInstructionGenerator(self.service_registry, self.bus_manager)
 
-        tool_count = await self._instruction_generator.pre_cache_tools()
+        tool_count: int = await self._instruction_generator.pre_cache_tools()
         self._tools_cached = True
         logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
         return tool_count

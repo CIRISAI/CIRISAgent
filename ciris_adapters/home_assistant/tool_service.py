@@ -210,19 +210,29 @@ class HAToolService:
     ) -> ToolExecutionResult:
         """Execute a Home Assistant tool."""
         start_time = datetime.now(timezone.utc)
+        correlation_id = str(uuid.uuid4())
+
+        logger.info("=" * 60)
+        logger.info(f"[HA TOOL EXECUTE] Tool: {tool_name}")
+        logger.info(f"[HA TOOL EXECUTE] Parameters: {parameters}")
+        logger.info(f"[HA TOOL EXECUTE] Context: {context}")
+        logger.info(f"[HA TOOL EXECUTE] Correlation ID: {correlation_id}")
 
         if tool_name not in self.TOOL_DEFINITIONS:
+            logger.error(f"[HA TOOL EXECUTE] Unknown tool: {tool_name}")
+            logger.info("=" * 60)
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.NOT_FOUND,
                 success=False,
                 data=None,
                 error=f"Unknown tool: {tool_name}",
-                correlation_id=str(uuid.uuid4()),
+                correlation_id=correlation_id,
             )
 
         try:
             if tool_name == "ha_device_control":
+                logger.info("[HA TOOL EXECUTE] Dispatching to _execute_device_control")
                 result = await self._execute_device_control(parameters)
             elif tool_name == "ha_automation_trigger":
                 result = await self._execute_automation_trigger(parameters)
@@ -241,20 +251,30 @@ class HAToolService:
                     success=False,
                     data=None,
                     error=f"Tool not implemented: {tool_name}",
-                    correlation_id=str(uuid.uuid4()),
+                    correlation_id=correlation_id,
                 )
 
+            elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+            logger.info(f"[HA TOOL EXECUTE] Result: success={result.success}, status={result.status}")
+            logger.info(f"[HA TOOL EXECUTE] Result data: {result.data}")
+            if result.error:
+                logger.error(f"[HA TOOL EXECUTE] Error: {result.error}")
+            logger.info(f"[HA TOOL EXECUTE] Elapsed: {elapsed:.3f}s")
+            logger.info("=" * 60)
             return result
 
         except Exception as e:
-            logger.error(f"Error executing tool {tool_name}: {e}")
+            logger.error(f"[HA TOOL EXECUTE] Exception executing tool {tool_name}: {e}")
+            import traceback
+            logger.error(f"[HA TOOL EXECUTE] Traceback: {traceback.format_exc()}")
+            logger.info("=" * 60)
             return ToolExecutionResult(
                 tool_name=tool_name,
                 status=ToolExecutionStatus.FAILED,
                 success=False,
                 data=None,
                 error=str(e),
-                correlation_id=str(uuid.uuid4()),
+                correlation_id=correlation_id,
             )
 
     async def _execute_device_control(self, params: Dict[str, Any]) -> ToolExecutionResult:

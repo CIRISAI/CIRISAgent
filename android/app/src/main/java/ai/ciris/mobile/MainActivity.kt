@@ -1021,6 +1021,8 @@ class MainActivity : AppCompatActivity() {
             try {
                 withContext(Dispatchers.Main) {
                     appendToConsole("Starting CIRIS runtime...")
+                    // Start foreground service to keep Python alive during OAuth flows
+                    CirisBackgroundService.start(this@MainActivity)
                 }
 
                 Log.i(TAG, "Starting Python server...")
@@ -2001,6 +2003,8 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         // Stop token refresh manager
         tokenRefreshManager?.stop()
+        // Stop foreground service
+        CirisBackgroundService.stop(this)
         // Note: Python server continues running
         // In production, implement proper shutdown
     }

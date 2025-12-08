@@ -9,6 +9,10 @@
     <!-- Google Play Billing permission -->
     <uses-permission android:name="com.android.vending.BILLING" />
 
+    <!-- Foreground service permission for keeping Python runtime alive -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!-- Storage for on-device database and logs -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"
@@ -113,5 +117,15 @@
                 <data android:scheme="ciris" android:host="oauth" />
             </intent-filter>
         </activity>
+
+        <!-- Foreground service to keep Python runtime alive during OAuth flows -->
+        <service
+            android:name=".CirisBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local AI server for on-device processing" />
+        </service>
     </application>
 </manifest>

@@ -82,9 +82,10 @@ class HAIntegrationService:
 
     def __init__(self) -> None:
         """Initialize the Home Assistant integration service."""
-        # HA configuration
-        self.ha_url = os.getenv("HOME_ASSISTANT_URL", "http://homeassistant.local:8123").rstrip("/")
-        self.ha_token = os.getenv("HOME_ASSISTANT_TOKEN")
+        # HA configuration - NOTE: Token is fetched dynamically via property
+        # to support OAuth flows where token is set after adapter initialization
+        self._ha_url: Optional[str] = None
+        self._ha_token: Optional[str] = None
 
         # Camera configuration
         self.go2rtc_url = os.getenv("GO2RTC_SERVER_URL", "http://127.0.0.1:8554")
@@ -99,11 +100,41 @@ class HAIntegrationService:
         self._event_history: List[DetectionEvent] = []
         self._initialized = False
 
-        if not self.ha_token:
-            logger.warning("HOME_ASSISTANT_TOKEN not set - Home Assistant integration disabled")
-
         logger.info(f"HAIntegrationService initialized for {self.ha_url}")
         logger.info(f"Configured {len(self.camera_urls)} cameras via go2rtc")
+
+    @property
+    def ha_url(self) -> str:
+        """Get HA URL - fetched dynamically from env or cached value."""
+        if self._ha_url:
+            return self._ha_url
+        return os.getenv("HOME_ASSISTANT_URL", "http://homeassistant.local:8123").rstrip("/")
+
+    @ha_url.setter
+    def ha_url(self, value: str) -> None:
+        """Set HA URL explicitly."""
+        self._ha_url = value.rstrip("/") if value else None
+
+    @property
+    def ha_token(self) -> Optional[str]:
+        """Get HA token - fetched dynamically from env or cached value.
+
+        This is critical for OAuth flows where the token is set via environment
+        variable AFTER the service is initialized.
+        """
+        if self._ha_token:
+            return self._ha_token
+        token = os.getenv("HOME_ASSISTANT_TOKEN")
+        if token:
+            logger.debug(f"[HA TOKEN] Retrieved from env: {token[:20]}..." if len(token) > 20 else f"[HA TOKEN] Retrieved from env: {token}")
+        return token
+
+    @ha_token.setter
+    def ha_token(self, value: Optional[str]) -> None:
+        """Set HA token explicitly."""
+        self._ha_token = value
+        if value:
+            logger.info(f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set")
 
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
@@ -236,13 +267,27 @@ class HAIntegrationService:
 
     async def control_device(self, entity_id: str, action: str, **kwargs: Any) -> HAAutomationResult:
         """Control a Home Assistant device."""
-        if not self.ha_token:
+        logger.info("=" * 60)
+        logger.info("[HA DEVICE CONTROL] Starting device control request")
+        logger.info(f"  entity_id: {entity_id}")
+        logger.info(f"  action: {action}")
+        logger.info(f"  kwargs: {kwargs}")
+        logger.info(f"  ha_url: {self.ha_url}")
+
+        token = self.ha_token
+        if not token:
+            logger.error("[HA DEVICE CONTROL] NO TOKEN AVAILABLE!")
+            logger.error(f"  _ha_token (cached): {self._ha_token}")
+            logger.error(f"  HOME_ASSISTANT_TOKEN env: {os.getenv('HOME_ASSISTANT_TOKEN', '<not set>')[:20] if os.getenv('HOME_ASSISTANT_TOKEN') else '<not set>'}")
+            logger.info("=" * 60)
             return HAAutomationResult(
                 entity_id=entity_id,
                 action=action,
                 success=False,
-                error="Home Assistant not configured",
+                error="Home Assistant not configured - no token available",
             )
+
+        logger.info(f"  token: {token[:20]}..." if len(token) > 20 else f"  token: {token}")
 
         # Map actions to HA services
         domain = entity_id.split(".")[0] if "." in entity_id else "homeassistant"
@@ -254,27 +299,53 @@ class HAIntegrationService:
         }
 
         service = service_map.get(action, f"{domain}/{action}")
+        url = f"{self.ha_url}/api/services/{service}"
+        logger.info(f"  service: {service}")
+        logger.info(f"  full URL: {url}")
 
         try:
             payload: Dict[str, Any] = {"entity_id": entity_id}
             payload.update(kwargs)
+            logger.info(f"  payload: {payload}")
+
+            headers = self._get_headers()
+            logger.info(f"  headers: Authorization=Bearer {token[:20]}..., Content-Type=application/json")
 
             async with aiohttp.ClientSession() as session:
+                logger.info(f"[HA DEVICE CONTROL] Sending POST request to {url}")
                 async with session.post(
-                    f"{self.ha_url}/api/services/{service}",
-                    headers=self._get_headers(),
+                    url,
+                    headers=headers,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as response:
-                    success = response.status == 200
+                    status = response.status
+                    response_text = await response.text()
+                    logger.info(f"[HA DEVICE CONTROL] Response status: {status}")
+                    logger.info(f"[HA DEVICE CONTROL] Response body: {response_text[:500]}" if len(response_text) > 500 else f"[HA DEVICE CONTROL] Response body: {response_text}")
+
+                    success = status == 200
+                    if not success:
+                        logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
+                        if status == 401:
+                            logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token may be expired or invalid")
+                        elif status == 403:
+                            logger.error("[HA DEVICE CONTROL] 403 Forbidden - Token lacks required permissions")
+                        elif status == 404:
+                            logger.error(f"[HA DEVICE CONTROL] 404 Not Found - Service {service} not found")
+
+                    logger.info("=" * 60)
                     return HAAutomationResult(
                         entity_id=entity_id,
                         action=action,
                         success=success,
-                        error=None if success else f"Status {response.status}",
+                        error=None if success else f"Status {status}: {response_text[:200]}",
                     )
         except Exception as e:
-            logger.error(f"Error controlling device: {e}")
+            logger.error(f"[HA DEVICE CONTROL] Exception: {e}")
+            import traceback
+            logger.error(f"[HA DEVICE CONTROL] Traceback: {traceback.format_exc()}")
+            logger.info("=" * 60)
             return HAAutomationResult(
                 entity_id=entity_id,
                 action=action,

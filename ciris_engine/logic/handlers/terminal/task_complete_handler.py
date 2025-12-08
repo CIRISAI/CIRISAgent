@@ -149,18 +149,19 @@ class TaskCompleteHandler(BaseActionHandler):
                         f"Marked parent task {parent_task_id} as COMPLETED due to TASK_COMPLETE action on thought {thought_id}."
                     )
 
-                    # Send notification to API channels if agent did not speak (reuse task we already fetched)
-                    if task and task.channel_id:
-                        is_api = self._is_api_channel(task.channel_id)
-                        has_spoken = await self._has_speak_action_completed(parent_task_id)
-
-                        if is_api and not has_spoken:
-                            self.logger.info(
-                                f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} - sending notification"
-                            )
-                            await self._send_notification(
-                                task.channel_id, "Agent chose not to speak in response to your message"
-                            )
+                    # Disabled: Don't send notification when agent completes task without speaking
+                    # The agent may legitimately choose not to respond (e.g., for system messages, follow-ups)
+                    # if task and task.channel_id:
+                    #     is_api = self._is_api_channel(task.channel_id)
+                    #     has_spoken = await self._has_speak_action_completed(parent_task_id)
+                    #
+                    #     if is_api and not has_spoken:
+                    #         self.logger.info(
+                    #             f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} - sending notification"
+                    #         )
+                    #         await self._send_notification(
+                    #             task.channel_id, "Agent chose not to speak in response to your message"
+                    #         )
                 else:
                     self.logger.error(f"Failed to update status for parent task {parent_task_id} to COMPLETED.")
         else:

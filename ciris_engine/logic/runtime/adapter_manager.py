@@ -804,7 +804,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
                 # Set adapter_id on the provider so context enrichment can identify it
                 if not hasattr(provider, "adapter_id"):
-                    provider.adapter_id = instance.adapter_id  # type: ignore[attr-defined]
+                    provider.adapter_id = instance.adapter_id
 
                 # Handle both string and enum service_type
                 # AdapterServiceRegistration has ServiceType enum, ServiceRegistration has string

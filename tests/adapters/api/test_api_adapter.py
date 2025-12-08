@@ -323,28 +323,18 @@ class TestAPIErrorHandling:
 
     @pytest.mark.asyncio
     async def test_server_startup_error(self, api_platform):
-        """Test handling of server startup errors."""
-        with patch("uvicorn.Server") as mock_server_class, patch("uvicorn.Config"):
-            mock_server = Mock()
+        """Test handling of server startup errors when port is in use."""
+        # Mock socket to simulate port already in use
+        mock_socket = Mock()
+        mock_socket.__enter__ = Mock(return_value=mock_socket)
+        mock_socket.__exit__ = Mock(return_value=False)
+        mock_socket.settimeout = Mock()
+        mock_socket.connect_ex = Mock(return_value=0)  # 0 means port is in use
 
-            # Make serve() raise an exception
-            async def failing_serve():
-                raise Exception("Port already in use")
-
-            mock_server.serve = failing_serve
-            mock_server_class.return_value = mock_server
-
-            # Start the platform - it creates a task that will fail
-            await api_platform.start()
-
-            # Give the task time to fail
-            await asyncio.sleep(0.1)
-
-            # Check that the server task failed
-            assert api_platform._server_task is not None
-            assert api_platform._server_task.done()
-            with pytest.raises(Exception, match="Port already in use"):
-                api_platform._server_task.result()
+        with patch("socket.socket", return_value=mock_socket):
+            # Start should raise RuntimeError due to port being in use
+            with pytest.raises(RuntimeError, match="Port .* is already in use"):
+                await api_platform.start()
 
     @pytest.mark.asyncio
     async def test_message_handling_error(self, api_platform):

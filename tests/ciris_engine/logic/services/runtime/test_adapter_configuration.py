@@ -843,7 +843,8 @@ class TestAdapterConfigurationPersistence:
     async def test_persist_adapter_config_success(self) -> None:
         """Test persisting an adapter configuration."""
         mock_config_service = AsyncMock()
-        mock_config_service.set = AsyncMock()
+        mock_config_service.set_config = AsyncMock()
+        mock_config_service.get = AsyncMock(return_value=None)  # For verification read-back
 
         config = {"base_url": "https://ha.local:8123", "access_token": "test_token"}
         success = await self.service.persist_adapter_config(
@@ -853,8 +854,8 @@ class TestAdapterConfigurationPersistence:
         )
 
         assert success is True
-        mock_config_service.set.assert_called_once()
-        call_args = mock_config_service.set.call_args
+        mock_config_service.set_config.assert_called_once()
+        call_args = mock_config_service.set_config.call_args
         assert call_args[0][0] == "adapter.startup.homeassistant"
         assert call_args[0][1]["adapter_type"] == "homeassistant"
         assert call_args[0][1]["config"] == config
@@ -875,7 +876,7 @@ class TestAdapterConfigurationPersistence:
     async def test_persist_adapter_config_exception(self) -> None:
         """Test persist handles exceptions gracefully."""
         mock_config_service = AsyncMock()
-        mock_config_service.set = AsyncMock(side_effect=Exception("Database error"))
+        mock_config_service.set_config = AsyncMock(side_effect=Exception("Database error"))
 
         success = await self.service.persist_adapter_config(
             adapter_type="homeassistant",

@@ -7,6 +7,7 @@ from .api_tests import APITestModule
 from .billing_tests import BillingTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
+from .context_enrichment_tests import ContextEnrichmentTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
@@ -24,6 +25,7 @@ __all__ = [
     "AdapterConfigTests",
     "APITestModule",
     "CognitiveStateAPITests",
+    "ContextEnrichmentTests",
     "HandlerTestModule",
     "SDKTestModule",
     "ConsentTests",

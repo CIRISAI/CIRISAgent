@@ -37,6 +37,7 @@ class QAModule(Enum):
     COGNITIVE_STATE_API = "cognitive_state"  # Cognitive state transition API testing
     MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
     ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
+    CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
 
     # Handler modules
     HANDLERS = "handlers"

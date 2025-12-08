@@ -187,162 +187,143 @@ class ActionInstructionGenerator:
         return f"{action_name}: {{}}"
 
     def _generate_tool_schema(self) -> str:
-        """Generate dynamic tool schema based on available tools."""
+        """Generate dynamic tool schema based on available tools.
+
+        CRITICAL: This method MUST use pre-cached tools. No fallbacks, no hardcoded tools.
+        If tools aren't available, we fail loudly so the issue is obvious.
+        """
         base_schema = (
             'TOOL: {"name": string (tool name), "parameters": Dict[str, str|int|float|bool|List[str]|Dict[str,str]]}'
         )
 
-        # If we have a service registry, try to get tools from all tool services
-        if self.service_registry:
+        # Check for pre-cached tools first (set by async caller before prompt building)
+        if hasattr(self, "_cached_tools") and self._cached_tools:
+            logger.info(f"[TOOL_SCHEMA] Using {len(self._cached_tools)} pre-cached tools")
+            return base_schema + self._format_tools_for_prompt(self._cached_tools)
+
+        # No service registry = no tools
+        if not self.service_registry:
+            logger.error("[TOOL_SCHEMA] FAIL: No service_registry available - cannot discover tools!")
+            return base_schema + "\n\n⚠️ ERROR: No tool service registry available. Tools cannot be discovered."
+
+        # Service registry exists but no cached tools - this is a bug in the caller
+        logger.error(
+            "[TOOL_SCHEMA] FAIL: service_registry exists but _cached_tools not set! "
+            "Caller must call await pre_cache_tools() before generating schema. "
+            "This is a bug - tools should be fetched asynchronously before prompt building."
+        )
+        return base_schema + "\n\n⚠️ ERROR: Tools not pre-cached. Call pre_cache_tools() before schema generation."
+
+    async def pre_cache_tools(self) -> int:
+        """Pre-cache tools from all registered tool services.
+
+        MUST be called before generate_action_instructions() to populate _cached_tools.
+        Returns the number of tools cached.
+        """
+        if not self.service_registry:
+            logger.warning("[TOOL_CACHE] No service_registry - cannot cache tools")
+            self._cached_tools: JSONDict = {}
+            return 0
+
+        all_tools: JSONDict = {}
+        tool_services = self.service_registry.get_services_by_type("tool")
+
+        logger.info(f"[TOOL_CACHE] Discovering tools from {len(tool_services)} tool service(s)...")
+
+        for tool_service in tool_services:
+            service_name = getattr(tool_service, "adapter_name", type(tool_service).__name__)
             try:
-                # Get all tool services from the registry
-                import asyncio
+                if hasattr(tool_service, "get_all_tool_info"):
+                    tool_infos = await tool_service.get_all_tool_info()
+                    logger.info(f"[TOOL_CACHE] {service_name}: Found {len(tool_infos)} tools via get_all_tool_info()")
 
-                loop = asyncio.get_event_loop()
+                    for tool_info in tool_infos:
+                        tool_name = tool_info.name
+                        tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
 
-                # Create a coroutine to get all tools
-                async def get_all_tools() -> JSONDict:
-                    if not self.service_registry:
-                        return {}
+                        enhanced_info = {
+                            "name": tool_name,
+                            "service": service_name,
+                            "description": tool_info.description,
+                            "parameters": tool_info.parameters.model_dump() if tool_info.parameters else {},
+                        }
+                        if hasattr(tool_info, "when_to_use") and tool_info.when_to_use:
+                            enhanced_info["when_to_use"] = tool_info.when_to_use
 
-                    # Get ALL tool services registered in the system
-                    tool_services = self.service_registry.get_services_by_type("tool")
-                    all_tools: JSONDict = {}
+                        all_tools[tool_key] = enhanced_info
+                        logger.debug(f"[TOOL_CACHE]   - {tool_name}: {tool_info.description[:50]}...")
 
-                    # Aggregate tools from all services
-                    for tool_service in tool_services:
-                        try:
-                            # Try to get detailed tool info first
-                            service_name = getattr(tool_service, "adapter_name", type(tool_service).__name__)
+                elif hasattr(tool_service, "get_available_tools"):
+                    service_tools = await tool_service.get_available_tools()
+                    logger.info(
+                        f"[TOOL_CACHE] {service_name}: Found {len(service_tools)} tools via get_available_tools()"
+                    )
 
-                            # Check if service has get_all_tool_info method
-                            if hasattr(tool_service, "get_all_tool_info"):
-                                tool_infos = await tool_service.get_all_tool_info()
-
-                                # Process ToolInfo objects
-                                for tool_info in tool_infos:
-                                    tool_name = tool_info.name
-
-                                    # Create unique key if tool name exists in multiple services
-                                    if tool_name in all_tools:
-                                        tool_key = f"{tool_name}_{service_name}"
-                                    else:
-                                        tool_key = tool_name
-
-                                    # Extract info from ToolInfo object
-                                    enhanced_info = {
-                                        "name": tool_name,
-                                        "service": service_name,
-                                        "description": tool_info.description,
-                                        "parameters": tool_info.parameters.model_dump() if tool_info.parameters else {},
-                                    }
-
-                                    if hasattr(tool_info, "when_to_use") and tool_info.when_to_use:
-                                        enhanced_info["when_to_use"] = tool_info.when_to_use
-
-                                    all_tools[tool_key] = enhanced_info
-                            else:
-                                # Fallback to get_available_tools
-                                service_tools = await tool_service.get_available_tools()
-
-                                if isinstance(service_tools, list):
-                                    # If it returns a list of names, convert to dict
-                                    for tool_name in service_tools:
-                                        all_tools[tool_name] = {
-                                            "name": tool_name,
-                                            "description": "No description available",
-                                            "service": service_name,
-                                        }
-                                elif isinstance(service_tools, dict):
-                                    # If it returns a dict with details
-                                    for tool_name, tool_info in service_tools.items():
-                                        # Create unique key if tool name exists in multiple services
-                                        if tool_name in all_tools:
-                                            tool_key = f"{tool_name}_{service_name}"
-                                        else:
-                                            tool_key = tool_name
-
-                                        # Enhance tool info with service metadata
-                                        enhanced_info = {
-                                            "name": tool_name,
-                                            "service": service_name,
-                                            "description": (
-                                                tool_info.get("description", "No description")
-                                                if isinstance(tool_info, dict)
-                                                else "No description"
-                                            ),
-                                        }
-
-                                        if isinstance(tool_info, dict):
-                                            if "parameters" in tool_info:
-                                                enhanced_info["parameters"] = tool_info["parameters"]
-                                            if "when_to_use" in tool_info:
-                                                enhanced_info["when_to_use"] = tool_info["when_to_use"]
-
-                                        all_tools[tool_key] = enhanced_info
-
-                        except Exception as e:
-                            logger.warning(f"Failed to get tools from {type(tool_service).__name__}: {e}")
-
-                    return all_tools
-
-                # Execute the coroutine
-                try:
-                    if loop.is_running():
-                        # If loop is already running, we can't use run_until_complete
-                        # This is a limitation of calling async from sync in an async context
-                        logger.debug("Event loop already running, skipping dynamic tool discovery")
-                        return base_schema + self._get_default_tool_instructions()
-                    else:
-                        all_tools = loop.run_until_complete(get_all_tools())
-                except RuntimeError as e:
-                    logger.debug(f"Cannot fetch tools synchronously: {e}")
-                    return base_schema + self._get_default_tool_instructions()
-
-                if all_tools:
-                    tools_info = []
-                    tools_info.append("\nAvailable tools and their parameters:")
-
-                    for tool_key, tool_info_raw in all_tools.items():
-                        tool_info = get_dict({"info": tool_info_raw}, "info", {})
-                        tool_name = get_str(tool_info, "name", "")
-                        tool_desc_str = get_str(tool_info, "description", "")
-                        tool_service = get_str(tool_info, "service", "")
-
-                        tool_desc = f"  - {tool_name}: {tool_desc_str}"
-                        if tool_service != tool_name:
-                            tool_desc += f" (from {tool_service})"
-                        tools_info.append(tool_desc)
-
-                        # Add parameter schema if available
-                        if "parameters" in tool_info:
-                            params = get_dict(tool_info, "parameters", {})
-                            param_text = f"    parameters: {json.dumps(params, indent=6)}"
-                            tools_info.append(param_text)
-
-                        # Add usage guidance if available
-                        if "when_to_use" in tool_info:
-                            when_to_use = get_str(tool_info, "when_to_use", "")
-                            tools_info.append(f"    Use when: {when_to_use}")
-
-                    return base_schema + "\n".join(tools_info)
+                    if isinstance(service_tools, list):
+                        for tool_name in service_tools:
+                            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
+                            all_tools[tool_key] = {
+                                "name": tool_name,
+                                "description": "No description available",
+                                "service": service_name,
+                            }
+                    elif isinstance(service_tools, dict):
+                        for tool_name, tool_info in service_tools.items():
+                            tool_key = f"{tool_name}_{service_name}" if tool_name in all_tools else tool_name
+                            enhanced_info = {
+                                "name": tool_name,
+                                "service": service_name,
+                                "description": (
+                                    tool_info.get("description", "No description")
+                                    if isinstance(tool_info, dict)
+                                    else "No description"
+                                ),
+                            }
+                            if isinstance(tool_info, dict):
+                                if "parameters" in tool_info:
+                                    enhanced_info["parameters"] = tool_info["parameters"]
+                                if "when_to_use" in tool_info:
+                                    enhanced_info["when_to_use"] = tool_info["when_to_use"]
+                            all_tools[tool_key] = enhanced_info
+                else:
+                    logger.warning(f"[TOOL_CACHE] {service_name}: No get_all_tool_info or get_available_tools method!")
 
             except Exception as e:
-                logger.warning(f"Could not fetch tools via LIST_TOOLS: {e}")
+                logger.error(f"[TOOL_CACHE] {service_name}: FAILED to get tools: {e}")
 
-        # Fallback: Include some known tools
-        return base_schema + self._get_default_tool_instructions()
+        self._cached_tools = all_tools
+        logger.info(f"[TOOL_CACHE] ✓ Cached {len(all_tools)} total tools: {list(all_tools.keys())}")
+        return len(all_tools)
 
-    def _get_default_tool_instructions(self) -> str:
-        """Get default tool instructions when dynamic discovery isn't available."""
-        return """
-Available tools (check with tool service for current list):
-  - discord_delete_message: Delete a message
-    parameters: {"channel_id": integer, "message_id": integer}
-  - discord_timeout_user: Temporarily mute a user
-    parameters: {"guild_id": integer, "user_id": integer, "duration_seconds": integer, "reason"?: string}
-  - discord_ban_user: Ban a user from the server
-    parameters: {"guild_id": integer, "user_id": integer, "reason"?: string, "delete_message_days"?: integer}"""
+    def _format_tools_for_prompt(self, all_tools: JSONDict) -> str:
+        """Format cached tools into prompt text."""
+        if not all_tools:
+            return "\n\n⚠️ No tools registered. TOOL action is not available."
+
+        tools_info = []
+        tools_info.append("\nAvailable tools and their parameters:")
+
+        for tool_key, tool_info_raw in all_tools.items():
+            tool_info = get_dict({"info": tool_info_raw}, "info", {})
+            tool_name = get_str(tool_info, "name", "")
+            tool_desc_str = get_str(tool_info, "description", "")
+            tool_service = get_str(tool_info, "service", "")
+
+            tool_desc = f"  - {tool_name}: {tool_desc_str}"
+            if tool_service != tool_name:
+                tool_desc += f" (from {tool_service})"
+            tools_info.append(tool_desc)
+
+            if "parameters" in tool_info:
+                params = get_dict(tool_info, "parameters", {})
+                param_text = f"    parameters: {json.dumps(params, indent=6)}"
+                tools_info.append(param_text)
+
+            if "when_to_use" in tool_info:
+                when_to_use = get_str(tool_info, "when_to_use", "")
+                tools_info.append(f"    Use when: {when_to_use}")
+
+        return "\n".join(tools_info)
 
     def _simplify_schema(self, schema: JSONDict) -> str:
         """Simplify a JSON schema to a readable format."""

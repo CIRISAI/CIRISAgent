@@ -124,6 +124,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         thought_content_str = str(thought_item.content)
 
+        # Fetch original task for context
+        thought_depth = getattr(thought_item, "thought_depth", 0)
+        agent_occurrence_id = getattr(thought_item, "agent_occurrence_id", "default")
+        original_task = await self.fetch_original_task(thought_item.source_task_id, agent_occurrence_id)
+        task_context_str = self.format_task_context(original_task, thought_depth)
+        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
+
         # Use DMAInputData if provided, otherwise fall back to ProcessingQueueItem context
         if current_context:
             # Use typed DMAInputData fields
@@ -322,7 +329,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 domain_name=self.domain_name, rules_summary_str=rules_summary_str, context_str=context_str
             )
 
-        full_snapshot_and_profile_context_str = system_snapshot_block + user_profiles_block
+        full_snapshot_and_profile_context_str = task_context_block + system_snapshot_block + user_profiles_block
         user_message_content = f"{full_snapshot_and_profile_context_str}\nEvaluate this thought for the '{self.domain_name}' domain: \"{thought_content_str}\""
 
         # Store user prompt for streaming/debugging

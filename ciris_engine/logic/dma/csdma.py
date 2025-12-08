@@ -155,10 +155,18 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
     async def evaluate_thought(self, thought_item: ProcessingQueueItem, context: Optional[Any] = None) -> CSDMAResult:
         thought_content_str = str(thought_item.content)
 
+        # Fetch original task for context
+        thought_depth = getattr(thought_item, "thought_depth", 0)
+        agent_occurrence_id = getattr(thought_item, "agent_occurrence_id", "default")
+        original_task = await self.fetch_original_task(thought_item.source_task_id, agent_occurrence_id)
+        task_context_str = self.format_task_context(original_task, thought_depth)
+
         # Extract context data from context object
         system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)
 
-        combined_snapshot_block = system_snapshot_str + user_profiles_str
+        # Prepend task context to system snapshot
+        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
+        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
 
         messages = self._create_csdma_messages_for_instructor(
             thought_content_str,

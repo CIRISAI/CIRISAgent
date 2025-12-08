@@ -49,7 +49,7 @@
   },
   "interactive_config": {
     "required": false,
-    "workflow_type": "guided_setup",
+    "workflow_type": "wizard",
     "steps": [
       {
         "step_id": "select_transport",

@@ -82,7 +82,7 @@
   },
   "interactive_config": {
     "required": false,
-    "workflow_type": "step_by_step",
+    "workflow_type": "wizard",
     "steps": [
       {
         "step_id": "select_transport",

@@ -179,6 +179,12 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             else getattr(agent_identity, "agent_name", "CIRISAgent")
         )
 
+        # CRITICAL: Pre-cache tools AND task context BEFORE building prompt
+        # This must happen asynchronously before the synchronous build_main_user_content
+        # pre_cache_context() caches both tools AND the original task for follow-through
+        original_thought = input_data.original_thought
+        await self.context_builder.pre_cache_context(original_thought)
+
         main_user_content = self.context_builder.build_main_user_content(input_data, agent_name)
 
         # Get faculty evaluations from typed input
@@ -189,9 +195,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             main_user_content += faculty_insights
 
         system_message = self._build_system_message(input_data)
-
-        # Get original thought from input_data for follow-up detection
-        original_thought = input_data.original_thought
 
         # Prepend thought type to covenant for rock-solid follow-up detection
         covenant_with_metadata = COVENANT_TEXT

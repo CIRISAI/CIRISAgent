@@ -102,7 +102,7 @@
   },
   "interactive_config": {
     "required": false,
-    "workflow_type": "credentials_then_config",
+    "workflow_type": "wizard",
     "steps": [
       {
         "step_id": "client_credentials",

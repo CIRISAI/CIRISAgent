@@ -46,6 +46,29 @@ def action_selection(
     import logging
 
     logger = logging.getLogger(__name__)
+
+    # === CRITICAL: Early follow-up detection ===
+    # Check the FIRST system message for THOUGHT_TYPE=follow_up
+    # This MUST happen before any other logic to ensure follow-ups are detected
+    is_followup_thought = False
+    if messages and len(messages) > 0:
+        first_msg = messages[0]
+        if isinstance(first_msg, dict) and first_msg.get("role") == "system":
+            content = first_msg.get("content", "")
+            # Log what we're checking (INFO level for visibility)
+            logger.info(f"[MOCK_LLM] FIRST SYSTEM MESSAGE (first 100 chars): {content[:100] if content else 'EMPTY'}")
+            if content.startswith("THOUGHT_TYPE=follow_up"):
+                is_followup_thought = True
+                logger.info("[MOCK_LLM] *** DETECTED FOLLOW-UP THOUGHT *** via THOUGHT_TYPE=follow_up in first message")
+            elif "THOUGHT_TYPE=" in content:
+                # Log what type it actually is
+                thought_type_match = content.split("\n")[0] if content else ""
+                logger.info(f"[MOCK_LLM] Found different thought type: {thought_type_match}")
+            else:
+                logger.info("[MOCK_LLM] No THOUGHT_TYPE found in first system message")
+    else:
+        logger.info("[MOCK_LLM] WARNING: No messages passed to action_selection!")
+
     logger.debug(f"[MOCK_LLM] Context items: {len(context)}")
     logger.debug(f"[MOCK_LLM] Messages count: {len(messages)}")
     if messages:
@@ -126,8 +149,22 @@ def action_selection(
 
     # Debug logging
     logger.info(
-        f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}"
+        f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}"
     )
+
+    # === EARLY EXIT FOR FOLLOW-UP THOUGHTS ===
+    # If this is a follow-up thought (detected via THOUGHT_TYPE=follow_up), complete the task
+    # This check MUST come before other logic to prevent follow-ups from looping
+    if is_followup_thought and not forced_action and not command_from_context:
+        logger.info("[MOCK_LLM] *** EARLY EXIT: Follow-up thought detected, returning TASK_COMPLETE ***")
+        action = HandlerActionType.TASK_COMPLETE
+        params = TaskCompleteParams(completion_reason="[MOCK LLM] Follow-up thought completed - task finished")
+        rationale = "[MOCK LLM] Completing follow-up thought (detected via THOUGHT_TYPE=follow_up)"
+        return ActionSelectionDMAResult(
+            selected_action=action,
+            action_parameters=params.model_dump(),
+            rationale=rationale,
+        )
 
     if forced_action:
         try:
@@ -617,9 +654,13 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             first_msg = messages[0]
             if isinstance(first_msg, dict) and first_msg.get("role") == "system":
                 content = first_msg.get("content", "")
+                logger.info(f"[MOCK_LLM] First system message starts with: {content[:80] if content else 'EMPTY'}...")
                 # Check if this is a follow_up thought type
                 if content.startswith("THOUGHT_TYPE=follow_up"):
                     is_followup = True
+                    logger.info("[MOCK_LLM] DETECTED FOLLOW-UP THOUGHT via THOUGHT_TYPE=follow_up")
+        else:
+            logger.info("[MOCK_LLM] No messages available for THOUGHT_TYPE check")
 
         if is_followup:
             # Check the content of the follow-up thought to determine if it's from a SPEAK handler

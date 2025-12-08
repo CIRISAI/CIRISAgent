@@ -57,6 +57,12 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         original_thought_content = str(input_data.content)
         logger.debug(f"Evaluating thought ID {input_data.thought_id}")
 
+        # Fetch original task for context
+        thought_depth = getattr(input_data, "thought_depth", 0)
+        agent_occurrence_id = getattr(input_data, "agent_occurrence_id", "default")
+        original_task = await self.fetch_original_task(input_data.source_task_id, agent_occurrence_id)
+        task_context_str = self.format_task_context(original_task, thought_depth)
+
         system_snapshot_context_str = ""
         user_profile_context_str = ""
         if context and hasattr(context, "system_snapshot") and context.system_snapshot:
@@ -66,7 +72,10 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         elif context and hasattr(context, "user_profiles") and context.user_profiles:
             user_profile_context_str = format_user_profiles(context.user_profiles)
 
-        full_context_str = system_snapshot_context_str + user_profile_context_str
+        # Include task context in the full context
+        full_context_str = (
+            f"=== ORIGINAL TASK ===\n{task_context_str}\n\n" + system_snapshot_context_str + user_profile_context_str
+        )
 
         messages: List[JSONDict] = []
 

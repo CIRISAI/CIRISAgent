@@ -218,6 +218,13 @@ class ApiPlatform(Service):
 
         logger.info(f"Re-injection complete: {injected_count} services injected, {skipped_count} still unavailable")
 
+        # Now that services are available, inject adapter_manager into APIRuntimeControlService
+        # This was skipped during first-run startup because RuntimeControlService didn't exist
+        try:
+            self._inject_adapter_manager_to_api_runtime_control()
+        except RuntimeError as e:
+            logger.warning(f"Could not inject adapter_manager during re-injection: {e}")
+
     def _log_service_registry(self, service: Any) -> None:
         """Log service registry details."""
         try:
@@ -262,7 +269,19 @@ class ApiPlatform(Service):
 
         CRITICAL: This must be called after _inject_services() so main_runtime_control_service
         is available in app.state.
+
+        In first-run mode, RuntimeControlService is not yet initialized (services start after
+        the setup wizard completes), so we skip this injection. It will be called again
+        during reinject_services() after resume_from_first_run().
         """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # In first-run mode, RuntimeControlService doesn't exist yet - skip injection
+        # It will be injected after resume_from_first_run() completes
+        if is_first_run():
+            logger.info("First-run mode: Skipping adapter_manager injection (will inject after setup)")
+            return
+
         main_runtime_control = getattr(self.app.state, "main_runtime_control_service", None)
         if not main_runtime_control:
             raise RuntimeError(

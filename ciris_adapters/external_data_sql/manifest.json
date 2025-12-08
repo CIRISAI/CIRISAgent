@@ -47,7 +47,7 @@
   },
   "interactive_config": {
     "required": false,
-    "workflow_type": "manual_config",
+    "workflow_type": "wizard",
     "steps": [
       {
         "step_id": "select_dialect",

@@ -67,6 +67,8 @@ class ModuleInfo(BaseModel):
     license: Optional[str] = Field(None, description="Module license")
     homepage: Optional[str] = Field(None, description="Module homepage URL")
     safe_domain: Optional[bool] = Field(None, description="Whether module operates in safe domains")
+    reference: bool = Field(False, description="Whether this is a reference/example module")
+    for_qa: bool = Field(False, description="Whether this module is for QA/testing")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -77,6 +79,7 @@ class LegacyDependencies(BaseModel):
     protocols: List[str] = Field(default_factory=list, description="Required protocols")
     schemas: List[str] = Field(default_factory=list, description="Required schemas")
     external: Optional[Dict[str, str]] = Field(None, description="External package dependencies")
+    internal: Optional[List[str]] = Field(None, description="Internal module dependencies")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -84,12 +87,13 @@ class LegacyDependencies(BaseModel):
 class ConfigurationParameter(BaseModel):
     """Configuration parameter definition."""
 
-    type: str = Field(..., description="Parameter type (integer, float, string, boolean)")
-    default: Optional[Union[int, float, str, bool]] = Field(None, description="Default value (optional)")
+    type: str = Field(..., description="Parameter type (integer, float, string, boolean, array)")
+    default: Optional[Union[int, float, str, bool, List[str]]] = Field(None, description="Default value (optional)")
     description: str = Field(..., description="Parameter description")
     env: Optional[str] = Field(None, description="Environment variable name")
     sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
     required: bool = Field(True, description="Whether this parameter is required")
+    enum: Optional[List[str]] = Field(None, description="Allowed values for string parameters")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -114,6 +118,34 @@ class AdapterOAuthConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ConfigurationFieldDefinition(BaseModel):
+    """Definition of a field within an input step."""
+
+    # Field identification - supports both 'name' and 'field_id' patterns
+    name: Optional[str] = Field(None, description="Field name (alternative to field_id)")
+    field_id: Optional[str] = Field(None, description="Field identifier (alternative to name)")
+    label: Optional[str] = Field(None, description="Human-readable label for the field")
+
+    # Field type and input
+    type: Optional[str] = Field(None, description="Field data type (string, integer, number, boolean, password)")
+    input_type: Optional[str] = Field(None, description="Input control type (text, password, number, select)")
+
+    # Field metadata
+    description: Optional[str] = Field(None, description="Description of the field")
+    placeholder: Optional[str] = Field(None, description="Placeholder text for input")
+    default: Optional[Any] = Field(None, description="Default value")
+    required: bool = Field(False, description="Whether this field is required")
+
+    # Validation
+    min: Optional[Union[int, float]] = Field(None, description="Minimum value")
+    max: Optional[Union[int, float]] = Field(None, description="Maximum value")
+
+    # Conditional display
+    depends_on: Optional[Dict[str, Any]] = Field(None, description="Conditional display based on other fields")
+
+    model_config = ConfigDict(extra="allow")  # Allow additional field-specific properties
+
+
 class ConfigurationStep(BaseModel):
     """A step in an adapter configuration workflow."""
 
@@ -123,18 +155,51 @@ class ConfigurationStep(BaseModel):
     )
     title: str = Field(..., description="Human-readable step title")
     description: str = Field(..., description="Description of what this step does")
+
+    # Discovery step fields
     discovery_method: Optional[str] = Field(
         None, description="Discovery method name (e.g., 'mdns', 'api_scan') for discovery steps"
     )
+
+    # OAuth step fields
     oauth_config: Optional[AdapterOAuthConfig] = Field(None, description="OAuth configuration for oauth steps")
+
+    # Select step fields
     options_method: Optional[str] = Field(
         None, description="Method name to call for retrieving options in select steps"
     )
-    depends_on: List[str] = Field(
-        default_factory=list, description="List of step_ids that must complete before this step"
+    multiple: bool = Field(False, description="Whether multiple selections are allowed")
+
+    # Input step fields - complex form with multiple fields
+    fields: Optional[List[ConfigurationFieldDefinition]] = Field(
+        None, description="List of field definitions for input steps"
+    )
+    dynamic_fields: bool = Field(False, description="Whether fields are dynamically generated")
+
+    # Input step fields - simple single field (alternative to 'fields' list)
+    field: Optional[str] = Field(None, description="Single field name (simple input)")
+    field_name: Optional[str] = Field(None, description="Configuration field name for input/select steps")
+    input_type: Optional[str] = Field(None, description="Input type (text, password, number)")
+    placeholder: Optional[str] = Field(None, description="Placeholder text")
+
+    # Step requirements and flow control
+    required: bool = Field(False, description="Whether this step is required")
+    optional: bool = Field(False, description="Whether this step/field is optional")
+    default: Optional[Any] = Field(None, description="Default value for the field")
+    validation: Optional[Dict[str, Any]] = Field(None, description="Validation rules (e.g., min, max, pattern)")
+
+    # Dependencies - supports both list of step_ids and conditional dict
+    depends_on: Optional[Union[List[str], Dict[str, Any]]] = Field(
+        None, description="Step dependencies - list of step_ids or conditional dict"
+    )
+    condition: Optional[Dict[str, Any]] = Field(
+        None, description="Condition for showing this step (e.g., {field: 'x', equals: 'y'})"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    # Confirm step fields
+    action: Optional[str] = Field(None, description="Action to perform on confirm (e.g., 'test_connection')")
+
+    model_config = ConfigDict(extra="allow")  # Allow additional step-specific properties
 
 
 class InteractiveConfiguration(BaseModel):
@@ -145,13 +210,13 @@ class InteractiveConfiguration(BaseModel):
     """
 
     required: bool = Field(False, description="Whether interactive configuration is required")
-    workflow_type: Literal["wizard", "discovery_then_config"] = Field(
+    workflow_type: Literal["wizard", "discovery_then_config", "simple_config"] = Field(
         "wizard", description="Type of configuration workflow"
     )
     steps: List[ConfigurationStep] = Field(default_factory=list, description="Ordered list of configuration steps")
     completion_method: str = Field("apply_config", description="Method name to call when configuration is complete")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")  # Allow reference/documentation fields
 
 
 class ServiceManifest(BaseModel):
@@ -168,6 +233,7 @@ class ServiceManifest(BaseModel):
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
     requirements: List[str] = Field(default_factory=list, description="Python package requirements")
     prohibited_sensors: Optional[List[str]] = Field(None, description="Prohibited sensor types for sensor modules")
+    prohibited_capabilities: Optional[List[str]] = Field(None, description="Prohibited capabilities for this module")
     interactive_config: Optional[InteractiveConfiguration] = Field(
         None, description="Interactive configuration workflow for adapters"
     )

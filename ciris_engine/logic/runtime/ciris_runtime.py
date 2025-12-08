@@ -1136,9 +1136,7 @@ class CIRISRuntime:
         # overly conservative. Default behavior should enable all states - users can disable
         # specific states via template configuration if needed.
         if not cognitive_behaviors:
-            from ciris_engine.schemas.config.cognitive_state_behaviors import (
-                CognitiveStateBehaviors,
-            )
+            from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 
             logger.info("[COGNITIVE_MIGRATION] No template - using Covenant-compliant defaults (all states enabled)")
             cognitive_behaviors = CognitiveStateBehaviors()
@@ -1729,6 +1727,27 @@ class CIRISRuntime:
                 self.modules_to_load,
             )
             log_step(6, total_steps, "✓ Core services initialized")
+
+            # Set runtime references on services that need them (same as _initialize_services)
+            if self.audit_service:
+                self.audit_service._runtime = self  # type: ignore[attr-defined]
+                logger.debug("Set runtime reference on audit service for trace correlations")
+
+            if self.visibility_service:
+                self.visibility_service._runtime = self  # type: ignore[attr-defined]
+                logger.debug("Set runtime reference on visibility service for trace retrieval")
+
+            if self.runtime_control_service:
+                if hasattr(self.runtime_control_service, "_set_runtime"):
+                    self.runtime_control_service._set_runtime(self)
+                else:
+                    self.runtime_control_service.runtime = self  # type: ignore[attr-defined]
+                logger.info("Updated runtime control service with runtime reference")
+
+            if self.telemetry_service:
+                if hasattr(self.telemetry_service, "_set_runtime"):
+                    self.telemetry_service._set_runtime(self)
+                    logger.info("Updated telemetry service with runtime reference for aggregator")
 
             if self.modules_to_load:
                 log_step(

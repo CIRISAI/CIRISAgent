@@ -45,6 +45,12 @@ logger = logging.getLogger(__name__)
 # Total core services for startup logging (22 per architecture)
 TOTAL_CORE_SERVICES = 22
 
+# First-run minimal services (10 services needed to serve setup wizard)
+FIRST_RUN_SERVICES = 10
+
+# Services started during resume_from_first_run (remaining 12)
+RESUME_SERVICES = 12
+
 # Service names in initialization order for UI display
 SERVICE_NAMES = [
     "TimeService",  # 1 - Infrastructure
@@ -71,11 +77,23 @@ SERVICE_NAMES = [
     "SecretsToolService",  # 22 - Tool Services
 ]
 
+# Track which phase we're in for logging clarity
+_current_phase: str = "STARTUP"
+
+
+def _set_service_phase(phase: str) -> None:
+    """Set the current service initialization phase for logging."""
+    global _current_phase
+    _current_phase = phase
+    logger.warning(f"[SERVICES] === {phase} PHASE ===")
+    print(f"[SERVICES] === {phase} PHASE ===")
+
 
 def _log_service_started(service_num: int, service_name: str, success: bool = True) -> None:
     """Log service startup status in a format parseable by the UI."""
     status = "STARTED" if success else "FAILED"
-    msg = f"[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
+    phase_prefix = f"[{_current_phase}] " if _current_phase != "STARTUP" else ""
+    msg = f"{phase_prefix}[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
     # Use WARNING level so it shows up in incident logs for easy parsing
     logger.warning(msg)
     # Also print to console/stdout for Android logcat visibility
@@ -131,6 +149,12 @@ class ServiceInitializer:
         self._startup_start_time: Optional[float] = None
         self._startup_end_time: Optional[float] = None
 
+    def _is_first_run_mode(self) -> bool:
+        """Check if we're in first-run mode."""
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        return is_first_run()
+
     async def initialize_infrastructure_services(self) -> None:
         """Initialize infrastructure services that all other services depend on."""
         # Track startup time
@@ -138,6 +162,9 @@ class ServiceInitializer:
 
         if self._startup_start_time is None:
             self._startup_start_time = time.time()
+
+        # Set phase for logging - this is the first phase of initialization
+        _set_service_phase("FIRST-RUN" if self._is_first_run_mode() else "FULL-STARTUP")
 
         # Initialize TimeService first - everyone needs time
         try:
@@ -493,6 +520,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(13, "WiseAuthority")
 
+        # Log summary for first-run mode
+        if self._is_first_run_mode():
+            msg = f"[FIRST-RUN] ✓ {self._services_started_count}/{FIRST_RUN_SERVICES} minimal services started - ready for setup wizard"
+            logger.warning(msg)
+            print(msg)
+
     async def verify_security_services(self) -> bool:
         """Verify security services are operational."""
         # Verify secrets service
@@ -521,7 +554,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
         startup_channel_id: Optional[str] = None,
         modules_to_load: Optional[List[str]] = None,
     ) -> None:
-        """Initialize all remaining core services."""
+        """Initialize all remaining core services.
+
+        This is called:
+        - During normal startup: After first-run services (completes all 22)
+        - During resume_from_first_run: Starts the remaining 12 services after wizard
+        """
+        # Set phase for logging - RESUME if coming from first-run, otherwise continue FULL-STARTUP
+        if self._services_started_count == FIRST_RUN_SERVICES:
+            _set_service_phase(f"RESUME ({RESUME_SERVICES} remaining services)")
+        else:
+            _set_service_phase("CORE-SERVICES")
+
         from ciris_engine.logic.registries.base import get_global_registry
 
         self.service_registry = get_global_registry()

@@ -104,6 +104,10 @@ class HAToolService:
                 },
                 required=[],
             ),
+            # Context enrichment: run this tool automatically during context gathering
+            # to provide available entities to the ASPDMA for action selection
+            context_enrichment=True,
+            context_enrichment_params={},  # Empty params = list all entities
         ),
         "ha_notification": ToolInfo(
             name="ha_notification",

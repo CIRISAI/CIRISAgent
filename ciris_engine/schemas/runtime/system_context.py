@@ -143,6 +143,14 @@ class SystemSnapshot(BaseModel):
         default_factory=dict, description="Available tools by adapter type with full ToolInfo objects"
     )
 
+    # Context enrichment results - pre-run tool results for context-aware action selection
+    # These are populated by running tools marked with context_enrichment=True
+    # Key is "adapter_type:tool_name", value is the tool result data
+    context_enrichment_results: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Results from tools marked with context_enrichment=True, keyed by adapter_type:tool_name",
+    )
+
     model_config = ConfigDict(extra="forbid")  # Be strict about fields to catch misuse
 
 

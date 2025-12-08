@@ -1171,3 +1171,324 @@ class TestUserManagement:
 
         assert len(result) == 0
         assert "Failed to enrich user error_user: User error" in caplog.text
+
+
+# =============================================================================
+# 9. CONTEXT ENRICHMENT TESTS
+# =============================================================================
+
+
+class TestContextEnrichment:
+    """Test context enrichment tool execution."""
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_with_no_runtime(self):
+        """Test context enrichment returns empty when runtime is None."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        result = await _run_context_enrichment_tools(None, {})
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_with_no_tools(self, mock_runtime):
+        """Test context enrichment with no available tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        result = await _run_context_enrichment_tools(mock_runtime, {})
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_with_no_enrichment_tools(self, mock_runtime, mock_non_enrichment_tool_info):
+        """Test context enrichment when no tools are marked for enrichment."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        # Available tools with no context_enrichment=True
+        available_tools = {"test": [mock_non_enrichment_tool_info]}
+
+        result = await _run_context_enrichment_tools(mock_runtime, available_tools)
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_executes_enrichment_tool(
+        self,
+        mock_runtime_with_enrichment,
+        mock_enrichment_tool_info,
+        mock_tool_execution_result,
+        caplog,
+    ):
+        """Test context enrichment executes tools marked with context_enrichment=True."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        # Set up available tools with enrichment tool
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Should have executed the enrichment tool
+        assert "test:test_list_items" in result
+        assert result["test:test_list_items"]["count"] == 3
+        assert len(result["test:test_list_items"]["items"]) == 3
+
+        # Check logging
+        assert "[CONTEXT_ENRICHMENT] Found enrichment tool: test:test_list_items" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_handles_tool_execution_error(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test context enrichment handles tool execution errors gracefully."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        # Make tool execution fail
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.execute_tool = AsyncMock(side_effect=Exception("Tool execution failed"))
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Should have error in result
+        assert "test:test_list_items" in result
+        assert "error" in result["test:test_list_items"]
+        assert "Tool execution failed" in result["test:test_list_items"]["error"]
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_with_custom_params(self, mock_runtime_with_enrichment, caplog):
+        """Test context enrichment uses custom enrichment params."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+
+        # Create tool with custom enrichment params
+        tool_with_params = ToolInfo(
+            name="test_filtered_list",
+            description="List filtered items",
+            parameters=ToolParameterSchema(
+                type="object",
+                properties={"domain": {"type": "string"}},
+                required=[],
+            ),
+            context_enrichment=True,
+            context_enrichment_params={"domain": "lights"},
+        )
+
+        # Set up tool service
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.get_available_tools = AsyncMock(return_value=["test_filtered_list"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_with_params)
+
+        available_tools = {"test": [tool_with_params]}
+
+        await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Verify execute_tool was called with the custom params
+        tool_service.execute_tool.assert_called_once()
+        call_args = tool_service.execute_tool.call_args
+        assert call_args[0][0] == "test_filtered_list"
+        assert call_args[0][1] == {"domain": "lights"}
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_multiple_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test context enrichment with multiple enrichment tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        # Create second enrichment tool
+        second_tool = ToolInfo(
+            name="test_get_status",
+            description="Get status for enrichment",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        # Set up tool service to return different results for different tools
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.get_available_tools = AsyncMock(return_value=["test_list_items", "test_get_status"])
+
+        def get_tool_info_side_effect(name):
+            if name == "test_list_items":
+                return mock_enrichment_tool_info
+            elif name == "test_get_status":
+                return second_tool
+            return None
+
+        tool_service.get_tool_info = AsyncMock(side_effect=get_tool_info_side_effect)
+
+        def execute_tool_side_effect(name, params):
+            if name == "test_list_items":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"items": ["a", "b"]},
+                    error=None,
+                    correlation_id="corr-1",
+                )
+            elif name == "test_get_status":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"status": "online"},
+                    error=None,
+                    correlation_id="corr-2",
+                )
+            return None
+
+        tool_service.execute_tool = AsyncMock(side_effect=execute_tool_side_effect)
+
+        available_tools = {"test": [mock_enrichment_tool_info, second_tool]}
+
+        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Should have results from both tools
+        assert len(result) == 2
+        assert "test:test_list_items" in result
+        assert "test:test_get_status" in result
+        assert result["test:test_list_items"]["items"] == ["a", "b"]
+        assert result["test:test_get_status"]["status"] == "online"
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_missing_tool_service(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test context enrichment when tool service for adapter is not found."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+
+        # Make get_available_tools return empty - tool service doesn't have the tool
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.get_available_tools = AsyncMock(return_value=[])
+
+        # The tool is in available_tools but not actually provided by any service
+        available_tools = {"other_adapter": [mock_enrichment_tool_info]}
+
+        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Should log warning about missing tool service
+        assert "[CONTEXT_ENRICHMENT] No tool service found for other_adapter:test_list_items" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_run_context_enrichment_result_without_data(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test context enrichment when tool returns success but no data."""
+        from ciris_engine.logic.context.system_snapshot_helpers import _run_context_enrichment_tools
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+
+        # Return result with success=True but no data
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.execute_tool = AsyncMock(
+            return_value=ToolExecutionResult(
+                tool_name="test_list_items",
+                status=ToolExecutionStatus.COMPLETED,
+                success=True,
+                data=None,
+                error=None,
+                correlation_id="corr-123",
+            )
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+
+        # Should have success indicator instead of data
+        assert "test:test_list_items" in result
+        assert result["test:test_list_items"]["success"] is True
+        assert "message" in result["test:test_list_items"]
+
+
+# =============================================================================
+# 10. SYSTEM SNAPSHOT FORMATTER TESTS
+# =============================================================================
+
+
+class TestSystemSnapshotFormatter:
+    """Test system snapshot formatter for context enrichment."""
+
+    def test_format_system_snapshot_with_context_enrichment(self):
+        """Test that context enrichment results are formatted in snapshot."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create snapshot with context enrichment results
+        snapshot = SystemSnapshot(
+            context_enrichment_results={
+                "home_assistant:ha_list_entities": {
+                    "count": 5,
+                    "entities": [
+                        {"entity_id": "light.living_room", "state": "on"},
+                        {"entity_id": "switch.garage", "state": "off"},
+                    ],
+                }
+            }
+        )
+
+        result = format_system_snapshot(snapshot)
+
+        # Check formatting
+        assert "=== Context Enrichment (Pre-fetched Tool Results) ===" in result
+        assert "home_assistant:ha_list_entities" in result
+        assert "light.living_room" in result
+        assert "switch.garage" in result
+
+    def test_format_system_snapshot_with_enrichment_error(self):
+        """Test that context enrichment errors are formatted."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        snapshot = SystemSnapshot(context_enrichment_results={"test:failing_tool": {"error": "Connection timeout"}})
+
+        result = format_system_snapshot(snapshot)
+
+        assert "=== Context Enrichment (Pre-fetched Tool Results) ===" in result
+        assert "test:failing_tool" in result
+        assert "Error: Connection timeout" in result
+
+    def test_format_system_snapshot_without_enrichment(self):
+        """Test snapshot formatting without context enrichment."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        snapshot = SystemSnapshot()
+
+        result = format_system_snapshot(snapshot)
+
+        # Should not contain enrichment section
+        assert "=== Context Enrichment" not in result
+
+    def test_format_system_snapshot_with_empty_enrichment(self):
+        """Test snapshot formatting with empty enrichment results."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        snapshot = SystemSnapshot(context_enrichment_results={})
+
+        result = format_system_snapshot(snapshot)
+
+        # Should not contain enrichment section when empty
+        assert "=== Context Enrichment" not in result
+
+    def test_format_system_snapshot_truncates_large_enrichment(self):
+        """Test that large enrichment results are truncated."""
+        from ciris_engine.logic.formatters.system_snapshot import format_system_snapshot
+        from ciris_engine.schemas.runtime.system_context import SystemSnapshot
+
+        # Create large result that exceeds 2000 chars
+        large_entities = [
+            {"entity_id": f"light.room_{i}", "state": "on", "attributes": {"brightness": 255}} for i in range(100)
+        ]
+
+        snapshot = SystemSnapshot(context_enrichment_results={"test:large_tool": {"entities": large_entities}})
+
+        result = format_system_snapshot(snapshot)
+
+        # Should be truncated
+        assert "... (truncated)" in result

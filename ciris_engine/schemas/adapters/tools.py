@@ -43,6 +43,17 @@ class ToolInfo(BaseModel):
     cost: float = Field(0.0, description="Cost to execute the tool")
     when_to_use: Optional[str] = Field(None, description="Guidance on when to use the tool")
 
+    # Context enrichment: if True, this tool is automatically run during context gathering
+    # and its results are added to the system snapshot for use in action selection
+    context_enrichment: bool = Field(
+        False,
+        description="If True, tool is automatically run during context gathering to enrich ASPDMA prompt",
+    )
+    # Default parameters to use when running as context enrichment tool
+    context_enrichment_params: Optional[JSONDict] = Field(
+        None, description="Default parameters when running as context enrichment (e.g., {'domain': 'light'})"
+    )
+
     model_config = ConfigDict(extra="forbid")
 
 

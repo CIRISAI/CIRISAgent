@@ -936,6 +936,92 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
     return available_tools
 
 
+async def _run_context_enrichment_tools(
+    runtime: Optional[Any], available_tools: Dict[str, List[ToolInfo]]
+) -> Dict[str, Any]:
+    """Run context enrichment tools and return their results.
+
+    Context enrichment tools are marked with context_enrichment=True in their ToolInfo.
+    They are automatically executed during context gathering to provide additional
+    information for action selection (e.g., listing available Home Assistant entities).
+
+    Args:
+        runtime: The runtime object with service_registry and bus_manager
+        available_tools: Already collected available tools by adapter type
+
+    Returns:
+        Dict mapping "adapter_type:tool_name" to tool execution results
+    """
+    enrichment_results: Dict[str, Any] = {}
+
+    if not _validate_runtime_capabilities(runtime):
+        return enrichment_results
+
+    # Assert runtime is not None since we validated it
+    assert runtime is not None
+
+    # Find all tools marked for context enrichment
+    enrichment_tools: List[tuple[str, ToolInfo]] = []
+    for adapter_type, tools in available_tools.items():
+        for tool in tools:
+            if tool.context_enrichment:
+                enrichment_tools.append((adapter_type, tool))
+                logger.info(f"[CONTEXT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
+
+    if not enrichment_tools:
+        logger.debug("[CONTEXT_ENRICHMENT] No context enrichment tools found")
+        return enrichment_results
+
+    # Execute each enrichment tool
+    service_registry = runtime.service_registry
+    tool_services = _get_tool_services(service_registry)
+
+    for adapter_type, tool in enrichment_tools:
+        tool_key = f"{adapter_type}:{tool.name}"
+        try:
+            # Find the tool service for this adapter
+            tool_service = None
+            for ts in tool_services:
+                adapter_id = getattr(ts, "adapter_id", "")
+                ts_adapter_type = _extract_adapter_type(adapter_id)
+                if ts_adapter_type == adapter_type:
+                    # Check if this service provides the tool
+                    available = await _call_async_or_sync_method(ts, "get_available_tools")
+                    if available and tool.name in available:
+                        tool_service = ts
+                        break
+
+            if not tool_service:
+                logger.warning(f"[CONTEXT_ENRICHMENT] No tool service found for {tool_key}")
+                continue
+
+            # Execute the tool with default enrichment params
+            params = tool.context_enrichment_params or {}
+            logger.info(f"[CONTEXT_ENRICHMENT] Executing {tool_key} with params: {params}")
+
+            result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
+
+            if result:
+                # Store the result data (ToolExecutionResult.data or the raw result)
+                if hasattr(result, "data") and result.data is not None:
+                    enrichment_results[tool_key] = result.data
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} returned data with {len(result.data)} keys")
+                elif hasattr(result, "success") and result.success:
+                    # Tool succeeded but no data field - store success indicator
+                    enrichment_results[tool_key] = {"success": True, "message": "Tool executed successfully"}
+                else:
+                    # Store raw result if it's not a ToolExecutionResult
+                    enrichment_results[tool_key] = result
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} returned raw result")
+
+        except Exception as e:
+            logger.error(f"[CONTEXT_ENRICHMENT] Failed to execute {tool_key}: {e}")
+            enrichment_results[tool_key] = {"error": str(e)}
+
+    logger.info(f"[CONTEXT_ENRICHMENT] Collected {len(enrichment_results)} enrichment results")
+    return enrichment_results
+
+
 # =============================================================================
 # 8. USER MANAGEMENT
 # =============================================================================

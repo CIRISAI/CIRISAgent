@@ -5,6 +5,48 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2025-12-07
+
+### Added
+
+- **Dynamic Adapter Configuration System** - Interactive wizard for configuring adapters at runtime
+  - `AdapterConfigurationService` with step-by-step configuration workflows
+  - `ConfigurableAdapterProtocol` for adapters supporting discovery, OAuth, and validation
+  - API endpoints: `/v1/system/adapters/configurable`, `/configure/{session_id}/step`
+  - OAuth callback handling with PKCE support
+  - Persistence of adapter configurations via config service
+
+- **Home Assistant Integration** - Full OAuth2 configurable adapter
+  - mDNS discovery of Home Assistant instances
+  - OAuth2 with PKCE authentication flow
+  - Entity selection and monitoring configuration
+  - Separate TOOL and COMMUNICATION service capabilities
+
+- **Android Configuration UI** - Dynamic adapter configuration wizard
+  - Native Android fragments for adapter discovery and configuration
+  - OAuth flow integration with system browser
+  - Real-time configuration step rendering
+
+- **Unified Adapter Architecture** - Renamed `ciris_modular_services` to `ciris_adapters`
+  - Unified loading from core and modular locations
+  - Consistent adapter naming and discovery
+
+### Fixed
+
+- **Mock LLM WAKEUP Loop** - Fixed infinite loop in WAKEUP state with Mock LLM
+  - Detect follow-up thoughts via `THOUGHT_TYPE=follow_up` marker
+  - Return TASK_COMPLETE for follow-up thoughts instead of SPEAK
+
+- **OAuth Method Signatures** - Aligned all configurable adapters with protocol
+  - Added `code_challenge` to `get_oauth_url()`
+  - Added `code_verifier` to `handle_oauth_callback()`
+  - Updated: MockLLM, SampleAdapter, MCPServer, HomeAssistant adapters
+
+- **Test Fixes** - Updated test mocks for new adapter configuration service
+  - Fixed `list_configs` mock method name
+  - Added `runtime_control` mock for API adapter tests
+  - Updated service count assertions
+
 ## [1.7.1] - 2025-12-04
 
 ### Added

@@ -457,16 +457,11 @@ class ApiPlatform(Service):
                 if not interactive_config_data:
                     continue
 
-                # Parse steps into ConfigurationStep objects
+                # Parse steps into ConfigurationStep objects, preserving all metadata
                 steps = []
                 for step_data in interactive_config_data.get("steps", []):
-                    step = ConfigurationStep(
-                        step_id=step_data["step_id"],
-                        step_type=step_data["step_type"],
-                        title=step_data.get("title", step_data["step_id"]),
-                        description=step_data.get("description", ""),
-                        discovery_method=step_data.get("discovery_method"),
-                    )
+                    # Use model_validate to preserve all step fields (oauth_config, fields, etc.)
+                    step = ConfigurationStep.model_validate(step_data)
                     steps.append(step)
 
                 # Create InteractiveConfiguration
@@ -583,16 +578,11 @@ class ApiPlatform(Service):
 
                 logger.info(f"Found interactive_config for adapter: {adapter_name}")
 
-                # Parse steps into ConfigurationStep objects
+                # Parse steps into ConfigurationStep objects, preserving all metadata
                 steps = []
                 for step_data in interactive_config_data.get("steps", []):
-                    step = ConfigurationStep(
-                        step_id=step_data["step_id"],
-                        step_type=step_data["step_type"],
-                        title=step_data.get("title", step_data["step_id"]),
-                        description=step_data.get("description", ""),
-                        discovery_method=step_data.get("discovery_method"),
-                    )
+                    # Use model_validate to preserve all step fields (oauth_config, fields, etc.)
+                    step = ConfigurationStep.model_validate(step_data)
                     steps.append(step)
 
                 # Create InteractiveConfiguration

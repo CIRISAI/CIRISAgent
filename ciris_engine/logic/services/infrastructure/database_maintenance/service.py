@@ -65,12 +65,20 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._perform_periodic_maintenance()
 
     async def _perform_periodic_maintenance(self) -> None:
-        """Run periodic maintenance tasks."""
-        logger.info("Periodic maintenance tasks executed.")
+        """Run periodic maintenance tasks including stale task cleanup."""
+        logger.info("Periodic maintenance tasks starting.")
         # Increment vacuum operations counter for periodic maintenance
         self._vacuum_runs += 1
-        # The actual maintenance logic would go here
-        # For now, this is a placeholder
+
+        # Clean up stale wakeup/shutdown tasks from dead occurrences
+        # This is critical for multi-occurrence deployments where an occurrence
+        # may die mid-wakeup, leaving shared tasks in ACTIVE state forever
+        await self._cleanup_stale_wakeup_tasks()
+
+        # Clean up old active tasks that may have been orphaned
+        await self._cleanup_old_active_tasks()
+
+        logger.info("Periodic maintenance tasks completed.")
 
     async def _on_stop(self) -> None:
         """Stop hook for cleanup."""

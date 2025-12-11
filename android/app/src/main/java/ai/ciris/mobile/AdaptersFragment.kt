@@ -460,6 +460,13 @@ class AdaptersFragment : Fragment() {
     }
 
     private fun showConfigurationDialog(module: ModuleTypeInfo) {
+        Log.d(TAG, "[CONFIG_DIALOG] Opening dialog for module: ${module.moduleId}")
+        Log.d(TAG, "[CONFIG_DIALOG] Module name: ${module.name}, description: ${module.description}")
+        Log.d(TAG, "[CONFIG_DIALOG] Schema has ${module.configurationSchema.size} parameters")
+        module.configurationSchema.forEachIndexed { idx, param ->
+            Log.d(TAG, "[CONFIG_DIALOG] Param[$idx]: name=${param.name}, type=${param.paramType}, required=${param.required}, default=${param.default} (${param.default?.javaClass?.simpleName})")
+        }
+
         val context = requireContext()
         val configParams = module.configurationSchema
 
@@ -526,8 +533,15 @@ class AdaptersFragment : Fragment() {
                     }
                 }
                 // Set default value if available
+                // Gson deserializes JSON integers as Double, so convert whole numbers to Int for display
                 param.default?.let { default ->
-                    setText(default.toString())
+                    val displayValue = when {
+                        // If it's a Double that represents a whole number (e.g., 8000.0), display as integer
+                        default is Double && default == default.toLong().toDouble() -> default.toLong().toString()
+                        else -> default.toString()
+                    }
+                    Log.d(TAG, "[CONFIG_DIALOG] Param '${param.name}': type=${param.paramType}, default=$default (${default::class.simpleName}), display=$displayValue")
+                    setText(displayValue)
                 }
             }
 

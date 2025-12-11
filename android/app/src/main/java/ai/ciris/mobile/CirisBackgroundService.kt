@@ -8,7 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
@@ -21,7 +23,12 @@ import androidx.core.app.NotificationCompat
  *
  * The service shows a persistent notification while CIRIS is running.
  *
- * Uses START_STICKY to ensure Python stays alive during OAuth browser flows.
+ * AUTO-SLEEP FEATURE:
+ * The service automatically stops itself after 5 minutes of background activity.
+ * This saves battery and resources when OAuth is complete. The timer resets each
+ * time the app comes to foreground (via resetSleepTimer).
+ *
+ * Uses START_NOT_STICKY so the service doesn't auto-restart after sleeping.
  * MainActivity has smart startup logic to detect and gracefully shutdown any
  * stale server sessions before starting a new one (prevents "port already bound" errors).
  */
@@ -31,6 +38,11 @@ class CirisBackgroundService : Service() {
         private const val TAG = "CirisBackgroundService"
         private const val CHANNEL_ID = "ciris_background_channel"
         private const val NOTIFICATION_ID = 1001
+
+        // Auto-sleep after 5 minutes of background activity
+        private const val SLEEP_TIMEOUT_MS = 5 * 60 * 1000L  // 5 minutes
+
+        private var instance: CirisBackgroundService? = null
 
         fun start(context: Context) {
             val intent = Intent(context, CirisBackgroundService::class.java)
@@ -47,10 +59,35 @@ class CirisBackgroundService : Service() {
             context.stopService(intent)
             Log.i(TAG, "Foreground service stop requested")
         }
+
+        /**
+         * Reset the sleep timer when app comes to foreground.
+         * Call this from MainActivity.onResume().
+         */
+        fun resetSleepTimer() {
+            instance?.resetTimer()
+        }
+
+        /**
+         * Start the sleep timer when app goes to background.
+         * Call this from MainActivity.onPause().
+         */
+        fun startSleepTimer() {
+            instance?.startTimer()
+        }
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var sleepTimerRunning = false
+
+    private val sleepRunnable = Runnable {
+        Log.i(TAG, "Sleep timeout reached (${SLEEP_TIMEOUT_MS / 1000}s) - stopping service to save resources")
+        stopSelf()
     }
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.i(TAG, "Service created")
         createNotificationChannel()
     }
@@ -62,10 +99,10 @@ class CirisBackgroundService : Service() {
         startForeground(NOTIFICATION_ID, notification)
 
         Log.i(TAG, "Foreground service is now running - Python runtime protected from background kill")
+        Log.i(TAG, "Service will auto-sleep after ${SLEEP_TIMEOUT_MS / 1000}s of background activity")
 
-        // START_STICKY: Restart service if killed by system to keep Python alive during OAuth
-        // Smart startup in MainActivity handles stale sessions on app restart
-        return START_STICKY
+        // START_NOT_STICKY: Don't restart after auto-sleep - user will restart app if needed
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -74,7 +111,31 @@ class CirisBackgroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.i(TAG, "Service destroyed")
+        instance = null
+        handler.removeCallbacks(sleepRunnable)
+        Log.i(TAG, "Service destroyed - Python runtime no longer protected")
+    }
+
+    /**
+     * Start the sleep timer. Called when app goes to background.
+     */
+    private fun startTimer() {
+        if (!sleepTimerRunning) {
+            sleepTimerRunning = true
+            handler.postDelayed(sleepRunnable, SLEEP_TIMEOUT_MS)
+            Log.i(TAG, "Sleep timer started - service will stop in ${SLEEP_TIMEOUT_MS / 1000}s if app stays in background")
+        }
+    }
+
+    /**
+     * Reset/cancel the sleep timer. Called when app comes to foreground.
+     */
+    private fun resetTimer() {
+        if (sleepTimerRunning) {
+            handler.removeCallbacks(sleepRunnable)
+            sleepTimerRunning = false
+            Log.i(TAG, "Sleep timer cancelled - app is in foreground")
+        }
     }
 
     private fun createNotificationChannel() {

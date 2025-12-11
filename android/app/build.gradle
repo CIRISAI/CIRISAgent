@@ -21,8 +21,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 27
-        versionName "1.7.27"
+        versionCode 31
+        versionName "1.7.31"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

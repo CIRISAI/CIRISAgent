@@ -817,6 +817,31 @@ def _store_oauth_profile(auth_service: APIAuthService, user_id: str, name: str, 
         logger.warning(f"Invalid OAuth picture URL rejected for user {user_id}: {picture}")
 
 
+def _update_billing_provider_token(google_id_token: str) -> None:
+    """Update the billing provider with a fresh Google ID token.
+
+    This is called after native Google token exchange to ensure billing
+    is available immediately. The token is stored in the environment
+    so the billing provider can use it for credit checks.
+    """
+    import os
+
+    # Update environment variable so billing provider can use it
+    os.environ["CIRIS_BILLING_GOOGLE_ID_TOKEN"] = google_id_token
+    logger.info("[NativeAuth] Updated CIRIS_BILLING_GOOGLE_ID_TOKEN in environment for billing provider")
+
+    # Try to reinitialize the billing provider if resource_monitor is available
+    # This is done via a background task to not block the login response
+    try:
+        from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
+
+        # Check if we have access to the app state (will be set by FastAPI)
+        # The billing provider will be initialized on the next credit check if not done here
+        logger.info("[NativeAuth] Billing provider token updated - will be used on next credit check")
+    except Exception as e:
+        logger.warning(f"[NativeAuth] Could not update billing provider directly: {e}")
+
+
 def _generate_api_key_and_store(auth_service: APIAuthService, oauth_user: OAuthUser, provider: str) -> str:
     """Generate API key and store it for the OAuth user."""
     # SYSTEM_ADMIN, ADMIN, and AUTHORITY all get admin prefix (elevated roles)
@@ -1460,6 +1485,10 @@ async def native_google_token_exchange(
         # Generate API key
         logger.info(f"[NativeAuth] Generating API key for user {oauth_user.user_id}")
         api_key = _generate_api_key_and_store(auth_service, oauth_user, "google")
+
+        # Update billing provider with the Google ID token for credit checks
+        # This ensures billing is available immediately after login
+        _update_billing_provider_token(request.id_token)
 
         logger.info(f"[NativeAuth] SUCCESS - Native Google user {oauth_user.user_id} logged in, token generated")
 

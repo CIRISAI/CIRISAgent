@@ -6,6 +6,7 @@ into a unified system operations interface.
 """
 
 import asyncio
+import html
 import json
 import logging
 from datetime import datetime, timezone
@@ -2377,7 +2378,7 @@ async def oauth_callback(
 <head><title>OAuth Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #d32f2f;">Authentication Failed</h1>
-    <p>{result.error or "OAuth callback failed"}</p>
+    <p>{html.escape(result.error or "OAuth callback failed")}</p>
     <p>Please close this window and try again in the app.</p>
 </body>
 </html>"""
@@ -2396,7 +2397,7 @@ async def oauth_callback(
         <h1 style="color: #4caf50; margin-bottom: 20px;">✓ Connected!</h1>
         <p style="color: #666; font-size: 18px;">Authentication successful.</p>
         <p style="color: #888; margin-top: 20px;">You can close this window and return to the CIRIS app.</p>
-        <p style="color: #aaa; font-size: 12px; margin-top: 30px;">Session: {session_id[:8]}...</p>
+        <p style="color: #aaa; font-size: 12px; margin-top: 30px;">Session: {html.escape(session_id[:8])}...</p>
     </div>
 </body>
 </html>"""

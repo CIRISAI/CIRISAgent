@@ -83,6 +83,36 @@ def extract_query_params(url: str) -> Dict[str, str]:
     return dict(urllib.parse.parse_qsl(parsed.query))
 
 
+def _is_private_network_host(host: str) -> bool:
+    """
+    Check if a host is on a private/local network.
+
+    Allows HTTP for local development and Home Assistant on local networks.
+    """
+    import ipaddress
+
+    # Remove port if present
+    hostname = host.split(":")[0].lower()
+
+    # Check for localhost variants
+    if hostname in ("localhost", "127.0.0.1", "::1"):
+        return True
+
+    # Check for .local mDNS domains (common for Home Assistant)
+    if hostname.endswith(".local"):
+        return True
+
+    # Check for private IP ranges
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return ip.is_private or ip.is_loopback
+    except ValueError:
+        # Not a valid IP address, check if it looks like a local hostname
+        pass
+
+    return False
+
+
 def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     """
     Validate redirect_uri to prevent open redirect attacks.
@@ -91,6 +121,7 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
     - Relative paths (starting with /)
     - URLs matching OAUTH_FRONTEND_URL domain
     - URLs matching domains in OAUTH_ALLOWED_REDIRECT_DOMAINS
+    - HTTP allowed for private/local networks (Home Assistant, local dev)
 
     Returns the redirect_uri if valid, None if invalid/untrusted.
     """
@@ -114,14 +145,30 @@ def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
             logger.warning(f"Rejected malformed redirect_uri: {redirect_uri[:50]}")
             return None
 
-        # Only allow https (security)
-        if parsed.scheme.lower() != "https":
-            logger.warning(f"Rejected non-HTTPS redirect_uri: {redirect_uri[:50]}")
+        scheme = parsed.scheme.lower()
+        is_private = _is_private_network_host(parsed.netloc)
+
+        # Allow HTTP only for private/local networks (Home Assistant, local dev)
+        # Require HTTPS for all public URLs
+        if scheme == "http":
+            if not is_private:
+                logger.warning(f"Rejected HTTP redirect_uri to public host: {redirect_uri[:50]}")
+                return None
+            # HTTP to private network is allowed
+            logger.debug(f"Allowing HTTP redirect to private network: {parsed.netloc}")
+        elif scheme != "https":
+            logger.warning(f"Rejected redirect_uri with unsupported scheme: {scheme}")
             return None
 
         redirect_domain = parsed.netloc.lower()
 
-        # Build list of allowed domains
+        # Private network hosts are always allowed (Home Assistant, local dev)
+        # This enables OAuth callbacks to local Home Assistant instances
+        if is_private:
+            logger.debug(f"Allowing redirect to private network host: {redirect_domain}")
+            return redirect_uri
+
+        # Build list of allowed domains for public URLs
         allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
 
         # Always allow OAUTH_FRONTEND_URL domain if configured

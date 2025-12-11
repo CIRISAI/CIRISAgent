@@ -5,7 +5,7 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.3] - 2025-12-07
+## [1.7.3] - 2025-12-11
 
 ### Added
 
@@ -27,11 +27,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - OAuth flow integration with system browser
   - Real-time configuration step rendering
 
+- **Enhanced Android Startup UI** - Visual feedback during ~15 second initialization
+  - Signet logo with ARM32-friendly alpha pulse animation
+  - Phase indicator showing current startup stage (INITIALIZING → LOADING RUNTIME → PREPARING → etc.)
+  - Elapsed time counter updated every 100ms
+  - Two distinct flows: First-run setup vs returning user
+  - Detailed status messages for each phase
+
+- **Context Enrichment for Adapter Tools** - Tools can now enrich context with additional data
+  - `ContextEnrichmentTool` protocol for tools providing context enrichment
+  - Context builder integration for automatic enrichment during thought processing
+  - QA tests for context enrichment verification
+
 - **Unified Adapter Architecture** - Renamed `ciris_modular_services` to `ciris_adapters`
   - Unified loading from core and modular locations
   - Consistent adapter naming and discovery
 
 ### Fixed
+
+- **PostgreSQL Deferral Retrieval** - Fixed `get_pending_deferrals` failing on PostgreSQL
+  - **Issue**: `invalid literal for int() with base 10: 'priority'`
+  - **Root Cause**: PostgreSQL `RealDictCursor` returns rows as dictionaries; unpacking dicts as tuples yields keys instead of values
+  - **Fix**: Check row type and handle both dict (PostgreSQL) and tuple (SQLite) formats
+  - **Files**: `ciris_engine/logic/services/governance/wise_authority/service.py:460-470`
+
+- **Android Startup Error Detection** - Fixed false error detection during startup
+  - Filter out "Incident capture" log messages from error detection
+  - Filter out deprecation warnings and HTTP status patterns
+  - Prevents startup UI from incorrectly showing error state
+
+- **Android Google Sign-In** - Conditional Google sign-in based on user's auth choice
+  - Only attempt silent sign-in if user previously chose Google auth during setup
+  - API key users skip Google SDK entirely, reducing startup latency
+  - Auth method stored in SharedPreferences
+
+- **Android Post-Setup Navigation** - Fixed navigation after setup wizard completion
+  - Now correctly navigates to Kotlin InteractFragment (not standalone InteractActivity)
+  - Maintains bottom navigation bar after setup
 
 - **Mock LLM WAKEUP Loop** - Fixed infinite loop in WAKEUP state with Mock LLM
   - Detect follow-up thoughts via `THOUGHT_TYPE=follow_up` marker
@@ -42,10 +74,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `code_verifier` to `handle_oauth_callback()`
   - Updated: MockLLM, SampleAdapter, MCPServer, HomeAssistant adapters
 
+- **Silent Task Complete Notification** - Disabled "agent chose not to speak" notification
+  - No longer sends notification when agent completes task without speaking
+
+- **Setup Status Race Condition** - Fixed Android main thread network access
+  - Setup status check now properly runs on IO thread
+
 - **Test Fixes** - Updated test mocks for new adapter configuration service
   - Fixed `list_configs` mock method name
   - Added `runtime_control` mock for API adapter tests
   - Updated service count assertions
+
+### Changed
+
+- **Reduced Cognitive Complexity** - Refactored multiple modules for better maintainability
+  - SonarCloud code smell fixes across multiple files
+  - Extracted helper methods in complex functions
+
+### Android
+
+- Version bumped to **1.7.31** (build 31)
+- Setup wizard now clarifies LLM must be off-device with CIRIS proxy info
+- Release AAB built with proper arm64-v8a support for Pixel 6 devices
 
 ## [1.7.1] - 2025-12-04
 

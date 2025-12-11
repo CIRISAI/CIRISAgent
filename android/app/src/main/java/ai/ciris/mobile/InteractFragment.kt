@@ -56,6 +56,7 @@ class InteractFragment : Fragment() {
     private lateinit var shutdownButton: Button
     private lateinit var emergencyButton: Button
     private lateinit var loadingIndicator: ProgressBar
+    private lateinit var emptyStateContainer: LinearLayout
     // SSE status is shown in the statusText instead
 
     // Standard HTTP client for API calls
@@ -142,6 +143,7 @@ class InteractFragment : Fragment() {
         shutdownButton = view.findViewById(R.id.shutdownButton)
         emergencyButton = view.findViewById(R.id.emergencyButton)
         loadingIndicator = view.findViewById(R.id.loadingIndicator)
+        emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
 
         // Setup RecyclerView
         adapter = ChatWithReasoningAdapter(chatItems) { taskId ->
@@ -476,6 +478,20 @@ class InteractFragment : Fragment() {
             if (chatItems.isNotEmpty()) {
                 recyclerView.scrollToPosition(chatItems.size - 1)
             }
+        }
+
+        // Show/hide empty state based on message count
+        updateEmptyState()
+    }
+
+    private fun updateEmptyState() {
+        if (!isAdded) return
+        if (chatItems.isEmpty()) {
+            emptyStateContainer.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            emptyStateContainer.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
         }
     }
 

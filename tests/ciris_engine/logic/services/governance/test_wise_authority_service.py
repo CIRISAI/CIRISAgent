@@ -779,9 +779,7 @@ class TestPostgreSQLDictRowHandling:
     """
 
     @pytest.mark.asyncio
-    async def test_get_pending_deferrals_handles_dict_rows(
-        self, wise_authority_service, time_service, temp_db
-    ):
+    async def test_get_pending_deferrals_handles_dict_rows(self, wise_authority_service, time_service, temp_db):
         """Test that get_pending_deferrals correctly handles dict-format rows.
 
         This tests the fix for: invalid literal for int() with base 10: 'priority'
@@ -838,9 +836,7 @@ class TestPostgreSQLDictRowHandling:
         assert deferral_result.channel_id == "test-channel-123"
 
     @pytest.mark.asyncio
-    async def test_get_pending_deferrals_with_various_priorities(
-        self, wise_authority_service, time_service, temp_db
-    ):
+    async def test_get_pending_deferrals_with_various_priorities(self, wise_authority_service, time_service, temp_db):
         """Test priority parsing works correctly for all priority levels."""
         await wise_authority_service.start()
 
@@ -903,9 +899,7 @@ class TestPostgreSQLDictRowHandling:
             )
 
     @pytest.mark.asyncio
-    async def test_get_pending_deferrals_with_null_priority(
-        self, wise_authority_service, time_service, temp_db
-    ):
+    async def test_get_pending_deferrals_with_null_priority(self, wise_authority_service, time_service, temp_db):
         """Test that NULL priority is handled correctly (should be 'low')."""
         await wise_authority_service.start()
 
@@ -949,9 +943,7 @@ class TestPostgreSQLDictRowHandling:
         assert pending[0].priority == "low"
 
     @pytest.mark.asyncio
-    async def test_get_pending_deferrals_preserves_all_fields(
-        self, wise_authority_service, time_service, temp_db
-    ):
+    async def test_get_pending_deferrals_preserves_all_fields(self, wise_authority_service, time_service, temp_db):
         """Test that all fields are correctly preserved when parsing rows."""
         await wise_authority_service.start()
 

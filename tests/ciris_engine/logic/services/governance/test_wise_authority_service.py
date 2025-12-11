@@ -765,3 +765,239 @@ class TestDeferralHelperMethods:
         )
 
         assert len(deferral.reason) == 200
+
+
+# ========== PostgreSQL Dict Row Format Tests ==========
+
+
+class TestPostgreSQLDictRowHandling:
+    """Tests for PostgreSQL RealDictCursor compatibility.
+
+    PostgreSQL uses RealDictCursor which returns rows as dictionaries.
+    These tests verify that get_pending_deferrals correctly handles both
+    dict rows (PostgreSQL) and tuple rows (SQLite).
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_pending_deferrals_handles_dict_rows(
+        self, wise_authority_service, time_service, temp_db
+    ):
+        """Test that get_pending_deferrals correctly handles dict-format rows.
+
+        This tests the fix for: invalid literal for int() with base 10: 'priority'
+        which occurred when PostgreSQL RealDictCursor returned dicts and the code
+        tried to unpack them as tuples (getting keys instead of values).
+        """
+        await wise_authority_service.start()
+
+        # Create a task with a specific priority value
+        import sqlite3
+
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "task-dict-test",
+                "test-channel-123",
+                "Test task for dict row handling",
+                "active",
+                7,  # Specific priority value to verify it's read correctly
+                time_service.now().isoformat(),
+                time_service.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create a deferral for the task
+        from ciris_engine.schemas.services.authority_core import DeferralRequest
+
+        deferral = DeferralRequest(
+            task_id="task-dict-test",
+            thought_id="thought-dict-test",
+            reason="Testing dict row handling",
+            defer_until=time_service.now() + timedelta(hours=24),
+            context={"test_key": "test_value"},
+        )
+        await wise_authority_service.send_deferral(deferral)
+
+        # Get pending deferrals - this should work without raising
+        # "invalid literal for int() with base 10: 'priority'"
+        pending = await wise_authority_service.get_pending_deferrals()
+
+        assert len(pending) == 1
+        deferral_result = pending[0]
+
+        # Verify the priority was correctly interpreted (7 > 5 = "high")
+        assert deferral_result.priority == "high"
+        assert deferral_result.task_id == "task-dict-test"
+        assert deferral_result.channel_id == "test-channel-123"
+
+    @pytest.mark.asyncio
+    async def test_get_pending_deferrals_with_various_priorities(
+        self, wise_authority_service, time_service, temp_db
+    ):
+        """Test priority parsing works correctly for all priority levels."""
+        await wise_authority_service.start()
+
+        import sqlite3
+
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+
+        # Create tasks with different priorities
+        priorities = [
+            ("task-priority-0", 0, "low"),
+            ("task-priority-3", 3, "medium"),
+            ("task-priority-5", 5, "medium"),
+            ("task-priority-8", 8, "high"),
+            ("task-priority-10", 10, "high"),
+        ]
+
+        for task_id, priority, _ in priorities:
+            cursor.execute(
+                """
+                INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    task_id,
+                    "test-channel",
+                    f"Task with priority {priority}",
+                    "active",
+                    priority,
+                    time_service.now().isoformat(),
+                    time_service.now().isoformat(),
+                ),
+            )
+        conn.commit()
+        conn.close()
+
+        # Create deferrals for all tasks
+        from ciris_engine.schemas.services.authority_core import DeferralRequest
+
+        for task_id, _, _ in priorities:
+            deferral = DeferralRequest(
+                task_id=task_id,
+                thought_id=f"thought-{task_id}",
+                reason="Test priority handling",
+                defer_until=time_service.now() + timedelta(hours=24),
+                context={},
+            )
+            await wise_authority_service.send_deferral(deferral)
+
+        # Get pending deferrals
+        pending = await wise_authority_service.get_pending_deferrals()
+        assert len(pending) == 5
+
+        # Verify each priority was correctly converted
+        pending_by_task = {d.task_id: d for d in pending}
+        for task_id, _, expected_priority in priorities:
+            assert pending_by_task[task_id].priority == expected_priority, (
+                f"Task {task_id} expected priority '{expected_priority}' "
+                f"but got '{pending_by_task[task_id].priority}'"
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_pending_deferrals_with_null_priority(
+        self, wise_authority_service, time_service, temp_db
+    ):
+        """Test that NULL priority is handled correctly (should be 'low')."""
+        await wise_authority_service.start()
+
+        import sqlite3
+
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "task-null-priority",
+                "test-channel",
+                "Task with NULL priority",
+                "active",
+                None,  # NULL priority
+                time_service.now().isoformat(),
+                time_service.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create deferral
+        from ciris_engine.schemas.services.authority_core import DeferralRequest
+
+        deferral = DeferralRequest(
+            task_id="task-null-priority",
+            thought_id="thought-null-priority",
+            reason="Test null priority",
+            defer_until=time_service.now() + timedelta(hours=24),
+            context={},
+        )
+        await wise_authority_service.send_deferral(deferral)
+
+        # Get pending deferrals
+        pending = await wise_authority_service.get_pending_deferrals()
+        assert len(pending) == 1
+        assert pending[0].priority == "low"
+
+    @pytest.mark.asyncio
+    async def test_get_pending_deferrals_preserves_all_fields(
+        self, wise_authority_service, time_service, temp_db
+    ):
+        """Test that all fields are correctly preserved when parsing rows."""
+        await wise_authority_service.start()
+
+        import sqlite3
+
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                "task-fields-test",
+                "channel-abc-123",
+                "Detailed task description for field testing",
+                "active",
+                5,
+                time_service.now().isoformat(),
+                time_service.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create deferral with detailed context
+        from ciris_engine.schemas.services.authority_core import DeferralRequest
+
+        deferral = DeferralRequest(
+            task_id="task-fields-test",
+            thought_id="thought-fields-test",
+            reason="Field preservation test",
+            defer_until=time_service.now() + timedelta(hours=24),
+            context={"user_id": "user-xyz", "action": "test_action"},
+        )
+        await wise_authority_service.send_deferral(deferral)
+
+        # Get pending deferrals
+        pending = await wise_authority_service.get_pending_deferrals()
+        assert len(pending) == 1
+
+        result = pending[0]
+        assert result.task_id == "task-fields-test"
+        assert result.channel_id == "channel-abc-123"
+        assert result.thought_id == "thought-fields-test"
+        assert "Field preservation test" in result.reason
+        assert result.status == "pending"
+        assert result.priority == "medium"  # priority 5 = medium
+        assert "Detailed task description" in result.context.get("task_description", "")

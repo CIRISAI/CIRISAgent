@@ -42,6 +42,38 @@
 
         </LinearLayout>
 
+        <!-- Development Notice Banner -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:background="#FEF3C7"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Under Development"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#92400E"
+                android:background="@drawable/badge_warning"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Adapter configuration wizard is being refined in Kotlin"
+                android:textSize="12sp"
+                android:textColor="#92400E" />
+
+        </LinearLayout>
+
         <!-- Status bar -->
         <LinearLayout
             android:layout_width="match_parent"

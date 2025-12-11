@@ -61,6 +61,10 @@ OAUTH_FRONTEND_PATH = os.getenv("OAUTH_FRONTEND_PATH", "/oauth-complete.html")  
 OAUTH_REDIRECT_PARAMS = os.getenv(
     "OAUTH_REDIRECT_PARAMS", "access_token,token_type,role,user_id,expires_in,email,marketing_opt_in,agent,provider"
 ).split(",")
+# Comma-separated list of allowed redirect domains for OAuth (security: prevents open redirect attacks)
+# Always includes OAUTH_FRONTEND_URL if set. Relative paths (starting with /) are always allowed.
+OAUTH_ALLOWED_REDIRECT_DOMAINS = os.getenv("OAUTH_ALLOWED_REDIRECT_DOMAINS", "").split(",")
+OAUTH_ALLOWED_REDIRECT_DOMAINS = [d.strip().lower() for d in OAUTH_ALLOWED_REDIRECT_DOMAINS if d.strip()]
 
 
 # Helper functions
@@ -77,6 +81,73 @@ def extract_query_params(url: str) -> Dict[str, str]:
 
     parsed = urllib.parse.urlparse(url)
     return dict(urllib.parse.parse_qsl(parsed.query))
+
+
+def validate_redirect_uri(redirect_uri: Optional[str]) -> Optional[str]:
+    """
+    Validate redirect_uri to prevent open redirect attacks.
+
+    Security: Only allows:
+    - Relative paths (starting with /)
+    - URLs matching OAUTH_FRONTEND_URL domain
+    - URLs matching domains in OAUTH_ALLOWED_REDIRECT_DOMAINS
+
+    Returns the redirect_uri if valid, None if invalid/untrusted.
+    """
+    import urllib.parse
+
+    if not redirect_uri:
+        return None
+
+    # Relative paths are always safe (same-origin)
+    if redirect_uri.startswith("/"):
+        # Prevent path traversal tricks like //evil.com
+        if redirect_uri.startswith("//"):
+            logger.warning(f"Rejected redirect_uri with protocol-relative path: {redirect_uri[:50]}")
+            return None
+        return redirect_uri
+
+    # Parse the URL to extract domain
+    try:
+        parsed = urllib.parse.urlparse(redirect_uri)
+        if not parsed.scheme or not parsed.netloc:
+            logger.warning(f"Rejected malformed redirect_uri: {redirect_uri[:50]}")
+            return None
+
+        # Only allow https (security)
+        if parsed.scheme.lower() != "https":
+            logger.warning(f"Rejected non-HTTPS redirect_uri: {redirect_uri[:50]}")
+            return None
+
+        redirect_domain = parsed.netloc.lower()
+
+        # Build list of allowed domains
+        allowed_domains: Set[str] = set(OAUTH_ALLOWED_REDIRECT_DOMAINS)
+
+        # Always allow OAUTH_FRONTEND_URL domain if configured
+        if OAUTH_FRONTEND_URL:
+            frontend_parsed = urllib.parse.urlparse(OAUTH_FRONTEND_URL)
+            if frontend_parsed.netloc:
+                allowed_domains.add(frontend_parsed.netloc.lower())
+
+        # Check if redirect domain is allowed
+        if redirect_domain in allowed_domains:
+            return redirect_uri
+
+        # Check for subdomain matches (e.g., allow *.ciris.ai if ciris.ai is in allowed)
+        for allowed in allowed_domains:
+            if redirect_domain == allowed or redirect_domain.endswith("." + allowed):
+                return redirect_uri
+
+        logger.warning(
+            f"Rejected redirect_uri to untrusted domain: {redirect_domain}. "
+            f"Allowed domains: {allowed_domains or '(none configured)'}"
+        )
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to parse redirect_uri: {e}")
+        return None
 
 
 logger = logging.getLogger(__name__)
@@ -412,11 +483,20 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         # Generate CSRF token
         csrf_token = secrets.token_urlsafe(32)
 
+        # Validate redirect_uri to prevent open redirect attacks (security)
+        validated_redirect_uri = validate_redirect_uri(redirect_uri)
+        if redirect_uri and not validated_redirect_uri:
+            logger.warning(f"OAuth login rejected untrusted redirect_uri from {request.client.host if request.client else 'unknown'}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid redirect_uri: must be a relative path or trusted domain"
+            )
+
         # Encode state with CSRF token and optional redirect_uri
         state_data = {"csrf": csrf_token}
-        if redirect_uri:
-            state_data["redirect_uri"] = redirect_uri
-            logger.info(f"OAuth login initiated with redirect_uri: {redirect_uri}")
+        if validated_redirect_uri:
+            state_data["redirect_uri"] = validated_redirect_uri
+            logger.info(f"OAuth login initiated with validated redirect_uri: {validated_redirect_uri}")
 
         # Base64 encode the state JSON
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
@@ -1048,6 +1128,10 @@ async def oauth_callback(
             state_json = base64.urlsafe_b64decode(state.encode()).decode()
             state_data = json.loads(state_json)
             redirect_uri = state_data.get("redirect_uri")
+
+            # Defense-in-depth: Re-validate redirect_uri even from state
+            # (state could theoretically be tampered with)
+            redirect_uri = validate_redirect_uri(redirect_uri)
 
             # Extract marketing_opt_in from redirect_uri query parameters
             if redirect_uri:

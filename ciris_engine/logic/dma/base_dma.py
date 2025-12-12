@@ -280,29 +280,30 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
     def build_multimodal_content(
         text: str,
         images: List[ImageContent],
-    ) -> Union[str, List[ContentBlock]]:
+    ) -> Union[str, List[Dict[str, Any]]]:
         """
         Build content for an LLM message, supporting both text-only and multimodal.
 
         If no images are provided, returns the text string directly.
-        If images are provided, returns a list of ContentBlocks (text + images).
+        If images are provided, returns a list of serialized content block dicts.
 
         Args:
             text: Text content of the message
             images: List of ImageContent objects (can be empty)
 
         Returns:
-            Either a string (text-only) or List[ContentBlock] (multimodal)
+            Either a string (text-only) or List[Dict] (multimodal content blocks)
         """
         if not images:
             return text
 
-        # Build content blocks for multimodal message
-        content: List[ContentBlock] = [TextContentBlock(text=text)]
+        # Build content blocks for multimodal message and serialize to dicts
+        # This ensures JSON serialization works when sent to LLM APIs
+        content: List[Dict[str, Any]] = [TextContentBlock(text=text).model_dump()]
 
         for img in images:
             image_block = ImageContentBlock(image_url=ImageURLDetail(url=img.to_data_url()))
-            content.append(image_block)
+            content.append(image_block.model_dump())
 
         return content
 

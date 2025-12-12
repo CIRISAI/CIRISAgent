@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.runtime.enums import ThoughtType
-from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
+from ciris_engine.schemas.runtime.models import ImageContent, Thought, ThoughtContext
 
 # Import both types of ThoughtContext
 from ciris_engine.schemas.runtime.processing_context import ProcessingThoughtContext
@@ -46,6 +46,9 @@ class ProcessingQueueItem(BaseModel):
     conscience_feedback: Optional[Any] = Field(
         default=None, description="conscience evaluation feedback if applicable."
     )
+    images: List[ImageContent] = Field(
+        default_factory=list, description="Images attached to this thought for multimodal processing"
+    )
 
     @property
     def content_text(self) -> str:
@@ -59,9 +62,18 @@ class ProcessingQueueItem(BaseModel):
         raw_input: Optional[str] = None,
         initial_ctx: Optional[JSONDict] = None,
         queue_item_content: Optional[Union[ThoughtContent, str, JSONDict]] = None,
+        task_images: Optional[List[ImageContent]] = None,
     ) -> "ProcessingQueueItem":
         """
         Creates a ProcessingQueueItem from a Thought instance.
+
+        Args:
+            thought_instance: The thought to create a queue item from
+            raw_input: Optional raw input string
+            initial_ctx: Optional initial context
+            queue_item_content: Optional content override
+            task_images: Optional list of images from the source task. If not provided,
+                        the method will attempt to look up the task and get its images.
         """
         raw_initial_ctx = initial_ctx if initial_ctx is not None else thought_instance.context
         # Accept ProcessingThoughtContext, ThoughtContext, dict, or any Pydantic model
@@ -79,6 +91,28 @@ class ProcessingQueueItem(BaseModel):
             resolved_content = ThoughtContent(text=raw_content)
         else:  # isinstance(raw_content, dict)
             resolved_content = ThoughtContent(**raw_content)
+
+        # Get images from task if not provided
+        # Images are stored at the TASK level, so all thoughts for a task share the same images
+        images: List[ImageContent] = []
+        if task_images is not None:
+            images = task_images
+        else:
+            # Look up the task to get its images
+            try:
+                from ciris_engine.logic.persistence.models.tasks import get_task_by_id
+
+                task = get_task_by_id(thought_instance.source_task_id, thought_instance.agent_occurrence_id)
+                if task and task.images:
+                    images = task.images
+                    if images:
+                        logger.info(
+                            f"[VISION] ProcessingQueueItem inheriting {len(images)} images "
+                            f"from task {thought_instance.source_task_id}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to load task images for thought {thought_instance.thought_id}: {e}")
+
         return cls(
             thought_id=thought_instance.thought_id,
             source_task_id=thought_instance.source_task_id,
@@ -88,6 +122,7 @@ class ProcessingQueueItem(BaseModel):
             raw_input_string=raw_input if raw_input is not None else str(thought_instance.content),
             initial_context=final_initial_ctx,
             ponder_notes=thought_instance.ponder_notes,
+            images=images,
         )
 
 

@@ -242,6 +242,7 @@ class QARunner:
             QAModule.MCP,
             QAModule.ADAPTER_CONFIG,
             QAModule.CONTEXT_ENRICHMENT,
+            QAModule.VISION,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -814,6 +815,7 @@ class QARunner:
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
+        from .modules.vision_tests import VisionTests
 
         all_passed = True
 
@@ -834,6 +836,7 @@ class QARunner:
             QAModule.MCP: MCPTests,
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
+            QAModule.VISION: VisionTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

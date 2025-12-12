@@ -344,10 +344,18 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
 
+        # Get images from thought item for multimodal
+        thought_images = getattr(thought_item, "images", []) or []
+        if thought_images:
+            logger.info(
+                f"[VISION] DSDMA '{self.domain_name}' building multimodal content with {len(thought_images)} images"
+            )
+        user_content = self.build_multimodal_content(user_message_content, thought_images)
+
         messages: List[JSONDict] = [
             {"role": "system", "content": COVENANT_TEXT},
             {"role": "system", "content": system_message_content},
-            {"role": "user", "content": user_message_content},
+            {"role": "user", "content": user_content},
         ]
 
         try:

@@ -89,15 +89,20 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
         messages.append({"role": "system", "content": system_message})
 
-        user_message = self.prompt_loader.get_user_message(
+        user_message_text = self.prompt_loader.get_user_message(
             self.prompt_template_data,
             original_thought_content=original_thought_content,
             full_context_str=full_context_str,
         )
-        messages.append({"role": "user", "content": user_message})
+        # Build multimodal content if images are present
+        input_images = getattr(input_data, "images", []) or []
+        if input_images:
+            logger.info(f"[VISION] EthicalPDMA building multimodal content with {len(input_images)} images")
+        user_content = self.build_multimodal_content(user_message_text, input_images)
+        messages.append({"role": "user", "content": user_content})
 
         # Store user prompt for streaming/debugging
-        self.last_user_prompt = user_message
+        self.last_user_prompt = user_message_text
 
         result_tuple = await self.call_llm_structured(
             messages=messages,

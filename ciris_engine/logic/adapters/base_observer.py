@@ -566,6 +566,11 @@ class BaseObserver(Generic[MessageT], ABC):
             else:
                 description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
 
+            # Extract images from IncomingMessage for multimodal processing
+            msg_images = getattr(msg, "images", []) or []
+            if msg_images:
+                logger.info(f"[VISION] Extracted {len(msg_images)} images from IncomingMessage for task creation")
+
             task = create_task(
                 description=description,
                 channel_id=getattr(msg, "channel_id", "system"),
@@ -575,6 +580,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 status=TaskStatus.ACTIVE,
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
+                images=msg_images,
             )
 
             await self._sign_and_add_task(task)
@@ -656,6 +662,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 parent_thought_id=thought.parent_thought_id,
                 final_action=None,
                 context=thought.context,
+                images=thought.images,  # Preserve images from seed thought (inherited from task)
             )
 
             persistence.add_thought(thought)

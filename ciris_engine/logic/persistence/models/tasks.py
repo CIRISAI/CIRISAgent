@@ -185,13 +185,20 @@ def _handle_duplicate_task(task: Task, db_path: Optional[str]) -> str:
 
 def add_task(task: Task, db_path: Optional[str] = None) -> str:
     task_dict = task.model_dump(mode="json")
+
+    # Serialize images for storage
+    images_data = task_dict.get("images", [])
+    images_json = json.dumps(images_data) if images_data else None
+
     sql = """
         INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
                            created_at, updated_at, parent_task_id, context_json, outcome_json,
-                           signed_by, signature, signed_at, updated_info_available, updated_info_content)
+                           signed_by, signature, signed_at, updated_info_available, updated_info_content,
+                           images_json)
         VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
                 :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
+                :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content,
+                :images)
     """
     params = {
         **task_dict,
@@ -204,12 +211,19 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
         "signed_at": task_dict.get("signed_at"),
         "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
         "updated_info_content": task_dict.get("updated_info_content"),
+        "images": images_json,
     }
     try:
         with get_db_connection(db_path) as conn:
             conn.execute(sql, params)
             conn.commit()
-        logger.info(f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) to database.")
+        image_count = len(images_data) if images_data else 0
+        if image_count > 0:
+            logger.info(
+                f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) with {image_count} images."
+            )
+        else:
+            logger.info(f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) to database.")
         return task.task_id
     except Exception as e:
         error_msg = str(e).lower()
@@ -389,6 +403,40 @@ def update_task_context_and_signing(
             occurrence_id,
             e,
         )
+        return False
+
+
+def clear_task_images(
+    task_id: str,
+    occurrence_id: str,
+    time_service: TimeServiceProtocol,
+    db_path: Optional[str] = None,
+) -> bool:
+    """Clear images from a task (for privacy/storage cleanup on completion).
+
+    Args:
+        task_id: The task ID to clear images from
+        occurrence_id: The occurrence ID for the task
+        time_service: Time service for timestamp
+        db_path: Optional database path
+
+    Returns:
+        True if images were cleared, False otherwise
+    """
+    sql = "UPDATE tasks SET images_json = NULL, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
+    params = (time_service.now_iso(), task_id, occurrence_id)
+
+    try:
+        with get_db_connection(db_path) as conn:
+            cursor = conn.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"Cleared images from task {task_id} (occurrence: {occurrence_id})")
+                return True
+            logger.debug(f"Task {task_id} not found or no images to clear (occurrence: {occurrence_id})")
+            return False
+    except Exception as e:
+        logger.exception(f"Failed to clear images for task {task_id}: {e}")
         return False
 
 
@@ -796,6 +844,7 @@ def try_claim_shared_task(
         "signed_at",
         "updated_info_available",
         "updated_info_content",
+        "images_json",
     ]
     conflict_columns = ["task_id"]  # Primary key constraint (task_id only)
 
@@ -817,6 +866,7 @@ def try_claim_shared_task(
         None,  # signed_at
         0,  # updated_info_available
         None,  # updated_info_content
+        None,  # images_json (shared tasks don't have images)
     )
 
     try:

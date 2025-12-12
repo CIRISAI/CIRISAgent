@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- Task signing fields (from migration 003)
     signed_by TEXT,
     signature TEXT,
-    signed_at TEXT
+    signed_at TEXT,
+    -- Native multimodal vision support (from migration 010)
+    -- Images are stored at the TASK level; thoughts inherit images from their source task
+    images_json TEXT
 );
 """
 

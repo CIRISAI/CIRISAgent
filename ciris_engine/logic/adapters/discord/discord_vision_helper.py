@@ -35,9 +35,7 @@ class DiscordVisionHelper(BaseVisionHelper):
         """
         super().__init__(max_image_size=max_image_size)
 
-    async def attachments_to_image_content(
-        self, attachments: List[discord.Attachment]
-    ) -> List[ImageContent]:
+    async def attachments_to_image_content(self, attachments: List[discord.Attachment]) -> List[ImageContent]:
         """
         Convert Discord attachments to ImageContent objects for native multimodal.
 
@@ -50,10 +48,7 @@ class DiscordVisionHelper(BaseVisionHelper):
         images: List[ImageContent] = []
 
         # Filter for image attachments
-        image_attachments = [
-            att for att in attachments
-            if att.content_type and att.content_type.startswith("image/")
-        ]
+        image_attachments = [att for att in attachments if att.content_type and att.content_type.startswith("image/")]
 
         for attachment in image_attachments:
             try:
@@ -66,9 +61,7 @@ class DiscordVisionHelper(BaseVisionHelper):
 
         return images
 
-    async def message_to_image_content(
-        self, message: discord.Message
-    ) -> List[ImageContent]:
+    async def message_to_image_content(self, message: discord.Message) -> List[ImageContent]:
         """
         Extract all images from a Discord message as ImageContent objects.
 
@@ -102,3 +95,54 @@ class DiscordVisionHelper(BaseVisionHelper):
             "max_image_size_mb": self.max_image_size / 1024 / 1024,
             "multimodal_enabled": True,
         }
+
+    async def process_image_attachments_list(self, attachments: List[discord.Attachment]) -> List[ImageContent]:
+        """
+        Process a list of Discord attachments to ImageContent objects.
+
+        This is the native multimodal approach - images are converted to
+        ImageContent and passed through the pipeline to the LLM.
+
+        Args:
+            attachments: List of Discord attachment objects
+
+        Returns:
+            List of ImageContent objects
+        """
+        return await self.attachments_to_image_content(attachments)
+
+    async def process_embeds(self, embeds: List[discord.Embed]) -> List[ImageContent]:
+        """
+        Process Discord embeds to extract images as ImageContent objects.
+
+        Args:
+            embeds: List of Discord embed objects
+
+        Returns:
+            List of ImageContent objects from embed images/thumbnails
+        """
+        images: List[ImageContent] = []
+
+        for embed in embeds:
+            try:
+                # Extract image from embed
+                if embed.image and embed.image.url:
+                    image_content = await self.url_to_image_content(
+                        embed.image.url,
+                        media_type="image/jpeg",  # Default, will be detected
+                        filename=f"embed_image_{len(images)}.jpg",
+                    )
+                    if image_content:
+                        images.append(image_content)
+
+                # Extract thumbnail from embed
+                if embed.thumbnail and embed.thumbnail.url:
+                    image_content = await self.url_to_image_content(
+                        embed.thumbnail.url, media_type="image/jpeg", filename=f"embed_thumbnail_{len(images)}.jpg"
+                    )
+                    if image_content:
+                        images.append(image_content)
+            except Exception as e:
+                logger.warning(f"Failed to process embed image: {e}")
+
+        return images

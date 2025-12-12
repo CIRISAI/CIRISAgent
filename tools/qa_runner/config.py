@@ -38,6 +38,7 @@ class QAModule(Enum):
     MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
     ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
+    VISION = "vision"  # Native multimodal vision testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -206,6 +207,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.ADAPTER_CONFIG:
             # Adapter configuration tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.VISION:
+            # Vision tests use direct API calls
             return []  # Will be handled separately by runner
 
         # Handler test modules

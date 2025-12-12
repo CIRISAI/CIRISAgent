@@ -121,6 +121,8 @@ def get_thoughts_by_status(
 
 def add_thought(thought: Thought, db_path: Optional[str] = None) -> str:
     thought_dict = thought.model_dump(mode="json")
+    # Note: Images are stored at the TASK level, not THOUGHT level.
+    # Thoughts inherit images from their source task via ProcessingQueueItem.from_thought()
     sql = """
         INSERT INTO thoughts (thought_id, source_task_id, agent_occurrence_id, channel_id, thought_type, status, created_at, updated_at,
                               round_number, content, context_json, thought_depth, ponder_notes_json,

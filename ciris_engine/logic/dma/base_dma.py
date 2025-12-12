@@ -301,9 +301,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         content: List[ContentBlock] = [TextContentBlock(text=text)]
 
         for img in images:
-            image_block = ImageContentBlock(
-                image_url=ImageURLDetail(url=img.to_data_url())
-            )
+            image_block = ImageContentBlock(image_url=ImageURLDetail(url=img.to_data_url()))
             content.append(image_block)
 
         return content

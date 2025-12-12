@@ -201,10 +201,15 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if original_thought and hasattr(original_thought, "thought_type"):
             covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
 
+        # Build user message content - supports multimodal if thought has images
+        if original_thought.images:
+            logger.info(f"[VISION] Building multimodal content with {len(original_thought.images)} images for LLM call")
+        user_content = self.build_multimodal_content(main_user_content, original_thought.images)
+
         messages: List[JSONDict] = [
             {"role": "system", "content": covenant_with_metadata},
             {"role": "system", "content": system_message},
-            {"role": "user", "content": main_user_content},
+            {"role": "user", "content": user_content},
         ]
 
         # Store user prompt for streaming/debugging

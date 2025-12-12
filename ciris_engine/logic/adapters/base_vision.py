@@ -76,9 +76,7 @@ class BaseVisionHelper(ABC):
         """
         self.max_image_size = max_image_size
 
-    async def attachment_to_image_content(
-        self, attachment: ImageAttachment
-    ) -> Optional[ImageContent]:
+    async def attachment_to_image_content(self, attachment: ImageAttachment) -> Optional[ImageContent]:
         """
         Convert an attachment to an ImageContent object.
 
@@ -93,8 +91,7 @@ class BaseVisionHelper(ABC):
         # Validate size
         if attachment.size > self.max_image_size:
             logger.warning(
-                f"Image {attachment.filename} too large: {attachment.size} bytes "
-                f"(max {self.max_image_size} bytes)"
+                f"Image {attachment.filename} too large: {attachment.size} bytes " f"(max {self.max_image_size} bytes)"
             )
             return None
 
@@ -109,9 +106,7 @@ class BaseVisionHelper(ABC):
             async with aiohttp.ClientSession() as session:
                 async with session.get(attachment.url) as response:
                     if response.status != 200:
-                        logger.error(
-                            f"Failed to download image {attachment.filename}: HTTP {response.status}"
-                        )
+                        logger.error(f"Failed to download image {attachment.filename}: HTTP {response.status}")
                         return None
 
                     image_data = await response.read()
@@ -160,8 +155,7 @@ class BaseVisionHelper(ABC):
                     # Check size after download
                     if len(image_data) > self.max_image_size:
                         logger.warning(
-                            f"Image from {url} too large: {len(image_data)} bytes "
-                            f"(max {self.max_image_size} bytes)"
+                            f"Image from {url} too large: {len(image_data)} bytes " f"(max {self.max_image_size} bytes)"
                         )
                         return None
 
@@ -197,9 +191,7 @@ class BaseVisionHelper(ABC):
             ImageContent object or None if conversion failed
         """
         if len(data) > self.max_image_size:
-            logger.warning(
-                f"Image data too large: {len(data)} bytes (max {self.max_image_size} bytes)"
-            )
+            logger.warning(f"Image data too large: {len(data)} bytes (max {self.max_image_size} bytes)")
             return None
 
         try:
@@ -233,18 +225,16 @@ class BaseVisionHelper(ABC):
             LLMMessage with multimodal content if images present, text-only otherwise
         """
         if not images:
-            return LLMMessage(role=role, content=text)  # type: ignore[arg-type]
+            return LLMMessage(role=role, content=text)
 
         # Build content blocks
         content: List[ContentBlock] = [TextContentBlock(text=text)]
 
         for img in images:
-            image_block = ImageContentBlock(
-                image_url=ImageURLDetail(url=img.to_data_url())
-            )
+            image_block = ImageContentBlock(image_url=ImageURLDetail(url=img.to_data_url()))
             content.append(image_block)
 
-        return LLMMessage(role=role, content=content)  # type: ignore[arg-type]
+        return LLMMessage(role=role, content=content)
 
     @staticmethod
     def build_multimodal_content_blocks(
@@ -266,9 +256,7 @@ class BaseVisionHelper(ABC):
         content: List[ContentBlock] = [TextContentBlock(text=text)]
 
         for img in images:
-            image_block = ImageContentBlock(
-                image_url=ImageURLDetail(url=img.to_data_url())
-            )
+            image_block = ImageContentBlock(image_url=ImageURLDetail(url=img.to_data_url()))
             content.append(image_block)
 
         return content

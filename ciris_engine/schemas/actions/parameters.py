@@ -129,5 +129,9 @@ class TaskCompleteParams(BaseModel):
     completion_reason: str = "Task completed successfully"
     context: Optional[Dict[str, Union[str, List[str]]]] = Field(default=None)
     positive_moment: Optional[str] = Field(None, description="Optional note about positive vibes/joy from this task")
+    persist_images: bool = Field(
+        default=False,
+        description="If True, preserve task images after completion. Default False purges images for privacy/storage.",
+    )
 
     model_config = ConfigDict(extra="forbid")

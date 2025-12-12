@@ -149,6 +149,22 @@ class TaskCompleteHandler(BaseActionHandler):
                         f"Marked parent task {parent_task_id} as COMPLETED due to TASK_COMPLETE action on thought {thought_id}."
                     )
 
+                    # Purge task images unless explicitly marked for persistence
+                    persist_images = False
+                    if hasattr(result, "action_parameters") and hasattr(result.action_parameters, "persist_images"):
+                        persist_images = result.action_parameters.persist_images
+
+                    if not persist_images and task and task.images:
+                        from ciris_engine.logic.persistence.models.tasks import clear_task_images
+
+                        cleared = clear_task_images(parent_task_id, task_occurrence_id, self.time_service)
+                        if cleared:
+                            self.logger.info(
+                                f"Purged {len(task.images)} images from completed task {parent_task_id} (persist_images=False)"
+                            )
+                        else:
+                            self.logger.debug(f"No images to purge from task {parent_task_id}")
+
                     # Disabled: Don't send notification when agent completes task without speaking
                     # The agent may legitimately choose not to respond (e.g., for system messages, follow-ups)
                     # if task and task.channel_id:

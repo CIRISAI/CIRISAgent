@@ -65,18 +65,80 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     context_items = []
 
     # Store original messages for $context display
+    # Handle multimodal content serialization
+    def serialize_message(msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize message, handling multimodal content."""
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            # Multimodal content - summarize for JSON storage
+            text_parts = []
+            image_count = 0
+            for block in content:
+                if isinstance(block, dict):
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "image_url":
+                        image_count += 1
+                elif hasattr(block, "type"):
+                    if block.type == "text":
+                        text_parts.append(getattr(block, "text", ""))
+                    elif block.type == "image_url":
+                        image_count += 1
+            return {**msg, "content": f"[MULTIMODAL: {' '.join(text_parts)[:200]}... + {image_count} image(s)]"}
+        return msg
 
-    context_items.append(f"__messages__:{json.dumps(messages)}")
+    serialized_messages = [serialize_message(m) for m in messages]
+    context_items.append(f"__messages__:{json.dumps(serialized_messages)}")
 
     # Debug logging - only log message count, not content
     logger.info(f"[MOCK_LLM] Extracting context from {len(messages)} messages")
+
+    # Check for multimodal content and log it
+    for i, msg in enumerate(messages):
+        if isinstance(msg, dict):
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # This is multimodal content!
+                image_count = 0
+                text_content = ""
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            text_content = block.get("text", "")[:100]
+                        elif block.get("type") == "image_url":
+                            image_count += 1
+                    elif hasattr(block, "type"):
+                        if block.type == "text":
+                            text_content = getattr(block, "text", "")[:100]
+                        elif block.type == "image_url":
+                            image_count += 1
+
+                logger.info(
+                    f"[MOCK_LLM] 🖼️ MULTIMODAL MESSAGE DETECTED in message {i}: "
+                    f"{image_count} image(s), text: '{text_content}...'"
+                )
+                context_items.append(f"multimodal_images:{image_count}")
+                context_items.append(f"multimodal_text:{text_content}")
 
     # Look for passive observation pattern in user messages ONLY
     actual_user_message = ""
     # Process user messages to find the actual user input
     for i, msg in enumerate(messages):
         if isinstance(msg, dict) and msg.get("role") == "user":
-            content = msg.get("content", "")
+            raw_content = msg.get("content", "")
+
+            # Handle multimodal content - extract text portion
+            if isinstance(raw_content, list):
+                # Extract text from multimodal content
+                text_parts = []
+                for block in raw_content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif hasattr(block, "type") and block.type == "text":
+                        text_parts.append(getattr(block, "text", ""))
+                content = " ".join(text_parts)
+            else:
+                content = raw_content
 
             # For ASPDMA messages, extract the Original Thought content ONLY
             if "Your task is to determine the single most appropriate HANDLER ACTION" in content:

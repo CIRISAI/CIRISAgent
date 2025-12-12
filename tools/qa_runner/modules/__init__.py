@@ -20,6 +20,7 @@ from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
 from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
+from .vision_tests import VisionTests
 
 __all__ = [
     "AdapterConfigTests",
@@ -40,4 +41,5 @@ __all__ = [
     "SQLExternalDataTests",
     "StateTransitionTests",
     "MCPTests",
+    "VisionTests",
 ]

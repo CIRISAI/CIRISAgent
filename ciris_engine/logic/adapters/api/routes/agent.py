@@ -347,8 +347,7 @@ async def _track_air_interaction(
 
     This monitors 1:1 API interactions for:
     - Time-based triggers (30 min continuous)
-    - Message-based triggers (20+ messages)
-    - Valence pattern triggers (anthropomorphism, dependency, emotional intensity)
+    - Message-based triggers (20+ messages in 30 min window)
 
     Returns reminder message if threshold exceeded, None otherwise.
     """
@@ -359,7 +358,7 @@ async def _track_air_interaction(
             return None
 
         # Track interaction and get potential reminder
-        reminder = await consent_manager.track_interaction(
+        reminder: Optional[str] = await consent_manager.track_interaction(
             user_id=auth.user_id,
             channel_id=channel_id,
             channel_type="api",

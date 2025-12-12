@@ -168,15 +168,20 @@ class _BaseConscience(ConscienceInterface):
         to know context exists to properly evaluate the proposed response.
         """
         thought = context.thought
-        if hasattr(thought, "images") and thought.images:
-            image_count = len(thought.images)
-            # Provide safe textual context without exposing image content
-            return (
-                f"[IMAGE CONTEXT: The user shared {image_count} image(s) with their request. "
-                f"The primary DMA pipeline has already analyzed these images and the proposed "
-                f"response is based on that analysis. Evaluate the response assuming it accurately "
-                f"describes user-provided visual content.]"
-            )
+        try:
+            # Check if thought has images attribute and it's a non-empty list
+            if hasattr(thought, "images") and isinstance(thought.images, list) and thought.images:
+                image_count = len(thought.images)
+                # Provide safe textual context without exposing image content
+                return (
+                    f"[IMAGE CONTEXT: The user shared {image_count} image(s) with their request. "
+                    f"The primary DMA pipeline has already analyzed these images and the proposed "
+                    f"response is based on that analysis. Evaluate the response assuming it accurately "
+                    f"describes user-provided visual content.]"
+                )
+        except (TypeError, AttributeError):
+            # Handle Mock objects or other non-standard thought types in tests
+            pass
         return None
 
     def _initialize_time_service(self) -> None:

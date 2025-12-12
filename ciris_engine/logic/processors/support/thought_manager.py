@@ -158,7 +158,7 @@ class ThoughtManager:
             )
 
         now_iso = self.time_service.now_iso()
-        thought_id = generate_thought_id(task.task_id, "recovery")
+        thought_id = generate_thought_id(ThoughtType.STANDARD, task.task_id)
 
         thought = Thought(
             thought_id=thought_id,
@@ -168,7 +168,7 @@ class ThoughtManager:
             status=ThoughtStatus.PENDING,
             created_at=now_iso,
             updated_at=now_iso,
-            round_created=round_number,
+            round_number=round_number,
             content=thought_content,
             context=thought_context,
             thought_depth=0,  # Start fresh for recovery

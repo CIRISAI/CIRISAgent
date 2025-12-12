@@ -129,7 +129,8 @@ class WorkProcessor(BaseProcessor):
                     tasks_needing_recovery, round_number
                 )
                 logger.debug(f"Generated {recovery_generated} recovery thoughts")
-                round_metrics["thoughts_generated"] = round_metrics.get("thoughts_generated", 0) + recovery_generated
+                # Add recovery thoughts to total (generated was set on line 121)
+                round_metrics["thoughts_generated"] = generated + recovery_generated
 
             # Phase 3: Populate processing queue
             logger.debug("Phase 3: Populating processing queue...")

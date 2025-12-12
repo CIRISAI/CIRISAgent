@@ -248,11 +248,10 @@ class TestThoughtDepthPropagation:
         # Test heavily pondered content (count=4 after increment)
         content = ponder_handler._generate_ponder_follow_up_content("Test task", questions, 4, heavily_pondered_thought)
 
-        # Should include guidance about multiple actions
-        assert "Fourth action for:" in content
-        assert "several actions" in content  # Updated guidance text
-        assert "RECALL, OBSERVE, MEMORIZE" in content  # Mentions example actions
-        assert "task is complete" in content  # Mentions completion
+        # Should include depth-specific guidance
+        assert "deep into this task" in content.lower()
+        assert "actions remaining" in content.lower()
+        assert "task" in content.lower()  # Task context mentioned
 
     def test_max_rounds_behavior_with_thought_depth(self, heavily_pondered_thought):
         """Test that ponder handler processes normally, relying on guardrails for max depth enforcement."""

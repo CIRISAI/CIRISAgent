@@ -132,8 +132,9 @@ class TestCheckSendMessagesPermission:
 class TestCreateInteractionMessage:
     """Test _create_interaction_message helper method."""
 
+    @pytest.mark.asyncio
     @patch("uuid.uuid4")
-    def test_create_interaction_message_success(self, mock_uuid):
+    async def test_create_interaction_message_success(self, mock_uuid):
         """Test successful message creation."""
         mock_uuid.return_value = Mock()
         mock_uuid.return_value.__str__ = Mock(return_value="test-message-id")
@@ -143,7 +144,7 @@ class TestCreateInteractionMessage:
 
         body = InteractRequest(message="Hello, CIRIS!")
 
-        message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
 
         assert message_id == "test-message-id"
         assert channel_id == "api_user-123"
@@ -155,7 +156,8 @@ class TestCreateInteractionMessage:
         assert msg.channel_id == "api_user-123"
         assert msg.timestamp is not None
 
-    def test_create_interaction_message_different_users(self):
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_different_users(self):
         """Test message creation for different user IDs."""
         mock_auth1 = Mock(spec=AuthContext)
         mock_auth1.user_id = "user-abc"
@@ -165,8 +167,8 @@ class TestCreateInteractionMessage:
 
         body = InteractRequest(message="Test message")
 
-        _, channel_id1, msg1 = _create_interaction_message(mock_auth1, body)
-        _, channel_id2, msg2 = _create_interaction_message(mock_auth2, body)
+        _, channel_id1, msg1 = await _create_interaction_message(mock_auth1, body)
+        _, channel_id2, msg2 = await _create_interaction_message(mock_auth2, body)
 
         assert channel_id1 == "api_user-abc"
         assert channel_id2 == "api_user-xyz"
@@ -666,7 +668,8 @@ class TestCleanupInteractionTracking:
 class TestInteractionTrackingIntegration:
     """Integration tests for interaction tracking across helper methods."""
 
-    def test_interaction_flow_tracking(self):
+    @pytest.mark.asyncio
+    async def test_interaction_flow_tracking(self):
         """Test complete interaction tracking flow."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "integration-user"
@@ -674,7 +677,7 @@ class TestInteractionTrackingIntegration:
         body = InteractRequest(message="Integration test")
 
         # Create interaction
-        message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
 
         # Add tracking (simulate main function)
         event = asyncio.Event()
@@ -692,7 +695,8 @@ class TestInteractionTrackingIntegration:
         assert message_id not in _response_events
         assert message_id not in _message_responses
 
-    def test_multiple_concurrent_interactions(self):
+    @pytest.mark.asyncio
+    async def test_multiple_concurrent_interactions(self):
         """Test handling of multiple concurrent interactions."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "concurrent-user"
@@ -702,7 +706,7 @@ class TestInteractionTrackingIntegration:
         # Create multiple interactions
         interactions = []
         for i in range(3):
-            message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+            message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
             _response_events[message_id] = asyncio.Event()
             _message_responses[message_id] = f"Response {i}"
             interactions.append(message_id)

@@ -1,238 +1,209 @@
-"""Comprehensive tests for Discord Vision Helper module."""
+"""Tests for Discord Vision Helper - Native Multimodal Support."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import aiohttp
 import discord
 import pytest
 
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
+from ciris_engine.schemas.runtime.models import ImageContent
 
 
 class TestDiscordVisionHelperInitialization:
     """Test vision helper initialization."""
 
-    def test_init_with_api_key(self):
-        """Test initialization with provided API key."""
-        helper = DiscordVisionHelper(api_key="test_key")
-        assert helper.api_key == "test_key"
-        assert helper.api_url == "https://api.openai.com/v1/chat/completions"
-        assert helper.model == "gpt-4o"
+    def test_init_default(self):
+        """Test initialization with default settings."""
+        helper = DiscordVisionHelper()
         assert helper.max_image_size == 20 * 1024 * 1024
 
-    @patch.dict(os.environ, {"CIRIS_OPENAI_VISION_KEY": "env_key"})
-    def test_init_with_env_var(self):
-        """Test initialization with environment variable."""
-        helper = DiscordVisionHelper()
-        assert helper.api_key == "env_key"
+    def test_init_custom_max_size(self):
+        """Test initialization with custom max image size."""
+        helper = DiscordVisionHelper(max_image_size=10 * 1024 * 1024)
+        assert helper.max_image_size == 10 * 1024 * 1024
 
-    @patch.dict(os.environ, {}, clear=True)
-    def test_init_no_api_key(self, caplog):
-        """Test initialization without API key logs warning."""
+    def test_is_available_always_true(self):
+        """Test is_available returns True (native vision is always available)."""
         helper = DiscordVisionHelper()
-        assert helper.api_key is None
-        assert "No OpenAI Vision API key found" in caplog.text
-
-    def test_is_available_with_key(self):
-        """Test is_available returns True when API key exists."""
-        helper = DiscordVisionHelper(api_key="test_key")
         assert helper.is_available() is True
 
-    def test_is_available_without_key(self):
-        """Test is_available returns False when no API key."""
-        helper = DiscordVisionHelper()
-        assert helper.is_available() is False
 
-
-class TestProcessMessageImages:
-    """Test processing images from Discord messages."""
+class TestAttachmentsToImageContent:
+    """Test converting Discord attachments to ImageContent."""
 
     @pytest.fixture
     def vision_helper(self):
-        """Create vision helper with API key."""
-        return DiscordVisionHelper(api_key="test_key")
+        """Create vision helper."""
+        return DiscordVisionHelper()
 
     @pytest.fixture
-    def mock_image_attachment(self, mock_attachment):
+    def mock_image_attachment(self):
         """Create mock image attachment."""
-        return mock_attachment(filename="test.png", content_type="image/png", size=1000000)
+        attachment = MagicMock(spec=discord.Attachment)
+        attachment.filename = "test.png"
+        attachment.content_type = "image/png"
+        attachment.size = 1000000  # 1MB
+        attachment.url = "https://cdn.discord.com/test.png"
+        attachment.read = AsyncMock(return_value=b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        return attachment
 
     @pytest.fixture
-    def mock_non_image_attachment(self, mock_attachment):
+    def mock_large_attachment(self):
+        """Create mock oversized attachment."""
+        attachment = MagicMock(spec=discord.Attachment)
+        attachment.filename = "large.png"
+        attachment.content_type = "image/png"
+        attachment.size = 25 * 1024 * 1024  # 25MB - too large
+        attachment.url = "https://cdn.discord.com/large.png"
+        return attachment
+
+    @pytest.fixture
+    def mock_non_image_attachment(self):
         """Create mock non-image attachment."""
-        return mock_attachment(filename="test.txt", content_type="text/plain", size=1000)
+        attachment = MagicMock(spec=discord.Attachment)
+        attachment.filename = "test.txt"
+        attachment.content_type = "text/plain"
+        attachment.size = 1000
+        attachment.url = "https://cdn.discord.com/test.txt"
+        return attachment
 
     @pytest.mark.asyncio
-    async def test_process_message_images_no_api_key(self, sample_discord_message):
-        """Test processing without API key returns None."""
-        helper = DiscordVisionHelper()
-        result = await helper.process_message_images(sample_discord_message)
-        assert result is None
+    async def test_empty_attachments(self, vision_helper):
+        """Test with empty attachments list returns empty list."""
+        result = await vision_helper.attachments_to_image_content([])
+        assert result == []
 
     @pytest.mark.asyncio
-    async def test_process_message_images_no_attachments(self, vision_helper, sample_discord_message):
-        """Test processing message with no attachments."""
-        sample_discord_message.attachments = []
-        result = await vision_helper.process_message_images(sample_discord_message)
-        assert result is None
+    async def test_skip_non_image_attachments(self, vision_helper, mock_non_image_attachment):
+        """Test non-image attachments are skipped."""
+        result = await vision_helper.attachments_to_image_content([mock_non_image_attachment])
+        assert result == []
 
     @pytest.mark.asyncio
-    async def test_process_message_images_no_image_attachments(
-        self, vision_helper, sample_discord_message, mock_non_image_attachment
-    ):
-        """Test processing message with non-image attachments."""
-        sample_discord_message.attachments = [mock_non_image_attachment]
-        result = await vision_helper.process_message_images(sample_discord_message)
-        assert result is None
+    async def test_skip_oversized_attachments(self, vision_helper, mock_large_attachment):
+        """Test oversized attachments are skipped."""
+        result = await vision_helper.attachments_to_image_content([mock_large_attachment])
+        assert result == []
 
     @pytest.mark.asyncio
-    async def test_process_message_images_success(self, vision_helper, sample_discord_message, mock_image_attachment):
-        """Test successful image processing."""
-        sample_discord_message.attachments = [mock_image_attachment]
+    async def test_process_valid_image(self, vision_helper, mock_image_attachment):
+        """Test processing valid image attachment."""
+        # Mock the base class method to avoid HTTP calls
+        import base64
 
-        with patch.object(vision_helper, "_process_single_image", return_value="A test image"):
-            result = await vision_helper.process_message_images(sample_discord_message)
-            assert result == "Image 'test.png': A test image"
+        mock_image = ImageContent(
+            source_type="base64",
+            data=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100).decode(),
+            media_type="image/png",
+            filename="test.png",
+        )
 
-    @pytest.mark.asyncio
-    async def test_process_message_images_multiple_images(self, vision_helper, sample_discord_message, mock_attachment):
-        """Test processing multiple images."""
-        img1 = mock_attachment("img1.png", "image/png")
-        img2 = mock_attachment("img2.jpg", "image/jpeg")
-        sample_discord_message.attachments = [img1, img2]
-
-        with patch.object(vision_helper, "_process_single_image", side_effect=["Description 1", "Description 2"]):
-            result = await vision_helper.process_message_images(sample_discord_message)
-            expected = "Image 'img1.png': Description 1\n\nImage 'img2.jpg': Description 2"
-            assert result == expected
-
-    @pytest.mark.asyncio
-    async def test_process_message_images_with_error(
-        self, vision_helper, sample_discord_message, mock_image_attachment
-    ):
-        """Test processing with error handling."""
-        sample_discord_message.attachments = [mock_image_attachment]
-
-        with patch.object(vision_helper, "_process_single_image", side_effect=Exception("API Error")):
-            result = await vision_helper.process_message_images(sample_discord_message)
-            assert "Failed to process - API Error" in result
-
-
-class TestProcessImageAttachmentsList:
-    """Test processing list of image attachments."""
-
-    @pytest.fixture
-    def vision_helper(self):
-        """Create vision helper with API key."""
-        return DiscordVisionHelper(api_key="test_key")
+        with patch.object(vision_helper, "attachment_to_image_content", new=AsyncMock(return_value=mock_image)):
+            result = await vision_helper.attachments_to_image_content([mock_image_attachment])
+            assert len(result) == 1
+            assert isinstance(result[0], ImageContent)
+            assert result[0].media_type == "image/png"
+            assert result[0].filename == "test.png"
 
     @pytest.mark.asyncio
-    async def test_process_image_attachments_list_no_api_key(self, sample_image_attachment):
-        """Test processing without API key returns None."""
-        helper = DiscordVisionHelper()
-        result = await helper.process_image_attachments_list([sample_image_attachment])
-        assert result is None
+    async def test_process_multiple_images(self, vision_helper, mock_image_attachment):
+        """Test processing multiple image attachments."""
+        import base64
+
+        # Create a second mock attachment
+        attachment2 = MagicMock(spec=discord.Attachment)
+        attachment2.filename = "test2.jpg"
+        attachment2.content_type = "image/jpeg"
+        attachment2.size = 500000
+        attachment2.url = "https://cdn.discord.com/test2.jpg"
+
+        mock_image1 = ImageContent(
+            source_type="base64", data=base64.b64encode(b"png").decode(), media_type="image/png", filename="test.png"
+        )
+        mock_image2 = ImageContent(
+            source_type="base64", data=base64.b64encode(b"jpg").decode(), media_type="image/jpeg", filename="test2.jpg"
+        )
+
+        with patch.object(
+            vision_helper, "attachment_to_image_content", new=AsyncMock(side_effect=[mock_image1, mock_image2])
+        ):
+            result = await vision_helper.attachments_to_image_content([mock_image_attachment, attachment2])
+            assert len(result) == 2
 
     @pytest.mark.asyncio
-    async def test_process_image_attachments_list_empty(self, vision_helper):
-        """Test processing empty list."""
-        result = await vision_helper.process_image_attachments_list([])
-        assert result is None
+    async def test_mixed_attachments(self, vision_helper, mock_image_attachment, mock_non_image_attachment):
+        """Test mixed image and non-image attachments."""
+        import base64
 
-    @pytest.mark.asyncio
-    async def test_process_image_attachments_list_success(self, vision_helper, sample_image_attachment):
-        """Test successful processing of attachment list."""
-        with patch.object(vision_helper, "_process_single_image", return_value="Test description"):
-            result = await vision_helper.process_image_attachments_list([sample_image_attachment])
-            assert result == "Image 'test_image.png': Test description"
+        mock_image = ImageContent(
+            source_type="base64", data=base64.b64encode(b"png").decode(), media_type="image/png", filename="test.png"
+        )
+
+        # Return image for first attachment, None for non-image
+        with patch.object(vision_helper, "attachment_to_image_content", new=AsyncMock(side_effect=[mock_image, None])):
+            result = await vision_helper.attachments_to_image_content(
+                [mock_image_attachment, mock_non_image_attachment]
+            )
+            assert len(result) == 1  # Only the image
 
 
 class TestProcessEmbeds:
-    """Test processing Discord embeds."""
+    """Test processing Discord embeds for images."""
 
     @pytest.fixture
     def vision_helper(self):
-        """Create vision helper with API key."""
-        return DiscordVisionHelper(api_key="test_key")
+        """Create vision helper."""
+        return DiscordVisionHelper()
 
-    @pytest.fixture
-    def mock_embed_with_image(self):
-        """Create mock embed with image."""
+    @pytest.mark.asyncio
+    async def test_empty_embeds(self, vision_helper):
+        """Test with empty embeds list returns empty list."""
+        result = await vision_helper.process_embeds([])
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_embed_with_image(self, vision_helper):
+        """Test embed with image URL."""
+        import base64
+
         embed = MagicMock(spec=discord.Embed)
         embed.image = MagicMock()
         embed.image.url = "https://example.com/image.png"
         embed.thumbnail = None
-        return embed
 
-    @pytest.fixture
-    def mock_embed_without_image(self):
-        """Create mock embed without image."""
-        embed = MagicMock(spec=discord.Embed)
-        embed.image = None
-        embed.thumbnail = None
-        return embed
+        mock_image = ImageContent(
+            source_type="base64", data=base64.b64encode(b"png").decode(), media_type="image/png", filename="image.png"
+        )
 
-    @pytest.mark.asyncio
-    async def test_process_embeds_no_api_key(self, mock_embed_with_image):
-        """Test processing embeds without API key."""
-        helper = DiscordVisionHelper()
-        result = await helper.process_embeds([mock_embed_with_image])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_process_embeds_empty_list(self, vision_helper):
-        """Test processing empty embed list."""
-        result = await vision_helper.process_embeds([])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_process_embeds_no_images(self, vision_helper, mock_embed_without_image):
-        """Test processing embeds without images."""
-        result = await vision_helper.process_embeds([mock_embed_without_image])
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_process_embeds_with_images(self, vision_helper, mock_embed_with_image):
-        """Test processing embeds with images."""
-        with patch.object(vision_helper, "_process_image_url", return_value="Embed image description"):
-            result = await vision_helper.process_embeds([mock_embed_with_image])
-            assert "Embed image description" in result
-
-
-class TestPrivateMethods:
-    """Test private methods of vision helper."""
-
-    @pytest.fixture
-    def vision_helper(self):
-        """Create vision helper with API key."""
-        return DiscordVisionHelper(api_key="test_key")
-
-    @pytest.mark.asyncio
-    async def test_process_single_image_size_limit(self, vision_helper, mock_attachment):
-        """Test single image processing with size limit."""
-        large_attachment = mock_attachment("large.png", "image/png", size=25 * 1024 * 1024)
-
-        result = await vision_helper._process_single_image(large_attachment)
-        assert "Image too large" in result
+        with patch.object(vision_helper, "url_to_image_content", new=AsyncMock(return_value=mock_image)):
+            result = await vision_helper.process_embeds([embed])
+            assert len(result) == 1
 
 
 class TestEdgeCases:
-    """Test edge cases and error conditions."""
+    """Test edge cases and error handling."""
 
-    @pytest.fixture
-    def vision_helper(self):
-        """Create vision helper with API key."""
-        return DiscordVisionHelper(api_key="test_key")
+    def test_max_image_size_validation(self):
+        """Test various max_image_size values."""
+        # Small size
+        helper = DiscordVisionHelper(max_image_size=1024)
+        assert helper.max_image_size == 1024
 
-    def test_initialization_edge_cases(self):
-        """Test initialization with edge cases."""
-        # Empty string API key should fallback to None via environment
-        with patch.dict(os.environ, {}, clear=True):
-            helper = DiscordVisionHelper(api_key="")
-            assert helper.api_key == "" or helper.api_key is None
+        # Large size
+        helper = DiscordVisionHelper(max_image_size=100 * 1024 * 1024)
+        assert helper.max_image_size == 100 * 1024 * 1024
 
-        # None API key explicitly
-        with patch.dict(os.environ, {}, clear=True):
-            helper = DiscordVisionHelper(api_key=None)
-            assert helper.api_key is None
+    @pytest.mark.asyncio
+    async def test_attachment_read_failure(self):
+        """Test handling of attachment read failure."""
+        helper = DiscordVisionHelper()
+
+        attachment = MagicMock(spec=discord.Attachment)
+        attachment.filename = "test.png"
+        attachment.content_type = "image/png"
+        attachment.size = 1000
+        attachment.url = "https://cdn.discord.com/test.png"
+        attachment.read = AsyncMock(side_effect=Exception("Read failed"))
+
+        result = await helper.attachments_to_image_content([attachment])
+        assert result == []

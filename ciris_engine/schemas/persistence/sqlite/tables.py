@@ -5,6 +5,7 @@ Provides SQL DDL for all database tables used by the agent.
 """
 
 # Tasks table for tracking agent tasks
+# Note: images_json column is added by migration 010_add_images_to_tasks.sql
 TASKS_TABLE_V1 = """
 CREATE TABLE IF NOT EXISTS tasks (
     task_id TEXT PRIMARY KEY,
@@ -21,10 +22,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- Task signing fields (from migration 003)
     signed_by TEXT,
     signature TEXT,
-    signed_at TEXT,
-    -- Native multimodal vision support (from migration 010)
-    -- Images are stored at the TASK level; thoughts inherit images from their source task
-    images_json TEXT
+    signed_at TEXT
 );
 """
 

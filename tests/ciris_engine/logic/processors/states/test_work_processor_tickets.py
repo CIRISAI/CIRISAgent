@@ -45,7 +45,7 @@ class TestWorkProcessorPhase1Claiming:
         )
 
         conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
+        for i in range(1, 11):  # Include migration 010 for images_json column
             migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
             if migration_files:
                 with open(migration_files[0], "r") as f:
@@ -264,7 +264,7 @@ class TestWorkProcessorPhase2Continuation:
         )
 
         conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
+        for i in range(1, 11):  # Include migration 010 for images_json column
             migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
             if migration_files:
                 with open(migration_files[0], "r") as f:
@@ -554,7 +554,7 @@ class TestWorkProcessorTwoPhaseIntegration:
         migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
 
         conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
+        for i in range(1, 11):  # Include migration 010 for images_json column
             migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
             if migration_files:
                 with open(migration_files[0], "r") as f:

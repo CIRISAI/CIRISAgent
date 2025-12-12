@@ -13,7 +13,7 @@ Authentication (who are you?) is handled by AuthenticationService.
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence.db.core import get_db_connection
@@ -116,11 +116,14 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     # ========== Deferral Helper Methods ==========
 
-    def _parse_deferral_context(self, context_json: Optional[str]) -> tuple[Dict[str, object], Dict[str, object]]:
+    def _parse_deferral_context(
+        self, context_json: Optional[Union[str, Dict[str, object]]]
+    ) -> tuple[Dict[str, object], Dict[str, object]]:
         """Parse context JSON and extract deferral info.
 
         Args:
-            context_json: JSON string containing context data
+            context_json: JSON string or dict containing context data
+                         (PostgreSQL jsonb returns dict directly)
 
         Returns:
             Tuple of (context_dict, deferral_info_dict)
@@ -129,9 +132,13 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         deferral_info: Dict[str, object] = {}
         if context_json:
             try:
-                context = json.loads(context_json)
+                # Handle both string JSON and pre-parsed dict (PostgreSQL jsonb)
+                if isinstance(context_json, dict):
+                    context = context_json
+                else:
+                    context = json.loads(context_json)
                 deferral_info = context.get("deferral", {})  # type: ignore[assignment]
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 pass
         return context, deferral_info
 

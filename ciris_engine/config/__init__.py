@@ -2,9 +2,20 @@
 Configuration module for CIRIS engine.
 
 This module provides configuration management for various aspects
-of the CIRIS system, including LLM pricing data.
+of the CIRIS system, including LLM pricing data and model capabilities.
 """
 
+from .model_capabilities import (
+    CapabilitiesMetadata,
+    CirisRequirements,
+    ModelCapabilities,
+    ModelCapabilitiesConfig,
+    ModelInfo,
+    ProviderModels,
+    RejectedModel,
+    TierInfo,
+    get_model_capabilities,
+)
 from .pricing_models import (
     EnvironmentalFactors,
     FallbackPricing,
@@ -17,6 +28,7 @@ from .pricing_models import (
 )
 
 __all__ = [
+    # Pricing models
     "PricingConfig",
     "ProviderConfig",
     "ModelConfig",
@@ -25,4 +37,14 @@ __all__ = [
     "EnvironmentalFactors",
     "PricingMetadata",
     "FallbackPricing",
+    # Model capabilities
+    "ModelCapabilitiesConfig",
+    "ModelCapabilities",
+    "ModelInfo",
+    "ProviderModels",
+    "CirisRequirements",
+    "TierInfo",
+    "RejectedModel",
+    "CapabilitiesMetadata",
+    "get_model_capabilities",
 ]

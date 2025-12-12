@@ -1,6 +1,15 @@
 package ai.ciris.mobile
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -10,10 +19,14 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -33,6 +46,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,13 +66,30 @@ class InteractFragment : Fragment() {
     private lateinit var adapter: ChatWithReasoningAdapter
     private lateinit var messageInput: EditText
     private lateinit var sendButton: ImageButton
+    private lateinit var attachButton: ImageButton
     private lateinit var statusDot: View
     private lateinit var statusText: TextView
     private lateinit var shutdownButton: Button
     private lateinit var emergencyButton: Button
     private lateinit var loadingIndicator: ProgressBar
     private lateinit var emptyStateContainer: LinearLayout
-    // SSE status is shown in the statusText instead
+    private lateinit var imagePreviewContainer: LinearLayout
+    private lateinit var imagePreview: ImageView
+    private lateinit var imageFilename: TextView
+    private lateinit var removeImageButton: ImageButton
+
+    // Attached image state
+    private var attachedImageUri: Uri? = null
+    private var attachedImageBase64: String? = null
+    private var attachedImageMediaType: String = "image/jpeg"
+    private var attachedImageFilename: String? = null
+    private var tempCameraFile: File? = null
+
+    // Attached document state (PDF, DOCX)
+    private var attachedDocumentUri: Uri? = null
+    private var attachedDocumentBase64: String? = null
+    private var attachedDocumentMediaType: String = "application/pdf"
+    private var attachedDocumentFilename: String? = null
 
     // Standard HTTP client for API calls
     private val client = OkHttpClient.Builder()
@@ -106,6 +138,40 @@ class InteractFragment : Fragment() {
         }
     }
 
+    // Activity result launchers for image picking
+    private val pickImageLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { handleSelectedImage(it) }
+    }
+
+    private val takePictureLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success: Boolean ->
+        if (success) {
+            tempCameraFile?.let { file ->
+                val uri = Uri.fromFile(file)
+                handleSelectedImage(uri)
+            }
+        }
+    }
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted: Boolean ->
+        if (granted) {
+            launchCamera()
+        } else {
+            Toast.makeText(requireContext(), "Camera permission required", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val pickDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { handleSelectedDocument(it) }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -138,12 +204,17 @@ class InteractFragment : Fragment() {
         recyclerView = view.findViewById(R.id.chatRecyclerView)
         messageInput = view.findViewById(R.id.messageInput)
         sendButton = view.findViewById(R.id.sendButton)
+        attachButton = view.findViewById(R.id.attachButton)
         statusDot = view.findViewById(R.id.statusDot)
         statusText = view.findViewById(R.id.statusText)
         shutdownButton = view.findViewById(R.id.shutdownButton)
         emergencyButton = view.findViewById(R.id.emergencyButton)
         loadingIndicator = view.findViewById(R.id.loadingIndicator)
         emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
+        imagePreviewContainer = view.findViewById(R.id.imagePreviewContainer)
+        imagePreview = view.findViewById(R.id.imagePreview)
+        imageFilename = view.findViewById(R.id.imageFilename)
+        removeImageButton = view.findViewById(R.id.removeImageButton)
 
         // Setup RecyclerView
         adapter = ChatWithReasoningAdapter(chatItems) { taskId ->
@@ -161,6 +232,8 @@ class InteractFragment : Fragment() {
 
         // Setup click listeners
         sendButton.setOnClickListener { sendMessage() }
+        attachButton.setOnClickListener { showAttachOptions() }
+        removeImageButton.setOnClickListener { clearAttachedImage() }
         shutdownButton.setOnClickListener { showShutdownDialog() }
         emergencyButton.setOnClickListener { showEmergencyShutdownDialog() }
 
@@ -547,19 +620,303 @@ class InteractFragment : Fragment() {
         }
     }
 
+    // ============== Image Handling ==============
+
+    private fun showAttachOptions() {
+        val options = arrayOf("📷 Take Photo", "🖼️ Choose Image", "📄 Attach Document (PDF/DOCX)")
+        AlertDialog.Builder(requireContext())
+            .setTitle("Attach File")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> checkCameraPermissionAndLaunch()
+                    1 -> pickImageLauncher.launch("image/*")
+                    2 -> pickDocumentLauncher.launch(arrayOf(
+                        "application/pdf",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/msword"
+                    ))
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun checkCameraPermissionAndLaunch() {
+        when {
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                launchCamera()
+            }
+            else -> {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+
+    private fun launchCamera() {
+        try {
+            val photoFile = File.createTempFile(
+                "CIRIS_${System.currentTimeMillis()}_",
+                ".jpg",
+                requireContext().cacheDir
+            )
+            tempCameraFile = photoFile
+
+            val photoUri = FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                photoFile
+            )
+            takePictureLauncher.launch(photoUri)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching camera", e)
+            Toast.makeText(requireContext(), "Failed to open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleSelectedImage(uri: Uri) {
+        try {
+            val contentResolver = requireContext().contentResolver
+
+            // Get MIME type
+            val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+            attachedImageMediaType = mimeType
+
+            // Get filename
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        attachedImageFilename = it.getString(nameIndex)
+                    }
+                }
+            }
+            if (attachedImageFilename == null) {
+                attachedImageFilename = "image_${System.currentTimeMillis()}.jpg"
+            }
+
+            // Read and compress image
+            val inputStream = contentResolver.openInputStream(uri)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+
+            if (bitmap == null) {
+                Toast.makeText(requireContext(), "Failed to load image", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // Resize if needed (max 2048px on longest side for API efficiency)
+            val scaledBitmap = scaleBitmapIfNeeded(bitmap, 2048)
+
+            // Convert to base64
+            val outputStream = ByteArrayOutputStream()
+            val compressFormat = when {
+                mimeType.contains("png") -> Bitmap.CompressFormat.PNG
+                else -> Bitmap.CompressFormat.JPEG
+            }
+            scaledBitmap.compress(compressFormat, 85, outputStream)
+            val imageBytes = outputStream.toByteArray()
+            attachedImageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+            attachedImageUri = uri
+
+            // Update UI
+            imagePreview.setImageBitmap(scaledBitmap)
+            imageFilename.text = attachedImageFilename
+            imagePreviewContainer.visibility = View.VISIBLE
+
+            Log.i(TAG, "Image attached: ${attachedImageFilename}, ${imageBytes.size} bytes, $mimeType")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling image", e)
+            Toast.makeText(requireContext(), "Failed to process image: ${e.message}", Toast.LENGTH_SHORT).show()
+            clearAttachedImage()
+        }
+    }
+
+    private fun scaleBitmapIfNeeded(bitmap: Bitmap, maxSize: Int): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+
+        if (width <= maxSize && height <= maxSize) {
+            return bitmap
+        }
+
+        val ratio = width.toFloat() / height.toFloat()
+        val newWidth: Int
+        val newHeight: Int
+
+        if (width > height) {
+            newWidth = maxSize
+            newHeight = (maxSize / ratio).toInt()
+        } else {
+            newHeight = maxSize
+            newWidth = (maxSize * ratio).toInt()
+        }
+
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+    }
+
+    private fun clearAttachedImage() {
+        attachedImageUri = null
+        attachedImageBase64 = null
+        attachedImageMediaType = "image/jpeg"
+        attachedImageFilename = null
+        tempCameraFile = null
+        attachedDocumentUri = null
+        attachedDocumentBase64 = null
+        attachedDocumentMediaType = "application/pdf"
+        attachedDocumentFilename = null
+        imagePreviewContainer.visibility = View.GONE
+        imagePreview.setImageDrawable(null)
+        imageFilename.text = ""
+    }
+
+    // ============== Document Handling ==============
+
+    private fun handleSelectedDocument(uri: Uri) {
+        try {
+            val contentResolver = requireContext().contentResolver
+
+            // Get MIME type
+            val mimeType = contentResolver.getType(uri) ?: "application/pdf"
+            attachedDocumentMediaType = mimeType
+
+            // Get filename
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            var fileSize: Long = 0
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        attachedDocumentFilename = it.getString(nameIndex)
+                    }
+                    val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (sizeIndex >= 0) {
+                        fileSize = it.getLong(sizeIndex)
+                    }
+                }
+            }
+            if (attachedDocumentFilename == null) {
+                val ext = if (mimeType.contains("pdf")) "pdf" else "docx"
+                attachedDocumentFilename = "document_${System.currentTimeMillis()}.$ext"
+            }
+
+            // Check file size (max 10MB for documents)
+            if (fileSize > 10 * 1024 * 1024) {
+                Toast.makeText(requireContext(), "Document too large (max 10MB)", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            // Read file content
+            val inputStream = contentResolver.openInputStream(uri)
+            val bytes = inputStream?.readBytes()
+            inputStream?.close()
+
+            if (bytes == null) {
+                Toast.makeText(requireContext(), "Failed to read document", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            attachedDocumentBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            attachedDocumentUri = uri
+
+            // Clear any attached image (can't attach both)
+            attachedImageUri = null
+            attachedImageBase64 = null
+
+            // Update UI - reuse image preview for document
+            imagePreview.setImageResource(
+                when {
+                    mimeType.contains("pdf") -> android.R.drawable.ic_menu_agenda
+                    else -> android.R.drawable.ic_menu_edit
+                }
+            )
+            imageFilename.text = "${attachedDocumentFilename} (${formatFileSize(bytes.size.toLong())})"
+            imagePreviewContainer.visibility = View.VISIBLE
+
+            Log.i(TAG, "Document attached: ${attachedDocumentFilename}, ${bytes.size} bytes, $mimeType")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling document", e)
+            Toast.makeText(requireContext(), "Failed to process document: ${e.message}", Toast.LENGTH_SHORT).show()
+            clearAttachedImage()
+        }
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            else -> "${bytes / (1024 * 1024)} MB"
+        }
+    }
+
+    // ============== Message Sending ==============
+
     private fun sendMessage() {
         val text = messageInput.text.toString().trim()
-        if (text.isEmpty() || isSending) return
+        val hasImage = attachedImageBase64 != null
+        val hasDocument = attachedDocumentBase64 != null
 
-        Log.d(TAG, "Sending message: $text")
+        // Allow sending with just an attachment (no text required)
+        if (text.isEmpty() && !hasImage && !hasDocument) return
+        if (isSending) return
+
+        Log.d(TAG, "Sending message: $text, hasImage=$hasImage, hasDocument=$hasDocument")
         isSending = true
         sendButton.isEnabled = false
+        attachButton.isEnabled = false
         messageInput.isEnabled = false
+
+        // Capture attachment data before clearing
+        val imageBase64 = attachedImageBase64
+        val imageMediaType = attachedImageMediaType
+        val imageFilename = attachedImageFilename
+        val documentBase64 = attachedDocumentBase64
+        val documentMediaType = attachedDocumentMediaType
+        val documentFilename = attachedDocumentFilename
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val url = "$BASE_URL/v1/agent/message"
-                val jsonBody = gson.toJson(mapOf("message" to text))
+                // Use /agent/interact endpoint when sending attachments, /agent/message for text-only
+                val url = if (imageBase64 != null || documentBase64 != null) {
+                    "$BASE_URL/v1/agent/interact"
+                } else {
+                    "$BASE_URL/v1/agent/message"
+                }
+
+                val requestBody = mutableMapOf<String, Any>()
+                requestBody["message"] = when {
+                    text.isNotEmpty() -> text
+                    imageBase64 != null -> "What do you see in this image?"
+                    documentBase64 != null -> "Please analyze this document."
+                    else -> ""
+                }
+
+                // Add images if present
+                if (imageBase64 != null) {
+                    val imagePayload = mapOf(
+                        "data" to imageBase64,
+                        "media_type" to imageMediaType,
+                        "filename" to imageFilename
+                    )
+                    requestBody["images"] = listOf(imagePayload)
+                }
+
+                // Add documents if present
+                if (documentBase64 != null) {
+                    val documentPayload = mapOf(
+                        "data" to documentBase64,
+                        "media_type" to documentMediaType,
+                        "filename" to documentFilename
+                    )
+                    requestBody["documents"] = listOf(documentPayload)
+                }
+
+                val jsonBody = gson.toJson(requestBody)
 
                 val requestBuilder = Request.Builder()
                     .url(url)
@@ -614,7 +971,10 @@ class InteractFragment : Fragment() {
                     if (!isAdded) return@withContext
                     isSending = false
                     sendButton.isEnabled = true
+                    attachButton.isEnabled = true
                     messageInput.isEnabled = true
+                    // Clear attachments after successful send
+                    clearAttachedImage()
                 }
             }
         }

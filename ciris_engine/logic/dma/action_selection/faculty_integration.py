@@ -160,6 +160,7 @@ class FacultyIntegration:
             faculty_enhanced=True,
             recursive_evaluation=False,
             conscience_context=conscience_failure_context,
+            images=triaged_inputs.get("images", []),  # Pass through images for vision
         )
 
         # Copy any additional fields from triaged_inputs

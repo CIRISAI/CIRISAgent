@@ -936,7 +936,13 @@ class InteractFragment : Fragment() {
 
                         if (!body.isNullOrEmpty()) {
                             try {
+                                Log.d(TAG, "[SUBMIT_RESPONSE] Raw body: $body")
                                 val submitResponse = gson.fromJson(body, MessageSubmitResponse::class.java)
+                                Log.d(TAG, "[SUBMIT_RESPONSE] Parsed: accepted=${submitResponse.data?.accepted}, " +
+                                    "rejectionReason=${submitResponse.data?.rejectionReason}, " +
+                                    "rejectionDetail=${submitResponse.data?.rejectionDetail}, " +
+                                    "messageId=${submitResponse.data?.messageId}, " +
+                                    "taskId=${submitResponse.data?.taskId}")
                                 if (submitResponse.data?.accepted == true) {
                                     // Track task_id for this message
                                     val messageId = submitResponse.data.messageId
@@ -948,6 +954,8 @@ class InteractFragment : Fragment() {
                                     Toast.makeText(requireContext(), "Processing...", Toast.LENGTH_SHORT).show()
                                 } else {
                                     val reason = submitResponse.data?.rejectionDetail ?: "Unknown"
+                                    Log.w(TAG, "[SUBMIT_RESPONSE] Message NOT accepted - showing rejection. " +
+                                        "accepted=${submitResponse.data?.accepted}, reason=$reason")
                                     Toast.makeText(requireContext(), "Rejected: $reason", Toast.LENGTH_LONG).show()
                                 }
                             } catch (e: Exception) {

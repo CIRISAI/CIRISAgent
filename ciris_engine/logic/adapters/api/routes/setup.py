@@ -206,15 +206,85 @@ def _get_llm_providers() -> List[LLMProvider]:
         LLMProvider(
             id="openai",
             name="OpenAI",
-            description="Official OpenAI API (GPT-4, GPT-3.5, etc.)",
+            description="Official OpenAI API (GPT-4, GPT-5.2, etc.)",
             requires_api_key=True,
             requires_base_url=False,
-            requires_model=False,
+            requires_model=True,
             default_base_url=None,
-            default_model="gpt-4",
+            default_model="gpt-5.2",
             examples=[
                 "Standard OpenAI API",
                 "Azure OpenAI Service",
+            ],
+        ),
+        LLMProvider(
+            id="anthropic",
+            name="Anthropic",
+            description="Claude models (Claude 3.5 Sonnet, Opus, Haiku)",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url=None,
+            default_model="claude-3-5-sonnet-20241022",
+            examples=[
+                "Claude 3.5 Sonnet",
+                "Claude 3 Opus",
+            ],
+        ),
+        LLMProvider(
+            id="openrouter",
+            name="OpenRouter",
+            description="Access 100+ models via OpenRouter",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url="https://openrouter.ai/api/v1",
+            default_model="meta-llama/llama-4-maverick",
+            examples=[
+                "Llama 4 Maverick",
+                "GPT-4o via OpenRouter",
+            ],
+        ),
+        LLMProvider(
+            id="groq",
+            name="Groq",
+            description="Ultra-fast LPU inference (Llama 3.3, Mixtral)",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url="https://api.groq.com/openai/v1",
+            default_model="llama-3.3-70b-versatile",
+            examples=[
+                "Llama 3.3 70B Versatile",
+                "Llama 3.2 90B Vision",
+            ],
+        ),
+        LLMProvider(
+            id="together",
+            name="Together AI",
+            description="High-performance open models",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url="https://api.together.xyz/v1",
+            default_model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            examples=[
+                "Llama 3.3 70B Turbo",
+                "Llama Vision Free",
+            ],
+        ),
+        LLMProvider(
+            id="google",
+            name="Google AI",
+            description="Gemini models (Gemini 2.0, 1.5 Pro)",
+            requires_api_key=True,
+            requires_base_url=False,
+            requires_model=True,
+            default_base_url="https://generativelanguage.googleapis.com/v1beta",
+            default_model="gemini-2.0-flash-exp",
+            examples=[
+                "Gemini 2.0 Flash",
+                "Gemini 1.5 Pro",
             ],
         ),
         LLMProvider(
@@ -235,7 +305,7 @@ def _get_llm_providers() -> List[LLMProvider]:
         ),
         LLMProvider(
             id="other",
-            name="OpenAI-Compatible Provider",
+            name="Other",
             description="Any OpenAI-compatible API endpoint",
             requires_api_key=True,
             requires_base_url=True,
@@ -243,10 +313,8 @@ def _get_llm_providers() -> List[LLMProvider]:
             default_base_url=None,
             default_model=None,
             examples=[
-                "Together AI: https://api.together.xyz/v1",
-                "Groq: https://api.groq.com/openai/v1",
-                "Fireworks: https://api.fireworks.ai/inference/v1",
-                "Anyscale: https://api.endpoints.anyscale.com/v1",
+                "Custom endpoints",
+                "Private deployments",
             ],
         ),
     ]
@@ -433,11 +501,25 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
     Returns:
         Validation response with success/failure status
     """
+    logger.info("[VALIDATE_LLM] " + "=" * 50)
+    logger.info(f"[VALIDATE_LLM] Starting validation for provider: {config.provider}")
+    logger.info(
+        f"[VALIDATE_LLM] API key provided: {bool(config.api_key)} (length: {len(config.api_key) if config.api_key else 0})"
+    )
+    logger.info(
+        f"[VALIDATE_LLM] API key prefix: {config.api_key[:20] + '...' if config.api_key and len(config.api_key) > 20 else config.api_key}"
+    )
+    logger.info(f"[VALIDATE_LLM] Base URL: {config.base_url}")
+    logger.info(f"[VALIDATE_LLM] Model: {config.model}")
+
     try:
         # Validate API key for provider type
         api_key_error = _validate_api_key_for_provider(config)
         if api_key_error:
+            logger.warning(f"[VALIDATE_LLM] API key validation FAILED: {api_key_error.error}")
             return api_key_error
+
+        logger.info("[VALIDATE_LLM] API key format validation passed")
 
         # Import OpenAI client
         from openai import AsyncOpenAI
@@ -447,22 +529,30 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
         if config.base_url:
             client_kwargs["base_url"] = config.base_url
 
+        logger.info(f"[VALIDATE_LLM] Creating OpenAI client with base_url: {client_kwargs.get('base_url', 'default')}")
+
         # Create client and test connection
         client = AsyncOpenAI(**client_kwargs)
 
         try:
+            logger.info("[VALIDATE_LLM] Attempting to list models from API...")
             models = await client.models.list()
             model_count = len(models.data) if hasattr(models, "data") else 0
 
+            logger.info(f"[VALIDATE_LLM] SUCCESS! Found {model_count} models")
             return LLMValidationResponse(
                 valid=True,
                 message=f"Connection successful! Found {model_count} available models.",
                 error=None,
             )
         except Exception as e:
-            return _classify_llm_connection_error(e, config.base_url)
+            logger.error(f"[VALIDATE_LLM] API call FAILED: {type(e).__name__}: {e}")
+            result = _classify_llm_connection_error(e, config.base_url)
+            logger.error(f"[VALIDATE_LLM] Classified error - valid: {result.valid}, error: {result.error}")
+            return result
 
     except Exception as e:
+        logger.error(f"[VALIDATE_LLM] Unexpected error: {type(e).__name__}: {e}")
         return LLMValidationResponse(valid=False, message="Validation error", error=str(e))
 
 
@@ -954,6 +1044,103 @@ async def list_adapters() -> SuccessResponse[List[AdapterConfig]]:
     """
     adapters = _get_available_adapters()
     return SuccessResponse(data=adapters)
+
+
+@router.get("/models")
+async def get_model_capabilities_endpoint() -> SuccessResponse[Dict[str, Any]]:
+    """Get CIRIS-compatible LLM model capabilities.
+
+    Returns the on-device model capabilities database for BYOK model selection.
+    Used by the wizard's Advanced settings to show compatible models per provider.
+    This endpoint is always accessible without authentication.
+
+    Returns model info including:
+    - CIRIS compatibility requirements (128K+ context, tool use, vision)
+    - Per-provider model listings with capability flags
+    - Tiers (default, fast, fallback, premium)
+    - Recommendations and rejection reasons
+    """
+    from ciris_engine.config import get_model_capabilities
+
+    try:
+        config = get_model_capabilities()
+
+        # Convert to dict for JSON response
+        return SuccessResponse(
+            data={
+                "version": config.version,
+                "last_updated": config.last_updated.isoformat(),
+                "ciris_requirements": config.ciris_requirements.model_dump(),
+                "providers": {
+                    provider_id: {
+                        "display_name": provider.display_name,
+                        "api_base": provider.api_base,
+                        "models": {model_id: model.model_dump() for model_id, model in provider.models.items()},
+                    }
+                    for provider_id, provider in config.providers.items()
+                },
+                "tiers": {tier_id: tier.model_dump() for tier_id, tier in config.tiers.items()},
+                "rejected_models": {model_id: model.model_dump() for model_id, model in config.rejected_models.items()},
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to load model capabilities: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load model capabilities: {str(e)}",
+        )
+
+
+@router.get("/models/{provider_id}")
+async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any]]:
+    """Get CIRIS-compatible models for a specific provider.
+
+    Returns models for the given provider with compatibility information.
+    Used by the wizard to populate model dropdown after provider selection.
+    """
+    from ciris_engine.config import get_model_capabilities
+
+    try:
+        config = get_model_capabilities()
+
+        if provider_id not in config.providers:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Provider '{provider_id}' not found")
+
+        provider = config.providers[provider_id]
+        compatible_models = []
+        incompatible_models = []
+
+        for model_id, model in provider.models.items():
+            model_data = {
+                "id": model_id,
+                **model.model_dump(),
+            }
+            if model.ciris_compatible:
+                compatible_models.append(model_data)
+            else:
+                incompatible_models.append(model_data)
+
+        # Sort: recommended first, then by display name
+        compatible_models.sort(key=lambda m: (not m.get("ciris_recommended", False), m["display_name"]))
+
+        return SuccessResponse(
+            data={
+                "provider_id": provider_id,
+                "display_name": provider.display_name,
+                "api_base": provider.api_base,
+                "compatible_models": compatible_models,
+                "incompatible_models": incompatible_models,
+                "ciris_requirements": config.ciris_requirements.model_dump(),
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get provider models: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get provider models: {str(e)}",
+        )
 
 
 @router.post("/validate-llm", response_model=SuccessResponse[LLMValidationResponse])

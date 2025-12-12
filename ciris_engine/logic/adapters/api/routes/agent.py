@@ -339,6 +339,43 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
         return ""
 
 
+async def _track_air_interaction(
+    auth: AuthContext, channel_id: str, message_content: str, request: Request
+) -> Optional[str]:
+    """
+    Track interaction for AIR (Artificial Interaction Reminder) parasocial prevention.
+
+    This monitors 1:1 API interactions for:
+    - Time-based triggers (30 min continuous)
+    - Message-based triggers (20+ messages)
+    - Valence pattern triggers (anthropomorphism, dependency, emotional intensity)
+
+    Returns reminder message if threshold exceeded, None otherwise.
+    """
+    try:
+        # Get consent manager which hosts the AIR manager
+        consent_manager = getattr(request.app.state, "consent_manager", None)
+        if not consent_manager:
+            return None
+
+        # Track interaction and get potential reminder
+        reminder = await consent_manager.track_interaction(
+            user_id=auth.user_id,
+            channel_id=channel_id,
+            channel_type="api",
+            message_content=message_content,
+        )
+
+        if reminder:
+            logger.info(f"[AIR] Reminder triggered for user {auth.user_id}")
+
+        return reminder
+
+    except Exception as e:
+        logger.debug(f"AIR tracking error (non-fatal): {e}")
+        return None
+
+
 def _derive_credit_account(
     auth: AuthContext,
     request: Request,
@@ -608,6 +645,10 @@ async def submit_message(
     # Handle consent for user
     await _handle_consent_for_user(auth, channel_id, request)
 
+    # Track interaction for AIR (parasocial attachment prevention)
+    # Note: For async pattern, reminder is logged but not returned (user polls for response)
+    await _track_air_interaction(auth, channel_id, body.message, request)
+
     # Track submission time
     submitted_at = datetime.now(timezone.utc)
 
@@ -715,6 +756,9 @@ async def interact(
     # Handle consent for user
     consent_notice = await _handle_consent_for_user(auth, channel_id, request)
 
+    # Track interaction for AIR (parasocial attachment prevention)
+    air_reminder = await _track_air_interaction(auth, channel_id, body.message, request)
+
     # Track timing
     start_time = datetime.now(timezone.utc)
 
@@ -763,6 +807,10 @@ async def interact(
         # Add consent notice if this is first interaction
         if consent_notice:
             response_content += consent_notice
+
+        # Add AIR reminder if triggered (parasocial attachment prevention)
+        if air_reminder:
+            response_content += "\n\n---\n" + air_reminder
 
         # Clean up and calculate timing
         _cleanup_interaction_tracking(message_id)

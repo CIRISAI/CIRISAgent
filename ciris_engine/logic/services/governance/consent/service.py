@@ -229,7 +229,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             raise
 
     async def track_interaction(
-        self, user_id: str, channel_id: str, channel_type: Optional[str] = None
+        self, user_id: str, channel_id: str, channel_type: Optional[str] = None, message_content: Optional[str] = None
     ) -> Optional[str]:
         """
         Track user interaction for parasocial attachment prevention.
@@ -238,17 +238,21 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         to monitor 1:1 API interactions and provide break reminders when thresholds are exceeded.
 
         Scope: API channels only (1:1 interactions, not community moderation)
-        Triggers: 30 minutes continuous interaction OR 20+ messages
+        Triggers:
+        - 30 minutes continuous interaction
+        - 20+ messages
+        - High valence patterns (anthropomorphism, dependency, emotional intensity)
 
         Args:
             user_id: User ID
             channel_id: Channel ID
             channel_type: Channel type (api, discord, cli, unknown) - if None, will infer from ID
+            message_content: Optional message content for valence analysis
 
         Returns:
             Reminder message if threshold exceeded, None otherwise
         """
-        return self._air_manager.track_interaction(user_id, channel_id, channel_type)
+        return self._air_manager.track_interaction(user_id, channel_id, channel_type, message_content)
 
     async def grant_consent(self, request: ConsentRequest, channel_id: Optional[str] = None) -> ConsentStatus:
         """

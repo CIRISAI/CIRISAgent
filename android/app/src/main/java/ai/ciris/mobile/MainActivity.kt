@@ -1710,7 +1710,12 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     if (result.success) {
-                        creditsCountText.text = result.balance.toString()
+                        if (result.isByok) {
+                            // BYOK mode - no billing needed
+                            creditsCountText.text = "BYOK"
+                        } else {
+                            creditsCountText.text = result.balance.toString()
+                        }
                     } else {
                         creditsCountText.text = "--"
                         // Retry if credit provider is still initializing (up to 6 times = 12 seconds)
@@ -2381,7 +2386,14 @@ class MainActivity : AppCompatActivity() {
             return null
         }
 
-        Log.i(TAG, "[PreflightTokenRefresh] Refreshing Google ID token before Python startup...")
+        // If we already have a fresh token from LoginActivity (just signed in), use it directly
+        // This avoids the race condition where silent sign-in fails right after interactive sign-in
+        if (!googleIdToken.isNullOrEmpty()) {
+            Log.i(TAG, "[PreflightTokenRefresh] Using existing token from LoginActivity (${googleIdToken!!.length} chars)")
+            return googleIdToken
+        }
+
+        Log.i(TAG, "[PreflightTokenRefresh] No token from LoginActivity, attempting silent sign-in...")
 
         return suspendCoroutine { continuation ->
             googleSignInHelper!!.silentSignIn { result ->
@@ -2410,6 +2422,9 @@ class MainActivity : AppCompatActivity() {
     /**
      * Write a fresh Google ID token to the .env file BEFORE Python starts.
      * This ensures Python's billing service has a valid token on first read.
+     *
+     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm.ciris.ai).
+     * In BYOK mode, the user's API key is preserved and only CIRIS_BILLING_GOOGLE_ID_TOKEN is updated.
      */
     private fun writeTokenToEnvFile(token: String): Boolean {
         val envFile = cirisHomePath?.let { File(it, ".env") } ?: run {
@@ -2427,29 +2442,38 @@ class MainActivity : AppCompatActivity() {
 
             // Update existing .env file
             var content = envFile.readText()
-            var updated = false
 
-            // Update OPENAI_API_KEY
-            val openaiPatterns = listOf(
-                Regex("""OPENAI_API_KEY="[^"]*""""),
-                Regex("""OPENAI_API_KEY='[^']*'"""),
-                Regex("""OPENAI_API_KEY=[^\n]*""")
-            )
-            for (pattern in openaiPatterns) {
-                if (pattern.containsMatchIn(content)) {
-                    content = pattern.replace(content, """OPENAI_API_KEY="$token"""")
-                    updated = true
-                    break
+            // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
+            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If not, we're in BYOK mode and should NOT overwrite the user's API key
+            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+
+            if (isCirisProxyMode) {
+                // CIRIS proxy mode: Update OPENAI_API_KEY with Google token
+                Log.i(TAG, "[PreflightTokenRefresh] CIRIS proxy mode detected - updating OPENAI_API_KEY")
+                val openaiPatterns = listOf(
+                    Regex("""OPENAI_API_KEY="[^"]*""""),
+                    Regex("""OPENAI_API_KEY='[^']*'"""),
+                    Regex("""OPENAI_API_KEY=[^\n]*""")
+                )
+                var openaiUpdated = false
+                for (pattern in openaiPatterns) {
+                    if (pattern.containsMatchIn(content)) {
+                        content = pattern.replace(content, """OPENAI_API_KEY="$token"""")
+                        openaiUpdated = true
+                        break
+                    }
                 }
+                // If OPENAI_API_KEY not found, append it
+                if (!openaiUpdated) {
+                    content += "\nOPENAI_API_KEY=\"$token\"\n"
+                }
+            } else {
+                // BYOK mode: Don't touch OPENAI_API_KEY - user has their own key
+                Log.i(TAG, "[PreflightTokenRefresh] BYOK mode detected - preserving user's OPENAI_API_KEY")
             }
 
-            // If OPENAI_API_KEY not found, append it
-            if (!updated) {
-                content += "\nOPENAI_API_KEY=\"$token\"\n"
-                updated = true
-            }
-
-            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN
+            // Always update CIRIS_BILLING_GOOGLE_ID_TOKEN for billing purposes
             val billingPatterns = listOf(
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN="[^"]*""""),
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN='[^']*'"""),
@@ -2468,7 +2492,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             envFile.writeText(content)
-            Log.i(TAG, "[PreflightTokenRefresh] Updated .env file with fresh token")
+            Log.i(TAG, "[PreflightTokenRefresh] Updated .env file (proxy mode: $isCirisProxyMode)")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "[PreflightTokenRefresh] Failed to write .env file: ${e.message}")

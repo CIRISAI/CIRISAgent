@@ -193,7 +193,7 @@ class ComponentBuilder:
         conscience_registry.register_conscience(
             "thought_depth",
             ThoughtDepthGuardrail(time_service=time_service, max_depth=config.security.max_thought_depth),
-            priority=4,  # Run after other consciences
+            priority=4,
         )
 
         # Build context provider

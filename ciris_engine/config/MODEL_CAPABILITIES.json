@@ -82,6 +82,36 @@
           "tier": "legacy",
           "ciris_compatible": false,
           "rejection_reason": "Context window below 128K minimum"
+        },
+        "gpt-5.2": {
+          "display_name": "GPT-5.2 Thinking",
+          "context_window": 256000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": true,
+          "notes": "OpenAI's most advanced model (Dec 2025) - excellent for professional work and agentic tasks"
+        },
+        "gpt-5.2-chat-latest": {
+          "display_name": "GPT-5.2 Instant",
+          "context_window": 256000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fast version of GPT-5.2 - optimized for writing and information seeking"
         }
       }
     },

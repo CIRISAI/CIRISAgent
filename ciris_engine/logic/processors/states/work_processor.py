@@ -120,6 +120,17 @@ class WorkProcessor(BaseProcessor):
             logger.debug(f"Generated {generated} seed thoughts")
             round_metrics["thoughts_generated"] = generated
 
+            # Phase 2.5: Recovery thought generation for tasks with updated info but no active thoughts
+            logger.debug("Phase 2.5: Generating recovery thoughts...")
+            tasks_needing_recovery = self.task_manager.get_tasks_needing_recovery()
+            if tasks_needing_recovery:
+                logger.info(f"[RECOVERY] Found {len(tasks_needing_recovery)} tasks needing recovery thoughts")
+                recovery_generated = self.thought_manager.generate_recovery_thoughts(
+                    tasks_needing_recovery, round_number
+                )
+                logger.debug(f"Generated {recovery_generated} recovery thoughts")
+                round_metrics["thoughts_generated"] = round_metrics.get("thoughts_generated", 0) + recovery_generated
+
             # Phase 3: Populate processing queue
             logger.debug("Phase 3: Populating processing queue...")
             queue_size = self.thought_manager.populate_queue(round_number)

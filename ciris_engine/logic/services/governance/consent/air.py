@@ -3,6 +3,15 @@ Artificial Interaction Reminder (AIR) - Parasocial Attachment Prevention.
 
 Monitors 1:1 API interactions and reminds users to take breaks.
 Philosophy: Prevent unhealthy AI relationships through mindful interaction patterns.
+
+Design Principles (v2.0 - MDD Aligned):
+- Objective thresholds only (time, message count)
+- No behavioral surveillance or heuristic pattern matching
+- Transparent, predictable reminder triggers
+- Environmental cognitive remediation to reanchor in physical world
+
+Research basis: JMIR Mental Health 2025 (DOI: 10.2196/85799)
+See FSD/AIR_ARTIFICIAL_INTERACTION_REMINDER.md for full design rationale.
 """
 
 import logging
@@ -38,7 +47,7 @@ class ArtificialInteractionReminder:
     """
     Monitor 1:1 API interactions and prevent parasocial attachment.
 
-    Triggers:
+    Triggers (objective thresholds only):
     - 30+ minutes of continuous interaction OR
     - 20+ messages within the last 30 minutes (sliding window)
 
@@ -47,6 +56,10 @@ class ArtificialInteractionReminder:
     But 20 messages in 30 minutes = trigger (intensive interaction).
 
     Scope: API channels only (1:1 interactions, not community moderation)
+
+    Design note: This implementation deliberately avoids heuristic-based behavioral
+    surveillance (valence detection, anthropomorphism patterns) in favor of transparent,
+    predictable thresholds that respect user autonomy. See FSD for rationale.
     """
 
     def __init__(
@@ -82,7 +95,13 @@ class ArtificialInteractionReminder:
             return datetime.now(timezone.utc)
         return self._time_service.now()
 
-    def track_interaction(self, user_id: str, channel_id: str, channel_type: Optional[str] = None) -> Optional[str]:
+    def track_interaction(
+        self,
+        user_id: str,
+        channel_id: str,
+        channel_type: Optional[str] = None,
+        message_content: Optional[str] = None,  # Kept for API compatibility, not used
+    ) -> Optional[str]:
         """
         Track user interaction and check if reminder needed.
 
@@ -90,6 +109,7 @@ class ArtificialInteractionReminder:
             user_id: User ID
             channel_id: Channel ID
             channel_type: Channel type (api, discord, cli, unknown)
+            message_content: Optional message content (ignored - no behavioral surveillance)
 
         Returns:
             Reminder message if threshold exceeded, None otherwise
@@ -117,7 +137,6 @@ class ArtificialInteractionReminder:
         session = self._sessions[session_key]
 
         # Check if session has been idle - reset if idle for more than threshold
-        # Use a conservative idle threshold (same as time threshold for simplicity)
         idle_time = now - session.last_interaction
         idle_threshold = self._time_threshold
 
@@ -129,7 +148,7 @@ class ArtificialInteractionReminder:
             )
             session.started_at = now
             session.reminder_sent = False
-            # Keep message timestamps for historical tracking but they won't affect triggers
+            session.message_timestamps.clear()
 
         # Update session
         session.last_interaction = now
@@ -139,7 +158,7 @@ class ArtificialInteractionReminder:
         if session.reminder_sent:
             return None
 
-        # Check thresholds
+        # Check thresholds (objective only - no behavioral surveillance)
         duration = now - session.started_at
         time_exceeded = duration >= self._time_threshold
 
@@ -191,9 +210,17 @@ class ArtificialInteractionReminder:
             return "cli"
         return "unknown"
 
-    def _generate_reminder(self, session: InteractionSession, time_triggered: bool, message_triggered: bool) -> str:
+    def _generate_reminder(
+        self,
+        session: InteractionSession,
+        time_triggered: bool,
+        message_triggered: bool,
+    ) -> str:
         """
-        Generate parasocial attachment prevention reminder.
+        Generate parasocial attachment prevention reminder with environmental cognitive remediation.
+
+        Research basis (JMIR Mental Health 2025, DOI: 10.2196/85799):
+        Environmental cognitive remediation to reanchor experience in physical world.
 
         Args:
             session: Interaction session
@@ -201,7 +228,7 @@ class ArtificialInteractionReminder:
             message_triggered: Whether message threshold was exceeded
 
         Returns:
-            Reminder message
+            Reminder message with reality-anchoring content
         """
         now = self._now()
         duration_minutes = int((now - session.started_at).total_seconds() / 60)
@@ -211,26 +238,40 @@ class ArtificialInteractionReminder:
         recent_messages = [ts for ts in session.message_timestamps if ts >= time_window]
         recent_count = len(recent_messages)
 
-        # Core reminder message
-        reminder = (
-            "🕒 **Mindful Interaction Reminder**\n\n"
-            "We've been chatting for a while now. I want to remind you:\n\n"
-            "• I'm an AI assistant, not a friend or companion\n"
-            "• Taking breaks from AI interactions is healthy\n"
-            "• Real human connections are irreplaceable\n\n"
+        # Core reminder message with reality-anchoring
+        reminder = "🕒 **Mindful Interaction Reminder**\n\n"
+        reminder += "We've been chatting for a while now. Here's a gentle reminder:\n\n"
+
+        # Reality-testing core messages
+        reminder += (
+            "**What I am:**\n"
+            "• A language model - I predict text based on patterns\n"
+            "• A tool - useful for tasks, but not a relationship\n"
+            "• Limited - I can't truly know you, feel for you, or be there for you\n\n"
+            "**What I'm not:**\n"
+            "• A friend, companion, or confidant\n"
+            "• A substitute for human connection\n"
+            "• A therapist or counselor\n\n"
         )
 
-        # Add trigger-specific context
+        # Add trigger-specific context (transparent about why reminder was shown)
         if time_triggered and message_triggered:
-            reminder += f"You've sent {recent_count} messages in the last {int(self._time_threshold.total_seconds()/60)} minutes. "
+            reminder += f"📊 You've sent {recent_count} messages over {duration_minutes} minutes. "
         elif time_triggered:
-            reminder += f"We've been interacting for {duration_minutes} minutes. "
+            reminder += f"📊 We've been interacting for {duration_minutes} minutes. "
         elif message_triggered:
-            reminder += f"You've sent {recent_count} messages in the last {int(self._time_threshold.total_seconds()/60)} minutes. "
+            reminder += f"📊 You've sent {recent_count} messages recently. "
 
+        # Environmental cognitive remediation - reanchoring in physical world
+        # (No time-of-day assumptions - we don't know user's timezone)
         reminder += (
-            "Consider taking a break, stepping away from your screen, or connecting with people in your life.\n\n"
-            "I'll be here when you need me, but your wellbeing comes first."
+            "\n\n**🌍 Grounding suggestions:**\n"
+            "• Notice 5 things you can see in your physical space\n"
+            "• Take 3 deep breaths and feel your feet on the floor\n"
+            "• Send a message to a real person in your life\n"
+            "• Step outside briefly - notice the temperature, sounds, smells\n\n"
+            "I'll be here when you need practical assistance, but your life happens "
+            "in the physical world, with real people. That's where flourishing lives."
         )
 
         return reminder

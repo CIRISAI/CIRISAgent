@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -107,6 +108,32 @@ class BillingApiClient(
     fun getBillingUrl(): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_BILLING_API_URL, billingApiUrl) ?: billingApiUrl
+    }
+
+    /**
+     * Check if we're using CIRIS proxy for LLM (billing required).
+     * Reads from the .env file to check if OPENAI_API_BASE contains ciris.ai.
+     * BYOK users don't need billing at all.
+     */
+    fun isCirisProxyMode(): Boolean {
+        try {
+            // Read from .env file in CIRIS home directory
+            val cirisHome = File(context.filesDir, "ciris")
+            val envFile = File(cirisHome, ".env")
+
+            if (!envFile.exists()) {
+                Log.d(TAG, "isCirisProxyMode: .env file not found, defaulting to false")
+                return false
+            }
+
+            val content = envFile.readText()
+            val isCirisProxy = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            Log.d(TAG, "isCirisProxyMode: $isCirisProxy (from .env file)")
+            return isCirisProxy
+        } catch (e: Exception) {
+            Log.e(TAG, "isCirisProxyMode: Error reading .env file", e)
+            return false
+        }
     }
 
     /**
@@ -522,14 +549,22 @@ class BillingApiClient(
      * Calls local Python server's GET /api/billing/credits endpoint.
      * This is the same endpoint used by the WebView billing page.
      *
+     * For BYOK users (not using CIRIS proxy), returns immediately with BYOK indicator
+     * without making any network calls.
+     *
      * Handles stale API keys by automatically refreshing on 401 errors.
      */
     fun getBalance(): BalanceResult {
+        // BYOK mode: no billing needed at all
+        if (!isCirisProxyMode()) {
+            Log.i(TAG, "getBalance() - BYOK mode detected, skipping billing check")
+            return BalanceResult(success = true, balance = -1, isByok = true)
+        }
         return getBalanceInternal(allowRetry = true)
     }
 
     private fun getBalanceInternal(allowRetry: Boolean): BalanceResult {
-        Log.i(TAG, "getBalance() called (allowRetry=$allowRetry)")
+        Log.i(TAG, "getBalance() called (allowRetry=$allowRetry, CIRIS proxy mode)")
 
         // Ensure we have a valid CIRIS API key (exchange Google ID token if needed)
         if (!ensureApiKey()) {
@@ -661,7 +696,8 @@ data class BalanceResponse(
 data class BalanceResult(
     val success: Boolean,
     val balance: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    val isByok: Boolean = false  // True when user is in BYOK mode (no billing needed)
 )
 
 // Token Exchange models for native Google Sign-In

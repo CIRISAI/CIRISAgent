@@ -73,9 +73,7 @@ class ModelInfo(BaseModel):
     active_params: Optional[str] = Field(default=None, description="Active parameters per token")
     context_window: int = Field(..., gt=0, description="Maximum context window in tokens")
     capabilities: ModelCapabilities = Field(..., description="Model capabilities")
-    underlying_providers: Optional[List[str]] = Field(
-        default=None, description="For aggregators: underlying providers"
-    )
+    underlying_providers: Optional[List[str]] = Field(default=None, description="For aggregators: underlying providers")
     tier: str = Field(..., description="Performance tier (default, fast, fallback, premium, legacy)")
     ciris_compatible: bool = Field(..., description="Meets CIRIS minimum requirements")
     ciris_recommended: bool = Field(default=False, description="Recommended for CIRIS use")
@@ -150,9 +148,7 @@ class ModelCapabilitiesConfig(BaseModel):
     metadata: CapabilitiesMetadata = Field(..., description="Configuration metadata")
     ciris_requirements: CirisRequirements = Field(..., description="CIRIS compatibility requirements")
     providers: Dict[str, ProviderModels] = Field(..., description="Provider configurations")
-    rejected_models: Dict[str, RejectedModel] = Field(
-        default_factory=dict, description="Models tested and rejected"
-    )
+    rejected_models: Dict[str, RejectedModel] = Field(default_factory=dict, description="Models tested and rejected")
     tiers: Dict[str, TierInfo] = Field(..., description="Performance tier definitions")
 
     model_config = ConfigDict(extra="forbid")
@@ -232,9 +228,7 @@ class ModelCapabilitiesConfig(BaseModel):
             return None
         return provider.models.get(model_id)
 
-    def get_compatible_models(
-        self, provider_name: Optional[str] = None
-    ) -> List[Tuple[str, str, ModelInfo]]:
+    def get_compatible_models(self, provider_name: Optional[str] = None) -> List[Tuple[str, str, ModelInfo]]:
         """
         Get all CIRIS-compatible models.
 
@@ -258,9 +252,7 @@ class ModelCapabilitiesConfig(BaseModel):
 
         return models
 
-    def get_recommended_models(
-        self, provider_name: Optional[str] = None
-    ) -> List[Tuple[str, str, ModelInfo]]:
+    def get_recommended_models(self, provider_name: Optional[str] = None) -> List[Tuple[str, str, ModelInfo]]:
         """
         Get CIRIS-recommended models.
 
@@ -276,9 +268,7 @@ class ModelCapabilitiesConfig(BaseModel):
             if info.ciris_recommended
         ]
 
-    def get_models_by_tier(
-        self, tier: str, provider_name: Optional[str] = None
-    ) -> List[Tuple[str, str, ModelInfo]]:
+    def get_models_by_tier(self, tier: str, provider_name: Optional[str] = None) -> List[Tuple[str, str, ModelInfo]]:
         """
         Get models by performance tier.
 
@@ -295,9 +285,7 @@ class ModelCapabilitiesConfig(BaseModel):
             if info.tier == tier
         ]
 
-    def get_models_with_vision(
-        self, provider_name: Optional[str] = None
-    ) -> List[Tuple[str, str, ModelInfo]]:
+    def get_models_with_vision(self, provider_name: Optional[str] = None) -> List[Tuple[str, str, ModelInfo]]:
         """
         Get models with vision/multimodal support.
 
@@ -313,9 +301,7 @@ class ModelCapabilitiesConfig(BaseModel):
             if info.capabilities.vision
         ]
 
-    def check_model_compatibility(
-        self, provider_name: str, model_id: str
-    ) -> Tuple[bool, List[str]]:
+    def check_model_compatibility(self, provider_name: str, model_id: str) -> Tuple[bool, List[str]]:
         """
         Check if a model meets CIRIS requirements.
 
@@ -335,9 +321,7 @@ class ModelCapabilitiesConfig(BaseModel):
 
         # Check context window
         if model.context_window < reqs.min_context_window:
-            issues.append(
-                f"Context window {model.context_window} < minimum {reqs.min_context_window}"
-            )
+            issues.append(f"Context window {model.context_window} < minimum {reqs.min_context_window}")
 
         # Check required capabilities
         for cap in reqs.required_capabilities:

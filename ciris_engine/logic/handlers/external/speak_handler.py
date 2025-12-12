@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Set
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
@@ -13,6 +13,50 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
 
 logger = logging.getLogger(__name__)
+
+# Known adapter prefixes for channel routing
+KNOWN_ADAPTER_PREFIXES: Set[str] = {"api_", "discord_", "cli_", "ws:", "reddit_"}
+
+
+def _has_valid_adapter_prefix(channel_id: str) -> bool:
+    """Check if channel_id has a known adapter prefix."""
+    return any(channel_id.startswith(prefix) for prefix in KNOWN_ADAPTER_PREFIXES)
+
+
+def _normalize_channel_id(channel_id: str, thought: Thought) -> str:
+    """
+    Normalize a channel_id to ensure it has a valid adapter prefix.
+
+    If the channel_id doesn't have a valid prefix (e.g., just a user_id like "google:123"),
+    try to find the correct prefix from the thought/task context, or default to "api_".
+
+    Args:
+        channel_id: The channel_id to normalize
+        thought: The thought context for looking up the original channel
+
+    Returns:
+        Normalized channel_id with adapter prefix
+    """
+    if _has_valid_adapter_prefix(channel_id):
+        return channel_id
+
+    # Channel doesn't have a valid prefix - try to get the correct one from context
+    logger.info(f"SPEAK: channel_id '{channel_id}' missing adapter prefix, attempting to normalize")
+
+    # Check if the task has a channel_id that matches (with prefix)
+    if thought.source_task_id:
+        task = persistence.get_task_by_id(thought.source_task_id)
+        if task and task.channel_id:
+            # Check if task's channel_id ends with the provided channel_id
+            # e.g., task.channel_id = "api_google:123" and channel_id = "google:123"
+            if task.channel_id.endswith(channel_id):
+                logger.info(f"SPEAK: Found matching task channel_id '{task.channel_id}' for '{channel_id}'")
+                return task.channel_id
+
+    # Default: prepend "api_" for API-originated messages
+    normalized = f"api_{channel_id}"
+    logger.info(f"SPEAK: Normalized channel_id to '{normalized}' (prepended api_)")
+    return normalized
 
 
 def _build_speak_error_context(params: SpeakParams, thought_id: str, error_type: str = "notification_failed") -> str:
@@ -110,6 +154,10 @@ class SpeakHandler(BaseActionHandler):
         if not channel_id:
             logger.error(f"CRITICAL: No channel_id found in params or thought {thought_id} context")
             raise ValueError(f"Channel ID is required for SPEAK action - none found in params or thought {thought_id}")
+
+        # Normalize channel_id to ensure it has a valid adapter prefix
+        # This handles cases where the LLM provides a user_id without the adapter prefix
+        channel_id = _normalize_channel_id(channel_id, thought)
 
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 

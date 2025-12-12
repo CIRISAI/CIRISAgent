@@ -91,66 +91,62 @@ class PonderHandler(BaseActionHandler):
     def _generate_ponder_follow_up_content(
         self, task_context: str, questions_list: List[str], thought_depth: int, thought: Thought
     ) -> str:
-        """Generate dynamic follow-up content based on ponder count and previous failures."""
+        """Generate dynamic follow-up content based on ponder count and previous failures.
 
-        base_questions = questions_list.copy()
+        IMPORTANT: This method accumulates context across ponder iterations.
+        Each follow-up should include:
+        1. The parent thought's content (accumulated history)
+        2. The current ponder questions/conscience feedback
+        3. Depth-specific guidance
+        """
+        # Start with accumulated history from parent thought
+        accumulated_history = ""
+        if thought.content:
+            # Include parent thought content to preserve history
+            accumulated_history = f"=== PREVIOUS CONTEXT ===\n{thought.content}\n\n"
+
+        # Format current ponder round
+        current_round = f"=== PONDER ROUND {thought_depth} ===\n"
+        if questions_list:
+            current_round += "Conscience feedback:\n"
+            for i, q in enumerate(questions_list, 1):
+                current_round += f"  {i}. {q}\n"
 
         # Add thought-depth specific guidance
-        if thought_depth == 1:
-            follow_up_content = (
-                f'Continuing work on: "{task_context}"\n'
-                f"Current considerations: {base_questions}\n"
-                "Please proceed with your next action."
-            )
-        elif thought_depth == 2:
-            follow_up_content = (
-                f'Second action for: "{task_context}"\n'
-                f"Current focus: {base_questions}\n"
-                "You've taken one action already. Continue making progress on this task."
-            )
-        elif thought_depth == 3:
-            follow_up_content = (
-                f'Third action for: "{task_context}"\n'
-                f"Working on: {base_questions}\n"
-                "You're making good progress with multiple actions. Keep going!"
-            )
-        elif thought_depth == 4:
-            follow_up_content = (
-                f'Fourth action for: "{task_context}"\n'
-                f"Current needs: {base_questions}\n"
-                "You've taken several actions (RECALL, OBSERVE, MEMORIZE, etc.). "
-                "Continue if more work is needed, or consider if the task is complete."
-            )
-        elif thought_depth == 5:
-            follow_up_content = (
-                f'Fifth action for: "{task_context}"\n'
-                f"Addressing: {base_questions}\n"
-                "You're deep into this task with multiple actions. Consider: "
-                "1) Is the task nearly complete? "
-                "2) Do you need just a few more steps? "
-                "3) Remember: You have 7 actions total for this task."
+        if thought_depth <= 3:
+            guidance = f'Task: "{task_context}"\n' "Continue making progress. Consider the conscience feedback above."
+        elif thought_depth <= 5:
+            guidance = (
+                f'Task: "{task_context}"\n'
+                "You're deep into this task. Consider:\n"
+                "1) Is the task nearly complete?\n"
+                "2) Can you address the conscience concerns with a modified approach?\n"
+                f"3) You have {7 - thought_depth + 1} actions remaining."
             )
         elif thought_depth == 6:
-            follow_up_content = (
-                f'Sixth action for: "{task_context}"\n'
-                f"Final steps: {base_questions}\n"
-                "You're approaching the action limit (7 total). Consider: "
-                "1) Can you complete the task with one more action? "
-                "2) Is the task essentially done and ready for TASK_COMPLETE? "
-                "3) Tip: If you need more actions, someone can ask you to continue and you'll get 7 more!"
+            guidance = (
+                f'Task: "{task_context}"\n'
+                "Approaching action limit. Consider:\n"
+                "1) Can you complete with one more action?\n"
+                "2) Is TASK_COMPLETE appropriate?\n"
+                "3) If you need more actions, someone can ask you to continue."
             )
-        elif thought_depth >= 7:
-            follow_up_content = (
-                f'Seventh action for: "{task_context}"\n'
-                f"Final action: {base_questions}\n"
-                "This is your last action for this task chain. You should either: "
-                "1) TASK_COMPLETE - If the work is done or substantially complete "
-                "2) DEFER - Only if you truly need human help to proceed "
-                "Remember: If someone asks you to continue working on this, you'll get a fresh set of 7 actions!"
+        else:  # thought_depth >= 7
+            guidance = (
+                f'Task: "{task_context}"\n'
+                "FINAL ACTION. You should either:\n"
+                "1) TASK_COMPLETE - If work is substantially complete\n"
+                "2) DEFER - Only if you truly need human help\n"
+                "Note: Someone can ask you to continue for 7 more actions."
             )
 
-        # Add context from previous ponder notes if available
+        # Combine all parts
+        follow_up_content = accumulated_history + current_round + "\n" + guidance
+
+        # Also include ponder_notes for backwards compatibility
         if thought.ponder_notes:
-            follow_up_content += f"\n\nPrevious ponder history: {thought.ponder_notes[-3:]}"  # Last 3 entries
+            follow_up_content += f"\n\n=== PONDER NOTES ===\n"
+            for note in thought.ponder_notes[-5:]:  # Last 5 entries for more context
+                follow_up_content += f"- {note}\n"
 
         return follow_up_content

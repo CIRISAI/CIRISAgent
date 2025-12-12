@@ -129,6 +129,22 @@ class TaskManager:
         logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need seed thoughts")
         return filtered
 
+    def get_tasks_needing_recovery(self, limit: int = 50) -> List[Task]:
+        """Get active tasks that have updated_info_available but no pending thoughts.
+
+        These are tasks where new observations came in but all thoughts have completed/failed,
+        requiring a new "recovery" thought to process the updated information.
+        """
+        logger.debug(f"[TASK DEBUG] get_tasks_needing_recovery called for occurrence {self.agent_occurrence_id}")
+        # Exclude special tasks that are handled separately
+        excluded_tasks = {"WAKEUP_ROOT", "SYSTEM_TASK"}
+
+        tasks = persistence.get_tasks_needing_recovery_thought(self.agent_occurrence_id, limit)
+        logger.debug(f"[TASK DEBUG] Found {len(tasks)} tasks needing recovery from persistence")
+        filtered = [t for t in tasks if t.task_id not in excluded_tasks and t.parent_task_id != "WAKEUP_ROOT"]
+        logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need recovery thoughts")
+        return filtered
+
     def complete_task(self, task_id: str, outcome: Optional[JSONDict] = None) -> bool:
         """Mark a task as completed with optional outcome."""
         task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)

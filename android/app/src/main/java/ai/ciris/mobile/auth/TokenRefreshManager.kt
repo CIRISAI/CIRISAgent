@@ -113,8 +113,20 @@ class TokenRefreshManager(
         handler.removeCallbacks(signalMonitorRunnable)
     }
 
+    // Callback for triggering interactive login when silent sign-in fails with SIGN_IN_REQUIRED
+    private var interactiveLoginTrigger: (() -> Unit)? = null
+
+    /**
+     * Set the callback for triggering interactive login.
+     * This should launch the sign-in UI and call handleNewToken when complete.
+     */
+    fun setInteractiveLoginTrigger(trigger: (() -> Unit)?) {
+        this.interactiveLoginTrigger = trigger
+    }
+
     /**
      * Manually trigger a token refresh.
+     * If silent sign-in fails with SIGN_IN_REQUIRED (code 4), triggers interactive login if available.
      */
     fun refreshToken() {
         Log.i(TAG, "Refreshing Google ID token via silentSignIn...")
@@ -131,9 +143,28 @@ class TokenRefreshManager(
                     }
                 }
                 is GoogleSignInHelper.SignInResult.Error -> {
-                    Log.e(TAG, "Token refresh failed: ${result.statusCode} - ${result.message}")
+                    // Error code 4 = SIGN_IN_REQUIRED - try interactive login if available
+                    if (result.statusCode == 4 && interactiveLoginTrigger != null) {
+                        Log.i(TAG, "Silent sign-in requires interactive login (code 4), triggering interactive flow...")
+                        interactiveLoginTrigger?.invoke()
+                    } else {
+                        Log.e(TAG, "Token refresh failed: ${result.statusCode} - ${result.message}")
+                    }
                 }
             }
+        }
+    }
+
+    /**
+     * Public method to handle a new token after interactive sign-in.
+     * Call this from the activity after the user completes interactive sign-in.
+     */
+    fun onInteractiveSignInComplete(idToken: String?) {
+        if (idToken != null) {
+            Log.i(TAG, "Interactive sign-in complete - got new token")
+            handleNewToken(idToken)
+        } else {
+            Log.w(TAG, "Interactive sign-in did not return a token")
         }
     }
 

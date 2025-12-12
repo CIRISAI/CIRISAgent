@@ -11,6 +11,18 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
+ * Result of a token refresh attempt.
+ */
+sealed class TokenRefreshResult {
+    /** Successfully got a fresh token */
+    data class Success(val token: String) : TokenRefreshResult()
+    /** Silent sign-in failed but interactive login may work (error code 4) */
+    object NeedsInteractiveLogin : TokenRefreshResult()
+    /** Complete failure - cannot recover */
+    data class Failed(val message: String) : TokenRefreshResult()
+}
+
+/**
  * Callback interface for requesting fresh Google ID tokens.
  * This allows BillingApiClient to trigger native Google Sign-In refresh
  * when the stored token is expired.
@@ -21,6 +33,31 @@ interface GoogleTokenRefreshCallback {
      * @param onResult Called with the fresh token, or null if refresh failed
      */
     fun requestFreshToken(onResult: (String?) -> Unit)
+
+    /**
+     * Request a fresh token with detailed result information.
+     * This allows the caller to know if interactive login is needed.
+     * @param onResult Called with TokenRefreshResult indicating success, needs login, or failure
+     */
+    fun requestFreshTokenWithResult(onResult: (TokenRefreshResult) -> Unit) {
+        // Default implementation for backward compatibility
+        requestFreshToken { token ->
+            if (token != null) {
+                onResult(TokenRefreshResult.Success(token))
+            } else {
+                onResult(TokenRefreshResult.Failed("Token refresh failed"))
+            }
+        }
+    }
+
+    /**
+     * Launch interactive sign-in flow. This should start the sign-in UI.
+     * @param onResult Called with the fresh token after interactive sign-in completes, or null if cancelled/failed
+     */
+    fun launchInteractiveSignIn(onResult: (String?) -> Unit) {
+        // Default: not supported, return null
+        onResult(null)
+    }
 }
 
 /**
@@ -135,6 +172,8 @@ class BillingApiClient(
      * If a token refresh callback is set, this will first request a fresh Google ID token
      * via native silent sign-in before attempting the exchange.
      *
+     * If silent sign-in fails with SIGN_IN_REQUIRED, this will attempt interactive login.
+     *
      * Returns true if we successfully obtained a new API key.
      */
     fun refreshApiKey(): Boolean {
@@ -145,11 +184,12 @@ class BillingApiClient(
         val callback = tokenRefreshCallback
         if (callback != null) {
             Log.i(TAG, "Requesting fresh Google ID token via native sign-in...")
-            var freshToken: String? = null
+            var refreshResult: TokenRefreshResult? = null
             val latch = java.util.concurrent.CountDownLatch(1)
 
-            callback.requestFreshToken { token ->
-                freshToken = token
+            // First try silent sign-in with detailed result
+            callback.requestFreshTokenWithResult { result ->
+                refreshResult = result
                 latch.countDown()
             }
 
@@ -161,12 +201,45 @@ class BillingApiClient(
                     return false
                 }
 
-                if (freshToken != null) {
-                    Log.i(TAG, "Got fresh Google ID token, storing it")
-                    setGoogleIdToken(freshToken!!)
-                } else {
-                    Log.e(TAG, "Token refresh callback returned null - native sign-in may have failed")
-                    return false
+                when (val result = refreshResult) {
+                    is TokenRefreshResult.Success -> {
+                        Log.i(TAG, "Got fresh Google ID token via silent sign-in, storing it")
+                        setGoogleIdToken(result.token)
+                    }
+                    is TokenRefreshResult.NeedsInteractiveLogin -> {
+                        Log.i(TAG, "Silent sign-in requires interactive login, launching sign-in flow...")
+                        // Try interactive login
+                        var interactiveToken: String? = null
+                        val interactiveLatch = java.util.concurrent.CountDownLatch(1)
+
+                        callback.launchInteractiveSignIn { token ->
+                            interactiveToken = token
+                            interactiveLatch.countDown()
+                        }
+
+                        // Wait up to 120 seconds for interactive sign-in (user interaction)
+                        val interactiveCompleted = interactiveLatch.await(120, java.util.concurrent.TimeUnit.SECONDS)
+                        if (!interactiveCompleted) {
+                            Log.e(TAG, "Interactive sign-in timed out after 120 seconds")
+                            return false
+                        }
+
+                        if (interactiveToken != null) {
+                            Log.i(TAG, "Got fresh Google ID token via interactive sign-in, storing it")
+                            setGoogleIdToken(interactiveToken!!)
+                        } else {
+                            Log.e(TAG, "Interactive sign-in cancelled or failed")
+                            return false
+                        }
+                    }
+                    is TokenRefreshResult.Failed -> {
+                        Log.e(TAG, "Token refresh failed: ${result.message}")
+                        return false
+                    }
+                    null -> {
+                        Log.e(TAG, "Token refresh returned null result")
+                        return false
+                    }
                 }
             } catch (e: InterruptedException) {
                 Log.e(TAG, "Token refresh interrupted: ${e.message}")

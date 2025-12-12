@@ -4,6 +4,45 @@ Pydantic models for LLM model capabilities configuration.
 This module provides type-safe models for loading and validating
 LLM model capabilities data from the on-device configuration file.
 Used by the wizard for BYOK model selection.
+
+BYOK Wizard Integration Pattern
+===============================
+
+When user selects "Bring Your Own Key" (BYOK) in the setup wizard:
+
+1. User selects provider (OpenAI, Anthropic, etc.)
+2. Wizard loads models for that provider:
+
+   ```python
+   from ciris_engine.config import get_model_capabilities
+
+   config = get_model_capabilities()
+   provider_models = config.get_compatible_models(provider_name="openai")
+   ```
+
+3. Display models grouped by compatibility:
+   - RECOMMENDED: ciris_recommended=True (green checkmark)
+   - COMPATIBLE: ciris_compatible=True (yellow checkmark)
+   - ADVANCED OVERRIDE: ciris_compatible=False (warning icon)
+
+4. For each model, show:
+   - display_name
+   - capabilities (vision, tool_use icons)
+   - tier (default/fast/premium)
+   - notes (if any)
+
+5. If user selects incompatible model (Advanced override):
+   ```python
+   is_compat, issues = config.check_model_compatibility(provider, model_id)
+   # Show issues as warnings, allow override
+   ```
+
+6. Vision-capable model filtering:
+   ```python
+   vision_models = config.get_models_with_vision(provider_name="openai")
+   ```
+
+All data is on-device in MODEL_CAPABILITIES.json - no external API calls.
 """
 
 import json

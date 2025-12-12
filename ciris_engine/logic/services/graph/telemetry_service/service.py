@@ -2036,9 +2036,15 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             with get_db_connection(db_path=db_path) as conn:
                 cursor = conn.cursor()
                 # Count all TSDB_DATA nodes
-                cursor.execute("SELECT COUNT(*) FROM graph_nodes WHERE node_type = 'tsdb_data'")
+                cursor.execute("SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_type = 'tsdb_data'")
                 result = cursor.fetchone()
-                count = result[0] if result else 0
+                # Handle both dict (PostgreSQL RealDictCursor) and tuple (SQLite Row) formats
+                if result is None:
+                    count = 0
+                elif isinstance(result, dict):
+                    count = result.get("cnt", 0)
+                else:
+                    count = result[0]
 
                 logger.debug(f"Total metric count from graph nodes: {count}")
                 return count

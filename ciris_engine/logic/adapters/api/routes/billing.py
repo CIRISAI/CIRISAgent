@@ -8,6 +8,7 @@ Frontend should NEVER call the billing backend directly.
 import logging
 import re
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -543,8 +544,10 @@ async def get_purchase_status(
         from typing import Mapping, cast
 
         # Query billing backend for specific payment status
+        # URL-encode payment_id to prevent path traversal (already validated by PAYMENT_ID_PATTERN)
+        safe_payment_id = quote(payment_id, safe="")
         payment_response = await billing_client.get(
-            f"/v1/billing/purchases/{payment_id}/status",
+            f"/v1/billing/purchases/{safe_payment_id}/status",
             params=cast(Mapping[str, str | int | float | bool | None], user_identity),
         )
         payment_response.raise_for_status()

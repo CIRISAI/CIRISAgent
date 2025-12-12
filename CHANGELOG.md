@@ -5,6 +5,41 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2025-12-12
+
+### Added
+
+- **Native Multimodal Vision Support** - Images now flow through the full processing pipeline
+  - `ImageContent` schema for base64/URL image attachments on tasks
+  - Images persist with tasks and flow to vision-capable LLMs
+  - API endpoints support `images` field in `/agent/interact` requests
+  - Discord adapter processes image attachments natively
+
+- **Multimodal Input in Android InteractFragment** - Full image and document attachment support
+  - Attachment button with camera, gallery, and document picker options
+  - Image capture with automatic compression and base64 encoding (max 2048px)
+  - PDF and DOCX document attachments (up to 10MB)
+  - Preview UI showing attached file with remove button
+  - Uses `/agent/interact` endpoint with multimodal payloads
+
+- **Billing Token Refresh with Interactive Login Fallback** - Robust token handling
+  - `TokenRefreshResult` sealed class with `Success`/`NeedsInteractiveLogin`/`Failed` states
+  - Extended `GoogleTokenRefreshCallback` interface with `requestFreshTokenWithResult()` and `launchInteractiveSignIn()`
+  - When silent sign-in fails with SIGN_IN_REQUIRED (code 4), falls back to interactive login
+  - Updated `BillingApiClient`, `PurchaseActivity`, `MainActivity`, and `TokenRefreshManager`
+
+### Fixed
+
+- **Silent Sign-In Failure Handling** - Fixed billing token refresh not detecting failures
+  - Previously returned `null` without triggering interactive login
+  - Now properly detects error code 4 and prompts for interactive sign-in
+
+### Android
+
+- Version bumped to **1.7.4** (build 32)
+- Added multimodal input UI to InteractFragment
+- Improved Google sign-in error recovery
+
 ## [1.7.3] - 2025-12-11
 
 ### Added

@@ -173,6 +173,6 @@ class ModuleTypesResponse(BaseModel):
     """Response containing all available module types."""
 
     core_modules: List[ModuleTypeInfo] = Field(..., description="Built-in core adapters")
-    modular_services: List[ModuleTypeInfo] = Field(..., description="Dynamically loaded modular services")
+    adapters: List[ModuleTypeInfo] = Field(..., description="Dynamically loaded adapters")
     total_core: int = Field(..., description="Total number of core modules")
-    total_modular: int = Field(..., description="Total number of modular services")
+    total_adapters: int = Field(..., description="Total number of adapters")

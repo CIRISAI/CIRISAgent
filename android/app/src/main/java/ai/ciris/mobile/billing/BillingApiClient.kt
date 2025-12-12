@@ -11,6 +11,19 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
+ * Callback interface for requesting fresh Google ID tokens.
+ * This allows BillingApiClient to trigger native Google Sign-In refresh
+ * when the stored token is expired.
+ */
+interface GoogleTokenRefreshCallback {
+    /**
+     * Request a fresh Google ID token via silent sign-in.
+     * @param onResult Called with the fresh token, or null if refresh failed
+     */
+    fun requestFreshToken(onResult: (String?) -> Unit)
+}
+
+/**
  * HTTP client for communicating with the local CIRIS agent's billing API.
  *
  * All billing operations go through the local Python server, which handles:
@@ -21,7 +34,8 @@ import java.util.concurrent.TimeUnit
  */
 class BillingApiClient(
     private val context: Context,
-    private val billingApiUrl: String = DEFAULT_LOCAL_API_URL
+    private val billingApiUrl: String = DEFAULT_LOCAL_API_URL,
+    private var tokenRefreshCallback: GoogleTokenRefreshCallback? = null
 ) {
     companion object {
         private const val TAG = "CIRISBillingAPI"
@@ -109,12 +123,59 @@ class BillingApiClient(
     }
 
     /**
+     * Set the token refresh callback.
+     * This should be set by the activity/fragment that has access to GoogleSignInHelper.
+     */
+    fun setTokenRefreshCallback(callback: GoogleTokenRefreshCallback?) {
+        this.tokenRefreshCallback = callback
+    }
+
+    /**
      * Force refresh the API key by clearing the old one and exchanging for a new one.
+     * If a token refresh callback is set, this will first request a fresh Google ID token
+     * via native silent sign-in before attempting the exchange.
+     *
      * Returns true if we successfully obtained a new API key.
      */
     fun refreshApiKey(): Boolean {
         Log.i(TAG, "Forcing API key refresh...")
         clearApiKey()
+
+        // If we have a token refresh callback, get a fresh Google ID token first
+        val callback = tokenRefreshCallback
+        if (callback != null) {
+            Log.i(TAG, "Requesting fresh Google ID token via native sign-in...")
+            var freshToken: String? = null
+            val latch = java.util.concurrent.CountDownLatch(1)
+
+            callback.requestFreshToken { token ->
+                freshToken = token
+                latch.countDown()
+            }
+
+            // Wait up to 30 seconds for the token refresh
+            try {
+                val completed = latch.await(30, java.util.concurrent.TimeUnit.SECONDS)
+                if (!completed) {
+                    Log.e(TAG, "Token refresh timed out after 30 seconds")
+                    return false
+                }
+
+                if (freshToken != null) {
+                    Log.i(TAG, "Got fresh Google ID token, storing it")
+                    setGoogleIdToken(freshToken!!)
+                } else {
+                    Log.e(TAG, "Token refresh callback returned null - native sign-in may have failed")
+                    return false
+                }
+            } catch (e: InterruptedException) {
+                Log.e(TAG, "Token refresh interrupted: ${e.message}")
+                return false
+            }
+        } else {
+            Log.w(TAG, "No token refresh callback set - using stored (possibly expired) token")
+        }
+
         val result = exchangeGoogleTokenForApiKey()
         if (result.success) {
             Log.i(TAG, "API key refresh successful")

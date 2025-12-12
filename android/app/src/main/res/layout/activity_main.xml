@@ -31,31 +31,37 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Logo/Title -->
-        <LinearLayout
+        <!-- Signet Logo -->
+        <ImageView
+            android:id="@+id/signetLogo"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:src="@drawable/ic_signet"
+            android:layout_marginBottom="16dp"
+            app:tint="#419CA0" />
+
+        <!-- Phase Indicator -->
+        <TextView
+            android:id="@+id/phaseIndicator"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="48dp">
+            android:text="INITIALIZING"
+            android:textColor="#419CA0"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="8dp" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CIRIS"
-                android:textColor="#00d4ff"
-                android:textSize="36sp"
-                android:textStyle="bold"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" Agent"
-                android:textColor="#ffffff"
-                android:textSize="36sp"
-                android:fontFamily="monospace" />
-        </LinearLayout>
+        <!-- Elapsed Time -->
+        <TextView
+            android:id="@+id/elapsedTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0.0s"
+            android:textColor="#666666"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="24dp" />
 
         <!-- Prep lights (6 for pydantic/native lib setup) -->
         <LinearLayout

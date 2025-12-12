@@ -9,10 +9,29 @@
     <!-- Google Play Billing permission -->
     <uses-permission android:name="com.android.vending.BILLING" />
 
+    <!-- Foreground service permission for keeping Python runtime alive during OAuth -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <!-- Storage for on-device database and logs -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"
         tools:ignore="ScopedStorage" />
+
+    <!-- Required for Android 11+ to query browser Custom Tabs support -->
+    <!-- Without this, CustomTabsClient.getPackageName() returns null -->
+    <queries>
+        <!-- Query browsers for Custom Tabs warmup -->
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <!-- Query browsers for VIEW intent (fallback) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -73,5 +92,40 @@
             android:label="Reasoning Stream"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.CIRIS.NoActionBar" />
+
+        <!-- OAuth callback activity for deep link handling -->
+        <!-- Handles ciris://oauth/callback?code=xxx&state=yyy from OAuth providers -->
+        <!-- Reusable for any OAuth2 provider: Home Assistant, Discord, Google, Microsoft, Reddit, etc. -->
+        <activity
+            android:name=".OAuthCallbackActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.CIRIS.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Primary OAuth callback scheme -->
+                <data android:scheme="ciris" android:host="oauth" android:pathPrefix="/callback" />
+            </intent-filter>
+            <!-- Additional intent filter for per-provider paths if needed -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Provider-specific callbacks: ciris://oauth/ha, ciris://oauth/discord, etc. -->
+                <data android:scheme="ciris" android:host="oauth" />
+            </intent-filter>
+        </activity>
+
+        <!-- Foreground service to keep Python runtime alive during OAuth browser flows -->
+        <service
+            android:name=".CirisBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local AI server for on-device processing" />
+        </service>
     </application>
 </manifest>

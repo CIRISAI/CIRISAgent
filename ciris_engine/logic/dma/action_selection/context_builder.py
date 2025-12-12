@@ -8,7 +8,7 @@ from ciris_engine.schemas.dma.faculty import ConscienceFailureContext, EnhancedD
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
-from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,72 @@ class ActionSelectionContextBuilder:
         self.service_registry = service_registry
         self.bus_manager = bus_manager
         self._instruction_generator: Optional[Any] = None
+        self._tools_cached: bool = False
+        self._cached_task: Optional[Task] = None
+
+    async def pre_cache_context(self, thought: Thought) -> int:
+        """Pre-cache tools and task context before building prompt.
+
+        MUST be called before build_main_user_content().
+        Returns the number of tools cached.
+        """
+        # Ensure instruction generator is initialized
+        if self._instruction_generator is None:
+            from ciris_engine.logic.dma.action_selection.action_instruction_generator import ActionInstructionGenerator
+
+            self._instruction_generator = ActionInstructionGenerator(self.service_registry, self.bus_manager)
+
+        # Pre-cache tools asynchronously
+        tool_count: int = await self._instruction_generator.pre_cache_tools()
+        self._tools_cached = True
+        logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
+
+        # Pre-cache the original task for this thought (sync operation)
+        self._cache_original_task(thought)
+
+        return tool_count
+
+    async def pre_cache_tools(self) -> int:
+        """Legacy method - prefer pre_cache_context() which also caches task."""
+        if self._instruction_generator is None:
+            from ciris_engine.logic.dma.action_selection.action_instruction_generator import ActionInstructionGenerator
+
+            self._instruction_generator = ActionInstructionGenerator(self.service_registry, self.bus_manager)
+
+        tool_count: int = await self._instruction_generator.pre_cache_tools()
+        self._tools_cached = True
+        logger.info(f"[CONTEXT] Pre-cached {tool_count} tools for action selection")
+        return tool_count
+
+    def _cache_original_task(self, thought: Thought) -> None:
+        """Cache the original task that spawned this thought chain."""
+        from ciris_engine.logic import persistence
+
+        try:
+            source_task_id = thought.source_task_id
+            agent_occurrence_id = thought.agent_occurrence_id
+
+            logger.info(f"[CONTEXT] Fetching original task {source_task_id} for thought {thought.thought_id}")
+
+            task = persistence.get_task_by_id(source_task_id, agent_occurrence_id)
+            if task:
+                self._cached_task = task
+                logger.info(
+                    f"[CONTEXT] ✓ Cached original task: '{task.description[:80]}...' (depth={thought.thought_depth})"
+                )
+
+                # If there's a parent task, log it for context
+                if task.context and task.context.parent_task_id:
+                    parent_task = persistence.get_task_by_id(task.context.parent_task_id, agent_occurrence_id)
+                    if parent_task:
+                        logger.info(f"[CONTEXT]   Parent task: '{parent_task.description[:80]}...'")
+            else:
+                logger.warning(f"[CONTEXT] Task {source_task_id} not found in persistence")
+                self._cached_task = None
+
+        except Exception as e:
+            logger.error(f"[CONTEXT] Failed to cache original task: {e}")
+            self._cached_task = None
 
     def build_main_user_content(self, triaged_inputs: EnhancedDMAInputs, agent_name: Optional[str] = None) -> str:
         """Build the main user content for LLM evaluation."""
@@ -88,9 +154,12 @@ class ActionSelectionContextBuilder:
         _action_parameters_observe_guidance = _guidance_sections.get("action_parameters_observe_guidance", "")
         _rationale_csdma_guidance = _guidance_sections.get("rationale_csdma_guidance", "")
 
+        # Build original task context
+        _original_task_str = self._build_original_task_context(original_thought)
+
         # Assemble final content
         main_user_content = """
-Your task is to determine the single most appropriate HANDLER ACTION based on an original thought and evaluations from three prior DMAs (Ethical PDMA, CSDMA, DSDMA).
+Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from three prior DMAs (Ethical PDMA, CSDMA, DSDMA).
 You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
 All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
 Permitted Handler Actions: {action_options_str}{available_tools_str}
@@ -100,7 +169,8 @@ Permitted Handler Actions: {action_options_str}{available_tools_str}
 {final_ponder_advisory}
 {action_parameter_schemas}
 Action Selection Instructions:
-Based on the DMA results and original thought, select the most appropriate handler action.
+Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
+CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
 
 Your response MUST be a JSON object with exactly these three keys:
 1. 'selected_action': Choose from {action_options_str}
@@ -113,8 +183,14 @@ Your response MUST be a JSON object with exactly these three keys:
 
 IMPORTANT: Return ONLY a JSON object with these exact keys: selected_action, action_parameters, rationale.
 
-Original Thought: "{original_thought_content}"
+=== ORIGINAL TASK (What the user requested) ===
+{original_task_str}
+
+=== CURRENT THOUGHT (Your current reasoning state) ===
+Thought: "{original_thought_content}"
+Thought Depth: {thought_depth} (0=initial, higher=follow-up after tool use or pondering)
 {ponder_notes_str}
+
 {user_profile_context_str}
 {system_snapshot_context_str}
 
@@ -123,7 +199,7 @@ Ethical PDMA: {ethical_summary}
 CSDMA: {csdma_summary}
 DSDMA: {dsdma_summary_str}
 
-Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action and structure your response as specified.
+Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
 Adhere strictly to the schema for your JSON output.
 """
         # Format the template with all the variables
@@ -143,6 +219,8 @@ Adhere strictly to the schema for your JSON output.
             guidance_sections=_guidance_sections,
             original_thought=original_thought,
             original_thought_content=original_thought.content,
+            original_task_str=_original_task_str,
+            thought_depth=original_thought.thought_depth,
             ponder_notes_str=_ponder_notes_str,
             user_profile_context_str=user_profile_context_str,
             system_snapshot_context_str=system_snapshot_context_str,
@@ -381,3 +459,50 @@ Adhere strictly to the schema for your JSON output.
             return self.prompts.action_parameter_schemas or ""
         else:
             return self.prompts.get("action_parameter_schemas", "")
+
+    def _build_original_task_context(self, original_thought: Thought) -> str:
+        """Build the original task context string for the prompt.
+
+        This provides the LLM with the original user request so it can
+        properly follow through on multi-step operations.
+        """
+        if not self._cached_task:
+            # Fallback: if task wasn't cached, return minimal info
+            logger.warning(
+                f"[CONTEXT] Original task not cached for thought {original_thought.thought_id}. "
+                "The LLM may not have full context about the user's original request."
+            )
+            return f"(Task ID: {original_thought.source_task_id} - description not available)"
+
+        task = self._cached_task
+        parts = []
+
+        # Primary task description - this is what the user originally asked for
+        parts.append(f'Task: "{task.description}"')
+        parts.append(f"Task ID: {task.task_id}")
+
+        # Include task status for context
+        if hasattr(task, "status") and task.status:
+            parts.append(f"Status: {task.status}")
+
+        # Include parent task context if available (for subtasks)
+        if task.context:
+            if task.context.parent_task_id:
+                parts.append(f"Parent Task ID: {task.context.parent_task_id}")
+            if task.context.correlation_id:
+                parts.append(f"Correlation ID: {task.context.correlation_id}")
+
+        # Include any priority information
+        if hasattr(task, "priority") and task.priority:
+            parts.append(f"Priority: {task.priority}")
+
+        # Add guidance about following through
+        if original_thought.thought_depth > 0:
+            parts.append("")
+            parts.append(
+                "⚠️ FOLLOW-THROUGH REQUIRED: This is a follow-up thought (depth > 0). "
+                "You have already started working on this task. Review what actions "
+                "have been taken and determine what remains to COMPLETE the original task."
+            )
+
+        return "\n".join(parts)

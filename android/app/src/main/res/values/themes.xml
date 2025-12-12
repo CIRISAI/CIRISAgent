@@ -22,4 +22,15 @@
         <item name="android:statusBarColor">@color/ciris_primary</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <!-- Transparent theme for OAuth callback activity -->
+    <!-- Activity processes deep link and finishes immediately, no visible UI needed -->
+    <style name="Theme.CIRIS.Transparent" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>

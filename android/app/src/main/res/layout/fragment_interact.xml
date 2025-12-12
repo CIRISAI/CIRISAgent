@@ -70,16 +70,70 @@
         android:layout_gravity="center"
         android:visibility="gone" />
 
-    <!-- Chat messages -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/chatRecyclerView"
+    <!-- Chat messages container with empty state -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="8dp"
-        android:clipToPadding="false"
-        android:scrollbars="vertical"
-        android:background="#F3F4F6" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/chatRecyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="8dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical"
+            android:background="#F3F4F6" />
+
+        <!-- Empty state for new installs -->
+        <LinearLayout
+            android:id="@+id/emptyStateContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp"
+            android:background="#F3F4F6"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:src="@drawable/ic_signet"
+                android:alpha="0.6"
+                android:layout_marginBottom="24dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Welcome to Ally"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1F2937"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Your personal thriving assistant"
+                android:textSize="14sp"
+                android:textColor="#6B7280"
+                android:layout_marginBottom="24dp" />
+
+            <TextView
+                android:id="@+id/emptyStateHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ask Ally how it can help with tasks, scheduling, decisions, or wellbeing — or ask how CIRIS works!"
+                android:textSize="14sp"
+                android:textColor="#419CA0"
+                android:textAlignment="center"
+                android:lineSpacingMultiplier="1.3"
+                android:paddingHorizontal="16dp" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
     <TextView
         android:layout_width="match_parent"

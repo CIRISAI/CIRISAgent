@@ -46,7 +46,7 @@ Comprehensive telemetry improvements for CIRISLens integration:
   - Covenant compliance rate
   - Transparency score
 - **Dynamic Topology**: Support for runtime service instance creation/destruction
-- **External Module Support**: Tracks metrics from ciris_modular_services
+- **External Module Support**: Tracks metrics from ciris_adapters
 - **36 Validated Source Types**: Rigorous analysis and categorization
 
 ### 4. Telemetry Source Analysis

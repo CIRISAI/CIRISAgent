@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `ciris_engine/` houses the H3ERE core (adapters, buses, schemas, utilities).
-- `ciris_modular_services/` stores pluggable services; copy the `mock_llm/` manifest layout for new modules.
+- `ciris_adapters/` stores pluggable services; copy the `mock_llm/` manifest layout for new modules.
 - `ciris_sdk/` ships the client SDK and telemetry resources.
 - `shared/` and `tools/` bundle OAuth helpers plus QA, security, and Grace scripts.
 - `tests/` mirrors engine domains with network suites isolated under `tests/live/`.
@@ -12,8 +12,8 @@
 - Install deps: `pip install -r requirements.txt` (+ `requirements-dev.txt` for tooling).
 - Run adapters: `python main.py --adapter discord --guild-id <id>` or `--adapter api --port 8000`.
 - Fast tests: `pytest -m "not live"`; add integrations with `-m "integration"` when needed.
-- Type check: `mypy ciris_engine/ ciris_modular_services/ ciris_sdk/` (strict per `mypy.ini`).
-- Prune dead code: `vulture ciris_engine/ ciris_modular_services/` (per `pyproject.toml`).
+- Type check: `mypy ciris_engine/ ciris_adapters/ ciris_sdk/` (strict per `mypy.ini`).
+- Prune dead code: `vulture ciris_engine/ ciris_adapters/` (per `pyproject.toml`).
 
 ## Coding Style & Naming Conventions
 - Stick to Python 3.12, four-space indents, `snake_case` modules, `PascalCase` classes, and `SCREAMING_SNAKE_CASE` constants; prefer Enums and Pydantic over raw dicts.
@@ -25,7 +25,7 @@
 - Place tests beside their domain (e.g., adapters under `tests/adapters/<adapter>`); use `test_*.py` names.
 - Pytest logs to `test_logs/pytest.log`; inspect failures before reruns.
 - Mark slow, integration, or live scenarios with the corresponding pytest markers so CI filters work.
-- Target ≥80% coverage on critical paths; run `pytest --cov=ciris_engine --cov=ciris_modular_services`.
+- Target ≥80% coverage on critical paths; run `pytest --cov=ciris_engine --cov=ciris_adapters`.
 
 ## Commit & Pull Request Guidelines
 - Follow conventional commits (`fix:`, `perf:`, `feat:`) and keep each commit atomic.

@@ -237,8 +237,19 @@ class GoogleSignInHelper(private val context: Context) {
                 onResult(SignInResult.Success(account))
             }
             .addOnFailureListener { e ->
-                Log.w(TAG, "Silent sign-in failed: ${e.message}")
-                onResult(SignInResult.Error(-1, e.message))
+                // Extract error code for better diagnostics
+                val errorCode = if (e is ApiException) e.statusCode else -1
+                val errorDescription = when (errorCode) {
+                    4 -> "SIGN_IN_REQUIRED - User needs to interactively sign in"
+                    7 -> "NETWORK_ERROR - Network unavailable"
+                    8 -> "INTERNAL_ERROR - Internal error in Google Play services"
+                    12500 -> "SIGN_IN_CANCELLED - Sign in was cancelled"
+                    12501 -> "SIGN_IN_CURRENTLY_IN_PROGRESS - Sign in already in progress"
+                    12502 -> "SIGN_IN_FAILED - Sign in failed"
+                    else -> "Unknown error"
+                }
+                Log.w(TAG, "Silent sign-in failed: code=$errorCode ($errorDescription), message=${e.message}")
+                onResult(SignInResult.Error(errorCode, "$errorCode: ${e.message}"))
             }
     }
 

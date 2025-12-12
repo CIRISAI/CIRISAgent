@@ -91,7 +91,7 @@ fi
 
 # Install dependencies
 print_info "Installing Node.js dependencies..."
-npm ci
+npm install
 
 # Build static assets
 print_info "Building static assets (this may take a few minutes)..."

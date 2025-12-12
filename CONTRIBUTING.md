@@ -80,7 +80,7 @@ Extend CIRIS capabilities with new modular services:
 
 ## 🧩 **Modular Service Development**
 
-For new modular services, follow the **Mock LLM pattern** in `ciris_modular_services/mock_llm/`:
+For new modular services, follow the **Mock LLM pattern** in `ciris_adapters/mock_llm/`:
 
 ### **Required Files:**
 ```
@@ -249,7 +249,7 @@ new_task = Task(..., context=task_context)
 - **Architecture**: See `ciris_engine/logic/README.md`
 - **H3ERE Documentation**: All bus and service README files
 - **Example Adapters**: `ciris_engine/logic/adapters/`
-- **Example Services**: `ciris_modular_services/mock_llm/`
+- **Example Services**: `ciris_adapters/mock_llm/`
 
 ## ⚖️ **Code of Conduct**
 

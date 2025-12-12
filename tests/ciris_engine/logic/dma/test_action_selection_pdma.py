@@ -19,8 +19,10 @@ class TestActionSelectionPDMAEvaluator:
 
     @pytest.fixture
     def mock_service_registry(self):
-        """Create mock service registry."""
+        """Create mock service registry with proper tool service support."""
         registry = Mock()
+        # Return empty list for tool services (no tools available in tests)
+        registry.get_services_by_type.return_value = []
         return registry
 
     @pytest.fixture

@@ -1,0 +1,211 @@
+{
+  "module": {
+    "name": "mcp_server",
+    "version": "1.0.0",
+    "description": "MCP server adapter that exposes CIRIS capabilities to external AI agents via Model Context Protocol",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "RUNTIME_CONTROL",
+      "priority": "NORMAL",
+      "class": "mcp_server.adapter.Adapter",
+      "capabilities": [
+        "mcp:server",
+        "mcp:expose_tools",
+        "mcp:expose_resources",
+        "mcp:expose_prompts"
+      ]
+    }
+  ],
+  "capabilities": [
+    "mcp:server",
+    "mcp:expose_tools",
+    "mcp:expose_resources",
+    "mcp:expose_prompts"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.RuntimeControlService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.runtime.enums"
+    ],
+    "internal": [
+      "ciris_adapters.mcp_common"
+    ],
+    "external": {
+      "mcp": ">=1.0.0"
+    }
+  },
+  "exports": {
+    "adapter": "mcp_server.adapter.Adapter",
+    "config": "mcp_server.config.MCPServerAdapterConfig",
+    "security": "mcp_server.security.MCPServerSecurityManager",
+    "handlers": "mcp_server.handlers",
+    "configurable": "mcp_server.configurable.MCPServerConfigurableAdapter"
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_transport",
+        "step_type": "select",
+        "title": "Select Transport Type",
+        "description": "Choose how the MCP server will communicate with clients",
+        "options_method": "get_config_options",
+        "field_name": "transport_type",
+        "required": true
+      },
+      {
+        "step_id": "server_settings",
+        "step_type": "input",
+        "title": "Server Settings",
+        "description": "Configure server identification and network settings",
+        "fields": [
+          {
+            "name": "server_id",
+            "label": "Server ID",
+            "type": "text",
+            "default": "ciris-mcp-server",
+            "description": "Unique identifier for this MCP server instance",
+            "required": true
+          },
+          {
+            "name": "server_name",
+            "label": "Server Name",
+            "type": "text",
+            "default": "CIRIS MCP Server",
+            "description": "Human-readable name for this server",
+            "required": false
+          },
+          {
+            "name": "host",
+            "label": "Host",
+            "type": "text",
+            "default": "127.0.0.1",
+            "description": "Host to bind to (for HTTP/SSE transports)",
+            "required": false,
+            "depends_on": {
+              "field": "transport_type",
+              "values": ["sse", "http"]
+            }
+          },
+          {
+            "name": "port",
+            "label": "Port",
+            "type": "number",
+            "default": 3000,
+            "description": "Port to listen on (for HTTP/SSE transports)",
+            "required": false,
+            "depends_on": {
+              "field": "transport_type",
+              "values": ["sse", "http"]
+            }
+          }
+        ]
+      },
+      {
+        "step_id": "select_auth",
+        "step_type": "select",
+        "title": "Authentication Method",
+        "description": "Choose how clients will authenticate (optional)",
+        "options_method": "get_config_options",
+        "field_name": "auth_method",
+        "optional": true,
+        "default": "none"
+      },
+      {
+        "step_id": "api_keys",
+        "step_type": "input",
+        "title": "API Keys",
+        "description": "Enter API keys for client authentication",
+        "fields": [
+          {
+            "name": "api_keys",
+            "label": "API Keys",
+            "type": "text",
+            "description": "Comma-separated list of valid API keys",
+            "required": true
+          }
+        ],
+        "depends_on": {
+          "field": "auth_method",
+          "values": ["api_key"]
+        },
+        "optional": true
+      },
+      {
+        "step_id": "select_exposure",
+        "step_type": "select",
+        "title": "Select Features to Expose",
+        "description": "Choose which CIRIS capabilities to make available via MCP",
+        "options_method": "get_config_options",
+        "field_name": "exposure",
+        "multiple": true,
+        "required": true
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your MCP Server configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "configuration": {
+    "transport_type": {
+      "type": "string",
+      "enum": ["stdio", "sse", "http"],
+      "default": "stdio",
+      "description": "Transport type for the MCP server"
+    },
+    "host": {
+      "type": "string",
+      "default": "localhost",
+      "description": "Host to bind for HTTP transports"
+    },
+    "port": {
+      "type": "integer",
+      "default": 8765,
+      "description": "Port to bind for HTTP transports"
+    },
+    "require_auth": {
+      "type": "boolean",
+      "default": true,
+      "description": "Require authentication for MCP clients"
+    },
+    "expose_tools": {
+      "type": "boolean",
+      "default": true,
+      "description": "Expose CIRIS tools as MCP tools"
+    },
+    "expose_resources": {
+      "type": "boolean",
+      "default": true,
+      "description": "Expose CIRIS data as MCP resources"
+    },
+    "expose_prompts": {
+      "type": "boolean",
+      "default": true,
+      "description": "Expose guidance prompts as MCP prompts"
+    }
+  },
+  "metadata": {
+    "api": "Model Context Protocol (MCP) Server",
+    "requires_api_key": false,
+    "safe_domain": "external_integration",
+    "prohibited": ["medical"],
+    "transport_types": ["stdio", "sse", "http"],
+    "security_features": [
+      "client_authentication",
+      "request_validation",
+      "rate_limiting",
+      "session_management"
+    ]
+  }
+}

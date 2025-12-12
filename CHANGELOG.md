@@ -5,6 +5,98 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2025-12-11
+
+### Added
+
+- **Dynamic Adapter Configuration System** - Interactive wizard for configuring adapters at runtime
+  - `AdapterConfigurationService` with step-by-step configuration workflows
+  - `ConfigurableAdapterProtocol` for adapters supporting discovery, OAuth, and validation
+  - API endpoints: `/v1/system/adapters/configurable`, `/configure/{session_id}/step`
+  - OAuth callback handling with PKCE support
+  - Persistence of adapter configurations via config service
+
+- **Home Assistant Integration** - Full OAuth2 configurable adapter
+  - mDNS discovery of Home Assistant instances
+  - OAuth2 with PKCE authentication flow
+  - Entity selection and monitoring configuration
+  - Separate TOOL and COMMUNICATION service capabilities
+
+- **Android Configuration UI** - Dynamic adapter configuration wizard
+  - Native Android fragments for adapter discovery and configuration
+  - OAuth flow integration with system browser
+  - Real-time configuration step rendering
+
+- **Enhanced Android Startup UI** - Visual feedback during ~15 second initialization
+  - Signet logo with ARM32-friendly alpha pulse animation
+  - Phase indicator showing current startup stage (INITIALIZING → LOADING RUNTIME → PREPARING → etc.)
+  - Elapsed time counter updated every 100ms
+  - Two distinct flows: First-run setup vs returning user
+  - Detailed status messages for each phase
+
+- **Context Enrichment for Adapter Tools** - Tools can now enrich context with additional data
+  - `ContextEnrichmentTool` protocol for tools providing context enrichment
+  - Context builder integration for automatic enrichment during thought processing
+  - QA tests for context enrichment verification
+
+- **Unified Adapter Architecture** - Renamed `ciris_modular_services` to `ciris_adapters`
+  - Unified loading from core and modular locations
+  - Consistent adapter naming and discovery
+
+### Fixed
+
+- **PostgreSQL Deferral Retrieval** - Fixed `get_pending_deferrals` failing on PostgreSQL
+  - **Issue**: `invalid literal for int() with base 10: 'priority'`
+  - **Root Cause**: PostgreSQL `RealDictCursor` returns rows as dictionaries; unpacking dicts as tuples yields keys instead of values
+  - **Fix**: Check row type and handle both dict (PostgreSQL) and tuple (SQLite) formats
+  - **Files**: `ciris_engine/logic/services/governance/wise_authority/service.py:460-470`
+
+- **Android Startup Error Detection** - Fixed false error detection during startup
+  - Filter out "Incident capture" log messages from error detection
+  - Filter out deprecation warnings and HTTP status patterns
+  - Prevents startup UI from incorrectly showing error state
+
+- **Android Google Sign-In** - Conditional Google sign-in based on user's auth choice
+  - Only attempt silent sign-in if user previously chose Google auth during setup
+  - API key users skip Google SDK entirely, reducing startup latency
+  - Auth method stored in SharedPreferences
+
+- **Android Post-Setup Navigation** - Fixed navigation after setup wizard completion
+  - Now correctly navigates to Kotlin InteractFragment (not standalone InteractActivity)
+  - Maintains bottom navigation bar after setup
+
+- **Mock LLM WAKEUP Loop** - Fixed infinite loop in WAKEUP state with Mock LLM
+  - Detect follow-up thoughts via `THOUGHT_TYPE=follow_up` marker
+  - Return TASK_COMPLETE for follow-up thoughts instead of SPEAK
+
+- **OAuth Method Signatures** - Aligned all configurable adapters with protocol
+  - Added `code_challenge` to `get_oauth_url()`
+  - Added `code_verifier` to `handle_oauth_callback()`
+  - Updated: MockLLM, SampleAdapter, MCPServer, HomeAssistant adapters
+
+- **Silent Task Complete Notification** - Disabled "agent chose not to speak" notification
+  - No longer sends notification when agent completes task without speaking
+
+- **Setup Status Race Condition** - Fixed Android main thread network access
+  - Setup status check now properly runs on IO thread
+
+- **Test Fixes** - Updated test mocks for new adapter configuration service
+  - Fixed `list_configs` mock method name
+  - Added `runtime_control` mock for API adapter tests
+  - Updated service count assertions
+
+### Changed
+
+- **Reduced Cognitive Complexity** - Refactored multiple modules for better maintainability
+  - SonarCloud code smell fixes across multiple files
+  - Extracted helper methods in complex functions
+
+### Android
+
+- Version bumped to **1.7.31** (build 31)
+- Setup wizard now clarifies LLM must be off-device with CIRIS proxy info
+- Release AAB built with proper arm64-v8a support for Pixel 6 devices
+
 ## [1.7.1] - 2025-12-04
 
 ### Added
@@ -281,14 +373,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed - Authentication Permissions and API Integration
 
 - **Modular Services Packaging** - Fix missing directory in pip installs
-  - **Issue**: `ciris_modular_services` directory not found on Windows and other pip installations
+  - **Issue**: `ciris_adapters` directory not found on Windows and other pip installations
   - **Root Cause**: Missing top-level `__init__.py` file prevented `find_packages()` from discovering the package
   - **Fix**:
-    - Added `ciris_modular_services/__init__.py` to make it a proper Python package
+    - Added `ciris_adapters/__init__.py` to make it a proper Python package
     - Updated `MANIFEST.in` to explicitly include all modular service files (*.py, *.json, *.yaml, *.md, *.txt)
   - **Impact**: Modular services (mock_llm, reddit, geo_wisdom, weather_wisdom, sensor_wisdom, external_data_sql) now properly packaged in wheel distributions
   - **Files**:
-    - `ciris_modular_services/__init__.py` (new)
+    - `ciris_adapters/__init__.py` (new)
     - `MANIFEST.in`
 
 - **macOS launchd Port Configuration** - Fix hardcoded port in wrapper script
@@ -592,7 +684,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Restarting Scout 003 would reply to weeks of historical Reddit content
   - **Solution**: Added `_startup_timestamp` filter (60s grace period) to skip old content
   - **Behavior**: Only processes content created AFTER agent starts running
-  - **Files**: `ciris_modular_services/reddit/observer.py`
+  - **Files**: `ciris_adapters/reddit/observer.py`
 
 - **Task Counting Event Loop Blocking** - 100-1000x performance improvement
   - **Problem**: `count_tasks()` loaded ALL tasks into memory via `get_all_tasks()`, blocking event loop
@@ -1080,7 +1172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Files**:
     - `ciris_engine/logic/services/special/sql_external_data/service.py` - Core service implementation
     - `ciris_engine/logic/services/special/sql_external_data/dsar_operations.py` - DSAR tooling
-    - `ciris_modular_services/sql_external_data/` - Tool adapter integration
+    - `ciris_adapters/sql_external_data/` - Tool adapter integration
   - **Test Coverage**: 2/8 initialization tests passing, DSAR operations in progress
   - **Documentation**: Complete tool schemas with examples and validation rules
 
@@ -1124,7 +1216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Log full payload when 'json' dict missing
     - Log json_data when 'things' list missing
     - Include HTTP status code and response text in error message
-  - **Files**: `ciris_modular_services/reddit/service.py:424, 434, 295-297`
+  - **Files**: `ciris_adapters/reddit/service.py:424, 434, 295-297`
 
 - **Telemetry Error Logging** - Added exception type and stack trace to metric count errors
   - **Problem**: Cryptic "Failed to get metric count: 0" error with no context
@@ -1138,7 +1230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Character Limit Protection**: Automatically truncates text to fit Reddit's 10,000 character limit while preserving attribution
   - **Smart Truncation**: Preserves beginning of content + ellipsis + attribution when text exceeds limit
   - **Comprehensive Test Coverage**: 11 tests covering boundary cases, truncation, and edge cases
-  - **Files**: `ciris_modular_services/reddit/service.py:131-174, 274-275, 302-303`
+  - **Files**: `ciris_adapters/reddit/service.py:131-174, 274-275, 302-303`
   - **Tests**: `tests/reddit/test_reddit_attribution_length.py`
 
 - **CIRIS Agent Runtime Guide** - Context-engineered operational guide for agents at runtime
@@ -1235,7 +1327,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Production evidence: Scout replied to itself twice in post 1okfrdw
   - **Root Cause**: `BaseObserver._is_agent_message()` compares `msg.author_id` against `self.agent_id` (CIRIS agent ID like "scout-remote-test-dahrb9"), but Reddit messages have `author_id = "CIRIS-Scout"` (Reddit username)
   - **Solution**: Added `_is_agent_message()` override in `RedditObserver` to compare against Reddit username: `msg.author_id == self._api_client._credentials.username`
-  - **Files**: `ciris_modular_services/reddit/observer.py:74-83`
+  - **Files**: `ciris_adapters/reddit/observer.py:74-83`
   - **Verification**: All 9 Reddit observer tests pass
 
 - **P0: ShutdownProcessor Thought Query After Ownership Transfer** - Fixed shutdown loop caused by querying with wrong occurrence_id
@@ -1391,8 +1483,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     3. Updated `RedditCommunicationService` to accept and pass occurrence_id to observer
     4. Added occurrence_id to modular service dependency injection in `ServiceInitializer`
   - **Files**:
-    - `ciris_modular_services/reddit/observer.py:44,62` - Added parameter and pass-through
-    - `ciris_modular_services/reddit/service.py:1195,1206,1228` - Store and pass occurrence_id
+    - `ciris_adapters/reddit/observer.py:44,62` - Added parameter and pass-through
+    - `ciris_adapters/reddit/service.py:1195,1206,1228` - Store and pass occurrence_id
     - `ciris_engine/logic/runtime/service_initializer.py:1114` - Inject from essential_config
   - **Production Evidence**: Scout-003 detected posts 1ojzi91 and 1ojzj66 but created tasks/thoughts with occurrence_id='default', leaving Scout-003 unable to process them
 
@@ -1436,7 +1528,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Creates and starts RedditObserver in `_on_start()` if dependencies available
   - Observer lifecycle tied to communication service lifecycle (like Discord pattern)
   - 15-second poll interval, 25-item limit per poll with deduplication
-  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1100-1115`, `ciris_modular_services/reddit/service.py:1185-1239`
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1100-1115`, `ciris_adapters/reddit/service.py:1185-1239`
 - **Comprehensive Unit Tests** - Added 15 new unit tests for Reddit observer fixes (100% pass rate)
   - Runtime dependency injection pattern (3 tests)
   - TSDB consolidation lock acquisition (5 tests)
@@ -1485,7 +1577,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Problem**: `_load_modular_service()` looped through manifest.services but always loaded first class
   - **Impact**: Reddit manifest has ToolService AND CommunicationService but both got ToolService, observer never started
   - **Solution**: Added `load_service_class(manifest, class_path)` method to load specific class per service definition
-  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1095`, `ciris_engine/logic/runtime/modular_service_loader.py:95-185`
+  - **Files**: `ciris_engine/logic/runtime/service_initializer.py:1095`, `ciris_engine/logic/runtime/adapter_loader.py:95-185`
 - **P1: PostgreSQL JSON Extraction** - Fixed `get_task_by_correlation_id()` to use dialect adapter
   - **Problem**: Hardcoded `json_extract()` which is SQLite-only, PostgreSQL uses JSONB operators (-> and ->>)
   - **Impact**: PostgreSQL queries failed with "function json_extract(jsonb, unknown) does not exist"
@@ -1567,17 +1659,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Impact**: Reddit module couldn't instantiate due to schema validation errors
   - **Solution**: Created `_schema_to_param_schema()` helper to extract type, properties, required from JSON schema
   - Affects all Reddit tools: get_user_context, submit_post, submit_comment, remove_content, get_submission, delete_content, disclose_identity
-  - **Files**: `ciris_modular_services/reddit/service.py:1108-1151`
+  - **Files**: `ciris_adapters/reddit/service.py:1108-1151`
 - **P0: Reddit MRO Conflict** - Fixed Method Resolution Order conflict in RedditToolService and RedditCommunicationService
   - **Problem**: Diamond inheritance with `RedditOAuthProtocol` appearing twice in hierarchy
   - **Impact**: Module import failed with "Cannot create a consistent method resolution order (MRO)"
   - **Solution**: Removed duplicate protocol inheritance, rely on `RedditServiceBase` providing protocol
-  - **Files**: `ciris_modular_services/reddit/service.py:648, 1197`
+  - **Files**: `ciris_adapters/reddit/service.py:648, 1197`
 - **P1: Disclosure Comment Schema Mismatch** - Fixed `_tool_disclose_identity` to use correct field names
   - **Problem**: Used `target_id` and `distinguish` fields that don't exist in `RedditSubmitCommentRequest`
   - **Impact**: Disclosure tool always failed with validation errors
   - **Solution**: Changed to `parent_fullname` and removed `distinguish` (not supported by schema)
-  - **Files**: `ciris_modular_services/reddit/service.py:1008-1014`
+  - **Files**: `ciris_adapters/reddit/service.py:1008-1014`
 - **P2: SonarCloud String Concatenation Warnings** - Fixed implicit string concatenation in TSDB query manager
   - **Problem**: Two f-strings placed adjacent without explicit concatenation operator
   - **Impact**: SonarCloud code quality warnings at lines 545 and 632
@@ -1670,7 +1762,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Modular Service Loading via ADAPTERS** - Support loading modular services via `--adapter` flag or `CIRIS_ADAPTER` env var
-  - Automatically discovers modular services from `ciris_modular_services/` directory
+  - Automatically discovers modular services from `ciris_adapters/` directory
   - Validates required environment configuration before loading
   - Registers services with appropriate buses (Tool, Communication, LLM)
   - Example: `CIRIS_ADAPTER=reddit` loads Reddit adapter if config is present
@@ -1689,7 +1781,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Observer for passive monitoring of submissions and comments
   - Anti-spoofing channel validation and reddit-prefixed routing
   - Defaults to r/ciris subreddit with lower priority than API adapter
-  - **Files**: `ciris_modular_services/reddit/*`, `ciris_engine/logic/buses/communication_bus.py`, `ciris_engine/logic/utils/channel_utils.py`
+  - **Files**: `ciris_adapters/reddit/*`, `ciris_engine/logic/buses/communication_bus.py`, `ciris_engine/logic/utils/channel_utils.py`
 
 - **Initialization Fix Tests** - Added comprehensive test suite for all 3 initialization fixes (9 tests)
   - Tests database_maintenance_service property alias and backward compatibility
@@ -2735,7 +2827,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🎯 100% Type Safety**: Complete mypy cleanup across all three codebases
   - ciris_sdk: 0 errors (was 194 errors across 23 files)
   - ciris_engine: 0 errors (553 files)
-  - ciris_modular_services: 0 errors (14 files)
+  - ciris_adapters: 0 errors (14 files)
   - Total: 204 errors fixed using parallel Task workers
 - **✅ 100% QA Test Coverage**: All 131 tests passing across 14 modules
   - Individual modules: 79/79 tests (auth, agent, memory, telemetry, system, audit, tools, guidance, handlers, filters, sdk, streaming)

@@ -470,11 +470,18 @@ async def build_system_snapshot_with_batch(
     # Collect adapter channels and tools (if runtime available)
     adapter_channels = {}
     available_tools = {}
+    context_enrichment_results = {}
     if runtime:
-        from .system_snapshot_helpers import _collect_adapter_channels, _collect_available_tools
+        from .system_snapshot_helpers import (
+            _collect_adapter_channels,
+            _collect_available_tools,
+            _run_context_enrichment_tools,
+        )
 
         adapter_channels = await _collect_adapter_channels(runtime)
         available_tools = await _collect_available_tools(runtime)
+        # Run context enrichment tools (e.g., ha_list_entities)
+        context_enrichment_results = await _run_context_enrichment_tools(runtime, available_tools)
 
     # Get queue status for system_counts
     queue_status = persistence.get_queue_status()
@@ -533,6 +540,7 @@ async def build_system_snapshot_with_batch(
         user_profiles=user_profiles,  # Enriched user profiles from GraphQL and memory graph
         adapter_channels=adapter_channels,  # Available channels by adapter
         available_tools=available_tools,  # Available tools by adapter
+        context_enrichment_results=context_enrichment_results,  # Pre-run tool results for context
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

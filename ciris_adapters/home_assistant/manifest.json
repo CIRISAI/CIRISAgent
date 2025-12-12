@@ -1,0 +1,203 @@
+{
+  "module": {
+    "name": "home_assistant",
+    "version": "1.0.0",
+    "description": "Enhanced Home Assistant integration with CIRIS multi-modal capabilities including event detection and camera frame extraction",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "home_assistant.tool_service.HAToolService",
+      "capabilities": [
+        "execute_tool",
+        "get_available_tools",
+        "ha_device_control",
+        "ha_automation_trigger",
+        "ha_sensor_query",
+        "ha_notification",
+        "ha_camera_analyze",
+        "provider:home_assistant"
+      ]
+    },
+    {
+      "type": "COMMUNICATION",
+      "priority": "NORMAL",
+      "class": "home_assistant.communication_service.HACommunicationService",
+      "capabilities": [
+        "send_message",
+        "fetch_messages",
+        "ha_event_stream",
+        "ha_camera_events",
+        "ha_tts",
+        "provider:home_assistant"
+      ]
+    }
+  ],
+  "capabilities": [
+    "ha_chat_bridge",
+    "ha_device_control",
+    "ha_automation_trigger",
+    "ha_sensor_data",
+    "ha_event_detection",
+    "ha_camera_frames",
+    "provider:home_assistant",
+    "modality:vision:camera",
+    "modality:event:motion",
+    "modality:event:person",
+    "modality:event:vehicle",
+    "domain:home_automation"
+  ],
+  "prohibited_capabilities": [
+    "medical",
+    "health",
+    "clinical",
+    "patient",
+    "vital",
+    "diagnosis",
+    "treatment"
+  ],
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "discovery_then_config",
+    "steps": [
+      {
+        "step_id": "discover",
+        "step_type": "discovery",
+        "title": "Discover Home Assistant",
+        "description": "Find Home Assistant instances on your network via mDNS or enter URL manually",
+        "discovery_method": "mdns"
+      },
+      {
+        "step_id": "oauth",
+        "step_type": "oauth",
+        "title": "Authenticate with Home Assistant",
+        "description": "Sign in to your Home Assistant instance using OAuth2",
+        "oauth_config": {
+          "provider_name": "Home Assistant",
+          "authorization_path": "/auth/authorize",
+          "token_path": "/auth/token",
+          "client_id_source": "indieauth",
+          "scopes": [],
+          "pkce_required": true
+        },
+        "depends_on": ["discover"]
+      },
+      {
+        "step_id": "select_features",
+        "step_type": "select",
+        "title": "Select Features",
+        "description": "Choose which Home Assistant features to enable",
+        "options_method": "get_config_options",
+        "depends_on": ["oauth"]
+      },
+      {
+        "step_id": "select_cameras",
+        "step_type": "select",
+        "title": "Select Cameras",
+        "description": "Choose which cameras to use for event detection (optional)",
+        "options_method": "get_config_options",
+        "depends_on": ["oauth"],
+        "optional": true
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your Home Assistant configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.CommunicationService",
+      "ciris_engine.protocols.adapters.configurable.ConfigurableAdapterProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.core",
+      "ciris_engine.schemas.runtime.manifest"
+    ],
+    "external": {
+      "aiohttp": ">=3.8.0",
+      "opencv-python": ">=4.5.0",
+      "numpy": ">=1.20.0",
+      "zeroconf": ">=0.80.0"
+    }
+  },
+  "exports": {
+    "service_class": "home_assistant.service.HAIntegrationService",
+    "configurable": "home_assistant.configurable.HAConfigurableAdapter",
+    "schemas": [
+      "home_assistant.schemas.DetectionEvent",
+      "home_assistant.schemas.CameraFrame",
+      "home_assistant.schemas.HADeviceState"
+    ],
+    "capabilities": [
+      "ha_chat_bridge",
+      "ha_device_control",
+      "ha_automation_trigger",
+      "ha_sensor_data",
+      "ha_event_detection",
+      "ha_camera_frames"
+    ]
+  },
+  "configuration": {
+    "homeassistant_url": {
+      "type": "string",
+      "env": "HOME_ASSISTANT_URL",
+      "default": "http://homeassistant.local:8123",
+      "description": "Home Assistant instance URL"
+    },
+    "homeassistant_token": {
+      "type": "string",
+      "env": "HOME_ASSISTANT_TOKEN",
+      "default": null,
+      "description": "Home Assistant access token (obtained via OAuth2)"
+    },
+    "homeassistant_refresh_token": {
+      "type": "string",
+      "env": "HOME_ASSISTANT_REFRESH_TOKEN",
+      "default": null,
+      "description": "Home Assistant refresh token for token renewal"
+    },
+    "go2rtc_server_url": {
+      "type": "string",
+      "env": "GO2RTC_SERVER_URL",
+      "default": "http://127.0.0.1:8554",
+      "description": "go2rtc server URL for WebRTC camera streams"
+    },
+    "webrtc_camera_urls": {
+      "type": "string",
+      "env": "WEBRTC_CAMERA_URLS",
+      "default": "",
+      "description": "Comma-separated camera definitions: name:rtsp_url,name2:rtsp_url2"
+    },
+    "event_detection_sensitivity": {
+      "type": "float",
+      "env": "EVENT_DETECTION_SENSITIVITY",
+      "default": 0.7,
+      "description": "Sensitivity threshold for event detection (0.0-1.0)"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "default": 30,
+      "description": "Entity cache time-to-live in seconds"
+    },
+    "enabled_features": {
+      "type": "array",
+      "default": ["device_control", "automation_trigger", "sensor_data", "notifications"],
+      "description": "List of enabled HA features"
+    }
+  },
+  "metadata": {
+    "api": "Home Assistant WebSocket/REST API",
+    "requires_api_key": true,
+    "safe_domain": "home_automation",
+    "hardware_notes": "Designed for CIRISHome hardware stack: Jetson + HA Yellow + Voice PE",
+    "critical_note": "Actively filters out medical capabilities",
+    "oauth_note": "Uses IndieAuth-style OAuth2 per https://developers.home-assistant.io/docs/auth_api/"
+  }
+}

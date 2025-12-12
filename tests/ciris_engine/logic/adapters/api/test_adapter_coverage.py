@@ -377,8 +377,11 @@ class TestReinjectServices:
 
             adapter.runtime = Mock()
             adapter.runtime.test_service = Mock()
+            adapter.runtime.runtime_control_service = Mock()
+            adapter.runtime.runtime_control_service.adapter_manager = Mock()
             adapter.app = Mock()
             adapter.app.state = Mock()
+            adapter.runtime_control = Mock()  # Required for _inject_adapter_manager_to_api_runtime_control
 
             # Mock the service configuration
             with patch("ciris_engine.logic.adapters.api.adapter.ApiServiceConfiguration") as mock_config:

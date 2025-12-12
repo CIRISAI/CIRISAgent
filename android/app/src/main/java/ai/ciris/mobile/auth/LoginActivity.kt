@@ -77,8 +77,27 @@ class LoginActivity : AppCompatActivity() {
             openPrivacyPolicy()
         }
 
-        // Try silent sign-in on launch (only for returning Google users)
-        attemptSilentSignIn()
+        // Only attempt silent sign-in if user previously chose Google auth
+        val prefs = getSharedPreferences("ciris_auth", MODE_PRIVATE)
+        val savedAuthMethod = prefs.getString("auth_method", null)
+
+        when (savedAuthMethod) {
+            AUTH_METHOD_GOOGLE -> {
+                // Returning Google user - try silent sign-in
+                Log.i(TAG, "Returning Google user - attempting silent sign-in")
+                attemptSilentSignIn()
+            }
+            AUTH_METHOD_API_KEY -> {
+                // Returning API key user - go straight to main
+                Log.i(TAG, "Returning API key user - proceeding to main")
+                proceedToMain(AUTH_METHOD_API_KEY)
+            }
+            else -> {
+                // First-time user - show login options
+                Log.i(TAG, "First-time user - showing login options")
+                showProgress(false)
+            }
+        }
     }
 
     private fun openPrivacyPolicy() {
@@ -154,6 +173,11 @@ class LoginActivity : AppCompatActivity() {
 
     private fun proceedToMain(authMethod: String) {
         Log.i(TAG, "[Auth Flow] proceedToMain called with authMethod: $authMethod")
+
+        // Save the user's auth method choice for future launches
+        val prefs = getSharedPreferences("ciris_auth", MODE_PRIVATE)
+        prefs.edit().putString("auth_method", authMethod).apply()
+        Log.i(TAG, "[Auth Flow] Saved auth_method preference: $authMethod")
 
         val intent = Intent(this, MainActivity::class.java).apply {
             putExtra("auth_method", authMethod)

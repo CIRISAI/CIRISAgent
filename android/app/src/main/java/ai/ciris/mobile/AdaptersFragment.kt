@@ -1,11 +1,18 @@
 package ai.ciris.mobile
 
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -67,10 +74,14 @@ class AdaptersFragment : Fragment() {
     private var pollingJob: Job? = null
     private var isConnected = false
     private var cachedModuleTypes: ModuleTypesData? = null
+    private var cachedConfigurableAdapters: List<ConfigurableAdapterInfo> = emptyList()
+    private var currentConfigSession: ConfigSessionData? = null
+
 
     companion object {
         private const val TAG = "AdaptersFragment"
-        private const val BASE_URL = "http://localhost:8080"
+        // Use 127.0.0.1 instead of localhost - Android browser may not resolve localhost to loopback
+        private const val BASE_URL = "http://127.0.0.1:8080"
         private const val POLL_INTERVAL_MS = 10000L
         private const val ARG_ACCESS_TOKEN = "access_token"
 
@@ -111,13 +122,12 @@ class AdaptersFragment : Fragment() {
         adapter = AdapterListAdapter(adapterItems, ::onReloadAdapter, ::onRemoveAdapter)
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = adapter
-
         // Refresh button
         refreshButton.setOnClickListener {
             fetchAdapters()
         }
 
-        // Add adapter FAB
+        // Add adapter FAB - show available adapter types directly
         addAdapterFab.setOnClickListener {
             showAddAdapterDialog()
         }
@@ -134,6 +144,10 @@ class AdaptersFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         stopPolling()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
     }
 
     private fun startPolling() {
@@ -340,17 +354,39 @@ class AdaptersFragment : Fragment() {
         }
     }
 
+    // ===== Adapter Actions Menu =====
+
+    private fun showAdapterActionsMenu() {
+        val options = arrayOf(
+            "Add Adapter (Manual)",
+            "Configure Adapter (Wizard)"
+        )
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Adapter Options")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showAddAdapterDialog()
+                    1 -> showConfigureAdapterDialog()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     // ===== Add Adapter Functionality =====
 
     private fun showAddAdapterDialog() {
-        // First fetch available module types
+        // Fetch both module types AND configurable adapters
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val moduleTypes = fetchModuleTypes()
+                val configurableAdapters = fetchConfigurableAdapters()
                 withContext(Dispatchers.Main) {
+                    cachedConfigurableAdapters = configurableAdapters
                     if (moduleTypes != null) {
                         cachedModuleTypes = moduleTypes
-                        showModuleTypeSelectionDialog(moduleTypes)
+                        showModuleTypeSelectionDialog(moduleTypes, configurableAdapters)
                     } else {
                         Toast.makeText(context, "Failed to load adapter types", Toast.LENGTH_SHORT).show()
                     }
@@ -382,29 +418,55 @@ class AdaptersFragment : Fragment() {
         return null
     }
 
-    private fun showModuleTypeSelectionDialog(data: ModuleTypesData) {
-        val allModules = data.coreModules + data.modularServices
-        if (allModules.isEmpty()) {
+    private fun showModuleTypeSelectionDialog(
+        data: ModuleTypesData,
+        configurableAdapters: List<ConfigurableAdapterInfo>
+    ) {
+        val allModules = data.coreModules + data.adapters
+        if (allModules.isEmpty() && configurableAdapters.isEmpty()) {
             Toast.makeText(context, "No adapter types available", Toast.LENGTH_SHORT).show()
             return
         }
 
+        // Build a map of configurable adapter types for quick lookup
+        val configurableMap = configurableAdapters.associateBy { it.adapterType }
+
         val moduleNames = allModules.map { module ->
-            val source = if (module.moduleSource == "core") "[Core]" else "[Modular]"
-            "$source ${module.name}"
+            val isConfigurable = configurableMap.containsKey(module.moduleId)
+            val tag = when {
+                isConfigurable -> "[Wizard]"
+                module.moduleSource == "core" -> "[Core]"
+                else -> "[Modular]"
+            }
+            "$tag ${module.name}"
         }.toTypedArray()
 
         AlertDialog.Builder(requireContext())
             .setTitle("Select Adapter Type")
             .setItems(moduleNames) { _, which ->
                 val selectedModule = allModules[which]
-                showConfigurationDialog(selectedModule)
+                // Check if this module has a configurable adapter with wizard flow
+                val configurableAdapter = configurableMap[selectedModule.moduleId]
+                if (configurableAdapter != null) {
+                    // Use wizard flow for configurable adapters
+                    startConfigurationSession(configurableAdapter)
+                } else {
+                    // Use manual form for other adapters
+                    showConfigurationDialog(selectedModule)
+                }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
     private fun showConfigurationDialog(module: ModuleTypeInfo) {
+        Log.d(TAG, "[CONFIG_DIALOG] Opening dialog for module: ${module.moduleId}")
+        Log.d(TAG, "[CONFIG_DIALOG] Module name: ${module.name}, description: ${module.description}")
+        Log.d(TAG, "[CONFIG_DIALOG] Schema has ${module.configurationSchema.size} parameters")
+        module.configurationSchema.forEachIndexed { idx, param ->
+            Log.d(TAG, "[CONFIG_DIALOG] Param[$idx]: name=${param.name}, type=${param.paramType}, required=${param.required}, default=${param.default} (${param.default?.javaClass?.simpleName})")
+        }
+
         val context = requireContext()
         val configParams = module.configurationSchema
 
@@ -471,8 +533,15 @@ class AdaptersFragment : Fragment() {
                     }
                 }
                 // Set default value if available
+                // Gson deserializes JSON integers as Double, so convert whole numbers to Int for display
                 param.default?.let { default ->
-                    setText(default.toString())
+                    val displayValue = when {
+                        // If it's a Double that represents a whole number (e.g., 8000.0), display as integer
+                        default is Double && default == default.toLong().toDouble() -> default.toLong().toString()
+                        else -> default.toString()
+                    }
+                    Log.d(TAG, "[CONFIG_DIALOG] Param '${param.name}': type=${param.paramType}, default=$default (${default::class.simpleName}), display=$displayValue")
+                    setText(displayValue)
                 }
             }
 
@@ -510,8 +579,12 @@ class AdaptersFragment : Fragment() {
         val settings = mutableMapOf<String, Any?>()
         var hasError = false
 
+        Log.d(TAG, "[SUBMIT_CONFIG] Processing module: ${module.moduleId}")
+        Log.d(TAG, "[SUBMIT_CONFIG] Configuration schema: ${module.configurationSchema.map { "${it.name}:${it.paramType}" }}")
+
         module.configurationSchema.forEach { param ->
             val value = fields[param.name]?.text?.toString() ?: ""
+            Log.d(TAG, "[SUBMIT_CONFIG] Processing param: ${param.name}, type=${param.paramType}, value='$value'")
 
             if (param.required && value.isEmpty()) {
                 Toast.makeText(context, "${param.name} is required", Toast.LENGTH_SHORT).show()
@@ -527,6 +600,7 @@ class AdaptersFragment : Fragment() {
                     "boolean" -> value.lowercase() in listOf("true", "1", "yes")
                     else -> value
                 }
+                Log.d(TAG, "[SUBMIT_CONFIG] Converted ${param.name}: '$value' -> $typedValue (type=${typedValue?.javaClass?.simpleName})")
                 settings[param.name] = typedValue
             }
         }
@@ -535,6 +609,8 @@ class AdaptersFragment : Fragment() {
 
         // Generate a unique adapter ID
         val adapterId = "${module.moduleId}_${System.currentTimeMillis()}"
+        Log.d(TAG, "[SUBMIT_CONFIG] Generated adapter_id: $adapterId")
+        Log.d(TAG, "[SUBMIT_CONFIG] Final settings: $settings")
 
         // Submit to API
         CoroutineScope(Dispatchers.IO).launch {
@@ -560,13 +636,16 @@ class AdaptersFragment : Fragment() {
                     "config" to config,
                     "auto_start" to true
                 )
+
+                Log.d(TAG, "[SUBMIT_CONFIG] Request config: $config")
                 val jsonBody = gson.toJson(requestBody)
-                    .toRequestBody("application/json".toMediaType())
+                Log.d(TAG, "[SUBMIT_CONFIG] Request JSON: $jsonBody")
+                val jsonRequestBody = jsonBody.toRequestBody("application/json".toMediaType())
 
                 // Include adapter_id as query parameter (per MCP tests pattern)
                 val request = Request.Builder()
                     .url("$BASE_URL/v1/system/adapters/${module.moduleId}?adapter_id=$adapterId")
-                    .post(jsonBody)
+                    .post(jsonRequestBody)
                     .apply {
                         accessToken?.let { addHeader("Authorization", "Bearer $it") }
                         addHeader("Content-Type", "application/json")
@@ -576,6 +655,9 @@ class AdaptersFragment : Fragment() {
                 val response = client.newCall(request).execute()
                 val responseBody = response.body?.string()
 
+                Log.d(TAG, "[SUBMIT_CONFIG] Response code: ${response.code}")
+                Log.d(TAG, "[SUBMIT_CONFIG] Response body: $responseBody")
+
                 withContext(Dispatchers.Main) {
                     if (response.isSuccessful) {
                         // Parse response to check if operation succeeded
@@ -583,11 +665,14 @@ class AdaptersFragment : Fragment() {
                             gson.fromJson(responseBody, GenericResponse::class.java)
                         } catch (e: Exception) { null }
 
+                        Log.d(TAG, "[SUBMIT_CONFIG] Parsed result: success=${result?.data?.success}, error=${result?.data?.error}")
+
                         if (result?.data?.success != false) {
                             Toast.makeText(context, "Adapter added successfully", Toast.LENGTH_SHORT).show()
                             fetchAdapters()
                         } else {
                             val error = result.data?.error ?: result.data?.message ?: "Operation failed"
+                            Log.e(TAG, "[SUBMIT_CONFIG] Adapter add failed: $error")
                             Toast.makeText(context, "Failed: $error", Toast.LENGTH_LONG).show()
                         }
                     } else {
@@ -597,16 +682,792 @@ class AdaptersFragment : Fragment() {
                         } catch (e: Exception) {
                             "Failed to add adapter: ${response.code}"
                         }
+                        Log.e(TAG, "[SUBMIT_CONFIG] HTTP error: ${response.code}, message=$errorMsg")
                         Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error adding adapter", e)
+                Log.e(TAG, "[SUBMIT_CONFIG] Error adding adapter", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    // ===== Dynamic Configuration Wizard =====
+
+    private fun showConfigureAdapterDialog() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val adapters = fetchConfigurableAdapters()
+                withContext(Dispatchers.Main) {
+                    if (adapters.isNotEmpty()) {
+                        cachedConfigurableAdapters = adapters
+                        showConfigurableAdapterSelectionDialog(adapters)
+                    } else {
+                        Toast.makeText(context, "No configurable adapters available", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching configurable adapters", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchConfigurableAdapters(): List<ConfigurableAdapterInfo> {
+        val request = Request.Builder()
+            .url("$BASE_URL/v1/system/adapters/configurable")
+            .apply {
+                accessToken?.let { addHeader("Authorization", "Bearer $it") }
+            }
+            .build()
+
+        val response = client.newCall(request).execute()
+        val body = response.body?.string() ?: return emptyList()
+
+        if (response.isSuccessful) {
+            val configResponse = gson.fromJson(body, ConfigurableAdaptersResponse::class.java)
+            return configResponse.data?.adapters ?: emptyList()
+        }
+        return emptyList()
+    }
+
+    private fun showConfigurableAdapterSelectionDialog(adapters: List<ConfigurableAdapterInfo>) {
+        val adapterNames = adapters.map { "${it.name}\n${it.description}" }.toTypedArray()
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Configure Adapter")
+            .setItems(adapterNames) { _, which ->
+                val selectedAdapter = adapters[which]
+                startConfigurationSession(selectedAdapter)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun startConfigurationSession(adapterInfo: ConfigurableAdapterInfo) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/${adapterInfo.adapterType}/configure/start")
+                    .post("{}".toRequestBody("application/json".toMediaType()))
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful && body != null) {
+                        val sessionResponse = gson.fromJson(body, ConfigSessionResponse::class.java)
+                        sessionResponse.data?.let { session ->
+                            currentConfigSession = session
+                            // Use currentStepInfo from session (preferred) or fall back to steps list
+                            val step = session.currentStepInfo
+                                ?: adapterInfo.steps?.getOrNull(session.currentStep)
+                            if (step != null) {
+                                showConfigurationStep(adapterInfo, session, step)
+                            } else {
+                                Toast.makeText(context, "No step info available", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(context, "Failed to start configuration", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting configuration session", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showConfigurationStep(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val context = requireContext()
+
+        Log.i(TAG, "Showing step: ${step.stepId} (${step.stepType})")
+
+        when (step.stepType) {
+            "discovery" -> executeDiscoveryStep(adapterInfo, session, step)
+            "oauth" -> executeOAuthStep(adapterInfo, session, step)
+            "select" -> executeSelectStep(adapterInfo, session, step)
+            "input" -> showInputStepDialog(adapterInfo, session, step)
+            "confirm" -> showConfirmStepDialog(adapterInfo, session, step)
+            else -> {
+                Toast.makeText(context, "Unknown step type: ${step.stepType}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun executeDiscoveryStep(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val context = requireContext()
+
+        // Show progress dialog
+        val progressDialog = AlertDialog.Builder(context)
+            .setTitle(step.title)
+            .setMessage("${step.description}\n\nSearching...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Wrap step data in step_data field as expected by server
+                val requestBody = mapOf(
+                    "step_data" to mapOf(
+                        "step_type" to "discovery",
+                        "discovery_type" to (step.discoveryMethod ?: "auto")
+                    )
+                )
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/step")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+
+                    if (response.isSuccessful && body != null) {
+                        val stepResponse = gson.fromJson(body, StepExecutionResponse::class.java)
+                        stepResponse.data?.let { result ->
+                            val items = result.data?.discoveredItems ?: emptyList()
+                            Log.d(TAG, "Discovery returned ${items.size} items: ${items.map { it.label }}")
+                            showDiscoveryResultsDialog(adapterInfo, session, step, items)
+                        }
+                    } else {
+                        Toast.makeText(context, "Discovery failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in discovery step", e)
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showDiscoveryResultsDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo,
+        items: List<DiscoveredItem>
+    ) {
+        val context = requireContext()
+
+        if (items.isEmpty()) {
+            // No items discovered - allow manual entry
+            showManualUrlEntryDialog(adapterInfo, session)
+            return
+        }
+
+        val itemLabels = (items.map { it.label } + listOf("Enter URL manually...")).toTypedArray()
+
+        AlertDialog.Builder(context)
+            .setTitle("Select ${adapterInfo.name}")
+            .setItems(itemLabels) { _, which ->
+                if (which < items.size) {
+                    // Selected a discovered item
+                    val selectedItem = items[which]
+                    Log.d(TAG, "[DISCOVERY] Selected item metadata: ${selectedItem.metadata}")
+
+                    // Build URL - handle port as number (Gson deserializes JSON numbers as Double)
+                    val url = selectedItem.metadata?.get("url") as? String
+                        ?: selectedItem.metadata?.get("host")?.let { host ->
+                            val portValue = selectedItem.metadata["port"]
+                            // Convert port to integer (JSON numbers come as Double from Gson)
+                            val port = when (portValue) {
+                                is Number -> portValue.toInt()
+                                is String -> portValue.toIntOrNull() ?: 8123
+                                else -> 8123
+                            }
+                            Log.d(TAG, "[DISCOVERY] Building URL from host=$host, port=$port (raw portValue=$portValue, type=${portValue?.javaClass?.simpleName})")
+                            "http://$host:$port"
+                        }
+
+                    Log.d(TAG, "[DISCOVERY] Final URL: $url")
+                    if (url != null) {
+                        proceedToNextStep(adapterInfo, session, mapOf("base_url" to url, "selected_instance" to selectedItem.id))
+                    }
+                } else {
+                    // Manual entry
+                    showManualUrlEntryDialog(adapterInfo, session)
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                cancelConfigSession(session)
+            }
+            .show()
+    }
+
+    private fun showManualUrlEntryDialog(adapterInfo: ConfigurableAdapterInfo, session: ConfigSessionData) {
+        val context = requireContext()
+        val editText = EditText(context).apply {
+            hint = "http://192.168.1.100:8123"
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(48, 32, 48, 32)
+        }
+
+        AlertDialog.Builder(context)
+            .setTitle("Enter ${adapterInfo.name} URL")
+            .setView(editText)
+            .setPositiveButton("Continue") { _, _ ->
+                val url = editText.text.toString().trim()
+                if (url.isNotEmpty()) {
+                    proceedToNextStep(adapterInfo, session, mapOf("base_url" to url))
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                cancelConfigSession(session)
+            }
+            .show()
+    }
+
+    private fun executeOAuthStep(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val ctx = requireContext()
+
+        // Get base_url from session context (set during discovery selection)
+        val baseUrl = session.context?.get("base_url") as? String
+        Log.d(TAG, "[OAUTH] executeOAuthStep called, session.context=${session.context}, base_url=$baseUrl")
+
+        if (baseUrl.isNullOrEmpty()) {
+            Log.e(TAG, "[OAUTH] ERROR: No base_url in session context!")
+            Toast.makeText(ctx, "No Home Assistant URL configured", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Include base_url and callback_base_url in step_data so the server can generate the OAuth URL
+                // Home Assistant requires localhost redirect (client_id must be a website URL)
+                // The system browser will redirect to http://127.0.0.1:8080/... which our local server handles
+                // API expects {"step_data": {...}}
+                val requestBody = mapOf(
+                    "step_data" to mapOf(
+                        "step_type" to "oauth",
+                        "base_url" to baseUrl,
+                        "callback_base_url" to BASE_URL,  // Local API - used as both client_id and redirect base
+                        "platform" to "android"
+                    )
+                )
+                Log.d(TAG, "[OAUTH] Sending OAuth step request with base_url=$baseUrl, callback_base_url=$BASE_URL")
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/step")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful && body != null) {
+                        val stepResponse = gson.fromJson(body, StepExecutionResponse::class.java)
+                        val oauthUrl = stepResponse.data?.data?.oauthUrl
+
+                        if (oauthUrl != null) {
+                            showOAuthDialog(adapterInfo, session, step, oauthUrl)
+                        } else {
+                            Toast.makeText(context, "Failed to get OAuth URL", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "OAuth step failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in OAuth step", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * Opens OAuth URL in Chrome Custom Tabs (system browser) for OAuth flow.
+     *
+     * Uses the ciris:// deep link scheme for OAuth callbacks, which allows:
+     * - Full browser security features (password managers, autofill, etc.)
+     * - Proper certificate validation
+     * - User's existing browser session and cookies
+     *
+     * The OAuth provider redirects to ciris://oauth/callback?code=xxx&state=yyy
+     * which is handled by OAuthCallbackActivity, forwarded to local Python server.
+     *
+     * This pattern works for any OAuth2 provider: Home Assistant, Discord,
+     * Google, Microsoft, Reddit, etc.
+     */
+    private fun showOAuthDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo,
+        oauthUrl: String
+    ) {
+        val ctx = requireContext()
+        val providerName = step.oauthConfig?.providerName ?: adapterInfo.name
+
+        Log.i(TAG, "[OAUTH] Opening OAuth URL: $oauthUrl")
+        Log.i(TAG, "[OAUTH] Session ID: ${session.sessionId}")
+
+        try {
+            // Simple browser intent - works reliably for localhost redirects
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(oauthUrl))
+            ctx.startActivity(browserIntent)
+            showOAuthPendingDialog(adapterInfo, session, step, providerName)
+        } catch (e: Exception) {
+            Log.e(TAG, "[OAUTH] Failed to launch browser: ${e.message}", e)
+            Toast.makeText(ctx, "Could not open browser for authentication", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Shows a dialog while OAuth is in progress in the browser.
+     * User will automatically return to app via deep link callback.
+     */
+    private fun showOAuthPendingDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo,
+        providerName: String
+    ) {
+        val ctx = requireContext()
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Authenticating with $providerName")
+            .setMessage("Complete sign-in in your browser.\n\nYou'll be returned to the app automatically when done.")
+            .setPositiveButton("Check Status") { _, _ ->
+                // Manual check in case deep link didn't work
+                checkOAuthCallback(adapterInfo, session, step)
+            }
+            .setNeutralButton("Retry") { _, _ ->
+                // Re-execute OAuth step to get fresh URL
+                executeOAuthStep(adapterInfo, session, step)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                cancelConfigSession(session)
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showOAuthWaitingDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val context = requireContext()
+
+        AlertDialog.Builder(context)
+            .setTitle("Waiting for Authorization")
+            .setMessage("After you've signed in, tap 'Check Status' to continue.")
+            .setPositiveButton("Check Status") { _, _ ->
+                checkOAuthCallback(adapterInfo, session, step)
+            }
+            .setNeutralButton("Retry") { _, _ ->
+                // Re-execute OAuth step to get fresh URL
+                executeOAuthStep(adapterInfo, session, step)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                cancelConfigSession(session)
+            }
+            .show()
+    }
+
+    private fun checkOAuthCallback(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        // Check session status to see if OAuth completed
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/status")
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful && body != null) {
+                        val statusResponse = gson.fromJson(body, ConfigSessionResponse::class.java)
+                        statusResponse.data?.let { updatedSession ->
+                            currentConfigSession = updatedSession
+
+                            // Check if we've moved past OAuth step
+                            val oauthStepIndex = adapterInfo.steps?.indexOfFirst { it.stepType == "oauth" } ?: -1
+                            if (updatedSession.currentStep > oauthStepIndex) {
+                                // OAuth completed, proceed to next step
+                                val nextStep = updatedSession.currentStepInfo
+                                    ?: adapterInfo.steps?.getOrNull(updatedSession.currentStep)
+                                if (nextStep != null) {
+                                    showConfigurationStep(adapterInfo, updatedSession, nextStep)
+                                }
+                            } else {
+                                // Still waiting for OAuth
+                                showOAuthWaitingDialog(adapterInfo, updatedSession, step)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking OAuth status", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun executeSelectStep(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Wrap step data in step_data field as expected by server
+                val requestBody = mapOf(
+                    "step_data" to mapOf(
+                        "step_type" to "select",
+                        "step_id" to step.stepId,
+                        "get_options" to true
+                    )
+                )
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/step")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful && body != null) {
+                        val stepResponse = gson.fromJson(body, StepExecutionResponse::class.java)
+                        val options = stepResponse.data?.data?.options ?: emptyList()
+                        showSelectOptionsDialog(adapterInfo, session, step, options)
+                    } else {
+                        // If no options, skip to next step
+                        proceedToNextStep(adapterInfo, session, emptyMap())
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in select step", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun showSelectOptionsDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo,
+        options: List<ConfigOption>
+    ) {
+        val context = requireContext()
+
+        if (options.isEmpty()) {
+            // No options available, skip step
+            if (step.optional) {
+                proceedToNextStep(adapterInfo, session, emptyMap())
+            } else {
+                Toast.makeText(context, "No options available for ${step.title}", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        val optionLabels = options.map { it.label }.toTypedArray()
+        val checkedItems = BooleanArray(options.size) { i ->
+            (options[i].metadata?.get("default") as? Boolean) ?: false
+        }
+
+        AlertDialog.Builder(context)
+            .setTitle(step.title)
+            .setMultiChoiceItems(optionLabels, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+            }
+            .setPositiveButton("Continue") { _, _ ->
+                val selectedOptions = options.filterIndexed { index, _ -> checkedItems[index] }
+                val selectedIds = selectedOptions.map { it.id }
+                proceedWithSelection(adapterInfo, session, step, selectedIds)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                if (step.optional) {
+                    proceedToNextStep(adapterInfo, session, emptyMap())
+                } else {
+                    cancelConfigSession(session)
+                }
+            }
+            .show()
+    }
+
+    private fun proceedWithSelection(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo,
+        selectedIds: List<String>
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Wrap step data in step_data field as expected by server
+                val requestBody = mapOf(
+                    "step_data" to mapOf(
+                        "step_type" to "select",
+                        "step_id" to step.stepId,
+                        "selected" to selectedIds
+                    )
+                )
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/step")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful && body != null) {
+                        val stepResponse = gson.fromJson(body, StepExecutionResponse::class.java)
+                        stepResponse.data?.let { result ->
+                            if (result.success) {
+                                val nextStepIndex = result.nextStep ?: (session.currentStep + 1)
+                                val stepsSize = adapterInfo.steps?.size ?: 0
+                                if (nextStepIndex < stepsSize) {
+                                    val updatedSession = session.copy(currentStep = nextStepIndex)
+                                    currentConfigSession = updatedSession
+                                    val nextStep = adapterInfo.steps?.getOrNull(nextStepIndex)
+                                    if (nextStep != null) {
+                                        showConfigurationStep(adapterInfo, updatedSession, nextStep)
+                                    }
+                                } else {
+                                    completeConfiguration(session)
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error submitting selection", e)
+            }
+        }
+    }
+
+    private fun showInputStepDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val context = requireContext()
+
+        // Simple input step - for now just show a continue button
+        AlertDialog.Builder(context)
+            .setTitle(step.title)
+            .setMessage(step.description)
+            .setPositiveButton("Continue") { _, _ ->
+                proceedToNextStep(adapterInfo, session, emptyMap())
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                cancelConfigSession(session)
+            }
+            .show()
+    }
+
+    private fun showConfirmStepDialog(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        step: ConfigurationStepInfo
+    ) {
+        val context = requireContext()
+
+        // Execute confirm step to get config preview
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Wrap step data in step_data field as expected by server
+                val requestBody = mapOf(
+                    "step_data" to mapOf(
+                        "step_type" to "confirm",
+                        "get_preview" to true
+                    )
+                )
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/step")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    val preview = if (response.isSuccessful && body != null) {
+                        val stepResponse = gson.fromJson(body, StepExecutionResponse::class.java)
+                        stepResponse.data?.data?.configPreview?.entries
+                            ?.filter { entry -> !entry.key.contains("token", ignoreCase = true) }
+                            ?.joinToString("\n") { entry -> "${entry.key}: ${entry.value}" }
+                            ?: "Configuration ready"
+                    } else {
+                        "Configuration ready"
+                    }
+
+                    AlertDialog.Builder(context)
+                        .setTitle(step.title)
+                        .setMessage("${step.description}\n\n$preview")
+                        .setPositiveButton("Apply Configuration") { _, _ ->
+                            completeConfiguration(session)
+                        }
+                        .setNeutralButton("Apply & Save") { _, _ ->
+                            completeConfiguration(session, persist = true)
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            cancelConfigSession(session)
+                        }
+                        .show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in confirm step", e)
+                withContext(Dispatchers.Main) {
+                    // Fallback to simple confirm dialog
+                    AlertDialog.Builder(context)
+                        .setTitle(step.title)
+                        .setMessage(step.description)
+                        .setPositiveButton("Apply") { _, _ ->
+                            completeConfiguration(session)
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            cancelConfigSession(session)
+                        }
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun proceedToNextStep(
+        adapterInfo: ConfigurableAdapterInfo,
+        session: ConfigSessionData,
+        context: Map<String, Any>
+    ) {
+        val nextStepIndex = session.currentStep + 1
+        val stepsSize = adapterInfo.steps?.size ?: 0
+        Log.d(TAG, "[PROCEED] proceedToNextStep: nextStep=$nextStepIndex, existingContext=${session.context}, newContext=$context")
+        if (nextStepIndex < stepsSize) {
+            // Merge new context with existing (handle null session.context)
+            val mergedContext = (session.context ?: emptyMap()) + context
+            Log.d(TAG, "[PROCEED] mergedContext=$mergedContext")
+            val updatedSession = session.copy(currentStep = nextStepIndex, context = mergedContext)
+            currentConfigSession = updatedSession
+            val nextStep = adapterInfo.steps?.getOrNull(nextStepIndex)
+            if (nextStep != null) {
+                showConfigurationStep(adapterInfo, updatedSession, nextStep)
+            }
+        } else {
+            completeConfiguration(session)
+        }
+    }
+
+    private fun completeConfiguration(session: ConfigSessionData, persist: Boolean = false) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val requestBody = mapOf("persist" to persist)
+                val jsonBody = gson.toJson(requestBody).toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/v1/system/adapters/configure/${session.sessionId}/complete")
+                    .post(jsonBody)
+                    .apply {
+                        accessToken?.let { addHeader("Authorization", "Bearer $it") }
+                        addHeader("Content-Type", "application/json")
+                    }
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+
+                withContext(Dispatchers.Main) {
+                    if (response.isSuccessful) {
+                        val persistMsg = if (persist) " (saved for startup)" else ""
+                        Toast.makeText(context, "Adapter configured successfully$persistMsg", Toast.LENGTH_SHORT).show()
+                        currentConfigSession = null
+                        fetchAdapters()
+                    } else {
+                        val error = try {
+                            gson.fromJson(body, ErrorResponse::class.java).detail
+                        } catch (e: Exception) { "Configuration failed" }
+                        Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error completing configuration", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun cancelConfigSession(session: ConfigSessionData) {
+        // Just clear local state - sessions expire automatically
+        currentConfigSession = null
+        Toast.makeText(context, "Configuration cancelled", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -646,9 +1507,9 @@ data class ModuleTypesResponse(
 
 data class ModuleTypesData(
     @SerializedName("core_modules") val coreModules: List<ModuleTypeInfo>,
-    @SerializedName("modular_services") val modularServices: List<ModuleTypeInfo>,
+    @SerializedName("adapters") val adapters: List<ModuleTypeInfo>,
     @SerializedName("total_core") val totalCore: Int,
-    @SerializedName("total_modular") val totalModular: Int
+    @SerializedName("total_adapters") val totalAdapters: Int
 )
 
 data class ModuleTypeInfo(
@@ -695,6 +1556,94 @@ data class AdapterOperationResult(
     val error: String? = null,
     val message: String? = null,
     @SerializedName("is_running") val isRunning: Boolean? = null
+)
+
+// ===== Dynamic Configuration Data Classes =====
+
+data class ConfigurableAdaptersResponse(
+    val data: ConfigurableAdaptersData?
+)
+
+data class ConfigurableAdaptersData(
+    val adapters: List<ConfigurableAdapterInfo>,
+    @SerializedName("total_count") val totalCount: Int
+)
+
+data class ConfigurableAdapterInfo(
+    @SerializedName("adapter_type") val adapterType: String,
+    val name: String,
+    val description: String,
+    @SerializedName("workflow_type") val workflowType: String,
+    val steps: List<ConfigurationStepInfo>? = null
+)
+
+data class ConfigurationStepInfo(
+    @SerializedName("step_id") val stepId: String,
+    @SerializedName("step_type") val stepType: String,
+    val title: String,
+    val description: String,
+    @SerializedName("discovery_method") val discoveryMethod: String? = null,
+    @SerializedName("oauth_config") val oauthConfig: OAuthConfigInfo? = null,
+    @SerializedName("depends_on") val dependsOn: List<String> = emptyList(),
+    val optional: Boolean = false
+)
+
+data class OAuthConfigInfo(
+    @SerializedName("provider_name") val providerName: String,
+    @SerializedName("authorization_path") val authorizationPath: String,
+    @SerializedName("token_path") val tokenPath: String,
+    @SerializedName("client_id_source") val clientIdSource: String,
+    val scopes: List<String> = emptyList(),
+    @SerializedName("pkce_required") val pkceRequired: Boolean = true
+)
+
+data class ConfigSessionResponse(
+    val data: ConfigSessionData?
+)
+
+data class ConfigSessionData(
+    @SerializedName("session_id") val sessionId: String,
+    val status: String,
+    @SerializedName("adapter_type") val adapterType: String,
+    @SerializedName("current_step_index") val currentStep: Int,
+    @SerializedName("current_step") val currentStepInfo: ConfigurationStepInfo? = null,
+    @SerializedName("steps_completed") val stepsCompleted: List<String>? = null,
+    val context: Map<String, Any>? = null
+)
+
+data class StepExecutionResponse(
+    val data: StepExecutionData?
+)
+
+data class StepExecutionData(
+    val success: Boolean,
+    @SerializedName("step_id") val stepId: String? = null,
+    @SerializedName("step_type") val stepType: String? = null,
+    val data: StepResult? = null,  // Python sends "data" containing discovered_items
+    @SerializedName("next_step") val nextStep: Int? = null,
+    @SerializedName("next_step_index") val nextStepIndex: Int? = null,
+    val message: String? = null
+)
+
+data class StepResult(
+    @SerializedName("discovered_items") val discoveredItems: List<DiscoveredItem>? = null,
+    @SerializedName("oauth_url") val oauthUrl: String? = null,
+    val options: List<ConfigOption>? = null,
+    @SerializedName("config_preview") val configPreview: Map<String, Any>? = null
+)
+
+data class DiscoveredItem(
+    val id: String,
+    val label: String,
+    val description: String,
+    val metadata: Map<String, Any>? = null
+)
+
+data class ConfigOption(
+    val id: String,
+    val label: String,
+    val description: String,
+    val metadata: Map<String, Any>? = null
 )
 
 // RecyclerView Adapter

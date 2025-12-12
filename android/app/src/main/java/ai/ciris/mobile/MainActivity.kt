@@ -1,7 +1,12 @@
 package ai.ciris.mobile
 
 import android.animation.ArgbEvaluator
+import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.os.Handler
+import android.os.Looper
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -30,6 +35,7 @@ import androidx.security.crypto.MasterKey
 import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.auth.TokenRefreshManager
 import ai.ciris.mobile.billing.BillingApiClient
+import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
@@ -91,6 +97,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var currentServiceName: TextView
     private lateinit var showLogsButton: TextView
     private lateinit var backToSplashButton: TextView
+
+    // Enhanced startup UI views
+    private lateinit var signetLogo: ImageView
+    private lateinit var phaseIndicator: TextView
+    private lateinit var elapsedTime: TextView
+
+    // Elapsed time tracking
+    private var startTime: Long = 0
+    private val elapsedHandler = Handler(Looper.getMainLooper())
+    private var elapsedRunnable: Runnable? = null
+    private var currentPhase = StartupPhase.INITIALIZING
+    private var healthCheckAttempts = 0
 
     // Prep phase views (6 lights for pydantic/native lib setup)
     private lateinit var prepLightsContainer: LinearLayout
@@ -161,6 +179,23 @@ class MainActivity : AppCompatActivity() {
             private set
     }
 
+    /**
+     * Startup phases for UI display.
+     * ARM32-friendly - no complex animations.
+     */
+    enum class StartupPhase(val displayName: String) {
+        INITIALIZING("INITIALIZING"),
+        LOADING_RUNTIME("LOADING RUNTIME"),
+        PREPARING("PREPARING ENVIRONMENT"),
+        STARTING_SERVER("STARTING SERVER"),
+        WAITING_SERVER("WAITING FOR SERVER"),
+        LOADING_SERVICES("LOADING SERVICES"),
+        CHECKING_CONFIG("CHECKING CONFIG"),
+        FIRST_RUN_SETUP("FIRST-TIME SETUP"),
+        AUTHENTICATING("AUTHENTICATING"),
+        READY("READY")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable edge-to-edge display for Android 15+ (SDK 35)
         enableEdgeToEdge()
@@ -214,7 +249,7 @@ class MainActivity : AppCompatActivity() {
 
         // Save Google user info to BillingApiClient for billing API calls
         if (!googleUserId.isNullOrEmpty()) {
-            val billingApiClient = BillingApiClient(this)
+            val billingApiClient = createBillingApiClient()
             billingApiClient.setGoogleUserId(googleUserId!!)
             userEmail?.let { billingApiClient.setGoogleEmail(it) }
             userName?.let { billingApiClient.setGoogleDisplayName(it) }
@@ -260,6 +295,11 @@ class MainActivity : AppCompatActivity() {
         showLogsButton = findViewById(R.id.showLogsButton)
         backToSplashButton = findViewById(R.id.backToSplashButton)
 
+        // Setup enhanced startup UI views
+        signetLogo = findViewById(R.id.signetLogo)
+        phaseIndicator = findViewById(R.id.phaseIndicator)
+        elapsedTime = findViewById(R.id.elapsedTime)
+
         // Setup prep phase views
         prepLightsContainer = findViewById(R.id.prepLightsContainer)
         prepLightsRow = findViewById(R.id.prepLightsRow)
@@ -281,6 +321,10 @@ class MainActivity : AppCompatActivity() {
         // Setup button click handlers
         showLogsButton.setOnClickListener { showConsoleView() }
         backToSplashButton.setOnClickListener { showSplashView() }
+
+        // Start elapsed timer and signet pulse animation
+        startElapsedTimer()
+        startSignetPulse()
 
         // Setup WebView (hidden initially)
         setupWebView()
@@ -311,7 +355,16 @@ class MainActivity : AppCompatActivity() {
                 // Regex to match service startup lines: [SERVICE X/22] ServiceName STARTED
                 val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\] (\w+) STARTED""")
                 // Regex to detect errors
-                val errorPattern = Regex("""ERROR|FAILED|Exception|Traceback""", RegexOption.IGNORE_CASE)
+                val errorPattern = Regex("""\bERROR\b|FAILED|Exception|Traceback""", RegexOption.IGNORE_CASE)
+                // Patterns for false positives (not real errors)
+                val falsePositivePatterns = listOf(
+                    "Incident capture",           // Log setup message
+                    "WARNING/ERROR",              // Log setup message
+                    "Internal Server Error",      // HTTP status (handled separately)
+                    "Deprecated",                 // Deprecation warnings
+                    "PydanticDeprecated",         // Pydantic warnings
+                    "to be removed in"            // Future removal warnings
+                )
 
                 while (true) {
                     val line = reader.readLine() ?: break
@@ -334,8 +387,9 @@ class MainActivity : AppCompatActivity() {
                                 onServiceStarted(serviceNum, serviceName)
                             }
 
-                            // Check for errors
-                            if (errorPattern.containsMatchIn(line)) {
+                            // Check for errors (but filter out false positives)
+                            val isFalsePositive = falsePositivePatterns.any { line.contains(it, ignoreCase = true) }
+                            if (!isFalsePositive && errorPattern.containsMatchIn(line)) {
                                 onErrorDetected(line)
                             }
                         }
@@ -386,6 +440,11 @@ class MainActivity : AppCompatActivity() {
     private fun onPrepStepCompleted(stepNum: Int, description: String) {
         if (stepNum < 1 || stepNum > totalPrepSteps) return
 
+        // Set phase to PREPARING on first prep step
+        if (litPrepSteps.isEmpty()) {
+            setPhase(StartupPhase.PREPARING)
+        }
+
         // Track this step as lit
         litPrepSteps.add(stepNum)
 
@@ -401,14 +460,15 @@ class MainActivity : AppCompatActivity() {
         prepLabel.setTextColor(0xFF00d4ff.toInt())  // Cyan when active
 
         // Update status text with current step
-        splashStatus.text = "Setting up Python runtime..."
-        currentServiceName.text = description.take(50)  // Truncate long descriptions
+        updateStartupStatus("Preparing environment... $stepNum/$totalPrepSteps", description.take(50))
 
         // When all prep steps complete, show the services section
         if (litPrepSteps.size >= totalPrepSteps) {
             prepLabel.text = "Environment Ready"
             prepLabel.setTextColor(0xFF00ff88.toInt())  // Green when complete
             servicesLabel.visibility = View.VISIBLE
+            setPhase(StartupPhase.STARTING_SERVER)
+            updateStartupStatus("Environment ready ✓")
         }
 
         Log.i(TAG, "Prep step $stepNum/$totalPrepSteps completed: ${description.take(50)}")
@@ -459,6 +519,11 @@ class MainActivity : AppCompatActivity() {
     private fun onServiceStarted(serviceNum: Int, serviceName: String) {
         if (serviceNum < 1 || serviceNum > totalServices) return
 
+        // Set phase to LOADING_SERVICES on first service
+        if (litServices.isEmpty()) {
+            setPhase(StartupPhase.LOADING_SERVICES)
+        }
+
         // Track this service as lit
         litServices.add(serviceNum)
 
@@ -470,8 +535,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Update status text
-        splashStatus.text = "Starting services... ${litServices.size}/$totalServices"
-        currentServiceName.text = serviceName
+        updateStartupStatus("Starting services... ${litServices.size}/$totalServices", serviceName)
+
+        // When all services are ready
+        if (litServices.size >= totalServices) {
+            updateStartupStatus("All ${totalServices} services ready ✓")
+        }
 
         Log.i(TAG, "Service $serviceNum/$totalServices started: $serviceName")
     }
@@ -525,6 +594,103 @@ class MainActivity : AppCompatActivity() {
         splashContainer.visibility = View.VISIBLE
     }
 
+    // ================== Enhanced Startup UI Methods ==================
+
+    /**
+     * Start the elapsed time counter.
+     * Updates every 100ms for smooth display.
+     */
+    private fun startElapsedTimer() {
+        startTime = System.currentTimeMillis()
+        elapsedRunnable = object : Runnable {
+            override fun run() {
+                val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+                elapsedTime.text = String.format("%.1fs", elapsed)
+                if (!isFinishing && !isDestroyed) {
+                    elapsedHandler.postDelayed(this, 100)
+                }
+            }
+        }
+        elapsedHandler.post(elapsedRunnable!!)
+    }
+
+    /**
+     * Stop the elapsed timer.
+     */
+    private fun stopElapsedTimer() {
+        elapsedRunnable?.let { elapsedHandler.removeCallbacks(it) }
+        elapsedRunnable = null
+    }
+
+    /**
+     * Simple pulse animation for ARM32 compatibility.
+     * Just alpha animation, no complex transforms.
+     */
+    private fun startSignetPulse() {
+        val anim = AlphaAnimation(0.5f, 1.0f)
+        anim.duration = 1500
+        anim.repeatMode = Animation.REVERSE
+        anim.repeatCount = Animation.INFINITE
+        signetLogo.startAnimation(anim)
+    }
+
+    /**
+     * Stop the pulse animation.
+     */
+    private fun stopSignetPulse() {
+        signetLogo.clearAnimation()
+        signetLogo.alpha = 1.0f
+    }
+
+    /**
+     * Update the current startup phase.
+     * Updates phase indicator and adjusts animations.
+     */
+    private fun setPhase(phase: StartupPhase) {
+        currentPhase = phase
+        phaseIndicator.text = phase.displayName
+
+        // Adjust color based on phase
+        when (phase) {
+            StartupPhase.FIRST_RUN_SETUP -> {
+                phaseIndicator.setTextColor(0xFFFFCC00.toInt())  // Yellow for setup
+            }
+            StartupPhase.READY -> {
+                phaseIndicator.setTextColor(0xFF00ff88.toInt())  // Green for ready
+                stopSignetPulse()
+                // Brief scale animation to indicate ready
+                signetLogo.animate()
+                    .scaleX(1.1f)
+                    .scaleY(1.1f)
+                    .setDuration(200)
+                    .withEndAction {
+                        signetLogo.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(150)
+                            .start()
+                    }
+                    .start()
+            }
+            else -> {
+                phaseIndicator.setTextColor(0xFF419CA0.toInt())  // Teal for normal phases
+            }
+        }
+
+        Log.i(TAG, "[Phase] Changed to: ${phase.displayName}")
+    }
+
+    /**
+     * Update startup status with detailed message.
+     * Called from log parsing or startup sequence.
+     */
+    private fun updateStartupStatus(message: String, detail: String? = null) {
+        splashStatus.text = message
+        currentServiceName.text = detail ?: ""
+    }
+
+    // ================== End Enhanced Startup UI Methods ==================
+
     /**
      * Initialize Python runtime and start server in background.
      * This prevents ANR (Application Not Responding) during startup.
@@ -533,6 +699,8 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 withContext(Dispatchers.Main) {
+                    setPhase(StartupPhase.INITIALIZING)
+                    updateStartupStatus("Initializing...")
                     appendToConsole("Initializing Python runtime...")
                     updateStatus("Starting", "yellow")
                 }
@@ -556,25 +724,35 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     } else {
+                        // Silent sign-in failed - redirect to LoginActivity for re-authentication
+                        // NEVER write stale tokens - they will just cause auth failures
+                        Log.w(TAG, "[PreflightTokenRefresh] Silent sign-in failed - redirecting to login")
                         withContext(Dispatchers.Main) {
-                            appendToConsole("⚠ Token refresh failed - using existing token")
+                            appendToConsole("⚠ Session expired - please sign in again")
+                            redirectToLogin()
                         }
-                        // Still try to write the existing token if we have one
-                        googleIdToken?.let { writeTokenToEnvFile(it) }
+                        return@launch  // Exit early, don't start Python with invalid auth
                     }
                 }
 
                 // Python.start() can take several seconds - do it off main thread
                 // Note: AndroidPlatform requires a Context, but doesn't need to be on main thread
+                withContext(Dispatchers.Main) {
+                    setPhase(StartupPhase.LOADING_RUNTIME)
+                    updateStartupStatus("Loading Python runtime...")
+                }
+
                 if (!Python.isStarted()) {
                     Python.start(AndroidPlatform(this@MainActivity))
                     withContext(Dispatchers.Main) {
                         appendToConsole("✓ Python runtime initialized")
+                        updateStartupStatus("Python runtime loaded")
                     }
                     Log.i(TAG, "Python runtime initialized")
                 } else {
                     withContext(Dispatchers.Main) {
                         appendToConsole("✓ Python runtime already running")
+                        updateStartupStatus("Python runtime ready")
                     }
                 }
 
@@ -712,6 +890,25 @@ class MainActivity : AppCompatActivity() {
                         if (isRuntimePage && !isApiEndpoint) {
                             Log.i(TAG, "Intercepting runtime page for native stream viewer: $url")
                             launchRuntimeActivity()
+                            return true
+                        }
+                    }
+
+                    // Intercept /login page -> launch native LoginActivity
+                    // The web GUI redirects to /login on 401, but on mobile we use native login
+                    // LoginActivity supports both Google OAuth AND local username/password
+                    if (url != null) {
+                        val isLoginPage = url.endsWith("/login") ||
+                                         url.endsWith("/login/") ||
+                                         url.contains("/login?") ||
+                                         url.contains("/login/index.html")
+                        if (isLoginPage) {
+                            Log.i(TAG, "Intercepting login page - launching native LoginActivity: $url")
+                            // Launch native LoginActivity instead of web login
+                            val intent = Intent(this@MainActivity, ai.ciris.mobile.auth.LoginActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
                             return true
                         }
                     }
@@ -888,6 +1085,23 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        /**
+         * Navigate to the native Kotlin InteractFragment (chat with bottom nav).
+         * Call this after setup completes to go to the chat interface.
+         */
+        @JavascriptInterface
+        fun navigateToInteract() {
+            Log.i(TAG, "[WebAppInterface] navigateToInteract() called from JavaScript")
+            runOnUiThread {
+                try {
+                    showInteractFragment()
+                    Log.i(TAG, "[WebAppInterface] Showed InteractFragment")
+                } catch (e: Exception) {
+                    Log.e(TAG, "[WebAppInterface] Failed to show InteractFragment: ${e.message}", e)
+                }
+            }
+        }
     }
 
     /**
@@ -920,7 +1134,7 @@ class MainActivity : AppCompatActivity() {
                 currentGoogleUserId = account.id
 
                 // Also save to BillingApiClient for billing API calls
-                val billingApiClient = BillingApiClient(this)
+                val billingApiClient = createBillingApiClient()
                 account.id?.let { billingApiClient.setGoogleUserId(it) }
                 account.email?.let { billingApiClient.setGoogleEmail(it) }
                 account.displayName?.let { billingApiClient.setGoogleDisplayName(it) }
@@ -997,14 +1211,125 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Check if a previous CIRIS server is still running on port 8080.
+     * Returns true if server responds to health check.
+     */
+    private fun isExistingServerRunning(): Boolean {
+        return try {
+            val url = URL("$SERVER_URL/v1/system/health")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 1000
+            connection.readTimeout = 1000
+            connection.requestMethod = "GET"
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Attempt to shut down an existing server gracefully via API.
+     * Uses saved CIRIS access token for authentication.
+     * Returns true if shutdown was triggered successfully.
+     */
+    private fun shutdownExistingServer(): Boolean {
+        return try {
+            Log.i(TAG, "[SmartStartup] Attempting graceful shutdown of existing server...")
+
+            // Get saved auth token for the shutdown request
+            val prefs = getSharedPreferences("ciris_prefs", MODE_PRIVATE)
+            val savedToken = prefs.getString("ciris_access_token", null)
+
+            val url = URL("$SERVER_URL/v1/system/shutdown")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 3000
+            connection.readTimeout = 5000
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+
+            // Add auth token if available
+            if (savedToken != null) {
+                connection.setRequestProperty("Authorization", "Bearer $savedToken")
+                Log.i(TAG, "[SmartStartup] Using saved auth token for shutdown")
+            } else {
+                Log.w(TAG, "[SmartStartup] No saved auth token - shutdown may fail with 401")
+            }
+
+            // Send empty body or shutdown command
+            connection.outputStream.bufferedWriter().use { it.write("{}") }
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            Log.i(TAG, "[SmartStartup] Shutdown response: $responseCode")
+            responseCode in 200..299
+        } catch (e: Exception) {
+            Log.w(TAG, "[SmartStartup] Graceful shutdown failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Wait for an existing server to fully shut down.
+     * Polls health endpoint until it fails (server is down).
+     */
+    private suspend fun waitForServerShutdown(maxWaitSeconds: Int = 10): Boolean {
+        var waitedSeconds = 0
+        while (waitedSeconds < maxWaitSeconds) {
+            if (!isExistingServerRunning()) {
+                Log.i(TAG, "[SmartStartup] Existing server has shut down after ${waitedSeconds}s")
+                return true
+            }
+            delay(1000)
+            waitedSeconds++
+        }
+        Log.w(TAG, "[SmartStartup] Existing server did not shut down within ${maxWaitSeconds}s")
+        return false
+    }
+
     private fun startPythonServer() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 withContext(Dispatchers.Main) {
                     appendToConsole("Starting CIRIS runtime...")
+                    // Start foreground service EARLY to keep Python alive during OAuth flows
+                    CirisBackgroundService.start(this@MainActivity)
                 }
 
                 Log.i(TAG, "Starting Python server...")
+
+                // Smart startup: Check for and handle existing server session
+                if (isExistingServerRunning()) {
+                    Log.i(TAG, "[SmartStartup] Detected existing server on port 8080")
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("Found existing server - shutting down...")
+                    }
+
+                    // Try graceful shutdown first
+                    if (shutdownExistingServer()) {
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("Waiting for previous session to end...")
+                        }
+                        val shutdownOk = waitForServerShutdown(10)
+                        if (shutdownOk) {
+                            withContext(Dispatchers.Main) {
+                                appendToConsole("✓ Previous session ended")
+                            }
+                            // Add a small delay to ensure port is fully released
+                            delay(500)
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                appendToConsole("⚠ Previous session still running - may fail to bind")
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("⚠ Could not reach previous session - proceeding anyway")
+                        }
+                    }
+                }
 
                 val python = Python.getInstance()
                 val mobileMain = python.getModule("mobile_main")
@@ -1028,13 +1353,21 @@ class MainActivity : AppCompatActivity() {
                 var isHealthy = false
 
                 withContext(Dispatchers.Main) {
+                    setPhase(StartupPhase.WAITING_SERVER)
+                    updateStartupStatus("Starting API server...")
                     appendToConsole("Waiting for API server...")
                 }
 
                 while (attempts < maxAttempts && !isHealthy) {
                     delay(1000)
                     attempts++
+                    healthCheckAttempts = attempts
                     isHealthy = checkServerHealth()
+
+                    withContext(Dispatchers.Main) {
+                        // Show elapsed seconds during the wait
+                        updateStartupStatus("Waiting for server... ${attempts}s")
+                    }
 
                     if (attempts % 5 == 0) {
                         withContext(Dispatchers.Main) {
@@ -1048,6 +1381,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (isHealthy) {
                         serverStarted = true
+                        updateStartupStatus("Server ready!")
                         appendToConsole("✓ CIRIS runtime ready!")
                         appendToConsole("Loading web interface...")
                         updateStatus("Ready", "green")
@@ -1055,10 +1389,15 @@ class MainActivity : AppCompatActivity() {
                         // Short delay to let user see the success message
                         delay(500)
 
+                        // Check if this is first run or returning user
+                        setPhase(StartupPhase.CHECKING_CONFIG)
+                        updateStartupStatus("Checking configuration...")
+
                         // Transition to WebView
                         showWebView()
                     } else {
                         appendToConsole("❌ Server failed to start after ${maxAttempts}s")
+                        updateStartupStatus("Server failed to start")
                         updateStatus("Failed", "red")
                     }
                 }
@@ -1082,6 +1421,7 @@ class MainActivity : AppCompatActivity() {
             CoroutineScope(Dispatchers.IO).launch {
                 // Step 1: Verify device/app integrity with billing.ciris.ai
                 withContext(Dispatchers.Main) {
+                    updateStartupStatus("Verifying device integrity...")
                     appendToConsole("Verifying device integrity...")
                 }
 
@@ -1090,19 +1430,31 @@ class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "Device integrity verified: ${integrityResult.deviceIntegrity}")
                     integrityVerified = true
                     withContext(Dispatchers.Main) {
+                        updateStartupStatus("Device verified ✓")
                         appendToConsole("✓ Device integrity verified")
                     }
                 } else {
                     Log.w(TAG, "Device integrity check failed: ${integrityResult?.error ?: "unknown"}")
                     integrityVerified = false
                     withContext(Dispatchers.Main) {
+                        updateStartupStatus("Device check: ${integrityResult?.error ?: "skipped"}")
                         appendToConsole("⚠ Device integrity check: ${integrityResult?.error ?: "failed"}")
                         // Continue anyway - integrity is logged but not blocking for now
                     }
                 }
 
                 // Step 2: Exchange Google ID token for CIRIS API token
+                withContext(Dispatchers.Main) {
+                    setPhase(StartupPhase.AUTHENTICATING)
+                    updateStartupStatus("Authenticating...")
+                }
+
                 val exchanged = exchangeGoogleIdToken()
+
+                // Check setup status on IO thread BEFORE switching to Main thread
+                // This prevents NetworkOnMainThreadException and ensures accurate status
+                val setupRequired = checkSetupStatus()
+
                 withContext(Dispatchers.Main) {
                     if (exchanged) {
                         Log.i(TAG, "Successfully exchanged Google ID token for CIRIS token")
@@ -1115,42 +1467,71 @@ class MainActivity : AppCompatActivity() {
                     // Short delay to let user see status
                     delay(300)
 
+                    // Stop elapsed timer as startup is complete
+                    stopElapsedTimer()
+
+                    // Handle first-run vs returning user
+                    if (setupRequired) {
+                        setPhase(StartupPhase.FIRST_RUN_SETUP)
+                        updateStartupStatus("First-time setup required")
+                        delay(500)
+                        updateStartupStatus("Loading setup wizard...")
+                        Log.i(TAG, "Setup required - showing WebView with setup wizard")
+                    } else {
+                        setPhase(StartupPhase.READY)
+                        updateStartupStatus("Welcome back!")
+                        delay(500)
+                        Log.i(TAG, "Setup complete - showing Kotlin interact fragment")
+                    }
+
                     // Hide splash/console, show toolbar
                     splashContainer.visibility = View.GONE
                     consoleContainer.visibility = View.GONE
                     findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
 
-                    // Check if setup is required - show WebView with setup wizard, otherwise Kotlin interact fragment
-                    val setupRequired = checkSetupStatus()
+                    // Use the setup status we already fetched on IO thread
                     if (setupRequired) {
-                        Log.i(TAG, "Setup required - showing WebView with setup wizard")
                         webView.visibility = View.VISIBLE
                         fragmentContainer.visibility = View.GONE
                         loadUI()  // Load index.html which will redirect to /setup
                     } else {
-                        Log.i(TAG, "Setup complete - showing Kotlin interact fragment")
                         showInteractFragment()
                     }
                     loadCreditsBalance()
                 }
             }
         } else {
-            // Hide splash/console, show toolbar
-            splashContainer.visibility = View.GONE
-            consoleContainer.visibility = View.GONE
-            findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
-
-            // Check if setup is required - show WebView with setup wizard, otherwise Kotlin interact fragment
+            // Non-Google auth flow
             CoroutineScope(Dispatchers.IO).launch {
                 val setupRequired = checkSetupStatus()
                 withContext(Dispatchers.Main) {
+                    // Stop elapsed timer
+                    stopElapsedTimer()
+
+                    // Handle first-run vs returning user
                     if (setupRequired) {
+                        setPhase(StartupPhase.FIRST_RUN_SETUP)
+                        updateStartupStatus("First-time setup required")
+                        delay(500)
+                        updateStartupStatus("Loading setup wizard...")
                         Log.i(TAG, "Setup required (API key auth) - showing WebView with setup wizard")
+                    } else {
+                        setPhase(StartupPhase.READY)
+                        updateStartupStatus("Welcome back!")
+                        delay(500)
+                        Log.i(TAG, "Setup complete (API key auth) - showing Kotlin interact fragment")
+                    }
+
+                    // Hide splash/console, show toolbar
+                    splashContainer.visibility = View.GONE
+                    consoleContainer.visibility = View.GONE
+                    findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
+
+                    if (setupRequired) {
                         webView.visibility = View.VISIBLE
                         fragmentContainer.visibility = View.GONE
                         loadUI()  // Load index.html which will redirect to /setup
                     } else {
-                        Log.i(TAG, "Setup complete (API key auth) - showing Kotlin interact fragment")
                         showInteractFragment()
                     }
                     loadCreditsBalance()
@@ -1274,7 +1655,7 @@ class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "[TokenExchange] SUCCESS - Got CIRIS access token for user: ${tokenResponse.user_id}, role: ${tokenResponse.role}")
 
                 // Also store in BillingApiClient's SharedPreferences so getBalance() doesn't re-exchange
-                BillingApiClient(this).setApiKey(tokenResponse.access_token)
+                createBillingApiClient().setApiKey(tokenResponse.access_token)
                 Log.i(TAG, "[TokenExchange] Stored API key in BillingApiClient SharedPreferences")
 
                 // Refresh menu to show/hide admin items based on role
@@ -1319,7 +1700,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadCreditsBalance(retryCount: Int = 0) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val billingApiClient = BillingApiClient(this@MainActivity)
+                val billingApiClient = createBillingApiClient()
                 val result = billingApiClient.getBalance()
 
                 withContext(Dispatchers.Main) {
@@ -1780,6 +2161,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Redirect to login screen when session expires during startup.
+     * This is called when silent sign-in fails and we need the user to re-authenticate.
+     */
+    private fun redirectToLogin() {
+        Log.i(TAG, "[SessionExpired] Redirecting to login - Google session expired")
+
+        // Clear stored tokens - they're invalid
+        cirisAccessToken = null
+        googleIdToken = null
+
+        // Clear Google user ID from billing SharedPreferences
+        val prefs = getSharedPreferences("ciris_settings", MODE_PRIVATE)
+        prefs.edit().remove("google_user_id").apply()
+
+        // Also clear from BillingApiClient prefs
+        val billingPrefs = getSharedPreferences("ciris_billing_prefs", MODE_PRIVATE)
+        billingPrefs.edit()
+            .remove("google_id_token")
+            .remove("api_key")
+            .apply()
+
+        Log.i(TAG, "[SessionExpired] Cleared all stale tokens, starting LoginActivity")
+
+        // Start LoginActivity and clear the activity stack
+        val intent = Intent(this, ai.ciris.mobile.auth.LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
+    }
+
+    /**
      * Return to the login screen.
      */
     private fun returnToLogin() {
@@ -1831,6 +2243,47 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize CIRIS_HOME path: ${e.message}")
         }
+    }
+
+    /**
+     * Create a BillingApiClient with token refresh callback wired up.
+     * This ensures that when the API key refresh is needed, we get a fresh
+     * Google ID token via native sign-in before exchanging.
+     */
+    private fun createBillingApiClient(): BillingApiClient {
+        val client = BillingApiClient(this)
+
+        // Set up token refresh callback if using Google auth
+        if (authMethod == "google" && googleSignInHelper != null) {
+            client.setTokenRefreshCallback(object : GoogleTokenRefreshCallback {
+                override fun requestFreshToken(onResult: (String?) -> Unit) {
+                    Log.i(TAG, "[BillingTokenRefresh] Requesting fresh Google ID token via native sign-in...")
+                    googleSignInHelper!!.silentSignIn { result ->
+                        when (result) {
+                            is GoogleSignInHelper.SignInResult.Success -> {
+                                val freshToken = result.account.idToken
+                                if (freshToken != null) {
+                                    Log.i(TAG, "[BillingTokenRefresh] Got fresh token (${freshToken.length} chars)")
+                                    // Also update our stored token
+                                    googleIdToken = freshToken
+                                    onResult(freshToken)
+                                } else {
+                                    Log.w(TAG, "[BillingTokenRefresh] Silent sign-in succeeded but no ID token")
+                                    onResult(null)
+                                }
+                            }
+                            is GoogleSignInHelper.SignInResult.Error -> {
+                                Log.e(TAG, "[BillingTokenRefresh] Silent sign-in failed: ${result.message}")
+                                onResult(null)
+                            }
+                        }
+                    }
+                }
+            })
+            Log.i(TAG, "BillingApiClient created with token refresh callback")
+        }
+
+        return client
     }
 
     /**
@@ -1978,10 +2431,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // App came to foreground - cancel the sleep timer
+        CirisBackgroundService.resetSleepTimer()
+        Log.d(TAG, "App resumed - sleep timer cancelled")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // App going to background - start the 5 minute sleep timer
+        CirisBackgroundService.startSleepTimer()
+        Log.d(TAG, "App paused - sleep timer started (5 min)")
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        // Stop elapsed timer
+        stopElapsedTimer()
         // Stop token refresh manager
         tokenRefreshManager?.stop()
+        // Stop background service - uses START_NOT_STICKY so won't auto-restart
+        CirisBackgroundService.stop(this)
+        Log.i(TAG, "MainActivity destroyed, background service stopped")
         // Note: Python server continues running
         // In production, implement proper shutdown
     }

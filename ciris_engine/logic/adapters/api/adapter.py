@@ -18,6 +18,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
@@ -40,6 +41,9 @@ from .services.auth_service import APIAuthService
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MANIFEST_FILENAME = "manifest.json"
+
 
 class ApiPlatform(Service):
     """API adapter platform for CIRIS v1."""
@@ -48,35 +52,17 @@ class ApiPlatform(Service):
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
         """Initialize API adapter."""
-        # Import moved to top-level to avoid forward reference issues
-
         super().__init__(config=kwargs.get("adapter_config"))
         self.runtime = runtime
 
-        # Start with default configuration
-        self.config = APIAdapterConfig()
-
-        # Load environment variables first (provides defaults)
-        self.config.load_env_vars()
-
-        # Then apply user-provided configuration (takes precedence over env vars)
-        # NOTE: Do NOT call load_env_vars() after this - the config dict already
-        # represents the final desired config with CLI args taking precedence.
-        # Calling load_env_vars() would override CLI args with .env values.
-        if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
-            if isinstance(kwargs["adapter_config"], APIAdapterConfig):
-                self.config = kwargs["adapter_config"]
-                # Don't call load_env_vars() - config object already has correct values
-            elif isinstance(kwargs["adapter_config"], dict):
-                # Create config from dict - this contains final merged values
-                self.config = APIAdapterConfig(**kwargs["adapter_config"])
-                # Don't call load_env_vars() - dict already has correct values from main.py
-            # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
+        # Initialize and load configuration
+        self.config = self._load_config(kwargs)
 
         # Create FastAPI app - services will be injected later in start()
         self.app: FastAPI = create_app(runtime, self.config)
         self._server: Server | None = None
         self._server_task: asyncio.Task[Any] | None = None
+        self._startup_error: str | None = None  # Track server startup errors
 
         # Message observer for handling incoming messages (will be created in start())
         self.message_observer: APIObserver | None = None
@@ -95,6 +81,9 @@ class ApiPlatform(Service):
         # Tool service
         self.tool_service = APIToolService(time_service=getattr(runtime, "time_service", None))
 
+        # Adapter configuration service for interactive adapter setup
+        self.adapter_configuration_service = AdapterConfigurationService()
+
         # Debug logging
         logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
@@ -103,6 +92,52 @@ class ApiPlatform(Service):
                 logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
 
         logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
+
+    def _load_config(self, kwargs: dict[str, Any]) -> APIAdapterConfig:
+        """Load and merge configuration from various sources.
+
+        Priority (highest to lowest):
+        1. adapter_config parameter (APIAdapterConfig object or dict)
+        2. Flat kwargs (host, port)
+        3. Environment variables
+        """
+        config = APIAdapterConfig()
+        config.load_env_vars()
+
+        logger.info(f"[API_ADAPTER_INIT] kwargs keys: {list(kwargs.keys())}")
+        logger.info(f"[API_ADAPTER_INIT] adapter_config in kwargs: {'adapter_config' in kwargs}")
+
+        adapter_config = kwargs.get("adapter_config")
+        if adapter_config is not None:
+            logger.info(f"[API_ADAPTER_INIT] adapter_config value: {adapter_config}, type: {type(adapter_config)}")
+            config = self._apply_adapter_config(config, adapter_config)
+        elif "host" in kwargs or "port" in kwargs:
+            config = self._apply_flat_kwargs(config, kwargs)
+        else:
+            logger.info(f"[API_ADAPTER_INIT] No config provided, using env defaults, port={config.port}")
+
+        return config
+
+    def _apply_adapter_config(self, config: APIAdapterConfig, adapter_config: Any) -> APIAdapterConfig:
+        """Apply adapter_config parameter to configuration."""
+        if isinstance(adapter_config, APIAdapterConfig):
+            logger.info(f"[API_ADAPTER_INIT] Using APIAdapterConfig object, port={adapter_config.port}")
+            return adapter_config
+        elif isinstance(adapter_config, dict):
+            new_config = APIAdapterConfig(**adapter_config)
+            logger.info(f"[API_ADAPTER_INIT] Created APIAdapterConfig from dict, port={new_config.port}")
+            return new_config
+        # If adapter_config is provided but not dict/APIAdapterConfig, keep env-loaded config
+        return config
+
+    def _apply_flat_kwargs(self, config: APIAdapterConfig, kwargs: dict[str, Any]) -> APIAdapterConfig:
+        """Apply flat kwargs (host, port) to configuration."""
+        if "host" in kwargs:
+            config.host = kwargs["host"]
+        if "port" in kwargs:
+            config.port = kwargs["port"]
+        logger.info(f"[API_ADAPTER_INIT] Applied flat kwargs: host={config.host}, port={config.port}")
+        return config
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services provided by this adapter."""
@@ -214,6 +249,13 @@ class ApiPlatform(Service):
 
         logger.info(f"Re-injection complete: {injected_count} services injected, {skipped_count} still unavailable")
 
+        # Now that services are available, inject adapter_manager into APIRuntimeControlService
+        # This was skipped during first-run startup because RuntimeControlService didn't exist
+        try:
+            self._inject_adapter_manager_to_api_runtime_control()
+        except RuntimeError as e:
+            logger.warning(f"Could not inject adapter_manager during re-injection: {e}")
+
     def _log_service_registry(self, service: Any) -> None:
         """Log service registry details."""
         try:
@@ -249,6 +291,54 @@ class ApiPlatform(Service):
                 logger.warning(f"Runtime does not have attribute '{runtime_attr}' - skipping injection")
             else:
                 logger.warning(f"Runtime attribute '{runtime_attr}' is None - skipping injection")
+
+    def _inject_adapter_manager_to_api_runtime_control(self) -> None:
+        """Inject main RuntimeControlService's adapter_manager into APIRuntimeControlService.
+
+        This ensures a single source of truth for loaded adapters. Without this,
+        adapters loaded via one service won't be visible in the other.
+
+        CRITICAL: This must be called after _inject_services() so main_runtime_control_service
+        is available in app.state.
+
+        In first-run mode, RuntimeControlService is not yet initialized (services start after
+        the setup wizard completes), so we skip this injection. It will be called again
+        during reinject_services() after resume_from_first_run().
+        """
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # In first-run mode, RuntimeControlService doesn't exist yet - skip injection
+        # It will be injected after resume_from_first_run() completes
+        if is_first_run():
+            logger.info("First-run mode: Skipping adapter_manager injection (will inject after setup)")
+            return
+
+        main_runtime_control = getattr(self.app.state, "main_runtime_control_service", None)
+        if not main_runtime_control:
+            raise RuntimeError(
+                "CRITICAL: main_runtime_control_service not available in app.state. "
+                "This indicates a startup sequencing issue. Cannot inject adapter_manager."
+            )
+
+        # Trigger lazy initialization of adapter_manager if needed
+        # The main RuntimeControlService has _ensure_adapter_manager_initialized() for this
+        if hasattr(main_runtime_control, "_ensure_adapter_manager_initialized"):
+            main_runtime_control._ensure_adapter_manager_initialized()
+
+        adapter_manager = getattr(main_runtime_control, "adapter_manager", None)
+        if not adapter_manager:
+            raise RuntimeError(
+                "CRITICAL: main_runtime_control_service has no adapter_manager even after "
+                "_ensure_adapter_manager_initialized(). This indicates the main RuntimeControlService "
+                "has no runtime reference. Check service initialization order."
+            )
+
+        # Inject into APIRuntimeControlService
+        self.runtime_control.adapter_manager = adapter_manager
+        logger.info(
+            f"Injected main RuntimeControlService's adapter_manager (id: {id(adapter_manager)}) "
+            f"into APIRuntimeControlService - single source of truth established"
+        )
 
     def _handle_auth_service(self, auth_service: Any) -> None:
         """Special handler for authentication service."""
@@ -358,6 +448,225 @@ class ApiPlatform(Service):
         persistence.add_correlation(correlation, time_service)
         logger.debug(f"Created observe correlation for message {msg.message_id}")
 
+    def _discover_and_register_configurable_adapters(self) -> None:
+        """Discover and register adapters that support interactive configuration.
+
+        Scans the ciris_adapters directory for adapter manifests that define
+        interactive_config sections and registers them with the AdapterConfigurationService.
+        """
+        from pathlib import Path
+
+        # Find ciris_adapters directory - try multiple methods for Android compatibility
+        adapters_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "ciris_adapters"
+
+        if not adapters_dir.exists():
+            # Fallback for Android: use importlib.resources to discover adapters dynamically
+            logger.info(f"Filesystem adapters directory not found ({adapters_dir}), using importlib discovery")
+            self._discover_adapters_via_importlib()
+            return
+
+        registered_count = 0
+        for adapter_path in adapters_dir.iterdir():
+            if self._process_adapter_path(adapter_path):
+                registered_count += 1
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+
+    def _process_adapter_path(self, adapter_path: Any) -> bool:
+        """Process a single adapter directory and register if configurable.
+
+        Returns True if adapter was successfully registered.
+        """
+        import json
+
+        if not adapter_path.is_dir():
+            return False
+
+        manifest_path = adapter_path / MANIFEST_FILENAME
+        if not manifest_path.exists():
+            return False
+
+        try:
+            with open(manifest_path) as f:
+                manifest_data = json.load(f)
+            return self._register_adapter_from_manifest(manifest_data, adapter_path.name)
+        except Exception as e:
+            logger.warning(f"Failed to process manifest for {adapter_path.name}: {e}")
+            return False
+
+    def _register_adapter_from_manifest(self, manifest_data: dict[str, Any], adapter_type: str) -> bool:
+        """Register an adapter from its manifest data.
+
+        Returns True if adapter was successfully registered.
+        """
+        interactive_config_data = manifest_data.get("interactive_config")
+        if not interactive_config_data:
+            return False
+
+        interactive_config = self._parse_interactive_config(interactive_config_data)
+        exports = manifest_data.get("exports", {})
+        configurable_class_path = exports.get("configurable")
+
+        if not configurable_class_path:
+            logger.debug(f"Adapter {adapter_type} has interactive_config but no configurable export")
+            return False
+
+        return self._load_and_register_configurable(adapter_type, interactive_config, configurable_class_path)
+
+    def _parse_interactive_config(self, config_data: dict[str, Any]) -> Any:
+        """Parse interactive configuration data into InteractiveConfiguration object."""
+        from ciris_engine.schemas.runtime.manifest import ConfigurationStep, InteractiveConfiguration
+
+        steps = [ConfigurationStep.model_validate(step_data) for step_data in config_data.get("steps", [])]
+
+        return InteractiveConfiguration(
+            required=config_data.get("required", False),
+            workflow_type=config_data.get("workflow_type", "wizard"),
+            steps=steps,
+            completion_method=config_data.get("completion_method", "apply_config"),
+        )
+
+    def _load_and_register_configurable(
+        self, adapter_type: str, interactive_config: Any, configurable_class_path: str
+    ) -> bool:
+        """Load configurable class and register with configuration service.
+
+        Returns True if successful.
+        """
+        import importlib
+
+        try:
+            module_path, class_name = configurable_class_path.rsplit(".", 1)
+            if not module_path.startswith("ciris_adapters"):
+                module_path = f"ciris_adapters.{module_path}"
+            module = importlib.import_module(module_path)
+            configurable_class = getattr(module, class_name)
+            adapter_instance = configurable_class()
+
+            self.adapter_configuration_service.register_adapter_config(
+                adapter_type=adapter_type,
+                interactive_config=interactive_config,
+                adapter_instance=adapter_instance,
+            )
+            logger.info(f"Registered configurable adapter: {adapter_type}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+            return False
+
+    def _discover_adapters_via_importlib(self) -> None:
+        """Discover adapters dynamically using importlib (Android/Chaquopy compatible).
+
+        Uses pkgutil.iter_modules to find all subpackages in ciris_adapters,
+        then checks each for a manifest.json with interactive_config.
+        """
+        adapter_names = self._get_adapter_package_names()
+        if not adapter_names:
+            return
+
+        registered_count = 0
+        for adapter_name in adapter_names:
+            if self._process_adapter_via_importlib(adapter_name):
+                registered_count += 1
+
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) via importlib")
+
+    def _get_adapter_package_names(self) -> list[str]:
+        """Get list of adapter package names via pkgutil."""
+        import pkgutil
+
+        try:
+            import ciris_adapters
+
+            adapter_names = [
+                name
+                for importer, name, ispkg in pkgutil.iter_modules(ciris_adapters.__path__)
+                if ispkg and not name.startswith("_")
+            ]
+            logger.info(f"Discovered {len(adapter_names)} adapter packages via pkgutil: {adapter_names}")
+            return adapter_names
+        except ImportError:
+            logger.warning("ciris_adapters package not found, no adapters to discover")
+            return []
+
+    def _process_adapter_via_importlib(self, adapter_name: str) -> bool:
+        """Process a single adapter package via importlib.
+
+        Returns True if adapter was successfully registered.
+        """
+        import importlib
+
+        try:
+            importlib.import_module(f"ciris_adapters.{adapter_name}")
+        except ImportError:
+            logger.debug(f"Adapter package not found: ciris_adapters.{adapter_name}")
+            return False
+
+        manifest_data = self._read_manifest_via_importlib(adapter_name)
+        if manifest_data is None:
+            return False
+
+        try:
+            return self._register_adapter_from_manifest(manifest_data, adapter_name)
+        except Exception as e:
+            logger.warning(f"Failed to process adapter {adapter_name}: {e}")
+            return False
+
+    def _read_manifest_via_importlib(self, adapter_name: str) -> dict[str, Any] | None:
+        """Read manifest.json using importlib.resources.
+
+        Returns manifest data dict or None if not found.
+        """
+        import importlib.resources as pkg_resources
+        import json
+
+        package_name = f"ciris_adapters.{adapter_name}"
+        try:
+            # Try files() API first (Python 3.9+)
+            files = pkg_resources.files(package_name)
+            manifest_path = files.joinpath(MANIFEST_FILENAME)
+            manifest_text = manifest_path.read_text()
+        except (TypeError, AttributeError):
+            # Fallback for older API
+            try:
+                with pkg_resources.open_text(package_name, MANIFEST_FILENAME) as f:
+                    manifest_text = f.read()
+            except Exception as e:
+                logger.warning(f"Could not read manifest for {adapter_name}: {e}")
+                return None
+        except Exception as e:
+            logger.warning(f"Could not read manifest for {adapter_name}: {e}")
+            return None
+
+        logger.info(f"Successfully read manifest for {adapter_name}")
+        result: dict[str, Any] = json.loads(manifest_text)
+        return result
+
+    async def _restore_persisted_adapter_configs(self) -> None:
+        """Restore adapter configurations that were persisted for load-on-startup.
+
+        This is called during API adapter startup to restore adapters that were
+        previously configured and marked for automatic loading.
+        """
+        # Get config service from runtime
+        config_service = getattr(self.runtime, "config_service", None)
+        if not config_service:
+            logger.debug("No config_service available - skipping persisted adapter restoration")
+            return
+
+        # Get runtime control service for loading adapters
+        runtime_control_service = self.runtime_control
+
+        try:
+            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(
+                config_service=config_service,
+                runtime_control_service=runtime_control_service,
+            )
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} persisted adapter configuration(s)")
+        except Exception as e:
+            logger.warning(f"Failed to restore persisted adapter configurations: {e}")
+
     async def start(self) -> None:
         """Start the API server."""
         logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
@@ -400,9 +709,43 @@ class ApiPlatform(Service):
         # Inject services now that they're initialized
         self._inject_services()
 
+        # Inject main RuntimeControlService's adapter_manager into APIRuntimeControlService
+        # This ensures a single source of truth for loaded adapters
+        self._inject_adapter_manager_to_api_runtime_control()
+
+        # Discover and register configurable adapters
+        self._discover_and_register_configurable_adapters()
+
+        # Restore any persisted adapter configurations from previous sessions
+        await self._restore_persisted_adapter_configs()
+
         # Start runtime control service now that services are available
         await self.runtime_control.start()
         logger.info("Started API runtime control service")
+
+        # Check if port is already in use before attempting to bind
+        # This prevents uvicorn from calling sys.exit(1) which crashes the entire process
+        import socket
+
+        port_available = False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                result = s.connect_ex(
+                    (self.config.host if self.config.host != "0.0.0.0" else "127.0.0.1", self.config.port)
+                )
+                # If connect succeeds (result == 0), port is in use
+                # If connect fails, port is available
+                port_available = result != 0
+        except Exception as e:
+            logger.warning(f"Could not check port availability: {e}, will attempt to start anyway")
+            port_available = True
+
+        if not port_available:
+            error_msg = f"Port {self.config.port} is already in use on {self.config.host}"
+            logger.error(f"[API_ADAPTER] {error_msg}")
+            self._startup_error = error_msg
+            raise RuntimeError(error_msg)
 
         # Configure uvicorn
         config = uvicorn.Config(
@@ -414,15 +757,36 @@ class ApiPlatform(Service):
             timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
         )
 
-        # Create and start server
+        # Create and start server with error handling wrapper
         self._server = uvicorn.Server(config)
         assert self._server is not None
-        self._server_task = asyncio.create_task(self._server.serve())
+
+        async def _run_server_safely() -> None:
+            """Run server and catch SystemExit to prevent process crash."""
+            try:
+                await self._server.serve()  # type: ignore[union-attr]
+            except SystemExit as e:
+                # uvicorn calls sys.exit(1) on startup failures - catch it!
+                logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")
+                self._startup_error = f"Server startup failed: {e}"
+                raise RuntimeError(self._startup_error) from e
+            except Exception as e:
+                logger.error(f"[API_ADAPTER] Server error: {e}", exc_info=True)
+                self._startup_error = str(e)
+                raise RuntimeError(self._startup_error) from e
+
+        self._server_task = asyncio.create_task(_run_server_safely())
 
         logger.info(f"API server starting on http://{self.config.host}:{self.config.port}")
 
-        # Wait a moment for server to start
+        # Wait a moment for server to start and check for immediate failures
         await asyncio.sleep(1)
+
+        # Check if server task failed immediately
+        if self._server_task.done():
+            error = getattr(self, "_startup_error", None)
+            if error:
+                raise RuntimeError(f"API server failed to start: {error}")
 
     async def stop(self) -> None:
         """Stop the API server."""

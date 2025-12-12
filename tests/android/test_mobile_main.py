@@ -82,7 +82,7 @@ class TestSetupAndroidEnvironment:
             assert os.environ.get("CIRIS_OFFLINE_MODE") == "true"
             assert os.environ.get("CIRIS_CLOUD_SYNC") == "false"
             assert os.environ.get("CIRIS_MAX_WORKERS") == "1"
-            assert os.environ.get("CIRIS_API_HOST") == "127.0.0.1"
+            assert os.environ.get("CIRIS_API_HOST") == "0.0.0.0"
             assert os.environ.get("CIRIS_API_PORT") == "8080"
         finally:
             # Restore environment
@@ -199,7 +199,7 @@ class TestStartMobileRuntime:
 
                         assert call_kwargs["adapter_types"] == ["api"]
                         assert call_kwargs["interactive"] is False
-                        assert call_kwargs["host"] == "127.0.0.1"
+                        assert call_kwargs["host"] == "0.0.0.0"
                         assert call_kwargs["port"] == 8080
 
                         # Verify lifecycle methods were called

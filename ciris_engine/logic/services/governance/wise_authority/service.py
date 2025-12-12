@@ -458,7 +458,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             )
 
             for row in cursor.fetchall():
-                task_id, channel_id, description, priority, created_at, updated_at, context_json = row
+                # Handle both dict (PostgreSQL RealDictCursor) and tuple (SQLite) row formats
+                if isinstance(row, dict):
+                    task_id = row["task_id"]
+                    channel_id = row["channel_id"]
+                    description = row["description"]
+                    priority = row["priority"]
+                    updated_at = row["updated_at"]
+                    context_json = row["context_json"]
+                else:
+                    task_id, channel_id, description, priority, _, updated_at, context_json = row
 
                 _, deferral_info = self._parse_deferral_context(context_json)
                 priority_str = self._priority_to_string(priority)

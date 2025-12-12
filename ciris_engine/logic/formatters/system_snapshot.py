@@ -150,6 +150,32 @@ def format_system_snapshot(system_snapshot: SystemSnapshot) -> str:
             for service, count in sorted(telemetry.service_calls.items(), key=lambda x: x[1], reverse=True)[:5]:
                 lines.append(f"  - {service}: {count} calls")
 
+    # Context Enrichment Results (pre-run tool results for context-aware action selection)
+    if hasattr(system_snapshot, "context_enrichment_results") and system_snapshot.context_enrichment_results:
+        lines.append("")
+        lines.append("=== Context Enrichment (Pre-fetched Tool Results) ===")
+        for tool_key, result in system_snapshot.context_enrichment_results.items():
+            lines.append(f"--- {tool_key} ---")
+            if isinstance(result, dict):
+                if "error" in result:
+                    lines.append(f"  Error: {result['error']}")
+                else:
+                    # Format the result data in a readable way
+                    import json
+
+                    # Try to pretty-print, but limit length
+                    try:
+                        result_str = json.dumps(result, indent=2, default=str)
+                        # Limit to ~2000 chars to avoid bloating the prompt
+                        if len(result_str) > 2000:
+                            result_str = result_str[:2000] + "\n  ... (truncated)"
+                        for line in result_str.split("\n"):
+                            lines.append(f"  {line}")
+                    except (TypeError, ValueError):
+                        lines.append(f"  {result}")
+            else:
+                lines.append(f"  {result}")
+
     # Legacy fields for backward compatibility
     fields = [
         ("active_tasks", "Active Tasks"),

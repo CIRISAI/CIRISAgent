@@ -14,8 +14,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.billing.BillingManager
+import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
 import ai.ciris.mobile.billing.PurchaseResult
 import com.android.billingclient.api.ProductDetails
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ class PurchaseActivity : AppCompatActivity() {
 
     private lateinit var billingManager: BillingManager
     private lateinit var billingApiClient: BillingApiClient
+    private lateinit var googleSignInHelper: GoogleSignInHelper
 
     private lateinit var balanceText: TextView
     private lateinit var productsList: RecyclerView
@@ -64,8 +67,34 @@ class PurchaseActivity : AppCompatActivity() {
         productsList.layoutManager = LinearLayoutManager(this)
         productsList.adapter = productsAdapter
 
-        // Initialize billing
+        // Initialize Google Sign-In helper for token refresh
+        googleSignInHelper = GoogleSignInHelper(this)
+
+        // Initialize billing with token refresh callback
         billingApiClient = BillingApiClient(this)
+        billingApiClient.setTokenRefreshCallback(object : GoogleTokenRefreshCallback {
+            override fun requestFreshToken(onResult: (String?) -> Unit) {
+                Log.i(TAG, "[TokenRefresh] Requesting fresh Google ID token via native sign-in...")
+                googleSignInHelper.silentSignIn { result ->
+                    when (result) {
+                        is GoogleSignInHelper.SignInResult.Success -> {
+                            val freshToken = result.account.idToken
+                            if (freshToken != null) {
+                                Log.i(TAG, "[TokenRefresh] Got fresh token (${freshToken.length} chars)")
+                                onResult(freshToken)
+                            } else {
+                                Log.w(TAG, "[TokenRefresh] Silent sign-in succeeded but no ID token")
+                                onResult(null)
+                            }
+                        }
+                        is GoogleSignInHelper.SignInResult.Error -> {
+                            Log.e(TAG, "[TokenRefresh] Silent sign-in failed: ${result.message}")
+                            onResult(null)
+                        }
+                    }
+                }
+            }
+        })
         billingManager = BillingManager(this, billingApiClient)
 
         // Handle purchase results

@@ -1,0 +1,247 @@
+{
+  "module": {
+    "name": "sample_adapter",
+    "version": "1.0.0",
+    "description": "Reference adapter demonstrating all bus types and interactive configuration",
+    "author": "CIRIS Team",
+    "reference": true,
+    "for_qa": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "sample_adapter.services.SampleToolService",
+      "capabilities": [
+        "tool:sample",
+        "tool:sample:echo",
+        "tool:sample:status",
+        "tool:sample:config"
+      ]
+    },
+    {
+      "type": "COMMUNICATION",
+      "priority": "LOW",
+      "class": "sample_adapter.services.SampleCommunicationService",
+      "capabilities": [
+        "communication:send_message",
+        "communication:fetch_messages"
+      ]
+    },
+    {
+      "type": "WISE_AUTHORITY",
+      "priority": "NORMAL",
+      "class": "sample_adapter.services.SampleWisdomService",
+      "capabilities": [
+        "get_guidance",
+        "fetch_guidance",
+        "domain:sample"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:sample",
+    "tool:sample:echo",
+    "tool:sample:status",
+    "tool:sample:config",
+    "communication:send_message",
+    "communication:fetch_messages",
+    "get_guidance",
+    "fetch_guidance",
+    "domain:sample"
+  ],
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "discover",
+        "step_type": "discovery",
+        "title": "Discover Services",
+        "description": "Find available sample services on your network",
+        "discovery_method": "mock_discovery",
+        "_comment": "STEP TYPE: discovery - Automatically discovers services. Returns list of discovered items with id, label, description, metadata fields."
+      },
+      {
+        "step_id": "oauth",
+        "step_type": "oauth",
+        "title": "Authenticate",
+        "description": "Sign in to the sample service",
+        "oauth_config": {
+          "provider_name": "Sample Provider",
+          "authorization_path": "/oauth/authorize",
+          "token_path": "/oauth/token",
+          "client_id_source": "static",
+          "scopes": ["read", "write"],
+          "pkce_required": true
+        },
+        "_comment": "STEP TYPE: oauth - Initiates OAuth2 flow with PKCE. Returns oauth URL for user to visit. Handles callback with authorization code exchange."
+      },
+      {
+        "step_id": "select_features",
+        "step_type": "select",
+        "title": "Select Features",
+        "description": "Choose which features to enable (multiple selection)",
+        "depends_on": ["oauth"],
+        "multiple": true,
+        "_comment": "STEP TYPE: select (REQUIRED, MULTIPLE) - Shows list from get_config_options(). User selects one or more items. depends_on ensures oauth completes first."
+      },
+      {
+        "step_id": "select_instance",
+        "step_type": "select",
+        "title": "Select Instance",
+        "description": "Choose which discovered instance to use (single selection)",
+        "depends_on": ["discover"],
+        "multiple": false,
+        "optional": false,
+        "_comment": "STEP TYPE: select (REQUIRED, SINGLE) - Shows discovered instances. User must select exactly one. Not optional, must complete."
+      },
+      {
+        "step_id": "optional_cameras",
+        "step_type": "select",
+        "title": "Select Cameras (Optional)",
+        "description": "Optionally choose cameras to monitor",
+        "depends_on": ["oauth"],
+        "multiple": true,
+        "optional": true,
+        "_comment": "STEP TYPE: select (OPTIONAL, MULTIPLE) - Can be skipped. If completed, user can select 0+ cameras. optional: true means step can be skipped entirely."
+      },
+      {
+        "step_id": "settings",
+        "step_type": "input",
+        "title": "Configure Settings",
+        "description": "Set poll interval and other options",
+        "fields": [
+          {
+            "name": "poll_interval",
+            "type": "integer",
+            "label": "Poll Interval (seconds)",
+            "description": "How often to poll for updates",
+            "required": true,
+            "default": 30,
+            "min": 5,
+            "max": 300
+          },
+          {
+            "name": "api_timeout",
+            "type": "integer",
+            "label": "API Timeout (seconds)",
+            "description": "Timeout for API requests",
+            "required": false,
+            "default": 10,
+            "min": 1,
+            "max": 60
+          },
+          {
+            "name": "custom_label",
+            "type": "string",
+            "label": "Custom Label",
+            "description": "Optional custom name for this adapter instance",
+            "required": false,
+            "default": ""
+          }
+        ],
+        "_comment": "STEP TYPE: input (REQUIRED FIELDS) - Collects manual input. Each field has name, type, label, description, required flag, and optional default/min/max."
+      },
+      {
+        "step_id": "optional_advanced",
+        "step_type": "input",
+        "title": "Advanced Settings (Optional)",
+        "description": "Configure advanced options (can be skipped)",
+        "optional": true,
+        "fields": [
+          {
+            "name": "debug_mode",
+            "type": "boolean",
+            "label": "Enable Debug Mode",
+            "description": "Enable verbose logging",
+            "required": false,
+            "default": false
+          },
+          {
+            "name": "retry_count",
+            "type": "integer",
+            "label": "Retry Count",
+            "description": "Number of retries on failure",
+            "required": false,
+            "default": 3,
+            "min": 0,
+            "max": 10
+          }
+        ],
+        "_comment": "STEP TYPE: input (OPTIONAL STEP) - Entire step can be skipped. optional: true at step level means the step itself is optional."
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your settings",
+        "_comment": "STEP TYPE: confirm - Final review step. Shows summary of all collected config. User confirms to proceed with apply_config()."
+      }
+    ],
+    "completion_method": "apply_config",
+    "_step_types_reference": {
+      "discovery": "Auto-discovers services/devices. Calls discover() method. Returns list of items.",
+      "oauth": "OAuth2 flow with PKCE. Calls get_oauth_url() and handle_oauth_callback(). Returns tokens.",
+      "select": "User selects from options. Calls get_config_options(). Can be single/multiple, required/optional.",
+      "input": "Manual data entry. Fields defined in step config. Each field can be required/optional.",
+      "confirm": "Review and confirm. Shows summary. User approves to trigger completion_method."
+    },
+    "_field_types_reference": {
+      "string": "Text input",
+      "integer": "Numeric input (whole numbers)",
+      "float": "Numeric input (decimals)",
+      "boolean": "True/false checkbox",
+      "select": "Dropdown selection (define options in field config)"
+    }
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService",
+      "ciris_engine.protocols.services.CommunicationService",
+      "ciris_engine.protocols.services.WiseAuthorityService",
+      "ciris_engine.protocols.adapters.configurable.ConfigurableAdapterProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.runtime.messages",
+      "ciris_engine.schemas.runtime.manifest"
+    ]
+  },
+  "exports": {
+    "tool_service": "sample_adapter.services.SampleToolService",
+    "communication_service": "sample_adapter.services.SampleCommunicationService",
+    "wisdom_service": "sample_adapter.services.SampleWisdomService",
+    "configurable": "sample_adapter.configurable.SampleConfigurableAdapter"
+  },
+  "configuration": {
+    "sample_url": {
+      "type": "string",
+      "env": "CIRIS_SAMPLE_URL",
+      "default": "http://localhost:9999",
+      "description": "Sample service URL"
+    },
+    "sample_token": {
+      "type": "string",
+      "env": "CIRIS_SAMPLE_TOKEN",
+      "default": null,
+      "description": "Sample service access token"
+    },
+    "poll_interval": {
+      "type": "integer",
+      "default": 30,
+      "description": "Polling interval in seconds"
+    },
+    "enabled_features": {
+      "type": "array",
+      "default": ["echo", "status"],
+      "description": "List of enabled features"
+    }
+  },
+  "metadata": {
+    "reference": true,
+    "for_qa": true,
+    "description": "This adapter serves as a reference implementation for adapter developers and for QA testing",
+    "oauth_mock_note": "Uses RFC 8252 loopback redirect (http://127.0.0.1:PORT/callback) for OAuth mock testing"
+  }
+}

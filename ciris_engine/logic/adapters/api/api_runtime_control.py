@@ -18,7 +18,16 @@ logger = logging.getLogger(__name__)
 
 
 class APIRuntimeControlService(Service):
-    """Runtime control exposed through API."""
+    """Runtime control exposed through API.
+
+    This service handles API-specific runtime control (pause/resume with reasons).
+    For adapter management, it uses the main RuntimeControlService's adapter_manager
+    to ensure a single source of truth for loaded adapters.
+
+    IMPORTANT: This service does NOT create its own adapter_manager. It must be
+    injected from the main RuntimeControlService. If adapter_manager is None when
+    adapter operations are called, it will fail fast with a clear error.
+    """
 
     def __init__(self, runtime: Any, time_service: Optional[Any] = None) -> None:
         """Initialize API runtime control."""
@@ -32,7 +41,8 @@ class APIRuntimeControlService(Service):
         self._start_time: Optional[datetime] = None  # For uptime tracking
         self._started = False  # Track if service has been started
 
-        # Adapter manager will be initialized later when services are available
+        # Adapter manager MUST be injected from main RuntimeControlService
+        # We do NOT create our own - single source of truth
         self.adapter_manager: Optional[RuntimeAdapterManager] = None
 
     async def pause_processing(self, reason: str) -> bool:
@@ -184,12 +194,21 @@ class APIRuntimeControlService(Service):
         self._start_time = datetime.now(timezone.utc)
         self._started = True
 
-        # Initialize adapter manager now that services should be available
-        if self.runtime and hasattr(self.runtime, "time_service") and self.runtime.time_service:
-            self.adapter_manager = RuntimeAdapterManager(self.runtime, self.runtime.time_service)
-            logger.info("Initialized RuntimeAdapterManager for API runtime control")
+        # Get adapter_manager from main RuntimeControlService - single source of truth
+        # We do NOT create our own adapter_manager
+        main_runtime_control = getattr(self.runtime, "runtime_control_service", None)
+        if main_runtime_control and hasattr(main_runtime_control, "adapter_manager"):
+            self.adapter_manager = main_runtime_control.adapter_manager
+            logger.info(
+                f"APIRuntimeControlService using main RuntimeControlService's adapter_manager "
+                f"(id: {id(self.adapter_manager)})"
+            )
         else:
-            logger.warning(f"{ERROR_TIME_SERVICE_NOT_AVAILABLE}, adapter manager will not be initialized")
+            # This is expected during early startup - adapter_manager will be set later
+            logger.info(
+                "APIRuntimeControlService started without adapter_manager - "
+                "will be injected from main RuntimeControlService"
+            )
 
         logger.info("API Runtime Control Service started")
 
@@ -247,21 +266,26 @@ class APIRuntimeControlService(Service):
 
     # Adapter Management Methods
 
+    def _require_adapter_manager(self) -> RuntimeAdapterManager:
+        """Get adapter_manager or raise if not available. Fail fast, no fallbacks."""
+        if not self.adapter_manager:
+            raise RuntimeError(
+                "CRITICAL: adapter_manager not available in APIRuntimeControlService. "
+                "This indicates a startup sequencing issue - main RuntimeControlService's "
+                "adapter_manager was not injected. Check service initialization order."
+            )
+        return self.adapter_manager
+
     async def list_adapters(self) -> List[Any]:
         """List all loaded adapters."""
-        if not self.adapter_manager:
-            logger.warning(ERROR_ADAPTER_MANAGER_NOT_AVAILABLE)
-            return []
-
-        return await self.adapter_manager.list_adapters()
+        adapter_manager = self._require_adapter_manager()
+        return await adapter_manager.list_adapters()
 
     async def get_adapter_info(self, adapter_id: str) -> Optional[Any]:
         """Get detailed information about a specific adapter."""
-        if not self.adapter_manager:
-            logger.warning(ERROR_ADAPTER_MANAGER_NOT_AVAILABLE)
-            return None
+        adapter_manager = self._require_adapter_manager()
 
-        status = await self.adapter_manager.get_adapter_status(adapter_id)
+        status = await adapter_manager.get_adapter_status(adapter_id)
         if not status:
             return None
 
@@ -287,18 +311,20 @@ class APIRuntimeControlService(Service):
     async def load_adapter(
         self, adapter_type: str, adapter_id: Optional[str] = None, config: Optional[Dict[str, object]] = None
     ) -> Any:
-        """Load a new adapter instance."""
-        if not self.adapter_manager:
-            from ciris_engine.schemas.services.core.runtime import AdapterOperationResponse, AdapterStatus
+        """Load a new adapter instance.
 
-            return AdapterOperationResponse(
-                success=False,
-                timestamp=datetime.now(timezone.utc),
-                adapter_id=adapter_id,
-                adapter_type=adapter_type,
-                status=AdapterStatus.ERROR,
-                error=ERROR_ADAPTER_MANAGER_NOT_AVAILABLE,
-            )
+        Args:
+            adapter_type: Type of adapter to load (e.g., "home_assistant", "discord")
+            adapter_id: Optional unique identifier for the adapter instance
+            config: Optional configuration dictionary for the adapter
+
+        Returns:
+            AdapterOperationResponse with success status and adapter info
+
+        Raises:
+            RuntimeError: If adapter_manager is not available (fail fast)
+        """
+        adapter_manager = self._require_adapter_manager()
 
         # Generate adapter ID if not provided
         if not adapter_id:
@@ -311,9 +337,19 @@ class APIRuntimeControlService(Service):
         if config:
             from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 
-            adapter_config = AdapterConfig(**config)
+            # If config already has adapter_type, use it directly
+            # Otherwise, wrap the config in the proper structure
+            if "adapter_type" in config:
+                adapter_config = AdapterConfig(**config)
+            else:
+                # Wrap the collected config in AdapterConfig structure
+                adapter_config = AdapterConfig(
+                    adapter_type=adapter_type,
+                    enabled=True,
+                    adapter_config=config,  # Pass full config for complex adapters
+                )
 
-        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id, adapter_config)
+        result = await adapter_manager.load_adapter(adapter_type, adapter_id, adapter_config)
 
         # Convert to runtime control response format
         from ciris_engine.schemas.services.core.runtime import AdapterOperationResponse, AdapterStatus
@@ -329,20 +365,14 @@ class APIRuntimeControlService(Service):
         )
 
     async def unload_adapter(self, adapter_id: str) -> Any:
-        """Unload an adapter instance."""
-        if not self.adapter_manager:
-            from ciris_engine.schemas.services.core.runtime import AdapterOperationResponse, AdapterStatus
+        """Unload an adapter instance.
 
-            return AdapterOperationResponse(
-                success=False,
-                timestamp=datetime.now(timezone.utc),
-                adapter_id=adapter_id,
-                adapter_type="unknown",
-                status=AdapterStatus.ERROR,
-                error=ERROR_ADAPTER_MANAGER_NOT_AVAILABLE,
-            )
+        Raises:
+            RuntimeError: If adapter_manager is not available (fail fast)
+        """
+        adapter_manager = self._require_adapter_manager()
 
-        result = await self.adapter_manager.unload_adapter(adapter_id)
+        result = await adapter_manager.unload_adapter(adapter_id)
 
         # Convert to runtime control response format
         from ciris_engine.schemas.services.core.runtime import AdapterOperationResponse, AdapterStatus

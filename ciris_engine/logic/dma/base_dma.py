@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
@@ -11,10 +12,13 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.faculties import EpistemicFaculty
+
+logger = logging.getLogger(__name__)
 
 InputT = TypeVar("InputT")
 DMAResultT = TypeVar("DMAResultT", bound=BaseModel)
@@ -207,6 +211,64 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         """Get the type of decision making algorithm."""
         # Return class name by default
         return self.__class__.__name__
+
+    async def fetch_original_task(self, source_task_id: str, agent_occurrence_id: str = "default") -> Optional[Task]:
+        """Fetch the original task from persistence.
+
+        Args:
+            source_task_id: The task ID to fetch
+            agent_occurrence_id: The occurrence ID for the task
+
+        Returns:
+            Task object if found, None otherwise
+        """
+        try:
+            from ciris_engine.logic import persistence
+
+            task = persistence.get_task_by_id(source_task_id, agent_occurrence_id)
+            if task:
+                logger.debug(f"[DMA] Fetched original task: {source_task_id}")
+            else:
+                logger.warning(f"[DMA] Task {source_task_id} not found in persistence")
+            return task
+        except Exception as e:
+            logger.error(f"[DMA] Failed to fetch task {source_task_id}: {e}")
+            return None
+
+    def format_task_context(self, task: Optional[Task], thought_depth: int = 0) -> str:
+        """Format task context for inclusion in DMA prompts.
+
+        Args:
+            task: The original Task object (or None if not found)
+            thought_depth: Current thought depth (0=initial, >0=follow-up)
+
+        Returns:
+            Formatted string with task context for the prompt
+        """
+        if not task:
+            return "(Original task not available)"
+
+        parts = []
+        parts.append(f'Task: "{task.description}"')
+        parts.append(f"Task ID: {task.task_id}")
+
+        if hasattr(task, "status") and task.status:
+            parts.append(f"Status: {task.status}")
+
+        # Include parent task context if available (for subtasks)
+        if task.context and task.context.parent_task_id:
+            parts.append(f"Parent Task ID: {task.context.parent_task_id}")
+
+        # Add follow-through guidance for non-initial thoughts
+        if thought_depth > 0:
+            parts.append("")
+            parts.append(
+                "⚠️ FOLLOW-THROUGH REQUIRED: This is thought depth {depth}. "
+                "Previous actions have been taken. Evaluate whether the current "
+                "thought properly continues toward completing the original task.".format(depth=thought_depth)
+            )
+
+        return "\n".join(parts)
 
     @abstractmethod
     async def evaluate(self, *args: Any, **kwargs: Any) -> BaseModel:

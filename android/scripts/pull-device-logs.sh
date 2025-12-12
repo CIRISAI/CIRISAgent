@@ -192,6 +192,14 @@ main() {
     adb_cmd logcat -d -v time 'AndroidRuntime:E' '*:S' > "$OUTPUT_DIR/logcat_crashes.txt" 2>&1
     log_success "  logcat_crashes.txt"
 
+    # Get CIRISMobile app logcat (Kotlin navigation and setup decisions)
+    adb_cmd logcat -d -v time 'CIRISMobile:*' '*:S' > "$OUTPUT_DIR/logcat_ciris_mobile.txt" 2>&1
+    log_success "  logcat_ciris_mobile.txt"
+
+    # Get combined app logs (CIRISMobile + Python + WebView)
+    adb_cmd logcat -d -v time 'CIRISMobile:*' 'python.stdout:*' 'python.stderr:*' 'chromium:*' 'WebViewFactory:*' '*:S' > "$OUTPUT_DIR/logcat_combined.txt" 2>&1
+    log_success "  logcat_combined.txt"
+
     # If we have run-as access, get more files
     if [ "$CAN_RUN_AS" = "true" ]; then
         # 3. Get Python log files
@@ -274,6 +282,10 @@ main() {
     echo "  cat $OUTPUT_DIR/logs/incidents_latest.log | grep -i error"
     echo "  cat $OUTPUT_DIR/logs/latest.log | tail -100"
     echo "  sqlite3 $OUTPUT_DIR/databases/*.db '.tables'"
+    echo ""
+    echo "Kotlin navigation decisions:"
+    echo "  cat $OUTPUT_DIR/logcat_ciris_mobile.txt | grep -i 'SetupStatus\\|showInteract\\|showWebView'"
+    echo "  cat $OUTPUT_DIR/logcat_ciris_mobile.txt | grep -i 'setup_required\\|Setup complete\\|Setup required'"
 }
 
 main "$@"

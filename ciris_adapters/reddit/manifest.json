@@ -1,0 +1,218 @@
+{
+  "module": {
+    "name": "reddit_adapter",
+    "version": "1.0.0",
+    "description": "Adapter that connects CIRIS to Reddit with tool, communication, and observation services",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "reddit.service.RedditToolService",
+      "capabilities": [
+        "tool:reddit",
+        "tool:reddit:get_user_context",
+        "tool:reddit:submit_post",
+        "tool:reddit:submit_comment",
+        "tool:reddit:remove_content",
+        "tool:reddit:get_submission",
+        "tool:reddit:observe"
+      ]
+    },
+    {
+      "type": "COMMUNICATION",
+      "priority": "LOW",
+      "class": "reddit.service.RedditCommunicationService",
+      "capabilities": [
+        "communication:send_message",
+        "communication:fetch_messages"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:reddit",
+    "tool:reddit:get_user_context",
+    "tool:reddit:submit_post",
+    "tool:reddit:submit_comment",
+    "tool:reddit:remove_content",
+    "tool:reddit:get_submission",
+    "tool:reddit:observe",
+    "communication:send_message",
+    "communication:fetch_messages"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService",
+      "ciris_engine.protocols.services.CommunicationService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.runtime.enums",
+      "ciris_engine.schemas.runtime.messages"
+    ],
+    "external": {
+      "httpx": ">=0.25.0,<1.0.0"
+    }
+  },
+  "exports": {
+    "tool_service": "reddit.service.RedditToolService",
+    "communication_service": "reddit.service.RedditCommunicationService",
+    "observer": "reddit.observer.RedditObserver",
+    "protocol": "reddit.protocol.RedditOAuthProtocol",
+    "schemas": "reddit.schemas",
+    "adapter": "reddit.adapter.RedditAdapter",
+    "configurable": "reddit.configurable.RedditConfigurableAdapter"
+  },
+  "configuration": {
+    "reddit_client_id": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_CLIENT_ID",
+      "description": "Reddit OAuth client identifier"
+    },
+    "reddit_client_secret": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_CLIENT_SECRET",
+      "description": "Reddit OAuth client secret"
+    },
+    "reddit_username": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_USERNAME",
+      "description": "Bot account username"
+    },
+    "reddit_password": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_PASSWORD",
+      "sensitivity": "HIGH",
+      "description": "Bot account password"
+    },
+    "reddit_user_agent": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_USER_AGENT",
+      "default": "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)",
+      "description": "User-Agent header that complies with Reddit API rules"
+    },
+    "reddit_subreddit": {
+      "type": "string",
+      "env": "CIRIS_REDDIT_SUBREDDIT",
+      "default": "ciris",
+      "description": "Home subreddit for passive observation"
+    }
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "client_credentials",
+        "step_type": "input",
+        "title": "Reddit OAuth Application Credentials",
+        "description": "Enter your Reddit OAuth app credentials from https://www.reddit.com/prefs/apps",
+        "fields": [
+          {
+            "field_id": "client_id",
+            "label": "Client ID",
+            "description": "OAuth client ID from your Reddit app",
+            "input_type": "text",
+            "required": true,
+            "placeholder": "Enter your Reddit client ID"
+          },
+          {
+            "field_id": "client_secret",
+            "label": "Client Secret",
+            "description": "OAuth client secret from your Reddit app",
+            "input_type": "password",
+            "required": true,
+            "placeholder": "Enter your Reddit client secret"
+          }
+        ]
+      },
+      {
+        "step_id": "bot_account",
+        "step_type": "input",
+        "title": "Reddit Bot Account Credentials",
+        "description": "Enter credentials for your Reddit bot account",
+        "fields": [
+          {
+            "field_id": "username",
+            "label": "Bot Username",
+            "description": "Reddit bot account username",
+            "input_type": "text",
+            "required": true,
+            "placeholder": "Enter your bot username"
+          },
+          {
+            "field_id": "password",
+            "label": "Bot Password",
+            "description": "Reddit bot account password",
+            "input_type": "password",
+            "required": true,
+            "placeholder": "Enter your bot password"
+          }
+        ],
+        "depends_on": ["client_credentials"]
+      },
+      {
+        "step_id": "user_agent",
+        "step_type": "input",
+        "title": "User-Agent Configuration",
+        "description": "Reddit requires a unique User-Agent string for API requests",
+        "fields": [
+          {
+            "field_id": "user_agent",
+            "label": "User-Agent",
+            "description": "Unique User-Agent string (required by Reddit API)",
+            "input_type": "text",
+            "required": true,
+            "default": "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)",
+            "placeholder": "CIRIS-RedditAdapter/1.0 (+https://ciris.ai)"
+          }
+        ],
+        "depends_on": ["bot_account"]
+      },
+      {
+        "step_id": "select_subreddit",
+        "step_type": "input",
+        "title": "Home Subreddit",
+        "description": "Choose the primary subreddit for monitoring and interaction",
+        "fields": [
+          {
+            "field_id": "subreddit",
+            "label": "Subreddit",
+            "description": "Primary subreddit (without r/ prefix)",
+            "input_type": "text",
+            "required": false,
+            "default": "ciris",
+            "placeholder": "ciris"
+          }
+        ],
+        "depends_on": ["user_agent"],
+        "optional": true
+      },
+      {
+        "step_id": "select_post_types",
+        "step_type": "select",
+        "title": "Post Types to Monitor",
+        "description": "Choose which types of posts to monitor (optional)",
+        "options_method": "get_config_options",
+        "depends_on": ["user_agent"],
+        "optional": true
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your Reddit configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "metadata": {
+    "api": "Reddit OAuth API",
+    "requires_api_key": true,
+    "safe_domain": "community_outreach",
+    "prohibited": ["medical", "political_campaigning"],
+    "channel_format": "reddit:r/<subreddit>:post/<submission_id>:comment/<comment_id>"
+  }
+}

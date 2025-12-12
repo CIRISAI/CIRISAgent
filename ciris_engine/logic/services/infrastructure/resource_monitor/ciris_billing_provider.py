@@ -73,7 +73,17 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._cache: dict[str, tuple[CreditCheckResult, datetime]] = {}
 
     def _get_current_token(self) -> str:
-        """Get the current Google ID token, refreshing if callback is available."""
+        """Get the current Google ID token, checking environment for updates.
+
+        Token refresh flow:
+        1. Billing request fails with 401 → writes .token_refresh_needed
+        2. Android detects signal, refreshes Google token silently
+        3. Android updates .env with new GOOGLE_ID_TOKEN
+        4. Android writes .config_reload signal
+        5. ResourceMonitor reloads .env (via load_dotenv override=True)
+        6. This method reads the updated GOOGLE_ID_TOKEN from environment
+        """
+        # First, try the callback if available
         if self._token_refresh_callback:
             try:
                 new_token = self._token_refresh_callback()
@@ -82,8 +92,18 @@ class CIRISBillingProvider(CreditGateProtocol):
                     new_preview = new_token[:20] + "..."
                     logger.info("[BILLING_TOKEN] Token refreshed via callback: %s -> %s", old_preview, new_preview)
                     self._google_id_token = new_token
+                    return self._google_id_token
             except Exception as exc:
                 logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
+
+        # Check environment for updated token (set by ResourceMonitor after .env reload)
+        env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
+        if env_token and env_token != self._google_id_token:
+            old_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
+            new_preview = env_token[:20] + "..."
+            logger.info("[BILLING_TOKEN] Token updated from environment: %s -> %s", old_preview, new_preview)
+            self._google_id_token = env_token
+
         return self._google_id_token
 
     def _build_auth_headers(self) -> dict[str, str]:

@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Allow cleartext for localhost (local Python API server) and local network -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
+        <!-- Home Assistant and local network devices for mDNS discovery -->
+        <domain includeSubdomains="true">192.168.50.243</domain>
+        <domain includeSubdomains="true">homeassistant.local</domain>
     </domain-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <!-- Default: require HTTPS for all other traffic -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>

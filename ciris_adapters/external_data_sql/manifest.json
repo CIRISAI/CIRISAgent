@@ -1,0 +1,195 @@
+{
+  "module": {
+    "name": "external_data_sql",
+    "version": "1.0.0",
+    "description": "SQL database connector for DSAR automation and external data access",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "external_data_sql.service.SQLToolService",
+      "capabilities": [
+        "tool:sql",
+        "tool:sql:find_user_data",
+        "tool:sql:export_user",
+        "tool:sql:delete_user",
+        "tool:sql:anonymize_user",
+        "tool:sql:verify_deletion",
+        "tool:sql:get_stats",
+        "tool:sql:query"
+      ]
+    }
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolService"
+    ],
+    "external": {
+      "pyodbc": ">=5.0.0,<6.0.0",
+      "sqlalchemy": ">=2.0.0,<3.0.0",
+      "pyyaml": ">=6.0.0,<7.0.0"
+    }
+  },
+  "exports": {
+    "protocols": [],
+    "schemas": [
+      "external_data_sql.schemas.SQLConnectorConfig",
+      "external_data_sql.schemas.PrivacySchemaConfig",
+      "external_data_sql.schemas.SQLQueryResult",
+      "external_data_sql.schemas.SQLExportResult",
+      "external_data_sql.schemas.SQLDeletionResult",
+      "external_data_sql.schemas.SQLAnonymizationResult",
+      "external_data_sql.schemas.SQLVerificationResult"
+    ]
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "select_dialect",
+        "step_type": "select",
+        "title": "Select Database Type",
+        "description": "Choose the type of SQL database you want to connect to",
+        "options_method": "get_config_options",
+        "required": true
+      },
+      {
+        "step_id": "connection_sqlite",
+        "step_type": "input",
+        "title": "SQLite Connection",
+        "description": "Enter the path to your SQLite database file",
+        "fields": [
+          {
+            "field_id": "database_path",
+            "label": "Database File Path",
+            "type": "string",
+            "placeholder": "/path/to/database.db",
+            "required": true
+          },
+          {
+            "field_id": "connector_id",
+            "label": "Connector ID",
+            "type": "string",
+            "placeholder": "my_sqlite_db",
+            "default": "sql",
+            "required": true
+          }
+        ],
+        "depends_on": ["select_dialect"],
+        "condition": {
+          "field": "dialect",
+          "equals": "sqlite"
+        }
+      },
+      {
+        "step_id": "connection_server",
+        "step_type": "input",
+        "title": "Database Connection",
+        "description": "Enter connection details for your database server",
+        "fields": [
+          {
+            "field_id": "host",
+            "label": "Host",
+            "type": "string",
+            "placeholder": "localhost",
+            "required": true
+          },
+          {
+            "field_id": "port",
+            "label": "Port",
+            "type": "number",
+            "placeholder": "5432",
+            "required": false
+          },
+          {
+            "field_id": "database",
+            "label": "Database Name",
+            "type": "string",
+            "placeholder": "mydb",
+            "required": true
+          },
+          {
+            "field_id": "user",
+            "label": "Username",
+            "type": "string",
+            "placeholder": "dbuser",
+            "required": true
+          },
+          {
+            "field_id": "password",
+            "label": "Password",
+            "type": "password",
+            "placeholder": "••••••••",
+            "required": true
+          },
+          {
+            "field_id": "connector_id",
+            "label": "Connector ID",
+            "type": "string",
+            "placeholder": "my_database",
+            "default": "sql",
+            "required": true
+          }
+        ],
+        "depends_on": ["select_dialect"],
+        "condition": {
+          "field": "dialect",
+          "not_equals": "sqlite"
+        }
+      },
+      {
+        "step_id": "privacy_schema",
+        "step_type": "input",
+        "title": "Privacy Schema (Optional)",
+        "description": "Configure privacy schema for GDPR/DSAR compliance",
+        "fields": [
+          {
+            "field_id": "privacy_schema_path",
+            "label": "Privacy Schema File Path",
+            "type": "string",
+            "placeholder": "/path/to/privacy_schema.yaml",
+            "required": false
+          }
+        ],
+        "optional": true,
+        "depends_on": ["select_dialect"]
+      },
+      {
+        "step_id": "select_features",
+        "step_type": "select",
+        "title": "Select Features",
+        "description": "Choose which SQL features to enable",
+        "options_method": "get_config_options",
+        "multiple": true,
+        "depends_on": ["select_dialect"]
+      },
+      {
+        "step_id": "test_connection",
+        "step_type": "confirm",
+        "title": "Test Connection",
+        "description": "Test the database connection before applying configuration",
+        "optional": true,
+        "action": "test_connection"
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Confirm Configuration",
+        "description": "Review and apply your SQL database configuration"
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "configuration": {
+    "sql_config_file": {
+      "type": "string",
+      "env": "CIRIS_SQL_EXTERNAL_DATA_CONFIG",
+      "default": null,
+      "description": "Path to SQL external data configuration JSON file"
+    }
+  }
+}

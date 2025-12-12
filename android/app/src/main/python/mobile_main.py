@@ -603,7 +603,7 @@ def setup_android_environment():
     # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")
     os.environ.setdefault("CIRIS_LOG_LEVEL", "INFO")
-    os.environ.setdefault("CIRIS_API_HOST", "127.0.0.1")
+    os.environ.setdefault("CIRIS_API_HOST", "0.0.0.0")
     os.environ.setdefault("CIRIS_API_PORT", "8080")
 
 
@@ -615,7 +615,7 @@ async def start_mobile_runtime():
     from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 
     logger.info("Starting CIRIS on-device runtime...")
-    logger.info("API endpoint: http://127.0.0.1:8080")
+    logger.info("API endpoint: http://0.0.0.0:8080 (binding all interfaces)")
     logger.info(f"LLM endpoint: {os.environ.get('OPENAI_API_BASE', 'NOT CONFIGURED')}")
 
     # On Android, we skip file-based config loading and use defaults directly
@@ -650,9 +650,9 @@ async def start_mobile_runtime():
     )
     logger.info(f"Using Android config - CIRIS_HOME: {ciris_home}, data_dir: {data_dir}")
 
-    # Configure API adapter
+    # Configure API adapter - bind to 0.0.0.0 so browser can reach localhost
     api_config = APIAdapterConfig()
-    api_config.host = "127.0.0.1"
+    api_config.host = "0.0.0.0"
     api_config.port = 8080
 
     adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
@@ -666,7 +666,7 @@ async def start_mobile_runtime():
         startup_channel_id=startup_channel_id,
         adapter_configs=adapter_configs,
         interactive=False,  # No interactive CLI on Android
-        host="127.0.0.1",
+        host="0.0.0.0",  # Bind all interfaces so browser OAuth can reach us
         port=8080,
     )
 

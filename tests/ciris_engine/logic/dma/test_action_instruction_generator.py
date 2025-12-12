@@ -93,20 +93,22 @@ class TestActionInstructionGenerator:
         assert "ISO 8601 format: '2025-01-20T15:00:00Z'" in defer_schema
 
     def test_tool_schema_without_registry(self):
-        """Test tool schema generation without service registry."""
+        """Test tool schema generation without service registry fails fast."""
         generator = ActionInstructionGenerator()
 
         tool_schema = generator._generate_schema_for_action(HandlerActionType.TOOL)
 
-        # Should fall back to default tools
-        assert "Available tools (check with tool service for current list):" in tool_schema
-        assert "discord_delete_message" in tool_schema
-        assert "discord_timeout_user" in tool_schema
-        assert "discord_ban_user" in tool_schema
+        # Should fail fast with error - no hardcoded fallback tools
+        assert "ERROR" in tool_schema
+        assert "No tool service registry available" in tool_schema
+        # Should NOT contain any hardcoded Discord tools
+        assert "discord_delete_message" not in tool_schema
+        assert "discord_timeout_user" not in tool_schema
+        assert "discord_ban_user" not in tool_schema
 
     @pytest.mark.asyncio
     async def test_tool_schema_with_registry(self):
-        """Test tool schema generation with service registry."""
+        """Test tool schema generation with service registry after pre-caching."""
         # Create mock tool service
         mock_tool_service = Mock()
         mock_tool_service.adapter_name = "discord"
@@ -131,12 +133,16 @@ class TestActionInstructionGenerator:
 
         generator = ActionInstructionGenerator(mock_registry)
 
-        # We need to test the async get_all_tools function directly
-        # since _generate_tool_schema has async code that's hard to test in sync context
+        # CRITICAL: Must pre-cache tools before generating schema (no fallbacks!)
+        await generator.pre_cache_tools()
+
+        # Now generate the tool schema - should use pre-cached tools
         tool_schema = generator._generate_schema_for_action(HandlerActionType.TOOL)
 
-        # In sync context, it should try but fall back to default
+        # Should have the pre-cached tools available
         assert "Available tools" in tool_schema
+        assert "test_tool_1" in tool_schema
+        assert "test_tool_2" in tool_schema
 
     def test_simplify_schema(self):
         """Test schema simplification."""

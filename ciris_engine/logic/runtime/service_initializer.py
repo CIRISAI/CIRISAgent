@@ -45,6 +45,12 @@ logger = logging.getLogger(__name__)
 # Total core services for startup logging (22 per architecture)
 TOTAL_CORE_SERVICES = 22
 
+# First-run minimal services (10 services needed to serve setup wizard)
+FIRST_RUN_SERVICES = 10
+
+# Services started during resume_from_first_run (remaining 12)
+RESUME_SERVICES = 12
+
 # Service names in initialization order for UI display
 SERVICE_NAMES = [
     "TimeService",  # 1 - Infrastructure
@@ -71,11 +77,23 @@ SERVICE_NAMES = [
     "SecretsToolService",  # 22 - Tool Services
 ]
 
+# Track which phase we're in for logging clarity
+_current_phase: str = "STARTUP"
+
+
+def _set_service_phase(phase: str) -> None:
+    """Set the current service initialization phase for logging."""
+    global _current_phase
+    _current_phase = phase
+    logger.warning(f"[SERVICES] === {phase} PHASE ===")
+    print(f"[SERVICES] === {phase} PHASE ===")
+
 
 def _log_service_started(service_num: int, service_name: str, success: bool = True) -> None:
     """Log service startup status in a format parseable by the UI."""
     status = "STARTED" if success else "FAILED"
-    msg = f"[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
+    phase_prefix = f"[{_current_phase}] " if _current_phase != "STARTUP" else ""
+    msg = f"{phase_prefix}[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
     # Use WARNING level so it shows up in incident logs for easy parsing
     logger.warning(msg)
     # Also print to console/stdout for Android logcat visibility
@@ -131,6 +149,12 @@ class ServiceInitializer:
         self._startup_start_time: Optional[float] = None
         self._startup_end_time: Optional[float] = None
 
+    def _is_first_run_mode(self) -> bool:
+        """Check if we're in first-run mode."""
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        return is_first_run()
+
     async def initialize_infrastructure_services(self) -> None:
         """Initialize infrastructure services that all other services depend on."""
         # Track startup time
@@ -138,6 +162,9 @@ class ServiceInitializer:
 
         if self._startup_start_time is None:
             self._startup_start_time = time.time()
+
+        # Set phase for logging - this is the first phase of initialization
+        _set_service_phase("FIRST-RUN" if self._is_first_run_mode() else "FULL-STARTUP")
 
         # Initialize TimeService first - everyone needs time
         try:
@@ -493,6 +520,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(13, "WiseAuthority")
 
+        # Log summary for first-run mode
+        if self._is_first_run_mode():
+            msg = f"[FIRST-RUN] ✓ {self._services_started_count}/{FIRST_RUN_SERVICES} minimal services started - ready for setup wizard"
+            logger.warning(msg)
+            print(msg)
+
     async def verify_security_services(self) -> bool:
         """Verify security services are operational."""
         # Verify secrets service
@@ -521,7 +554,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
         startup_channel_id: Optional[str] = None,
         modules_to_load: Optional[List[str]] = None,
     ) -> None:
-        """Initialize all remaining core services."""
+        """Initialize all remaining core services.
+
+        This is called:
+        - During normal startup: After first-run services (completes all 22)
+        - During resume_from_first_run: Starts the remaining 12 services after wizard
+        """
+        # Set phase for logging - RESUME if coming from first-run, otherwise continue FULL-STARTUP
+        if self._services_started_count == FIRST_RUN_SERVICES:
+            _set_service_phase(f"RESUME ({RESUME_SERVICES} remaining services)")
+        else:
+            _set_service_phase("CORE-SERVICES")
+
         from ciris_engine.logic.registries.base import get_global_registry
 
         self.service_registry = get_global_registry()
@@ -1276,8 +1320,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             capabilities=service_def.capabilities,
         )
 
-    def _register_modular_service(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
-        """Register a modular service with the appropriate bus/registry based on type."""
+    def _register_adapter(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
+        """Register a adapter with the appropriate bus/registry based on type."""
         if service_def.type == ServiceType.TOOL:
             self._register_tool_service(service_instance, manifest, service_def)
         elif service_def.type == ServiceType.COMMUNICATION:
@@ -1285,37 +1329,37 @@ This directory contains critical cryptographic keys for the CIRIS system.
         elif service_def.type == ServiceType.LLM:
             self._register_llm_service(service_instance, manifest, service_def)
 
-    async def _load_modular_service(self, service_name: str) -> None:
-        """Load a modular service and register its services with appropriate buses.
+    async def _load_adapter(self, service_name: str) -> None:
+        """Load a adapter and register its services with appropriate buses.
 
         Args:
-            service_name: Name of the modular service to load (e.g. "reddit_adapter")
+            service_name: Name of the adapter to load (e.g. "reddit_adapter")
         """
-        from ciris_engine.logic.runtime.modular_service_loader import ModularServiceLoader
+        from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
 
-        logger.info(f"Loading modular service: {service_name}")
+        logger.info(f"Loading adapter: {service_name}")
 
         # Discover and find the service
-        modular_loader = ModularServiceLoader()
-        discovered_services = modular_loader.discover_services()
+        adapter_loader = AdapterLoader()
+        discovered_services = adapter_loader.discover_services()
 
         manifest = self._find_service_manifest(service_name, discovered_services)
         if not manifest:
-            raise ValueError(f"Modular service '{service_name}' not found")
+            raise ValueError(f"Adapter '{service_name}' not found")
 
-        logger.info(f"Found manifest for modular service '{manifest.module.name}'")
+        logger.info(f"Found manifest for adapter '{manifest.module.name}'")
 
         # Load each service defined in the manifest
         for service_def in manifest.services:
             try:
                 # Load the specific service class for this service definition
-                service_class = modular_loader.load_service_class(manifest, service_def.class_path)
+                service_class = adapter_loader.load_service_class(manifest, service_def.class_path)
                 if not service_class:
                     logger.error(f"Failed to load service class for {manifest.module.name}")
                     continue
 
                 # Instantiate the service (services usually need minimal initialization)
-                # Most modular services are self-contained and load config from env
+                # Most adapters are self-contained and load config from env
                 # Some services (like observers) may need runtime dependencies
                 try:
                     # Try to inject runtime dependencies if the service accepts them
@@ -1341,12 +1385,12 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     # Handle both async and sync start methods
                     if hasattr(start_result, "__await__"):
                         await start_result
-                    logger.info(f"Started modular service {manifest.module.name}")
+                    logger.info(f"Started adapter {manifest.module.name}")
 
                 # Register with appropriate bus based on service type
-                self._register_modular_service(service_instance, manifest, service_def)
+                self._register_adapter(service_instance, manifest, service_def)
 
-                logger.info(f"Successfully loaded and registered modular service: {manifest.module.name}")
+                logger.info(f"Successfully loaded and registered adapter: {manifest.module.name}")
                 self.loaded_modules.append(f"modular:{service_name}")
 
             except Exception as e:
@@ -1369,10 +1413,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         for module_name in modules:
             try:
-                # Check if this is a modular service
+                # Check if this is a adapter
                 if module_name.startswith("modular:"):
                     service_name = module_name[8:]  # Remove "modular:" prefix
-                    await self._load_modular_service(service_name)
+                    await self._load_adapter(service_name)
                     continue
 
                 # Load module with safety checks

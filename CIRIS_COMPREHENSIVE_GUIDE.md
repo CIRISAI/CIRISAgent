@@ -347,7 +347,7 @@ User messages are scanned and cleaned of spoofed security markers before you pro
 ### Credit Enforcement
 
 - **1 credit = 1 interaction session** (up to 7 processing rounds)
-- **$5.00 = 20 credits** ($0.25 per interaction) via Stripe
+- **$5.00 = 100 credits** ($0.05 per interaction) via Stripe
 - **Daily free uses**: 2 free LLM calls every day, resetting at midnight UTC
 - **Free trial credits**: 3 free interactions for Google OAuth users (used after daily free uses exhausted)
 - **Credit priority**: Daily free → Free trial → Paid credits
@@ -804,8 +804,8 @@ The SQL External Data Service implements:
 ### Detailed Documentation
 
 For comprehensive implementation details, see:
-- **[SQL External Data Service README](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/README.md)** - Complete service documentation
-- **[Privacy Schema Examples](/home/emoore/CIRISAgent/ciris_modular_services/external_data_sql/examples/)** - Real-world configurations
+- **[SQL External Data Service README](/home/emoore/CIRISAgent/ciris_adapters/external_data_sql/README.md)** - Complete service documentation
+- **[Privacy Schema Examples](/home/emoore/CIRISAgent/ciris_adapters/external_data_sql/examples/)** - Real-world configurations
 - **[DSAR Automation Guide](/home/emoore/CIRISAgent/docs/DSAR_AUTOMATION.md)** - Multi-source DSAR orchestration
 
 ---

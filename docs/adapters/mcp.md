@@ -2,10 +2,10 @@
 
 CIRIS provides comprehensive MCP support through two complementary modular services:
 
-1. **MCP Client** (`ciris_modular_services/mcp_client/`) - Connect to external MCP servers
-2. **MCP Server** (`ciris_modular_services/mcp_server/`) - Expose CIRIS as an MCP server
+1. **MCP Client** (`ciris_adapters/mcp_client/`) - Connect to external MCP servers
+2. **MCP Server** (`ciris_adapters/mcp_server/`) - Expose CIRIS as an MCP server
 
-Both adapters share common utilities in `ciris_modular_services/mcp_common/`.
+Both adapters share common utilities in `ciris_adapters/mcp_common/`.
 
 ## Architecture Overview
 
@@ -72,7 +72,7 @@ export MCP_SERVER_WEATHER_BUSES=tool,wise
 #### Programmatic Configuration
 
 ```python
-from ciris_modular_services.mcp_client import (
+from ciris_adapters.mcp_client import (
     MCPAdapterConfig,
     MCPServerConfig,
     MCPBusBinding,
@@ -185,7 +185,7 @@ The MCP Server adapter exposes CIRIS capabilities to external MCP clients like C
 ### Configuration
 
 ```python
-from ciris_modular_services.mcp_server import (
+from ciris_adapters.mcp_server import (
     MCPServerAdapterConfig,
     MCPServerTransportConfig,
     MCPServerSecurityConfig,
@@ -246,7 +246,7 @@ To use with Claude Desktop, add to `claude_desktop_config.json`:
   "mcpServers": {
     "ciris": {
       "command": "python",
-      "args": ["-m", "ciris_modular_services.mcp_server"],
+      "args": ["-m", "ciris_adapters.mcp_server"],
       "env": {}
     }
   }
@@ -276,7 +276,7 @@ Shared code between client and server adapters:
 ### Protocol Helpers
 
 ```python
-from ciris_modular_services.mcp_common.protocol import (
+from ciris_adapters.mcp_common.protocol import (
     MCPMessage,
     validate_mcp_message,
     create_success_response,
@@ -293,7 +293,7 @@ response = create_success_response(request_id, {"tools": [...]})
 ### Schema Converters
 
 ```python
-from ciris_modular_services.mcp_common.schemas import (
+from ciris_adapters.mcp_common.schemas import (
     ciris_tool_to_mcp,
     mcp_tool_to_ciris,
 )
@@ -312,13 +312,13 @@ Run MCP adapter tests:
 
 ```bash
 # Client adapter tests
-pytest tests/ciris_modular_services/mcp_client/ -v
+pytest tests/ciris_adapters/mcp_client/ -v
 
 # Server adapter tests
-pytest tests/ciris_modular_services/mcp_server/ -v
+pytest tests/ciris_adapters/mcp_server/ -v
 
 # Common utilities tests
-pytest tests/ciris_modular_services/mcp_common/ -v
+pytest tests/ciris_adapters/mcp_common/ -v
 ```
 
 ## Security Best Practices
@@ -367,6 +367,6 @@ Based on research from:
 
 ```python
 import logging
-logging.getLogger("ciris_modular_services.mcp_client").setLevel(logging.DEBUG)
-logging.getLogger("ciris_modular_services.mcp_server").setLevel(logging.DEBUG)
+logging.getLogger("ciris_adapters.mcp_client").setLevel(logging.DEBUG)
+logging.getLogger("ciris_adapters.mcp_server").setLevel(logging.DEBUG)
 ```

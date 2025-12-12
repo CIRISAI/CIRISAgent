@@ -272,3 +272,104 @@ def user_enrichment_setup(mock_memory_service, sample_user_node, mock_db_connect
     mock_db_connection.cursor.return_value.fetchall.return_value = []
 
     return {"memory_service": mock_memory_service, "user_node": sample_user_node, "db_connection": mock_db_connection}
+
+
+# =============================================================================
+# CONTEXT ENRICHMENT FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def mock_enrichment_tool_info():
+    """Create a ToolInfo marked for context enrichment."""
+    from ciris_engine.schemas.adapters.tools import ToolParameterSchema
+
+    return ToolInfo(
+        name="test_list_items",
+        description="List all available items for context enrichment",
+        parameters=ToolParameterSchema(
+            type="object",
+            properties={
+                "filter": {
+                    "type": "string",
+                    "description": "Optional filter",
+                },
+            },
+            required=[],
+        ),
+        context_enrichment=True,
+        context_enrichment_params={},
+    )
+
+
+@pytest.fixture
+def mock_non_enrichment_tool_info():
+    """Create a ToolInfo NOT marked for context enrichment."""
+    from ciris_engine.schemas.adapters.tools import ToolParameterSchema
+
+    return ToolInfo(
+        name="test_action",
+        description="Perform an action",
+        parameters=ToolParameterSchema(
+            type="object",
+            properties={
+                "target": {
+                    "type": "string",
+                    "description": "Action target",
+                },
+            },
+            required=["target"],
+        ),
+        context_enrichment=False,
+    )
+
+
+@pytest.fixture
+def mock_tool_execution_result():
+    """Create a mock ToolExecutionResult."""
+    from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+
+    return ToolExecutionResult(
+        tool_name="test_list_items",
+        status=ToolExecutionStatus.COMPLETED,
+        success=True,
+        data={
+            "count": 3,
+            "items": [
+                {"id": "item1", "name": "Item 1"},
+                {"id": "item2", "name": "Item 2"},
+                {"id": "item3", "name": "Item 3"},
+            ],
+        },
+        error=None,
+        correlation_id="test-corr-123",
+    )
+
+
+@pytest.fixture
+def mock_enrichment_tool_service(mock_enrichment_tool_info, mock_tool_execution_result):
+    """Create a mock tool service with enrichment tools."""
+    service = Mock()
+    service.adapter_id = "test_adapter"
+    service.get_available_tools = AsyncMock(return_value=["test_list_items", "test_action"])
+    service.get_tool_info = AsyncMock(return_value=mock_enrichment_tool_info)
+    service.execute_tool = AsyncMock(return_value=mock_tool_execution_result)
+    return service
+
+
+@pytest.fixture
+def mock_runtime_with_enrichment(mock_enrichment_tool_service):
+    """Create a runtime mock with tool service that has enrichment tools."""
+    runtime = Mock()
+    runtime.current_shutdown_context = None
+
+    # Mock adapter manager
+    runtime.adapter_manager = Mock()
+    runtime.adapter_manager._adapters = {}
+
+    # Mock service registry with tool services
+    runtime.service_registry = Mock()
+    runtime.service_registry.get_services_by_type.return_value = [mock_enrichment_tool_service]
+    runtime.bus_manager = Mock()
+
+    return runtime

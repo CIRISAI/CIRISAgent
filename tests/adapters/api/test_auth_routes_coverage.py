@@ -454,11 +454,16 @@ class TestOAuthRedirectURI:
                 return_value='{"google": {"client_id": "test-client-id", "client_secret": "test-secret"}}',
             ),
             patch.dict(os.environ, {"CIRIS_AGENT_ID": "scout-test"}),
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
+                ["scout.ciris.ai"],
+            ),
         ):
             # Create mock request with redirect_uri parameter
             mock_request = Mock()
             mock_request.headers = {"x-forwarded-proto": "https", "host": "scoutapi.ciris.ai"}
             mock_request.url = Mock(scheme="https")
+            mock_request.client = Mock(host="127.0.0.1")
 
             # Call oauth_login with redirect_uri
             redirect_uri = "https://scout.ciris.ai/oauth/scout-test/google/callback"
@@ -542,6 +547,10 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
+                ["scout.ciris.ai"],
+            ),
         ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
@@ -685,6 +694,10 @@ class TestOAuthRedirectURI:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth_handler,
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
+                ["scout.ciris.ai"],
+            ),
         ):
             mock_config.return_value = {"client_id": "test-id", "client_secret": "test-secret"}
 
@@ -1583,6 +1596,10 @@ class TestMarketingOptInParsing:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
+                ["scout.ciris.ai"],
+            ),
         ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {
@@ -1625,6 +1642,10 @@ class TestMarketingOptInParsing:
         with (
             patch("ciris_engine.logic.adapters.api.routes.auth._load_oauth_config") as mock_config,
             patch("ciris_engine.logic.adapters.api.routes.auth._handle_google_oauth") as mock_oauth,
+            patch(
+                "ciris_engine.logic.adapters.api.routes.auth.OAUTH_ALLOWED_REDIRECT_DOMAINS",
+                ["scout.ciris.ai"],
+            ),
         ):
             mock_config.return_value = {"client_id": "id", "client_secret": "secret"}
             mock_oauth.return_value = {

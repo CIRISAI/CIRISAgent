@@ -75,7 +75,7 @@ class TestModuleTypeInfo:
         assert not info.is_mock
         assert len(info.service_types) == 2
 
-    def test_modular_service(self) -> None:
+    def test_adapter(self) -> None:
         """Test creating a modular service info."""
         info = ModuleTypeInfo(
             module_id="reddit",
@@ -134,14 +134,14 @@ class TestModuleTypesResponse:
         )
         response = ModuleTypesResponse(
             core_modules=[core],
-            modular_services=[modular],
+            adapters=[modular],
             total_core=1,
-            total_modular=1,
+            total_adapters=1,
         )
         assert len(response.core_modules) == 1
-        assert len(response.modular_services) == 1
+        assert len(response.adapters) == 1
         assert response.total_core == 1
-        assert response.total_modular == 1
+        assert response.total_adapters == 1
 
 
 class TestGetCoreAdapterInfo:
@@ -351,7 +351,7 @@ class TestModuleTypesIntegration:
         import json
         from pathlib import Path
 
-        manifest_path = Path("ciris_modular_services/mcp_client/manifest.json")
+        manifest_path = Path("ciris_adapters/mcp_client/manifest.json")
         if manifest_path.exists():
             with open(manifest_path) as f:
                 manifest_data = json.load(f)

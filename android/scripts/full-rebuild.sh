@@ -38,7 +38,7 @@ PYTHON_GUI_DIR="$ANDROID_DIR/app/src/main/python/android_gui_static"
 WHEELS_DIR="$ANDROID_DIR/app/wheels"
 PYTHON_SRC_DIR="$ANDROID_DIR/app/src/main/python"
 MAIN_CIRIS_ENGINE="$PROJECT_ROOT/ciris_engine"
-MAIN_MODULAR_SERVICES="$PROJECT_ROOT/ciris_modular_services"
+MAIN_MODULAR_SERVICES="$PROJECT_ROOT/ciris_adapters"
 
 # Colors
 RED='\033[0;31m'
@@ -316,18 +316,18 @@ sync_python_sources() {
         exit 1
     fi
 
-    # Sync ciris_modular_services
-    log_step "Syncing ciris_modular_services..."
+    # Sync ciris_adapters
+    log_step "Syncing ciris_adapters..."
     if [ -d "$MAIN_MODULAR_SERVICES" ]; then
-        rm -rf "$PYTHON_SRC_DIR/ciris_modular_services"
-        cp -r "$MAIN_MODULAR_SERVICES" "$PYTHON_SRC_DIR/ciris_modular_services"
+        rm -rf "$PYTHON_SRC_DIR/ciris_adapters"
+        cp -r "$MAIN_MODULAR_SERVICES" "$PYTHON_SRC_DIR/ciris_adapters"
         # Remove __pycache__ directories
-        find "$PYTHON_SRC_DIR/ciris_modular_services" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        find "$PYTHON_SRC_DIR/ciris_adapters" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
         local count2
-        count2=$(find "$PYTHON_SRC_DIR/ciris_modular_services" -name "*.py" | wc -l)
+        count2=$(find "$PYTHON_SRC_DIR/ciris_adapters" -name "*.py" | wc -l)
         log_info "  -> $count2 Python files"
     else
-        log_warn "ciris_modular_services not found at $MAIN_MODULAR_SERVICES - skipping"
+        log_warn "ciris_adapters not found at $MAIN_MODULAR_SERVICES - skipping"
     fi
 
     log_success "Python sources synced from main repo"

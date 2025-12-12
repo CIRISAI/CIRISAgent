@@ -12,7 +12,13 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.runtime.models import ImageContent, Task
+from ciris_engine.schemas.services.llm import (
+    ContentBlock,
+    ImageContentBlock,
+    ImageURLDetail,
+    TextContentBlock,
+)
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -269,6 +275,56 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             )
 
         return "\n".join(parts)
+
+    @staticmethod
+    def build_multimodal_content(
+        text: str,
+        images: List[ImageContent],
+    ) -> Union[str, List[ContentBlock]]:
+        """
+        Build content for an LLM message, supporting both text-only and multimodal.
+
+        If no images are provided, returns the text string directly.
+        If images are provided, returns a list of ContentBlocks (text + images).
+
+        Args:
+            text: Text content of the message
+            images: List of ImageContent objects (can be empty)
+
+        Returns:
+            Either a string (text-only) or List[ContentBlock] (multimodal)
+        """
+        if not images:
+            return text
+
+        # Build content blocks for multimodal message
+        content: List[ContentBlock] = [TextContentBlock(text=text)]
+
+        for img in images:
+            image_block = ImageContentBlock(
+                image_url=ImageURLDetail(url=img.to_data_url())
+            )
+            content.append(image_block)
+
+        return content
+
+    def build_user_message(
+        self,
+        text: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> JSONDict:
+        """
+        Build a user message dict for LLM calls, with optional multimodal support.
+
+        Args:
+            text: Text content of the message
+            images: Optional list of ImageContent objects
+
+        Returns:
+            Message dict with role and content (text or multimodal)
+        """
+        content = self.build_multimodal_content(text, images or [])
+        return {"role": "user", "content": content}
 
     @abstractmethod
     async def evaluate(self, *args: Any, **kwargs: Any) -> BaseModel:

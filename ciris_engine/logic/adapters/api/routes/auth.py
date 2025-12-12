@@ -533,10 +533,12 @@ async def oauth_login(provider: str, request: Request, redirect_uri: Optional[st
         # Validate redirect_uri to prevent open redirect attacks (security)
         validated_redirect_uri = validate_redirect_uri(redirect_uri)
         if redirect_uri and not validated_redirect_uri:
-            logger.warning(f"OAuth login rejected untrusted redirect_uri from {request.client.host if request.client else 'unknown'}")
+            logger.warning(
+                f"OAuth login rejected untrusted redirect_uri from {request.client.host if request.client else 'unknown'}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid redirect_uri: must be a relative path or trusted domain"
+                detail="Invalid redirect_uri: must be a relative path or trusted domain",
             )
 
         # Encode state with CSRF token and optional redirect_uri

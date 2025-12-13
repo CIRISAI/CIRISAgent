@@ -1629,6 +1629,18 @@ class MainActivity : AppCompatActivity() {
             return false
         }
 
+        // Log token diagnostics for debugging (safe for release builds - no token value logged)
+        val helper = googleSignInHelper ?: GoogleSignInHelper(this)
+        helper.logTokenDiagnostics("ExchangeAttempt", idToken)
+
+        // Check if token is already expired
+        val expiry = helper.getTokenExpiry(idToken)
+        val nowSeconds = System.currentTimeMillis() / 1000
+        if (expiry != null && expiry <= nowSeconds) {
+            Log.e(TAG, "[TokenExchange] TOKEN IS EXPIRED! expiry=$expiry, now=$nowSeconds, expired ${nowSeconds - expiry}s ago")
+            Log.e(TAG, "[TokenExchange] This indicates the token was not refreshed properly after sign-in")
+        }
+
         Log.i(TAG, "[TokenExchange] Starting token exchange - token length: ${idToken.length}, prefix: ${idToken.take(20)}...")
 
         return try {

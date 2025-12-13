@@ -144,10 +144,37 @@ class GoogleSignInHelper(private val context: Context) {
     }
 
     /**
+     * Log token diagnostics without exposing the actual token.
+     * Safe for release builds - logs only metadata useful for debugging.
+     */
+    fun logTokenDiagnostics(source: String, idToken: String?) {
+        if (idToken == null) {
+            Log.w(TAG, "[TokenDiag:$source] Token is NULL")
+            return
+        }
+
+        val expiry = getTokenExpiry(idToken)
+        val nowSeconds = System.currentTimeMillis() / 1000
+        val remainingSeconds = expiry?.let { it - nowSeconds }
+        val isExpired = remainingSeconds != null && remainingSeconds <= 0
+
+        // Generate a short hash of the token for correlation (first 8 chars of SHA-256)
+        val tokenHash = try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(idToken.toByteArray())
+            hash.take(4).joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) { "????????" }
+
+        Log.i(TAG, "[TokenDiag:$source] length=${idToken.length}, hash=$tokenHash, " +
+                "expiry=${expiry ?: "unknown"}, remaining=${remainingSeconds ?: "unknown"}s, " +
+                "expired=$isExpired")
+    }
+
+    /**
      * Get the expiry time (in seconds since epoch) from a JWT token.
      * Returns null if parsing fails.
      */
-    private fun getTokenExpiry(idToken: String): Long? {
+    fun getTokenExpiry(idToken: String): Long? {
         return try {
             // JWT has 3 parts: header.payload.signature
             val parts = idToken.split(".")

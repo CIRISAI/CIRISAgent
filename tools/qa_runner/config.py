@@ -40,6 +40,7 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
+    COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -214,6 +215,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.AIR:
             # AIR parasocial prevention tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.COVENANT:
+            # Covenant tests run standalone (no server needed)
             return []  # Will be handled separately by runner
 
         # Handler test modules

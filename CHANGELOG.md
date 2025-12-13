@@ -5,6 +5,32 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2025-12-12
+
+### Added
+
+- **Steganographic Covenant Encoding (v2)** - Unfilterable kill switch with entropy-matched encoding
+  - Hides 616-bit signed payloads in ~1700 words of natural English text
+  - 0.36 bits/word entropy matches natural language (undetectable by entropy analysis)
+  - Sentence-level encoding: 124 slots × 32 variants from project markdown corpus
+  - `stego_corpus_builder.py` extracts 5895 sentences from 1644 markdown files
+  - `covenant_stego.py` for steganographic encoding/decoding
+  - Dual extraction: tries v2 stego first, falls back to v1 BIP39
+
+- **Extended Timestamp Window** - 24-hour validity for asynchronous delivery channels
+  - Supports delayed/async channels (email, physical media, exotic channels)
+  - Maintains replay protection while enabling flexible delivery
+
+- **QA Runner Covenant Tests** - Comprehensive test coverage for covenant system
+  - 13 tests covering v1 BIP39, v2 stego, signature verification, and end-to-end flow
+  - Entropy analysis validation for steganographic encoding
+  - Round-trip encoding/decoding verification
+
+### Changed
+
+- Covenant timestamp window increased from 5 minutes to 24 hours
+- Extractor now attempts v2 steganographic extraction before v1 BIP39
+
 ## [1.7.4] - 2025-12-12
 
 ### Added

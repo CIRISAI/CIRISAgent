@@ -61,6 +61,7 @@ Available modules:
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
   single_step_comprehensive - Complete 17-phase COVENANT single-step validation
+  covenant        - Covenant invocation system (kill switch) tests
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything

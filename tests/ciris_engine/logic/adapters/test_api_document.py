@@ -227,6 +227,176 @@ class TestAPIDocumentHelper:
             assert mock_proc.call_count == 1
 
 
+class TestProcessUrlDocumentEdgeCases:
+    """Additional tests for URL document processing edge cases."""
+
+    @pytest.fixture
+    def helper(self):
+        """Create helper with mocked parser."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            mock_instance._extract_text_sync.return_value = "Extracted text"
+            mock_instance.MAX_TEXT_LENGTH = 50000
+            mock_parser.return_value = mock_instance
+            helper = APIDocumentHelper()
+            return helper
+
+    @pytest.mark.asyncio
+    async def test_process_url_invalid_media_type(self, helper):
+        """Test processing URL with invalid media type."""
+        result = await helper.process_url_document("https://example.com/file.txt", "text/plain")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_process_url_infer_extension_from_url(self, helper):
+        """Test inferring extension from URL path."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_download:
+            mock_download.return_value = b"%PDF-1.4"
+
+            # No filename provided, extension should be inferred from URL
+            result = await helper.process_url_document(
+                "https://example.com/documents/report.pdf",
+                "application/pdf",
+            )
+            assert result == "Extracted text"
+
+    @pytest.mark.asyncio
+    async def test_process_url_infer_extension_from_url_path(self, helper):
+        """Test inferring extension from URL when media type doesn't help."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_download:
+            mock_download.return_value = b"DOCX content"
+
+            # Use octet-stream type, should infer from URL
+            result = await helper.process_url_document(
+                "https://example.com/report.docx?token=abc",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            assert result == "Extracted text"
+
+    @pytest.mark.asyncio
+    async def test_process_url_cannot_infer_extension(self, helper):
+        """Test URL where extension cannot be inferred."""
+        result = await helper.process_url_document(
+            "https://example.com/api/document/12345",  # No extension in URL
+            "application/octet-stream",  # Unknown type
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_process_url_exception(self, helper):
+        """Test exception handling in URL processing."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_download:
+            mock_download.side_effect = Exception("Unexpected error")
+            result = await helper.process_url_document("https://example.com/doc.pdf", "application/pdf")
+            assert result is None
+
+
+class TestDownloadDocumentEdgeCases:
+    """Tests for download document edge cases - tested via process_url_document."""
+
+    @pytest.fixture
+    def helper(self):
+        """Create helper with mocked parser."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            mock_instance._extract_text_sync.return_value = "Extracted"
+            mock_parser.return_value = mock_instance
+            helper = APIDocumentHelper()
+            return helper
+
+    @pytest.mark.asyncio
+    async def test_url_processing_with_download_mock(self, helper):
+        """Test URL processing when download returns data."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
+            mock_dl.return_value = b"PDF content"
+            result = await helper.process_url_document(
+                "https://example.com/doc.pdf", "application/pdf", "doc.pdf"
+            )
+            assert result == "Extracted"
+            mock_dl.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_url_processing_download_fails(self, helper):
+        """Test URL processing when download returns None."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
+            mock_dl.return_value = None
+            result = await helper.process_url_document(
+                "https://example.com/doc.pdf", "application/pdf"
+            )
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_url_processing_download_exception(self, helper):
+        """Test URL processing when download raises exception."""
+        with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
+            mock_dl.side_effect = Exception("Network error")
+            result = await helper.process_url_document(
+                "https://example.com/doc.pdf", "application/pdf"
+            )
+            assert result is None
+
+
+class TestProcessBase64EdgeCases:
+    """Additional tests for base64 document processing edge cases."""
+
+    @pytest.fixture
+    def helper(self):
+        """Create helper with mocked parser."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            mock_instance._extract_text_sync.return_value = "Extracted text"
+            mock_instance.MAX_TEXT_LENGTH = 50000
+            mock_parser.return_value = mock_instance
+            helper = APIDocumentHelper()
+            return helper
+
+    @pytest.mark.asyncio
+    async def test_no_file_extension_determined(self, helper):
+        """Test when file extension cannot be determined."""
+        pdf_data = base64.b64encode(b"%PDF-1.4").decode("utf-8")
+        result = await helper.process_base64_document(pdf_data, "application/octet-stream")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_exception_during_processing(self, helper):
+        """Test exception during text extraction."""
+        helper._parser._extract_text_sync.side_effect = Exception("Parser error")
+        pdf_data = base64.b64encode(b"%PDF-1.4").decode("utf-8")
+        result = await helper.process_base64_document(pdf_data, "application/pdf")
+        assert result is None
+
+
+class TestDocumentListTruncation:
+    """Tests for text truncation in document list processing."""
+
+    @pytest.mark.asyncio
+    async def test_text_truncation(self):
+        """Test that combined text is truncated when too long."""
+        with patch("ciris_engine.logic.adapters.api.api_document.DocumentParser") as mock_parser:
+            mock_instance = MagicMock()
+            mock_instance.is_available.return_value = True
+            # Return very long text
+            mock_instance._extract_text_sync.return_value = "x" * 60000
+            mock_instance.MAX_TEXT_LENGTH = 50000
+            mock_parser.return_value = mock_instance
+
+            helper = APIDocumentHelper()
+
+            with patch.object(helper, "process_document_payload", new_callable=AsyncMock) as mock_proc:
+                # Return text longer than MAX_TEXT_LENGTH
+                mock_proc.return_value = "y" * 60000
+
+                documents = [{"data": "data1", "media_type": "application/pdf", "filename": "doc.pdf"}]
+                result = await helper.process_document_list(documents)
+
+                assert result is not None
+                assert len(result) <= helper._parser.MAX_TEXT_LENGTH + 50  # Allow for truncation marker
+                assert "[Text truncated]" in result
+
+
 class TestGetAPIDocumentHelper:
     """Tests for singleton getter."""
 

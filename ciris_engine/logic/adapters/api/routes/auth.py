@@ -1416,7 +1416,8 @@ async def _call_google_tokeninfo_api(id_token: str) -> Dict[str, Any]:
     logger.info("[NativeAuth] Calling Google tokeninfo API...")
 
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
+        # Use params dict for proper URL encoding of the token
+        response = await client.get("https://oauth2.googleapis.com/tokeninfo", params={"id_token": id_token})
         logger.info(f"[NativeAuth] Google tokeninfo response: {response.status_code}")
 
         if response.status_code != 200:

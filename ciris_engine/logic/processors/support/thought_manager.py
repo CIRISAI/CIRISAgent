@@ -125,6 +125,94 @@ class ThoughtManager:
             logger.debug("No seed thoughts needed")
         return generated_count
 
+    def generate_recovery_thought(self, task: Task, round_number: int = 0) -> Optional[Thought]:
+        """Generate a recovery thought for a task that has updated_info_available but no active thoughts.
+
+        This creates a new thought to process updated information (e.g., follow-up messages,
+        documents) that came in after all existing thoughts completed/failed.
+        """
+        from ciris_engine.logic.persistence.db import get_db_connection
+
+        # Get the updated_info_content from the task
+        updated_content = getattr(task, "updated_info_content", None) or ""
+
+        # Build recovery thought content
+        thought_content = f"RECOVERY: New information received for task.\n\nOriginal task: {task.description}\n\n"
+        if updated_content:
+            thought_content += f"Updated information:\n{updated_content}\n\n"
+        thought_content += "Please review the updated information and continue processing this task."
+
+        # Create thought context from task
+        thought_context = None
+        if task.context and isinstance(task.context, TaskContext):
+            thought_context = ThoughtContext(
+                task_id=task.task_id,
+                channel_id=task.context.channel_id if hasattr(task.context, "channel_id") else None,
+                round_number=round_number,
+                depth=0,
+                parent_thought_id=None,
+                correlation_id=(
+                    task.context.correlation_id if hasattr(task.context, "correlation_id") else str(uuid.uuid4())
+                ),
+                agent_occurrence_id=task.agent_occurrence_id,
+            )
+
+        now_iso = self.time_service.now_iso()
+        thought_id = generate_thought_id(ThoughtType.STANDARD, task.task_id)
+
+        thought = Thought(
+            thought_id=thought_id,
+            source_task_id=task.task_id,
+            agent_occurrence_id=task.agent_occurrence_id,
+            thought_type=ThoughtType.STANDARD,
+            status=ThoughtStatus.PENDING,
+            created_at=now_iso,
+            updated_at=now_iso,
+            round_number=round_number,
+            content=thought_content,
+            context=thought_context,
+            thought_depth=0,  # Start fresh for recovery
+        )
+
+        try:
+            persistence.add_thought(thought)
+            logger.info(
+                f"[RECOVERY] Generated recovery thought {thought.thought_id} for task {task.task_id} "
+                f"(occurrence: {task.agent_occurrence_id})"
+            )
+
+            # Clear the updated_info_available flag now that we've created a recovery thought
+            try:
+                with get_db_connection() as conn:
+                    conn.execute(
+                        "UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?",
+                        (task.task_id,),
+                    )
+                    conn.commit()
+                logger.debug(f"[RECOVERY] Cleared updated_info_available flag for task {task.task_id}")
+            except Exception as e:
+                logger.warning(f"[RECOVERY] Failed to clear updated_info_available flag for task {task.task_id}: {e}")
+
+            return thought
+        except Exception as e:
+            logger.error(f"[RECOVERY] Failed to add recovery thought for task {task.task_id}: {e}")
+            return None
+
+    def generate_recovery_thoughts(self, tasks: List[Task], round_number: int) -> int:
+        """Generate recovery thoughts for multiple tasks with updated information."""
+        generated_count = 0
+
+        for task in tasks:
+            thought = self.generate_recovery_thought(task, round_number)
+            if thought:
+                generated_count += 1
+
+        if generated_count > 0:
+            logger.info(f"[RECOVERY] Generated {generated_count} recovery thoughts")
+        else:
+            logger.debug("[RECOVERY] No recovery thoughts needed")
+        return generated_count
+
     def populate_queue(self, round_number: int) -> int:
         """
         Populate the processing queue for the current round.

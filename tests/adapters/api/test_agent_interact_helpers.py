@@ -132,8 +132,9 @@ class TestCheckSendMessagesPermission:
 class TestCreateInteractionMessage:
     """Test _create_interaction_message helper method."""
 
+    @pytest.mark.asyncio
     @patch("uuid.uuid4")
-    def test_create_interaction_message_success(self, mock_uuid):
+    async def test_create_interaction_message_success(self, mock_uuid):
         """Test successful message creation."""
         mock_uuid.return_value = Mock()
         mock_uuid.return_value.__str__ = Mock(return_value="test-message-id")
@@ -143,7 +144,7 @@ class TestCreateInteractionMessage:
 
         body = InteractRequest(message="Hello, CIRIS!")
 
-        message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
 
         assert message_id == "test-message-id"
         assert channel_id == "api_user-123"
@@ -155,7 +156,8 @@ class TestCreateInteractionMessage:
         assert msg.channel_id == "api_user-123"
         assert msg.timestamp is not None
 
-    def test_create_interaction_message_different_users(self):
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_different_users(self):
         """Test message creation for different user IDs."""
         mock_auth1 = Mock(spec=AuthContext)
         mock_auth1.user_id = "user-abc"
@@ -165,13 +167,203 @@ class TestCreateInteractionMessage:
 
         body = InteractRequest(message="Test message")
 
-        _, channel_id1, msg1 = _create_interaction_message(mock_auth1, body)
-        _, channel_id2, msg2 = _create_interaction_message(mock_auth2, body)
+        _, channel_id1, msg1 = await _create_interaction_message(mock_auth1, body)
+        _, channel_id2, msg2 = await _create_interaction_message(mock_auth2, body)
 
         assert channel_id1 == "api_user-abc"
         assert channel_id2 == "api_user-xyz"
         assert msg1.author_id == "user-abc"
         assert msg2.author_id == "user-xyz"
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_with_images(self):
+        """Test message creation with image payloads."""
+        from ciris_engine.logic.adapters.api.routes.agent import ImagePayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "image-user"
+
+        # Create body with images
+        image_payload = ImagePayload(data="base64encodeddata", media_type="image/jpeg", filename="test.jpg")
+        body = InteractRequest(message="Check this image", images=[image_payload])
+
+        # Mock the vision helper - patch at source since it's imported inside the function
+        with patch("ciris_engine.logic.adapters.api.api_vision.get_api_vision_helper") as mock_get_helper:
+            mock_helper = Mock()
+            mock_image_content = Mock()
+            mock_image_content.source_type = "base64"
+            mock_helper.process_image_payload.return_value = mock_image_content
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            assert len(msg.images) == 1
+            mock_helper.process_image_payload.assert_called_once_with("base64encodeddata", "image/jpeg", "test.jpg")
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_with_multiple_images(self):
+        """Test message creation with multiple image payloads."""
+        from ciris_engine.logic.adapters.api.routes.agent import ImagePayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "multi-image-user"
+
+        # Create body with multiple images
+        images = [
+            ImagePayload(data="data1", media_type="image/jpeg", filename="img1.jpg"),
+            ImagePayload(data="data2", media_type="image/png", filename="img2.png"),
+            ImagePayload(data="data3", media_type="image/gif", filename="img3.gif"),
+        ]
+        body = InteractRequest(message="Multiple images", images=images)
+
+        with patch("ciris_engine.logic.adapters.api.api_vision.get_api_vision_helper") as mock_get_helper:
+            mock_helper = Mock()
+            # Return a mock ImageContent for each call
+            mock_helper.process_image_payload.side_effect = [
+                Mock(source_type="base64"),
+                Mock(source_type="base64"),
+                Mock(source_type="base64"),
+            ]
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            assert len(msg.images) == 3
+            assert mock_helper.process_image_payload.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_image_processing_failure(self):
+        """Test message creation when image processing fails."""
+        from ciris_engine.logic.adapters.api.routes.agent import ImagePayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "failed-image-user"
+
+        image_payload = ImagePayload(data="invalid_base64", media_type="image/jpeg", filename="bad.jpg")
+        body = InteractRequest(message="Bad image", images=[image_payload])
+
+        with patch("ciris_engine.logic.adapters.api.api_vision.get_api_vision_helper") as mock_get_helper:
+            mock_helper = Mock()
+            mock_helper.process_image_payload.return_value = None  # Failed processing
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            # Should have empty images list when processing fails
+            assert len(msg.images) == 0
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_with_documents(self):
+        """Test message creation with document payloads."""
+        from ciris_engine.logic.adapters.api.routes.agent import DocumentPayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "doc-user"
+
+        doc_payload = DocumentPayload(data="base64pdfdata", media_type="application/pdf", filename="document.pdf")
+        body = InteractRequest(message="Check this PDF", documents=[doc_payload])
+
+        with patch("ciris_engine.logic.adapters.api.api_document.get_api_document_helper") as mock_get_helper:
+            mock_helper = Mock()
+            mock_helper.is_available.return_value = True
+            mock_helper.process_document_list = AsyncMock(return_value="Extracted text from PDF")
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            assert "[Document Analysis]" in msg.content
+            assert "Extracted text from PDF" in msg.content
+            mock_helper.process_document_list.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_documents_not_available(self):
+        """Test message creation when document processing is not available."""
+        from ciris_engine.logic.adapters.api.routes.agent import DocumentPayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "no-doc-support-user"
+
+        doc_payload = DocumentPayload(data="base64pdfdata", media_type="application/pdf", filename="document.pdf")
+        body = InteractRequest(message="Check this PDF", documents=[doc_payload])
+
+        with patch("ciris_engine.logic.adapters.api.api_document.get_api_document_helper") as mock_get_helper:
+            mock_helper = Mock()
+            mock_helper.is_available.return_value = False  # Not available
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            # Message should not have document analysis when not available
+            assert "[Document Analysis]" not in msg.content
+            assert msg.content == "Check this PDF"
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_document_processing_returns_none(self):
+        """Test message creation when document processing returns None."""
+        from ciris_engine.logic.adapters.api.routes.agent import DocumentPayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "empty-doc-user"
+
+        doc_payload = DocumentPayload(data="empty_doc", media_type="application/pdf", filename="empty.pdf")
+        body = InteractRequest(message="Empty doc", documents=[doc_payload])
+
+        with patch("ciris_engine.logic.adapters.api.api_document.get_api_document_helper") as mock_get_helper:
+            mock_helper = Mock()
+            mock_helper.is_available.return_value = True
+            mock_helper.process_document_list = AsyncMock(return_value=None)  # Returns None
+            mock_get_helper.return_value = mock_helper
+
+            _, _, msg = await _create_interaction_message(mock_auth, body)
+
+            # Should not add document analysis section
+            assert "[Document Analysis]" not in msg.content
+            assert msg.content == "Empty doc"
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_with_images_and_documents(self):
+        """Test message creation with both images and documents."""
+        from ciris_engine.logic.adapters.api.routes.agent import DocumentPayload, ImagePayload
+
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "multimodal-user"
+
+        image_payload = ImagePayload(data="imagedata", media_type="image/png", filename="screenshot.png")
+        doc_payload = DocumentPayload(data="docdata", media_type="application/pdf", filename="report.pdf")
+        body = InteractRequest(message="Process these", images=[image_payload], documents=[doc_payload])
+
+        with patch("ciris_engine.logic.adapters.api.api_vision.get_api_vision_helper") as mock_vision:
+            with patch("ciris_engine.logic.adapters.api.api_document.get_api_document_helper") as mock_doc:
+                # Setup vision helper
+                vision_helper = Mock()
+                vision_helper.process_image_payload.return_value = Mock(source_type="base64")
+                mock_vision.return_value = vision_helper
+
+                # Setup document helper
+                doc_helper = Mock()
+                doc_helper.is_available.return_value = True
+                doc_helper.process_document_list = AsyncMock(return_value="Report contents")
+                mock_doc.return_value = doc_helper
+
+                _, _, msg = await _create_interaction_message(mock_auth, body)
+
+                # Should have both images and document content
+                assert len(msg.images) == 1
+                assert "[Document Analysis]" in msg.content
+                assert "Report contents" in msg.content
+
+    @pytest.mark.asyncio
+    async def test_create_interaction_message_no_images_no_documents(self):
+        """Test message creation with no images or documents."""
+        mock_auth = Mock(spec=AuthContext)
+        mock_auth.user_id = "text-only-user"
+
+        body = InteractRequest(message="Just text, no attachments")
+
+        _, _, msg = await _create_interaction_message(mock_auth, body)
+
+        assert msg.content == "Just text, no attachments"
+        assert len(msg.images) == 0
 
 
 class TestHandleConsentForUser:
@@ -666,7 +858,8 @@ class TestCleanupInteractionTracking:
 class TestInteractionTrackingIntegration:
     """Integration tests for interaction tracking across helper methods."""
 
-    def test_interaction_flow_tracking(self):
+    @pytest.mark.asyncio
+    async def test_interaction_flow_tracking(self):
         """Test complete interaction tracking flow."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "integration-user"
@@ -674,7 +867,7 @@ class TestInteractionTrackingIntegration:
         body = InteractRequest(message="Integration test")
 
         # Create interaction
-        message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+        message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
 
         # Add tracking (simulate main function)
         event = asyncio.Event()
@@ -692,7 +885,8 @@ class TestInteractionTrackingIntegration:
         assert message_id not in _response_events
         assert message_id not in _message_responses
 
-    def test_multiple_concurrent_interactions(self):
+    @pytest.mark.asyncio
+    async def test_multiple_concurrent_interactions(self):
         """Test handling of multiple concurrent interactions."""
         mock_auth = Mock(spec=AuthContext)
         mock_auth.user_id = "concurrent-user"
@@ -702,7 +896,7 @@ class TestInteractionTrackingIntegration:
         # Create multiple interactions
         interactions = []
         for i in range(3):
-            message_id, channel_id, msg = _create_interaction_message(mock_auth, body)
+            message_id, channel_id, msg = await _create_interaction_message(mock_auth, body)
             _response_events[message_id] = asyncio.Event()
             _message_responses[message_id] = f"Response {i}"
             interactions.append(message_id)

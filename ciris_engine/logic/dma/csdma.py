@@ -14,6 +14,7 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import COVENANT_TEXT
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
+from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
@@ -74,6 +75,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         identity_context_block: str,
         system_snapshot_block: str,
         user_profiles_block: str,
+        images: Optional[List[ImageContent]] = None,
     ) -> List[JSONDict]:
         """Assemble prompt messages using canonical formatting utilities and prompt loader."""
         messages: List[JSONDict] = []
@@ -95,18 +97,23 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         )
         messages.append({"role": "system", "content": formatted_system})
 
-        user_message = self.prompt_loader.get_user_message(
+        user_message_text = self.prompt_loader.get_user_message(
             self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
         )
 
-        if not user_message or user_message == f"Thought to evaluate: {thought_content}":
-            user_message = format_user_prompt_blocks(
+        if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
+            user_message_text = format_user_prompt_blocks(
                 format_parent_task_chain([]),
                 format_thoughts_chain([{"content": thought_content}]),
                 None,
             )
 
-        messages.append({"role": "user", "content": user_message})
+        # Build multimodal content if images are present
+        images_list = images or []
+        if images_list:
+            logger.info(f"[VISION] CSDMA building multimodal content with {len(images_list)} images")
+        user_content = self.build_multimodal_content(user_message_text, images_list)
+        messages.append({"role": "user", "content": user_content})
 
         return messages
 
@@ -168,12 +175,16 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
         combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
 
+        # Get images from thought item for multimodal
+        thought_images = getattr(thought_item, "images", []) or []
+
         messages = self._create_csdma_messages_for_instructor(
             thought_content_str,
             context_summary,
             identity_context_block="",
             system_snapshot_block=combined_snapshot_block,
             user_profiles_block="",
+            images=thought_images,
         )
 
         # Store user prompt for streaming/debugging

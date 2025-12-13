@@ -5,9 +5,12 @@ Typed message structures for all communication types.
 """
 
 from enum import Enum
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.models import ImageContent
 
 
 class MessageHandlingStatus(str, Enum):
@@ -58,6 +61,8 @@ class IncomingMessage(BaseModel):
     destination_id: Optional[str] = Field(default=None, alias="channel_id")
     reference_message_id: Optional[str] = Field(None, description="ID of message being replied to")
     timestamp: Optional[str] = Field(None, description="Message timestamp")
+    # Native multimodal support - images attached to the message
+    images: List[Any] = Field(default_factory=list, description="Images attached to this message (List[ImageContent])")
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 

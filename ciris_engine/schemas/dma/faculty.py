@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.models import ImageContent
 
 
 class ThoughtMetadata(BaseModel):
@@ -171,6 +172,11 @@ class EnhancedDMAInputs(BaseModel):
     current_thought_depth: int = Field(0, description="Ponder depth")
     max_rounds: int = Field(5, description="Maximum rounds")
     processing_context: Any = Field(..., description="Processing context")
+
+    # Native multimodal support - images from source task for vision processing
+    images: List[ImageContent] = Field(
+        default_factory=list, description="Images from source task for multimodal processing"
+    )
 
     # Action selection fields
     agent_identity: Optional[IdentityData] = Field(None, description="Agent identity information")

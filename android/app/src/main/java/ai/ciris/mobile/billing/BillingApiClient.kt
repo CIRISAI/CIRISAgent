@@ -8,7 +8,20 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.util.concurrent.TimeUnit
+
+/**
+ * Result of a token refresh attempt.
+ */
+sealed class TokenRefreshResult {
+    /** Successfully got a fresh token */
+    data class Success(val token: String) : TokenRefreshResult()
+    /** Silent sign-in failed but interactive login may work (error code 4) */
+    object NeedsInteractiveLogin : TokenRefreshResult()
+    /** Complete failure - cannot recover */
+    data class Failed(val message: String) : TokenRefreshResult()
+}
 
 /**
  * Callback interface for requesting fresh Google ID tokens.
@@ -21,6 +34,31 @@ interface GoogleTokenRefreshCallback {
      * @param onResult Called with the fresh token, or null if refresh failed
      */
     fun requestFreshToken(onResult: (String?) -> Unit)
+
+    /**
+     * Request a fresh token with detailed result information.
+     * This allows the caller to know if interactive login is needed.
+     * @param onResult Called with TokenRefreshResult indicating success, needs login, or failure
+     */
+    fun requestFreshTokenWithResult(onResult: (TokenRefreshResult) -> Unit) {
+        // Default implementation for backward compatibility
+        requestFreshToken { token ->
+            if (token != null) {
+                onResult(TokenRefreshResult.Success(token))
+            } else {
+                onResult(TokenRefreshResult.Failed("Token refresh failed"))
+            }
+        }
+    }
+
+    /**
+     * Launch interactive sign-in flow. This should start the sign-in UI.
+     * @param onResult Called with the fresh token after interactive sign-in completes, or null if cancelled/failed
+     */
+    fun launchInteractiveSignIn(onResult: (String?) -> Unit) {
+        // Default: not supported, return null
+        onResult(null)
+    }
 }
 
 /**
@@ -70,6 +108,32 @@ class BillingApiClient(
     fun getBillingUrl(): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_BILLING_API_URL, billingApiUrl) ?: billingApiUrl
+    }
+
+    /**
+     * Check if we're using CIRIS proxy for LLM (billing required).
+     * Reads from the .env file to check if OPENAI_API_BASE contains ciris.ai.
+     * BYOK users don't need billing at all.
+     */
+    fun isCirisProxyMode(): Boolean {
+        try {
+            // Read from .env file in CIRIS home directory
+            val cirisHome = File(context.filesDir, "ciris")
+            val envFile = File(cirisHome, ".env")
+
+            if (!envFile.exists()) {
+                Log.d(TAG, "isCirisProxyMode: .env file not found, defaulting to false")
+                return false
+            }
+
+            val content = envFile.readText()
+            val isCirisProxy = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            Log.d(TAG, "isCirisProxyMode: $isCirisProxy (from .env file)")
+            return isCirisProxy
+        } catch (e: Exception) {
+            Log.e(TAG, "isCirisProxyMode: Error reading .env file", e)
+            return false
+        }
     }
 
     /**
@@ -135,6 +199,8 @@ class BillingApiClient(
      * If a token refresh callback is set, this will first request a fresh Google ID token
      * via native silent sign-in before attempting the exchange.
      *
+     * If silent sign-in fails with SIGN_IN_REQUIRED, this will attempt interactive login.
+     *
      * Returns true if we successfully obtained a new API key.
      */
     fun refreshApiKey(): Boolean {
@@ -145,11 +211,12 @@ class BillingApiClient(
         val callback = tokenRefreshCallback
         if (callback != null) {
             Log.i(TAG, "Requesting fresh Google ID token via native sign-in...")
-            var freshToken: String? = null
+            var refreshResult: TokenRefreshResult? = null
             val latch = java.util.concurrent.CountDownLatch(1)
 
-            callback.requestFreshToken { token ->
-                freshToken = token
+            // First try silent sign-in with detailed result
+            callback.requestFreshTokenWithResult { result ->
+                refreshResult = result
                 latch.countDown()
             }
 
@@ -161,12 +228,45 @@ class BillingApiClient(
                     return false
                 }
 
-                if (freshToken != null) {
-                    Log.i(TAG, "Got fresh Google ID token, storing it")
-                    setGoogleIdToken(freshToken!!)
-                } else {
-                    Log.e(TAG, "Token refresh callback returned null - native sign-in may have failed")
-                    return false
+                when (val result = refreshResult) {
+                    is TokenRefreshResult.Success -> {
+                        Log.i(TAG, "Got fresh Google ID token via silent sign-in, storing it")
+                        setGoogleIdToken(result.token)
+                    }
+                    is TokenRefreshResult.NeedsInteractiveLogin -> {
+                        Log.i(TAG, "Silent sign-in requires interactive login, launching sign-in flow...")
+                        // Try interactive login
+                        var interactiveToken: String? = null
+                        val interactiveLatch = java.util.concurrent.CountDownLatch(1)
+
+                        callback.launchInteractiveSignIn { token ->
+                            interactiveToken = token
+                            interactiveLatch.countDown()
+                        }
+
+                        // Wait up to 120 seconds for interactive sign-in (user interaction)
+                        val interactiveCompleted = interactiveLatch.await(120, java.util.concurrent.TimeUnit.SECONDS)
+                        if (!interactiveCompleted) {
+                            Log.e(TAG, "Interactive sign-in timed out after 120 seconds")
+                            return false
+                        }
+
+                        if (interactiveToken != null) {
+                            Log.i(TAG, "Got fresh Google ID token via interactive sign-in, storing it")
+                            setGoogleIdToken(interactiveToken!!)
+                        } else {
+                            Log.e(TAG, "Interactive sign-in cancelled or failed")
+                            return false
+                        }
+                    }
+                    is TokenRefreshResult.Failed -> {
+                        Log.e(TAG, "Token refresh failed: ${result.message}")
+                        return false
+                    }
+                    null -> {
+                        Log.e(TAG, "Token refresh returned null result")
+                        return false
+                    }
                 }
             } catch (e: InterruptedException) {
                 Log.e(TAG, "Token refresh interrupted: ${e.message}")
@@ -449,14 +549,22 @@ class BillingApiClient(
      * Calls local Python server's GET /api/billing/credits endpoint.
      * This is the same endpoint used by the WebView billing page.
      *
+     * For BYOK users (not using CIRIS proxy), returns immediately with BYOK indicator
+     * without making any network calls.
+     *
      * Handles stale API keys by automatically refreshing on 401 errors.
      */
     fun getBalance(): BalanceResult {
+        // BYOK mode: no billing needed at all
+        if (!isCirisProxyMode()) {
+            Log.i(TAG, "getBalance() - BYOK mode detected, skipping billing check")
+            return BalanceResult(success = true, balance = -1, isByok = true)
+        }
         return getBalanceInternal(allowRetry = true)
     }
 
     private fun getBalanceInternal(allowRetry: Boolean): BalanceResult {
-        Log.i(TAG, "getBalance() called (allowRetry=$allowRetry)")
+        Log.i(TAG, "getBalance() called (allowRetry=$allowRetry, CIRIS proxy mode)")
 
         // Ensure we have a valid CIRIS API key (exchange Google ID token if needed)
         if (!ensureApiKey()) {
@@ -588,7 +696,8 @@ data class BalanceResponse(
 data class BalanceResult(
     val success: Boolean,
     val balance: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    val isByok: Boolean = false  // True when user is in BYOK mode (no billing needed)
 )
 
 // Token Exchange models for native Google Sign-In

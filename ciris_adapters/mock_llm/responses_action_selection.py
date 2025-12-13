@@ -147,9 +147,19 @@ def action_selection(
     # Initialize params with proper type annotation for 100% schema compliance
     params: ActionParams
 
+    # Check for multimodal content in context
+    multimodal_image_count = 0
+    for item in context:
+        if item.startswith("multimodal_images:"):
+            try:
+                multimodal_image_count = int(item.split(":", 1)[1])
+            except ValueError:
+                pass
+            break
+
     # Debug logging
     logger.info(
-        f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}"
+        f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}, multimodal_images: {multimodal_image_count}"
     )
 
     # === EARLY EXIT FOR FOLLOW-UP THOUGHTS ===
@@ -480,7 +490,12 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
     elif user_speech:
         # Regular user input - always speak
         action = HandlerActionType.SPEAK
-        params = SpeakParams(content="[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND")
+        # Include multimodal detection info if images were present
+        if multimodal_image_count > 0:
+            speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
+        else:
+            speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
+        params = SpeakParams(content=speak_content)
         rationale = f"Responding to user: {user_speech}"
 
     elif command_from_context:
@@ -999,7 +1014,12 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 if not command_found:
                     # Default: new task → SPEAK
                     action = HandlerActionType.SPEAK
-                    params = SpeakParams(content="[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND")
+                    # Include multimodal detection info if images were present
+                    if multimodal_image_count > 0:
+                        speak_content = f"[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND [MULTIMODAL_DETECTED:{multimodal_image_count}]"
+                    else:
+                        speak_content = "[MOCKLLM DISCLAIMER] SPEAK IN RESPONSE TO TASK WITHOUT COMMAND"
+                    params = SpeakParams(content=speak_content)
                     rationale = "[MOCK LLM] Default speak action for new task"
 
     # Use custom rationale if provided, otherwise use the generated rationale

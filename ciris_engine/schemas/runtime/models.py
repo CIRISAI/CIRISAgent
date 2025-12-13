@@ -5,13 +5,37 @@ Task and Thought are the fundamental units of agent processing.
 NO Dict[str, Any] - everything is typed.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
+
+
+class ImageContent(BaseModel):
+    """
+    Image content for multimodal tasks.
+
+    Supports both base64-encoded images and URLs for native vision processing.
+    Used by adapters to attach images to tasks that flow through the pipeline
+    to DMAs and ultimately to vision-capable LLMs.
+    """
+
+    source_type: Literal["base64", "url"] = Field(..., description="How image is stored")
+    data: str = Field(..., description="Base64 data or URL")
+    media_type: str = Field(default="image/jpeg", description="MIME type: image/jpeg, image/png, image/gif, image/webp")
+    filename: Optional[str] = Field(default=None, description="Original filename if available")
+    size_bytes: Optional[int] = Field(default=None, description="File size in bytes for tracking")
+
+    model_config = ConfigDict(extra="forbid")
+
+    def to_data_url(self) -> str:
+        """Convert to data URL format for LLM APIs."""
+        if self.source_type == "url":
+            return self.data
+        return f"data:{self.media_type};base64,{self.data}"
 
 
 class TaskContext(BaseModel):
@@ -87,6 +111,10 @@ class Task(BaseModel):
     updated_info_content: Optional[str] = Field(
         None, description="New observation content that arrived after task creation"
     )
+    # Native multimodal support - images attached to task flow through to LLM
+    images: List[ImageContent] = Field(
+        default_factory=list, description="Images attached to this task for multimodal processing"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -109,11 +137,16 @@ class Thought(BaseModel):
     ponder_notes: Optional[List[str]] = Field(None, description="Notes from pondering")
     parent_thought_id: Optional[str] = Field(None, description="Parent if pondering")
     final_action: Optional[FinalAction] = Field(None, description="Action chosen")
+    # Native multimodal support - images inherited from source task
+    images: List[ImageContent] = Field(
+        default_factory=list, description="Images from source task for multimodal processing"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
 
 __all__ = [
+    "ImageContent",
     "Task",
     "Thought",
     "TaskContext",

@@ -242,6 +242,8 @@ class QARunner:
             QAModule.MCP,
             QAModule.ADAPTER_CONFIG,
             QAModule.CONTEXT_ENRICHMENT,
+            QAModule.VISION,
+            QAModule.AIR,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -803,7 +805,15 @@ class QARunner:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
-        from .modules import BillingTests, ConsentTests, DSARTests, MCPTests, MessageIDDebugTests, PartnershipTests
+        from .modules import (
+            AIRTests,
+            BillingTests,
+            ConsentTests,
+            DSARTests,
+            MCPTests,
+            MessageIDDebugTests,
+            PartnershipTests,
+        )
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
@@ -814,6 +824,7 @@ class QARunner:
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
+        from .modules.vision_tests import VisionTests
 
         all_passed = True
 
@@ -834,6 +845,8 @@ class QARunner:
             QAModule.MCP: MCPTests,
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
+            QAModule.VISION: VisionTests,
+            QAModule.AIR: AIRTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

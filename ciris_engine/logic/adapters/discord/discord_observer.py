@@ -60,12 +60,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         logger.info(f"  - Deferral channel: {self.deferral_channel_id}")
         logger.info(f"  - WA user IDs: {self.wa_user_ids}")
 
-        # Initialize vision helper
+        # Initialize vision helper (native multimodal is always available)
         self._vision_helper = DiscordVisionHelper()
-        if self._vision_helper.is_available():
-            logger.info("Discord Vision Helper initialized - image processing enabled")
-        else:
-            logger.warning("Discord Vision Helper not available - set CIRIS_OPENAI_VISION_KEY to enable")
+        logger.info("Discord Vision Helper initialized - native multimodal image processing enabled")
 
     async def _send_deferral_message(self, content: str) -> None:
         """Send a message to the deferral channel."""
@@ -279,6 +276,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         clean_content = self._detect_and_replace_spoofed_markers(msg.content)
 
         additional_content = ""
+        collected_images: List[Any] = []  # ImageContent objects for native multimodal
 
         # Check if this message is a reply and process both messages with attachment limits
         if hasattr(msg, "raw_message") and msg.raw_message:
@@ -286,26 +284,24 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 # Detect reply and collect attachment/image data with priority rules
                 attachments_data = await self._collect_message_attachments_with_reply(msg.raw_message)
 
-                # Process images if vision is available
+                # Process images for native multimodal (convert to ImageContent)
                 images_raw = attachments_data.get("images")
                 if self._vision_helper.is_available() and images_raw and isinstance(images_raw, list):
-                    image_descriptions = await self._vision_helper.process_image_attachments_list(images_raw)
+                    # Convert Discord attachments to ImageContent for native multimodal
+                    image_contents = await self._vision_helper.process_image_attachments_list(images_raw)
+                    if image_contents:
+                        collected_images.extend(image_contents)
+                        logger.info(
+                            f"[VISION] Converted {len(image_contents)} attachments to ImageContent for native multimodal"
+                        )
 
-                    # Process embeds if any
-                    embed_descriptions = None
+                    # Process embeds for additional images
                     embeds_raw = attachments_data.get("embeds")
                     if embeds_raw and isinstance(embeds_raw, list):
-                        embed_descriptions = await self._vision_helper.process_embeds(embeds_raw)
-
-                    # Add image descriptions to content
-                    if image_descriptions or embed_descriptions:
-                        additional_content += "\n\n[Image Analysis]\n"
-                        if image_descriptions:
-                            additional_content += image_descriptions
-                        if embed_descriptions:
-                            if image_descriptions:
-                                additional_content += "\n\n"
-                            additional_content += embed_descriptions
+                        embed_images = await self._vision_helper.process_embeds(embeds_raw)
+                        if embed_images:
+                            collected_images.extend(embed_images)
+                            logger.info(f"[VISION] Converted {len(embed_images)} embed images to ImageContent")
 
                 # Process document attachments if document parser is available
                 documents_raw = attachments_data.get("documents")
@@ -323,8 +319,8 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 logger.error(f"Failed to process attachments in message {msg.message_id}: {e}")
                 additional_content += f"\n\n[Attachment Processing Error: {str(e)}]"
 
-        # Create enhanced message if we have additional content or cleaned content
-        if additional_content or clean_content != msg.content:
+        # Create enhanced message if we have additional content, cleaned content, or images
+        if additional_content or clean_content != msg.content or collected_images:
             return DiscordMessage(
                 message_id=msg.message_id,
                 content=clean_content + additional_content,
@@ -334,6 +330,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 is_bot=msg.is_bot,
                 is_dm=msg.is_dm,
                 raw_message=msg.raw_message,
+                images=collected_images,  # Native multimodal images
             )
 
         return msg

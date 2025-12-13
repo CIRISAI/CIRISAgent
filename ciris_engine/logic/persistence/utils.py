@@ -84,8 +84,25 @@ def map_row_to_task(row: Any) -> Task:
                     dt = dt.replace(tzinfo=timezone.utc)
                 row_dict[dt_field] = dt.isoformat()
 
+    # Handle images_json for native multimodal vision support
+    if row_dict.get("images_json"):
+        try:
+            from ciris_engine.schemas.runtime.models import ImageContent
+
+            images_json = row_dict["images_json"]
+            images_data = images_json if isinstance(images_json, list) else json.loads(images_json)
+            if isinstance(images_data, list) and images_data:
+                row_dict["images"] = [ImageContent.model_validate(img) for img in images_data]
+            else:
+                row_dict["images"] = []
+        except Exception as e:
+            logger.warning(f"Failed to decode images_json for task {row_dict.get('task_id')}: {e}")
+            row_dict["images"] = []
+    else:
+        row_dict["images"] = []
+
     # Remove database-specific columns that aren't in the Task schema
-    for k in ["context_json", "outcome_json", "retry_count"]:
+    for k in ["context_json", "outcome_json", "retry_count", "images_json"]:
         if k in row_dict:
             del row_dict[k]
 
@@ -176,6 +193,11 @@ def map_row_to_thought(row: Any) -> Thought:
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 row_dict[dt_field] = dt.isoformat()
+
+    # Note: Images are stored at the TASK level, not THOUGHT level.
+    # Thoughts inherit images from their source task when loaded via ProcessingQueueItem.from_thought()
+    # which looks up the task and copies its images.
+    row_dict["images"] = []
 
     for k in ["context_json", "ponder_notes_json", "final_action_json"]:
         if k in row_dict:

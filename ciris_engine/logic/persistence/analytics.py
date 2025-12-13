@@ -52,6 +52,34 @@ def get_tasks_needing_seed_thought(occurrence_id: str = "default", limit: Option
     return tasks_needing_seed
 
 
+def get_tasks_needing_recovery_thought(occurrence_id: str = "default", limit: Optional[int] = None) -> List[Task]:
+    """Get active tasks with updated_info_available but no PENDING/PROCESSING thoughts.
+
+    These are tasks that received new observations (e.g., follow-up messages, documents)
+    but all their existing thoughts have completed or failed, so they need a new thought
+    to process the updated information.
+    """
+    active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, occurrence_id)
+    tasks_needing_recovery: List[Task] = []
+
+    for task in active_tasks:
+        # Only consider tasks with updated_info_available flag set
+        if not getattr(task, "updated_info_available", False):
+            continue
+
+        # Check if task has any PENDING or PROCESSING thoughts
+        thoughts = get_thoughts_by_task_id(task.task_id, occurrence_id)
+        has_active_thought = any(t.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING] for t in thoughts)
+
+        # If no active thoughts but has updated info, needs recovery
+        if not has_active_thought:
+            tasks_needing_recovery.append(task)
+
+    if limit:
+        return tasks_needing_recovery[:limit]
+    return tasks_needing_recovery
+
+
 def pending_thoughts(occurrence_id: str = "default") -> bool:
     """Check if there are any pending thoughts."""
     return count_thoughts(occurrence_id) > 0

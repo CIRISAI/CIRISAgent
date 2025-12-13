@@ -145,6 +145,47 @@
         android:paddingVertical="4dp"
         android:background="#FFFFFF" />
 
+    <!-- Image preview (shown when image attached) -->
+    <LinearLayout
+        android:id="@+id/imagePreviewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="#F3F4F6"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/imagePreview"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/edit_text_background" />
+
+        <TextView
+            android:id="@+id/imageFilename"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:text="image.jpg"
+            android:textSize="12sp"
+            android:textColor="#6B7280"
+            android:maxLines="1"
+            android:ellipsize="middle" />
+
+        <ImageButton
+            android:id="@+id/removeImageButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Remove image"
+            android:tint="#EF4444" />
+
+    </LinearLayout>
+
     <!-- Message input -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -154,6 +195,17 @@
         android:background="#FFFFFF"
         android:elevation="4dp"
         android:gravity="center_vertical">
+
+        <ImageButton
+            android:id="@+id/attachButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_gallery"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Attach image"
+            android:tint="#6B7280"
+            android:scaleType="centerInside"
+            android:padding="8dp" />
 
         <EditText
             android:id="@+id/messageInput"

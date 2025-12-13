@@ -3,6 +3,13 @@ Global reasoning event streaming for H3ERE pipeline.
 
 Provides always-on streaming of 5 simplified reasoning events with auth-gated access.
 All reasoning events are broadcast to connected clients in real-time.
+
+SECURITY: Multimodal content (images) is EXCLUDED from SSE events to prevent:
+1. Large payloads causing mobile client issues
+2. Visual prompt injection attacks reaching monitoring interfaces
+3. Base64 data bloating SSE event sizes
+
+Images remain available in OpenTelemetry traces for debugging purposes.
 """
 
 import asyncio
@@ -15,6 +22,44 @@ from ciris_engine.schemas.streaming.reasoning_stream import ReasoningEventUnion,
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_sse(data: Any) -> Any:
+    """
+    Remove multimodal content from SSE event data.
+
+    SECURITY: This prevents images from being broadcast over SSE while they
+    remain available in OpenTelemetry traces for debugging purposes.
+
+    Recursively removes:
+    - 'images' fields (List[ImageContent])
+    - 'image_url' fields (from ImageContentBlock)
+    - 'data_url' fields (base64 image data)
+    - Any field containing base64 image data patterns
+
+    Args:
+        data: The data to sanitize (dict, list, or primitive)
+
+    Returns:
+        Sanitized data with multimodal content removed
+    """
+    if isinstance(data, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, value in data.items():
+            # Skip image-related fields entirely
+            if key in ("images", "image_url", "data_url", "image_data", "image_content"):
+                continue
+            # Skip fields that look like base64 image data
+            if isinstance(value, str) and value.startswith("data:image/"):
+                continue
+            # Recursively sanitize nested structures
+            sanitized[key] = _sanitize_for_sse(value)
+        return sanitized
+    elif isinstance(data, list):
+        return [_sanitize_for_sse(item) for item in data]
+    else:
+        # Primitives pass through unchanged
+        return data
 
 
 class ReasoningEventStream:
@@ -56,6 +101,10 @@ class ReasoningEventStream:
 
         # Convert to dict for JSON serialization
         update_dict = stream_update.model_dump()
+
+        # SECURITY: Remove multimodal content from SSE events
+        # Images remain in OpenTelemetry traces for debugging
+        update_dict = _sanitize_for_sse(update_dict)
 
         # Broadcast to all subscribers
         dead_queues = []

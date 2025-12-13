@@ -244,10 +244,10 @@ class TestPonderHandler:
             follow_up_call = mock_persistence.add_thought.call_args[0][0]
             assert follow_up_call.thought_depth == 2  # Increased depth
             assert "ethical implications" in follow_up_call.content.lower()
-            # The handler includes questions in the follow-up content
+            # The handler includes structured ponder content
             assert (
-                "current considerations" in follow_up_call.content.lower()
-                or "current focus" in follow_up_call.content.lower()
+                "ponder round" in follow_up_call.content.lower()
+                or "conscience feedback" in follow_up_call.content.lower()
             )
 
     @pytest.mark.asyncio
@@ -452,10 +452,11 @@ class TestPonderHandler:
                 final_action=mock_result,
             )
 
-            # Verify follow-up was created with empty questions (fallback behavior)
+            # Verify follow-up was created even with empty/invalid questions (fallback behavior)
             assert follow_up_id is not None
             follow_up_call = mock_persistence.add_thought.call_args[0][0]
-            assert "[]" in follow_up_call.content  # Empty questions list
+            # With empty questions, should still have basic ponder structure
+            assert "ponder round" in follow_up_call.content.lower()
 
     @pytest.mark.asyncio
     async def test_ponder_with_existing_ponder_notes(
@@ -477,9 +478,9 @@ class TestPonderHandler:
             # Should create follow-up thought
             assert follow_up_id is not None
 
-            # Check that previous ponder history is included in follow-up
+            # Check that previous ponder notes are included in follow-up
             follow_up_call = mock_persistence.add_thought.call_args[0][0]
-            assert "previous ponder history" in follow_up_call.content.lower()
+            assert "ponder notes" in follow_up_call.content.lower()
             assert mock_persistence.update_thought_status.called
 
     @pytest.mark.asyncio
@@ -500,8 +501,8 @@ class TestPonderHandler:
             follow_up_call = mock_persistence.add_thought.call_args[0][0]
             assert follow_up_call.parent_thought_id == "thought_123"
             assert follow_up_call.round_number == test_thought.round_number
-            # Context should reference the action
-            assert "action" in follow_up_call.content.lower() or "focus" in follow_up_call.content.lower()
+            # Context should include structured ponder content
+            assert "task:" in follow_up_call.content.lower() or "continue" in follow_up_call.content.lower()
 
     @pytest.mark.asyncio
     async def test_long_questions_list(

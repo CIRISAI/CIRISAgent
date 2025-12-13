@@ -201,10 +201,17 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if original_thought and hasattr(original_thought, "thought_type"):
             covenant_with_metadata = f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{COVENANT_TEXT}"
 
+        # Build user message content - supports multimodal if input has images
+        # Images come from input_data (EnhancedDMAInputs) which gets them from ProcessingQueueItem
+        input_images = getattr(input_data, "images", []) or []
+        if input_images:
+            logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
+        user_content = self.build_multimodal_content(main_user_content, input_images)
+
         messages: List[JSONDict] = [
             {"role": "system", "content": covenant_with_metadata},
             {"role": "system", "content": system_message},
-            {"role": "user", "content": main_user_content},
+            {"role": "user", "content": user_content},
         ]
 
         # Store user prompt for streaming/debugging

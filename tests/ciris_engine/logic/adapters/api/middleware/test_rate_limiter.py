@@ -642,7 +642,7 @@ class TestRateLimitMiddlewareEnforcement:
         import json
 
         content = json.loads(response.body.decode())
-        assert content["detail"] == "Rate limit exceeded"
+        assert "Too many requests" in content["detail"]
         assert "retry_after" in content
 
 

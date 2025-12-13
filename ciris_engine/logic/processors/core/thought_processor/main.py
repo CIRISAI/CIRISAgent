@@ -806,8 +806,9 @@ class ThoughtProcessor(
             return "speak"
 
         content_str = str(params.content)
-        if len(content_str) > 50:
-            return f"speak: '{content_str[:50]}...'"
+        # Use 200 chars to provide more context for conscience evaluation
+        if len(content_str) > 200:
+            return f"speak: '{content_str[:200]}...'"
         else:
             return f"speak: '{content_str}'"
 

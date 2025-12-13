@@ -3,6 +3,7 @@ QA test modules for different components.
 """
 
 from .adapter_config_tests import AdapterConfigTests
+from .air_tests import AIRTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
@@ -20,9 +21,11 @@ from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
 from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
+from .vision_tests import VisionTests
 
 __all__ = [
     "AdapterConfigTests",
+    "AIRTests",
     "APITestModule",
     "CognitiveStateAPITests",
     "ContextEnrichmentTests",
@@ -40,4 +43,6 @@ __all__ = [
     "SQLExternalDataTests",
     "StateTransitionTests",
     "MCPTests",
+    "VisionTests",
+    "AIRTests",
 ]

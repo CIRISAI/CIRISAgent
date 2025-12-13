@@ -274,7 +274,12 @@ class RateLimitMiddleware:
             retry_after = self.limiter.get_retry_after(client_id)
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded", "retry_after": retry_after},
+                content={
+                    "detail": f"Too many requests. Please wait {retry_after} seconds before trying again.",
+                    "error": "rate_limit_exceeded",
+                    "retry_after": retry_after,
+                    "message": "You're sending requests too quickly. The system will be ready again shortly.",
+                },
                 headers={
                     "Retry-After": str(retry_after),
                     "X-RateLimit-Limit": str(self.limiter.rate),

@@ -19,7 +19,9 @@ import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.billing.BillingManager
 import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
 import ai.ciris.mobile.billing.PurchaseResult
+import ai.ciris.mobile.billing.TokenRefreshResult
 import com.android.billingclient.api.ProductDetails
+import android.content.Intent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -35,6 +37,7 @@ class PurchaseActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CIRISPurchase"
+        private const val RC_INTERACTIVE_SIGN_IN = 9002
     }
 
     private lateinit var billingManager: BillingManager
@@ -45,6 +48,9 @@ class PurchaseActivity : AppCompatActivity() {
     private lateinit var productsList: RecyclerView
     private lateinit var loadingProgress: ProgressBar
     private lateinit var statusText: TextView
+
+    // Callback for interactive sign-in result
+    private var interactiveSignInCallback: ((String?) -> Unit)? = null
 
     private val productsAdapter = ProductsAdapter { product ->
         onProductSelected(product)
@@ -70,7 +76,7 @@ class PurchaseActivity : AppCompatActivity() {
         // Initialize Google Sign-In helper for token refresh
         googleSignInHelper = GoogleSignInHelper(this)
 
-        // Initialize billing with token refresh callback
+        // Initialize billing with token refresh callback that supports interactive login fallback
         billingApiClient = BillingApiClient(this)
         billingApiClient.setTokenRefreshCallback(object : GoogleTokenRefreshCallback {
             override fun requestFreshToken(onResult: (String?) -> Unit) {
@@ -92,6 +98,43 @@ class PurchaseActivity : AppCompatActivity() {
                             onResult(null)
                         }
                     }
+                }
+            }
+
+            override fun requestFreshTokenWithResult(onResult: (TokenRefreshResult) -> Unit) {
+                Log.i(TAG, "[TokenRefresh] Requesting fresh Google ID token with detailed result...")
+                googleSignInHelper.silentSignIn { result ->
+                    when (result) {
+                        is GoogleSignInHelper.SignInResult.Success -> {
+                            val freshToken = result.account.idToken
+                            if (freshToken != null) {
+                                Log.i(TAG, "[TokenRefresh] Got fresh token (${freshToken.length} chars)")
+                                onResult(TokenRefreshResult.Success(freshToken))
+                            } else {
+                                Log.w(TAG, "[TokenRefresh] Silent sign-in succeeded but no ID token")
+                                onResult(TokenRefreshResult.Failed("No ID token in response"))
+                            }
+                        }
+                        is GoogleSignInHelper.SignInResult.Error -> {
+                            // Error code 4 = SIGN_IN_REQUIRED - user needs to interactively sign in
+                            if (result.statusCode == 4) {
+                                Log.i(TAG, "[TokenRefresh] Silent sign-in requires interactive login (code 4)")
+                                onResult(TokenRefreshResult.NeedsInteractiveLogin)
+                            } else {
+                                Log.e(TAG, "[TokenRefresh] Silent sign-in failed: ${result.message}")
+                                onResult(TokenRefreshResult.Failed("Sign-in failed: ${result.message}"))
+                            }
+                        }
+                    }
+                }
+            }
+
+            override fun launchInteractiveSignIn(onResult: (String?) -> Unit) {
+                Log.i(TAG, "[TokenRefresh] Launching interactive Google sign-in...")
+                runOnUiThread {
+                    interactiveSignInCallback = onResult
+                    val signInIntent = googleSignInHelper.getSignInIntent()
+                    startActivityForResult(signInIntent, RC_INTERACTIVE_SIGN_IN)
                 }
             }
         })
@@ -227,6 +270,33 @@ class PurchaseActivity : AppCompatActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == RC_INTERACTIVE_SIGN_IN) {
+            val callback = interactiveSignInCallback
+            interactiveSignInCallback = null  // Clear to avoid reuse
+
+            val result = googleSignInHelper.handleSignInResult(data)
+            when (result) {
+                is GoogleSignInHelper.SignInResult.Success -> {
+                    val freshToken = result.account.idToken
+                    if (freshToken != null) {
+                        Log.i(TAG, "[InteractiveSignIn] Got fresh token (${freshToken.length} chars)")
+                        callback?.invoke(freshToken)
+                    } else {
+                        Log.w(TAG, "[InteractiveSignIn] Sign-in succeeded but no ID token")
+                        callback?.invoke(null)
+                    }
+                }
+                is GoogleSignInHelper.SignInResult.Error -> {
+                    Log.e(TAG, "[InteractiveSignIn] Sign-in failed: ${result.message}")
+                    callback?.invoke(null)
+                }
+            }
+        }
+    }
+
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
@@ -234,6 +304,7 @@ class PurchaseActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        interactiveSignInCallback = null  // Clear any pending callback
         billingManager.endConnection()
     }
 }

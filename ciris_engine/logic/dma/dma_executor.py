@@ -525,6 +525,7 @@ async def run_action_selection_pdma(
                 faculty_enhanced=triaged_inputs.get("faculty_enhanced", False),
                 recursive_evaluation=triaged_inputs.get("recursive_evaluation", False),
                 conscience_feedback=triaged_inputs.get("conscience_feedback"),
+                images=triaged_inputs.get("images", []),  # Pass through images for vision
             )
 
         result = await evaluator.evaluate(enhanced_inputs)

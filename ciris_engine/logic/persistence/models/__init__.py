@@ -36,6 +36,7 @@ from .identity import (
 from .queue_status import QueueStatus, get_queue_status
 from .tasks import (
     add_task,
+    clear_task_images,
     count_tasks,
     delete_tasks_by_ids,
     get_all_tasks,
@@ -77,6 +78,7 @@ __all__ = [
     "update_task_status",
     "task_exists",
     "add_task",
+    "clear_task_images",
     "get_all_tasks",
     "get_task_by_id",
     "get_tasks_by_status",

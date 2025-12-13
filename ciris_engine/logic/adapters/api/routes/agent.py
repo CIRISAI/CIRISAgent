@@ -47,11 +47,34 @@ class MessageRejectionReason(str, Enum):
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
 
 
+class ImagePayload(BaseModel):
+    """Image payload for multimodal requests."""
+
+    data: str = Field(..., description="Base64-encoded image data or URL")
+    media_type: str = Field(default="image/jpeg", description="MIME type (image/jpeg, image/png, etc)")
+    filename: Optional[str] = Field(default=None, description="Optional filename")
+
+
+class DocumentPayload(BaseModel):
+    """Document payload for text extraction from files."""
+
+    data: str = Field(..., description="Base64-encoded document data or URL")
+    media_type: str = Field(
+        default="application/pdf",
+        description="MIME type (application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document)",
+    )
+    filename: Optional[str] = Field(default=None, description="Optional filename (helps determine document type)")
+
+
 class InteractRequest(BaseModel):
     """Request to interact with the agent."""
 
     message: str = Field(..., description="Message to send to the agent")
     context: Optional[MessageContext] = Field(None, description="Optional context")
+    images: Optional[List[ImagePayload]] = Field(default=None, description="Optional images for multimodal interaction")
+    documents: Optional[List[DocumentPayload]] = Field(
+        default=None, description="Optional documents (PDF, DOCX) for text extraction"
+    )
 
 
 class InteractResponse(BaseModel):
@@ -222,20 +245,57 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
     raise HTTPException(status_code=403, detail=error_detail)
 
 
-def _create_interaction_message(
+async def _create_interaction_message(
     auth: AuthContext, body: Union[InteractRequest, MessageRequest]
 ) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
+    from ciris_engine.logic.adapters.api.api_document import get_api_document_helper
+    from ciris_engine.logic.adapters.api.api_vision import get_api_vision_helper
+
     message_id = str(uuid.uuid4())
     channel_id = f"api_{auth.user_id}"  # User-specific channel
+
+    # Process images if provided (InteractRequest only)
+    images = []
+    if isinstance(body, InteractRequest) and body.images:
+        vision_helper = get_api_vision_helper()
+        for img_payload in body.images:
+            image_content = vision_helper.process_image_payload(
+                img_payload.data,
+                img_payload.media_type,
+                img_payload.filename,
+            )
+            if image_content:
+                images.append(image_content)
+        if images:
+            logger.info(f"Processed {len(images)} images for multimodal interaction")
+
+    # Process documents if provided (InteractRequest only)
+    additional_content = ""
+    if isinstance(body, InteractRequest) and body.documents:
+        document_helper = get_api_document_helper()
+        if document_helper.is_available():
+            doc_payloads = [
+                {"data": doc.data, "media_type": doc.media_type, "filename": doc.filename} for doc in body.documents
+            ]
+            document_text = await document_helper.process_document_list(doc_payloads)
+            if document_text:
+                additional_content = "\n\n[Document Analysis]\n" + document_text
+                logger.info(f"Processed {len(body.documents)} documents for interaction")
+        else:
+            logger.warning("Document processing requested but not available (missing libraries)")
+
+    # Combine message content with any extracted document text
+    final_content = body.message + additional_content
 
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
         author_name=auth.user_id,
-        content=body.message,
+        content=final_content,
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
+        images=images,
     )
 
     return message_id, channel_id, msg
@@ -277,6 +337,42 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
     except Exception as e:
         logger.warning(f"Could not check consent for user {auth.user_id}: {e}")
         return ""
+
+
+async def _track_air_interaction(
+    auth: AuthContext, channel_id: str, message_content: str, request: Request
+) -> Optional[str]:
+    """
+    Track interaction for AIR (Artificial Interaction Reminder) parasocial prevention.
+
+    This monitors 1:1 API interactions for:
+    - Time-based triggers (30 min continuous)
+    - Message-based triggers (20+ messages in 30 min window)
+
+    Returns reminder message if threshold exceeded, None otherwise.
+    """
+    try:
+        # Get consent manager which hosts the AIR manager
+        consent_manager = getattr(request.app.state, "consent_manager", None)
+        if not consent_manager:
+            return None
+
+        # Track interaction and get potential reminder
+        reminder: Optional[str] = await consent_manager.track_interaction(
+            user_id=auth.user_id,
+            channel_id=channel_id,
+            channel_type="api",
+            message_content=message_content,
+        )
+
+        if reminder:
+            logger.info(f"[AIR] Reminder triggered for user {auth.user_id}")
+
+        return reminder
+
+    except Exception as e:
+        logger.debug(f"AIR tracking error (non-fatal): {e}")
+        return None
 
 
 def _derive_credit_account(
@@ -542,11 +638,15 @@ async def submit_message(
     _check_send_messages_permission(auth, request)
 
     # Create message and tracking
-    message_id, channel_id, msg = _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     # Handle consent for user
     await _handle_consent_for_user(auth, channel_id, request)
+
+    # Track interaction for AIR (parasocial attachment prevention)
+    # Note: For async pattern, reminder is logged but not returned (user polls for response)
+    await _track_air_interaction(auth, channel_id, body.message, request)
 
     # Track submission time
     submitted_at = datetime.now(timezone.utc)
@@ -646,7 +746,7 @@ async def interact(
     _check_send_messages_permission(auth, request)
 
     # Create message and tracking
-    message_id, channel_id, msg = _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     event = asyncio.Event()
@@ -654,6 +754,9 @@ async def interact(
 
     # Handle consent for user
     consent_notice = await _handle_consent_for_user(auth, channel_id, request)
+
+    # Track interaction for AIR (parasocial attachment prevention)
+    air_reminder = await _track_air_interaction(auth, channel_id, body.message, request)
 
     # Track timing
     start_time = datetime.now(timezone.utc)
@@ -703,6 +806,10 @@ async def interact(
         # Add consent notice if this is first interaction
         if consent_notice:
             response_content += consent_notice
+
+        # Add AIR reminder if triggered (parasocial attachment prevention)
+        if air_reminder:
+            response_content += "\n\n---\n" + air_reminder
 
         # Clean up and calculate timing
         _cleanup_interaction_tracking(message_id)

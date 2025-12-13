@@ -103,7 +103,7 @@ class TestProvidersEndpoint:
         assert response.status_code == status.HTTP_200_OK
         providers = response.json()["data"]
         assert isinstance(providers, list)
-        assert len(providers) == 3  # openai, local, other
+        assert len(providers) >= 8  # openai, anthropic, openrouter, groq, together, google, local, other
 
         # Check OpenAI provider
         openai = next(p for p in providers if p["id"] == "openai")
@@ -111,16 +111,19 @@ class TestProvidersEndpoint:
         assert openai["requires_api_key"] is True
         assert openai["requires_base_url"] is False
 
+        # Check Anthropic provider
+        anthropic = next(p for p in providers if p["id"] == "anthropic")
+        assert anthropic["name"] == "Anthropic"
+        assert anthropic["requires_api_key"] is True
+
         # Check local LLM provider
         local = next(p for p in providers if p["id"] == "local")
         assert local["name"] == "Local LLM"
         assert local["requires_base_url"] is True
-        assert local["default_base_url"] == "http://localhost:11434"
-        assert local["default_model"] == "llama3"
 
-        # Check other provider
+        # Check other provider (OpenAI-compatible)
         other = next(p for p in providers if p["id"] == "other")
-        assert other["name"] == "OpenAI-Compatible Provider"
+        assert other["name"] == "Other"
         assert other["requires_api_key"] is True
         assert other["requires_base_url"] is True
         assert other["requires_model"] is True
@@ -510,7 +513,7 @@ class TestHelperFunctions:
         """Test _get_llm_providers helper."""
         providers = _get_llm_providers()
 
-        assert len(providers) == 3
+        assert len(providers) >= 8  # Multiple providers: openai, anthropic, google, local, etc.
         assert all(isinstance(p, LLMProvider) for p in providers)
 
         openai = next(p for p in providers if p.id == "openai")

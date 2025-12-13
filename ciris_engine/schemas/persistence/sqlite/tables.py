@@ -5,6 +5,7 @@ Provides SQL DDL for all database tables used by the agent.
 """
 
 # Tasks table for tracking agent tasks
+# Note: images_json column is added by migration 010_add_images_to_tasks.sql
 TASKS_TABLE_V1 = """
 CREATE TABLE IF NOT EXISTS tasks (
     task_id TEXT PRIMARY KEY,

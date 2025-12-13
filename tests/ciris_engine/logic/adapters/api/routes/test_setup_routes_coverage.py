@@ -274,7 +274,7 @@ class TestGetLLMProviders:
         openai = next(p for p in providers if p.id == "openai")
         assert openai.requires_api_key is True
         assert openai.requires_base_url is False
-        assert openai.default_model == "gpt-4"
+        assert openai.default_model == "gpt-5.2"
 
     def test_local_provider_config(self):
         """Local provider has correct configuration."""

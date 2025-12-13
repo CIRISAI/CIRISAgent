@@ -36,6 +36,7 @@ import ai.ciris.mobile.auth.GoogleSignInHelper
 import ai.ciris.mobile.auth.TokenRefreshManager
 import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
+import ai.ciris.mobile.billing.TokenRefreshResult
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
@@ -173,11 +174,15 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_USE_NATIVE = "use_native_interact"
         private const val SERVER_URL = "http://localhost:8080"  // Match GUI SDK default (must use localhost, not 127.0.0.1, for Same-Origin Policy)
         private const val UI_PATH = "/index.html"
+        private const val RC_BILLING_INTERACTIVE_SIGN_IN = 9003  // Request code for billing-triggered interactive sign-in
 
         // Static reference to current Google user ID for LLM proxy calls
         var currentGoogleUserId: String? = null
             private set
     }
+
+    // Callback for billing-triggered interactive sign-in
+    private var billingInteractiveSignInCallback: ((String?) -> Unit)? = null
 
     /**
      * Startup phases for UI display.
@@ -1705,7 +1710,12 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     if (result.success) {
-                        creditsCountText.text = result.balance.toString()
+                        if (result.isByok) {
+                            // BYOK mode - no billing needed
+                            creditsCountText.text = "BYOK"
+                        } else {
+                            creditsCountText.text = result.balance.toString()
+                        }
                     } else {
                         creditsCountText.text = "--"
                         // Retry if credit provider is still initializing (up to 6 times = 12 seconds)
@@ -2249,6 +2259,8 @@ class MainActivity : AppCompatActivity() {
      * Create a BillingApiClient with token refresh callback wired up.
      * This ensures that when the API key refresh is needed, we get a fresh
      * Google ID token via native sign-in before exchanging.
+     *
+     * If silent sign-in fails with SIGN_IN_REQUIRED, interactive login is triggered.
      */
     private fun createBillingApiClient(): BillingApiClient {
         val client = BillingApiClient(this)
@@ -2279,8 +2291,46 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+
+                override fun requestFreshTokenWithResult(onResult: (TokenRefreshResult) -> Unit) {
+                    Log.i(TAG, "[BillingTokenRefresh] Requesting fresh Google ID token with detailed result...")
+                    googleSignInHelper!!.silentSignIn { result ->
+                        when (result) {
+                            is GoogleSignInHelper.SignInResult.Success -> {
+                                val freshToken = result.account.idToken
+                                if (freshToken != null) {
+                                    Log.i(TAG, "[BillingTokenRefresh] Got fresh token (${freshToken.length} chars)")
+                                    googleIdToken = freshToken
+                                    onResult(TokenRefreshResult.Success(freshToken))
+                                } else {
+                                    Log.w(TAG, "[BillingTokenRefresh] Silent sign-in succeeded but no ID token")
+                                    onResult(TokenRefreshResult.Failed("No ID token in response"))
+                                }
+                            }
+                            is GoogleSignInHelper.SignInResult.Error -> {
+                                // Error code 4 = SIGN_IN_REQUIRED - user needs to interactively sign in
+                                if (result.statusCode == 4) {
+                                    Log.i(TAG, "[BillingTokenRefresh] Silent sign-in requires interactive login (code 4)")
+                                    onResult(TokenRefreshResult.NeedsInteractiveLogin)
+                                } else {
+                                    Log.e(TAG, "[BillingTokenRefresh] Silent sign-in failed: ${result.message}")
+                                    onResult(TokenRefreshResult.Failed("Sign-in failed: ${result.message}"))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                override fun launchInteractiveSignIn(onResult: (String?) -> Unit) {
+                    Log.i(TAG, "[BillingTokenRefresh] Launching interactive Google sign-in...")
+                    runOnUiThread {
+                        billingInteractiveSignInCallback = onResult
+                        val signInIntent = googleSignInHelper!!.getSignInIntent()
+                        startActivityForResult(signInIntent, RC_BILLING_INTERACTIVE_SIGN_IN)
+                    }
+                }
             })
-            Log.i(TAG, "BillingApiClient created with token refresh callback")
+            Log.i(TAG, "BillingApiClient created with token refresh callback (supports interactive fallback)")
         }
 
         return client
@@ -2336,7 +2386,14 @@ class MainActivity : AppCompatActivity() {
             return null
         }
 
-        Log.i(TAG, "[PreflightTokenRefresh] Refreshing Google ID token before Python startup...")
+        // If we already have a fresh token from LoginActivity (just signed in), use it directly
+        // This avoids the race condition where silent sign-in fails right after interactive sign-in
+        if (!googleIdToken.isNullOrEmpty()) {
+            Log.i(TAG, "[PreflightTokenRefresh] Using existing token from LoginActivity (${googleIdToken!!.length} chars)")
+            return googleIdToken
+        }
+
+        Log.i(TAG, "[PreflightTokenRefresh] No token from LoginActivity, attempting silent sign-in...")
 
         return suspendCoroutine { continuation ->
             googleSignInHelper!!.silentSignIn { result ->
@@ -2365,6 +2422,9 @@ class MainActivity : AppCompatActivity() {
     /**
      * Write a fresh Google ID token to the .env file BEFORE Python starts.
      * This ensures Python's billing service has a valid token on first read.
+     *
+     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm.ciris.ai).
+     * In BYOK mode, the user's API key is preserved and only CIRIS_BILLING_GOOGLE_ID_TOKEN is updated.
      */
     private fun writeTokenToEnvFile(token: String): Boolean {
         val envFile = cirisHomePath?.let { File(it, ".env") } ?: run {
@@ -2382,29 +2442,38 @@ class MainActivity : AppCompatActivity() {
 
             // Update existing .env file
             var content = envFile.readText()
-            var updated = false
 
-            // Update OPENAI_API_KEY
-            val openaiPatterns = listOf(
-                Regex("""OPENAI_API_KEY="[^"]*""""),
-                Regex("""OPENAI_API_KEY='[^']*'"""),
-                Regex("""OPENAI_API_KEY=[^\n]*""")
-            )
-            for (pattern in openaiPatterns) {
-                if (pattern.containsMatchIn(content)) {
-                    content = pattern.replace(content, """OPENAI_API_KEY="$token"""")
-                    updated = true
-                    break
+            // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
+            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If not, we're in BYOK mode and should NOT overwrite the user's API key
+            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+
+            if (isCirisProxyMode) {
+                // CIRIS proxy mode: Update OPENAI_API_KEY with Google token
+                Log.i(TAG, "[PreflightTokenRefresh] CIRIS proxy mode detected - updating OPENAI_API_KEY")
+                val openaiPatterns = listOf(
+                    Regex("""OPENAI_API_KEY="[^"]*""""),
+                    Regex("""OPENAI_API_KEY='[^']*'"""),
+                    Regex("""OPENAI_API_KEY=[^\n]*""")
+                )
+                var openaiUpdated = false
+                for (pattern in openaiPatterns) {
+                    if (pattern.containsMatchIn(content)) {
+                        content = pattern.replace(content, """OPENAI_API_KEY="$token"""")
+                        openaiUpdated = true
+                        break
+                    }
                 }
+                // If OPENAI_API_KEY not found, append it
+                if (!openaiUpdated) {
+                    content += "\nOPENAI_API_KEY=\"$token\"\n"
+                }
+            } else {
+                // BYOK mode: Don't touch OPENAI_API_KEY - user has their own key
+                Log.i(TAG, "[PreflightTokenRefresh] BYOK mode detected - preserving user's OPENAI_API_KEY")
             }
 
-            // If OPENAI_API_KEY not found, append it
-            if (!updated) {
-                content += "\nOPENAI_API_KEY=\"$token\"\n"
-                updated = true
-            }
-
-            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN
+            // Always update CIRIS_BILLING_GOOGLE_ID_TOKEN for billing purposes
             val billingPatterns = listOf(
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN="[^"]*""""),
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN='[^']*'"""),
@@ -2423,7 +2492,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             envFile.writeText(content)
-            Log.i(TAG, "[PreflightTokenRefresh] Updated .env file with fresh token")
+            Log.i(TAG, "[PreflightTokenRefresh] Updated .env file (proxy mode: $isCirisProxyMode)")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "[PreflightTokenRefresh] Failed to write .env file: ${e.message}")
@@ -2445,12 +2514,49 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "App paused - sleep timer started (5 min)")
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        // Handle billing-triggered interactive sign-in result
+        if (requestCode == RC_BILLING_INTERACTIVE_SIGN_IN) {
+            val callback = billingInteractiveSignInCallback
+            billingInteractiveSignInCallback = null  // Clear to avoid reuse
+
+            if (googleSignInHelper != null) {
+                val result = googleSignInHelper!!.handleSignInResult(data)
+                when (result) {
+                    is GoogleSignInHelper.SignInResult.Success -> {
+                        val freshToken = result.account.idToken
+                        if (freshToken != null) {
+                            Log.i(TAG, "[BillingInteractiveSignIn] Got fresh token (${freshToken.length} chars)")
+                            googleIdToken = freshToken
+                            callback?.invoke(freshToken)
+                        } else {
+                            Log.w(TAG, "[BillingInteractiveSignIn] Sign-in succeeded but no ID token")
+                            callback?.invoke(null)
+                        }
+                    }
+                    is GoogleSignInHelper.SignInResult.Error -> {
+                        Log.e(TAG, "[BillingInteractiveSignIn] Sign-in failed: ${result.message}")
+                        callback?.invoke(null)
+                    }
+                }
+            } else {
+                Log.e(TAG, "[BillingInteractiveSignIn] googleSignInHelper is null")
+                callback?.invoke(null)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // Stop elapsed timer
         stopElapsedTimer()
         // Stop token refresh manager
         tokenRefreshManager?.stop()
+        // Clear billing callback
+        billingInteractiveSignInCallback = null
         // Stop background service - uses START_NOT_STICKY so won't auto-restart
         CirisBackgroundService.stop(this)
         Log.i(TAG, "MainActivity destroyed, background service stopped")

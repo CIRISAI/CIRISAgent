@@ -442,6 +442,25 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     )
                     extra_kwargs["extra_body"] = {"metadata": {"interaction_id": interaction_id}}
 
+                # DEBUG: Log multimodal content details for proxy team diagnostics
+                image_count = 0
+                total_image_bytes = 0
+                for msg in msg_list:
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "image_url":
+                                image_count += 1
+                                url = block.get("image_url", {}).get("url", "")
+                                if url.startswith("data:image"):
+                                    total_image_bytes += len(url)
+                if image_count > 0:
+                    logger.info(
+                        f"[VISION_DEBUG] Sending to proxy: model={self.model_name}, "
+                        f"images={image_count}, image_data_bytes={total_image_bytes}, "
+                        f"thought_id={thought_id}, response_model={resp_model.__name__}"
+                    )
+
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
                     messages=cast(Any, msg_list),
@@ -451,6 +470,14 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     temperature=temp,
                     **extra_kwargs,
                 )
+
+                # DEBUG: Log proxy response details
+                if image_count > 0:
+                    actual_model = getattr(completion, "model", "unknown")
+                    logger.info(
+                        f"[VISION_DEBUG] Proxy response: requested={self.model_name}, "
+                        f"actual_model={actual_model}, thought_id={thought_id}"
+                    )
 
                 # Extract usage data from completion
                 usage = completion.usage

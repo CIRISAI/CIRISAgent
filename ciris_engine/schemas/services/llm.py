@@ -5,7 +5,7 @@ Provides typed schemas for LLM service operations.
 """
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -92,12 +92,68 @@ class LLMCallMetadata(BaseModel):
     cached: bool = Field(False, description="Whether response was cached")
 
 
+class TextContentBlock(BaseModel):
+    """Text content block for multimodal messages."""
+
+    type: Literal["text"] = "text"
+    text: str = Field(..., description="Text content")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ImageURLDetail(BaseModel):
+    """Image URL details for multimodal messages."""
+
+    url: str = Field(..., description="Image URL or data URL (data:image/jpeg;base64,...)")
+    detail: Optional[Literal["auto", "low", "high"]] = Field(
+        default="auto", description="Image detail level for vision processing"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ImageContentBlock(BaseModel):
+    """Image content block for multimodal messages."""
+
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageURLDetail = Field(..., description="Image URL details")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# Union type for content blocks in multimodal messages
+ContentBlock = Union[TextContentBlock, ImageContentBlock]
+
+
 class LLMMessage(BaseModel):
-    """Message for LLM conversations."""
+    """
+    Message for LLM conversations.
+
+    Supports both simple text content (str) and multimodal content (List[ContentBlock]).
+    For text-only messages, use content="text".
+    For multimodal messages with images, use content=[TextContentBlock(...), ImageContentBlock(...)].
+    """
 
     role: Literal["system", "user", "assistant"] = Field(..., description="Message role")
-    content: str = Field(..., description="Message content")
+    content: str | List[ContentBlock] = Field(
+        ..., description="Message content - string for text, list of blocks for multimodal"
+    )
     name: Optional[str] = Field(None, description="Optional name for the message sender")
+
+    def is_multimodal(self) -> bool:
+        """Check if this message contains multimodal content."""
+        return isinstance(self.content, list)
+
+    def get_text_content(self) -> str:
+        """Extract text content from the message."""
+        if isinstance(self.content, str):
+            return self.content
+        # Extract text from content blocks
+        texts = []
+        for block in self.content:
+            if isinstance(block, TextContentBlock):
+                texts.append(block.text)
+        return "\n".join(texts)
 
 
 class LLMCallParams(BaseModel):

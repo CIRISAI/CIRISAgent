@@ -17,12 +17,12 @@ Key principles:
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, Thought, ThoughtContext
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ def create_task(
     user_id: Optional[str] = None,
     parent_task_id: Optional[str] = None,
     context: Optional[TaskContext] = None,
+    images: Optional[List[ImageContent]] = None,
 ) -> Task:
     """
     Create a Task with proper occurrence_id handling.
@@ -56,6 +57,7 @@ def create_task(
         user_id: Optional user ID who created task
         parent_task_id: Optional parent task ID
         context: Optional pre-built TaskContext (will be validated)
+        images: Optional list of images for multimodal tasks
 
     Returns:
         Task with proper occurrence_id in both task and context
@@ -115,9 +117,15 @@ def create_task(
         updated_at=now_iso,
         parent_task_id=parent_task_id,
         context=context,
+        images=images or [],
     )
 
-    logger.debug(f"Created task {task_id} for occurrence '{agent_occurrence_id}' in channel '{channel_id}'")
+    image_count = len(images) if images else 0
+    if image_count > 0:
+        logger.info(f"[VISION] Created task {task_id} with {image_count} images attached")
+    logger.debug(
+        f"Created task {task_id} for occurrence '{agent_occurrence_id}' in channel '{channel_id}' with {image_count} images"
+    )
 
     return task
 
@@ -138,6 +146,7 @@ def create_thought(
     thought_id: Optional[str] = None,
     context: Optional[ThoughtContext] = None,
     is_seed: bool = False,
+    images: Optional[List[ImageContent]] = None,
 ) -> Thought:
     """
     Create a Thought with proper occurrence_id handling.
@@ -157,6 +166,7 @@ def create_thought(
         thought_id: Optional explicit thought_id (generates if None)
         context: Optional pre-built ThoughtContext (will be validated)
         is_seed: Whether this is a seed thought for task
+        images: Optional list of images for multimodal thoughts
 
     Returns:
         Thought with proper occurrence_id in both thought and context
@@ -230,10 +240,14 @@ def create_thought(
         thought_depth=thought_depth,
         parent_thought_id=parent_thought_id,
         context=context,
+        images=images or [],
     )
 
+    image_count = len(images) if images else 0
+    if image_count > 0:
+        logger.info(f"[VISION] Created thought {thought_id} with {image_count} images inherited from task")
     logger.debug(
-        f"Created {thought_type.value} thought {thought_id} for task {source_task_id}, occurrence '{agent_occurrence_id}', round {round_number}"
+        f"Created {thought_type.value} thought {thought_id} for task {source_task_id}, occurrence '{agent_occurrence_id}', round {round_number}, with {image_count} images"
     )
 
     return thought
@@ -302,6 +316,7 @@ def create_seed_thought_for_task(
         parent_thought_id=None,
         context=thought_context,
         is_seed=True,
+        images=task.images,  # Inherit images from task
     )
 
 
@@ -375,6 +390,7 @@ def create_follow_up_thought(
         parent_thought_id=parent_thought.thought_id,
         context=follow_up_context,
         is_seed=False,
+        images=parent_thought.images,  # Inherit images from parent thought
     )
 
 

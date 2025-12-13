@@ -113,8 +113,20 @@ class TokenRefreshManager(
         handler.removeCallbacks(signalMonitorRunnable)
     }
 
+    // Callback for triggering interactive login when silent sign-in fails with SIGN_IN_REQUIRED
+    private var interactiveLoginTrigger: (() -> Unit)? = null
+
+    /**
+     * Set the callback for triggering interactive login.
+     * This should launch the sign-in UI and call handleNewToken when complete.
+     */
+    fun setInteractiveLoginTrigger(trigger: (() -> Unit)?) {
+        this.interactiveLoginTrigger = trigger
+    }
+
     /**
      * Manually trigger a token refresh.
+     * If silent sign-in fails with SIGN_IN_REQUIRED (code 4), triggers interactive login if available.
      */
     fun refreshToken() {
         Log.i(TAG, "Refreshing Google ID token via silentSignIn...")
@@ -131,9 +143,28 @@ class TokenRefreshManager(
                     }
                 }
                 is GoogleSignInHelper.SignInResult.Error -> {
-                    Log.e(TAG, "Token refresh failed: ${result.statusCode} - ${result.message}")
+                    // Error code 4 = SIGN_IN_REQUIRED - try interactive login if available
+                    if (result.statusCode == 4 && interactiveLoginTrigger != null) {
+                        Log.i(TAG, "Silent sign-in requires interactive login (code 4), triggering interactive flow...")
+                        interactiveLoginTrigger?.invoke()
+                    } else {
+                        Log.e(TAG, "Token refresh failed: ${result.statusCode} - ${result.message}")
+                    }
                 }
             }
+        }
+    }
+
+    /**
+     * Public method to handle a new token after interactive sign-in.
+     * Call this from the activity after the user completes interactive sign-in.
+     */
+    fun onInteractiveSignInComplete(idToken: String?) {
+        if (idToken != null) {
+            Log.i(TAG, "Interactive sign-in complete - got new token")
+            handleNewToken(idToken)
+        } else {
+            Log.w(TAG, "Interactive sign-in did not return a token")
         }
     }
 
@@ -208,6 +239,9 @@ class TokenRefreshManager(
     /**
      * Update the .env file with a new API key (ID token).
      * Also updates CIRIS_BILLING_GOOGLE_ID_TOKEN if present (for CIRIS proxy billing).
+     *
+     * IMPORTANT: Only updates OPENAI_API_KEY if using CIRIS proxy mode (llm.ciris.ai).
+     * In BYOK mode, the user's API key is preserved and only CIRIS_BILLING_GOOGLE_ID_TOKEN is updated.
      */
     private fun updateEnvFile(newIdToken: String) {
         val envFile = cirisHome?.let { File(it, ".env") } ?: run {
@@ -223,46 +257,68 @@ class TokenRefreshManager(
         try {
             var content = envFile.readText()
 
-            // Replace the OPENAI_API_KEY value
-            // Match both quoted and unquoted formats
-            val openaiPatterns = listOf(
-                Regex("""OPENAI_API_KEY="[^"]*""""),
-                Regex("""OPENAI_API_KEY='[^']*'"""),
-                Regex("""OPENAI_API_KEY=[^\n]*""")
-            )
+            // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
+            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If not, we're in BYOK mode and should NOT overwrite the user's API key
+            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
 
-            var updated = false
-            for (pattern in openaiPatterns) {
-                if (pattern.containsMatchIn(content)) {
-                    content = pattern.replace(content, """OPENAI_API_KEY="$newIdToken"""")
-                    updated = true
-                    break
+            var openaiUpdated = false
+            if (isCirisProxyMode) {
+                // CIRIS proxy mode: Update OPENAI_API_KEY with Google token
+                Log.i(TAG, "CIRIS proxy mode detected - updating OPENAI_API_KEY")
+
+                // Replace the OPENAI_API_KEY value
+                // Match both quoted and unquoted formats
+                val openaiPatterns = listOf(
+                    Regex("""OPENAI_API_KEY="[^"]*""""),
+                    Regex("""OPENAI_API_KEY='[^']*'"""),
+                    Regex("""OPENAI_API_KEY=[^\n]*""")
+                )
+
+                for (pattern in openaiPatterns) {
+                    if (pattern.containsMatchIn(content)) {
+                        content = pattern.replace(content, """OPENAI_API_KEY="$newIdToken"""")
+                        openaiUpdated = true
+                        break
+                    }
                 }
+            } else {
+                // BYOK mode: Don't touch OPENAI_API_KEY - user has their own key
+                Log.i(TAG, "BYOK mode detected - preserving user's OPENAI_API_KEY")
             }
 
-            // Also update CIRIS_BILLING_GOOGLE_ID_TOKEN if present (same token used for billing JWT auth)
+            // Always update CIRIS_BILLING_GOOGLE_ID_TOKEN for billing purposes (regardless of BYOK mode)
             val billingPatterns = listOf(
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN="[^"]*""""),
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN='[^']*'"""),
                 Regex("""CIRIS_BILLING_GOOGLE_ID_TOKEN=[^\n]*""")
             )
 
+            var billingUpdated = false
             for (pattern in billingPatterns) {
                 if (pattern.containsMatchIn(content)) {
                     content = pattern.replace(content, """CIRIS_BILLING_GOOGLE_ID_TOKEN="$newIdToken"""")
-                    Log.i(TAG, "Also updated CIRIS_BILLING_GOOGLE_ID_TOKEN")
+                    billingUpdated = true
+                    Log.i(TAG, "Updated CIRIS_BILLING_GOOGLE_ID_TOKEN")
                     break
                 }
             }
 
-            if (updated) {
+            // If billing token wasn't found, append it (needed for all modes)
+            if (!billingUpdated) {
+                content += "\nCIRIS_BILLING_GOOGLE_ID_TOKEN=\"$newIdToken\"\n"
+                billingUpdated = true
+                Log.i(TAG, "Added CIRIS_BILLING_GOOGLE_ID_TOKEN")
+            }
+
+            if (openaiUpdated || billingUpdated) {
                 envFile.writeText(content)
-                Log.i(TAG, ".env file updated with new ID token")
+                Log.i(TAG, ".env file updated (proxy mode: $isCirisProxyMode)")
 
                 // Also trigger Python to reload the config
                 triggerPythonConfigReload()
             } else {
-                Log.w(TAG, "OPENAI_API_KEY not found in .env file")
+                Log.w(TAG, "No updates needed for .env file")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update .env file: ${e.message}")

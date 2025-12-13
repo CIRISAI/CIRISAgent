@@ -1,0 +1,419 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-12-12T00:00:00Z",
+  "metadata": {
+    "schema_version": "1.0.0",
+    "ciris_requirements_version": "1.0",
+    "update_frequency": "monthly",
+    "sources": [
+      "OpenRouter API",
+      "Provider documentation",
+      "ciris.ai/models"
+    ]
+  },
+  "ciris_requirements": {
+    "min_context_window": 128000,
+    "preferred_context_window": 256000,
+    "max_combined_cost_per_million_cents": 100,
+    "min_provider_count": 2,
+    "required_capabilities": ["tool_use", "structured_output"],
+    "recommended_capabilities": ["vision", "json_mode", "streaming"]
+  },
+  "providers": {
+    "openai": {
+      "display_name": "OpenAI",
+      "api_base": "https://api.openai.com/v1",
+      "models": {
+        "gpt-4o": {
+          "display_name": "GPT-4o",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "High quality but single provider - no fallback chain"
+        },
+        "gpt-4o-mini": {
+          "display_name": "GPT-4o Mini",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Cost-effective but single provider"
+        },
+        "gpt-4-turbo": {
+          "display_name": "GPT-4 Turbo",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Previous generation, higher cost"
+        },
+        "gpt-3.5-turbo": {
+          "display_name": "GPT-3.5 Turbo",
+          "context_window": 16385,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": false,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "legacy",
+          "ciris_compatible": false,
+          "rejection_reason": "Context window below 128K minimum"
+        },
+        "gpt-5.2": {
+          "display_name": "GPT-5.2 Thinking",
+          "context_window": 256000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": true,
+          "notes": "OpenAI's most advanced model (Dec 2025) - excellent for professional work and agentic tasks"
+        },
+        "gpt-5.2-chat-latest": {
+          "display_name": "GPT-5.2 Instant",
+          "context_window": 256000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fast version of GPT-5.2 - optimized for writing and information seeking"
+        }
+      }
+    },
+    "anthropic": {
+      "display_name": "Anthropic",
+      "api_base": "https://api.anthropic.com/v1",
+      "models": {
+        "claude-3-opus-20240229": {
+          "display_name": "Claude 3 Opus",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Highest quality Claude, single provider"
+        },
+        "claude-3-5-sonnet-20241022": {
+          "display_name": "Claude 3.5 Sonnet",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Excellent balance of quality and cost"
+        },
+        "claude-3-5-haiku-20241022": {
+          "display_name": "Claude 3.5 Haiku",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fast and efficient"
+        }
+      }
+    },
+    "openrouter": {
+      "display_name": "OpenRouter",
+      "api_base": "https://openrouter.ai/api/v1",
+      "note": "Aggregator - provides access to multiple underlying providers",
+      "models": {
+        "meta-llama/llama-4-maverick": {
+          "display_name": "Llama 4 Maverick",
+          "architecture": "mixture_of_experts",
+          "active_params": "17B",
+          "context_window": 1000000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "underlying_providers": ["groq", "together", "lambda_labs"],
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": true,
+          "notes": "Primary CIRIS model - MoE architecture, multi-provider fallback"
+        },
+        "meta-llama/llama-3.3-70b-instruct": {
+          "display_name": "Llama 3.3 70B",
+          "architecture": "dense",
+          "active_params": "70B",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": false,
+            "json_mode": true,
+            "streaming": true
+          },
+          "underlying_providers": ["together", "groq", "fireworks"],
+          "tier": "fallback",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fallback for Maverick - no vision support"
+        },
+        "google/gemini-2.0-flash-exp": {
+          "display_name": "Gemini 2.0 Flash",
+          "context_window": 1000000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Very fast, large context, experimental"
+        },
+        "anthropic/claude-3.5-sonnet": {
+          "display_name": "Claude 3.5 Sonnet (via OpenRouter)",
+          "context_window": 200000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "High quality, available via aggregator"
+        },
+        "openai/gpt-4o": {
+          "display_name": "GPT-4o (via OpenRouter)",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "High quality, available via aggregator"
+        }
+      }
+    },
+    "together": {
+      "display_name": "Together AI",
+      "api_base": "https://api.together.xyz/v1",
+      "models": {
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+          "display_name": "Llama 3.3 70B Turbo",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": false,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fast inference, good tool support"
+        },
+        "meta-llama/Llama-Vision-Free": {
+          "display_name": "Llama Vision Free",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Free tier with vision support"
+        }
+      }
+    },
+    "groq": {
+      "display_name": "Groq",
+      "api_base": "https://api.groq.com/openai/v1",
+      "note": "Optimized for speed with LPU hardware",
+      "models": {
+        "llama-3.3-70b-versatile": {
+          "display_name": "Llama 3.3 70B Versatile",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": false,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Extremely fast inference"
+        },
+        "llama-3.2-90b-vision-preview": {
+          "display_name": "Llama 3.2 90B Vision",
+          "context_window": 128000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Fast inference with vision support"
+        },
+        "mixtral-8x7b-32768": {
+          "display_name": "Mixtral 8x7B",
+          "context_window": 32768,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": false,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": false,
+          "rejection_reason": "Context window below 128K minimum"
+        }
+      }
+    },
+    "google": {
+      "display_name": "Google AI",
+      "api_base": "https://generativelanguage.googleapis.com/v1beta",
+      "models": {
+        "gemini-2.0-flash-exp": {
+          "display_name": "Gemini 2.0 Flash",
+          "context_window": 1000000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "fast",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Very fast, huge context window"
+        },
+        "gemini-1.5-pro": {
+          "display_name": "Gemini 1.5 Pro",
+          "context_window": 2000000,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "tier": "premium",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Largest context window available"
+        }
+      }
+    }
+  },
+  "rejected_models": {
+    "gpt-oss-20b": {
+      "display_name": "GPT-OSS 20B",
+      "rejection_reason": "Fails structured output - 'tool choice is required, but the model did not call a tool'",
+      "tested_date": "2025-11-15"
+    },
+    "llama-2-70b": {
+      "display_name": "Llama 2 70B",
+      "rejection_reason": "No native tool use support, context window only 4K",
+      "tested_date": "2024-06-01"
+    }
+  },
+  "tiers": {
+    "default": {
+      "description": "Cost-optimized for standard operations",
+      "typical_latency_ms": "1000-3000",
+      "use_case": "Normal agent processing"
+    },
+    "fast": {
+      "description": "Speed-optimized for interactive use",
+      "typical_latency_ms": "200-800",
+      "use_case": "Interactive ethical review, real-time responses"
+    },
+    "fallback": {
+      "description": "Backup when primary models unavailable",
+      "typical_latency_ms": "1000-5000",
+      "use_case": "Redundancy and failover"
+    },
+    "premium": {
+      "description": "Highest quality for complex tasks",
+      "typical_latency_ms": "2000-10000",
+      "use_case": "Complex reasoning, nuanced decisions"
+    },
+    "legacy": {
+      "description": "Older models, not recommended",
+      "use_case": "Compatibility only"
+    }
+  }
+}

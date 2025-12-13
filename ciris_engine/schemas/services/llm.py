@@ -135,7 +135,7 @@ class LLMMessage(BaseModel):
     """
 
     role: Literal["system", "user", "assistant"] = Field(..., description="Message role")
-    content: Union[str, List[ContentBlock]] = Field(
+    content: str | List[ContentBlock] = Field(
         ..., description="Message content - string for text, list of blocks for multimodal"
     )
     name: Optional[str] = Field(None, description="Optional name for the message sender")

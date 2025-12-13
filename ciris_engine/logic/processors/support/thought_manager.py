@@ -137,7 +137,7 @@ class ThoughtManager:
         updated_content = getattr(task, "updated_info_content", None) or ""
 
         # Build recovery thought content
-        thought_content = f"RECOVERY: New information received for task.\n\n" f"Original task: {task.description}\n\n"
+        thought_content = f"RECOVERY: New information received for task.\n\nOriginal task: {task.description}\n\n"
         if updated_content:
             thought_content += f"Updated information:\n{updated_content}\n\n"
         thought_content += "Please review the updated information and continue processing this task."

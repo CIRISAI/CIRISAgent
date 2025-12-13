@@ -105,9 +105,7 @@ class TestUrlToImageContentSync:
 
     def test_url_storage(self, helper):
         """Test that URL is stored directly without download."""
-        result = helper.url_to_image_content_sync(
-            "https://example.com/image.jpg", "image/jpeg", "photo.jpg"
-        )
+        result = helper.url_to_image_content_sync("https://example.com/image.jpg", "image/jpeg", "photo.jpg")
 
         assert result is not None
         assert result.source_type == "url"

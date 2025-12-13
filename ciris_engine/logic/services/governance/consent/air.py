@@ -100,7 +100,7 @@ class ArtificialInteractionReminder:
         user_id: str,
         channel_id: str,
         channel_type: Optional[str] = None,
-        message_content: Optional[str] = None,  # Kept for API compatibility, not used
+        _message_content: Optional[str] = None,  # Kept for API compatibility, not used
     ) -> Optional[str]:
         """
         Track user interaction and check if reminder needed.

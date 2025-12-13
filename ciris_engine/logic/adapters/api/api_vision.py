@@ -14,6 +14,9 @@ from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
+# Default media type for images
+DEFAULT_IMAGE_MEDIA_TYPE = "image/jpeg"
+
 
 class APIVisionHelper(BaseVisionHelper):
     """
@@ -36,7 +39,7 @@ class APIVisionHelper(BaseVisionHelper):
     def base64_to_image_content(
         self,
         base64_data: str,
-        media_type: str = "image/jpeg",
+        media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> Optional[ImageContent]:
         """
@@ -90,7 +93,7 @@ class APIVisionHelper(BaseVisionHelper):
     def url_to_image_content_sync(
         self,
         url: str,
-        media_type: str = "image/jpeg",
+        media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> ImageContent:
         """
@@ -118,7 +121,7 @@ class APIVisionHelper(BaseVisionHelper):
     def process_image_payload(
         self,
         image_data: str,
-        media_type: str = "image/jpeg",
+        media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> Optional[ImageContent]:
         """
@@ -168,7 +171,7 @@ class APIVisionHelper(BaseVisionHelper):
                 logger.warning("Image entry missing 'data' field")
                 continue
 
-            media_type = img.get("media_type", "image/jpeg")
+            media_type = img.get("media_type", DEFAULT_IMAGE_MEDIA_TYPE)
             filename = img.get("filename")
 
             image_content = self.process_image_payload(data, media_type, filename)

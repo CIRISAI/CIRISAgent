@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 # Maximum image size (20MB default)
 DEFAULT_MAX_IMAGE_SIZE = 20 * 1024 * 1024
 
+# Default media type for images
+DEFAULT_IMAGE_MEDIA_TYPE = "image/jpeg"
+
 
 @runtime_checkable
 class ImageAttachment(Protocol):
@@ -91,12 +94,12 @@ class BaseVisionHelper(ABC):
         # Validate size
         if attachment.size > self.max_image_size:
             logger.warning(
-                f"Image {attachment.filename} too large: {attachment.size} bytes " f"(max {self.max_image_size} bytes)"
+                f"Image {attachment.filename} too large: {attachment.size} bytes (max {self.max_image_size} bytes)"
             )
             return None
 
         # Validate content type
-        content_type = attachment.content_type or "image/jpeg"
+        content_type = attachment.content_type or DEFAULT_IMAGE_MEDIA_TYPE
         if not content_type.startswith("image/"):
             logger.warning(f"Attachment {attachment.filename} is not an image: {content_type}")
             return None
@@ -127,7 +130,7 @@ class BaseVisionHelper(ABC):
     async def url_to_image_content(
         self,
         url: str,
-        media_type: str = "image/jpeg",
+        media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> Optional[ImageContent]:
         """
@@ -155,7 +158,7 @@ class BaseVisionHelper(ABC):
                     # Check size after download
                     if len(image_data) > self.max_image_size:
                         logger.warning(
-                            f"Image from {url} too large: {len(image_data)} bytes " f"(max {self.max_image_size} bytes)"
+                            f"Image from {url} too large: {len(image_data)} bytes (max {self.max_image_size} bytes)"
                         )
                         return None
 
@@ -176,7 +179,7 @@ class BaseVisionHelper(ABC):
     def bytes_to_image_content(
         self,
         data: bytes,
-        media_type: str = "image/jpeg",
+        media_type: str = DEFAULT_IMAGE_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> Optional[ImageContent]:
         """

@@ -311,9 +311,7 @@ class TestDownloadDocumentEdgeCases:
         """Test URL processing when download returns data."""
         with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
             mock_dl.return_value = b"PDF content"
-            result = await helper.process_url_document(
-                "https://example.com/doc.pdf", "application/pdf", "doc.pdf"
-            )
+            result = await helper.process_url_document("https://example.com/doc.pdf", "application/pdf", "doc.pdf")
             assert result == "Extracted"
             mock_dl.assert_called_once()
 
@@ -322,9 +320,7 @@ class TestDownloadDocumentEdgeCases:
         """Test URL processing when download returns None."""
         with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
             mock_dl.return_value = None
-            result = await helper.process_url_document(
-                "https://example.com/doc.pdf", "application/pdf"
-            )
+            result = await helper.process_url_document("https://example.com/doc.pdf", "application/pdf")
             assert result is None
 
     @pytest.mark.asyncio
@@ -332,9 +328,7 @@ class TestDownloadDocumentEdgeCases:
         """Test URL processing when download raises exception."""
         with patch.object(helper, "_download_document", new_callable=AsyncMock) as mock_dl:
             mock_dl.side_effect = Exception("Network error")
-            result = await helper.process_url_document(
-                "https://example.com/doc.pdf", "application/pdf"
-            )
+            result = await helper.process_url_document("https://example.com/doc.pdf", "application/pdf")
             assert result is None
 
 

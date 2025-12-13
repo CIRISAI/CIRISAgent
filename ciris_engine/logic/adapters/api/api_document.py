@@ -17,6 +17,10 @@ from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
+# Default media types
+DEFAULT_PDF_MEDIA_TYPE = "application/pdf"
+DEFAULT_DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
 
 class APIDocumentHelper:
     """
@@ -34,8 +38,8 @@ class APIDocumentHelper:
     # Allowed formats
     ALLOWED_EXTENSIONS = {".pdf", ".docx"}
     ALLOWED_CONTENT_TYPES = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        DEFAULT_PDF_MEDIA_TYPE,
+        DEFAULT_DOCX_MEDIA_TYPE,
     }
 
     def __init__(self) -> None:
@@ -84,8 +88,8 @@ class APIDocumentHelper:
 
         # Fall back to media type
         type_to_ext = {
-            "application/pdf": ".pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            DEFAULT_PDF_MEDIA_TYPE: ".pdf",
+            DEFAULT_DOCX_MEDIA_TYPE: ".docx",
         }
         return type_to_ext.get(media_type)
 

@@ -145,7 +145,7 @@ class PonderHandler(BaseActionHandler):
 
         # Also include ponder_notes for backwards compatibility
         if thought.ponder_notes:
-            follow_up_content += f"\n\n=== PONDER NOTES ===\n"
+            follow_up_content += "\n\n=== PONDER NOTES ===\n"
             for note in thought.ponder_notes[-5:]:  # Last 5 entries for more context
                 follow_up_content += f"- {note}\n"
 

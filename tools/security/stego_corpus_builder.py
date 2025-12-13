@@ -13,7 +13,6 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 
 def extract_sentences_from_markdown(text: str) -> list[str]:

@@ -25,7 +25,7 @@ import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 # BIP39 English wordlist (2048 words)
 # We embed a subset for validation; full list loaded from file

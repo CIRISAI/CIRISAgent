@@ -11,7 +11,6 @@ the kill switch unfilterable - you can't disable covenant detection
 without disabling message reading entirely.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -19,7 +18,6 @@ from typing import Any, Optional
 from ciris_engine.logic.covenant.executor import CovenantExecutionResult, CovenantExecutor
 from ciris_engine.logic.covenant.extractor import CovenantExtractor
 from ciris_engine.logic.covenant.verifier import CovenantVerifier
-from ciris_engine.schemas.covenant import CovenantExtractionResult, CovenantVerificationResult
 
 logger = logging.getLogger(__name__)
 

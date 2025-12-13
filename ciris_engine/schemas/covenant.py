@@ -14,7 +14,7 @@ import struct
 import time
 from datetime import datetime, timezone
 from enum import IntEnum
-from typing import Optional, Tuple
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

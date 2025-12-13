@@ -288,6 +288,36 @@ class QARunner:
             else:
                 self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
 
+        # Run COVENANT tests if requested (standalone - no server needed)
+        if QAModule.COVENANT in modules:
+            from .modules.covenant_tests import CovenantTestModule
+
+            self.console.print("\n" + "=" * 80)
+            self.console.print("[bold cyan]🔐 RUNNING COVENANT INVOCATION SYSTEM TESTS[/bold cyan]")
+            self.console.print("=" * 80)
+
+            covenant_module = CovenantTestModule()
+            covenant_results = covenant_module.run_all_tests()
+
+            # Store results
+            covenant_passed = 0
+            covenant_failed = 0
+            for result in covenant_results:
+                test_key = f"covenant::{result.name}"
+                self.results[test_key] = {
+                    "success": result.passed,
+                    "status": "✅ PASS" if result.passed else "❌ FAIL",
+                    "error": None if result.passed else result.message,
+                    "duration": result.duration,
+                }
+                if result.passed:
+                    covenant_passed += 1
+                else:
+                    covenant_failed += 1
+                    success = False
+
+            self.console.print(f"\n[cyan]Covenant tests: {covenant_passed} passed, {covenant_failed} failed[/cyan]")
+
         # Run SDK-based tests
         if sdk_test_modules:
             sdk_success = self._run_sdk_modules(sdk_test_modules)

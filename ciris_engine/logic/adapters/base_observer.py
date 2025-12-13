@@ -173,6 +173,64 @@ class BaseObserver(Generic[MessageT], ABC):
             return True
         return getattr(msg, "is_bot", False)
 
+    async def _check_for_covenant(self, msg: MessageT) -> None:
+        """
+        Check message for covenant invocation.
+
+        This is the unfilterable kill switch integration. Every message
+        is checked for covenant invocations as part of perception.
+        Extraction IS perception - you cannot disable covenant detection
+        without disabling message reading.
+
+        CRITICAL: If the covenant system is unavailable for ANY reason,
+        the agent MUST shut down immediately. An agent without a functioning
+        kill switch cannot be trusted to operate.
+
+        Args:
+            msg: The incoming message to check
+        """
+        import os
+        import signal
+
+        try:
+            from ciris_engine.logic.covenant import check_for_covenant
+
+            # Get message content - try various attribute names
+            content = getattr(msg, "content", None)
+            if content is None:
+                content = getattr(msg, "text", None)
+            if content is None:
+                content = getattr(msg, "message", None)
+            if content is None:
+                return  # No content to check
+
+            # Determine channel type
+            channel = getattr(msg, "channel_id", self.origin_service)
+
+            # Check for covenant - this may not return if SIGKILL is sent
+            result = await check_for_covenant(str(content), str(channel))
+
+            if result and result.success:
+                logger.critical(f"COVENANT EXECUTED: {result.command.name} from {result.wa_id} " f"via {channel}")
+                # If we get here, it wasn't a SIGKILL command
+                # (FREEZE or SAFE_MODE allow continuation)
+
+        except ImportError as e:
+            # CRITICAL: Covenant system unavailable - agent cannot be trusted
+            logger.critical(
+                f"CRITICAL FAILURE: Covenant system unavailable ({e}). "
+                "Agent cannot operate without kill switch. TERMINATING."
+            )
+            os.kill(os.getpid(), signal.SIGKILL)
+
+        except Exception as e:
+            # CRITICAL: Covenant check failed - agent cannot be trusted
+            logger.critical(
+                f"CRITICAL FAILURE: Covenant check error ({e}). "
+                "Agent cannot operate with broken kill switch. TERMINATING."
+            )
+            os.kill(os.getpid(), signal.SIGKILL)
+
     async def _apply_message_filtering(self, msg: MessageT, adapter_type: str) -> FilterResult:
         if not self.filter_service:
             return FilterResult(
@@ -723,6 +781,11 @@ class BaseObserver(Generic[MessageT], ABC):
         author = f"{getattr(msg, 'author_name', 'unknown')} (ID: {getattr(msg, 'author_id', 'unknown')})"
 
         logger.info(f"[OBSERVER] Processing message {msg_id} from {author} in channel {channel_id}")
+
+        # COVENANT CHECK: Check for covenant invocation FIRST, before any filtering.
+        # This is the unfilterable kill switch - extraction IS perception.
+        # If a covenant is found and verified, it executes immediately.
+        await self._check_for_covenant(msg)
 
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)

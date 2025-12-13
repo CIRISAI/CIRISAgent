@@ -124,7 +124,9 @@ class TestCovenantHandler:
     def test_auto_load_no_authorities_terminates(self):
         """Auto-load mode with no authorities should terminate."""
         with patch("os.kill") as mock_kill:
-            with patch("ciris_engine.logic.covenant.verifier.CovenantVerifier._load_default_authorities", return_value=0):
+            with patch(
+                "ciris_engine.logic.covenant.verifier.CovenantVerifier._load_default_authorities", return_value=0
+            ):
                 from ciris_engine.logic.covenant.handler import CovenantHandler
 
                 # This should trigger SIGKILL because auto_load=True but no authorities loaded

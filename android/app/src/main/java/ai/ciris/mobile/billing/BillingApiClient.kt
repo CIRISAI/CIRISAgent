@@ -2,6 +2,7 @@ package ai.ciris.mobile.billing
 
 import android.content.Context
 import android.util.Log
+import ai.ciris.mobile.config.CIRISConfig
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import okhttp3.MediaType.Companion.toMediaType
@@ -81,8 +82,9 @@ class BillingApiClient(
         // Local Python server URL - must match MainActivity.SERVER_URL
         const val DEFAULT_LOCAL_API_URL = "http://localhost:8080"
 
-        // External billing API URL for Google Play purchase verification only
-        const val BILLING_BACKEND_URL = "https://billing.ciris.ai"
+        // External billing API URL - use CIRISConfig.getBillingApiUrl() instead
+        @Deprecated("Use CIRISConfig.getBillingApiUrl() instead")
+        val BILLING_BACKEND_URL: String get() = CIRISConfig.getBillingApiUrl()
 
         private const val PREFS_NAME = "ciris_settings"
         private const val KEY_BILLING_API_URL = "billing_api_url"
@@ -127,7 +129,8 @@ class BillingApiClient(
             }
 
             val content = envFile.readText()
-            val isCirisProxy = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            // Use centralized config to check all known CIRIS proxy hostnames
+            val isCirisProxy = CIRISConfig.isCirisProxyUrl(content)
             Log.d(TAG, "isCirisProxyMode: $isCirisProxy (from .env file)")
             return isCirisProxy
         } catch (e: Exception) {

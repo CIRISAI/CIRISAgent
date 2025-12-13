@@ -37,6 +37,7 @@ import ai.ciris.mobile.auth.TokenRefreshManager
 import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
 import ai.ciris.mobile.billing.TokenRefreshResult
+import ai.ciris.mobile.config.CIRISConfig
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
@@ -2456,9 +2457,9 @@ class MainActivity : AppCompatActivity() {
             var content = envFile.readText()
 
             // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
-            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If API base contains a CIRIS proxy hostname, we're using the CIRIS proxy and need to update OPENAI_API_KEY
             // If not, we're in BYOK mode and should NOT overwrite the user's API key
-            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            val isCirisProxyMode = CIRISConfig.isCirisProxyUrl(content)
 
             if (isCirisProxyMode) {
                 // CIRIS proxy mode: Update OPENAI_API_KEY with Google token

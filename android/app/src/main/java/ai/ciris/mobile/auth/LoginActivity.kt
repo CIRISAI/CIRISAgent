@@ -114,16 +114,9 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun attemptSilentSignIn() {
-        // Check if already signed in with Google
-        val existingAccount = googleSignInHelper.getLastSignedInAccount()
-        if (existingAccount != null) {
-            Log.i(TAG, "Already signed in with Google, checking token validity")
-            googleSignInHelper.logTokenDiagnostics("ExistingAccount", existingAccount.idToken)
-            proceedToMain(AUTH_METHOD_GOOGLE, existingAccount)
-            return
-        }
-
-        // Try silent sign-in for Google
+        // ALWAYS call silentSignIn() to get a fresh token
+        // DO NOT use getLastSignedInAccount() directly - it returns cached tokens that may be expired
+        // The silentSignIn() function checks token validity and refreshes if needed
         showProgress(true, "Checking sign-in status...")
         googleSignInHelper.silentSignIn { result ->
             runOnUiThread {

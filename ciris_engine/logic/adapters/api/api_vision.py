@@ -132,8 +132,8 @@ class APIVisionHelper(BaseVisionHelper):
         Returns:
             ImageContent object or None if processing failed
         """
-        # Detect URL vs base64
-        if image_data.startswith(("http://", "https://")):
+        # Detect URL vs base64 (checking format, not making connections)
+        if image_data.startswith(("http://", "https://")):  # NOSONAR - format detection only
             return self.url_to_image_content_sync(image_data, media_type, filename)
         else:
             return self.base64_to_image_content(image_data, media_type, filename)

@@ -245,8 +245,8 @@ class APIDocumentHelper:
         Returns:
             Extracted text or None if processing failed
         """
-        # Detect URL vs base64
-        if document_data.startswith(("http://", "https://")):
+        # Detect URL vs base64 (checking format, not making connections)
+        if document_data.startswith(("http://", "https://")):  # NOSONAR - format detection only
             return await self.process_url_document(document_data, media_type, filename)
         else:
             return await self.process_base64_document(document_data, media_type, filename)

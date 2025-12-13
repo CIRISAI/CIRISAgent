@@ -60,12 +60,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         logger.info(f"  - Deferral channel: {self.deferral_channel_id}")
         logger.info(f"  - WA user IDs: {self.wa_user_ids}")
 
-        # Initialize vision helper
+        # Initialize vision helper (native multimodal is always available)
         self._vision_helper = DiscordVisionHelper()
-        if self._vision_helper.is_available():
-            logger.info("Discord Vision Helper initialized - image processing enabled")
-        else:
-            logger.warning("Discord Vision Helper not available - set CIRIS_OPENAI_VISION_KEY to enable")
+        logger.info("Discord Vision Helper initialized - native multimodal image processing enabled")
 
     async def _send_deferral_message(self, content: str) -> None:
         """Send a message to the deferral channel."""

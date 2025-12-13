@@ -115,9 +115,11 @@ class LoginActivity : AppCompatActivity() {
 
     private fun attemptSilentSignIn() {
         // Check if already signed in with Google
-        if (googleSignInHelper.isSignedIn()) {
-            Log.i(TAG, "Already signed in with Google, proceeding to main")
-            proceedToMain(AUTH_METHOD_GOOGLE)
+        val existingAccount = googleSignInHelper.getLastSignedInAccount()
+        if (existingAccount != null) {
+            Log.i(TAG, "Already signed in with Google, checking token validity")
+            googleSignInHelper.logTokenDiagnostics("ExistingAccount", existingAccount.idToken)
+            proceedToMain(AUTH_METHOD_GOOGLE, existingAccount)
             return
         }
 
@@ -128,7 +130,9 @@ class LoginActivity : AppCompatActivity() {
                 when (result) {
                     is GoogleSignInHelper.SignInResult.Success -> {
                         Log.i(TAG, "Silent sign-in successful")
-                        proceedToMain(AUTH_METHOD_GOOGLE)
+                        googleSignInHelper.logTokenDiagnostics("SilentSignIn", result.account.idToken)
+                        // Pass the fresh account from silent sign-in result
+                        proceedToMain(AUTH_METHOD_GOOGLE, result.account)
                     }
                     is GoogleSignInHelper.SignInResult.Error -> {
                         Log.i(TAG, "Silent sign-in failed, showing options")
@@ -151,6 +155,9 @@ class LoginActivity : AppCompatActivity() {
         proceedToMain(AUTH_METHOD_API_KEY)
     }
 
+    // Store the fresh token from interactive sign-in to avoid cache issues
+    private var freshSignInToken: String? = null
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -159,8 +166,24 @@ class LoginActivity : AppCompatActivity() {
             when (result) {
                 is GoogleSignInHelper.SignInResult.Success -> {
                     Log.i(TAG, "Sign-in successful: ${result.account.email}")
+
+                    // CRITICAL: Store the fresh token from the sign-in result directly
+                    // Do NOT use getLastSignedInAccount() which may return a stale cached token
+                    freshSignInToken = result.account.idToken
+                    Log.i(TAG, "[TokenFlow] Fresh token obtained from sign-in result")
+                    googleSignInHelper.logTokenDiagnostics("InteractiveSignIn", freshSignInToken)
+
+                    // Also log what getLastSignedInAccount() would return for comparison
+                    val cachedToken = googleSignInHelper.getIdToken()
+                    Log.i(TAG, "[TokenFlow] Cached token from getLastSignedInAccount():")
+                    googleSignInHelper.logTokenDiagnostics("CachedAccount", cachedToken)
+
+                    if (freshSignInToken != cachedToken) {
+                        Log.w(TAG, "[TokenFlow] WARNING: Fresh token differs from cached token!")
+                    }
+
                     Toast.makeText(this, "Welcome, ${result.account.displayName}!", Toast.LENGTH_SHORT).show()
-                    proceedToMain(AUTH_METHOD_GOOGLE)
+                    proceedToMain(AUTH_METHOD_GOOGLE, result.account)
                 }
                 is GoogleSignInHelper.SignInResult.Error -> {
                     Log.e(TAG, "Sign-in error: ${result.statusCode}")
@@ -171,8 +194,21 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Proceed to main activity with API key auth (no Google account).
+     */
     private fun proceedToMain(authMethod: String) {
-        Log.i(TAG, "[Auth Flow] proceedToMain called with authMethod: $authMethod")
+        proceedToMain(authMethod, null)
+    }
+
+    /**
+     * Proceed to main activity, optionally with a fresh Google account from sign-in.
+     *
+     * IMPORTANT: When account is provided, use token directly from it to avoid cache issues.
+     * Do NOT call getLastSignedInAccount() which may return stale cached data.
+     */
+    private fun proceedToMain(authMethod: String, freshAccount: com.google.android.gms.auth.api.signin.GoogleSignInAccount?) {
+        Log.i(TAG, "[Auth Flow] proceedToMain called with authMethod: $authMethod, freshAccount: ${freshAccount != null}")
 
         // Save the user's auth method choice for future launches
         val prefs = getSharedPreferences("ciris_auth", MODE_PRIVATE)
@@ -183,17 +219,26 @@ class LoginActivity : AppCompatActivity() {
             putExtra("auth_method", authMethod)
 
             if (authMethod == AUTH_METHOD_GOOGLE) {
-                // Pass Google user info including ID token for native auth
-                val googleUserId = googleSignInHelper.getGoogleUserId()
-                val googleIdToken = googleSignInHelper.getIdToken()
-                val userEmail = googleSignInHelper.getUserEmail()
-                val userName = googleSignInHelper.getUserDisplayName()
-                val userPhotoUrl = googleSignInHelper.getUserPhotoUrl()
+                // CRITICAL: Use freshAccount if available, otherwise fall back to cached
+                // This fixes the bug where stale cached tokens were used after interactive sign-in
+                val account = freshAccount ?: googleSignInHelper.getLastSignedInAccount()
+
+                if (freshAccount != null) {
+                    Log.i(TAG, "[Auth Flow] Using FRESH account from sign-in result")
+                } else {
+                    Log.i(TAG, "[Auth Flow] Using CACHED account from getLastSignedInAccount()")
+                }
+
+                val googleUserId = account?.id
+                val googleIdToken = account?.idToken
+                val userEmail = account?.email
+                val userName = account?.displayName
+                val userPhotoUrl = account?.photoUrl?.toString()
                 val marketingOptIn = marketingCheckbox.isChecked
 
                 Log.i(TAG, "[Auth Flow] Google auth data:")
                 Log.i(TAG, "[Auth Flow]   google_user_id: ${googleUserId ?: "(null)"}")
-                Log.i(TAG, "[Auth Flow]   google_id_token: ${if (googleIdToken != null) "${googleIdToken.take(20)}... (${googleIdToken.length} chars)" else "(null)"}")
+                googleSignInHelper.logTokenDiagnostics("ProceedToMain", googleIdToken)
                 Log.i(TAG, "[Auth Flow]   user_email: ${userEmail ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_name: ${userName ?: "(null)"}")
                 Log.i(TAG, "[Auth Flow]   user_photo_url: ${userPhotoUrl ?: "(null)"}")

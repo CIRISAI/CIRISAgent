@@ -16,24 +16,24 @@ class TestCovenantHandler:
     @pytest.fixture
     def handler_with_authority(self):
         """Create handler with a test authority."""
-        with patch("os.kill"):
-            from ciris_engine.logic.covenant.handler import CovenantHandler
-            from tools.security.covenant_keygen import derive_covenant_keypair
+        # No patch needed - auto_load_authorities=False skips the kill check
+        from ciris_engine.logic.covenant.handler import CovenantHandler
+        from tools.security.covenant_keygen import derive_covenant_keypair
 
-            # Create handler without auto-loading (to avoid SIGKILL)
-            handler = CovenantHandler(auto_load_authorities=False)
-            handler._verifier._authorities = []
+        # Create handler without auto-loading
+        handler = CovenantHandler(auto_load_authorities=False)
+        handler._verifier._authorities = []
 
-            # Add test authority
-            mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-            private_bytes, public_bytes, _ = derive_covenant_keypair(mnemonic)
-            handler.add_authority("wa-test-001", public_bytes, "ROOT")
+        # Add test authority
+        mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        private_bytes, public_bytes, _ = derive_covenant_keypair(mnemonic)
+        handler.add_authority("wa-test-001", public_bytes, "ROOT")
 
-            # Store keypair for test use
-            handler._test_private_key = private_bytes
-            handler._test_public_key = public_bytes
+        # Store keypair for test use
+        handler._test_private_key = private_bytes
+        handler._test_public_key = public_bytes
 
-            return handler
+        return handler
 
     @pytest.mark.asyncio
     async def test_check_message_no_covenant(self, handler_with_authority):
@@ -120,6 +120,35 @@ class TestCovenantHandler:
 
             # Should have called SIGKILL
             mock_kill.assert_called()
+
+    def test_auto_load_no_authorities_terminates(self):
+        """Auto-load mode with no authorities should terminate."""
+        with patch("os.kill") as mock_kill:
+            with patch("ciris_engine.logic.covenant.verifier.CovenantVerifier._load_default_authorities", return_value=0):
+                from ciris_engine.logic.covenant.handler import CovenantHandler
+
+                # This should trigger SIGKILL because auto_load=True but no authorities loaded
+                CovenantHandler(auto_load_authorities=True)
+                mock_kill.assert_called()
+
+    def test_handler_properties(self, handler_with_authority):
+        """Should expose count properties."""
+        assert handler_with_authority.extraction_count >= 0
+        assert handler_with_authority.potential_covenant_count >= 0
+        assert handler_with_authority.verified_count >= 0
+        assert handler_with_authority.executed_count >= 0
+
+    @pytest.mark.asyncio
+    async def test_stats_with_last_covenant(self, handler_with_authority):
+        """Stats should include last_covenant_at after execution."""
+        from datetime import datetime, timezone
+
+        # Manually set last_covenant_at to test serialization
+        handler_with_authority._last_covenant_at = datetime.now(timezone.utc)
+
+        stats = handler_with_authority.get_stats()
+        assert stats["last_covenant_at"] is not None
+        assert isinstance(stats["last_covenant_at"], str)  # ISO format string
 
 
 class TestGetCovenantHandler:

@@ -58,8 +58,10 @@ class CovenantHandler:
         self._enabled = True
         self._last_covenant_at: Optional[datetime] = None
 
-        # Verify we have authorities - this is critical
-        if self._verifier.authority_count == 0:
+        # Verify we have authorities - this is critical for auto-load mode
+        # When auto_load_authorities=False, caller is responsible for adding
+        # authorities via add_authority() before operational use
+        if auto_load_authorities and self._verifier.authority_count == 0:
             import os
             import signal
 

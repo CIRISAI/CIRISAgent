@@ -399,7 +399,7 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
         # Attach to resource monitor
         resource_monitor.credit_provider = provider
         logger.info(
-            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider:\n" "  base_url: %s\n" "  token_length: %d",
+            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: base_url=%s, token_length=%d",
             billing_url,
             len(google_token),
         )

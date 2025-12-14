@@ -17,15 +17,20 @@ from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRISRuntime
+from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRIS_PROXY_DOMAINS, CIRISRuntime
 
 
 class TestCIRISProxyDomainConstant:
     """Tests for CIRIS_PROXY_DOMAIN constant."""
 
     def test_constant_value(self):
-        """CIRIS_PROXY_DOMAIN has expected value."""
+        """CIRIS_PROXY_DOMAIN has expected value (backwards compat)."""
         assert CIRIS_PROXY_DOMAIN == "ciris.ai"
+
+    def test_domains_tuple_value(self):
+        """CIRIS_PROXY_DOMAINS includes legacy and new infrastructure."""
+        assert "ciris.ai" in CIRIS_PROXY_DOMAINS
+        assert "ciris-services" in CIRIS_PROXY_DOMAINS
 
 
 class TestIsUsingCirisProxy:
@@ -47,6 +52,12 @@ class TestIsUsingCirisProxy:
     def test_returns_true_for_billing_url(self, runtime):
         """Returns True when URL contains ciris.ai domain."""
         with patch.dict(os.environ, {"OPENAI_API_BASE": "https://api.ciris.ai/llm"}):
+            result = runtime._is_using_ciris_proxy()
+            assert result is True
+
+    def test_returns_true_for_ciris_services_url(self, runtime):
+        """Returns True when URL contains ciris-services domain."""
+        with patch.dict(os.environ, {"OPENAI_API_BASE": "https://proxy1.ciris-services-1.ai/v1"}):
             result = runtime._is_using_ciris_proxy()
             assert result is True
 
@@ -128,7 +139,7 @@ class TestCreateBillingProvider:
                 mock_provider_class.assert_called_once()
                 call_kwargs = mock_provider_class.call_args[1]
                 assert call_kwargs["google_id_token"] == "test-token"
-                assert call_kwargs["base_url"] == "https://billing.ciris.ai"
+                assert call_kwargs["base_url"] == "https://billing1.ciris-services-1.ai"
                 assert call_kwargs["timeout_seconds"] == 5.0
                 assert call_kwargs["cache_ttl_seconds"] == 15
                 assert call_kwargs["fail_open"] is False

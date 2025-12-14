@@ -74,7 +74,10 @@ from .service_initializer import ServiceInitializer
 
 logger = logging.getLogger(__name__)
 
-# Domain identifier for CIRIS proxy services (LLM, billing)
+# Domain identifiers for CIRIS proxy services (LLM, billing)
+# Includes legacy ciris.ai and new ciris-services infrastructure
+CIRIS_PROXY_DOMAINS = ("ciris.ai", "ciris-services")
+# Keep single domain for backwards compatibility (tests)
 CIRIS_PROXY_DOMAIN = "ciris.ai"
 
 
@@ -1513,7 +1516,7 @@ class CIRISRuntime:
     def _is_using_ciris_proxy(self) -> bool:
         """Check if runtime is configured to use CIRIS proxy."""
         llm_base_url = os.getenv("OPENAI_API_BASE", "")
-        return CIRIS_PROXY_DOMAIN in llm_base_url
+        return any(domain in llm_base_url for domain in CIRIS_PROXY_DOMAINS)
 
     def _create_billing_token_handler(self, credit_provider: Any) -> Callable[..., Any]:
         """Create handler for billing token refresh signals."""
@@ -1557,7 +1560,7 @@ class CIRISRuntime:
             return
 
         base_url = getattr(service.openai_config, "base_url", "") or ""
-        if CIRIS_PROXY_DOMAIN not in base_url:
+        if not any(domain in base_url for domain in CIRIS_PROXY_DOMAINS):
             return
 
         service.update_api_key(new_token)

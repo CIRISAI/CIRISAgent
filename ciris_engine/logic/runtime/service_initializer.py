@@ -213,8 +213,9 @@ class ServiceInitializer:
         is_android = "ANDROID_DATA" in os.environ
 
         # Check if using CIRIS LLM proxy (Android only - billing required for proxy)
+        # Matches both legacy ciris.ai and new ciris-services infrastructure
         llm_base_url = os.getenv("OPENAI_API_BASE", "")
-        using_ciris_proxy = "llm.ciris.ai" in llm_base_url or "ciris.ai" in llm_base_url
+        using_ciris_proxy = "ciris.ai" in llm_base_url or "ciris-services" in llm_base_url
 
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")

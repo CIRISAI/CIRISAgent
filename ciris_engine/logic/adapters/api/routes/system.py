@@ -1479,6 +1479,34 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
     )
 
 
+def _check_platform_requirements_satisfied(platform_requirements: List[str]) -> bool:
+    """Check if current platform satisfies the given requirements.
+
+    Args:
+        platform_requirements: List of requirement strings
+
+    Returns:
+        True if platform satisfies all requirements, False otherwise
+    """
+    if not platform_requirements:
+        return True
+
+    from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
+    from ciris_engine.schemas.platform import PlatformRequirement
+
+    try:
+        caps = detect_platform_capabilities()
+        req_enums = []
+        for req_str in platform_requirements:
+            try:
+                req_enums.append(PlatformRequirement(req_str))
+            except ValueError:
+                pass  # Unknown requirement, skip
+        return caps.satisfies(req_enums)
+    except Exception:
+        return False
+
+
 def _should_filter_adapter(manifest_data: Dict[str, Any], filter_by_platform: bool = True) -> bool:
     """Check if an adapter should be filtered from public listings.
 
@@ -1520,42 +1548,24 @@ def _should_filter_adapter(manifest_data: Dict[str, Any], filter_by_platform: bo
     # Filter adapters that don't meet platform requirements
     if filter_by_platform:
         platform_requirements = manifest_data.get("platform_requirements", [])
-        if platform_requirements:
-            from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
-            from ciris_engine.schemas.platform import PlatformRequirement
-
-            try:
-                caps = detect_platform_capabilities()
-                req_enums = []
-                for req_str in platform_requirements:
-                    try:
-                        req_enums.append(PlatformRequirement(req_str))
-                    except ValueError:
-                        pass  # Unknown requirement, skip
-                if not caps.satisfies(req_enums):
-                    return True
-            except Exception:
-                # If we can't check platform, filter to be safe
-                return True
+        if not _check_platform_requirements_satisfied(platform_requirements):
+            return True
 
     return False
 
 
-def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
-    """Parse a module manifest into a ModuleTypeInfo."""
-    from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
-    from ciris_engine.schemas.platform import PlatformRequirement
-
-    module_info = manifest_data.get("module", {})
-
-    # Extract service types from services list
+def _extract_service_types(manifest_data: Dict[str, Any]) -> List[str]:
+    """Extract unique service types from manifest services list."""
     service_types = []
     for svc in manifest_data.get("services", []):
         svc_type = svc.get("type", "")
         if svc_type and svc_type not in service_types:
             service_types.append(svc_type)
+    return service_types
 
-    # Parse configuration parameters
+
+def _parse_config_parameters(manifest_data: Dict[str, Any]) -> List[ModuleConfigParameter]:
+    """Parse configuration parameters from manifest."""
     config_params: List[ModuleConfigParameter] = []
     for param_name, param_data in manifest_data.get("configuration", {}).items():
         if isinstance(param_data, dict):
@@ -1570,12 +1580,21 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
                     sensitivity=param_data.get("sensitivity"),
                 )
             )
+    return config_params
+
+
+def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
+    """Parse a module manifest into a ModuleTypeInfo."""
+    module_info = manifest_data.get("module", {})
+
+    # Extract service types and config params using helpers
+    service_types = _extract_service_types(manifest_data)
+    config_params = _parse_config_parameters(manifest_data)
 
     # Extract external dependencies
-    external_deps: Dict[str, str] = {}
     deps = manifest_data.get("dependencies", {})
-    if isinstance(deps, dict):
-        external_deps = deps.get("external", {}) or {}
+    external_deps = deps.get("external", {}) if isinstance(deps, dict) else {}
+    external_deps = external_deps or {}
 
     # Extract metadata
     metadata = manifest_data.get("metadata", {})
@@ -1586,22 +1605,8 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
     platform_requirements = manifest_data.get("platform_requirements", [])
     platform_requirements_rationale = manifest_data.get("platform_requirements_rationale")
 
-    # Check if current platform meets requirements
-    platform_available = True
-    if platform_requirements:
-        try:
-            caps = detect_platform_capabilities()
-            # Convert string requirements to PlatformRequirement enums
-            req_enums = []
-            for req_str in platform_requirements:
-                try:
-                    req_enums.append(PlatformRequirement(req_str))
-                except ValueError:
-                    logger.warning("Unknown platform requirement: %s", req_str)
-            platform_available = caps.satisfies(req_enums)
-        except Exception as e:
-            logger.warning("Error checking platform requirements: %s", e)
-            platform_available = False
+    # Check platform availability using shared helper
+    platform_available = _check_platform_requirements_satisfied(platform_requirements)
 
     return ModuleTypeInfo(
         module_id=module_id,
@@ -1716,6 +1721,9 @@ async def _discover_services_via_entry_points() -> List[ModuleTypeInfo]:
     This is the preferred discovery method as it works across all platforms
     including Android where filesystem iteration may fail. Entry points are
     defined in setup.py under the 'ciris.adapters' group.
+
+    Note: This function is async for API consistency even though the underlying
+    operations are synchronous. This allows uniform await usage in callers.
     """
     from importlib.metadata import entry_points
     from typing import Iterable

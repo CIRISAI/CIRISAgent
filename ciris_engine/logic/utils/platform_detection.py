@@ -178,7 +178,6 @@ def detect_platform_capabilities() -> PlatformCapabilities:
         PlatformCapabilities object with detected platform and capabilities
     """
     platform = get_platform_name()
-    capabilities: set[PlatformRequirement] = set()
 
     # Detect platform-specific capabilities
     if platform == "android":

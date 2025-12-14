@@ -10,10 +10,12 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("/home/emoore/ciris-release-key.jks")
-            storePassword "changeme123"
-            keyAlias "ciris-key"
-            keyPassword "changeme123"
+            // SECURITY: Credentials loaded from environment variables or gradle.properties
+            // Never commit signing credentials to version control
+            storeFile file(System.getenv("CIRIS_KEYSTORE_PATH") ?: "${System.getProperty('user.home')}/ciris-release-key.jks")
+            storePassword System.getenv("CIRIS_KEYSTORE_PASSWORD") ?: findProperty("cirisKeystorePassword") ?: ""
+            keyAlias System.getenv("CIRIS_KEY_ALIAS") ?: findProperty("cirisKeyAlias") ?: "ciris-key"
+            keyPassword System.getenv("CIRIS_KEY_PASSWORD") ?: findProperty("cirisKeyPassword") ?: ""
         }
     }
 
@@ -21,8 +23,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24  // Android 7.0+
         targetSdk 35
-        versionCode 38
-        versionName "1.7.38"
+        versionCode 39
+        versionName "1.7.39"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

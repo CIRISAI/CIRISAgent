@@ -9,10 +9,17 @@ that can only be satisfied on platforms with device attestation:
 - Android: Google Play Integrity API
 - iOS: App Attest (future)
 - Web: DPoP (future)
+
+Credit Model:
+- 10 free searches for new users (one-time welcome bonus)
+- 3 free searches per day (resets at UTC midnight)
+- 1 credit per search after free tier exhausted
+- Credits can be purchased via in-app billing
 """
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -28,8 +35,25 @@ from ciris_engine.schemas.platform import PlatformRequirement
 
 logger = logging.getLogger(__name__)
 
-# Default proxy URL - can be overridden by config
-DEFAULT_PROXY_URL = "https://llm.ciris.ai"
+# Proxy URLs - for tool execution (search, etc.)
+DEFAULT_PROXY_URL = "https://proxy1.ciris-services-1.ai"
+FALLBACK_PROXY_URL = "https://proxy1.ciris-services-2.ai"
+
+# Billing URLs - for balance/credit checking
+DEFAULT_BILLING_URL = "https://billing1.ciris-services-1.ai"
+FALLBACK_BILLING_URL = "https://billing1.ciris-services-2.ai"
+
+
+@dataclass
+class ToolBalance:
+    """Balance information for a hosted tool."""
+
+    product_type: str
+    free_remaining: int
+    paid_credits: int
+    total_available: int
+    price_minor: int  # Price in minor currency units (e.g., cents)
+    total_uses: int
 
 
 class CIRISHostedToolService:
@@ -98,15 +122,24 @@ class CIRISHostedToolService:
 
         Args:
             config: Optional configuration dictionary with:
-                - proxy_url: Base URL for CIRIS proxy (default: https://llm.ciris.ai)
+                - proxy_url: Base URL for CIRIS proxy (default: proxy1.ciris-services-1.ai)
+                - proxy_fallback_url: Fallback proxy URL (default: proxy1.ciris-services-2.ai)
+                - billing_url: Base URL for billing service (default: billing1.ciris-services-1.ai)
+                - billing_fallback_url: Fallback billing URL (default: billing1.ciris-services-2.ai)
                 - timeout: Request timeout in seconds (default: 30)
         """
         self.config = config or {}
+        # Proxy URLs for tool execution
         self._proxy_url = self.config.get("proxy_url", DEFAULT_PROXY_URL)
+        self._proxy_fallback_url = self.config.get("proxy_fallback_url", FALLBACK_PROXY_URL)
+        # Billing URLs for balance/credit checking
+        self._billing_url = self.config.get("billing_url", DEFAULT_BILLING_URL)
+        self._billing_fallback_url = self.config.get("billing_fallback_url", FALLBACK_BILLING_URL)
         self._timeout = self.config.get("timeout", 30.0)
         self._call_count = 0
         self._error_count = 0
-        logger.info(f"CIRISHostedToolService initialized with proxy: {self._proxy_url}")
+        self._cached_balance: Optional[ToolBalance] = None
+        logger.info(f"CIRISHostedToolService initialized with proxy: {self._proxy_url}, billing: {self._billing_url}")
 
     async def start(self) -> None:
         """Start the service."""
@@ -163,9 +196,7 @@ class CIRISHostedToolService:
         required = tool_info.parameters.required or []
         return all(param in parameters for param in required)
 
-    async def get_tool_result(
-        self, correlation_id: str, timeout: float = 30.0
-    ) -> Optional[ToolExecutionResult]:
+    async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         """Get result of previously executed tool. Not used for sync tools."""
         return None
 
@@ -180,6 +211,204 @@ class CIRISHostedToolService:
             }
             for tool in self.TOOL_DEFINITIONS.values()
         ]
+
+    # =========================================================================
+    # Balance Checking Methods
+    # =========================================================================
+
+    async def _make_request(
+        self,
+        method: str,
+        path: str,
+        json_data: Optional[Dict[str, Any]] = None,
+        use_fallback: bool = False,
+        service: str = "proxy",
+    ) -> httpx.Response:
+        """Make a request to a CIRIS service with fallback support.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            path: URL path (e.g., /v1/search)
+            json_data: Optional JSON body for POST requests
+            use_fallback: If True, use fallback URL instead of primary
+            service: Which service to call ("proxy" or "billing")
+
+        Returns:
+            httpx.Response object
+
+        Raises:
+            httpx.RequestError: If request fails
+        """
+        google_token = self._get_google_id_token()
+        headers = {
+            "Authorization": f"Bearer {google_token}" if google_token else "",
+            "Content-Type": "application/json",
+        }
+
+        # Select the appropriate URL based on service and fallback
+        if service == "billing":
+            base_url = self._billing_fallback_url if use_fallback else self._billing_url
+        else:  # proxy
+            base_url = self._proxy_fallback_url if use_fallback else self._proxy_url
+
+        url = f"{base_url}{path}"
+
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            if method.upper() == "GET":
+                return await client.get(url, headers=headers)
+            elif method.upper() == "POST":
+                return await client.post(url, json=json_data, headers=headers)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+
+    async def check_credit(self, tool_name: str = "web_search") -> Optional[bool]:
+        """Quick check if user has credit for a tool.
+
+        This is a lightweight check that doesn't return full balance details.
+
+        Args:
+            tool_name: Name of the tool to check credit for
+
+        Returns:
+            True if user has credit, False if not, None if check failed
+        """
+        google_token = self._get_google_id_token()
+        if not google_token:
+            return None
+
+        try:
+            response = await self._make_request(
+                "GET", f"/v1/tools/check/{tool_name}", service="billing"
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("has_credit", False)
+            return None
+        except httpx.RequestError:
+            # Try fallback
+            try:
+                response = await self._make_request(
+                    "GET", f"/v1/tools/check/{tool_name}", use_fallback=True, service="billing"
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("has_credit", False)
+            except httpx.RequestError:
+                pass
+            return None
+
+    async def get_balance(self, tool_name: str = "web_search") -> Optional[ToolBalance]:
+        """Get detailed balance information for a tool.
+
+        Args:
+            tool_name: Name of the tool to get balance for
+
+        Returns:
+            ToolBalance object with credit details, or None if request failed
+        """
+        google_token = self._get_google_id_token()
+        if not google_token:
+            return None
+
+        try:
+            response = await self._make_request(
+                "GET", f"/v1/tools/balance/{tool_name}", service="billing"
+            )
+            if response.status_code == 200:
+                data = response.json()
+                balance = ToolBalance(
+                    product_type=data.get("product_type", tool_name),
+                    free_remaining=data.get("free_remaining", 0),
+                    paid_credits=data.get("paid_credits", 0),
+                    total_available=data.get("total_available", 0),
+                    price_minor=data.get("price_minor", 1),
+                    total_uses=data.get("total_uses", 0),
+                )
+                self._cached_balance = balance
+                return balance
+            return None
+        except httpx.RequestError:
+            # Try fallback
+            try:
+                response = await self._make_request(
+                    "GET", f"/v1/tools/balance/{tool_name}", use_fallback=True, service="billing"
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    balance = ToolBalance(
+                        product_type=data.get("product_type", tool_name),
+                        free_remaining=data.get("free_remaining", 0),
+                        paid_credits=data.get("paid_credits", 0),
+                        total_available=data.get("total_available", 0),
+                        price_minor=data.get("price_minor", 1),
+                        total_uses=data.get("total_uses", 0),
+                    )
+                    self._cached_balance = balance
+                    return balance
+            except httpx.RequestError:
+                pass
+            return None
+
+    async def get_all_balances(self) -> List[ToolBalance]:
+        """Get balance information for all tools.
+
+        Returns:
+            List of ToolBalance objects for all hosted tools
+        """
+        google_token = self._get_google_id_token()
+        if not google_token:
+            return []
+
+        try:
+            response = await self._make_request("GET", "/v1/tools/balance", service="billing")
+            if response.status_code == 200:
+                data = response.json()
+                balances = []
+                for item in data.get("balances", []):
+                    balances.append(
+                        ToolBalance(
+                            product_type=item.get("product_type", "unknown"),
+                            free_remaining=item.get("free_remaining", 0),
+                            paid_credits=item.get("paid_credits", 0),
+                            total_available=item.get("total_available", 0),
+                            price_minor=item.get("price_minor", 1),
+                            total_uses=item.get("total_uses", 0),
+                        )
+                    )
+                return balances
+            return []
+        except httpx.RequestError:
+            # Try fallback
+            try:
+                response = await self._make_request(
+                    "GET", "/v1/tools/balance", use_fallback=True, service="billing"
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    balances = []
+                    for item in data.get("balances", []):
+                        balances.append(
+                            ToolBalance(
+                                product_type=item.get("product_type", "unknown"),
+                                free_remaining=item.get("free_remaining", 0),
+                                paid_credits=item.get("paid_credits", 0),
+                                total_available=item.get("total_available", 0),
+                                price_minor=item.get("price_minor", 1),
+                                total_uses=item.get("total_uses", 0),
+                            )
+                        )
+                    return balances
+            except httpx.RequestError:
+                pass
+            return []
+
+    def get_cached_balance(self) -> Optional[ToolBalance]:
+        """Get the last cached balance (useful for UI display without API call)."""
+        return self._cached_balance
+
+    # =========================================================================
+    # Tool Execution
+    # =========================================================================
 
     async def execute_tool(
         self,
@@ -235,10 +464,30 @@ class CIRISHostedToolService:
                 correlation_id=correlation_id,
             )
 
-    async def _execute_web_search(
-        self, parameters: Dict[str, Any], correlation_id: str
-    ) -> ToolExecutionResult:
+    async def _try_search_request(
+        self, payload: Dict[str, Any], use_fallback: bool = False
+    ) -> Optional[httpx.Response]:
+        """Try to make a search request to the proxy.
+
+        Args:
+            payload: Search parameters
+            use_fallback: If True, use fallback proxy URL
+
+        Returns:
+            Response object if successful, None if request failed
+        """
+        try:
+            return await self._make_request(
+                "POST", "/v1/search", json_data=payload, use_fallback=use_fallback, service="proxy"
+            )
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            logger.warning(f"[WEB_SEARCH] Request failed: {e}")
+            return None
+
+    async def _execute_web_search(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute a web search via CIRIS proxy.
+
+        The proxy handles credit charging internally by calling the billing service.
 
         Args:
             parameters: Search parameters (q, count)
@@ -275,99 +524,99 @@ class CIRISHostedToolService:
                 correlation_id=correlation_id,
             )
 
-        # Make request to CIRIS proxy
-        search_url = f"{self._proxy_url}/v1/search"
-        headers = {
-            "Authorization": f"Bearer {google_token}",
-            "Content-Type": "application/json",
-        }
         payload = {"q": query, "count": count}
-
         logger.info(f"[WEB_SEARCH] Searching for: {query[:50]}...")
 
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(search_url, json=payload, headers=headers)
+        # Try primary proxy first, then fallback
+        response = await self._try_search_request(payload, use_fallback=False)
+        if response is None:
+            logger.warning("[WEB_SEARCH] Primary proxy failed, trying fallback...")
+            response = await self._try_search_request(payload, use_fallback=True)
 
-                if response.status_code == 401:
-                    return ToolExecutionResult(
-                        tool_name="web_search",
-                        status=ToolExecutionStatus.UNAUTHORIZED,
-                        success=False,
-                        data=None,
-                        error="Authentication failed. Please sign in again with Google.",
-                        correlation_id=correlation_id,
-                    )
-
-                if response.status_code == 402:
-                    return ToolExecutionResult(
-                        tool_name="web_search",
-                        status=ToolExecutionStatus.FAILED,
-                        success=False,
-                        data=None,
-                        error=(
-                            "No web search credits available. "
-                            "You have 3 free searches per day. "
-                            "Purchase credits for more searches."
-                        ),
-                        correlation_id=correlation_id,
-                    )
-
-                if response.status_code != 200:
-                    error_text = response.text[:200] if response.text else "Unknown error"
-                    return ToolExecutionResult(
-                        tool_name="web_search",
-                        status=ToolExecutionStatus.FAILED,
-                        success=False,
-                        data=None,
-                        error=f"Search failed: HTTP {response.status_code} - {error_text}",
-                        correlation_id=correlation_id,
-                    )
-
-                result = response.json()
-
-                # Extract web results from response
-                web_results = result.get("results", {}).get("web", {}).get("results", [])
-
-                # Format results for agent consumption
-                formatted_results = []
-                for r in web_results:
-                    formatted_results.append({
-                        "title": r.get("title", ""),
-                        "url": r.get("url", ""),
-                        "description": r.get("description", ""),
-                    })
-
-                logger.info(f"[WEB_SEARCH] Got {len(formatted_results)} results for: {query[:50]}")
-
-                return ToolExecutionResult(
-                    tool_name="web_search",
-                    status=ToolExecutionStatus.COMPLETED,
-                    success=True,
-                    data={
-                        "query": query,
-                        "count": len(formatted_results),
-                        "results": formatted_results,
-                    },
-                    error=None,
-                    correlation_id=correlation_id,
-                )
-
-        except httpx.TimeoutException:
-            return ToolExecutionResult(
-                tool_name="web_search",
-                status=ToolExecutionStatus.TIMEOUT,
-                success=False,
-                data=None,
-                error=f"Search timed out after {self._timeout} seconds",
-                correlation_id=correlation_id,
-            )
-        except httpx.RequestError as e:
+        if response is None:
             return ToolExecutionResult(
                 tool_name="web_search",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
                 data=None,
-                error=f"Network error: {str(e)}",
+                error="Search failed: Unable to connect to any proxy server",
                 correlation_id=correlation_id,
             )
+
+        # Handle response status codes
+        if response.status_code == 401:
+            return ToolExecutionResult(
+                tool_name="web_search",
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error="Authentication failed. Please sign in again with Google.",
+                correlation_id=correlation_id,
+            )
+
+        if response.status_code == 402:
+            return ToolExecutionResult(
+                tool_name="web_search",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=(
+                    "No web search credits available. "
+                    "New users get 10 free searches, then 3 free per day. "
+                    "Purchase credits for more searches."
+                ),
+                correlation_id=correlation_id,
+            )
+
+        if response.status_code != 200:
+            error_text = response.text[:200] if response.text else "Unknown error"
+            return ToolExecutionResult(
+                tool_name="web_search",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=f"Search failed: HTTP {response.status_code} - {error_text}",
+                correlation_id=correlation_id,
+            )
+
+        # Parse successful response
+        try:
+            result = response.json()
+        except Exception as e:
+            return ToolExecutionResult(
+                tool_name="web_search",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                data=None,
+                error=f"Failed to parse search response: {e}",
+                correlation_id=correlation_id,
+            )
+
+        # Extract web results from response
+        web_results = result.get("results", {}).get("web", {}).get("results", [])
+
+        # Format results for agent consumption
+        formatted_results = []
+        for r in web_results:
+            formatted_results.append(
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "description": r.get("description", ""),
+                }
+            )
+
+        logger.info(f"[WEB_SEARCH] Got {len(formatted_results)} results for: {query[:50]}")
+
+        return ToolExecutionResult(
+            tool_name="web_search",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={
+                "query": query,
+                "count": len(formatted_results),
+                "results": formatted_results,
+            },
+            error=None,
+            correlation_id=correlation_id,
+        )

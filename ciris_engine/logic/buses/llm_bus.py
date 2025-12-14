@@ -75,7 +75,7 @@ class LLMBusMessage(BusMessage):
 
     messages: List[MessageDict]
     response_model: Type[BaseModel]
-    max_tokens: int = 2048
+    max_tokens: int = 4096
     temperature: float = 0.0
     # For async responses
     future: Optional[asyncio.Future[Any]] = None
@@ -154,7 +154,7 @@ class LLMBus(BaseBus[LLMService]):
         self,
         messages: Union[List[JSONDict], List["LLMMessage"]],
         response_model: Type[BaseModel],
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
         temperature: float = 0.0,
         handler_name: str = "default",
         domain: Optional[str] = None,  # NEW: Domain-aware routing
@@ -264,7 +264,7 @@ class LLMBus(BaseBus[LLMService]):
         messages: List[JSONDict],
         response_model: Type[BaseModel],
         handler_name: str,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
         temperature: float = 0.0,
         domain: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:

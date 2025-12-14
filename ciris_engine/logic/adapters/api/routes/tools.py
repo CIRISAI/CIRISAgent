@@ -279,8 +279,8 @@ async def get_tool_balance(
                     price_minor=data.get("price_minor", 1),
                     total_uses=data.get("total_uses", 0),
                 )
-        except httpx.RequestError:
-            pass
+        except httpx.RequestError as fallback_err:
+            logger.warning(f"[TOOL_BALANCE] Fallback also failed: {fallback_err}")
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
@@ -350,8 +350,8 @@ async def get_all_tool_balances(
                         )
                     )
                 return AllToolBalancesResponse(balances=balances)
-        except httpx.RequestError:
-            pass
+        except httpx.RequestError as fallback_err:
+            logger.warning(f"[TOOL_BALANCE] Fallback also failed: {fallback_err}")
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
@@ -415,8 +415,8 @@ async def check_tool_credit(
                     paid_credits=data.get("paid_credits", 0),
                     total_available=data.get("total_available", 0),
                 )
-        except httpx.RequestError:
-            pass
+        except httpx.RequestError as fallback_err:
+            logger.warning(f"[TOOL_CHECK] Fallback also failed: {fallback_err}")
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
@@ -552,6 +552,6 @@ async def verify_tool_purchase(
                     new_balance=data.get("new_balance", 0),
                     message=data.get("message", "Purchase processed"),
                 )
-        except httpx.RequestError:
-            pass
+        except httpx.RequestError as fallback_err:
+            logger.warning(f"[TOOL_PURCHASE] Fallback also failed: {fallback_err}")
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)

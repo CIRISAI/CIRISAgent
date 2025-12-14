@@ -1479,7 +1479,7 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
     )
 
 
-def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
+def _should_filter_adapter(manifest_data: Dict[str, Any], filter_by_platform: bool = True) -> bool:
     """Check if an adapter should be filtered from public listings.
 
     Filters out:
@@ -1487,9 +1487,11 @@ def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
     - Library modules (metadata.type: "library")
     - Modules with no services (empty services array)
     - Common/utility modules (name ends with _common)
+    - Adapters that don't meet platform requirements (if filter_by_platform=True)
 
     Args:
         manifest_data: The manifest JSON data
+        filter_by_platform: If True, also filter adapters that don't meet platform requirements
 
     Returns:
         True if the adapter should be filtered (hidden), False otherwise
@@ -1515,11 +1517,35 @@ def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
     if module_name.endswith("_common") or module_name.endswith("common"):
         return True
 
+    # Filter adapters that don't meet platform requirements
+    if filter_by_platform:
+        platform_requirements = manifest_data.get("platform_requirements", [])
+        if platform_requirements:
+            from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
+            from ciris_engine.schemas.platform import PlatformRequirement
+
+            try:
+                caps = detect_platform_capabilities()
+                req_enums = []
+                for req_str in platform_requirements:
+                    try:
+                        req_enums.append(PlatformRequirement(req_str))
+                    except ValueError:
+                        pass  # Unknown requirement, skip
+                if not caps.satisfies(req_enums):
+                    return True
+            except Exception:
+                # If we can't check platform, filter to be safe
+                return True
+
     return False
 
 
 def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
     """Parse a module manifest into a ModuleTypeInfo."""
+    from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
+    from ciris_engine.schemas.platform import PlatformRequirement
+
     module_info = manifest_data.get("module", {})
 
     # Extract service types from services list
@@ -1556,6 +1582,27 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
     safe_domain = metadata.get("safe_domain") if isinstance(metadata, dict) else None
     prohibited = metadata.get("prohibited", []) if isinstance(metadata, dict) else []
 
+    # Extract platform requirements
+    platform_requirements = manifest_data.get("platform_requirements", [])
+    platform_requirements_rationale = manifest_data.get("platform_requirements_rationale")
+
+    # Check if current platform meets requirements
+    platform_available = True
+    if platform_requirements:
+        try:
+            caps = detect_platform_capabilities()
+            # Convert string requirements to PlatformRequirement enums
+            req_enums = []
+            for req_str in platform_requirements:
+                try:
+                    req_enums.append(PlatformRequirement(req_str))
+                except ValueError:
+                    logger.warning("Unknown platform requirement: %s", req_str)
+            platform_available = caps.satisfies(req_enums)
+        except Exception as e:
+            logger.warning("Error checking platform requirements: %s", e)
+            platform_available = False
+
     return ModuleTypeInfo(
         module_id=module_id,
         name=module_info.get("name", module_id),
@@ -1572,22 +1619,14 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
         safe_domain=safe_domain if isinstance(safe_domain, str) else None,
         prohibited=prohibited if isinstance(prohibited, list) else [],
         metadata=metadata if isinstance(metadata, dict) else None,
+        platform_requirements=platform_requirements,
+        platform_requirements_rationale=platform_requirements_rationale,
+        platform_available=platform_available,
     )
 
 
-# Known services for Android AssetFinder fallback
-KNOWN_MODULAR_SERVICES = [
-    "mcp_client",
-    "mcp_server",
-    "mock_llm",
-    "reddit",
-    "geo_wisdom",
-    "sensor_wisdom",
-    "weather_wisdom",
-    "external_data_sql",
-    "mcp_common",
-    "ha_integration",
-]
+# Entry point group for adapter discovery (defined in setup.py)
+ADAPTER_ENTRY_POINT_GROUP = "ciris.adapters"
 
 
 async def _read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
@@ -1671,26 +1710,58 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
     return adapters
 
 
-async def _discover_services_by_name() -> List[ModuleTypeInfo]:
-    """Discover modular services from known service names (Android fallback)."""
+async def _discover_services_via_entry_points() -> List[ModuleTypeInfo]:
+    """Discover modular services via importlib.metadata entry points.
+
+    This is the preferred discovery method as it works across all platforms
+    including Android where filesystem iteration may fail. Entry points are
+    defined in setup.py under the 'ciris.adapters' group.
+    """
+    from importlib.metadata import entry_points
+    from typing import Iterable
+
     adapters: List[ModuleTypeInfo] = []
 
-    for svc_name in KNOWN_MODULAR_SERVICES:
-        module_info = _try_load_service_manifest(svc_name)
-        if module_info:
-            adapters.append(module_info)
-            logger.debug("Discovered modular service (known): %s", svc_name)
+    try:
+        # Get entry points - API varies by Python version
+        eps = entry_points()
+
+        # Try the modern API first (Python 3.10+)
+        adapter_eps: Iterable[Any]
+        if hasattr(eps, "select"):
+            # Python 3.10+ with SelectableGroups
+            adapter_eps = eps.select(group=ADAPTER_ENTRY_POINT_GROUP)
+        elif isinstance(eps, dict):
+            # Python 3.9 style dict-like access
+            adapter_eps = eps.get(ADAPTER_ENTRY_POINT_GROUP, [])
+        else:
+            # Fallback - try to iterate or access as needed
+            adapter_eps = getattr(eps, ADAPTER_ENTRY_POINT_GROUP, [])
+
+        for ep in adapter_eps:
+            module_info = _try_load_service_manifest(ep.name)
+            if module_info:
+                adapters.append(module_info)
+                logger.debug("Discovered adapter via entry point: %s", ep.name)
+
+    except Exception as e:
+        logger.warning("Entry point discovery failed: %s", e)
 
     return adapters
 
 
 async def _discover_adapters() -> List[ModuleTypeInfo]:
-    """Discover all available modular services."""
+    """Discover all available modular services.
+
+    Uses a fallback chain:
+    1. Try filesystem iteration (fastest, works in dev)
+    2. Fall back to entry points (works on Android and installed packages)
+    """
     try:
         import ciris_adapters
 
         if not hasattr(ciris_adapters, "__path__"):
-            return []
+            return await _discover_services_via_entry_points()
 
         services_base = Path(ciris_adapters.__path__[0])
         logger.debug("Modular services base path: %s", services_base)
@@ -1698,12 +1769,12 @@ async def _discover_adapters() -> List[ModuleTypeInfo]:
         try:
             return await _discover_services_from_directory(services_base)
         except OSError as e:
-            logger.debug("iterdir failed (%s), trying known service names", e)
-            return await _discover_services_by_name()
+            logger.debug("iterdir failed (%s), falling back to entry points", e)
+            return await _discover_services_via_entry_points()
 
     except ImportError as e:
         logger.debug("ciris_adapters not available: %s", e)
-        return []
+        return await _discover_services_via_entry_points()
 
 
 @router.get("/adapters/types", response_model=SuccessResponse[ModuleTypesResponse])

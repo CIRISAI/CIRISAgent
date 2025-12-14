@@ -77,6 +77,10 @@ class AdapterConfig(BaseModel):
     enabled_by_default: bool = Field(False, description="Whether enabled by default")
     required_env_vars: List[str] = Field(default_factory=list, description="Required environment variables")
     optional_env_vars: List[str] = Field(default_factory=list, description="Optional environment variables")
+    platform_requirements: List[str] = Field(
+        default_factory=list, description="Platform requirements (e.g., 'android_play_integrity')"
+    )
+    platform_available: bool = Field(True, description="Whether available on current platform")
 
 
 class SetupStatusResponse(BaseModel):

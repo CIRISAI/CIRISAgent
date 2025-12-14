@@ -1,0 +1,94 @@
+{
+  "module": {
+    "name": "ciris_hosted_tools",
+    "version": "1.0.0",
+    "description": "CIRIS-hosted tools requiring platform attestation (web search, etc.)",
+    "author": "CIRIS Team",
+    "safe_domain": true
+  },
+  "services": [{
+    "type": "TOOL",
+    "priority": "NORMAL",
+    "class": "ciris_hosted_tools.adapter.CIRISHostedToolsAdapter",
+    "capabilities": [
+      "tool:web_search",
+      "tool:ciris_hosted"
+    ]
+  }],
+  "capabilities": [
+    "tool:web_search",
+    "tool:ciris_hosted"
+  ],
+  "platform_requirements": [
+    "android_play_integrity",
+    "google_native_auth"
+  ],
+  "platform_requirements_rationale": "CIRIS hosted tools require device attestation to prevent API abuse. These tools are only available on Android with Google Play Services. Future support planned for iOS (App Attest) and Web (DPoP).",
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools",
+      "ciris_engine.schemas.platform"
+    ],
+    "external": {
+      "httpx": ">=0.24.0"
+    }
+  },
+  "interactive_config": {
+    "required": false,
+    "workflow_type": "simple_config",
+    "steps": [
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Enable CIRIS Hosted Tools",
+        "description": "This adapter provides web search and other CIRIS-hosted tools. Requires Android with Google Play Services."
+      }
+    ]
+  },
+  "exports": {
+    "service_class": "ciris_hosted_tools.adapter.CIRISHostedToolsAdapter",
+    "capabilities": [
+      "tool:web_search",
+      "tool:ciris_hosted"
+    ]
+  },
+  "configuration": {
+    "proxy_url": {
+      "type": "string",
+      "env": "CIRIS_PROXY_URL",
+      "default": "https://proxy1.ciris-services-1.ai",
+      "description": "Primary CIRIS proxy URL for tool execution"
+    },
+    "proxy_fallback_url": {
+      "type": "string",
+      "env": "CIRIS_PROXY_FALLBACK_URL",
+      "default": "https://proxy1.ciris-services-2.ai",
+      "description": "Fallback CIRIS proxy URL"
+    },
+    "billing_url": {
+      "type": "string",
+      "env": "CIRIS_BILLING_API_URL",
+      "default": "https://billing1.ciris-services-1.ai",
+      "description": "Primary billing service URL"
+    },
+    "billing_fallback_url": {
+      "type": "string",
+      "env": "CIRIS_BILLING_FALLBACK_URL",
+      "default": "https://billing1.ciris-services-2.ai",
+      "description": "Fallback billing service URL"
+    }
+  },
+  "metadata": {
+    "requires_device_attestation": true,
+    "supported_platforms": ["android"],
+    "future_platforms": ["ios", "web"],
+    "billing_model": "credits",
+    "free_tier": {
+      "welcome_bonus": 10,
+      "daily_free": 3
+    }
+  }
+}

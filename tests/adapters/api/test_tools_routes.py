@@ -7,10 +7,11 @@ Tests the /api/tools/* endpoints for:
 - Available tools listing by platform
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 import pytest
 from fastapi import status
-from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
 
 
 class TestToolBalanceEndpoints:
@@ -397,7 +398,7 @@ class TestHelperFunctions:
 
     def test_get_billing_url_default(self):
         """Test default billing URL."""
-        from ciris_engine.logic.adapters.api.routes.tools import _get_billing_url, DEFAULT_BILLING_URL
+        from ciris_engine.logic.adapters.api.routes.tools import DEFAULT_BILLING_URL, _get_billing_url
 
         with patch.dict("os.environ", {}, clear=True):
             # When no env var, should return default

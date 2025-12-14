@@ -167,6 +167,14 @@ class ModuleTypeInfo(BaseModel):
     safe_domain: Optional[str] = Field(None, description="Safe domain classification")
     prohibited: List[str] = Field(default_factory=list, description="Prohibited use cases")
     metadata: Optional[Dict[str, Union[str, bool, List[str]]]] = Field(None, description="Additional metadata")
+    # Platform requirements for this adapter
+    platform_requirements: List[str] = Field(
+        default_factory=list, description="Platform requirements (e.g., 'android_play_integrity', 'google_native_auth')"
+    )
+    platform_requirements_rationale: Optional[str] = Field(
+        None, description="Explanation of why platform requirements exist"
+    )
+    platform_available: bool = Field(True, description="Whether this adapter is available on the current platform")
 
 
 class ModuleTypesResponse(BaseModel):

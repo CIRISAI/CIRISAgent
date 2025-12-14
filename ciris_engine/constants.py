@@ -3,13 +3,13 @@
 from pathlib import Path
 
 # Version information
-CIRIS_VERSION = "1.7.5.1-stable"
+CIRIS_VERSION = "1.7.5.2-stable"
 CIRIS_VERSION_MAJOR = 1
 CIRIS_VERSION_MINOR = 7
 CIRIS_VERSION_PATCH = 5
-CIRIS_VERSION_BUILD = 1
+CIRIS_VERSION_BUILD = 2
 CIRIS_VERSION_STAGE = "stable"
-CIRIS_CODENAME = "Stable Foundation"  # Codename for this release
+CIRIS_CODENAME = "Context Engineering"  # Codename for this release
 
 # Agent defaults
 DEFAULT_TEMPLATE = "default"

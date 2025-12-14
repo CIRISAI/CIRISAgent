@@ -5,6 +5,41 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5.2] - 2025-12-14
+
+### Added
+
+- **Context-Engineered Runtime Guides** - Optimized agent context for token efficiency
+  - Rewrote `CIRIS_COMPREHENSIVE_GUIDE.md` using context engineering best practices
+  - Critical information positioned at start/end of guide (primacy/recency effects)
+  - Added clear knowledge limitations section (no inherent web search, LLM knowledge cutoff)
+  - Added Six Requirements framework (Published Covenant, Runtime Conscience, Human Deferral, Cryptographic Audit, Bilateral Consent, Open Source)
+  - Added Coherence Ratchet concept (truth is O(1), deception is NP-hard)
+  - Added AIR System documentation (Parasocial prevention: 30 min / 20 message thresholds)
+  - Added Commons Credits concept (non-fungible contribution acknowledgments)
+
+- **Android-Specific Runtime Guide** - Mobile-optimized agent context
+  - New `CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md` for Android deployments
+  - Resource awareness guidance (battery, memory, storage, network)
+  - App lifecycle documentation (wakeup, backgrounding, shutdown)
+  - Local-first privacy model (data stays on device)
+  - Credit system and billing flow for mobile
+
+- **Platform-Specific Guide Loading** - Automatic guide selection
+  - `constants.py` now uses `is_android()` for platform detection
+  - Android devices load `CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md` first
+  - Falls back to standard guide if Android-specific not found
+  - Transparent to agent - just loads appropriate context
+
+### Fixed
+
+- **Implicit String Concatenation** - SonarCloud code smell fix
+  - Merged implicitly concatenated strings in `billing.py:402`
+
+### Android
+
+- Version bumped to **1.7.40** (build 40)
+
 ## [1.7.5.1] - 2025-12-13
 
 ### Security

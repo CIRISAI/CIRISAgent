@@ -40,6 +40,7 @@ import ai.ciris.mobile.billing.TokenRefreshResult
 import ai.ciris.mobile.config.CIRISConfig
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
+import ai.ciris.mobile.setup.SetupWizardActivity
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -1497,9 +1498,17 @@ class MainActivity : AppCompatActivity() {
 
                     // Use the setup status we already fetched on IO thread
                     if (setupRequired) {
-                        webView.visibility = View.VISIBLE
-                        fragmentContainer.visibility = View.GONE
-                        loadUI()  // Load index.html which will redirect to /setup
+                        if (useNativeUi) {
+                            Log.i(TAG, "Setup required - launching native SetupWizardActivity")
+                            val intent = Intent(this@MainActivity, SetupWizardActivity::class.java)
+                            startActivity(intent)
+                            // Don't finish MainActivity - it holds the Python process
+                            // SetupWizardActivity will restart MainActivity when done
+                        } else {
+                            webView.visibility = View.VISIBLE
+                            fragmentContainer.visibility = View.GONE
+                            loadUI()  // Load index.html which will redirect to /setup
+                        }
                     } else {
                         showInteractFragment()
                     }
@@ -1534,9 +1543,16 @@ class MainActivity : AppCompatActivity() {
                     findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
 
                     if (setupRequired) {
-                        webView.visibility = View.VISIBLE
-                        fragmentContainer.visibility = View.GONE
-                        loadUI()  // Load index.html which will redirect to /setup
+                        if (useNativeUi) {
+                            Log.i(TAG, "Setup required (API key auth) - launching native SetupWizardActivity")
+                            val intent = Intent(this@MainActivity, SetupWizardActivity::class.java)
+                            startActivity(intent)
+                            // Don't finish MainActivity - it holds the Python process
+                        } else {
+                            webView.visibility = View.VISIBLE
+                            fragmentContainer.visibility = View.GONE
+                            loadUI()  // Load index.html which will redirect to /setup
+                        }
                     } else {
                         showInteractFragment()
                     }

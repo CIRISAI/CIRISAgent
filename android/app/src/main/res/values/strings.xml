@@ -7,4 +7,46 @@
     <string name="action_refresh">Refresh</string>
     <string name="action_buy_credits">Buy Credits</string>
     <string name="action_account">Account</string>
+
+    <!-- Setup Wizard -->
+    <string name="setup_welcome_title">Welcome to CIRIS</string>
+    <string name="setup_welcome_desc">CIRIS is a next-generation AI assistant that prioritizes cognitive integrity, transparency, and ethical decision-making.\n\nThis setup wizard will help you configure your instance in just a few steps.</string>
+    <string name="setup_what_configure">What you\'ll configure:</string>
+    <string name="setup_point_1_title">LLM API Key</string>
+    <string name="setup_point_1_desc">An API key from OpenAI, Anthropic, or another supported provider</string>
+    <string name="setup_point_2_title">Admin Password</string>
+    <string name="setup_point_2_desc">A secure password for the default admin account</string>
+    <string name="setup_point_3_title">Your Account</string>
+    <string name="setup_point_3_desc">Username and password for your personal account</string>
+    <string name="setup_note">Note: All data is stored locally on your device. Your API keys and passwords are encrypted and never shared.</string>
+
+    <string name="setup_continue">Continue -></string>
+    <string name="setup_back">Back</string>
+    <string name="setup_finish">Finish Setup</string>
+    <string name="setup_next">Next</string>
+
+    <string name="setup_step_1">1</string>
+    <string name="setup_step_2">2</string>
+    <string name="setup_step_3">3</string>
+    <string name="setup_step_4">4</string>
+
+    <string name="setup_llm_title">LLM Configuration</string>
+    <string name="setup_llm_desc">Choose your LLM provider and enter your API key.</string>
+    <string name="setup_provider_label">Provider</string>
+    <string name="setup_api_key_label">API Key</string>
+    <string name="setup_api_key_hint">sk-...</string>
+
+    <string name="setup_admin_title">Admin Security</string>
+    <string name="setup_admin_desc">Set a secure password for the default admin account.</string>
+    <string name="setup_admin_password_label">Admin Password</string>
+    <string name="setup_admin_password_confirm_label">Confirm Password</string>
+
+    <string name="setup_account_title">Your Account</string>
+    <string name="setup_account_desc">Create your personal account to access CIRIS.</string>
+    <string name="setup_username_label">Username</string>
+    <string name="setup_password_label">Password</string>
+    <string name="setup_email_label">Email (Optional)</string>
+
+    <string name="setup_error_empty_field">This field is required</string>
+    <string name="setup_error_password_mismatch">Passwords do not match</string>
 </resources>

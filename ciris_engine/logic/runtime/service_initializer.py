@@ -299,22 +299,46 @@ class ServiceInitializer:
         # Load or generate master key
         master_key_path = keys_dir / "secrets_master.key"
         master_key = None
+        is_android = "ANDROID_DATA" in os.environ
 
-        if master_key_path.exists():
-            # Load existing master key
-            async with aiofiles.open(master_key_path, "rb") as f:
-                master_key = await f.read()
-            logger.info("Loaded existing secrets master key")
-        else:
-            # Generate new master key and save it
-            import secrets
+        if is_android:
+            # Android: Use Keystore-wrapped key for hardware-backed protection
+            try:
+                from android_keystore import load_or_create_wrapped_master_key, migrate_plain_key_to_wrapped
 
-            master_key = secrets.token_bytes(32)
-            async with aiofiles.open(master_key_path, "wb") as f:
-                await f.write(master_key)
-            # Set restrictive permissions (owner read/write only)
-            os.chmod(master_key_path, 0o600)
-            logger.info("Generated and saved new secrets master key")
+                # Migrate existing plain key if present
+                migrate_plain_key_to_wrapped(master_key_path)
+
+                # Load or create wrapped key
+                master_key = load_or_create_wrapped_master_key(master_key_path)
+                if master_key:
+                    logger.info("Loaded secrets master key with Android Keystore protection")
+                else:
+                    logger.error("Failed to load/create Keystore-wrapped master key")
+            except ImportError:
+                logger.warning("Android Keystore module not available, falling back to file storage")
+                is_android = False  # Fall through to standard path
+            except Exception as e:
+                logger.error(f"Android Keystore error: {e}, falling back to file storage")
+                is_android = False
+
+        if not is_android:
+            # Standard path: plain file storage (server deployments)
+            if master_key_path.exists():
+                # Load existing master key
+                async with aiofiles.open(master_key_path, "rb") as f:
+                    master_key = await f.read()
+                logger.info("Loaded existing secrets master key")
+            else:
+                # Generate new master key and save it
+                import secrets
+
+                master_key = secrets.token_bytes(32)
+                async with aiofiles.open(master_key_path, "wb") as f:
+                    await f.write(master_key)
+                # Set restrictive permissions (owner read/write only)
+                os.chmod(master_key_path, 0o600)
+                logger.info("Generated and saved new secrets master key")
 
         # Create README if it doesn't exist
         readme_path = keys_dir / "README.md"

@@ -277,9 +277,7 @@ class CIRISHostedToolService:
             return None
 
         try:
-            response = await self._make_request(
-                "GET", f"/v1/tools/check/{tool_name}", service="billing"
-            )
+            response = await self._make_request("GET", f"/v1/tools/check/{tool_name}", service="billing")
             if response.status_code == 200:
                 data = response.json()
                 return data.get("has_credit", False)
@@ -311,9 +309,7 @@ class CIRISHostedToolService:
             return None
 
         try:
-            response = await self._make_request(
-                "GET", f"/v1/tools/balance/{tool_name}", service="billing"
-            )
+            response = await self._make_request("GET", f"/v1/tools/balance/{tool_name}", service="billing")
             if response.status_code == 200:
                 data = response.json()
                 balance = ToolBalance(
@@ -380,9 +376,7 @@ class CIRISHostedToolService:
         except httpx.RequestError:
             # Try fallback
             try:
-                response = await self._make_request(
-                    "GET", "/v1/tools/balance", use_fallback=True, service="billing"
-                )
+                response = await self._make_request("GET", "/v1/tools/balance", use_fallback=True, service="billing")
                 if response.status_code == 200:
                     data = response.json()
                     balances = []

@@ -608,7 +608,12 @@ def setup_android_environment():
 
 
 async def start_mobile_runtime():
-    """Start the full CIRIS runtime with API adapter for Android."""
+    """Start the full CIRIS runtime with API adapter for Android.
+
+    Auto-loads adapters based on platform capabilities:
+    - api: Always loaded (core functionality)
+    - ciris_hosted_tools: Loaded when Google Play Services available (web search, etc.)
+    """
     from ciris_engine.logic.adapters.api.config import APIAdapterConfig
     from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
     from ciris_engine.logic.utils.runtime_utils import load_config
@@ -656,12 +661,31 @@ async def start_mobile_runtime():
     api_config.port = 8080
 
     adapter_configs = {"api": AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())}
+    adapter_types = ["api"]
+
+    # Auto-load ciris_hosted_tools adapter when Google Play Services is available
+    # This provides web_search and other CIRIS-hosted tools
+    if os.environ.get("GOOGLE_PLAY_SERVICES_AVAILABLE", "").lower() == "true":
+        logger.info("Google Play Services detected - loading ciris_hosted_tools adapter")
+        adapter_configs["ciris_hosted_tools"] = AdapterConfig(
+            adapter_type="ciris_hosted_tools",
+            enabled=True,
+            settings={
+                "proxy_url": "https://proxy1.ciris-services-1.ai",
+                "proxy_fallback_url": "https://proxy1.ciris-services-2.ai",
+                "billing_url": "https://billing1.ciris-services-1.ai",
+                "billing_fallback_url": "https://billing1.ciris-services-2.ai",
+            },
+        )
+        adapter_types.append("ciris_hosted_tools")
+    else:
+        logger.info("Google Play Services not available - ciris_hosted_tools disabled")
 
     startup_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
 
     # Create the full CIRIS runtime
     runtime = CIRISRuntime(
-        adapter_types=["api"],
+        adapter_types=adapter_types,
         essential_config=app_config,
         startup_channel_id=startup_channel_id,
         adapter_configs=adapter_configs,

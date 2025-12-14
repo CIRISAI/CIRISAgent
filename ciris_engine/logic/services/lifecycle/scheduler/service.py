@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Try to import croniter for cron scheduling support
 try:
-    from croniter import croniter  # type: ignore[import-untyped]
+    from croniter import croniter
 
     CRONITER_AVAILABLE = True
 except ImportError:

@@ -81,10 +81,26 @@ class TestToolBalanceEndpoints:
         mock_response.status_code = 404
         mock_billing.return_value = mock_response
 
-        response = client.get("/v1/api/tools/balance/unknown_tool", headers=auth_headers)
+        response = client.get("/v1/api/tools/balance/unknowntool", headers=auth_headers)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "Tool not found" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_get_tool_balance_billing_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test tool balance with billing service error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/balance/web_search", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "Billing service unavailable" in response.json()["detail"]
 
 
 class TestAllToolBalancesEndpoint:
@@ -94,6 +110,43 @@ class TestAllToolBalancesEndpoint:
         """Test that all balances endpoint without auth returns 401."""
         response = client.get("/v1/api/tools/balance")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_get_all_balances_without_google_token_returns_401(self, client, auth_headers):
+        """Test that all balances without Google token returns 401."""
+        response = client.get("/v1/api/tools/balance", headers=auth_headers)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Google Sign-In required" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_get_all_balances_billing_auth_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test all balances with billing auth error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/balance", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Authentication failed" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_get_all_balances_billing_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test all balances with billing service error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/balance", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "Billing service unavailable" in response.json()["detail"]
 
     @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
     @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
@@ -132,6 +185,58 @@ class TestToolCreditCheckEndpoint:
         """Test that credit check without auth returns 401."""
         response = client.get("/v1/api/tools/check/web_search")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_check_credit_without_google_token_returns_401(self, client, auth_headers):
+        """Test that credit check without Google token returns 401."""
+        response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Google Sign-In required" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_check_credit_billing_auth_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test credit check with billing auth error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Authentication failed" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_check_credit_not_found(self, mock_billing, mock_token, client, auth_headers):
+        """Test credit check for non-existent tool."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/check/unknowntool", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "Tool not found" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_check_credit_billing_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test credit check with billing service error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_billing.return_value = mock_response
+
+        response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "Billing service unavailable" in response.json()["detail"]
 
     @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
     @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
@@ -341,6 +446,53 @@ class TestToolPurchaseEndpoint:
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "already processed" in response.json()["detail"]
 
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_purchase_billing_auth_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test purchase with billing auth error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_billing.return_value = mock_response
+
+        response = client.post(
+            "/v1/api/tools/purchase",
+            headers=auth_headers,
+            json={
+                "product_id": "web_search_10",
+                "purchase_token": "test_token",
+                "tool_name": "web_search",
+            },
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "Authentication failed" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_purchase_billing_error(self, mock_billing, mock_token, client, auth_headers):
+        """Test purchase with billing service error."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+        mock_billing.return_value = mock_response
+
+        response = client.post(
+            "/v1/api/tools/purchase",
+            headers=auth_headers,
+            json={
+                "product_id": "web_search_10",
+                "purchase_token": "test_token",
+                "tool_name": "web_search",
+            },
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "Billing service unavailable" in response.json()["detail"]
+
 
 class TestBillingServiceFallback:
     """Test fallback to secondary billing server."""
@@ -391,6 +543,121 @@ class TestBillingServiceFallback:
 
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         assert "Billing service unavailable" in response.json()["detail"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_all_balances_fallback_success(self, mock_billing, mock_token, client, auth_headers):
+        """Test all balances fallback on primary failure."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"balances": []}
+
+        mock_billing.side_effect = [httpx.RequestError("Connection failed"), mock_response]
+
+        response = client.get("/v1/api/tools/balance", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_billing.call_count == 2
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_all_balances_both_fail(self, mock_billing, mock_token, client, auth_headers):
+        """Test all balances 503 when both fail."""
+        mock_token.return_value = "test_google_token"
+
+        mock_billing.side_effect = httpx.RequestError("Connection failed")
+
+        response = client.get("/v1/api/tools/balance", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_check_credit_fallback_success(self, mock_billing, mock_token, client, auth_headers):
+        """Test credit check fallback on primary failure."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "has_credit": True,
+            "product_type": "web_search",
+            "free_remaining": 1,
+            "paid_credits": 0,
+            "total_available": 1,
+        }
+
+        mock_billing.side_effect = [httpx.RequestError("Connection failed"), mock_response]
+
+        response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_billing.call_count == 2
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_check_credit_both_fail(self, mock_billing, mock_token, client, auth_headers):
+        """Test credit check 503 when both fail."""
+        mock_token.return_value = "test_google_token"
+
+        mock_billing.side_effect = httpx.RequestError("Connection failed")
+
+        response = client.get("/v1/api/tools/check/web_search", headers=auth_headers)
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_purchase_fallback_success(self, mock_billing, mock_token, client, auth_headers):
+        """Test purchase fallback on primary failure."""
+        mock_token.return_value = "test_google_token"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "success": True,
+            "product_type": "web_search",
+            "credits_added": 10,
+            "new_balance": 10,
+            "message": "OK",
+        }
+
+        mock_billing.side_effect = [httpx.RequestError("Connection failed"), mock_response]
+
+        response = client.post(
+            "/v1/api/tools/purchase",
+            headers=auth_headers,
+            json={
+                "product_id": "web_search_10",
+                "purchase_token": "token",
+                "tool_name": "web_search",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_billing.call_count == 2
+
+    @patch("ciris_engine.logic.adapters.api.routes.tools._get_google_id_token")
+    @patch("ciris_engine.logic.adapters.api.routes.tools._make_billing_request")
+    def test_purchase_both_fail(self, mock_billing, mock_token, client, auth_headers):
+        """Test purchase 503 when both fail."""
+        mock_token.return_value = "test_google_token"
+
+        mock_billing.side_effect = httpx.RequestError("Connection failed")
+
+        response = client.post(
+            "/v1/api/tools/purchase",
+            headers=auth_headers,
+            json={
+                "product_id": "web_search_10",
+                "purchase_token": "token",
+                "tool_name": "web_search",
+            },
+        )
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 class TestHelperFunctions:

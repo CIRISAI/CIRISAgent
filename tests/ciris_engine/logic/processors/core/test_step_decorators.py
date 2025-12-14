@@ -80,6 +80,7 @@ class TestStreamingStepDecorator:
             raw_input_string="test input",
             priority=1,
             created_at=datetime.now(timezone.utc),
+            thought_depth=0,
         )
 
     @pytest.fixture
@@ -183,6 +184,7 @@ class TestStepPointDecorator:
             raw_input_string="pause test input",
             priority=1,
             created_at=datetime.now(timezone.utc),
+            thought_depth=0,
         )
 
     @pytest.mark.asyncio

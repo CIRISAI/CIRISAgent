@@ -157,6 +157,7 @@ def sample_thought():
     thought.context = {}  # Required for ProcessingQueueItem
     thought.ponder_notes = []  # Required for ProcessingQueueItem
     thought.agent_occurrence_id = "default"  # Required for ProcessingQueueItem
+    thought.thought_depth = 0  # Required for ProcessingQueueItem (NEVER defaults)
     # Add content structure for ProcessingQueueItem.from_thought
     # ThoughtContent requires 'text' field
     thought.content = {

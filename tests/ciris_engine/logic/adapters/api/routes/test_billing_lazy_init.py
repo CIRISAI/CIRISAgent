@@ -57,9 +57,7 @@ class TestGetCreditProvider:
         request.app.state = Mock()
         request.app.state.resource_monitor = resource_monitor
 
-        with patch(
-            "ciris_engine.logic.adapters.api.routes.billing._try_lazy_init_billing_provider"
-        ) as mock_lazy_init:
+        with patch("ciris_engine.logic.adapters.api.routes.billing._try_lazy_init_billing_provider") as mock_lazy_init:
             mock_lazy_init.return_value = None
             result = _get_credit_provider(request)
 
@@ -159,9 +157,7 @@ class TestTryLazyInitBillingProvider:
 
                         _try_lazy_init_billing_provider(request, resource_monitor)
 
-                        mock_load_dotenv.assert_called_once_with(
-                            "/fake/ciris/home/.env", override=True
-                        )
+                        mock_load_dotenv.assert_called_once_with("/fake/ciris/home/.env", override=True)
 
     def test_skips_env_reload_when_no_ciris_home(self):
         """Skips .env reload when CIRIS_HOME is not set."""
@@ -200,9 +196,7 @@ class TestTryLazyInitBillingProvider:
             ) as mock_provider_class:
                 mock_provider_class.return_value = Mock()
 
-                with patch(
-                    "ciris_engine.logic.adapters.api.routes.billing.logger"
-                ) as mock_logger:
+                with patch("ciris_engine.logic.adapters.api.routes.billing.logger") as mock_logger:
                     _try_lazy_init_billing_provider(request, resource_monitor)
 
                     # Check that info log was called (with BILLING_LAZY_INIT tag)

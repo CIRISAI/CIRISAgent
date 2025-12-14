@@ -24,6 +24,7 @@ def _get_keystore_wrapper():
 
     try:
         from java import jclass
+
         return jclass("ai.ciris.mobile.security.KeystoreSecretWrapper")
     except Exception as e:
         logger.warning(f"Failed to load KeystoreSecretWrapper: {e}")

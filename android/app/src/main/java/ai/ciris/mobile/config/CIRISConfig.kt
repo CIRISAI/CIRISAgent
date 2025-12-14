@@ -182,4 +182,46 @@ object CIRISConfig {
     fun isCirisBillingUrl(url: String): Boolean {
         return BILLING_HOSTNAMES.any { url.contains(it) }
     }
+
+    // ==================== ENV MIGRATION ====================
+
+    /**
+     * Legacy URL to new infrastructure URL mappings.
+     */
+    private val LEGACY_URL_MIGRATIONS = mapOf(
+        // LLM Proxy migrations
+        "https://llm.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
+        "https://llm.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
+        "https://api.ciris.ai/v1" to "https://proxy1.ciris-services-1.ai/v1",
+        "https://api.ciris.ai" to "https://proxy1.ciris-services-1.ai/v1",
+        // Billing migrations
+        "https://billing.ciris.ai" to "https://billing1.ciris-services-1.ai"
+    )
+
+    /**
+     * Migrate .env content from legacy infrastructure URLs to new ciris-services URLs.
+     *
+     * @param envContent The current .env file content
+     * @return Pair of (migratedContent, wasModified)
+     */
+    fun migrateEnvToNewInfra(envContent: String): Pair<String, Boolean> {
+        var content = envContent
+        var wasModified = false
+
+        for ((legacyUrl, newUrl) in LEGACY_URL_MIGRATIONS) {
+            if (content.contains(legacyUrl)) {
+                content = content.replace(legacyUrl, newUrl)
+                wasModified = true
+            }
+        }
+
+        return Pair(content, wasModified)
+    }
+
+    /**
+     * Check if .env content contains any legacy URLs that need migration.
+     */
+    fun needsInfraMigration(envContent: String): Boolean {
+        return LEGACY_URL_MIGRATIONS.keys.any { envContent.contains(it) }
+    }
 }

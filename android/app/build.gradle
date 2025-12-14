@@ -2,6 +2,9 @@ plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
     id "com.chaquo.python"
+    // Firebase plugins disabled until google-services.json is configured
+    // id "com.google.gms.google-services"
+    // id "com.google.firebase.crashlytics"
 }
 
 android {
@@ -304,6 +307,11 @@ dependencies {
 
     // Google Play Integrity API
     implementation "com.google.android.play:integrity:1.4.0"
+
+    // Firebase disabled until google-services.json is configured
+    // implementation platform("com.google.firebase:firebase-bom:32.7.0")
+    // implementation "com.google.firebase:firebase-crashlytics-ktx"
+    // implementation "com.google.firebase:firebase-analytics-ktx"
 
     // Coroutines for async operations
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"

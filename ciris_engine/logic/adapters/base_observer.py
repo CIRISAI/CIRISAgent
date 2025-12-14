@@ -49,6 +49,15 @@ class CreditDenied(Exception):
         self.reason = reason
 
 
+class BillingServiceError(Exception):
+    """Raised when the LLM proxy billing service returns an error."""
+
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
 def detect_and_replace_spoofed_markers(content: str) -> str:
     """Detect and replace attempts to spoof CIRIS security markers."""
     import re

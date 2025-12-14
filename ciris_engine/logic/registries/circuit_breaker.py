@@ -30,7 +30,7 @@ class CircuitBreakerConfig:
     """Configuration for circuit breaker behavior"""
 
     failure_threshold: int = 5
-    recovery_timeout: float = 60.0
+    recovery_timeout: float = 10.0  # Reduced from 60s for faster mobile recovery
     success_threshold: int = 3
     timeout_duration: float = 30.0
 

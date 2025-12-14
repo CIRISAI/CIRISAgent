@@ -38,7 +38,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         api_key: str = "",
         google_id_token: str = "",
         token_refresh_callback: Optional[Callable[[], str]] = None,
-        base_url: str = "https://billing.ciris.ai",
+        base_url: str = "https://billing1.ciris-services-1.ai",
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,

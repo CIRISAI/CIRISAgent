@@ -225,7 +225,7 @@ class ServiceInitializer:
             # Server with API key - use API key auth
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
             timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
@@ -245,7 +245,7 @@ class ServiceInitializer:
                 # Have Google ID token - use JWT auth
                 from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
                 timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
                 cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
                 fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"

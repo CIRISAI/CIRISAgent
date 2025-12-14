@@ -240,6 +240,13 @@ class LLMBus(BaseBus[LLMService]):
                 return result, usage
 
             except Exception as e:
+                # Check for billing errors - these should not be retried
+                from ciris_engine.logic.adapters.base_observer import BillingServiceError
+
+                if isinstance(e, BillingServiceError):
+                    logger.error(f"LLM billing error (not retrying): {e}")
+                    raise  # Don't retry billing errors - surface to user immediately
+
                 # Record failure
                 self._record_failure(service_name)
                 last_error = e

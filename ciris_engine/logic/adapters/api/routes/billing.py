@@ -121,7 +121,7 @@ def _get_billing_client(request: Request, google_id_token: Optional[str] = None)
         existing_client: httpx.AsyncClient = request.app.state.billing_client
         return existing_client
 
-    billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
+    billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
     api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
     # Determine authentication mode
@@ -322,13 +322,92 @@ def _get_agent_id(request: Request) -> str:
 
 
 def _get_credit_provider(request: Request) -> Optional[Any]:
-    """Get credit provider from resource monitor, or None if unavailable."""
+    """Get credit provider from resource monitor, lazily initializing if token is available.
+
+    This enables the billing provider to be created when:
+    1. Server starts without token
+    2. User logs in (Kotlin writes token to .env)
+    3. Next API call triggers lazy initialization
+
+    Returns:
+        Credit provider instance or None if unavailable and no token to initialize.
+    """
     if not hasattr(request.app.state, "resource_monitor"):
         return None
     resource_monitor = request.app.state.resource_monitor
     if not hasattr(resource_monitor, "credit_provider"):
         return None
-    return resource_monitor.credit_provider
+
+    # Return existing provider if available
+    if resource_monitor.credit_provider is not None:
+        return resource_monitor.credit_provider
+
+    # Lazy initialization: Try to create billing provider if token is now available
+    return _try_lazy_init_billing_provider(request, resource_monitor)
+
+
+def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> Optional[Any]:
+    """Attempt to lazily initialize the billing provider if a token is now available.
+
+    This handles the case where the Python server starts before the user logs in,
+    and the token is written to .env after server startup.
+
+    Args:
+        request: FastAPI request with app state
+        resource_monitor: Resource monitor instance to attach provider to
+
+    Returns:
+        Newly created billing provider or None if initialization fails
+    """
+    import os
+
+    from dotenv import load_dotenv
+
+    from ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider import CIRISBillingProvider
+
+    # Reload .env to pick up any new values written by Kotlin
+    ciris_home = os.environ.get("CIRIS_HOME", "")
+    if ciris_home:
+        env_path = os.path.join(ciris_home, ".env")
+        if os.path.exists(env_path):
+            load_dotenv(env_path, override=True)
+            logger.debug("[BILLING_LAZY_INIT] Reloaded .env from %s", env_path)
+
+    # Check for Google ID token (written by Kotlin when user logs in)
+    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+    if not google_token:
+        logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN in environment")
+        return None
+
+    # Get billing URL (use default if not set)
+    billing_url = os.environ.get("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+
+    logger.info(
+        "[BILLING_LAZY_INIT] Token found (%d chars), creating CIRISBillingProvider...",
+        len(google_token),
+    )
+
+    try:
+        # Create the billing provider with JWT auth
+        provider = CIRISBillingProvider(
+            google_id_token=google_token,
+            base_url=billing_url,
+            fail_open=False,  # Don't fail open - we want accurate billing status
+            cache_ttl_seconds=15,
+        )
+
+        # Attach to resource monitor
+        resource_monitor.credit_provider = provider
+        logger.info(
+            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider:\n" "  base_url: %s\n" "  token_length: %d",
+            billing_url,
+            len(google_token),
+        )
+        return provider
+
+    except Exception as exc:
+        logger.error("[BILLING_LAZY_INIT] Failed to create CIRISBillingProvider: %s", exc, exc_info=True)
+        return None
 
 
 def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:

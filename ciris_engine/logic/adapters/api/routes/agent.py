@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.adapters.base_observer import CreditCheckFailed, CreditDenied
+from ciris_engine.logic.adapters.base_observer import BillingServiceError, CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
@@ -462,8 +462,14 @@ def _attach_credit_metadata(
     )
 
     if not credit_provider:
-        logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
-        return msg
+        # Try lazy initialization - token may have been written after server start
+        from ciris_engine.logic.adapters.api.routes.billing import _try_lazy_init_billing_provider
+
+        credit_provider = _try_lazy_init_billing_provider(request, resource_monitor)
+        if not credit_provider:
+            logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
+            return msg
+        logger.info(f"[CREDIT_ATTACH] Lazily initialized billing provider for {msg.message_id}")
 
     try:
         account, _ = _derive_credit_account(auth, request)
@@ -784,6 +790,16 @@ async def interact(
     except CreditCheckFailed as exc:
         _cleanup_interaction_tracking(message_id)
         raise HTTPException(status_code=503, detail="Credit provider unavailable") from exc
+    except BillingServiceError as exc:
+        _cleanup_interaction_tracking(message_id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "billing_error",
+                "message": "LLM billing service error. Please check your account or try again later.",
+                "reason": exc.message,
+            },
+        ) from exc
 
     # Get timeout and wait for response
     timeout = _get_interaction_timeout(request)

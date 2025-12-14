@@ -426,7 +426,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # All thoughts within the same task share one credit
                 extra_kwargs: Dict[str, Any] = {}
                 base_url = self.openai_config.base_url or ""
-                if "ciris.ai" in base_url:
+                if "ciris.ai" in base_url or "ciris-services" in base_url:
                     # Hash task_id for billing (irreversible, same task = same hash = 1 credit)
                     import hashlib
 
@@ -562,11 +562,27 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"Error: {e}"
                     )
                 elif isinstance(e, InternalServerError):
-                    logger.error(
-                        f"LLM PROVIDER ERROR (500) - Provider: {error_details['base_url']}, "
-                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
-                        f"Provider returned internal server error: {e}"
-                    )
+                    error_str = str(e).lower()
+                    # Check for billing service errors - should be surfaced to user
+                    if "billing service error" in error_str or "billing error" in error_str:
+                        from ciris_engine.logic.adapters.base_observer import BillingServiceError
+
+                        # Force circuit breaker open - don't retry billing errors
+                        self.circuit_breaker.force_open(reason="Billing service error")
+                        logger.error(
+                            f"LLM BILLING ERROR - Provider: {error_details['base_url']}, "
+                            f"Model: {error_details['model']}. Billing service returned error: {e}"
+                        )
+                        raise BillingServiceError(
+                            message=f"LLM billing service error. Please check your account status or try again later. Details: {e}",
+                            status_code=402,
+                        ) from e
+                    else:
+                        logger.error(
+                            f"LLM PROVIDER ERROR (500) - Provider: {error_details['base_url']}, "
+                            f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                            f"Provider returned internal server error: {e}"
+                        )
                 elif isinstance(e, APIConnectionError):
                     logger.error(
                         f"LLM CONNECTION ERROR - Provider: {error_details['base_url']}, "

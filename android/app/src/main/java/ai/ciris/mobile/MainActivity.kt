@@ -1970,6 +1970,18 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
+    private fun showToolsFragment() {
+        Log.i(TAG, "Showing ToolsFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = ToolsFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "tools_fragment")
+            .addToBackStack("tools")
+            .commit()
+    }
+
     private fun showAdaptersFragment() {
         Log.i(TAG, "Showing AdaptersFragment")
         webView.visibility = View.GONE
@@ -2075,7 +2087,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_tools -> {
-                navigateToWebPage("/tools")
+                showToolsFragment()
                 true
             }
             R.id.action_telemetry -> {

@@ -75,7 +75,7 @@ class LLMBusMessage(BusMessage):
 
     messages: List[MessageDict]
     response_model: Type[BaseModel]
-    max_tokens: int = 1024
+    max_tokens: int = 4096
     temperature: float = 0.0
     # For async responses
     future: Optional[asyncio.Future[Any]] = None
@@ -154,7 +154,7 @@ class LLMBus(BaseBus[LLMService]):
         self,
         messages: Union[List[JSONDict], List["LLMMessage"]],
         response_model: Type[BaseModel],
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
         temperature: float = 0.0,
         handler_name: str = "default",
         domain: Optional[str] = None,  # NEW: Domain-aware routing
@@ -240,6 +240,13 @@ class LLMBus(BaseBus[LLMService]):
                 return result, usage
 
             except Exception as e:
+                # Check for billing errors - these should not be retried
+                from ciris_engine.logic.adapters.base_observer import BillingServiceError
+
+                if isinstance(e, BillingServiceError):
+                    logger.error(f"LLM billing error (not retrying): {e}")
+                    raise  # Don't retry billing errors - surface to user immediately
+
                 # Record failure
                 self._record_failure(service_name)
                 last_error = e
@@ -264,7 +271,7 @@ class LLMBus(BaseBus[LLMService]):
         messages: List[JSONDict],
         response_model: Type[BaseModel],
         handler_name: str,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
         temperature: float = 0.0,
         domain: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:

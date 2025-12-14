@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Base64
 import android.util.Log
+import ai.ciris.mobile.config.CIRISConfig
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -25,9 +26,6 @@ class GoogleSignInHelper(private val context: Context) {
         private const val TAG = "GoogleSignInHelper"
         const val RC_SIGN_IN = 9001
 
-        // Web client ID from Google Cloud Console (CIRIS Mobile)
-        private const val WEB_CLIENT_ID = "265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com"
-
         // Minimum token validity in seconds - if token expires sooner, force refresh
         // Set to 5 minutes to ensure token is valid for the entire session
         private const val MIN_TOKEN_VALIDITY_SECONDS = 300L
@@ -37,7 +35,7 @@ class GoogleSignInHelper(private val context: Context) {
 
     init {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(WEB_CLIENT_ID)
+            .requestIdToken(CIRISConfig.GOOGLE_WEB_CLIENT_ID)
             .requestEmail()
             .requestProfile()
             .build()

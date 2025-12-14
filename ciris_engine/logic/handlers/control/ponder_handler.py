@@ -59,10 +59,12 @@ class PonderHandler(BaseActionHandler):
         # If epistemic data is needed, it should be passed through proper typed fields
 
         current_thought_depth = thought.thought_depth
-        new_thought_depth = current_thought_depth + 1
+        # Calculate actual follow-up depth (capped at 7 by create_follow_up_thought)
+        new_thought_depth = min(current_thought_depth + 1, 7)
 
         logger.info(
-            f"Thought ID {thought.thought_id} pondering (depth: {new_thought_depth}). Questions: {questions_list}"
+            f"Thought ID {thought.thought_id} pondering (current_depth={current_thought_depth}, "
+            f"follow_up_depth={new_thought_depth}). Questions: {questions_list}"
         )
 
         # The thought depth conscience will handle max depth enforcement

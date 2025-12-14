@@ -37,6 +37,7 @@ import ai.ciris.mobile.auth.TokenRefreshManager
 import ai.ciris.mobile.billing.BillingApiClient
 import ai.ciris.mobile.billing.GoogleTokenRefreshCallback
 import ai.ciris.mobile.billing.TokenRefreshResult
+import ai.ciris.mobile.config.CIRISConfig
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import com.chaquo.python.Python
@@ -1713,8 +1714,10 @@ class MainActivity : AppCompatActivity() {
      * Load and display the user's credit balance in the toolbar.
      * Retries up to 6 times if credit provider is still initializing.
      * (Billing provider takes ~11 seconds to initialize on fresh start)
+     *
+     * This is internal so InteractFragment can trigger a refresh after interactions.
      */
-    private fun loadCreditsBalance(retryCount: Int = 0) {
+    internal fun loadCreditsBalance(retryCount: Int = 0) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val billingApiClient = createBillingApiClient()
@@ -2455,10 +2458,17 @@ class MainActivity : AppCompatActivity() {
             // Update existing .env file
             var content = envFile.readText()
 
+            // Migrate legacy URLs to new infrastructure (pre-1.7.38 clients)
+            val (migratedContent, wasMigrated) = CIRISConfig.migrateEnvToNewInfra(content)
+            if (wasMigrated) {
+                content = migratedContent
+                Log.i(TAG, "[PreflightTokenRefresh] Migrated legacy URLs to new ciris-services infrastructure")
+            }
+
             // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
-            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If API base contains a CIRIS proxy hostname, we're using the CIRIS proxy and need to update OPENAI_API_KEY
             // If not, we're in BYOK mode and should NOT overwrite the user's API key
-            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            val isCirisProxyMode = CIRISConfig.isCirisProxyUrl(content)
 
             if (isCirisProxyMode) {
                 // CIRIS proxy mode: Update OPENAI_API_KEY with Google token

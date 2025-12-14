@@ -120,7 +120,13 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 thought_depth_triggered=False,
             )
 
-        current_depth = getattr(thought, "thought_depth", 0)
+        # CRITICAL: thought_depth must NEVER default - it must be explicitly set
+        if not hasattr(thought, "thought_depth"):
+            raise ValueError(
+                f"GUARDRAIL BUG: thought object {type(thought).__name__} missing thought_depth. "
+                "thought_depth must always be explicitly set, never defaulted."
+            )
+        current_depth = thought.thought_depth
 
         # Terminal actions don't count toward depth limit
         terminal_actions = {

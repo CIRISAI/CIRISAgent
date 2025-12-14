@@ -15,6 +15,9 @@ class MockTimeService:
     def now(self):
         return datetime.now(timezone.utc)
 
+    def now_iso(self):
+        return self.now().isoformat()
+
 
 def test_thought_depth_increases_correctly():
     """Test that thought depth increases by 1 for each follow-up."""

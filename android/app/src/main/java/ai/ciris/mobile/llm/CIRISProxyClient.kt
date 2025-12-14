@@ -1,6 +1,7 @@
 package ai.ciris.mobile.llm
 
 import android.util.Log
+import ai.ciris.mobile.config.CIRISConfig
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -11,7 +12,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * Client for CIRIS LLM Proxy at llm.ciris.ai
+ * Client for CIRIS LLM Proxy.
  *
  * Authentication: Bearer google:{google_user_id}
  * Billing: 1 credit per interaction_id (supports multiple LLM calls)
@@ -20,8 +21,10 @@ class CIRISProxyClient(private val googleUserId: String) {
 
     companion object {
         private const val TAG = "CIRISProxyClient"
-        private const val BASE_URL = "https://llm.ciris.ai"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
+
+        // Get base URL from centralized config
+        private fun getBaseUrl(): String = CIRISConfig.getLLMProxyUrl().removeSuffix("/v1")
 
         /**
          * Generate a unique interaction ID for billing.
@@ -88,7 +91,7 @@ class CIRISProxyClient(private val googleUserId: String) {
         }.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         val request = Request.Builder()
-            .url("$BASE_URL/v1/chat/completions")
+            .url("${getBaseUrl()}/v1/chat/completions")
             .addHeader("Authorization", "Bearer google:$googleUserId")
             .addHeader("Content-Type", "application/json")
             .post(requestBody)
@@ -125,7 +128,7 @@ class CIRISProxyClient(private val googleUserId: String) {
      */
     fun healthCheck(): Boolean {
         val request = Request.Builder()
-            .url("$BASE_URL/health/liveliness")
+            .url("${getBaseUrl()}/health/liveliness")
             .get()
             .build()
 

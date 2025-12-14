@@ -56,6 +56,7 @@ class TestProcessingQueueItemBasic:
             source_task_id="task_456",
             thought_type=ThoughtType.STANDARD,
             content=content,
+            thought_depth=0,
         )
 
         assert item.thought_id == "thought_123"
@@ -89,6 +90,7 @@ class TestProcessingQueueItemBasic:
             source_task_id="task_456",
             thought_type=ThoughtType.GUIDANCE,
             content=content,
+            thought_depth=1,
             agent_occurrence_id="occ_001",
             raw_input_string="Original input",
             initial_context=context,
@@ -114,6 +116,7 @@ class TestProcessingQueueItemBasic:
             source_task_id="task1",
             thought_type=ThoughtType.STANDARD,
             content=content,
+            thought_depth=0,
         )
         assert item.content_text == "Property test"
 

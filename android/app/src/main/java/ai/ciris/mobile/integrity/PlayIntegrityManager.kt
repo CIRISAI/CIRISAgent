@@ -2,6 +2,7 @@ package ai.ciris.mobile.integrity
 
 import android.content.Context
 import android.util.Log
+import ai.ciris.mobile.config.CIRISConfig
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.IntegrityTokenRequest
 import com.google.android.gms.tasks.Tasks
@@ -15,9 +16,9 @@ import com.google.gson.Gson
  * Manages Play Integrity API interactions for device/app attestation.
  *
  * Flow:
- * 1. Get nonce from billing.ciris.ai
+ * 1. Get nonce from billing API
  * 2. Request integrity token from Google Play
- * 3. Send token to billing.ciris.ai for verification
+ * 3. Send token to billing API for verification
  *
  * This adds security on top of JWT auth by verifying:
  * - Device is genuine (not rooted/emulator)
@@ -31,10 +32,10 @@ class PlayIntegrityManager(private val context: Context) {
 
         // Google Cloud Project: ciris-oauth
         private const val CLOUD_PROJECT_NUMBER: Long = 265882853697L
-
-        // Billing API base URL
-        private const val BILLING_API_BASE = "https://billing.ciris.ai"
     }
+
+    // Get billing API URL from centralized config
+    private fun getBillingApiBase(): String = CIRISConfig.getBillingApiUrl()
 
     private val integrityManager = IntegrityManagerFactory.create(context)
     private val gson = Gson()
@@ -138,7 +139,7 @@ class PlayIntegrityManager(private val context: Context) {
                 )
 
             // Combined auth request - send Google ID token in Authorization header
-            val url = URL("$BILLING_API_BASE/v1/integrity/auth")
+            val url = URL("${getBillingApiBase()}/v1/integrity/auth")
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
                 requestMethod = "POST"
@@ -197,7 +198,7 @@ class PlayIntegrityManager(private val context: Context) {
      */
     private fun fetchNonce(): NonceResponse? {
         return try {
-            val url = URL("$BILLING_API_BASE/v1/integrity/nonce")
+            val url = URL("${getBillingApiBase()}/v1/integrity/nonce")
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
                 requestMethod = "GET"
@@ -254,7 +255,7 @@ class PlayIntegrityManager(private val context: Context) {
             // Billing API expects query parameters
             val encodedToken = java.net.URLEncoder.encode(integrityToken, "UTF-8")
             val encodedNonce = java.net.URLEncoder.encode(nonce, "UTF-8")
-            val url = URL("$BILLING_API_BASE/v1/integrity/verify?integrity_token=$encodedToken&nonce=$encodedNonce")
+            val url = URL("${getBillingApiBase()}/v1/integrity/verify?integrity_token=$encodedToken&nonce=$encodedNonce")
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
                 requestMethod = "POST"

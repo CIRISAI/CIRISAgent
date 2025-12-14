@@ -154,6 +154,7 @@ def sample_processing_queue_item():
         source_task_id="test_task_123",
         thought_type=ThoughtType.STANDARD,
         content=content,
+        thought_depth=0,
     )
 
 

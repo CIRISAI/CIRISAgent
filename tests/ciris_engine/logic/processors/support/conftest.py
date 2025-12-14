@@ -92,6 +92,7 @@ def sample_thought_item():
         source_task_id="task_123",
         thought_type=ThoughtType.STANDARD,
         content=content,
+        thought_depth=0,
     )
 
 

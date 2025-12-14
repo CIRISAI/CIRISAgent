@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Include shared preferences but exclude sensitive settings -->
-    <include domain="sharedpref" path="."/>
+    <!-- SECURITY: Exclude ALL sensitive data from backups -->
+    <!-- Exclude encrypted shared preferences (contains API keys) -->
     <exclude domain="sharedpref" path="ciris_settings.xml"/>
+    <exclude domain="sharedpref" path="ciris_encrypted_prefs.xml"/>
 
-    <!-- Include database for backup -->
-    <include domain="database" path="."/>
+    <!-- Exclude CIRIS_HOME directory (contains .env, secrets, tokens) -->
+    <exclude domain="file" path="ciris_home"/>
+    <exclude domain="file" path=".env"/>
+    <exclude domain="file" path="secrets_master.key"/>
+    <exclude domain="file" path="secrets_master.key.wrapped"/>
+
+    <!-- Exclude any cached tokens -->
+    <exclude domain="cache" path="."/>
+
+    <!-- Only include non-sensitive database if needed -->
+    <!-- <include domain="database" path="."/> -->
 </full-backup-content>

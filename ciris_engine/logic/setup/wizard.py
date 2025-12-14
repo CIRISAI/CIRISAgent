@@ -165,9 +165,18 @@ OPENAI_MODEL="{llm_model}"
 
 """
         # If using CIRIS LLM proxy, also set billing token and instructor mode
-        if "ciris.ai" in llm_base_url.lower():
+        if "ciris.ai" in llm_base_url.lower() or "ciris-services" in llm_base_url.lower():
+            # Determine billing URL based on LLM proxy URL
+            if "ciris-services-2" in llm_base_url.lower():
+                billing_url = "https://billing1.ciris-services-2.ai"
+            elif "ciris-services-1" in llm_base_url.lower():
+                billing_url = "https://billing1.ciris-services-1.ai"
+            else:
+                billing_url = "https://billing1.ciris-services-1.ai"  # Default to primary
+
             content += f"""# CIRIS Billing Configuration (Android - uses Google ID token for JWT auth)
 CIRIS_BILLING_GOOGLE_ID_TOKEN="{llm_api_key}"
+CIRIS_BILLING_API_URL="{billing_url}"
 
 # CIRIS Proxy uses JSON mode for Maverick (native structured output support)
 INSTRUCTOR_MODE="JSON"

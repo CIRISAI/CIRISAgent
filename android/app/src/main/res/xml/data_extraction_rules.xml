@@ -1,7 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Exclude sensitive data from cloud backup -->
+        <!-- SECURITY: Exclude ALL sensitive data from cloud backup -->
         <exclude domain="sharedpref" path="ciris_settings.xml"/>
+        <exclude domain="sharedpref" path="ciris_encrypted_prefs.xml"/>
+        <exclude domain="file" path="ciris_home"/>
+        <exclude domain="file" path=".env"/>
+        <exclude domain="file" path="secrets_master.key"/>
+        <exclude domain="file" path="secrets_master.key.wrapped"/>
+        <exclude domain="cache" path="."/>
     </cloud-backup>
+    <device-transfer>
+        <!-- SECURITY: Exclude sensitive data from device-to-device transfer -->
+        <exclude domain="sharedpref" path="ciris_settings.xml"/>
+        <exclude domain="sharedpref" path="ciris_encrypted_prefs.xml"/>
+        <exclude domain="file" path="ciris_home"/>
+        <exclude domain="file" path=".env"/>
+        <exclude domain="file" path="secrets_master.key"/>
+        <exclude domain="file" path="secrets_master.key.wrapped"/>
+        <exclude domain="cache" path="."/>
+    </device-transfer>
 </data-extraction-rules>

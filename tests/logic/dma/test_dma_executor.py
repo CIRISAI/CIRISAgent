@@ -63,6 +63,7 @@ def processing_queue_item():
         content=ThoughtContent(text="Test thought content for DMA evaluation"),
         raw_input_string="test input",
         initial_context={"test": "context", "user": "test_user"},
+        thought_depth=0,
     )
 
 

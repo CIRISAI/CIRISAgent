@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import ai.ciris.mobile.config.CIRISConfig
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
 import kotlinx.coroutines.CoroutineScope
@@ -257,10 +258,17 @@ class TokenRefreshManager(
         try {
             var content = envFile.readText()
 
+            // Migrate legacy URLs to new infrastructure (pre-1.7.38 clients)
+            val (migratedContent, wasMigrated) = CIRISConfig.migrateEnvToNewInfra(content)
+            if (wasMigrated) {
+                content = migratedContent
+                Log.i(TAG, "Migrated legacy URLs to new ciris-services infrastructure")
+            }
+
             // Check if we're in CIRIS proxy mode by looking at OPENAI_API_BASE
-            // If API base contains ciris.ai, we're using the CIRIS proxy and need to update OPENAI_API_KEY
+            // If API base contains a CIRIS proxy hostname, we're using the CIRIS proxy and need to update OPENAI_API_KEY
             // If not, we're in BYOK mode and should NOT overwrite the user's API key
-            val isCirisProxyMode = content.contains("llm.ciris.ai") || content.contains("api.ciris.ai")
+            val isCirisProxyMode = CIRISConfig.isCirisProxyUrl(content)
 
             var openaiUpdated = false
             if (isCirisProxyMode) {

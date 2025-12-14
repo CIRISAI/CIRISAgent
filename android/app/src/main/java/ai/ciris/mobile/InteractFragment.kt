@@ -544,12 +544,21 @@ class InteractFragment : Fragment() {
         val changed = newItems.size != chatItems.size ||
                 newItems.zip(chatItems).any { (new, old) -> new != old }
 
+        // Count agent messages to detect new responses
+        val oldAgentCount = chatItems.count { it is ChatItem.Message && it.isAgent }
+        val newAgentCount = newItems.count { it is ChatItem.Message && it.isAgent }
+
         if (changed) {
             chatItems.clear()
             chatItems.addAll(newItems)
             adapter.notifyDataSetChanged()
             if (chatItems.isNotEmpty()) {
                 recyclerView.scrollToPosition(chatItems.size - 1)
+            }
+
+            // Refresh credits when new agent response arrives (credits were spent)
+            if (newAgentCount > oldAgentCount) {
+                refreshCreditsBalance()
             }
         }
 
@@ -964,6 +973,8 @@ class InteractFragment : Fragment() {
                         }
 
                         loadHistory()
+                        // Refresh credits balance after interaction (credits may be deducted)
+                        refreshCreditsBalance()
                     } else {
                         Toast.makeText(requireContext(), "Error: ${response.code}", Toast.LENGTH_LONG).show()
                     }
@@ -986,6 +997,14 @@ class InteractFragment : Fragment() {
                 }
             }
         }
+    }
+
+    /**
+     * Refresh the credits balance display in MainActivity toolbar.
+     * Called after interactions to show updated credit count.
+     */
+    private fun refreshCreditsBalance() {
+        (activity as? MainActivity)?.loadCreditsBalance()
     }
 
     private fun showShutdownDialog() {

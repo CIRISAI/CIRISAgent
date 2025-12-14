@@ -1714,8 +1714,10 @@ class MainActivity : AppCompatActivity() {
      * Load and display the user's credit balance in the toolbar.
      * Retries up to 6 times if credit provider is still initializing.
      * (Billing provider takes ~11 seconds to initialize on fresh start)
+     *
+     * This is internal so InteractFragment can trigger a refresh after interactions.
      */
-    private fun loadCreditsBalance(retryCount: Int = 0) {
+    internal fun loadCreditsBalance(retryCount: Int = 0) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val billingApiClient = createBillingApiClient()

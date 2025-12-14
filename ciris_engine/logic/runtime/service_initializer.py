@@ -304,7 +304,7 @@ class ServiceInitializer:
         if is_android:
             # Android: Use Keystore-wrapped key for hardware-backed protection
             try:
-                from android_keystore import (  # type: ignore[import-not-found]
+                from android_keystore import (
                     load_or_create_wrapped_master_key,
                     migrate_plain_key_to_wrapped,
                 )

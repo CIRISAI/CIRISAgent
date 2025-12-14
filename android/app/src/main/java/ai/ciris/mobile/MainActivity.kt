@@ -898,6 +898,17 @@ class MainActivity : AppCompatActivity() {
                             launchRuntimeActivity()
                             return true
                         }
+
+                        // Check for dashboard page -> DashboardFragment
+                        val isDashboardPage = url.endsWith("/dashboard") ||
+                                             url.endsWith("/dashboard/") ||
+                                             url.contains("/dashboard/index.html") ||
+                                             url.contains("/dashboard?")
+                        if (isDashboardPage && !isApiEndpoint) {
+                            Log.i(TAG, "Intercepting dashboard page for native UI: $url")
+                            showDashboardFragment()
+                            return true
+                        }
                     }
 
                     // Intercept /login page -> launch native LoginActivity
@@ -1947,6 +1958,18 @@ class MainActivity : AppCompatActivity() {
         loadCreditsBalance()
     }
 
+    private fun showDashboardFragment() {
+        Log.i(TAG, "Showing DashboardFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = DashboardFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "dashboard_fragment")
+            .addToBackStack("dashboard")
+            .commit()
+    }
+
     private fun showAdaptersFragment() {
         Log.i(TAG, "Showing AdaptersFragment")
         webView.visibility = View.GONE
@@ -2048,7 +2071,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_dashboard -> {
-                navigateToWebPage("/dashboard")
+                showDashboardFragment()
                 true
             }
             R.id.action_tools -> {

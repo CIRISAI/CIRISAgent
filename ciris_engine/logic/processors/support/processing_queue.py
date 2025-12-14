@@ -34,6 +34,9 @@ class ProcessingQueueItem(BaseModel):
     agent_occurrence_id: str = Field(
         default="default", description="Agent occurrence ID that owns this thought (multi-occurrence support)"
     )
+    thought_depth: int = Field(
+        ..., ge=0, le=7, description="Current thought depth in the processing chain (REQUIRED, never defaults)"
+    )
     raw_input_string: Optional[str] = Field(
         default=None, description="The original input string that generated this thought, if applicable."
     )
@@ -119,6 +122,7 @@ class ProcessingQueueItem(BaseModel):
             thought_type=thought_instance.thought_type,
             content=resolved_content,
             agent_occurrence_id=thought_instance.agent_occurrence_id,
+            thought_depth=thought_instance.thought_depth,
             raw_input_string=raw_input if raw_input is not None else str(thought_instance.content),
             initial_context=final_initial_ctx,
             ponder_notes=thought_instance.ponder_notes,

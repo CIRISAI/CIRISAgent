@@ -99,6 +99,7 @@ class TestThoughtDepthPropagation:
         """Test that create_follow_up_thought properly increments thought_depth."""
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
 
         follow_up = create_follow_up_thought(
             parent=base_thought, time_service=mock_time_service, content="Follow-up thought content"
@@ -117,6 +118,7 @@ class TestThoughtDepthPropagation:
         """Test follow-up creation from already pondered thought."""
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
 
         follow_up = create_follow_up_thought(
             parent=pondered_thought, time_service=mock_time_service, content="Second follow-up thought"
@@ -130,6 +132,7 @@ class TestThoughtDepthPropagation:
         """Test that a chain of follow-ups maintains proper ponder count progression."""
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
 
         # Create first follow-up (thought_depth should be 1)
         first_follow_up = create_follow_up_thought(
@@ -171,6 +174,7 @@ class TestThoughtDepthPropagation:
         mock_dependencies.service_registry = None  # Add service_registry attribute
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
         mock_dependencies.time_service = mock_time_service
 
         # Mock persistence calls - note: add_thought is NOT async
@@ -239,6 +243,7 @@ class TestThoughtDepthPropagation:
         mock_dependencies.bus_manager = mock_bus_manager
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
         mock_dependencies.time_service = mock_time_service
         ponder_handler = PonderHandler(mock_dependencies, max_rounds=5)
 
@@ -265,6 +270,7 @@ class TestThoughtDepthPropagation:
         mock_bus_manager.audit_service = mock_audit_service
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
         mock_dependencies.time_service = mock_time_service
         mock_dependencies.bus_manager = mock_bus_manager
         mock_dependencies.service_registry = None
@@ -343,6 +349,7 @@ class TestThoughtDepthPropagation:
 
         mock_time_service = Mock()
         mock_time_service.now.return_value = datetime.now(timezone.utc)
+        mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
 
         follow_up = create_follow_up_thought(
             parent=thought, time_service=mock_time_service, content="Follow-up content"

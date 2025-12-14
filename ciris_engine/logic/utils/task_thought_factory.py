@@ -352,7 +352,9 @@ def create_follow_up_thought(
     """
     # Inherit values from parent
     round_number = parent_thought.round_number + 1 if increment_round else parent_thought.round_number
-    thought_depth = parent_thought.thought_depth + 1 if increment_depth else parent_thought.thought_depth
+    # CRITICAL: Always cap thought_depth at 7 (max allowed by schema)
+    raw_depth = parent_thought.thought_depth + 1 if increment_depth else parent_thought.thought_depth
+    thought_depth = min(raw_depth, 7)
 
     # Copy parent context and update for follow-up
     follow_up_context = None

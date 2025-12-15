@@ -1304,7 +1304,7 @@ def _is_localhost_request(request: Request) -> bool:
 
 
 @router.post("/local-shutdown", response_model=SuccessResponse[ShutdownResponse])
-async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
+async def local_shutdown(request: Request) -> Response:
     """
     Localhost-only shutdown endpoint (no authentication required).
 
@@ -1327,7 +1327,7 @@ async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
     import threading
 
     # Helper to get server state info for logging and responses
-    def get_server_state() -> dict:
+    def get_server_state() -> Dict[str, Any]:
         uptime = time.time() - getattr(runtime, "_startup_time", time.time()) if runtime else 0
         resume_in_progress = getattr(runtime, "_resume_in_progress", False)
         resume_started = getattr(runtime, "_resume_started_at", None)

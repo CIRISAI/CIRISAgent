@@ -93,6 +93,13 @@
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.CIRIS.NoActionBar" />
 
+        <!-- Setup Wizard -->
+        <activity
+            android:name=".setup.SetupWizardActivity"
+            android:exported="false"
+            android:label="Setup"
+            android:theme="@style/Theme.CIRIS.NoActionBar" />
+
         <!-- OAuth callback activity for deep link handling -->
         <!-- Handles ciris://oauth/callback?code=xxx&state=yyy from OAuth providers -->
         <!-- Reusable for any OAuth2 provider: Home Assistant, Discord, Google, Microsoft, Reddit, etc. -->

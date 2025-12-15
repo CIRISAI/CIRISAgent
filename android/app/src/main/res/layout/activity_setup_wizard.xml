@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/gray_light">
+
+    <!-- Header / Steps -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="32dp"
+        android:paddingBottom="16dp"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_welcome_title"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Steps Indicator -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Step 1 -->
+            <TextView
+                android:id="@+id/step1_indicator"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_step_active"
+                android:text="@string/setup_step_1"
+                android:gravity="center"
+                android:textColor="@color/white"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="2dp"
+                android:background="@color/gray_medium"/>
+
+             <!-- Step 2 -->
+            <TextView
+                android:id="@+id/step2_indicator"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_step_inactive"
+                android:text="@string/setup_step_2"
+                android:gravity="center"
+                android:textColor="@color/gray_medium"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="2dp"
+                android:background="@color/gray_medium"/>
+
+            <!-- Step 3 -->
+            <TextView
+                android:id="@+id/step3_indicator"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_step_inactive"
+                android:text="@string/setup_step_3"
+                android:gravity="center"
+                android:textColor="@color/gray_medium"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="2dp"
+                android:background="@color/gray_medium"/>
+
+            <!-- Step 4 -->
+            <TextView
+                android:id="@+id/step4_indicator"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_step_inactive"
+                android:text="@string/setup_step_4"
+                android:gravity="center"
+                android:textColor="@color/gray_medium"
+                android:textStyle="bold"/>
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"/>
+
+    <!-- Navigation Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_back"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:textColor="@color/gray_dark"
+            android:visibility="gone"/>
+
+        <Button
+            android:id="@+id/btn_next"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_continue"
+            android:backgroundTint="@color/ciris_primary"
+            android:textColor="@color/white"
+            android:layout_marginStart="16dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>

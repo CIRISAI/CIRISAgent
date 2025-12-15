@@ -51,10 +51,13 @@ class TaskCompleteHandler(BaseActionHandler):
 
                     ponder_result = ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
-                        action_parameters=PonderParams(questions=[ponder_content]).model_dump(),
+                        action_parameters=PonderParams(questions=[ponder_content], channel_id=None),
                         rationale="Wakeup task requires SPEAK action before completion",
                         reasoning="Wakeup task attempted completion without first performing SPEAK action - overriding to PONDER for guidance",
                         evaluation_time_ms=0.0,
+                        raw_llm_response=None,
+                        resource_usage=None,
+                        user_prompt=None,
                     )
 
                     ponder_result_dict = {
@@ -170,17 +173,22 @@ class TaskCompleteHandler(BaseActionHandler):
                     if task and task.channel_id:
                         is_api = self._is_api_channel(task.channel_id)
                         has_spoken = await self._has_speak_action_completed(parent_task_id)
+                        # Check if new messages arrived after last SPEAK (safety net for bypass conscience)
+                        has_unhandled_updates = getattr(task, "updated_info_available", False)
 
-                        if is_api and not has_spoken:
+                        if is_api and (not has_spoken or has_unhandled_updates):
                             # Provide context about what the agent did before completing silently
                             has_tool = await self._has_tool_action_completed(parent_task_id)
-                            if has_tool:
+                            if has_unhandled_updates:
+                                msg = "Agent completed task but new messages arrived that weren't addressed"
+                            elif has_tool:
                                 msg = "Agent chose task complete without speaking after a tool call"
                             else:
                                 msg = "Agent chose task complete without speaking immediately"
 
                             self.logger.info(
-                                f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} - sending notification"
+                                f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} "
+                                f"(has_spoken={has_spoken}, has_unhandled_updates={has_unhandled_updates}) - sending notification"
                             )
                             await self._send_notification(task.channel_id, msg)
                 else:

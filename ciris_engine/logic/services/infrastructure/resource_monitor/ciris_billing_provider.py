@@ -265,9 +265,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         else:
             logger.info("[BILLING] ✓ Request succeeded via %s", region)
 
-    def _summarize_errors(
-        self, errors: list[tuple[str, str, str]], cache_key: str
-    ) -> tuple[None, str]:
+    def _summarize_errors(self, errors: list[tuple[str, str, str]], cache_key: str) -> tuple[None, str]:
         """Summarize errors from all failed attempts."""
         if not errors:
             return None, "UNKNOWN_ERROR:No URLs configured"
@@ -361,9 +359,16 @@ class CIRISBillingProvider(CreditGateProtocol):
         credits_remaining = response_data.get("credits_remaining", 0)
 
         if has_credit:
-            logger.info("[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining)
+            logger.info(
+                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining
+            )
         else:
-            logger.warning("[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)", cache_key, free_remaining, credits_remaining)
+            logger.warning(
+                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
+                cache_key,
+                free_remaining,
+                credits_remaining,
+            )
 
         result = self._parse_check_success(response_data)
         self._store_cache(cache_key, result)
@@ -387,7 +392,10 @@ class CIRISBillingProvider(CreditGateProtocol):
             "  Reason: %s\n"
             "  Token: %s (%d chars)\n"
             "  Action: Writing .token_refresh_needed signal",
-            cache_key, reason, token_preview, len(self._google_id_token) if self._google_id_token else 0,
+            cache_key,
+            reason,
+            token_preview,
+            len(self._google_id_token) if self._google_id_token else 0,
         )
         self._signal_token_refresh_needed()
         return self._handle_failure("AUTH_EXPIRED", reason)

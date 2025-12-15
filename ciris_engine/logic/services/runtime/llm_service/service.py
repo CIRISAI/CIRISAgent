@@ -410,7 +410,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self.circuit_breaker.check_and_raise()
 
         # Track retry state for metadata
-        retry_state = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
 
         async def _make_structured_call(
             msg_list: List[MessageDict],

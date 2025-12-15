@@ -15,17 +15,21 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Dict, Literal
 
 ServiceType = Literal["proxy", "billing", "agents", "lens"]
 
+# Type for the config structure
+_ConfigType = Dict[str, Dict[str, str]]
+
 
 @lru_cache(maxsize=1)
-def _load_config() -> dict:
+def _load_config() -> _ConfigType:
     """Load the CIRIS services configuration from JSON."""
     config_path = Path(__file__).parent / "CIRIS_SERVICES.json"
     with open(config_path) as f:
-        return json.load(f)
+        result: _ConfigType = json.load(f)
+        return result
 
 
 def get_service_url(service: ServiceType, use_fallback: bool = False) -> str:
@@ -40,7 +44,7 @@ def get_service_url(service: ServiceType, use_fallback: bool = False) -> str:
     """
     config = _load_config()
     endpoint = "fallback" if use_fallback else "primary"
-    return config[service][endpoint]
+    return str(config[service][endpoint])
 
 
 def get_proxy_url(use_fallback: bool = False) -> str:

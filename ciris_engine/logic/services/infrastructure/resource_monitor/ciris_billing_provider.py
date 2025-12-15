@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import httpx
 
@@ -179,7 +179,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         logger.info("CIRISBillingProvider stopped")
 
     async def _post_with_fallback(
-        self, path: str, payload: dict, cache_key: str
+        self, path: str, payload: Dict[str, Any], cache_key: str
     ) -> tuple[httpx.Response | None, str | None]:
         """Make a POST request with automatic fallback to EU region.
 

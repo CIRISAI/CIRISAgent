@@ -719,7 +719,6 @@ class ApiPlatform(Service):
                     adapter_type="ciris_hosted_tools",
                     adapter_id="ciris_hosted_tools_auto",
                     config={},  # Uses defaults from manifest
-                    auto_start=True,
                 )
 
                 if result.success:

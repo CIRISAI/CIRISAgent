@@ -1352,7 +1352,7 @@ async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
     import os
     import threading
 
-    def _force_exit():
+    def _force_exit() -> None:
         """Force process exit after brief delay to allow response to be sent."""
         import time
 

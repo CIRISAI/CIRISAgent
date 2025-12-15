@@ -950,9 +950,9 @@ async def test_billing_provider_401_unauthorized():
                 account = CreditAccount(provider="oauth:google", account_id="user-401-test")
                 result = await provider.check_credit(account)
 
-                # Should return failure result
+                # Should return failure result with new error format
                 assert result.has_credit is False
-                assert "token_expired" in (result.reason or "")
+                assert "AUTH_EXPIRED" in (result.reason or "")
 
                 # Signal file should have been written
                 signal_file = os.path.join(temp_dir, ".token_refresh_needed")
@@ -1012,9 +1012,9 @@ async def test_billing_provider_request_error():
         account = CreditAccount(provider="oauth:google", account_id="user-error-test")
         result = await provider.check_credit(account)
 
-        # Should return failure
+        # Should return failure with new error format
         assert result.has_credit is False
-        assert "request_error" in (result.reason or "")
+        assert "NETWORK_ERROR" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1101,7 +1101,7 @@ async def test_billing_provider_spend_request_error():
         result = await provider.spend_credit(account, spend_req)
 
         assert result.succeeded is False
-        assert "request_error" in (result.reason or "")
+        assert "NETWORK_ERROR" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1127,7 +1127,7 @@ async def test_billing_provider_spend_unexpected_status():
         result = await provider.spend_credit(account, spend_req)
 
         assert result.succeeded is False
-        assert "unexpected_status_500" in (result.reason or "")
+        assert "HTTP_500" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1152,7 +1152,7 @@ async def test_billing_provider_check_unexpected_status():
         result = await provider.check_credit(account)
 
         assert result.has_credit is False
-        assert "unexpected_status_503" in (result.reason or "")
+        assert "HTTP_503" in (result.reason or "")
     finally:
         await provider.stop()
 

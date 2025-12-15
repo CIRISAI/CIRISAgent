@@ -215,6 +215,7 @@ class CIRISBillingProvider(CreditGateProtocol):
                 async with httpx.AsyncClient(
                     timeout=self._timeout_seconds,
                     headers=self._client.headers,
+                    transport=self._transport,
                 ) as client:
                     response = await client.post(full_url, json=payload)
 

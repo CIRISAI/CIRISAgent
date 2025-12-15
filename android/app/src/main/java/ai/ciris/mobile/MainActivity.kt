@@ -1982,6 +1982,18 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
+    private fun showAuditFragment() {
+        Log.i(TAG, "Showing AuditFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = AuditFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "audit_fragment")
+            .addToBackStack("audit")
+            .commit()
+    }
+
     private fun showAdaptersFragment() {
         Log.i(TAG, "Showing AdaptersFragment")
         webView.visibility = View.GONE
@@ -2132,7 +2144,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_audit -> {
-                navigateToWebPage("/audit")
+                showAuditFragment()
                 true
             }
             R.id.action_logs -> {

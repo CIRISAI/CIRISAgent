@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:id="@+id/auditAction"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="ACTION_NAME"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1F2937"/>
+
+            <TextView
+                android:id="@+id/auditActor"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Actor"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#6B7280"
+                android:background="#F3F4F6"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/auditTimestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="YYYY-MM-DD HH:MM:SS"
+            android:textSize="12sp"
+            android:textColor="#6B7280"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/auditDescription"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Description goes here..."
+            android:textSize="14sp"
+            android:textColor="#4B5563"/>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>

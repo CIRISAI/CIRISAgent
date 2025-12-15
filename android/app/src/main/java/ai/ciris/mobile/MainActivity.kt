@@ -898,6 +898,17 @@ class MainActivity : AppCompatActivity() {
                             launchRuntimeActivity()
                             return true
                         }
+
+                        // Check for dashboard page -> DashboardFragment
+                        val isDashboardPage = url.endsWith("/dashboard") ||
+                                             url.endsWith("/dashboard/") ||
+                                             url.contains("/dashboard/index.html") ||
+                                             url.contains("/dashboard?")
+                        if (isDashboardPage && !isApiEndpoint) {
+                            Log.i(TAG, "Intercepting dashboard page for native UI: $url")
+                            showDashboardFragment()
+                            return true
+                        }
                     }
 
                     // Intercept /login page -> launch native LoginActivity
@@ -1947,6 +1958,54 @@ class MainActivity : AppCompatActivity() {
         loadCreditsBalance()
     }
 
+    private fun showDashboardFragment() {
+        Log.i(TAG, "Showing DashboardFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = DashboardFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "dashboard_fragment")
+            .addToBackStack("dashboard")
+            .commit()
+    }
+
+    private fun showToolsFragment() {
+        Log.i(TAG, "Showing ToolsFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = ToolsFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "tools_fragment")
+            .addToBackStack("tools")
+            .commit()
+    }
+
+    private fun showAuditFragment() {
+        Log.i(TAG, "Showing AuditFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = AuditFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "audit_fragment")
+            .addToBackStack("audit")
+            .commit()
+    }
+
+    private fun showConfigFragment() {
+        Log.i(TAG, "Showing ConfigFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = ConfigFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "config_fragment")
+            .addToBackStack("config")
+            .commit()
+    }
+
     private fun showAdaptersFragment() {
         Log.i(TAG, "Showing AdaptersFragment")
         webView.visibility = View.GONE
@@ -2048,11 +2107,11 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_dashboard -> {
-                navigateToWebPage("/dashboard")
+                showDashboardFragment()
                 true
             }
             R.id.action_tools -> {
-                navigateToWebPage("/tools")
+                showToolsFragment()
                 true
             }
             R.id.action_telemetry -> {
@@ -2077,7 +2136,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_config -> {
-                navigateToWebPage("/config")
+                showConfigFragment()
                 true
             }
             R.id.action_users -> {
@@ -2097,7 +2156,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_audit -> {
-                navigateToWebPage("/audit")
+                showAuditFragment()
                 true
             }
             R.id.action_logs -> {

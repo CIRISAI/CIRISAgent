@@ -588,6 +588,23 @@ class ThoughtProcessor(
         """Simple conscience application without orchestrator."""
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
 
+        # Create typed context for conscience checks (needed for both bypass and normal)
+        context = ConscienceCheckContext(
+            thought=thought,
+            dma_results=dma_results_dict,  # extra="allow" accepts additional fields
+        )
+
+        # CRITICAL: Run bypass consciences FIRST, even for exempt actions
+        # This allows UpdatedStatusConscience to detect new messages before TASK_COMPLETE
+        bypass_result = await self._run_bypass_conscience_checks(action_result, context)
+        if bypass_result.overridden:
+            logger.info(
+                f"Bypass conscience overrode action {action_result.selected_action} -> "
+                f"{bypass_result.final_action.selected_action}: {bypass_result.override_reason}"
+            )
+            return self._create_conscience_application_result(action_result, bypass_result)
+
+        # Now check if action is exempt from normal conscience checks
         if self._is_exempt_from_conscience_checks(action_result):
             return ConscienceApplicationResult(
                 original_action=action_result,
@@ -600,14 +617,12 @@ class ThoughtProcessor(
                     uncertainty_acknowledged=True,  # System knows this is exempt
                     reasoning_transparency=1.0,  # Fully transparent (exempt)
                 ),
+                # Propagate any detection flags from bypass checks
+                updated_status_detected=bypass_result.updated_status_detected,
             )
 
-        # Create typed context for conscience checks
-        context = ConscienceCheckContext(
-            thought=thought,
-            dma_results=dma_results_dict,  # extra="allow" accepts additional fields
-        )
-        conscience_result = await self._run_conscience_checks(action_result, context)
+        # Run normal conscience checks
+        conscience_result = await self._run_normal_conscience_checks(action_result, context)
 
         if is_conscience_retry and not conscience_result.overridden:
             conscience_result = self._handle_conscience_retry_without_override(conscience_result)
@@ -636,10 +651,47 @@ class ThoughtProcessor(
         }
         return action_result.selected_action in exempt_actions
 
+    async def _run_bypass_conscience_checks(
+        self, action_result: ActionSelectionDMAResult, context: ConscienceCheckContext
+    ) -> ConscienceCheckInternalResult:
+        """Run bypass conscience checks that run even for exempt actions.
+
+        These are critical checks like UpdatedStatusConscience that must run
+        even for TASK_COMPLETE, DEFER, REJECT actions.
+        """
+        return await self._run_conscience_entries(
+            self.conscience_registry.get_bypass_consciences(),
+            action_result,
+            context,
+        )
+
+    async def _run_normal_conscience_checks(
+        self, action_result: ActionSelectionDMAResult, context: ConscienceCheckContext
+    ) -> ConscienceCheckInternalResult:
+        """Run normal conscience checks that respect exemption."""
+        return await self._run_conscience_entries(
+            self.conscience_registry.get_normal_consciences(),
+            action_result,
+            context,
+        )
+
     async def _run_conscience_checks(
         self, action_result: ActionSelectionDMAResult, context: ConscienceCheckContext
     ) -> ConscienceCheckInternalResult:
         """Run all conscience checks and return the results."""
+        return await self._run_conscience_entries(
+            self.conscience_registry.get_consciences(),
+            action_result,
+            context,
+        )
+
+    async def _run_conscience_entries(
+        self,
+        entries: List[Any],
+        action_result: ActionSelectionDMAResult,
+        context: ConscienceCheckContext,
+    ) -> ConscienceCheckInternalResult:
+        """Run a list of conscience entries and return aggregated results."""
         final_action = action_result
         overridden = False
         override_reason: Optional[str] = None
@@ -647,7 +699,7 @@ class ThoughtProcessor(
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
 
-        for entry in self.conscience_registry.get_consciences():
+        for entry in entries:
             conscience_result = await self._check_single_conscience(entry, final_action, context)
 
             if conscience_result.skip:

@@ -198,100 +198,96 @@ class CIRISBillingProvider(CreditGateProtocol):
         assert self._client is not None
         self._refresh_auth_header()
 
-        # Try primary URL first (unless we're already using fallback)
-        urls_to_try = (
-            [(self._fallback_url, "EU-fallback")]
-            if self._using_fallback
-            else [(self._base_url, "US-primary"), (self._fallback_url, "EU-fallback")]
-        )
-
-        errors_encountered: list[tuple[str, str, str]] = []  # (region, error_type, detail)
+        urls_to_try = self._get_urls_to_try()
+        errors_encountered: list[tuple[str, str, str]] = []
 
         for base_url, region in urls_to_try:
-            full_url = f"{base_url}{path}"
-            try:
-                logger.info("[BILLING] POST %s (%s) for %s", full_url, region, cache_key)
+            result = await self._try_single_request(base_url, region, path, payload, cache_key)
+            if result[0] is not None:
+                # Got a successful response
+                return result[0], None
+            if result[1] == "FATAL":
+                # Fatal error - don't try other URLs
+                return None, result[2]
+            if result[1] == "RETRY":
+                errors_encountered.append((region, result[2], result[3]))
 
-                async with httpx.AsyncClient(
-                    timeout=self._timeout_seconds,
-                    headers=self._client.headers,
-                    transport=self._transport,
-                ) as client:
-                    response = await client.post(full_url, json=payload)
+        return self._summarize_errors(errors_encountered, cache_key)
 
-                # Success - remember if we used fallback
-                if "fallback" in region and not self._using_fallback:
-                    logger.info("[BILLING] ✓ Switched to %s: %s", region, self._fallback_url)
-                    self._using_fallback = True
-                elif "primary" in region and self._using_fallback:
-                    logger.info("[BILLING] ✓ Recovered to %s: %s", region, self._base_url)
-                    self._using_fallback = False
-                else:
-                    logger.info("[BILLING] ✓ Request succeeded via %s", region)
+    def _get_urls_to_try(self) -> list[tuple[str, str]]:
+        """Get list of (url, region) tuples to try."""
+        if self._using_fallback:
+            return [(self._fallback_url, "EU-fallback")]
+        return [(self._base_url, "US-primary"), (self._fallback_url, "EU-fallback")]
 
-                return response, None
+    async def _try_single_request(
+        self, base_url: str, region: str, path: str, payload: Dict[str, Any], cache_key: str
+    ) -> tuple[httpx.Response | None, str, str, str]:
+        """Try a single request to one URL.
 
-            except httpx.ConnectTimeout as exc:
-                errors_encountered.append((region, "TIMEOUT", f"Connection timed out after {self._timeout_seconds}s"))
-                logger.warning(
-                    "[BILLING] ✗ %s TIMEOUT: Connection to %s timed out after %.1fs",
-                    region,
-                    base_url,
-                    self._timeout_seconds,
-                )
-                continue
+        Returns: (response, status, error_type, error_detail)
+        - status: "SUCCESS", "RETRY" (try next URL), or "FATAL" (don't retry)
+        """
+        full_url = f"{base_url}{path}"
+        try:
+            logger.info("[BILLING] POST %s (%s) for %s", full_url, region, cache_key)
+            async with httpx.AsyncClient(
+                timeout=self._timeout_seconds,
+                headers=self._client.headers,  # type: ignore[union-attr]
+                transport=self._transport,
+            ) as client:
+                response = await client.post(full_url, json=payload)
 
-            except asyncio.TimeoutError:
-                errors_encountered.append((region, "TIMEOUT", f"Request timed out after {self._timeout_seconds}s"))
-                logger.warning(
-                    "[BILLING] ✗ %s TIMEOUT: Request to %s timed out after %.1fs",
-                    region,
-                    base_url,
-                    self._timeout_seconds,
-                )
-                continue
+            self._update_fallback_state(region)
+            return response, "SUCCESS", "", ""
 
-            except httpx.ConnectError as exc:
-                errors_encountered.append((region, "CONNECTION_ERROR", str(exc)))
-                logger.warning(
-                    "[BILLING] ✗ %s CONNECTION_ERROR: Cannot reach %s - %s",
-                    region,
-                    base_url,
-                    exc,
-                )
-                continue
+        except (httpx.ConnectTimeout, asyncio.TimeoutError):
+            logger.warning("[BILLING] ✗ %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
+            return None, "RETRY", "TIMEOUT", f"Timed out after {self._timeout_seconds}s"
 
-            except httpx.RequestError as exc:
-                # Other request errors - don't try fallback, likely a client-side issue
-                error_detail = f"{type(exc).__name__}: {exc}"
-                logger.error(
-                    "[BILLING] ✗ %s NETWORK_ERROR: %s - %s",
-                    region,
-                    base_url,
-                    error_detail,
-                )
-                return None, f"NETWORK_ERROR:{error_detail}"
+        except httpx.ConnectError as exc:
+            logger.warning("[BILLING] ✗ %s CONNECTION_ERROR: Cannot reach %s - %s", region, base_url, exc)
+            return None, "RETRY", "CONNECTION_ERROR", str(exc)
 
-        # All URLs failed - summarize what happened
-        if errors_encountered:
-            error_types = set(e[1] for e in errors_encountered)
-            regions_tried = [e[0] for e in errors_encountered]
+        except httpx.RequestError as exc:
+            error_detail = f"NETWORK_ERROR:{type(exc).__name__}: {exc}"
+            logger.error("[BILLING] ✗ %s NETWORK_ERROR: %s - %s", region, base_url, error_detail)
+            return None, "FATAL", error_detail, ""
 
-            if error_types == {"TIMEOUT"}:
-                error_summary = f"TIMEOUT:All regions timed out ({', '.join(regions_tried)})"
-            elif error_types == {"CONNECTION_ERROR"}:
-                error_summary = f"CONNECTION_ERROR:Cannot reach any region ({', '.join(regions_tried)})"
-            else:
-                error_summary = f"MULTI_ERROR:{'; '.join(f'{e[0]}={e[1]}' for e in errors_encountered)}"
+    def _update_fallback_state(self, region: str) -> None:
+        """Update fallback state based on which region succeeded."""
+        if "fallback" in region and not self._using_fallback:
+            logger.info("[BILLING] ✓ Switched to %s: %s", region, self._fallback_url)
+            self._using_fallback = True
+        elif "primary" in region and self._using_fallback:
+            logger.info("[BILLING] ✓ Recovered to %s: %s", region, self._base_url)
+            self._using_fallback = False
+        else:
+            logger.info("[BILLING] ✓ Request succeeded via %s", region)
 
-            logger.error(
-                "[BILLING] ✗ ALL REGIONS FAILED for %s:\n%s",
-                cache_key,
-                "\n".join(f"  - {e[0]}: {e[1]} - {e[2]}" for e in errors_encountered),
-            )
-            return None, error_summary
+    def _summarize_errors(
+        self, errors: list[tuple[str, str, str]], cache_key: str
+    ) -> tuple[None, str]:
+        """Summarize errors from all failed attempts."""
+        if not errors:
+            return None, "UNKNOWN_ERROR:No URLs configured"
 
-        return None, "UNKNOWN_ERROR:No URLs configured"
+        error_types = {e[1] for e in errors}
+        regions_tried = [e[0] for e in errors]
+
+        if error_types == {"TIMEOUT"}:
+            error_summary = f"TIMEOUT:All regions timed out ({', '.join(regions_tried)})"
+        elif error_types == {"CONNECTION_ERROR"}:
+            error_summary = f"CONNECTION_ERROR:Cannot reach any region ({', '.join(regions_tried)})"
+        else:
+            error_summary = f"MULTI_ERROR:{'; '.join(f'{e[0]}={e[1]}' for e in errors)}"
+
+        logger.error(
+            "[BILLING] ✗ ALL REGIONS FAILED for %s:\n%s",
+            cache_key,
+            "\n".join(f"  - {e[0]}: {e[1]} - {e[2]}" for e in errors),
+        )
+        return None, error_summary
 
     async def check_credit(
         self,
@@ -304,6 +300,23 @@ class CIRISBillingProvider(CreditGateProtocol):
         await self._ensure_started()
 
         cache_key = account.cache_key()
+        cached_result = self._get_cached_check(cache_key)
+        if cached_result:
+            return cached_result
+
+        payload = self._build_check_payload(account, context)
+        logger.debug("Credit check payload for %s: %s", cache_key, payload)
+
+        response, error_type = await self._post_with_fallback("/v1/billing/credits/check", payload, cache_key)
+
+        if error_type:
+            return self._handle_check_network_error(error_type, cache_key)
+
+        assert response is not None
+        return self._handle_check_response(response, cache_key)
+
+    def _get_cached_check(self, cache_key: str) -> CreditCheckResult | None:
+        """Return cached result if valid, None otherwise."""
         cached = self._cache.get(cache_key)
         if cached and not self._is_expired(cached[1]):
             logger.info(
@@ -315,106 +328,74 @@ class CIRISBillingProvider(CreditGateProtocol):
                 int((cached[1] - datetime.now(timezone.utc)).total_seconds()),
             )
             return cached[0].model_copy()
-
         if cached:
             logger.debug("[CREDIT_CHECK] Cache expired for %s - querying backend", cache_key)
         else:
             logger.debug("[CREDIT_CHECK] No cache for %s - querying backend", cache_key)
+        return None
 
-        payload = self._build_check_payload(account, context)
-        logger.debug("Credit check payload for %s: %s", cache_key, payload)
+    def _handle_check_network_error(self, error_type: str, cache_key: str) -> CreditCheckResult:
+        """Handle network errors from check_credit."""
+        error_category = error_type.split(":")[0] if ":" in error_type else error_type
+        logger.error("[CREDIT_CHECK] ✗ %s for %s - %s", error_category, cache_key, error_type)
+        return self._handle_failure(error_category, error_type)
 
-        response, error_type = await self._post_with_fallback("/v1/billing/credits/check", payload, cache_key)
-
-        if error_type:
-            # Clear categorization of network errors
-            if error_type.startswith("TIMEOUT"):
-                logger.error(
-                    "[CREDIT_CHECK] ✗ TIMEOUT for %s - billing service unreachable (tried all regions)",
-                    cache_key,
-                )
-                return self._handle_failure("TIMEOUT", error_type)
-            elif error_type.startswith("CONNECTION_ERROR"):
-                logger.error(
-                    "[CREDIT_CHECK] ✗ CONNECTION_ERROR for %s - cannot connect to billing service",
-                    cache_key,
-                )
-                return self._handle_failure("CONNECTION_ERROR", error_type)
-            else:
-                logger.error(
-                    "[CREDIT_CHECK] ✗ NETWORK_ERROR for %s - %s",
-                    cache_key,
-                    error_type,
-                )
-                return self._handle_failure("NETWORK_ERROR", error_type)
-
-        assert response is not None
-
-        # Handle successful response
+    def _handle_check_response(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
+        """Handle HTTP response from check_credit."""
         if response.status_code == httpx.codes.OK:
-            response_data = response.json()
-            has_credit = response_data.get("has_credit", False)
-            free_remaining = response_data.get("free_uses_remaining", 0)
-            credits_remaining = response_data.get("credits_remaining", 0)
+            return self._handle_check_success(response, cache_key)
 
-            if has_credit:
-                logger.info(
-                    "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s",
-                    cache_key,
-                    free_remaining,
-                    credits_remaining,
-                )
-            else:
-                logger.warning(
-                    "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
-                    cache_key,
-                    free_remaining,
-                    credits_remaining,
-                )
-
-            result = self._parse_check_success(response_data)
-            self._store_cache(cache_key, result)
-            return result
-
-        # Handle payment required (402) or forbidden (403) - no credits
         if response.status_code in {httpx.codes.PAYMENT_REQUIRED, httpx.codes.FORBIDDEN}:
-            reason = self._extract_reason(response)
-            logger.warning(
-                "[CREDIT_CHECK] ✗ NO_CREDITS for %s (HTTP %d): %s",
-                cache_key,
-                response.status_code,
-                reason,
-            )
-            result = CreditCheckResult(has_credit=False, reason=f"NO_CREDITS:{reason}")
-            self._store_cache(cache_key, result)
-            return result
+            return self._handle_check_no_credits(response, cache_key)
 
-        # Handle 401 Unauthorized - token expired or invalid
         if response.status_code == httpx.codes.UNAUTHORIZED:
-            reason = self._extract_reason(response)
-            token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
-            logger.error(
-                "[CREDIT_CHECK] ✗ AUTH_EXPIRED for %s:\n"
-                "  HTTP Status: 401 Unauthorized\n"
-                "  Reason: %s\n"
-                "  Token: %s (%d chars)\n"
-                "  Action: Writing .token_refresh_needed signal",
-                cache_key,
-                reason,
-                token_preview,
-                len(self._google_id_token) if self._google_id_token else 0,
-            )
-            self._signal_token_refresh_needed()
-            return self._handle_failure("AUTH_EXPIRED", reason)
+            return self._handle_check_unauthorized(response, cache_key)
 
-        # Handle other unexpected responses
+        return self._handle_check_unexpected(response, cache_key)
+
+    def _handle_check_success(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
+        """Handle successful credit check response."""
+        response_data = response.json()
+        has_credit = response_data.get("has_credit", False)
+        free_remaining = response_data.get("free_uses_remaining", 0)
+        credits_remaining = response_data.get("credits_remaining", 0)
+
+        if has_credit:
+            logger.info("[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining)
+        else:
+            logger.warning("[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)", cache_key, free_remaining, credits_remaining)
+
+        result = self._parse_check_success(response_data)
+        self._store_cache(cache_key, result)
+        return result
+
+    def _handle_check_no_credits(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
+        """Handle payment required or forbidden response."""
         reason = self._extract_reason(response)
+        logger.warning("[CREDIT_CHECK] ✗ NO_CREDITS for %s (HTTP %d): %s", cache_key, response.status_code, reason)
+        result = CreditCheckResult(has_credit=False, reason=f"NO_CREDITS:{reason}")
+        self._store_cache(cache_key, result)
+        return result
+
+    def _handle_check_unauthorized(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
+        """Handle 401 Unauthorized response."""
+        reason = self._extract_reason(response)
+        token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
         logger.error(
-            "[CREDIT_CHECK] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s",
-            cache_key,
-            response.status_code,
-            reason,
+            "[CREDIT_CHECK] ✗ AUTH_EXPIRED for %s:\n"
+            "  HTTP Status: 401 Unauthorized\n"
+            "  Reason: %s\n"
+            "  Token: %s (%d chars)\n"
+            "  Action: Writing .token_refresh_needed signal",
+            cache_key, reason, token_preview, len(self._google_id_token) if self._google_id_token else 0,
         )
+        self._signal_token_refresh_needed()
+        return self._handle_failure("AUTH_EXPIRED", reason)
+
+    def _handle_check_unexpected(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
+        """Handle unexpected HTTP status codes."""
+        reason = self._extract_reason(response)
+        logger.error("[CREDIT_CHECK] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s", cache_key, response.status_code, reason)
         return self._handle_failure(f"HTTP_{response.status_code}", reason)
 
     async def spend_credit(

@@ -165,8 +165,8 @@ class TaskCompleteHandler(BaseActionHandler):
                         else:
                             self.logger.debug(f"No images to purge from task {parent_task_id}")
 
-                    # TODO: Disable this notification for voice/home assistant channels where silent
-                    # completion is expected behavior. Check dispatch_context for channel type.
+                    # Only notify on API channels where users expect feedback. Voice/home assistant
+                    # and Discord channels expect silent completion (speaking is handled separately).
                     if task and task.channel_id:
                         is_api = self._is_api_channel(task.channel_id)
                         has_spoken = await self._has_speak_action_completed(parent_task_id)

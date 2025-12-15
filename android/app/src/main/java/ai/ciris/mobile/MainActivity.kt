@@ -1994,6 +1994,18 @@ class MainActivity : AppCompatActivity() {
             .commit()
     }
 
+    private fun showConfigFragment() {
+        Log.i(TAG, "Showing ConfigFragment")
+        webView.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+
+        val fragment = ConfigFragment.newInstance(cirisAccessToken)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment, "config_fragment")
+            .addToBackStack("config")
+            .commit()
+    }
+
     private fun showAdaptersFragment() {
         Log.i(TAG, "Showing AdaptersFragment")
         webView.visibility = View.GONE
@@ -2124,7 +2136,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_config -> {
-                navigateToWebPage("/config")
+                showConfigFragment()
                 true
             }
             R.id.action_users -> {

@@ -1327,6 +1327,18 @@ async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
     if not runtime:
         raise HTTPException(status_code=503, detail="Runtime not available")
 
+    # Check if resume from first-run is in progress - don't kill the server mid-initialization
+    if getattr(runtime, "_resume_in_progress", False):
+        logger.warning("[LOCAL_SHUTDOWN] Rejected - resume from first-run in progress")
+        return SuccessResponse(
+            data=ShutdownResponse(
+                status="busy",
+                message="Resume from first-run in progress - server is initializing",
+                shutdown_initiated=False,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
     shutdown_service = getattr(runtime, "shutdown_service", None)
     if not shutdown_service:
         raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)

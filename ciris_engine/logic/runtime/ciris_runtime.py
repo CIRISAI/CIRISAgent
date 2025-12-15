@@ -157,6 +157,7 @@ class CIRISRuntime:
         self._shutdown_reason: Optional[str] = None
         self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
+        self._resume_in_progress = False  # Set during resume_from_first_run to prevent premature shutdown
 
         # Identity - will be loaded during initialization
         self.agent_identity: Optional[AgentIdentityRoot] = None
@@ -1808,6 +1809,9 @@ class CIRISRuntime:
         """
         import time
 
+        # Set flag to prevent premature shutdown during resume
+        self._resume_in_progress = True
+
         start_time = time.time()
         total_steps = 14
 
@@ -1881,6 +1885,9 @@ class CIRISRuntime:
         logger.warning(f"✅ RESUME COMPLETE in {elapsed:.2f}s - Agent processor started!")
         logger.warning("=" * 70)
         logger.warning("")
+
+        # Clear the resume flag - safe to shutdown now
+        self._resume_in_progress = False
 
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready.

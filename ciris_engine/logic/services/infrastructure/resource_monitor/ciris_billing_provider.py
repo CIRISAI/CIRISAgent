@@ -10,6 +10,7 @@ from typing import Callable, Optional
 
 import httpx
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.schemas.services.credit_gate import (
     CreditAccount,
@@ -30,6 +31,8 @@ class CIRISBillingProvider(CreditGateProtocol):
     2. JWT auth (Android/mobile): Uses Authorization: Bearer {google_id_token}
        - Token is refreshed automatically via token_refresh_callback
        - Format matches CIRIS LLM proxy: Bearer google:{user_id} or raw ID token
+
+    Includes automatic failover to EU fallback (ciris-services-2.ai) on connection errors.
     """
 
     def __init__(
@@ -38,7 +41,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         api_key: str = "",
         google_id_token: str = "",
         token_refresh_callback: Optional[Callable[[], str]] = None,
-        base_url: str = "https://billing1.ciris-services-1.ai",
+        base_url: Optional[str] = None,
         timeout_seconds: float = 5.0,
         cache_ttl_seconds: int = 15,
         fail_open: bool = False,
@@ -50,7 +53,7 @@ class CIRISBillingProvider(CreditGateProtocol):
             api_key: API key for server-to-server auth (uses X-API-Key header)
             google_id_token: Google ID token for JWT auth (uses Authorization: Bearer)
             token_refresh_callback: Optional callback to refresh google_id_token when expired
-            base_url: CIRIS Billing API base URL
+            base_url: CIRIS Billing API base URL (defaults to central config)
             timeout_seconds: HTTP request timeout
             cache_ttl_seconds: Credit check cache TTL
             fail_open: If True, allow requests when billing backend is unavailable
@@ -59,11 +62,14 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._api_key = api_key
         self._google_id_token = google_id_token
         self._token_refresh_callback = token_refresh_callback
-        self._base_url = base_url.rstrip("/")
+        # Use provided URL or get from central config
+        self._base_url = (base_url or get_billing_url()).rstrip("/")
+        self._fallback_url = get_billing_url(use_fallback=True).rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._cache_ttl = max(cache_ttl_seconds, 0)
         self._fail_open = fail_open
         self._transport = transport
+        self._using_fallback = False
 
         # Determine auth mode
         self._use_jwt_auth = bool(google_id_token)
@@ -169,7 +175,122 @@ class CIRISBillingProvider(CreditGateProtocol):
         if client:
             await client.aclose()
         self._cache.clear()
+        self._using_fallback = False
         logger.info("CIRISBillingProvider stopped")
+
+    async def _post_with_fallback(
+        self, path: str, payload: dict, cache_key: str
+    ) -> tuple[httpx.Response | None, str | None]:
+        """Make a POST request with automatic fallback to EU region.
+
+        Args:
+            path: API path (e.g., "/v1/billing/credits/check")
+            payload: JSON payload to send
+            cache_key: Cache key for logging
+
+        Returns:
+            Tuple of (response, error_type). error_type is a clear category string:
+            - "TIMEOUT": Request timed out (tried both regions)
+            - "CONNECTION_ERROR": Could not connect (tried both regions)
+            - "NETWORK_ERROR": Other network issue
+            - None: Success
+        """
+        assert self._client is not None
+        self._refresh_auth_header()
+
+        # Try primary URL first (unless we're already using fallback)
+        urls_to_try = (
+            [(self._fallback_url, "EU-fallback")]
+            if self._using_fallback
+            else [(self._base_url, "US-primary"), (self._fallback_url, "EU-fallback")]
+        )
+
+        errors_encountered: list[tuple[str, str, str]] = []  # (region, error_type, detail)
+
+        for base_url, region in urls_to_try:
+            full_url = f"{base_url}{path}"
+            try:
+                logger.info("[BILLING] POST %s (%s) for %s", full_url, region, cache_key)
+
+                async with httpx.AsyncClient(
+                    timeout=self._timeout_seconds,
+                    headers=self._client.headers,
+                ) as client:
+                    response = await client.post(full_url, json=payload)
+
+                # Success - remember if we used fallback
+                if "fallback" in region and not self._using_fallback:
+                    logger.info("[BILLING] ✓ Switched to %s: %s", region, self._fallback_url)
+                    self._using_fallback = True
+                elif "primary" in region and self._using_fallback:
+                    logger.info("[BILLING] ✓ Recovered to %s: %s", region, self._base_url)
+                    self._using_fallback = False
+                else:
+                    logger.info("[BILLING] ✓ Request succeeded via %s", region)
+
+                return response, None
+
+            except httpx.ConnectTimeout as exc:
+                errors_encountered.append((region, "TIMEOUT", f"Connection timed out after {self._timeout_seconds}s"))
+                logger.warning(
+                    "[BILLING] ✗ %s TIMEOUT: Connection to %s timed out after %.1fs",
+                    region,
+                    base_url,
+                    self._timeout_seconds,
+                )
+                continue
+
+            except asyncio.TimeoutError:
+                errors_encountered.append((region, "TIMEOUT", f"Request timed out after {self._timeout_seconds}s"))
+                logger.warning(
+                    "[BILLING] ✗ %s TIMEOUT: Request to %s timed out after %.1fs",
+                    region,
+                    base_url,
+                    self._timeout_seconds,
+                )
+                continue
+
+            except httpx.ConnectError as exc:
+                errors_encountered.append((region, "CONNECTION_ERROR", str(exc)))
+                logger.warning(
+                    "[BILLING] ✗ %s CONNECTION_ERROR: Cannot reach %s - %s",
+                    region,
+                    base_url,
+                    exc,
+                )
+                continue
+
+            except httpx.RequestError as exc:
+                # Other request errors - don't try fallback, likely a client-side issue
+                error_detail = f"{type(exc).__name__}: {exc}"
+                logger.error(
+                    "[BILLING] ✗ %s NETWORK_ERROR: %s - %s",
+                    region,
+                    base_url,
+                    error_detail,
+                )
+                return None, f"NETWORK_ERROR:{error_detail}"
+
+        # All URLs failed - summarize what happened
+        if errors_encountered:
+            error_types = set(e[1] for e in errors_encountered)
+            regions_tried = [e[0] for e in errors_encountered]
+
+            if error_types == {"TIMEOUT"}:
+                error_summary = f"TIMEOUT:All regions timed out ({', '.join(regions_tried)})"
+            elif error_types == {"CONNECTION_ERROR"}:
+                error_summary = f"CONNECTION_ERROR:Cannot reach any region ({', '.join(regions_tried)})"
+            else:
+                error_summary = f"MULTI_ERROR:{'; '.join(f'{e[0]}={e[1]}' for e in errors_encountered)}"
+
+            logger.error(
+                "[BILLING] ✗ ALL REGIONS FAILED for %s:\n%s",
+                cache_key,
+                "\n".join(f"  - {e[0]}: {e[1]} - {e[2]}" for e in errors_encountered),
+            )
+            return None, error_summary
+
+        return None, "UNKNOWN_ERROR:No URLs configured"
 
     async def check_credit(
         self,
@@ -202,77 +323,98 @@ class CIRISBillingProvider(CreditGateProtocol):
         payload = self._build_check_payload(account, context)
         logger.debug("Credit check payload for %s: %s", cache_key, payload)
 
-        try:
-            assert self._client is not None  # nosec - ensured by _ensure_started
-            # Refresh auth header before request (for JWT mode token refresh)
-            self._refresh_auth_header()
+        response, error_type = await self._post_with_fallback("/v1/billing/credits/check", payload, cache_key)
 
-            # Both JWT and API key modes need oauth_provider and external_id in body
-            # JWT provides authentication, but account identity still comes from payload
-            logger.info(
-                "Sending credit check to %s/v1/billing/credits/check (auth=%s, payload=%s)",
-                self._base_url,
-                "JWT" if self._use_jwt_auth else "API_KEY",
-                payload,
-            )
-            response = await self._client.post("/v1/billing/credits/check", json=payload)
+        if error_type:
+            # Clear categorization of network errors
+            if error_type.startswith("TIMEOUT"):
+                logger.error(
+                    "[CREDIT_CHECK] ✗ TIMEOUT for %s - billing service unreachable (tried all regions)",
+                    cache_key,
+                )
+                return self._handle_failure("TIMEOUT", error_type)
+            elif error_type.startswith("CONNECTION_ERROR"):
+                logger.error(
+                    "[CREDIT_CHECK] ✗ CONNECTION_ERROR for %s - cannot connect to billing service",
+                    cache_key,
+                )
+                return self._handle_failure("CONNECTION_ERROR", error_type)
+            else:
+                logger.error(
+                    "[CREDIT_CHECK] ✗ NETWORK_ERROR for %s - %s",
+                    cache_key,
+                    error_type,
+                )
+                return self._handle_failure("NETWORK_ERROR", error_type)
 
-            logger.info("Credit response status=%s", response.status_code)
-        except (httpx.RequestError, asyncio.TimeoutError) as exc:
-            logger.error("Credit request failed for %s: %s (%s)", cache_key, type(exc).__name__, exc, exc_info=True)
-            return self._handle_failure("request_error", str(exc))
+        assert response is not None
 
+        # Handle successful response
         if response.status_code == httpx.codes.OK:
             response_data = response.json()
-            # Both JWT and API key modes return same response format now
-            logger.info(
-                "[CREDIT_CHECK] Backend response for %s: free_uses=%s, credits=%s, has_credit=%s, daily_free=%s",
-                cache_key,
-                response_data.get("free_uses_remaining"),
-                response_data.get("credits_remaining"),
-                response_data.get("has_credit"),
-                response_data.get("daily_free_uses_remaining"),
-            )
+            has_credit = response_data.get("has_credit", False)
+            free_remaining = response_data.get("free_uses_remaining", 0)
+            credits_remaining = response_data.get("credits_remaining", 0)
+
+            if has_credit:
+                logger.info(
+                    "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s",
+                    cache_key,
+                    free_remaining,
+                    credits_remaining,
+                )
+            else:
+                logger.warning(
+                    "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
+                    cache_key,
+                    free_remaining,
+                    credits_remaining,
+                )
+
             result = self._parse_check_success(response_data)
             self._store_cache(cache_key, result)
             return result
 
+        # Handle payment required (402) or forbidden (403) - no credits
         if response.status_code in {httpx.codes.PAYMENT_REQUIRED, httpx.codes.FORBIDDEN}:
             reason = self._extract_reason(response)
-            logger.info("[CREDIT_CHECK] No credit available for %s: %s", cache_key, reason)
-            result = CreditCheckResult(has_credit=False, reason=reason)
+            logger.warning(
+                "[CREDIT_CHECK] ✗ NO_CREDITS for %s (HTTP %d): %s",
+                cache_key,
+                response.status_code,
+                reason,
+            )
+            result = CreditCheckResult(has_credit=False, reason=f"NO_CREDITS:{reason}")
             self._store_cache(cache_key, result)
             return result
 
-        # Handle 401 Unauthorized - likely token expired
+        # Handle 401 Unauthorized - token expired or invalid
         if response.status_code == httpx.codes.UNAUTHORIZED:
             reason = self._extract_reason(response)
             token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
             logger.error(
-                "[CREDIT_CHECK] 401 Unauthorized for %s - TOKEN LIKELY EXPIRED\n"
+                "[CREDIT_CHECK] ✗ AUTH_EXPIRED for %s:\n"
+                "  HTTP Status: 401 Unauthorized\n"
                 "  Reason: %s\n"
-                "  Token preview: %s\n"
-                "  Token length: %d\n"
-                "  Has refresh callback: %s\n"
-                "  Writing .token_refresh_needed signal for Android...",
+                "  Token: %s (%d chars)\n"
+                "  Action: Writing .token_refresh_needed signal",
                 cache_key,
                 reason,
                 token_preview,
                 len(self._google_id_token) if self._google_id_token else 0,
-                self._token_refresh_callback is not None,
             )
-            # Write signal file for Android to trigger token refresh
             self._signal_token_refresh_needed()
-            return self._handle_failure("token_expired", reason)
+            return self._handle_failure("AUTH_EXPIRED", reason)
 
+        # Handle other unexpected responses
         reason = self._extract_reason(response)
-        logger.warning(
-            "[CREDIT_CHECK] Unexpected response for %s: status=%s reason=%s",
+        logger.error(
+            "[CREDIT_CHECK] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s",
             cache_key,
             response.status_code,
             reason,
         )
-        return self._handle_failure(f"unexpected_status_{response.status_code}", reason)
+        return self._handle_failure(f"HTTP_{response.status_code}", reason)
 
     async def spend_credit(
         self,
@@ -289,55 +431,95 @@ class CIRISBillingProvider(CreditGateProtocol):
         cache_key = account.cache_key()
         logger.debug("Credit spend payload for %s: %s", cache_key, payload)
 
-        try:
-            assert self._client is not None
-            # Refresh auth header before request (for JWT mode token refresh)
-            self._refresh_auth_header()
-            response = await self._client.post("/v1/billing/charges", json=payload)
-            logger.debug("Credit spend response for %s: status=%s", cache_key, response.status_code)
-        except (httpx.RequestError, asyncio.TimeoutError) as exc:
-            logger.warning("Credit spend request failed for %s: %s", cache_key, exc)
-            return CreditSpendResult(succeeded=False, reason=f"charge_failure:request_error:{exc}")
+        response, error_type = await self._post_with_fallback("/v1/billing/charges", payload, cache_key)
 
+        if error_type:
+            # Clear categorization of network errors
+            if error_type.startswith("TIMEOUT"):
+                logger.error(
+                    "[CREDIT_SPEND] ✗ TIMEOUT for %s - billing service unreachable",
+                    cache_key,
+                )
+                return CreditSpendResult(succeeded=False, reason=f"TIMEOUT:{error_type}")
+            elif error_type.startswith("CONNECTION_ERROR"):
+                logger.error(
+                    "[CREDIT_SPEND] ✗ CONNECTION_ERROR for %s - cannot connect to billing",
+                    cache_key,
+                )
+                return CreditSpendResult(succeeded=False, reason=f"CONNECTION_ERROR:{error_type}")
+            else:
+                logger.error(
+                    "[CREDIT_SPEND] ✗ NETWORK_ERROR for %s - %s",
+                    cache_key,
+                    error_type,
+                )
+                return CreditSpendResult(succeeded=False, reason=f"NETWORK_ERROR:{error_type}")
+
+        assert response is not None
+
+        # Handle successful charge
         if response.status_code in {httpx.codes.OK, httpx.codes.CREATED}:
             response_data = response.json()
+            charge_id = response_data.get("charge_id")
+            balance_after = response_data.get("balance_after")
             logger.info(
-                "[CREDIT_SPEND] Charge successful for %s: charge_id=%s, balance_after=%s",
+                "[CREDIT_SPEND] ✓ CHARGE_SUCCESS for %s: charge_id=%s, balance_after=%s",
                 cache_key,
-                response_data.get("charge_id"),
-                response_data.get("balance_after"),
+                charge_id,
+                balance_after,
             )
             result = self._parse_spend_success(response_data)
-            logger.debug("[CREDIT_SPEND] Cache invalidated for %s - next check will hit backend", cache_key)
             self._invalidate_cache(cache_key)
             return result
 
+        # Handle idempotency conflict - charge already recorded (this is success)
         if response.status_code == httpx.codes.CONFLICT:
-            # Idempotency conflict - charge already exists
-            logger.info("Idempotency conflict for %s - charge already recorded", cache_key)
-            # Extract existing charge info from response if available
             existing_charge_id = response.headers.get("X-Existing-Charge-ID")
+            logger.info(
+                "[CREDIT_SPEND] ✓ ALREADY_CHARGED for %s (idempotency): charge_id=%s",
+                cache_key,
+                existing_charge_id,
+            )
             return CreditSpendResult(
                 succeeded=True,
                 transaction_id=existing_charge_id,
-                reason="charge_already_exists:idempotency",
+                reason="ALREADY_CHARGED:idempotency",
             )
 
+        # Handle insufficient credits
         if response.status_code in {httpx.codes.PAYMENT_REQUIRED, httpx.codes.FORBIDDEN}:
             reason = self._extract_reason(response)
+            logger.warning(
+                "[CREDIT_SPEND] ✗ INSUFFICIENT_CREDITS for %s (HTTP %d): %s",
+                cache_key,
+                response.status_code,
+                reason,
+            )
             self._invalidate_cache(cache_key)
-            return CreditSpendResult(succeeded=False, reason=reason)
+            return CreditSpendResult(succeeded=False, reason=f"INSUFFICIENT_CREDITS:{reason}")
 
+        # Handle auth errors
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            reason = self._extract_reason(response)
+            logger.error(
+                "[CREDIT_SPEND] ✗ AUTH_EXPIRED for %s: %s",
+                cache_key,
+                reason,
+            )
+            self._signal_token_refresh_needed()
+            return CreditSpendResult(succeeded=False, reason=f"AUTH_EXPIRED:{reason}")
+
+        # Handle other unexpected responses
         reason = self._extract_reason(response)
-        logger.warning(
-            "Unexpected credit spend response for %s: status=%s reason=%s",
+        logger.error(
+            "[CREDIT_SPEND] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s",
             cache_key,
             response.status_code,
             reason,
         )
         return CreditSpendResult(
             succeeded=False,
-            reason=f"charge_failure:unexpected_status_{response.status_code}:{reason}",
+            reason=f"HTTP_{response.status_code}:{reason}",
         )
 
     async def _ensure_started(self) -> None:
@@ -559,11 +741,24 @@ class CIRISBillingProvider(CreditGateProtocol):
         except ValueError:
             return response.text
 
-    def _handle_failure(self, code: str, detail: str) -> CreditCheckResult:
-        reason = f"credit_failure:{code}:{detail}"
+    def _handle_failure(self, error_category: str, detail: str) -> CreditCheckResult:
+        """Handle a billing failure and return appropriate CreditCheckResult.
+
+        Error categories:
+        - TIMEOUT: Billing service unreachable (tried all regions)
+        - CONNECTION_ERROR: Cannot connect to billing service
+        - NETWORK_ERROR: Other network issues
+        - AUTH_EXPIRED: Token expired, needs refresh
+        - NO_CREDITS: User has no credits available
+        - HTTP_xxx: Unexpected HTTP status code
+        """
+        reason = f"{error_category}:{detail}"
         if self._fail_open:
-            logger.info("Fail-open credit fallback engaged: %s", reason)
-            return CreditCheckResult(has_credit=True, reason=reason)
+            logger.warning(
+                "[BILLING] FAIL_OPEN engaged - allowing request despite error: %s",
+                reason,
+            )
+            return CreditCheckResult(has_credit=True, reason=f"FAIL_OPEN:{reason}")
         return CreditCheckResult(has_credit=False, reason=reason)
 
 

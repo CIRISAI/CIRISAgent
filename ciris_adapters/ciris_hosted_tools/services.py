@@ -25,23 +25,16 @@ from uuid import uuid4
 
 import httpx
 
-from ciris_engine.schemas.adapters.tools import (
-    ToolExecutionResult,
-    ToolExecutionStatus,
-    ToolInfo,
-    ToolParameterSchema,
+from ciris_engine.config.ciris_services import (
+    DEFAULT_BILLING_URL,
+    DEFAULT_PROXY_URL,
+    FALLBACK_BILLING_URL,
+    FALLBACK_PROXY_URL,
 )
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.platform import PlatformRequirement
 
 logger = logging.getLogger(__name__)
-
-# Proxy URLs - for tool execution (search, etc.)
-DEFAULT_PROXY_URL = "https://proxy1.ciris-services-1.ai"
-FALLBACK_PROXY_URL = "https://proxy1.ciris-services-2.ai"
-
-# Billing URLs - for balance/credit checking
-DEFAULT_BILLING_URL = "https://billing1.ciris-services-1.ai"
-FALLBACK_BILLING_URL = "https://billing1.ciris-services-2.ai"
 
 
 @dataclass
@@ -150,19 +143,70 @@ class CIRISHostedToolService:
         logger.info("CIRISHostedToolService stopped")
 
     def _get_google_id_token(self) -> Optional[str]:
-        """Get the Google ID token from environment.
+        """Get the Google ID token from environment or .env file.
 
         The token is set by:
         - Android: After native Google Sign-In, stored in CIRIS_BILLING_GOOGLE_ID_TOKEN
         - API: After native token exchange, stored in environment
 
+        On Android, the .env file may be updated after Python starts (by Kotlin
+        TokenRefreshManager), so we re-read from the file if not in environment.
+
         Returns:
             Google ID token if available, None otherwise
         """
-        # Try multiple env var names for compatibility
+        # First try environment (direct or loaded at startup)
         token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
-        if not token:
+        if token:
+            logger.info(f"[HOSTED_TOOLS] Got token from env CIRIS_BILLING_GOOGLE_ID_TOKEN (len={len(token)})")
+        else:
             token = os.environ.get("GOOGLE_ID_TOKEN")
+            if token:
+                logger.info(f"[HOSTED_TOOLS] Got token from env GOOGLE_ID_TOKEN (len={len(token)})")
+
+        # If not in environment, try re-reading from .env file
+        # This handles the case where Kotlin updates the file after Python starts
+        if not token:
+            logger.info("[HOSTED_TOOLS] No token in environment, reading from .env file...")
+            try:
+                from pathlib import Path
+
+                # Try common .env locations - Android path first
+                env_paths = [
+                    Path("/data/data/ai.ciris.mobile/files/ciris/.env"),  # Android
+                    Path(os.environ.get("CIRIS_HOME", ".")) / ".env",
+                    Path.home() / ".env",
+                    Path(".env"),
+                ]
+                for env_path in env_paths:
+                    logger.info(f"[HOSTED_TOOLS] Checking {env_path} exists={env_path.exists()}")
+                    if env_path.exists():
+                        with open(env_path) as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith("CIRIS_BILLING_GOOGLE_ID_TOKEN="):
+                                    # Handle quoted and unquoted values
+                                    value = line.split("=", 1)[1].strip()
+                                    if value.startswith('"') and value.endswith('"'):
+                                        value = value[1:-1]
+                                    elif value.startswith("'") and value.endswith("'"):
+                                        value = value[1:-1]
+                                    if value:
+                                        token = value
+                                        logger.info(
+                                            f"[HOSTED_TOOLS] ✓ Loaded fresh token from {env_path} (len={len(value)})"
+                                        )
+                                        break
+                        if token:
+                            break
+                        else:
+                            logger.warning(f"[HOSTED_TOOLS] .env exists but no CIRIS_BILLING_GOOGLE_ID_TOKEN found")
+
+                if not token:
+                    logger.error("[HOSTED_TOOLS] ✗ No token found in any .env location!")
+            except Exception as e:
+                logger.error(f"[HOSTED_TOOLS] ✗ Failed to read .env file: {e}")
+
         return token
 
     async def get_available_tools(self) -> List[str]:
@@ -470,13 +514,59 @@ class CIRISHostedToolService:
         Returns:
             Response object if successful, None if request failed
         """
+        response, _ = await self._try_search_request_with_error(payload, use_fallback)
+        return response
+
+    async def _try_search_request_with_error(
+        self, payload: Dict[str, Any], use_fallback: bool = False
+    ) -> tuple[Optional[httpx.Response], Optional[Exception]]:
+        """Try to make a search request to the proxy, returning error info.
+
+        Args:
+            payload: Search parameters
+            use_fallback: If True, use fallback proxy URL
+
+        Returns:
+            Tuple of (response, error). On success, error is None.
+        """
+        region = "EU-fallback" if use_fallback else "US-primary"
         try:
-            return await self._make_request(
-                "POST", "/v1/search", json_data=payload, use_fallback=use_fallback, service="proxy"
+            response = await self._make_request(
+                "POST", "/v1/web/search", json_data=payload, use_fallback=use_fallback, service="proxy"
             )
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.warning(f"[WEB_SEARCH] Request failed: {e}")
-            return None
+            logger.info(f"[WEB_SEARCH] ✓ Request succeeded via {region}")
+            return response, None
+        except httpx.ConnectTimeout as e:
+            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            return None, e
+        except httpx.ConnectError as e:
+            logger.warning(f"[WEB_SEARCH] ✗ {region} CONNECTION_ERROR: {e}")
+            return None, e
+        except httpx.TimeoutException as e:
+            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            return None, e
+        except httpx.RequestError as e:
+            logger.warning(f"[WEB_SEARCH] ✗ {region} NETWORK_ERROR: {e}")
+            return None, e
+
+    @staticmethod
+    def _categorize_request_error(error: Optional[Exception]) -> str:
+        """Categorize a request error for retry metadata.
+
+        Returns:
+            Error category string: TIMEOUT, CONNECTION_ERROR, NETWORK_ERROR, or UNKNOWN
+        """
+        if error is None:
+            return "UNKNOWN"
+        if isinstance(error, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout)):
+            return "TIMEOUT"
+        if isinstance(error, httpx.ConnectError):
+            return "CONNECTION_ERROR"
+        if isinstance(error, httpx.TimeoutException):
+            return "TIMEOUT"
+        if isinstance(error, httpx.RequestError):
+            return "NETWORK_ERROR"
+        return "UNKNOWN"
 
     async def _execute_web_search(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute a web search via CIRIS proxy.
@@ -518,14 +608,36 @@ class CIRISHostedToolService:
                 correlation_id=correlation_id,
             )
 
-        payload = {"q": query, "count": count}
-        logger.info(f"[WEB_SEARCH] Searching for: {query[:50]}...")
+        # Generate IDs for billing tracking and retry correlation
+        import hashlib
+        import uuid
 
-        # Try primary proxy first, then fallback
-        response = await self._try_search_request(payload, use_fallback=False)
+        interaction_id = hashlib.sha256(correlation_id.encode()).hexdigest()[:32]
+        request_id = uuid.uuid4().hex[:12]
+
+        payload = {
+            "q": query,
+            "count": count,
+            "metadata": {
+                "interaction_id": interaction_id,
+                "request_id": request_id,
+            },
+        }
+        logger.info(
+            f"[WEB_SEARCH] Searching for: {query[:50]}... (interaction_id={interaction_id}, request_id={request_id})"
+        )
+
+        # Try primary proxy first, then fallback with retry metadata
+        response, primary_error = await self._try_search_request_with_error(payload, use_fallback=False)
         if response is None:
-            logger.warning("[WEB_SEARCH] Primary proxy failed, trying fallback...")
-            response = await self._try_search_request(payload, use_fallback=True)
+            # Add retry metadata for fallback attempt
+            error_category = self._categorize_request_error(primary_error)
+            payload["metadata"]["retry_count"] = 1
+            payload["metadata"]["previous_error"] = error_category
+            payload["metadata"]["original_request_id"] = request_id
+
+            logger.warning(f"[WEB_SEARCH] Primary proxy failed ({error_category}), trying EU fallback...")
+            response, _ = await self._try_search_request_with_error(payload, use_fallback=True)
 
         if response is None:
             return ToolExecutionResult(

@@ -5,7 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/gray_light">
+    android:background="@color/gray_light"
+    android:fitsSystemWindows="true">
 
     <!-- Header / Steps -->
     <LinearLayout
@@ -25,14 +26,14 @@
             android:textColor="@color/text_primary"
             android:layout_marginBottom="16dp"/>
 
-        <!-- Steps Indicator -->
+        <!-- Steps Indicator (3 steps) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Step 1 -->
+            <!-- Step 1: Welcome -->
             <TextView
                 android:id="@+id/step1_indicator"
                 android:layout_width="32dp"
@@ -44,11 +45,11 @@
                 android:textStyle="bold"/>
 
             <View
-                android:layout_width="40dp"
+                android:layout_width="48dp"
                 android:layout_height="2dp"
                 android:background="@color/gray_medium"/>
 
-             <!-- Step 2 -->
+            <!-- Step 2: AI Configuration -->
             <TextView
                 android:id="@+id/step2_indicator"
                 android:layout_width="32dp"
@@ -60,33 +61,17 @@
                 android:textStyle="bold"/>
 
             <View
-                android:layout_width="40dp"
+                android:layout_width="48dp"
                 android:layout_height="2dp"
                 android:background="@color/gray_medium"/>
 
-            <!-- Step 3 -->
+            <!-- Step 3: Confirm -->
             <TextView
                 android:id="@+id/step3_indicator"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:background="@drawable/bg_step_inactive"
                 android:text="@string/setup_step_3"
-                android:gravity="center"
-                android:textColor="@color/gray_medium"
-                android:textStyle="bold"/>
-
-            <View
-                android:layout_width="40dp"
-                android:layout_height="2dp"
-                android:background="@color/gray_medium"/>
-
-            <!-- Step 4 -->
-            <TextView
-                android:id="@+id/step4_indicator"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_step_inactive"
-                android:text="@string/setup_step_4"
                 android:gravity="center"
                 android:textColor="@color/gray_medium"
                 android:textStyle="bold"/>
@@ -104,7 +89,10 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="48dp"
         android:orientation="horizontal"
         android:gravity="end">
 

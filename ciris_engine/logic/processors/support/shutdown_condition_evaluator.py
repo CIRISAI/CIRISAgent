@@ -103,7 +103,14 @@ class ShutdownConditionEvaluator:
         # Mode: conditional - Check each condition
         if shutdown.mode == "conditional":
             if not context:
-                # Without context, we can't evaluate conditions - default to requiring consent
+                # Without context, we can't evaluate conditions
+                # If instant_shutdown_otherwise is True, trust that and skip consent
+                # This is important for mobile/Android where context may not be available
+                if shutdown.instant_shutdown_otherwise:
+                    return (
+                        False,
+                        "No context for condition evaluation; instant_shutdown_otherwise=True permits shutdown",
+                    )
                 return True, "Conditional shutdown requires context for evaluation; defaulting to consent"
 
             # Check each configured condition

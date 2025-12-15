@@ -21,6 +21,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.schemas.api.auth import AuthContext
 
 from ..dependencies.auth import require_observer
@@ -29,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
-# Billing service URLs
-DEFAULT_BILLING_URL = "https://billing1.ciris-services-1.ai"
-FALLBACK_BILLING_URL = "https://billing1.ciris-services-2.ai"
+# Billing service URLs from central config
+DEFAULT_BILLING_URL = get_billing_url()
+FALLBACK_BILLING_URL = get_billing_url(use_fallback=True)
 
 
 class BillingEndpoint(str, Enum):
@@ -240,9 +241,7 @@ async def get_tool_balance(
         raise HTTPException(status_code=401, detail=ERR_GOOGLE_SIGNIN_REQUIRED)
 
     try:
-        response = await _make_billing_request(
-            "GET", BillingEndpoint.BALANCE_TOOL, google_token, tool_name=tool_name
-        )
+        response = await _make_billing_request("GET", BillingEndpoint.BALANCE_TOOL, google_token, tool_name=tool_name)
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)
@@ -334,9 +333,7 @@ async def get_all_tool_balances(
     except httpx.RequestError as e:
         logger.warning(f"[TOOL_BALANCE] Primary failed, trying fallback: {e}")
         try:
-            response = await _make_billing_request(
-                "GET", BillingEndpoint.BALANCE_ALL, google_token, use_fallback=True
-            )
+            response = await _make_billing_request("GET", BillingEndpoint.BALANCE_ALL, google_token, use_fallback=True)
             if response.status_code == 200:
                 data = response.json()
                 balances = []
@@ -381,9 +378,7 @@ async def check_tool_credit(
         )
 
     try:
-        response = await _make_billing_request(
-            "GET", BillingEndpoint.CHECK_TOOL, google_token, tool_name=tool_name
-        )
+        response = await _make_billing_request("GET", BillingEndpoint.CHECK_TOOL, google_token, tool_name=tool_name)
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)

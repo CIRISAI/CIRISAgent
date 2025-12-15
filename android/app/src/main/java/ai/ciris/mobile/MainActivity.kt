@@ -1239,12 +1239,36 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Attempt to shut down an existing server gracefully via API.
-     * Uses saved CIRIS access token for authentication.
+     * First tries unauthenticated local-shutdown (for cleared app data scenarios),
+     * then falls back to authenticated shutdown if token is available.
      * Returns true if shutdown was triggered successfully.
      */
     private fun shutdownExistingServer(): Boolean {
+        // First, try the localhost-only endpoint (no auth required)
+        // This handles the case where app data was cleared but server is still running
+        try {
+            Log.i(TAG, "[SmartStartup] Trying local-shutdown endpoint (no auth)...")
+            val localUrl = URL("$SERVER_URL/v1/system/local-shutdown")
+            val localConn = localUrl.openConnection() as HttpURLConnection
+            localConn.connectTimeout = 3000
+            localConn.readTimeout = 5000
+            localConn.requestMethod = "POST"
+            localConn.doOutput = true
+            localConn.setRequestProperty("Content-Type", "application/json")
+            localConn.outputStream.bufferedWriter().use { it.write("{}") }
+            val localResponse = localConn.responseCode
+            localConn.disconnect()
+            Log.i(TAG, "[SmartStartup] Local-shutdown response: $localResponse")
+            if (localResponse in 200..299) {
+                return true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[SmartStartup] Local-shutdown failed: ${e.message}")
+        }
+
+        // Fall back to authenticated shutdown
         return try {
-            Log.i(TAG, "[SmartStartup] Attempting graceful shutdown of existing server...")
+            Log.i(TAG, "[SmartStartup] Trying authenticated shutdown...")
 
             // Get saved auth token for the shutdown request
             val prefs = getSharedPreferences("ciris_prefs", MODE_PRIVATE)

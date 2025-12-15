@@ -8,17 +8,22 @@
     <string name="action_buy_credits">Buy Credits</string>
     <string name="action_account">Account</string>
 
-    <!-- Setup Wizard -->
+    <!-- Setup Wizard - Welcome -->
     <string name="setup_welcome_title">Welcome to CIRIS</string>
-    <string name="setup_welcome_desc">CIRIS is a next-generation AI assistant that prioritizes cognitive integrity, transparency, and ethical decision-making.\n\nThis setup wizard will help you configure your instance in just a few steps.</string>
-    <string name="setup_what_configure">What you\'ll configure:</string>
-    <string name="setup_point_1_title">LLM API Key</string>
-    <string name="setup_point_1_desc">An API key from OpenAI, Anthropic, or another supported provider</string>
-    <string name="setup_point_2_title">Admin Password</string>
-    <string name="setup_point_2_desc">A secure password for the default admin account</string>
-    <string name="setup_point_3_title">Your Account</string>
-    <string name="setup_point_3_desc">Username and password for your personal account</string>
-    <string name="setup_note">Note: All data is stored locally on your device. Your API keys and passwords are encrypted and never shared.</string>
+    <string name="setup_badge_free">✓ 100% Free &amp; Open Source</string>
+    <string name="setup_welcome_desc_simple">CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.</string>
+
+    <!-- Welcome - Google user -->
+    <string name="setup_google_ready_title">You\'re ready to go!</string>
+    <string name="setup_google_ready_desc">Since you signed in with Google, CIRIS can start working right away with free AI access. Your conversations are private and never used for training.</string>
+
+    <!-- Welcome - Non-Google user -->
+    <string name="setup_required_title">Quick Setup Required</string>
+    <string name="setup_required_desc">To power AI conversations, you\'ll need to connect an AI provider (like OpenAI or Anthropic). This takes about 2 minutes.</string>
+
+    <!-- Welcome - How it works -->
+    <string name="setup_how_it_works_title">How it works</string>
+    <string name="setup_how_it_works_desc">CIRIS runs entirely on your device. However, AI reasoning requires powerful servers. CIRIS connects to privacy-respecting AI providers that never train on your data and never store your conversations.</string>
 
     <string name="setup_continue">Continue -></string>
     <string name="setup_back">Back</string>
@@ -30,16 +35,31 @@
     <string name="setup_step_3">3</string>
     <string name="setup_step_4">4</string>
 
-    <string name="setup_llm_title">LLM Configuration</string>
-    <string name="setup_llm_desc">Choose your LLM provider and enter your API key.</string>
+    <string name="setup_llm_title">AI Configuration</string>
+    <string name="setup_llm_desc">Configure how CIRIS connects to AI services.</string>
     <string name="setup_provider_label">Provider</string>
     <string name="setup_api_key_label">API Key</string>
     <string name="setup_api_key_hint">sk-...</string>
 
-    <string name="setup_admin_title">Admin Security</string>
-    <string name="setup_admin_desc">Set a secure password for the default admin account.</string>
-    <string name="setup_admin_password_label">Admin Password</string>
-    <string name="setup_admin_password_confirm_label">Confirm Password</string>
+    <!-- CIRIS Proxy (Free AI for Google users) -->
+    <string name="setup_free_ai_ready">Free AI Access Ready</string>
+    <string name="setup_free_ai_desc">Your Google account includes free AI conversations. Privacy-protected and never used for training.</string>
+    <string name="setup_byok_advanced">I have my own AI provider (Advanced)</string>
+    <string name="setup_byok_mode_title">Using your own AI provider</string>
+    <string name="setup_byok_mode_desc">You can switch back to free AI anytime</string>
+    <string name="setup_use_free_ai">Use Free AI</string>
+
+    <!-- Confirm Setup (Step 3 for Google users) -->
+    <string name="setup_confirm_title">Confirm Setup</string>
+    <string name="setup_confirm_desc">Review your configuration and complete setup.</string>
+    <string name="setup_google_connected">Google Account Connected</string>
+    <string name="setup_google_connected_desc">You\'ll sign in to CIRIS using your Google account. A secure random password will be generated for the admin account (you won\'t need to use it).</string>
+    <string name="setup_summary_title">Setup Summary</string>
+    <string name="setup_summary_ai">AI: %s</string>
+    <string name="setup_summary_assistant">Assistant: Ally</string>
+    <string name="setup_summary_signin">Sign-in: Google Account</string>
+    <string name="setup_free_ai_via_google">Free AI Access (via Google)</string>
+    <string name="setup_your_own_provider">Your own AI provider</string>
 
     <string name="setup_account_title">Your Account</string>
     <string name="setup_account_desc">Create your personal account to access CIRIS.</string>

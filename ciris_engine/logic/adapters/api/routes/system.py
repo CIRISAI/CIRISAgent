@@ -1294,6 +1294,89 @@ async def shutdown_system(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _is_localhost_request(request: Request) -> bool:
+    """Check if request originates from localhost (safe for unauthenticated shutdown)."""
+    client_host = request.client.host if request.client else None
+    # Accept localhost variants: 127.0.0.1, ::1, localhost
+    return client_host in ("127.0.0.1", "::1", "localhost", None)
+
+
+@router.post("/local-shutdown", response_model=SuccessResponse[ShutdownResponse])
+async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
+    """
+    Localhost-only shutdown endpoint (no authentication required).
+
+    This endpoint is designed for Android/mobile apps where:
+    - App data may be cleared (losing auth tokens)
+    - Previous Python process may still be running
+    - Need to gracefully shut down before starting new instance
+
+    Security: Only accepts requests from localhost (127.0.0.1, ::1).
+    This is safe because only processes on the same device can call it.
+    """
+    # Verify request is from localhost
+    if not _is_localhost_request(request):
+        client_host = request.client.host if request.client else "unknown"
+        logger.warning(f"Local-shutdown rejected from non-local client: {client_host}")
+        raise HTTPException(status_code=403, detail="This endpoint only accepts requests from localhost")
+
+    logger.info("[LOCAL_SHUTDOWN] Localhost shutdown request received")
+
+    # Get shutdown service
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        raise HTTPException(status_code=503, detail="Runtime not available")
+
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    if not shutdown_service:
+        raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
+
+    # Check if already shutting down
+    if shutdown_service.is_shutdown_requested():
+        existing_reason = shutdown_service.get_shutdown_reason()
+        return SuccessResponse(
+            data=ShutdownResponse(
+                status="already_requested",
+                message=f"Shutdown already in progress: {existing_reason}",
+                shutdown_initiated=True,
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
+
+    reason = "Local shutdown requested (Android app restart)"
+    logger.warning(f"[LOCAL_SHUTDOWN] Initiating IMMEDIATE shutdown: {reason}")
+
+    # For local-shutdown (data wipe scenario), we need IMMEDIATE termination
+    # not the graceful thought-based shutdown which takes 15+ seconds.
+    # Schedule immediate process exit after response is sent.
+    import os
+    import threading
+
+    def _force_exit():
+        """Force process exit after brief delay to allow response to be sent."""
+        import time
+
+        time.sleep(0.5)  # Allow response to be sent
+        logger.warning("[LOCAL_SHUTDOWN] Force exiting process NOW")
+        os._exit(0)  # Immediate termination, bypasses cleanup
+
+    # Start exit timer in background
+    exit_thread = threading.Thread(target=_force_exit, daemon=True)
+    exit_thread.start()
+
+    # Also request normal shutdown in case force exit fails
+    runtime.request_shutdown(reason)
+
+    return SuccessResponse(
+        data=ShutdownResponse(
+            status="initiated",
+            message=f"System IMMEDIATE shutdown initiated: {reason}",
+            shutdown_initiated=True,
+            timestamp=datetime.now(timezone.utc),
+        )
+    )
+
+
 # Adapter Management Endpoints
 
 

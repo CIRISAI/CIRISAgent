@@ -10,129 +10,130 @@
         android:orientation="vertical"
         android:padding="24dp">
 
+        <!-- Badge: 100% Free & Open Source -->
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/setup_welcome_desc"
-            android:textColor="@color/text_primary"
-            android:lineSpacingMultiplier="1.2"
-            android:textSize="16sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/setup_what_configure"
-            android:textColor="@color/text_primary"
+            android:layout_gravity="center"
+            android:text="@string/setup_badge_free"
+            android:textColor="@color/success_text"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:textSize="18sp"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="12dp"/>
+            android:background="@drawable/bg_card_success"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:layout_marginBottom="16dp"/>
 
-        <!-- Point 1 -->
-        <LinearLayout
+        <!-- Main description -->
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="•"
-                android:textColor="@color/ciris_primary"
-                android:textSize="18sp"
-                android:layout_marginEnd="8dp"/>
+            android:text="@string/setup_welcome_desc_simple"
+            android:textColor="@color/text_primary"
+            android:textAlignment="center"
+            android:lineSpacingMultiplier="1.3"
+            android:textSize="16sp"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Card: Google user - Ready to go! -->
+        <LinearLayout
+            android:id="@+id/card_google_ready"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_success"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_1_title"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"/>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_1_desc"
-                    android:textColor="@color/text_secondary"/>
-            </LinearLayout>
-        </LinearLayout>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
 
-        <!-- Point 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✓"
+                    android:textColor="@color/success_dark"
+                    android:textSize="24sp"
+                    android:layout_marginEnd="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/setup_google_ready_title"
+                    android:textColor="@color/success_dark"
+                    android:textSize="18sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="•"
-                android:textColor="@color/ciris_primary"
-                android:textSize="18sp"
-                android:layout_marginEnd="8dp"/>
-            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_2_title"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"/>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_2_desc"
-                    android:textColor="@color/text_secondary"/>
-            </LinearLayout>
+                android:text="@string/setup_google_ready_desc"
+                android:textColor="@color/success_text"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
         </LinearLayout>
 
-        <!-- Point 3 -->
+        <!-- Card: Non-Google user - Quick Setup Required -->
         <LinearLayout
+            android:id="@+id/card_setup_required"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="24dp">
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_info"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="visible">
+
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="•"
-                android:textColor="@color/ciris_primary"
-                android:textSize="18sp"
-                android:layout_marginEnd="8dp"/>
-            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_3_title"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"/>
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/setup_point_3_desc"
-                    android:textColor="@color/text_secondary"/>
-            </LinearLayout>
+                android:text="@string/setup_required_title"
+                android:textColor="@color/info_dark"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_required_desc"
+                android:textColor="@color/info_text"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
         </LinearLayout>
 
+        <!-- How it works section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:background="@drawable/edit_text_background"
-            android:padding="16dp"
-            android:backgroundTint="#E3F2FD">
-             <TextView
-                android:layout_width="wrap_content"
+            android:backgroundTint="@color/gray_light"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/setup_note"
-                android:textColor="#0D47A1"
-                android:textSize="14sp"/>
+                android:text="@string/setup_how_it_works_title"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:id="@+id/text_how_it_works"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_how_it_works_desc"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
         </LinearLayout>
 
     </LinearLayout>

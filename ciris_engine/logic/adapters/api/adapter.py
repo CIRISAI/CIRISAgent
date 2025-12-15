@@ -667,6 +667,74 @@ class ApiPlatform(Service):
         except Exception as e:
             logger.warning(f"Failed to restore persisted adapter configurations: {e}")
 
+    async def _auto_enable_android_adapters(self) -> None:
+        """Auto-enable Android-specific adapters when conditions are met.
+
+        This enables ciris_hosted_tools (web_search) when:
+        1. Running on Android platform (detected via env var or platform check)
+        2. Google authentication is available (CIRIS_BILLING_GOOGLE_ID_TOKEN is set)
+        3. The adapter is not already loaded
+
+        Called at startup and after resume_from_first_run().
+        """
+        import os
+
+        # Check if we're on Android
+        is_android = os.environ.get("ANDROID_DATA") is not None or os.path.exists("/data/data")
+
+        if not is_android:
+            logger.debug("[AUTO_ENABLE] Not on Android, skipping auto-enable of ciris_hosted_tools")
+            return
+
+        # Check if Google auth is available
+        google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        if not google_token:
+            logger.debug("[AUTO_ENABLE] No Google auth token found, skipping auto-enable of ciris_hosted_tools")
+            return
+
+        # Check if adapter is already loaded
+        runtime_control = self.runtime_control
+        if runtime_control and hasattr(runtime_control, "adapter_manager"):
+            adapter_manager = runtime_control.adapter_manager
+            if adapter_manager:
+                loaded_adapters = (
+                    list(adapter_manager.loaded_adapters.keys()) if adapter_manager.loaded_adapters else []
+                )
+                if any("ciris_hosted_tools" in adapter_id for adapter_id in loaded_adapters):
+                    logger.debug("[AUTO_ENABLE] ciris_hosted_tools already loaded, skipping")
+                    return
+
+        # Auto-enable ciris_hosted_tools
+        logger.info("[AUTO_ENABLE] Android platform with Google auth detected - enabling ciris_hosted_tools adapter")
+
+        try:
+            # Get the main runtime control service for loading adapters
+            main_runtime_control = getattr(self.runtime, "runtime_control_service", None)
+            if not main_runtime_control:
+                main_runtime_control = self.runtime_control
+
+            if main_runtime_control:
+                # Load the adapter with default config
+                result = await main_runtime_control.load_adapter(
+                    adapter_type="ciris_hosted_tools",
+                    adapter_id="ciris_hosted_tools_auto",
+                    config={},  # Uses defaults from manifest
+                    auto_start=True,
+                )
+
+                if result.success:
+                    logger.info(
+                        f"[AUTO_ENABLE] Successfully enabled ciris_hosted_tools adapter (id: {result.adapter_id})"
+                    )
+                    logger.info("[AUTO_ENABLE] web_search tool is now available")
+                else:
+                    logger.warning(f"[AUTO_ENABLE] Failed to enable ciris_hosted_tools: {result.error}")
+            else:
+                logger.warning("[AUTO_ENABLE] No runtime control service available for adapter loading")
+
+        except Exception as e:
+            logger.warning(f"[AUTO_ENABLE] Error enabling ciris_hosted_tools: {e}")
+
     async def start(self) -> None:
         """Start the API server."""
         logger.debug(f"[DEBUG] At start() - config.host: {self.config.host}, config.port: {self.config.port}")
@@ -719,33 +787,51 @@ class ApiPlatform(Service):
         # Restore any persisted adapter configurations from previous sessions
         await self._restore_persisted_adapter_configs()
 
+        # Auto-enable Android-specific adapters (ciris_hosted_tools with web_search)
+        await self._auto_enable_android_adapters()
+
         # Start runtime control service now that services are available
         await self.runtime_control.start()
         logger.info("Started API runtime control service")
 
         # Check if port is already in use before attempting to bind
         # This prevents uvicorn from calling sys.exit(1) which crashes the entire process
+        # Retry up to 10 times to handle TIME_WAIT state from previous server shutdown
         import socket
 
-        port_available = False
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                result = s.connect_ex(
-                    (self.config.host if self.config.host != "0.0.0.0" else "127.0.0.1", self.config.port)
-                )
-                # If connect succeeds (result == 0), port is in use
-                # If connect fails, port is available
-                port_available = result != 0
-        except Exception as e:
-            logger.warning(f"Could not check port availability: {e}, will attempt to start anyway")
-            port_available = True
+        max_retries = 10
+        retry_delay = 1.0  # seconds
 
-        if not port_available:
-            error_msg = f"Port {self.config.port} is already in use on {self.config.host}"
-            logger.error(f"[API_ADAPTER] {error_msg}")
-            self._startup_error = error_msg
-            raise RuntimeError(error_msg)
+        for attempt in range(max_retries):
+            port_available = False
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(1)
+                    result = s.connect_ex(
+                        (self.config.host if self.config.host != "0.0.0.0" else "127.0.0.1", self.config.port)
+                    )
+                    # If connect succeeds (result == 0), port is in use
+                    # If connect fails, port is available
+                    port_available = result != 0
+            except Exception as e:
+                logger.warning(f"Could not check port availability: {e}, will attempt to start anyway")
+                port_available = True
+
+            if port_available:
+                if attempt > 0:
+                    logger.info(f"[API_ADAPTER] Port {self.config.port} became available after {attempt} retries")
+                break
+
+            if attempt < max_retries - 1:
+                logger.warning(
+                    f"[API_ADAPTER] Port {self.config.port} in use, waiting {retry_delay}s (attempt {attempt + 1}/{max_retries})"
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                error_msg = f"Port {self.config.port} is already in use on {self.config.host}"
+                logger.error(f"[API_ADAPTER] {error_msg}")
+                self._startup_error = error_msg
+                raise RuntimeError(error_msg)
 
         # Configure uvicorn
         config = uvicorn.Config(

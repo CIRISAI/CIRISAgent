@@ -58,7 +58,7 @@ class ToolHandler(BaseActionHandler):
             _correlation_id = str(uuid.uuid4())
             try:
                 # Debug logging
-                self.logger.debug(f"Executing tool: name={params.name}, parameters={params.parameters}")
+                self.logger.info(f"[TOOL_HANDLER] Executing tool: name={params.name}, parameters={params.parameters}")
                 self.logger.info(f"[TOOL_HANDLER] Parameters type: {type(params.parameters)}")
 
                 # If channel_id is provided in action params but not in tool parameters, add it
@@ -70,9 +70,18 @@ class ToolHandler(BaseActionHandler):
                     tool_params["channel_id"] = params.channel_id
                     self.logger.debug(f"Added channel_id {params.channel_id} to tool parameters")
 
+                # Add task_id for tools that need billing interaction_id (e.g., web_search)
+                if thought.source_task_id and "task_id" not in tool_params:
+                    tool_params["task_id"] = thought.source_task_id
+                    self.logger.debug(f"Added task_id {thought.source_task_id} to tool parameters")
+
                 # Use the tool bus to execute the tool
+                self.logger.info(f"[TOOL_HANDLER] Calling bus_manager.tool.execute_tool for '{params.name}'...")
                 tool_result = await self.bus_manager.tool.execute_tool(
                     tool_name=params.name, parameters=cast(JSONDict, tool_params), handler_name=self.__class__.__name__
+                )
+                self.logger.info(
+                    f"[TOOL_HANDLER] Tool result: success={tool_result.success}, status={tool_result.status}, error={tool_result.error}"
                 )
 
                 # tool_result is now ToolExecutionResult per protocol
@@ -81,10 +90,16 @@ class ToolHandler(BaseActionHandler):
                     follow_up_content_key_info = (
                         f"Tool '{params.name}' executed successfully. Result: {tool_result.data or 'No result data'}"
                     )
+                    self.logger.info(f"[TOOL_HANDLER] Tool '{params.name}' SUCCESS")
                 else:
                     final_thought_status = ThoughtStatus.FAILED
                     follow_up_content_key_info = f"Tool '{params.name}' failed: {tool_result.error or 'Unknown error'}"
+                    self.logger.error(f"[TOOL_HANDLER] Tool '{params.name}' FAILED: {tool_result.error}")
             except Exception as e_tool:
+                self.logger.error(
+                    f"[TOOL_HANDLER] EXCEPTION executing tool '{params.name}': {type(e_tool).__name__}: {e_tool}",
+                    exc_info=True,
+                )
                 await self._handle_error(HandlerActionType.TOOL, dispatch_context, thought_id, e_tool)
                 final_thought_status = ThoughtStatus.FAILED
                 follow_up_content_key_info = f"TOOL {params.name} execution failed: {str(e_tool)}"

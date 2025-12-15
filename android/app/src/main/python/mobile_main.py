@@ -614,6 +614,7 @@ async def start_mobile_runtime():
     - api: Always loaded (core functionality)
     - ciris_hosted_tools: Loaded when Google Play Services available (web search, etc.)
     """
+    from ciris_engine.config.ciris_services import get_billing_url, get_proxy_url
     from ciris_engine.logic.adapters.api.config import APIAdapterConfig
     from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
     from ciris_engine.logic.utils.runtime_utils import load_config
@@ -671,10 +672,10 @@ async def start_mobile_runtime():
             adapter_type="ciris_hosted_tools",
             enabled=True,
             settings={
-                "proxy_url": "https://proxy1.ciris-services-1.ai",
-                "proxy_fallback_url": "https://proxy1.ciris-services-2.ai",
-                "billing_url": "https://billing1.ciris-services-1.ai",
-                "billing_fallback_url": "https://billing1.ciris-services-2.ai",
+                "proxy_url": get_proxy_url(),
+                "proxy_fallback_url": get_proxy_url(use_fallback=True),
+                "billing_url": get_billing_url(),
+                "billing_fallback_url": get_billing_url(use_fallback=True),
             },
         )
         adapter_types.append("ciris_hosted_tools")

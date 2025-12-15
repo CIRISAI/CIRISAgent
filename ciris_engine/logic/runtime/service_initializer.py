@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
@@ -226,7 +227,7 @@ class ServiceInitializer:
             # Server with API key - use API key auth
             from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-            base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+            base_url = get_billing_url()
             timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
             cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
             fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
@@ -246,7 +247,7 @@ class ServiceInitializer:
                 # Have Google ID token - use JWT auth
                 from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-                base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+                base_url = get_billing_url()
                 timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
                 cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
                 fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
@@ -304,10 +305,7 @@ class ServiceInitializer:
         if is_android:
             # Android: Use Keystore-wrapped key for hardware-backed protection
             try:
-                from android_keystore import (
-                    load_or_create_wrapped_master_key,
-                    migrate_plain_key_to_wrapped,
-                )
+                from android_keystore import load_or_create_wrapped_master_key, migrate_plain_key_to_wrapped
 
                 # Migrate existing plain key if present
                 migrate_plain_key_to_wrapped(master_key_path)
@@ -822,11 +820,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
         archive_hours = getattr(config, "archive_older_than_hours", 24)
         assert self.time_service is not None
         assert self.config_service is not None
+        assert self.bus_manager is not None
         self.maintenance_service = DatabaseMaintenanceService(
             time_service=self.time_service,
             archive_dir_path=archive_dir,
             archive_older_than_hours=archive_hours,
             config_service=self.config_service,
+            bus_manager=self.bus_manager,
         )
         await self.maintenance_service.start()
         self._services_started_count += 1

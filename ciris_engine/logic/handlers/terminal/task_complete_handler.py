@@ -165,19 +165,24 @@ class TaskCompleteHandler(BaseActionHandler):
                         else:
                             self.logger.debug(f"No images to purge from task {parent_task_id}")
 
-                    # Disabled: Don't send notification when agent completes task without speaking
-                    # The agent may legitimately choose not to respond (e.g., for system messages, follow-ups)
-                    # if task and task.channel_id:
-                    #     is_api = self._is_api_channel(task.channel_id)
-                    #     has_spoken = await self._has_speak_action_completed(parent_task_id)
-                    #
-                    #     if is_api and not has_spoken:
-                    #         self.logger.info(
-                    #             f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} - sending notification"
-                    #         )
-                    #         await self._send_notification(
-                    #             task.channel_id, "Agent chose not to speak in response to your message"
-                    #         )
+                    # TODO: Disable this notification for voice/home assistant channels where silent
+                    # completion is expected behavior. Check dispatch_context for channel type.
+                    if task and task.channel_id:
+                        is_api = self._is_api_channel(task.channel_id)
+                        has_spoken = await self._has_speak_action_completed(parent_task_id)
+
+                        if is_api and not has_spoken:
+                            # Provide context about what the agent did before completing silently
+                            has_tool = await self._has_tool_action_completed(parent_task_id)
+                            if has_tool:
+                                msg = "Agent chose task complete without speaking after a tool call"
+                            else:
+                                msg = "Agent chose task complete without speaking immediately"
+
+                            self.logger.info(
+                                f"Task {parent_task_id} completed without speaking on API channel {task.channel_id} - sending notification"
+                            )
+                            await self._send_notification(task.channel_id, msg)
                 else:
                     self.logger.error(f"Failed to update status for parent task {parent_task_id} to COMPLETED.")
         else:
@@ -228,6 +233,23 @@ class TaskCompleteHandler(BaseActionHandler):
             return True
 
         self.logger.debug(f"No completed SPEAK action correlation found for task {task_id}")
+        return False
+
+    async def _has_tool_action_completed(self, task_id: str) -> bool:
+        """Check if a TOOL action has been successfully completed for the given task using correlation system."""
+        from ciris_engine.schemas.telemetry.core import ServiceCorrelationStatus
+
+        correlations = persistence.get_correlations_by_task_and_action(
+            task_id=task_id, action_type="tool_action", status=ServiceCorrelationStatus.COMPLETED
+        )
+
+        self.logger.debug(f"Found {len(correlations)} completed TOOL correlations for task {task_id}")
+
+        if correlations:
+            self.logger.debug(f"Found completed TOOL action correlation for task {task_id}")
+            return True
+
+        self.logger.debug(f"No completed TOOL action correlation found for task {task_id}")
         return False
 
     def _is_api_channel(self, channel_id: Optional[str]) -> bool:

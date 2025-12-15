@@ -11,6 +11,7 @@ This package contains optional service modules that can be dynamically loaded:
 - mcp_client: MCP client adapter for connecting to external MCP servers
 - mcp_server: MCP server adapter for exposing CIRIS as an MCP server
 - mcp_common: Shared utilities for MCP client and server
+- ciris_covenant_metrics: Covenant compliance metrics for CIRISLens (opt-in required)
 
 These modules are discovered at runtime via the service loader mechanism.
 """
@@ -25,4 +26,5 @@ __all__ = [
     "mcp_client",
     "mcp_server",
     "mcp_common",
+    "ciris_covenant_metrics",
 ]

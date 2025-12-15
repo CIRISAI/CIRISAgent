@@ -110,11 +110,37 @@ class SetupWizardActivity : AppCompatActivity() {
     /**
      * Detect if user is signed in with Google OAuth.
      * This determines whether CIRIS proxy option is available.
+     *
+     * Priority order:
+     * 1. Intent extras from MainActivity (most reliable - fresh from LoginActivity)
+     * 2. GoogleSignInHelper (fallback - may be stale)
      */
     private fun detectGoogleAuthState() {
         Log.i(TAG, "detectGoogleAuthState: Checking for Google sign-in")
 
         try {
+            // First check Intent extras from MainActivity - this is the most reliable source
+            // because it comes directly from LoginActivity's successful Google sign-in
+            val authMethod = intent.getStringExtra("auth_method")
+            val intentIdToken = intent.getStringExtra("google_id_token")
+            val intentUserId = intent.getStringExtra("google_user_id")
+            val intentEmail = intent.getStringExtra("user_email")
+            val intentName = intent.getStringExtra("user_name")
+
+            Log.i(TAG, "Intent extras: authMethod=$authMethod, hasToken=${intentIdToken != null}, email=$intentEmail")
+
+            if (authMethod == "google" && !intentIdToken.isNullOrEmpty()) {
+                Log.i(TAG, "User signed in with Google (from Intent) - enabling CIRIS proxy option")
+                viewModel.setGoogleAuthState(
+                    isAuth = true,
+                    idToken = intentIdToken,
+                    email = intentEmail,
+                    userId = intentUserId
+                )
+                return
+            }
+
+            // Fallback: Check GoogleSignInHelper (may not have fresh account)
             googleSignInHelper = GoogleSignInHelper(this)
 
             val isSignedIn = googleSignInHelper?.isSignedIn() == true
@@ -122,10 +148,10 @@ class SetupWizardActivity : AppCompatActivity() {
             val email = googleSignInHelper?.getUserEmail()
             val userId = googleSignInHelper?.getGoogleUserId()
 
-            Log.i(TAG, "Google auth state: signedIn=$isSignedIn, hasToken=${idToken != null}, email=$email")
+            Log.i(TAG, "GoogleSignInHelper state: signedIn=$isSignedIn, hasToken=${idToken != null}, email=$email")
 
             if (isSignedIn && idToken != null) {
-                Log.i(TAG, "User is signed in with Google - enabling CIRIS proxy option")
+                Log.i(TAG, "User is signed in with Google (from Helper) - enabling CIRIS proxy option")
                 viewModel.setGoogleAuthState(
                     isAuth = true,
                     idToken = idToken,

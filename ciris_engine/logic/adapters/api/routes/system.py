@@ -9,12 +9,14 @@ import asyncio
 import html
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, ValidationError, field_serializer
+from starlette.responses import JSONResponse
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.logic.utils.path_resolution import get_package_root
@@ -1313,64 +1315,140 @@ async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
 
     Security: Only accepts requests from localhost (127.0.0.1, ::1).
     This is safe because only processes on the same device can call it.
+
+    Response codes for SmartStartup negotiation:
+    - 200: Shutdown initiated successfully
+    - 202: Shutdown already in progress
+    - 403: Not localhost (security rejection)
+    - 409: Resume in progress, retry later (with retry_after_ms)
+    - 503: Server not ready
     """
-    # Verify request is from localhost
-    if not _is_localhost_request(request):
-        client_host = request.client.host if request.client else "unknown"
-        logger.warning(f"Local-shutdown rejected from non-local client: {client_host}")
-        raise HTTPException(status_code=403, detail="This endpoint only accepts requests from localhost")
-
-    logger.info("[LOCAL_SHUTDOWN] Localhost shutdown request received")
-
-    # Get shutdown service
-    runtime = getattr(request.app.state, "runtime", None)
-    if not runtime:
-        raise HTTPException(status_code=503, detail="Runtime not available")
-
-    # Check if resume from first-run is in progress - don't kill the server mid-initialization
-    if getattr(runtime, "_resume_in_progress", False):
-        logger.warning("[LOCAL_SHUTDOWN] Rejected - resume from first-run in progress")
-        return SuccessResponse(
-            data=ShutdownResponse(
-                status="busy",
-                message="Resume from first-run in progress - server is initializing",
-                shutdown_initiated=False,
-                timestamp=datetime.now(timezone.utc),
-            )
-        )
-
-    shutdown_service = getattr(runtime, "shutdown_service", None)
-    if not shutdown_service:
-        raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
-
-    # Check if already shutting down
-    if shutdown_service.is_shutdown_requested():
-        existing_reason = shutdown_service.get_shutdown_reason()
-        return SuccessResponse(
-            data=ShutdownResponse(
-                status="already_requested",
-                message=f"Shutdown already in progress: {existing_reason}",
-                shutdown_initiated=True,
-                timestamp=datetime.now(timezone.utc),
-            )
-        )
-
-    reason = "Local shutdown requested (Android app restart)"
-    logger.warning(f"[LOCAL_SHUTDOWN] Initiating IMMEDIATE shutdown: {reason}")
-
-    # For local-shutdown (data wipe scenario), we need IMMEDIATE termination
-    # not the graceful thought-based shutdown which takes 15+ seconds.
-    # Schedule immediate process exit after response is sent.
     import os
     import threading
 
+    # Helper to get server state info for logging and responses
+    def get_server_state() -> dict:
+        uptime = time.time() - getattr(runtime, "_startup_time", time.time()) if runtime else 0
+        resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+        resume_started = getattr(runtime, "_resume_started_at", None)
+        resume_elapsed = (time.time() - resume_started) if resume_started else None
+        shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+        if shutdown_in_progress:
+            state = "SHUTTING_DOWN"
+        elif resume_in_progress:
+            state = "RESUMING"
+        elif runtime and getattr(runtime, "_initialized", False):
+            state = "READY"
+        else:
+            state = "INITIALIZING"
+
+        return {
+            "server_state": state,
+            "uptime_seconds": round(uptime, 2),
+            "resume_in_progress": resume_in_progress,
+            "resume_elapsed_seconds": round(resume_elapsed, 2) if resume_elapsed else None,
+        }
+
+    # Verify request is from localhost
+    client_host = request.client.host if request.client else "unknown"
+    if not _is_localhost_request(request):
+        logger.warning(f"[LOCAL_SHUTDOWN] Rejected from non-local client: {client_host}")
+        raise HTTPException(status_code=403, detail="This endpoint only accepts requests from localhost")
+
+    logger.info(f"[LOCAL_SHUTDOWN] Request received from {client_host}")
+
+    # Get runtime
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        logger.warning("[LOCAL_SHUTDOWN] Runtime not available (503)")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "reason": "Runtime not available",
+                "retry_after_ms": 1000,
+                "server_state": "STARTING",
+            },
+        )
+
+    state_info = get_server_state()
+    logger.info(f"[LOCAL_SHUTDOWN] Server state: {state_info}")
+
+    # Check if resume from first-run is in progress
+    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+    resume_started_at = getattr(runtime, "_resume_started_at", None)
+
+    if resume_in_progress:
+        resume_elapsed = (time.time() - resume_started_at) if resume_started_at else 0
+        RESUME_TIMEOUT_SECONDS = 30.0  # Max reasonable time for resume
+
+        if resume_elapsed < RESUME_TIMEOUT_SECONDS:
+            # Resume is actively happening - ask Kotlin to retry
+            remaining = RESUME_TIMEOUT_SECONDS - resume_elapsed
+            retry_after_ms = min(2000, int(remaining * 1000))
+
+            logger.warning(
+                f"[LOCAL_SHUTDOWN] Rejected (409) - resume in progress for {resume_elapsed:.1f}s, "
+                f"retry in {retry_after_ms}ms (timeout at {RESUME_TIMEOUT_SECONDS}s)"
+            )
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "status": "busy",
+                    "reason": f"Resume from first-run in progress ({resume_elapsed:.1f}s elapsed)",
+                    "retry_after_ms": retry_after_ms,
+                    "resume_timeout_seconds": RESUME_TIMEOUT_SECONDS,
+                    **state_info,
+                },
+            )
+        else:
+            # Resume has been "in progress" too long - it's stuck, allow shutdown
+            logger.warning(
+                f"[LOCAL_SHUTDOWN] Resume exceeded timeout ({resume_elapsed:.1f}s > {RESUME_TIMEOUT_SECONDS}s) - "
+                "treating as stuck, allowing shutdown"
+            )
+
+    # Check if already shutting down
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+    if shutdown_in_progress or (shutdown_service and shutdown_service.is_shutdown_requested()):
+        existing_reason = shutdown_service.get_shutdown_reason() if shutdown_service else "unknown"
+        logger.info(f"[LOCAL_SHUTDOWN] Shutdown already in progress: {existing_reason}")
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "reason": f"Shutdown already in progress: {existing_reason}",
+                **state_info,
+            },
+        )
+
+    if not shutdown_service:
+        logger.warning("[LOCAL_SHUTDOWN] Shutdown service not available (503)")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "reason": "Shutdown service not available",
+                "retry_after_ms": 1000,
+                **state_info,
+            },
+        )
+
+    # Initiate shutdown
+    reason = "Local shutdown requested (Android SmartStartup)"
+    logger.warning(f"[LOCAL_SHUTDOWN] Initiating IMMEDIATE shutdown: {reason}")
+
+    # Mark shutdown in progress
+    runtime._shutdown_in_progress = True
+
     def _force_exit() -> None:
         """Force process exit after brief delay to allow response to be sent."""
-        import time
-
         time.sleep(0.5)  # Allow response to be sent
         logger.warning("[LOCAL_SHUTDOWN] Force exiting process NOW")
-        os._exit(0)  # Immediate termination, bypasses cleanup
+        os._exit(0)  # Immediate termination
 
     # Start exit timer in background
     exit_thread = threading.Thread(target=_force_exit, daemon=True)
@@ -1379,13 +1457,14 @@ async def local_shutdown(request: Request) -> SuccessResponse[ShutdownResponse]:
     # Also request normal shutdown in case force exit fails
     runtime.request_shutdown(reason)
 
-    return SuccessResponse(
-        data=ShutdownResponse(
-            status="initiated",
-            message=f"System IMMEDIATE shutdown initiated: {reason}",
-            shutdown_initiated=True,
-            timestamp=datetime.now(timezone.utc),
-        )
+    logger.info("[LOCAL_SHUTDOWN] Shutdown initiated successfully (200)")
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "accepted",
+            "reason": reason,
+            **state_info,
+        },
     )
 
 

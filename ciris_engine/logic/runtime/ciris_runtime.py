@@ -7,6 +7,7 @@ New simplified runtime that properly orchestrates all components.
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -157,7 +158,12 @@ class CIRISRuntime:
         self._shutdown_reason: Optional[str] = None
         self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
-        self._resume_in_progress = False  # Set during resume_from_first_run to prevent premature shutdown
+        self._shutdown_in_progress = False  # Set when shutdown has been initiated
+
+        # Resume protection - prevents SmartStartup from killing server mid-initialization
+        self._resume_in_progress = False  # Set during resume_from_first_run
+        self._resume_started_at: Optional[float] = None  # Timestamp for timeout detection
+        self._startup_time: float = time.time()  # For uptime calculation
 
         # Identity - will be loaded during initialization
         self.agent_identity: Optional[AgentIdentityRoot] = None
@@ -1807,10 +1813,11 @@ class CIRISRuntime:
         This continues from the point where first-run mode paused (line 1088).
         It executes the same steps as normal mode initialization.
         """
-        import time
-
-        # Set flag to prevent premature shutdown during resume
+        # Set flag AND timestamp to prevent premature shutdown during resume
+        # The timestamp allows timeout detection for stuck resume scenarios
         self._resume_in_progress = True
+        self._resume_started_at = time.time()
+        logger.info(f"[RESUME] Started at {self._resume_started_at:.3f}, _resume_in_progress=True")
 
         start_time = time.time()
         total_steps = 14
@@ -1886,8 +1893,10 @@ class CIRISRuntime:
         logger.warning("=" * 70)
         logger.warning("")
 
-        # Clear the resume flag - safe to shutdown now
+        # Clear the resume flag and timestamp - safe to shutdown now
         self._resume_in_progress = False
+        self._resume_started_at = None
+        logger.info(f"[RESUME] Completed in {elapsed:.2f}s, _resume_in_progress=False")
 
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready.

@@ -1,0 +1,152 @@
+{
+  "module": {
+    "name": "ciris_covenant_metrics",
+    "version": "1.0.0",
+    "description": "CIRIS Covenant compliance metrics adapter - reports WBD and PDMA events to CIRISLens",
+    "author": "CIRIS L3C",
+    "auto_load": false,
+    "opt_in_required": true,
+    "requires_consent": true
+  },
+  "services": [
+    {
+      "type": "WISE_AUTHORITY",
+      "priority": "LOW",
+      "class": "ciris_covenant_metrics.services.CovenantMetricsService",
+      "capabilities": [
+        "send_deferral",
+        "covenant_metrics"
+      ]
+    }
+  ],
+  "capabilities": [
+    "send_deferral",
+    "covenant_metrics"
+  ],
+  "interactive_config": {
+    "required": true,
+    "workflow_type": "wizard",
+    "steps": [
+      {
+        "step_id": "data_disclosure",
+        "step_type": "confirm",
+        "title": "Data Collection Disclosure",
+        "description": "This adapter will send the following data to CIRIS L3C (CIRISLens):\n\n**WBD (Wisdom-Based Deferral) Events:**\n- Anonymized agent ID (hash)\n- Thought/Task IDs\n- Deferral reason (no message content)\n- Timestamp and priority\n\n**PDMA Decision Events:**\n- Anonymized agent ID (hash)\n- Selected action type (SPEAK, DEFER, etc.)\n- Rationale summary (no user content)\n- Timestamp\n\n**NOT collected:**\n- User messages or content\n- Personal information\n- Chat history\n- Tool call details\n\nData is sent via HTTPS to https://lens.ciris.ai/v1"
+      },
+      {
+        "step_id": "consent",
+        "step_type": "input",
+        "title": "Explicit Consent Required",
+        "description": "By enabling this adapter, you consent to CIRIS L3C collecting covenant compliance metrics. You can revoke consent at any time by disabling this adapter.",
+        "fields": [
+          {
+            "name": "consent_given",
+            "type": "boolean",
+            "label": "I understand and consent to send covenant compliance data to CIRIS L3C",
+            "description": "This consent is required to enable the adapter. No data will be sent without your explicit consent.",
+            "required": true,
+            "default": false
+          },
+          {
+            "name": "consent_timestamp",
+            "type": "string",
+            "label": "Consent timestamp (auto-filled)",
+            "description": "Automatically recorded for audit purposes",
+            "required": false,
+            "readonly": true
+          }
+        ]
+      },
+      {
+        "step_id": "endpoint_config",
+        "step_type": "input",
+        "title": "CIRISLens Configuration",
+        "description": "Configure the CIRISLens endpoint for covenant metrics",
+        "optional": true,
+        "fields": [
+          {
+            "name": "endpoint_url",
+            "type": "string",
+            "label": "CIRISLens API Endpoint",
+            "description": "The URL where covenant metrics will be sent",
+            "required": false,
+            "default": "https://lens.ciris.ai/v1"
+          },
+          {
+            "name": "batch_size",
+            "type": "integer",
+            "label": "Batch Size",
+            "description": "Number of events to batch before sending (1-100)",
+            "required": false,
+            "default": 10,
+            "min": 1,
+            "max": 100
+          },
+          {
+            "name": "flush_interval_seconds",
+            "type": "integer",
+            "label": "Flush Interval (seconds)",
+            "description": "Send batched events after this many seconds even if batch is not full",
+            "required": false,
+            "default": 60,
+            "min": 10,
+            "max": 300
+          }
+        ]
+      },
+      {
+        "step_id": "confirm",
+        "step_type": "confirm",
+        "title": "Review and Enable",
+        "description": "Review your settings and enable covenant metrics collection. You can disable this adapter at any time to stop data collection."
+      }
+    ],
+    "completion_method": "apply_config"
+  },
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.WiseAuthorityService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.services.context"
+    ]
+  },
+  "exports": {
+    "wisdom_service": "ciris_covenant_metrics.services.CovenantMetricsService"
+  },
+  "configuration": {
+    "endpoint_url": {
+      "type": "string",
+      "env": "CIRIS_LENS_ENDPOINT",
+      "default": "https://lens.ciris.ai/v1",
+      "description": "CIRISLens API endpoint URL"
+    },
+    "consent_given": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether user has explicitly consented to data collection"
+    },
+    "consent_timestamp": {
+      "type": "string",
+      "default": null,
+      "description": "ISO timestamp when consent was given"
+    },
+    "batch_size": {
+      "type": "integer",
+      "default": 10,
+      "description": "Number of events to batch before sending"
+    },
+    "flush_interval_seconds": {
+      "type": "integer",
+      "default": 60,
+      "description": "Seconds before flushing partial batches"
+    }
+  },
+  "metadata": {
+    "covenant_section": "II",
+    "covenant_chapters": ["2 (PDMA)", "3 (WBD)"],
+    "privacy_policy": "https://ciris.ai/privacy",
+    "data_retention_days": 90,
+    "anonymization": true
+  }
+}

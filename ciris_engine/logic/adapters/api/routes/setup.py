@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -1260,10 +1261,12 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         # Schedule resume in background to allow response to be sent first
         import asyncio
 
-        # Set resume flag BEFORE scheduling task to prevent SmartStartup from killing us
+        # Set resume flag AND timestamp BEFORE scheduling task to prevent SmartStartup from killing us
         # This flag blocks local-shutdown requests during the resume sequence
+        # The timestamp enables timeout detection for stuck resume scenarios
         runtime._resume_in_progress = True
-        logger.info("[Setup] Set _resume_in_progress=True to protect against premature shutdown")
+        runtime._resume_started_at = time.time()
+        logger.info(f"[Setup] Set _resume_in_progress=True, _resume_started_at={runtime._resume_started_at:.3f}")
 
         async def _resume_runtime() -> None:
             await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
@@ -1272,8 +1275,10 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                 logger.info("✅ Successfully resumed from first-run mode - agent processor running")
             except Exception as e:
                 logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
-                # Clear the flag so shutdown can proceed
+                # Clear the flag and timestamp so shutdown can proceed
                 runtime._resume_in_progress = False
+                runtime._resume_started_at = None
+                logger.info("[Setup] Cleared _resume_in_progress due to error")
                 # If resume fails, fall back to restart
                 runtime.request_shutdown("Resume failed - restarting to apply configuration")
 

@@ -178,29 +178,29 @@ def _get_google_id_token(request: Request) -> Optional[str]:
     return token
 
 
-def _build_billing_url(base_url: str, path: str) -> str:
-    """Safely construct billing API URL.
-
-    Uses urljoin to prevent path injection attacks. The path must be
-    an absolute path starting with / to ensure it replaces the base URL path.
-    """
-    # Ensure path starts with / for proper joining
-    if not path.startswith("/"):
-        path = "/" + path
-    # Use urljoin for safe URL construction
-    return urljoin(base_url + "/", path.lstrip("/"))
-
-
 async def _make_billing_request(
     method: str,
-    path: str,
+    endpoint: BillingEndpoint,
     google_token: str,
+    tool_name: Optional[str] = None,
     use_fallback: bool = False,
     json_data: Optional[Dict[str, str]] = None,
 ) -> httpx.Response:
-    """Make a request to the billing service."""
+    """Make a request to the billing service.
+
+    Args:
+        method: HTTP method (GET or POST)
+        endpoint: Predefined billing endpoint from BillingEndpoint enum
+        google_token: Google ID token for authentication
+        tool_name: Optional tool name (required for endpoints with {tool_name})
+        use_fallback: Whether to use fallback billing URL
+        json_data: Optional JSON data for POST requests
+    """
     base_url = FALLBACK_BILLING_URL if use_fallback else _get_billing_url()
-    url = _build_billing_url(base_url, path)
+    # Build path from enum - this is the ONLY place paths are constructed
+    path = _build_endpoint_path(endpoint, tool_name)
+    # Construct full URL from base + predefined path
+    url = base_url.rstrip("/") + path
 
     headers = {
         "Authorization": f"Bearer {google_token}",
@@ -240,8 +240,9 @@ async def get_tool_balance(
         raise HTTPException(status_code=401, detail=ERR_GOOGLE_SIGNIN_REQUIRED)
 
     try:
-        endpoint_path = _build_endpoint_path(BillingEndpoint.BALANCE_TOOL, tool_name)
-        response = await _make_billing_request("GET", endpoint_path, google_token)
+        response = await _make_billing_request(
+            "GET", BillingEndpoint.BALANCE_TOOL, google_token, tool_name=tool_name
+        )
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)
@@ -267,8 +268,9 @@ async def get_tool_balance(
         # Try fallback
         logger.warning(f"[TOOL_BALANCE] Primary failed, trying fallback: {e}")
         try:
-            fallback_path = _build_endpoint_path(BillingEndpoint.BALANCE_TOOL, tool_name)
-            response = await _make_billing_request("GET", fallback_path, google_token, use_fallback=True)
+            response = await _make_billing_request(
+                "GET", BillingEndpoint.BALANCE_TOOL, google_token, tool_name=tool_name, use_fallback=True
+            )
             if response.status_code == 200:
                 data = response.json()
                 return ToolBalanceResponse(
@@ -305,8 +307,7 @@ async def get_all_tool_balances(
         )
 
     try:
-        endpoint_path = _build_endpoint_path(BillingEndpoint.BALANCE_ALL)
-        response = await _make_billing_request("GET", endpoint_path, google_token)
+        response = await _make_billing_request("GET", BillingEndpoint.BALANCE_ALL, google_token)
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)
@@ -333,8 +334,9 @@ async def get_all_tool_balances(
     except httpx.RequestError as e:
         logger.warning(f"[TOOL_BALANCE] Primary failed, trying fallback: {e}")
         try:
-            fallback_path = _build_endpoint_path(BillingEndpoint.BALANCE_ALL)
-            response = await _make_billing_request("GET", fallback_path, google_token, use_fallback=True)
+            response = await _make_billing_request(
+                "GET", BillingEndpoint.BALANCE_ALL, google_token, use_fallback=True
+            )
             if response.status_code == 200:
                 data = response.json()
                 balances = []
@@ -379,8 +381,9 @@ async def check_tool_credit(
         )
 
     try:
-        endpoint_path = _build_endpoint_path(BillingEndpoint.CHECK_TOOL, tool_name)
-        response = await _make_billing_request("GET", endpoint_path, google_token)
+        response = await _make_billing_request(
+            "GET", BillingEndpoint.CHECK_TOOL, google_token, tool_name=tool_name
+        )
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)
@@ -404,8 +407,9 @@ async def check_tool_credit(
     except httpx.RequestError as e:
         logger.warning(f"[TOOL_CHECK] Primary failed, trying fallback: {e}")
         try:
-            fallback_path = _build_endpoint_path(BillingEndpoint.CHECK_TOOL, tool_name)
-            response = await _make_billing_request("GET", fallback_path, google_token, use_fallback=True)
+            response = await _make_billing_request(
+                "GET", BillingEndpoint.CHECK_TOOL, google_token, tool_name=tool_name, use_fallback=True
+            )
             if response.status_code == 200:
                 data = response.json()
                 return ToolCreditCheckResponse(
@@ -508,8 +512,9 @@ async def verify_tool_purchase(
     }
 
     try:
-        endpoint_path = _build_endpoint_path(BillingEndpoint.VERIFY_PURCHASE)
-        response = await _make_billing_request("POST", endpoint_path, google_token, json_data=purchase_data)
+        response = await _make_billing_request(
+            "POST", BillingEndpoint.VERIFY_PURCHASE, google_token, json_data=purchase_data
+        )
 
         if response.status_code == 401:
             raise HTTPException(status_code=401, detail=ERR_AUTH_FAILED)
@@ -539,9 +544,8 @@ async def verify_tool_purchase(
         # Try fallback
         logger.warning(f"[TOOL_PURCHASE] Primary failed, trying fallback: {e}")
         try:
-            fallback_path = _build_endpoint_path(BillingEndpoint.VERIFY_PURCHASE)
             response = await _make_billing_request(
-                "POST", fallback_path, google_token, use_fallback=True, json_data=purchase_data
+                "POST", BillingEndpoint.VERIFY_PURCHASE, google_token, use_fallback=True, json_data=purchase_data
             )
             if response.status_code == 200:
                 data = response.json()

@@ -1303,6 +1303,165 @@ def _is_localhost_request(request: Request) -> bool:
     return client_host in ("127.0.0.1", "::1", "localhost", None)
 
 
+# Constants for local shutdown
+_RESUME_TIMEOUT_SECONDS = 30.0
+
+
+def _get_server_state(runtime: Any) -> Dict[str, Any]:
+    """Get server state info for logging and responses.
+
+    Args:
+        runtime: The runtime instance (may be None)
+
+    Returns:
+        Dict with server_state, uptime_seconds, resume_in_progress, resume_elapsed_seconds
+    """
+    if not runtime:
+        return {
+            "server_state": "STARTING",
+            "uptime_seconds": 0,
+            "resume_in_progress": False,
+            "resume_elapsed_seconds": None,
+        }
+
+    uptime = time.time() - getattr(runtime, "_startup_time", time.time())
+    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+    resume_started = getattr(runtime, "_resume_started_at", None)
+    resume_elapsed = (time.time() - resume_started) if resume_started else None
+    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+    state = _determine_server_state(runtime, shutdown_in_progress, resume_in_progress)
+
+    return {
+        "server_state": state,
+        "uptime_seconds": round(uptime, 2),
+        "resume_in_progress": resume_in_progress,
+        "resume_elapsed_seconds": round(resume_elapsed, 2) if resume_elapsed else None,
+    }
+
+
+def _determine_server_state(runtime: Any, shutdown_in_progress: bool, resume_in_progress: bool) -> str:
+    """Determine the current server state string.
+
+    Args:
+        runtime: The runtime instance
+        shutdown_in_progress: Whether shutdown is in progress
+        resume_in_progress: Whether resume is in progress
+
+    Returns:
+        State string: SHUTTING_DOWN, RESUMING, READY, or INITIALIZING
+    """
+    if shutdown_in_progress:
+        return "SHUTTING_DOWN"
+    if resume_in_progress:
+        return "RESUMING"
+    if runtime and getattr(runtime, "_initialized", False):
+        return "READY"
+    return "INITIALIZING"
+
+
+def _check_resume_blocking(runtime: Any, state_info: Dict[str, Any]) -> Optional[Response]:
+    """Check if resume is in progress and should block shutdown.
+
+    Args:
+        runtime: The runtime instance
+        state_info: Current server state info dict
+
+    Returns:
+        JSONResponse if shutdown should be blocked, None if OK to proceed
+    """
+    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+    if not resume_in_progress:
+        return None
+
+    resume_started_at = getattr(runtime, "_resume_started_at", None)
+    resume_elapsed = (time.time() - resume_started_at) if resume_started_at else 0
+
+    if resume_elapsed >= _RESUME_TIMEOUT_SECONDS:
+        # Resume stuck - allow shutdown
+        logger.warning(
+            f"[LOCAL_SHUTDOWN] Resume exceeded timeout ({resume_elapsed:.1f}s > "
+            f"{_RESUME_TIMEOUT_SECONDS}s) - treating as stuck, allowing shutdown"
+        )
+        return None
+
+    # Resume actively happening - ask caller to retry
+    remaining = _RESUME_TIMEOUT_SECONDS - resume_elapsed
+    retry_after_ms = min(2000, int(remaining * 1000))
+
+    logger.warning(
+        f"[LOCAL_SHUTDOWN] Rejected (409) - resume in progress for {resume_elapsed:.1f}s, "
+        f"retry in {retry_after_ms}ms (timeout at {_RESUME_TIMEOUT_SECONDS}s)"
+    )
+    return JSONResponse(
+        status_code=409,
+        content={
+            "status": "busy",
+            "reason": f"Resume from first-run in progress ({resume_elapsed:.1f}s elapsed)",
+            "retry_after_ms": retry_after_ms,
+            "resume_timeout_seconds": _RESUME_TIMEOUT_SECONDS,
+            **state_info,
+        },
+    )
+
+
+def _check_shutdown_already_in_progress(runtime: Any, state_info: Dict[str, Any]) -> Optional[Response]:
+    """Check if shutdown is already in progress.
+
+    Args:
+        runtime: The runtime instance
+        state_info: Current server state info dict
+
+    Returns:
+        JSONResponse if shutdown already in progress, None otherwise
+    """
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+    is_shutting_down = shutdown_in_progress or (
+        shutdown_service and shutdown_service.is_shutdown_requested()
+    )
+
+    if not is_shutting_down:
+        return None
+
+    existing_reason = shutdown_service.get_shutdown_reason() if shutdown_service else "unknown"
+    logger.info(f"[LOCAL_SHUTDOWN] Shutdown already in progress: {existing_reason}")
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "reason": f"Shutdown already in progress: {existing_reason}",
+            **state_info,
+        },
+    )
+
+
+def _initiate_force_shutdown(runtime: Any, reason: str) -> None:
+    """Initiate forced shutdown with background exit thread.
+
+    Args:
+        runtime: The runtime instance
+        reason: Shutdown reason string
+    """
+    import os
+    import threading
+
+    runtime._shutdown_in_progress = True
+
+    def _force_exit() -> None:
+        """Force process exit after brief delay to allow response to be sent."""
+        time.sleep(0.5)
+        logger.warning("[LOCAL_SHUTDOWN] Force exiting process NOW")
+        os._exit(0)
+
+    exit_thread = threading.Thread(target=_force_exit, daemon=True)
+    exit_thread.start()
+
+    # Also request normal shutdown in case force exit fails
+    runtime.request_shutdown(reason)
+
+
 @router.post("/local-shutdown", response_model=SuccessResponse[ShutdownResponse])
 async def local_shutdown(request: Request) -> Response:
     """
@@ -1323,33 +1482,6 @@ async def local_shutdown(request: Request) -> Response:
     - 409: Resume in progress, retry later (with retry_after_ms)
     - 503: Server not ready
     """
-    import os
-    import threading
-
-    # Helper to get server state info for logging and responses
-    def get_server_state() -> Dict[str, Any]:
-        uptime = time.time() - getattr(runtime, "_startup_time", time.time()) if runtime else 0
-        resume_in_progress = getattr(runtime, "_resume_in_progress", False)
-        resume_started = getattr(runtime, "_resume_started_at", None)
-        resume_elapsed = (time.time() - resume_started) if resume_started else None
-        shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
-
-        if shutdown_in_progress:
-            state = "SHUTTING_DOWN"
-        elif resume_in_progress:
-            state = "RESUMING"
-        elif runtime and getattr(runtime, "_initialized", False):
-            state = "READY"
-        else:
-            state = "INITIALIZING"
-
-        return {
-            "server_state": state,
-            "uptime_seconds": round(uptime, 2),
-            "resume_in_progress": resume_in_progress,
-            "resume_elapsed_seconds": round(resume_elapsed, 2) if resume_elapsed else None,
-        }
-
     # Verify request is from localhost
     client_host = request.client.host if request.client else "unknown"
     if not _is_localhost_request(request):
@@ -1372,59 +1504,21 @@ async def local_shutdown(request: Request) -> Response:
             },
         )
 
-    state_info = get_server_state()
+    state_info = _get_server_state(runtime)
     logger.info(f"[LOCAL_SHUTDOWN] Server state: {state_info}")
 
-    # Check if resume from first-run is in progress
-    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
-    resume_started_at = getattr(runtime, "_resume_started_at", None)
-
-    if resume_in_progress:
-        resume_elapsed = (time.time() - resume_started_at) if resume_started_at else 0
-        RESUME_TIMEOUT_SECONDS = 30.0  # Max reasonable time for resume
-
-        if resume_elapsed < RESUME_TIMEOUT_SECONDS:
-            # Resume is actively happening - ask Kotlin to retry
-            remaining = RESUME_TIMEOUT_SECONDS - resume_elapsed
-            retry_after_ms = min(2000, int(remaining * 1000))
-
-            logger.warning(
-                f"[LOCAL_SHUTDOWN] Rejected (409) - resume in progress for {resume_elapsed:.1f}s, "
-                f"retry in {retry_after_ms}ms (timeout at {RESUME_TIMEOUT_SECONDS}s)"
-            )
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "status": "busy",
-                    "reason": f"Resume from first-run in progress ({resume_elapsed:.1f}s elapsed)",
-                    "retry_after_ms": retry_after_ms,
-                    "resume_timeout_seconds": RESUME_TIMEOUT_SECONDS,
-                    **state_info,
-                },
-            )
-        else:
-            # Resume has been "in progress" too long - it's stuck, allow shutdown
-            logger.warning(
-                f"[LOCAL_SHUTDOWN] Resume exceeded timeout ({resume_elapsed:.1f}s > {RESUME_TIMEOUT_SECONDS}s) - "
-                "treating as stuck, allowing shutdown"
-            )
+    # Check if resume is blocking shutdown
+    resume_response = _check_resume_blocking(runtime, state_info)
+    if resume_response:
+        return resume_response
 
     # Check if already shutting down
+    shutdown_response = _check_shutdown_already_in_progress(runtime, state_info)
+    if shutdown_response:
+        return shutdown_response
+
+    # Verify shutdown service is available
     shutdown_service = getattr(runtime, "shutdown_service", None)
-    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
-
-    if shutdown_in_progress or (shutdown_service and shutdown_service.is_shutdown_requested()):
-        existing_reason = shutdown_service.get_shutdown_reason() if shutdown_service else "unknown"
-        logger.info(f"[LOCAL_SHUTDOWN] Shutdown already in progress: {existing_reason}")
-        return JSONResponse(
-            status_code=202,
-            content={
-                "status": "accepted",
-                "reason": f"Shutdown already in progress: {existing_reason}",
-                **state_info,
-            },
-        )
-
     if not shutdown_service:
         logger.warning("[LOCAL_SHUTDOWN] Shutdown service not available (503)")
         return JSONResponse(
@@ -1440,22 +1534,7 @@ async def local_shutdown(request: Request) -> Response:
     # Initiate shutdown
     reason = "Local shutdown requested (Android SmartStartup)"
     logger.warning(f"[LOCAL_SHUTDOWN] Initiating IMMEDIATE shutdown: {reason}")
-
-    # Mark shutdown in progress
-    runtime._shutdown_in_progress = True
-
-    def _force_exit() -> None:
-        """Force process exit after brief delay to allow response to be sent."""
-        time.sleep(0.5)  # Allow response to be sent
-        logger.warning("[LOCAL_SHUTDOWN] Force exiting process NOW")
-        os._exit(0)  # Immediate termination
-
-    # Start exit timer in background
-    exit_thread = threading.Thread(target=_force_exit, daemon=True)
-    exit_thread.start()
-
-    # Also request normal shutdown in case force exit fails
-    runtime.request_shutdown(reason)
+    _initiate_force_shutdown(runtime, reason)
 
     logger.info("[LOCAL_SHUTDOWN] Shutdown initiated successfully (200)")
     return JSONResponse(

@@ -8,7 +8,6 @@
         <exclude domain="file" path=".env"/>
         <exclude domain="file" path="secrets_master.key"/>
         <exclude domain="file" path="secrets_master.key.wrapped"/>
-        <exclude domain="cache" path="."/>
     </cloud-backup>
     <device-transfer>
         <!-- SECURITY: Exclude sensitive data from device-to-device transfer -->
@@ -18,6 +17,5 @@
         <exclude domain="file" path=".env"/>
         <exclude domain="file" path="secrets_master.key"/>
         <exclude domain="file" path="secrets_master.key.wrapped"/>
-        <exclude domain="cache" path="."/>
     </device-transfer>
 </data-extraction-rules>

@@ -414,8 +414,8 @@ class InteractActivity : AppCompatActivity() {
                 val url = "$BASE_URL/v1/system/shutdown"
                 val jsonBody = gson.toJson(mapOf(
                     "reason" to reason,
-                    "notify_channels" to true,
-                    "force" to force
+                    "force" to force,
+                    "confirm" to true  // Required confirmation flag
                 ))
 
                 val requestBuilder = Request.Builder()

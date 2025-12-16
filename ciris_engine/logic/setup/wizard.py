@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.constants import CIRIS_VERSION
 
 logger = logging.getLogger(__name__)
@@ -166,13 +167,9 @@ OPENAI_MODEL="{llm_model}"
 """
         # If using CIRIS LLM proxy, also set billing token and instructor mode
         if "ciris.ai" in llm_base_url.lower() or "ciris-services" in llm_base_url.lower():
-            # Determine billing URL based on LLM proxy URL
-            if "ciris-services-2" in llm_base_url.lower():
-                billing_url = "https://billing1.ciris-services-2.ai"
-            elif "ciris-services-1" in llm_base_url.lower():
-                billing_url = "https://billing1.ciris-services-1.ai"
-            else:
-                billing_url = "https://billing1.ciris-services-1.ai"  # Default to primary
+            # Determine billing URL based on LLM proxy URL (match region)
+            use_eu_fallback = "ciris-services-2" in llm_base_url.lower()
+            billing_url = get_billing_url(use_fallback=use_eu_fallback)
 
             content += f"""# CIRIS Billing Configuration (Android - uses Google ID token for JWT auth)
 CIRIS_BILLING_GOOGLE_ID_TOKEN="{llm_api_key}"

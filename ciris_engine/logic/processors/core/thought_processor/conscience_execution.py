@@ -72,7 +72,52 @@ class ConscienceExecutionPhase:
             elif hasattr(processing_context, "is_conscience_retry"):
                 processing_context.is_conscience_retry = False
 
-        # Exempt actions that shouldn't be overridden
+        # Create typed context for conscience checks BEFORE exemption check
+        # (bypass consciences need this context to run)
+        from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+
+        context = ConscienceCheckContext(
+            thought=thought or thought_item,
+            task=None,  # Will be populated by conscience checks if needed
+            round_number=None,
+            system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+        )
+
+        # CRITICAL: Run bypass consciences FIRST, even for exempt actions
+        # This allows UpdatedStatusConscience to detect new messages before TASK_COMPLETE
+        bypass_result = await self._run_bypass_conscience_entries(action_result, context)
+
+        if bypass_result["overridden"]:
+            logger.info(
+                f"Bypass conscience overrode action {action_result.selected_action} -> "
+                f"{bypass_result['final_action'].selected_action}: {bypass_result['override_reason']}"
+            )
+            from ciris_engine.schemas.conscience.core import EpistemicData
+
+            # CRITICAL: Include the new observation content in epistemic_data
+            # so it can be accessed by _prepare_conscience_retry_context
+            updated_obs = bypass_result.get("updated_observation_content")
+            if updated_obs:
+                logger.info(
+                    f"[CONSCIENCE_EXEC] Including updated_observation_content in result: {updated_obs[:100]}..."
+                )
+
+            return ConscienceApplicationResult(
+                original_action=action_result,
+                final_action=bypass_result["final_action"],
+                overridden=True,
+                override_reason=bypass_result["override_reason"],
+                epistemic_data=EpistemicData(
+                    entropy_level=0.5,  # Moderate uncertainty during override
+                    coherence_level=0.8,  # Good coherence
+                    uncertainty_acknowledged=True,
+                    reasoning_transparency=1.0,
+                    CIRIS_OBSERVATION_UPDATED_STATUS=updated_obs,  # NEW: Pass through the observation
+                ),
+                updated_status_detected=bypass_result.get("updated_status_detected"),
+            )
+
+        # Exempt actions that shouldn't be overridden by NORMAL consciences
         # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET (5 actions)
         # Conscience exempt: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (5 actions)
         exempt_actions = {
@@ -84,7 +129,7 @@ class ConscienceExecutionPhase:
         }
 
         if action_result.selected_action in exempt_actions:
-            # Exempt actions bypass conscience checks - return immediately with safe epistemic values
+            # Exempt actions bypass NORMAL conscience checks - return immediately with safe epistemic values
             from ciris_engine.schemas.conscience.core import EpistemicData
 
             # Exempt actions are considered safe: low entropy, high coherence, acknowledged, transparent
@@ -99,17 +144,9 @@ class ConscienceExecutionPhase:
                     uncertainty_acknowledged=True,  # System is aware this is exempt
                     reasoning_transparency=1.0,  # Fully transparent (exempt = explicit)
                 ),
+                # Propagate any detection flags from bypass checks
+                updated_status_detected=bypass_result.get("updated_status_detected"),
             )
-
-        # Create typed context for conscience checks
-        from ciris_engine.schemas.conscience.context import ConscienceCheckContext
-
-        context = ConscienceCheckContext(
-            thought=thought or thought_item,
-            task=None,  # Will be populated by conscience checks if needed
-            round_number=None,
-            system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
-        )
 
         final_action = action_result
         overridden = False
@@ -250,3 +287,96 @@ class ConscienceExecutionPhase:
         if updated_status_detected is not None:
             application_result.updated_status_detected = updated_status_detected
         return application_result
+
+    async def _run_bypass_conscience_entries(
+        self,
+        action_result: ActionSelectionDMAResult,
+        context: Any,
+    ) -> Dict[str, Any]:
+        """Run bypass conscience entries that should run even for exempt actions.
+
+        These are critical checks like UpdatedStatusConscience that must run
+        even for TASK_COMPLETE, DEFER, REJECT actions.
+
+        Returns:
+            Dict with keys: final_action, overridden, override_reason, updated_status_detected,
+                           updated_observation_content (the actual new message text)
+        """
+        final_action = action_result
+        overridden = False
+        override_reason: Optional[str] = None
+        updated_status_detected: Optional[bool] = None
+        updated_observation_content: Optional[str] = None  # NEW: Store the actual observation
+
+        # Get bypass consciences from registry
+        for entry in self.conscience_registry.get_bypass_consciences():
+            conscience = entry.conscience
+            cb = entry.circuit_breaker
+
+            try:
+                if cb:
+                    cb.check_and_raise()
+                result = await conscience.check(final_action, context)
+                if cb:
+                    cb.record_success()
+            except CircuitBreakerError as e:
+                logger.warning(f"Bypass conscience {entry.name} unavailable: {e}")
+                continue
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Bypass conscience {entry.name} error: {e}", exc_info=True)
+                if cb:
+                    cb.record_failure()
+                continue
+
+            if result.updated_status_detected is not None:
+                updated_status_detected = result.updated_status_detected
+
+            # CRITICAL: Extract the actual observation content from CIRIS_OBSERVATION_UPDATED_STATUS
+            if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
+                updated_observation_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
+                logger.info(
+                    f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                )
+
+            if not result.passed:
+                overridden = True
+                override_reason = result.reason
+                logger.info(f"[BYPASS_CONSCIENCE] {entry.name} overriding action {action_result.selected_action}")
+                logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
+                logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
+                logger.info(
+                    f"[BYPASS_CONSCIENCE] updated_observation_content={updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                )
+
+                # Check if the conscience provides a replacement action
+                if result.replacement_action:
+                    final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
+                    logger.info(f"[BYPASS_CONSCIENCE] Using replacement action: {final_action.selected_action}")
+                else:
+                    # Default behavior: create a PONDER action
+                    attempted_action_desc = self._describe_action(action_result)
+                    questions = [
+                        f"I attempted to {attempted_action_desc}",
+                        result.reason or "bypass conscience failed",
+                        "What alternative approach would better align with my principles?",
+                    ]
+
+                    ponder_params = PonderParams(questions=questions)
+                    final_action = ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=ponder_params,
+                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
+                        raw_llm_response=None,
+                        reasoning=None,
+                        evaluation_time_ms=None,
+                        resource_usage=None,
+                    )
+                break
+
+        return {
+            "final_action": final_action,
+            "overridden": overridden,
+            "override_reason": override_reason,
+            "updated_status_detected": updated_status_detected,
+            "updated_observation_content": updated_observation_content,  # NEW: Include the actual text
+        }

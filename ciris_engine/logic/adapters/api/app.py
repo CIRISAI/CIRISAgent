@@ -32,6 +32,7 @@ from .routes import (
     system_extensions,
     telemetry,
     tickets,
+    tools,
     transparency,
     users,
     verification,
@@ -161,7 +162,8 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     v1_routers = [
         setup.router,  # Setup wizard (first-run + reconfiguration) - MUST be first for first-run detection
         agent.router,  # Agent interaction
-        billing.router,  # Billing & credits (frontend proxy)
+        billing.router,  # Billing & credits (frontend proxy) - LLM credits
+        tools.router,  # Tool balance & credits (web_search, etc.) - separate from LLM credits
         memory.router,  # Memory operations
         system_extensions.router,  # Extended system operations (queue, services, processors) - MUST be before system.router
         system.router,  # System operations (includes health, time, resources, runtime)

@@ -14,6 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.types import JSONDict
 
@@ -121,7 +122,7 @@ def _get_billing_client(request: Request, google_id_token: Optional[str] = None)
         existing_client: httpx.AsyncClient = request.app.state.billing_client
         return existing_client
 
-    billing_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+    billing_url = get_billing_url()
     api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
     # Determine authentication mode
@@ -379,8 +380,8 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
         logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN in environment")
         return None
 
-    # Get billing URL (use default if not set)
-    billing_url = os.environ.get("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+    # Get billing URL from central config (checks env var first)
+    billing_url = get_billing_url()
 
     logger.info(
         "[BILLING_LAZY_INIT] Token found (%d chars), creating CIRISBillingProvider...",

@@ -92,7 +92,8 @@ class UpdatedStatusConscience(ConscienceInterface):
             )
 
         # Check if updated_info_available flag is set
-        if not getattr(task, "updated_info_available", False):
+        updated_flag = getattr(task, "updated_info_available", False)
+        if not updated_flag:
             # No update - pass
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,

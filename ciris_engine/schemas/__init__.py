@@ -32,6 +32,7 @@ from .handlers.contexts import (
     ToolContext,
 )
 from .handlers.schemas import ActionContext, ActionParameters, HandlerContext, HandlerResult
+from .platform import PlatformCapabilities, PlatformRequirement, PlatformRequirementSet
 from .processors.cognitive import DreamState, PlayState, ShutdownState, SolitudeState, WakeupState, WorkState
 from .services.metadata import ServiceMetadata
 from .services.requests import (
@@ -104,4 +105,8 @@ __all__ = [
     "ActionParameters",
     # conscience results
     "ConscienceResult",
+    # Platform requirements
+    "PlatformRequirement",
+    "PlatformCapabilities",
+    "PlatformRequirementSet",
 ]

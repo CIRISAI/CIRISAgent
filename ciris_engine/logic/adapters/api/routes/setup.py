@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -77,6 +78,10 @@ class AdapterConfig(BaseModel):
     enabled_by_default: bool = Field(False, description="Whether enabled by default")
     required_env_vars: List[str] = Field(default_factory=list, description="Required environment variables")
     optional_env_vars: List[str] = Field(default_factory=list, description="Optional environment variables")
+    platform_requirements: List[str] = Field(
+        default_factory=list, description="Platform requirements (e.g., 'android_play_integrity')"
+    )
+    platform_available: bool = Field(True, description="Whether available on current platform")
 
 
 class SetupStatusResponse(BaseModel):
@@ -1256,6 +1261,13 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         # Schedule resume in background to allow response to be sent first
         import asyncio
 
+        # Set resume flag AND timestamp BEFORE scheduling task to prevent SmartStartup from killing us
+        # This flag blocks local-shutdown requests during the resume sequence
+        # The timestamp enables timeout detection for stuck resume scenarios
+        runtime._resume_in_progress = True
+        runtime._resume_started_at = time.time()
+        logger.info(f"[Setup] Set _resume_in_progress=True, _resume_started_at={runtime._resume_started_at:.3f}")
+
         async def _resume_runtime() -> None:
             await asyncio.sleep(0.5)  # Brief delay to ensure response is sent
             try:
@@ -1263,6 +1275,10 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
                 logger.info("✅ Successfully resumed from first-run mode - agent processor running")
             except Exception as e:
                 logger.error(f"Failed to resume from first-run: {e}", exc_info=True)
+                # Clear the flag and timestamp so shutdown can proceed
+                runtime._resume_in_progress = False
+                runtime._resume_started_at = None
+                logger.info("[Setup] Cleared _resume_in_progress due to error")
                 # If resume fails, fall back to restart
                 runtime.request_shutdown("Resume failed - restarting to apply configuration")
 

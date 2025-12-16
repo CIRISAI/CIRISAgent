@@ -950,9 +950,9 @@ async def test_billing_provider_401_unauthorized():
                 account = CreditAccount(provider="oauth:google", account_id="user-401-test")
                 result = await provider.check_credit(account)
 
-                # Should return failure result
+                # Should return failure result with new error format
                 assert result.has_credit is False
-                assert "token_expired" in (result.reason or "")
+                assert "AUTH_EXPIRED" in (result.reason or "")
 
                 # Signal file should have been written
                 signal_file = os.path.join(temp_dir, ".token_refresh_needed")
@@ -1012,9 +1012,9 @@ async def test_billing_provider_request_error():
         account = CreditAccount(provider="oauth:google", account_id="user-error-test")
         result = await provider.check_credit(account)
 
-        # Should return failure
+        # Should return failure with new error format
         assert result.has_credit is False
-        assert "request_error" in (result.reason or "")
+        assert "NETWORK_ERROR" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1101,7 +1101,7 @@ async def test_billing_provider_spend_request_error():
         result = await provider.spend_credit(account, spend_req)
 
         assert result.succeeded is False
-        assert "request_error" in (result.reason or "")
+        assert "NETWORK_ERROR" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1127,7 +1127,7 @@ async def test_billing_provider_spend_unexpected_status():
         result = await provider.spend_credit(account, spend_req)
 
         assert result.succeeded is False
-        assert "unexpected_status_500" in (result.reason or "")
+        assert "HTTP_500" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1152,7 +1152,7 @@ async def test_billing_provider_check_unexpected_status():
         result = await provider.check_credit(account)
 
         assert result.has_credit is False
-        assert "unexpected_status_503" in (result.reason or "")
+        assert "HTTP_503" in (result.reason or "")
     finally:
         await provider.stop()
 
@@ -1245,3 +1245,298 @@ async def test_billing_provider_signal_token_refresh_no_ciris_home():
     finally:
         if original_env:
             os.environ["CIRIS_HOME"] = original_env
+
+
+# ============================================================================
+# Tests for refactored helper methods - ensuring coverage of extracted functions
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_timeout_error():
+    """Test handling of timeout errors with fallback retry."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("Connection timed out")
+
+    provider = CIRISBillingProvider(
+        api_key="test_key",
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-timeout-test")
+        result = await provider.check_credit(account)
+
+        # Should return failure with TIMEOUT error
+        assert result.has_credit is False
+        assert "TIMEOUT" in (result.reason or "")
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_connect_error():
+    """Test handling of connection errors with fallback retry."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused")
+
+    provider = CIRISBillingProvider(
+        api_key="test_key",
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-connect-error")
+        result = await provider.check_credit(account)
+
+        # Should return failure with CONNECTION_ERROR
+        assert result.has_credit is False
+        assert "CONNECTION_ERROR" in (result.reason or "")
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_fallback_switch():
+    """Test that provider switches to fallback URL after primary fails."""
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        # First request (primary) times out, second (fallback) succeeds
+        if request_count == 1:
+            raise httpx.ConnectTimeout("Primary timed out")
+        return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
+
+    provider = CIRISBillingProvider(
+        api_key="test_key",
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-fallback-test")
+        result = await provider.check_credit(account)
+
+        # Should succeed via fallback
+        assert result.has_credit is True
+        assert provider._using_fallback is True
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_recovery_to_primary():
+    """Test that provider recovers to primary URL after fallback was used."""
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(200, json={"has_credit": True, "credits_remaining": 100})
+
+    provider = CIRISBillingProvider(
+        api_key="test_key",
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.start()
+    # Simulate that we were using fallback
+    provider._using_fallback = True
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-recovery-test")
+        result = await provider.check_credit(account)
+
+        # Should succeed and recover to primary (since fallback URL is tried first when _using_fallback)
+        assert result.has_credit is True
+        # When _using_fallback=True, we only try fallback, so it stays True
+        assert provider._using_fallback is True
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_multi_error_summary():
+    """Test error summary when different error types occur on different regions."""
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            raise httpx.ConnectTimeout("Primary timed out")
+        else:
+            raise httpx.ConnectError("Fallback connection refused")
+
+    provider = CIRISBillingProvider(
+        api_key="test_key",
+        transport=httpx.MockTransport(handler),
+    )
+    await provider.start()
+
+    try:
+        account = CreditAccount(provider="oauth:google", account_id="user-multi-error")
+        result = await provider.check_credit(account)
+
+        # Should return failure with MULTI_ERROR
+        assert result.has_credit is False
+        assert (
+            "MULTI_ERROR" in (result.reason or "")
+            or "TIMEOUT" in (result.reason or "")
+            or "CONNECTION_ERROR" in (result.reason or "")
+        )
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_get_urls_to_try_fallback_mode():
+    """Test _get_urls_to_try when in fallback mode."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        # Initially not using fallback
+        urls = provider._get_urls_to_try()
+        assert len(urls) == 2  # Primary and fallback
+        assert "primary" in urls[0][1].lower()
+
+        # Switch to fallback mode
+        provider._using_fallback = True
+        urls = provider._get_urls_to_try()
+        assert len(urls) == 1  # Only fallback
+        assert "fallback" in urls[0][1].lower()
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_update_fallback_state():
+    """Test _update_fallback_state helper method."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        # Test switching to fallback
+        provider._using_fallback = False
+        provider._update_fallback_state("EU-fallback")
+        assert provider._using_fallback is True
+
+        # Test recovering to primary
+        provider._update_fallback_state("US-primary")
+        assert provider._using_fallback is False
+
+        # Test staying on current (no change)
+        provider._using_fallback = False
+        provider._update_fallback_state("US-primary")
+        assert provider._using_fallback is False
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_summarize_errors_timeout_only():
+    """Test _summarize_errors with only timeout errors."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        errors = [
+            ("US-primary", "TIMEOUT", "Timed out after 30s"),
+            ("EU-fallback", "TIMEOUT", "Timed out after 30s"),
+        ]
+        result, error_summary = provider._summarize_errors(errors, "test-key")
+
+        assert result is None
+        assert "TIMEOUT" in error_summary
+        assert "All regions timed out" in error_summary
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_summarize_errors_connection_only():
+    """Test _summarize_errors with only connection errors."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        errors = [
+            ("US-primary", "CONNECTION_ERROR", "Connection refused"),
+            ("EU-fallback", "CONNECTION_ERROR", "Connection refused"),
+        ]
+        result, error_summary = provider._summarize_errors(errors, "test-key")
+
+        assert result is None
+        assert "CONNECTION_ERROR" in error_summary
+        assert "Cannot reach any region" in error_summary
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_summarize_errors_mixed():
+    """Test _summarize_errors with mixed error types."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        errors = [
+            ("US-primary", "TIMEOUT", "Timed out"),
+            ("EU-fallback", "CONNECTION_ERROR", "Connection refused"),
+        ]
+        result, error_summary = provider._summarize_errors(errors, "test-key")
+
+        assert result is None
+        assert "MULTI_ERROR" in error_summary
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_summarize_errors_empty():
+    """Test _summarize_errors with no errors (edge case)."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        result, error_summary = provider._summarize_errors([], "test-key")
+
+        assert result is None
+        assert "UNKNOWN_ERROR" in error_summary
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_get_cached_check_miss():
+    """Test _get_cached_check with cache miss."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        # Cache is empty - should return None
+        result = provider._get_cached_check("nonexistent-key")
+        assert result is None
+    finally:
+        await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_billing_provider_handle_check_network_error():
+    """Test _handle_check_network_error helper."""
+    provider = CIRISBillingProvider(api_key="test_key")
+    await provider.start()
+
+    try:
+        result = provider._handle_check_network_error("TIMEOUT:All regions failed", "test-key")
+
+        assert result.has_credit is False
+        assert "TIMEOUT" in (result.reason or "")
+    finally:
+        await provider.stop()

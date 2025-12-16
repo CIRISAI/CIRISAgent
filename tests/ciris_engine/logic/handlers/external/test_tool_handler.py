@@ -200,7 +200,8 @@ async def test_tool_execution_success(mock_dependencies, monkeypatch):
     assert tool_bus.execute_tool.called
     call_args = tool_bus.execute_tool.call_args
     assert call_args.kwargs["tool_name"] == "calculator"
-    assert call_args.kwargs["parameters"] == {"operation": "add", "a": 20, "b": 22}
+    # task_id is now automatically added to tool parameters for billing purposes
+    assert call_args.kwargs["parameters"] == {"operation": "add", "a": 20, "b": 22, "task_id": "test_task"}
     assert call_args.kwargs["handler_name"] == "ToolHandler"
 
     # Verify thought was updated to completed
@@ -368,9 +369,10 @@ async def test_tool_with_complex_parameters(mock_dependencies):
 
     await handler.handle(result, thought, dispatch_context)
 
-    # Verify complex parameters were passed correctly
+    # Verify complex parameters were passed correctly (task_id is added automatically)
     call_args = tool_bus.execute_tool.call_args
-    assert call_args.kwargs["parameters"] == complex_params
+    expected_params = {**complex_params, "task_id": "test_task"}
+    assert call_args.kwargs["parameters"] == expected_params
 
     # Verify success
     update_call = persistence.update_thought_status.call_args
@@ -439,9 +441,9 @@ async def test_tool_with_empty_parameters(mock_dependencies):
 
     await handler.handle(result, thought, dispatch_context)
 
-    # Verify empty parameters were handled
+    # Verify empty parameters were handled (task_id is added automatically)
     call_args = tool_bus.execute_tool.call_args
-    assert call_args.kwargs["parameters"] == {}
+    assert call_args.kwargs["parameters"] == {"task_id": "test_task"}
 
     # Verify success
     update_call = persistence.update_thought_status.call_args

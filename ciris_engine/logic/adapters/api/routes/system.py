@@ -9,12 +9,14 @@ import asyncio
 import html
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, ValidationError, field_serializer
+from starlette.responses import JSONResponse
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.logic.utils.path_resolution import get_package_root
@@ -1294,6 +1296,255 @@ async def shutdown_system(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _is_localhost_request(request: Request) -> bool:
+    """Check if request originates from localhost (safe for unauthenticated shutdown)."""
+    client_host = request.client.host if request.client else None
+    # Accept localhost variants: 127.0.0.1, ::1, localhost
+    return client_host in ("127.0.0.1", "::1", "localhost", None)
+
+
+# Constants for local shutdown
+_RESUME_TIMEOUT_SECONDS = 30.0
+
+
+def _get_server_state(runtime: Any) -> Dict[str, Any]:
+    """Get server state info for logging and responses.
+
+    Args:
+        runtime: The runtime instance (may be None)
+
+    Returns:
+        Dict with server_state, uptime_seconds, resume_in_progress, resume_elapsed_seconds
+    """
+    if not runtime:
+        return {
+            "server_state": "STARTING",
+            "uptime_seconds": 0,
+            "resume_in_progress": False,
+            "resume_elapsed_seconds": None,
+        }
+
+    uptime = time.time() - getattr(runtime, "_startup_time", time.time())
+    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+    resume_started = getattr(runtime, "_resume_started_at", None)
+    resume_elapsed = (time.time() - resume_started) if resume_started else None
+    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+    state = _determine_server_state(runtime, shutdown_in_progress, resume_in_progress)
+
+    return {
+        "server_state": state,
+        "uptime_seconds": round(uptime, 2),
+        "resume_in_progress": resume_in_progress,
+        "resume_elapsed_seconds": round(resume_elapsed, 2) if resume_elapsed else None,
+    }
+
+
+def _determine_server_state(runtime: Any, shutdown_in_progress: bool, resume_in_progress: bool) -> str:
+    """Determine the current server state string.
+
+    Args:
+        runtime: The runtime instance
+        shutdown_in_progress: Whether shutdown is in progress
+        resume_in_progress: Whether resume is in progress
+
+    Returns:
+        State string: SHUTTING_DOWN, RESUMING, READY, or INITIALIZING
+    """
+    if shutdown_in_progress:
+        return "SHUTTING_DOWN"
+    if resume_in_progress:
+        return "RESUMING"
+    if runtime and getattr(runtime, "_initialized", False):
+        return "READY"
+    return "INITIALIZING"
+
+
+def _check_resume_blocking(runtime: Any, state_info: Dict[str, Any]) -> Optional[Response]:
+    """Check if resume is in progress and should block shutdown.
+
+    Args:
+        runtime: The runtime instance
+        state_info: Current server state info dict
+
+    Returns:
+        JSONResponse if shutdown should be blocked, None if OK to proceed
+    """
+    resume_in_progress = getattr(runtime, "_resume_in_progress", False)
+    if not resume_in_progress:
+        return None
+
+    resume_started_at = getattr(runtime, "_resume_started_at", None)
+    resume_elapsed = (time.time() - resume_started_at) if resume_started_at else 0
+
+    if resume_elapsed >= _RESUME_TIMEOUT_SECONDS:
+        # Resume stuck - allow shutdown
+        logger.warning(
+            f"[LOCAL_SHUTDOWN] Resume exceeded timeout ({resume_elapsed:.1f}s > "
+            f"{_RESUME_TIMEOUT_SECONDS}s) - treating as stuck, allowing shutdown"
+        )
+        return None
+
+    # Resume actively happening - ask caller to retry
+    remaining = _RESUME_TIMEOUT_SECONDS - resume_elapsed
+    retry_after_ms = min(2000, int(remaining * 1000))
+
+    logger.warning(
+        f"[LOCAL_SHUTDOWN] Rejected (409) - resume in progress for {resume_elapsed:.1f}s, "
+        f"retry in {retry_after_ms}ms (timeout at {_RESUME_TIMEOUT_SECONDS}s)"
+    )
+    return JSONResponse(
+        status_code=409,
+        content={
+            "status": "busy",
+            "reason": f"Resume from first-run in progress ({resume_elapsed:.1f}s elapsed)",
+            "retry_after_ms": retry_after_ms,
+            "resume_timeout_seconds": _RESUME_TIMEOUT_SECONDS,
+            **state_info,
+        },
+    )
+
+
+def _check_shutdown_already_in_progress(runtime: Any, state_info: Dict[str, Any]) -> Optional[Response]:
+    """Check if shutdown is already in progress.
+
+    Args:
+        runtime: The runtime instance
+        state_info: Current server state info dict
+
+    Returns:
+        JSONResponse if shutdown already in progress, None otherwise
+    """
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
+
+    is_shutting_down = shutdown_in_progress or (shutdown_service and shutdown_service.is_shutdown_requested())
+
+    if not is_shutting_down:
+        return None
+
+    existing_reason = shutdown_service.get_shutdown_reason() if shutdown_service else "unknown"
+    logger.info(f"[LOCAL_SHUTDOWN] Shutdown already in progress: {existing_reason}")
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "reason": f"Shutdown already in progress: {existing_reason}",
+            **state_info,
+        },
+    )
+
+
+def _initiate_force_shutdown(runtime: Any, reason: str) -> None:
+    """Initiate forced shutdown with background exit thread.
+
+    Args:
+        runtime: The runtime instance
+        reason: Shutdown reason string
+    """
+    import os
+    import threading
+
+    runtime._shutdown_in_progress = True
+
+    def _force_exit() -> None:
+        """Force process exit after brief delay to allow response to be sent."""
+        time.sleep(0.5)
+        logger.warning("[LOCAL_SHUTDOWN] Force exiting process NOW")
+        os._exit(0)
+
+    exit_thread = threading.Thread(target=_force_exit, daemon=True)
+    exit_thread.start()
+
+    # Also request normal shutdown in case force exit fails
+    runtime.request_shutdown(reason)
+
+
+@router.post("/local-shutdown", response_model=SuccessResponse[ShutdownResponse])
+async def local_shutdown(request: Request) -> Response:
+    """
+    Localhost-only shutdown endpoint (no authentication required).
+
+    This endpoint is designed for Android/mobile apps where:
+    - App data may be cleared (losing auth tokens)
+    - Previous Python process may still be running
+    - Need to gracefully shut down before starting new instance
+
+    Security: Only accepts requests from localhost (127.0.0.1, ::1).
+    This is safe because only processes on the same device can call it.
+
+    Response codes for SmartStartup negotiation:
+    - 200: Shutdown initiated successfully
+    - 202: Shutdown already in progress
+    - 403: Not localhost (security rejection)
+    - 409: Resume in progress, retry later (with retry_after_ms)
+    - 503: Server not ready
+    """
+    # Verify request is from localhost
+    client_host = request.client.host if request.client else "unknown"
+    if not _is_localhost_request(request):
+        logger.warning(f"[LOCAL_SHUTDOWN] Rejected from non-local client: {client_host}")
+        raise HTTPException(status_code=403, detail="This endpoint only accepts requests from localhost")
+
+    logger.info(f"[LOCAL_SHUTDOWN] Request received from {client_host}")
+
+    # Get runtime
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        logger.warning("[LOCAL_SHUTDOWN] Runtime not available (503)")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "reason": "Runtime not available",
+                "retry_after_ms": 1000,
+                "server_state": "STARTING",
+            },
+        )
+
+    state_info = _get_server_state(runtime)
+    logger.info(f"[LOCAL_SHUTDOWN] Server state: {state_info}")
+
+    # Check if resume is blocking shutdown
+    resume_response = _check_resume_blocking(runtime, state_info)
+    if resume_response:
+        return resume_response
+
+    # Check if already shutting down
+    shutdown_response = _check_shutdown_already_in_progress(runtime, state_info)
+    if shutdown_response:
+        return shutdown_response
+
+    # Verify shutdown service is available
+    shutdown_service = getattr(runtime, "shutdown_service", None)
+    if not shutdown_service:
+        logger.warning("[LOCAL_SHUTDOWN] Shutdown service not available (503)")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "reason": "Shutdown service not available",
+                "retry_after_ms": 1000,
+                **state_info,
+            },
+        )
+
+    # Initiate shutdown
+    reason = "Local shutdown requested (Android SmartStartup)"
+    logger.warning(f"[LOCAL_SHUTDOWN] Initiating IMMEDIATE shutdown: {reason}")
+    _initiate_force_shutdown(runtime, reason)
+
+    logger.info("[LOCAL_SHUTDOWN] Shutdown initiated successfully (200)")
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "accepted",
+            "reason": reason,
+            **state_info,
+        },
+    )
+
+
 # Adapter Management Endpoints
 
 
@@ -1479,7 +1730,35 @@ def _get_core_adapter_info(adapter_type: str) -> ModuleTypeInfo:
     )
 
 
-def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
+def _check_platform_requirements_satisfied(platform_requirements: List[str]) -> bool:
+    """Check if current platform satisfies the given requirements.
+
+    Args:
+        platform_requirements: List of requirement strings
+
+    Returns:
+        True if platform satisfies all requirements, False otherwise
+    """
+    if not platform_requirements:
+        return True
+
+    from ciris_engine.logic.utils.platform_detection import detect_platform_capabilities
+    from ciris_engine.schemas.platform import PlatformRequirement
+
+    try:
+        caps = detect_platform_capabilities()
+        req_enums = []
+        for req_str in platform_requirements:
+            try:
+                req_enums.append(PlatformRequirement(req_str))
+            except ValueError:
+                pass  # Unknown requirement, skip
+        return caps.satisfies(req_enums)
+    except Exception:
+        return False
+
+
+def _should_filter_adapter(manifest_data: Dict[str, Any], filter_by_platform: bool = True) -> bool:
     """Check if an adapter should be filtered from public listings.
 
     Filters out:
@@ -1487,9 +1766,11 @@ def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
     - Library modules (metadata.type: "library")
     - Modules with no services (empty services array)
     - Common/utility modules (name ends with _common)
+    - Adapters that don't meet platform requirements (if filter_by_platform=True)
 
     Args:
         manifest_data: The manifest JSON data
+        filter_by_platform: If True, also filter adapters that don't meet platform requirements
 
     Returns:
         True if the adapter should be filtered (hidden), False otherwise
@@ -1515,21 +1796,27 @@ def _should_filter_adapter(manifest_data: Dict[str, Any]) -> bool:
     if module_name.endswith("_common") or module_name.endswith("common"):
         return True
 
+    # Filter adapters that don't meet platform requirements
+    if filter_by_platform:
+        platform_requirements = manifest_data.get("platform_requirements", [])
+        if not _check_platform_requirements_satisfied(platform_requirements):
+            return True
+
     return False
 
 
-def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
-    """Parse a module manifest into a ModuleTypeInfo."""
-    module_info = manifest_data.get("module", {})
-
-    # Extract service types from services list
+def _extract_service_types(manifest_data: Dict[str, Any]) -> List[str]:
+    """Extract unique service types from manifest services list."""
     service_types = []
     for svc in manifest_data.get("services", []):
         svc_type = svc.get("type", "")
         if svc_type and svc_type not in service_types:
             service_types.append(svc_type)
+    return service_types
 
-    # Parse configuration parameters
+
+def _parse_config_parameters(manifest_data: Dict[str, Any]) -> List[ModuleConfigParameter]:
+    """Parse configuration parameters from manifest."""
     config_params: List[ModuleConfigParameter] = []
     for param_name, param_data in manifest_data.get("configuration", {}).items():
         if isinstance(param_data, dict):
@@ -1544,17 +1831,33 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
                     sensitivity=param_data.get("sensitivity"),
                 )
             )
+    return config_params
+
+
+def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str) -> ModuleTypeInfo:
+    """Parse a module manifest into a ModuleTypeInfo."""
+    module_info = manifest_data.get("module", {})
+
+    # Extract service types and config params using helpers
+    service_types = _extract_service_types(manifest_data)
+    config_params = _parse_config_parameters(manifest_data)
 
     # Extract external dependencies
-    external_deps: Dict[str, str] = {}
     deps = manifest_data.get("dependencies", {})
-    if isinstance(deps, dict):
-        external_deps = deps.get("external", {}) or {}
+    external_deps = deps.get("external", {}) if isinstance(deps, dict) else {}
+    external_deps = external_deps or {}
 
     # Extract metadata
     metadata = manifest_data.get("metadata", {})
     safe_domain = metadata.get("safe_domain") if isinstance(metadata, dict) else None
     prohibited = metadata.get("prohibited", []) if isinstance(metadata, dict) else []
+
+    # Extract platform requirements
+    platform_requirements = manifest_data.get("platform_requirements", [])
+    platform_requirements_rationale = manifest_data.get("platform_requirements_rationale")
+
+    # Check platform availability using shared helper
+    platform_available = _check_platform_requirements_satisfied(platform_requirements)
 
     return ModuleTypeInfo(
         module_id=module_id,
@@ -1572,22 +1875,14 @@ def _parse_manifest_to_module_info(manifest_data: Dict[str, Any], module_id: str
         safe_domain=safe_domain if isinstance(safe_domain, str) else None,
         prohibited=prohibited if isinstance(prohibited, list) else [],
         metadata=metadata if isinstance(metadata, dict) else None,
+        platform_requirements=platform_requirements,
+        platform_requirements_rationale=platform_requirements_rationale,
+        platform_available=platform_available,
     )
 
 
-# Known services for Android AssetFinder fallback
-KNOWN_MODULAR_SERVICES = [
-    "mcp_client",
-    "mcp_server",
-    "mock_llm",
-    "reddit",
-    "geo_wisdom",
-    "sensor_wisdom",
-    "weather_wisdom",
-    "external_data_sql",
-    "mcp_common",
-    "ha_integration",
-]
+# Entry point group for adapter discovery (defined in setup.py)
+ADAPTER_ENTRY_POINT_GROUP = "ciris.adapters"
 
 
 async def _read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
@@ -1671,26 +1966,61 @@ async def _discover_services_from_directory(services_base: Path) -> List[ModuleT
     return adapters
 
 
-async def _discover_services_by_name() -> List[ModuleTypeInfo]:
-    """Discover modular services from known service names (Android fallback)."""
+async def _discover_services_via_entry_points() -> List[ModuleTypeInfo]:
+    """Discover modular services via importlib.metadata entry points.
+
+    This is the preferred discovery method as it works across all platforms
+    including Android where filesystem iteration may fail. Entry points are
+    defined in setup.py under the 'ciris.adapters' group.
+
+    Note: This function is async for API consistency even though the underlying
+    operations are synchronous. This allows uniform await usage in callers.
+    """
+    from importlib.metadata import entry_points
+    from typing import Iterable
+
     adapters: List[ModuleTypeInfo] = []
 
-    for svc_name in KNOWN_MODULAR_SERVICES:
-        module_info = _try_load_service_manifest(svc_name)
-        if module_info:
-            adapters.append(module_info)
-            logger.debug("Discovered modular service (known): %s", svc_name)
+    try:
+        # Get entry points - API varies by Python version
+        eps = entry_points()
+
+        # Try the modern API first (Python 3.10+)
+        adapter_eps: Iterable[Any]
+        if hasattr(eps, "select"):
+            # Python 3.10+ with SelectableGroups
+            adapter_eps = eps.select(group=ADAPTER_ENTRY_POINT_GROUP)
+        elif isinstance(eps, dict):
+            # Python 3.9 style dict-like access
+            adapter_eps = eps.get(ADAPTER_ENTRY_POINT_GROUP, [])
+        else:
+            # Fallback - try to iterate or access as needed
+            adapter_eps = getattr(eps, ADAPTER_ENTRY_POINT_GROUP, [])
+
+        for ep in adapter_eps:
+            module_info = _try_load_service_manifest(ep.name)
+            if module_info:
+                adapters.append(module_info)
+                logger.debug("Discovered adapter via entry point: %s", ep.name)
+
+    except Exception as e:
+        logger.warning("Entry point discovery failed: %s", e)
 
     return adapters
 
 
 async def _discover_adapters() -> List[ModuleTypeInfo]:
-    """Discover all available modular services."""
+    """Discover all available modular services.
+
+    Uses a fallback chain:
+    1. Try filesystem iteration (fastest, works in dev)
+    2. Fall back to entry points (works on Android and installed packages)
+    """
     try:
         import ciris_adapters
 
         if not hasattr(ciris_adapters, "__path__"):
-            return []
+            return await _discover_services_via_entry_points()
 
         services_base = Path(ciris_adapters.__path__[0])
         logger.debug("Modular services base path: %s", services_base)
@@ -1698,12 +2028,12 @@ async def _discover_adapters() -> List[ModuleTypeInfo]:
         try:
             return await _discover_services_from_directory(services_base)
         except OSError as e:
-            logger.debug("iterdir failed (%s), trying known service names", e)
-            return await _discover_services_by_name()
+            logger.debug("iterdir failed (%s), falling back to entry points", e)
+            return await _discover_services_via_entry_points()
 
     except ImportError as e:
         logger.debug("ciris_adapters not available: %s", e)
-        return []
+        return await _discover_services_via_entry_points()
 
 
 @router.get("/adapters/types", response_model=SuccessResponse[ModuleTypesResponse])

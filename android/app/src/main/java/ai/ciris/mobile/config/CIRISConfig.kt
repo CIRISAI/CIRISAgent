@@ -59,6 +59,12 @@ object CIRISConfig {
     private const val LLM_PROXY_HOST_SECONDARY = "proxy1.ciris-services-2.ai"
 
     /**
+     * LLM Proxy URL constants for setup wizard.
+     */
+    const val CIRIS_LLM_PROXY_URL = "https://proxy1.ciris-services-1.ai/v1"
+    const val CIRIS_LLM_PROXY_URL_EU = "https://proxy1.ciris-services-2.ai/v1"
+
+    /**
      * Get the LLM proxy base URL for the active region.
      * This is OpenAI-compatible and used as OPENAI_API_BASE.
      */

@@ -11,9 +11,6 @@
     <exclude domain="file" path="secrets_master.key"/>
     <exclude domain="file" path="secrets_master.key.wrapped"/>
 
-    <!-- Exclude any cached tokens -->
-    <exclude domain="cache" path="."/>
-
     <!-- Only include non-sensitive database if needed -->
     <!-- <include domain="database" path="."/> -->
 </full-backup-content>

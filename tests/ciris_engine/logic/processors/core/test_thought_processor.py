@@ -220,6 +220,8 @@ class TestThoughtProcessor:
 
         mock_conscience_registry = Mock()
         mock_conscience_registry.get_consciences = Mock(return_value=[mock_entry])
+        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])  # No bypass consciences in tests
+        mock_conscience_registry.get_normal_consciences = Mock(return_value=[mock_entry])
 
         mock_config = Mock(spec=ConfigAccessor)
         mock_dependencies = Mock(spec=ActionHandlerDependencies)

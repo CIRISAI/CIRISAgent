@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.platform import PlatformRequirement
 from ciris_engine.schemas.types import JSONDict
 
 
@@ -52,6 +53,18 @@ class ToolInfo(BaseModel):
     # Default parameters to use when running as context enrichment tool
     context_enrichment_params: Optional[JSONDict] = Field(
         None, description="Default parameters when running as context enrichment (e.g., {'domain': 'light'})"
+    )
+
+    # Platform requirements: security/platform features required to use this tool
+    # If not satisfied, the tool will not be available in the agent's tool list
+    platform_requirements: List[PlatformRequirement] = Field(
+        default_factory=list,
+        description="Platform security requirements (e.g., ANDROID_PLAY_INTEGRITY, DPOP)",
+    )
+    # Human-readable explanation of why platform requirements exist
+    platform_requirements_rationale: Optional[str] = Field(
+        None,
+        description="Why these requirements exist (shown if requirements not met)",
     )
 
     model_config = ConfigDict(extra="forbid")

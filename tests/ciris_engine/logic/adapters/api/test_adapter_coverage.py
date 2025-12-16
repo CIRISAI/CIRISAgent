@@ -393,3 +393,191 @@ class TestReinjectServices:
 
                 # Service should be injected
                 assert adapter.app.state.test_service is adapter.runtime.test_service
+
+
+# ============================================================================
+# Tests for Android adapter helper methods (refactored for cognitive complexity)
+# ============================================================================
+
+
+class TestIsAndroidPlatform:
+    """Tests for _is_android_platform helper method."""
+
+    def test_returns_true_when_android_data_env_set(self):
+        """Returns True when ANDROID_DATA environment variable is set."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+
+            with patch.dict("os.environ", {"ANDROID_DATA": "/data"}):
+                assert adapter._is_android_platform() is True
+
+    def test_returns_true_when_data_data_exists(self):
+        """Returns True when /data/data path exists."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch("os.path.exists") as mock_exists:
+                    mock_exists.return_value = True
+                    assert adapter._is_android_platform() is True
+
+    def test_returns_false_when_not_android(self):
+        """Returns False when not on Android platform."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch("os.path.exists") as mock_exists:
+                    mock_exists.return_value = False
+                    assert adapter._is_android_platform() is False
+
+
+class TestHasGoogleAuth:
+    """Tests for _has_google_auth helper method."""
+
+    def test_returns_true_when_token_set(self):
+        """Returns True when Google ID token is set."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+
+            with patch.dict("os.environ", {"CIRIS_BILLING_GOOGLE_ID_TOKEN": "test-token"}):
+                assert adapter._has_google_auth() is True
+
+    def test_returns_false_when_no_token(self):
+        """Returns False when no Google ID token is set."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+
+            with patch.dict("os.environ", {}, clear=True):
+                assert adapter._has_google_auth() is False
+
+
+class TestIsHostedToolsLoaded:
+    """Tests for _is_hosted_tools_loaded helper method."""
+
+    def test_returns_false_when_no_runtime_control(self):
+        """Returns False when runtime_control is None."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.runtime_control = None
+
+            assert adapter._is_hosted_tools_loaded() is False
+
+    def test_returns_false_when_no_adapter_manager(self):
+        """Returns False when adapter_manager is missing."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.runtime_control = Mock(spec=[])  # No adapter_manager attribute
+
+            assert adapter._is_hosted_tools_loaded() is False
+
+    def test_returns_false_when_no_loaded_adapters(self):
+        """Returns False when loaded_adapters is empty."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.runtime_control = Mock()
+            adapter.runtime_control.adapter_manager = Mock()
+            adapter.runtime_control.adapter_manager.loaded_adapters = {}
+
+            assert adapter._is_hosted_tools_loaded() is False
+
+    def test_returns_true_when_hosted_tools_loaded(self):
+        """Returns True when ciris_hosted_tools is loaded."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.runtime_control = Mock()
+            adapter.runtime_control.adapter_manager = Mock()
+            adapter.runtime_control.adapter_manager.loaded_adapters = {"ciris_hosted_tools_auto": Mock()}
+
+            assert adapter._is_hosted_tools_loaded() is True
+
+
+class TestCheckPortAvailable:
+    """Tests for _check_port_available helper method."""
+
+    def test_returns_true_when_port_available(self):
+        """Returns True when port is not in use."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.config = Mock()
+            adapter.config.host = "127.0.0.1"
+            adapter.config.port = 8888
+
+            with patch("socket.socket") as mock_socket:
+                mock_socket_instance = MagicMock()
+                mock_socket.return_value.__enter__.return_value = mock_socket_instance
+                mock_socket_instance.connect_ex.return_value = 1  # Non-zero = port available
+
+                assert adapter._check_port_available() is True
+
+    def test_returns_false_when_port_in_use(self):
+        """Returns False when port is in use."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.config = Mock()
+            adapter.config.host = "127.0.0.1"
+            adapter.config.port = 8888
+
+            with patch("socket.socket") as mock_socket:
+                mock_socket_instance = MagicMock()
+                mock_socket.return_value.__enter__.return_value = mock_socket_instance
+                mock_socket_instance.connect_ex.return_value = 0  # Zero = port in use
+
+                assert adapter._check_port_available() is False
+
+    def test_returns_true_on_exception(self):
+        """Returns True when check raises exception (fail-open)."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.config = Mock()
+            adapter.config.host = "127.0.0.1"
+            adapter.config.port = 8888
+
+            with patch("socket.socket") as mock_socket:
+                mock_socket.return_value.__enter__.side_effect = Exception("Socket error")
+
+                assert adapter._check_port_available() is True
+
+    def test_handles_0000_host(self):
+        """Converts 0.0.0.0 to 127.0.0.1 for port check."""
+        from ciris_engine.logic.adapters.api.adapter import ApiPlatform
+
+        with patch.object(ApiPlatform, "__init__", lambda self, runtime, **kwargs: None):
+            adapter = ApiPlatform.__new__(ApiPlatform)
+            adapter.config = Mock()
+            adapter.config.host = "0.0.0.0"
+            adapter.config.port = 8888
+
+            with patch("socket.socket") as mock_socket:
+                mock_socket_instance = MagicMock()
+                mock_socket.return_value.__enter__.return_value = mock_socket_instance
+                mock_socket_instance.connect_ex.return_value = 1
+
+                adapter._check_port_available()
+
+                # Should have called connect_ex with 127.0.0.1
+                mock_socket_instance.connect_ex.assert_called_once_with(("127.0.0.1", 8888))

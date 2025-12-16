@@ -72,6 +72,11 @@ class EpistemicData(BaseModel):
     coherence_level: float = Field(ge=0.0, le=1.0, description="Current coherence level")
     uncertainty_acknowledged: bool = Field(description="Whether uncertainty was acknowledged")
     reasoning_transparency: float = Field(ge=0.0, le=1.0, description="Transparency of reasoning")
+    # NEW: Stores the actual content of a new observation that arrived during processing
+    # This is used by UpdatedStatusConscience to pass the new message to retry context
+    CIRIS_OBSERVATION_UPDATED_STATUS: Optional[str] = Field(
+        default=None, description="Content of new observation that arrived during processing"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

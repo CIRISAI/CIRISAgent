@@ -409,6 +409,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Check circuit breaker before making call
         self.circuit_breaker.check_and_raise()
 
+        # Track retry state for metadata
+        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+
         async def _make_structured_call(
             msg_list: List[MessageDict],
             resp_model: Type[BaseModel],
@@ -429,6 +432,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 if "ciris.ai" in base_url or "ciris-services" in base_url:
                     # Hash task_id for billing (irreversible, same task = same hash = 1 credit)
                     import hashlib
+                    import uuid
 
                     if not task_id:
                         raise RuntimeError(
@@ -436,11 +440,33 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                             f"(thought_id={thought_id}, model={resp_model.__name__})"
                         )
                     interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
-                    logger.info(
-                        f"DEBUG BILLING: interaction_id={interaction_id} "
-                        f"thought_id={thought_id} model={resp_model.__name__}"
-                    )
-                    extra_kwargs["extra_body"] = {"metadata": {"interaction_id": interaction_id}}
+
+                    # Build metadata for CIRIS proxy
+                    metadata: Dict[str, Any] = {"interaction_id": interaction_id}
+
+                    # Add retry info if this is a retry attempt
+                    if retry_state["count"] > 0:
+                        metadata["retry_count"] = retry_state["count"]
+                        if retry_state["previous_error"]:
+                            metadata["previous_error"] = retry_state["previous_error"]
+                        if retry_state["original_request_id"]:
+                            metadata["original_request_id"] = retry_state["original_request_id"]
+                        logger.info(
+                            f"[LLM_RETRY] attempt={retry_state['count']} "
+                            f"prev_error={retry_state['previous_error']} "
+                            f"interaction_id={interaction_id}"
+                        )
+                    else:
+                        # First attempt - generate request ID for correlation
+                        retry_state["original_request_id"] = uuid.uuid4().hex[:12]
+                        metadata["request_id"] = retry_state["original_request_id"]
+                        logger.info(
+                            f"[LLM_REQUEST] interaction_id={interaction_id} "
+                            f"request_id={retry_state['original_request_id']} "
+                            f"thought_id={thought_id} model={resp_model.__name__}"
+                        )
+
+                    extra_kwargs["extra_body"] = {"metadata": metadata}
 
                 # DEBUG: Log multimodal content details for proxy team diagnostics
                 image_count = 0
@@ -679,6 +705,28 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                                 "LLM rate limit exceeded (429) - circuit breaker activated for failover"
                             ) from e
 
+                        # Check for context length / token limit exceeded errors (400)
+                        elif (
+                            "context_length" in error_str
+                            or "maximum context" in error_str
+                            or "context length" in error_str
+                            or "token limit" in error_str
+                            or "too many tokens" in error_str
+                            or "max_tokens" in error_str
+                            and "exceed" in error_str
+                        ):
+                            logger.error(
+                                f"LLM CONTEXT_LENGTH_EXCEEDED - Input too long for model.\n"
+                                f"  Model: {error_context['model']}\n"
+                                f"  Provider: {error_context['provider']}\n"
+                                f"  CB State: {error_context['circuit_breaker_state']} "
+                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"  Error: {full_error[:500]}"
+                            )
+                            raise RuntimeError(
+                                "CONTEXT_LENGTH_EXCEEDED: Input too long - reduce message history or context"
+                            ) from e
+
                         # Check for content filtering / guardrail errors
                         elif "content_filter" in error_str or "content policy" in error_str or "safety" in error_str:
                             logger.error(
@@ -717,6 +765,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 response_model,
                 max_tokens,
                 temperature,
+                retry_state=retry_state,  # Pass retry state for CIRIS proxy metadata
             )
         except CircuitBreakerError:
             # Don't retry if circuit breaker is open
@@ -756,16 +805,40 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         response_model: Type[BaseModel],
         max_tokens: int,
         temperature: float,
+        retry_state: Optional[Dict[str, Any]] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
-        """Retry with exponential backoff (private method)."""
+        """Retry with exponential backoff (private method).
+
+        Args:
+            func: The callable to retry
+            messages: LLM messages
+            response_model: Pydantic response model
+            max_tokens: Max tokens
+            temperature: Temperature
+            retry_state: Optional dict to track retry info for CIRIS proxy metadata
+                         {"count": int, "previous_error": str, "original_request_id": str}
+        """
         last_exception = None
         for attempt in range(self.max_retries):
             try:
                 return await func(messages, response_model, max_tokens, temperature)
             except self.retryable_exceptions as e:
                 last_exception = e
+
+                # Categorize error for retry metadata
+                error_category = self._categorize_llm_error(e)
+
+                # Update retry state for next attempt's metadata
+                if retry_state is not None:
+                    retry_state["count"] = attempt + 1
+                    retry_state["previous_error"] = error_category
+
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2**attempt), self.max_delay)
+                    logger.warning(
+                        f"[LLM_RETRY_SCHEDULED] attempt={attempt + 1}/{self.max_retries} "
+                        f"error={error_category} delay={delay:.1f}s"
+                    )
                     import asyncio
 
                     await asyncio.sleep(delay)
@@ -777,6 +850,60 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if last_exception:
             raise last_exception
         raise RuntimeError("Retry logic failed without exception")
+
+    @staticmethod
+    def _categorize_llm_error(error: Exception) -> str:
+        """Categorize an LLM error for retry metadata.
+
+        Returns error category string for proxy correlation:
+        - TIMEOUT: Request timed out
+        - CONNECTION_ERROR: Could not connect
+        - RATE_LIMIT: Rate limit exceeded (429)
+        - CONTEXT_LENGTH_EXCEEDED: Input too long (400)
+        - VALIDATION_ERROR: Response didn't match schema
+        - AUTH_ERROR: Authentication failed (401)
+        - INTERNAL_ERROR: Provider error (500/503)
+        - UNKNOWN: Unrecognized error
+        """
+        error_str = str(error).lower()
+
+        # Check for timeout errors
+        if "timeout" in error_str or "timed out" in error_str:
+            return "TIMEOUT"
+
+        # Check for connection errors
+        if isinstance(error, APIConnectionError):
+            if "timeout" in error_str:
+                return "TIMEOUT"
+            return "CONNECTION_ERROR"
+
+        # Check for rate limit
+        if isinstance(error, RateLimitError) or "rate limit" in error_str or "429" in error_str:
+            return "RATE_LIMIT"
+
+        # Check for context length exceeded
+        if (
+            "context_length" in error_str
+            or "maximum context" in error_str
+            or "context length" in error_str
+            or "token limit" in error_str
+            or "too many tokens" in error_str
+        ):
+            return "CONTEXT_LENGTH_EXCEEDED"
+
+        # Check for validation errors
+        if "validation" in error_str or "validationerror" in error_str:
+            return "VALIDATION_ERROR"
+
+        # Check for auth errors
+        if isinstance(error, AuthenticationError) or "401" in error_str or "unauthorized" in error_str:
+            return "AUTH_ERROR"
+
+        # Check for server errors
+        if isinstance(error, InternalServerError) or "500" in error_str or "503" in error_str:
+            return "INTERNAL_ERROR"
+
+        return "UNKNOWN"
 
     def _signal_token_refresh_needed(self) -> None:
         """Write a signal file to indicate token refresh is needed (for ciris.ai).

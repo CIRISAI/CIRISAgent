@@ -32,4 +32,14 @@
     <!-- Text Colors -->
     <color name="text_primary">#1F2937</color>
     <color name="text_secondary">#6B7280</color>
+
+    <!-- Card Colors for Setup Wizard -->
+    <color name="success_light">#D1FAE5</color>
+    <color name="success_border">#6EE7B7</color>
+    <color name="success_dark">#065F46</color>
+    <color name="success_text">#047857</color>
+    <color name="info_light">#DBEAFE</color>
+    <color name="info_border">#93C5FD</color>
+    <color name="info_dark">#1E40AF</color>
+    <color name="info_text">#1D4ED8</color>
 </resources>

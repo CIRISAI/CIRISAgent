@@ -168,10 +168,15 @@ class TestRequiresConsent:
 
     @pytest.mark.asyncio
     async def test_conditional_mode_no_context(self, evaluator, conditional_shutdown_behaviors):
-        """Conditional mode defaults to consent when no context provided."""
+        """Conditional mode with instant_shutdown_otherwise=True allows shutdown without context.
+
+        This is important for mobile/Android where context may not be available.
+        When instant_shutdown_otherwise=True and no context, shutdown is permitted.
+        """
         requires, reason = await evaluator.requires_consent(conditional_shutdown_behaviors)
-        assert requires is True
-        assert "requires context" in reason
+        # instant_shutdown_otherwise=True in fixture means no consent needed without context
+        assert requires is False
+        assert "instant_shutdown_otherwise=True" in reason
 
     @pytest.mark.asyncio
     async def test_conditional_mode_crisis_triggered(

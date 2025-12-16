@@ -40,6 +40,7 @@ import ai.ciris.mobile.billing.TokenRefreshResult
 import ai.ciris.mobile.config.CIRISConfig
 import ai.ciris.mobile.integrity.PlayIntegrityManager
 import ai.ciris.mobile.integrity.IntegrityResult
+import ai.ciris.mobile.setup.SetupWizardActivity
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -180,6 +181,12 @@ class MainActivity : AppCompatActivity() {
         // Static reference to current Google user ID for LLM proxy calls
         var currentGoogleUserId: String? = null
             private set
+
+        // CRITICAL: Tracks if THIS process has already started a Python server.
+        // Prevents SmartStartup from killing our own server on activity recreation.
+        // Reset only when process dies (JVM static lifetime).
+        @Volatile
+        private var serverStartedByThisProcess = false
     }
 
     // Callback for billing-triggered interactive sign-in
@@ -250,6 +257,15 @@ class MainActivity : AppCompatActivity() {
         userPhotoUrl = intent.getStringExtra("user_photo_url")
         showSetup = intent.getBooleanExtra("show_setup", true)
 
+        // For local users: get CIRIS access token from SetupWizardActivity
+        // This is the token obtained by authenticating with username/password after setup
+        val intentCirisToken = intent.getStringExtra("ciris_access_token")
+        if (intentCirisToken != null) {
+            Log.i(TAG, "[Auth] Received CIRIS access token from setup (length=${intentCirisToken.length})")
+            cirisAccessToken = intentCirisToken
+            userRole = "ADMIN"  // Local users are ADMIN after setup
+        }
+
         // Store globally for LLM proxy access
         currentGoogleUserId = googleUserId
 
@@ -268,6 +284,7 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "[Auth Received] auth_method: $authMethod")
         Log.i(TAG, "[Auth Received] google_user_id: ${googleUserId ?: "(null/empty)"}")
         Log.i(TAG, "[Auth Received] google_id_token: ${googleIdToken?.let { "${it.take(20)}... (${it.length} chars)" } ?: "(null)"}")
+        Log.i(TAG, "[Auth Received] ciris_access_token: ${cirisAccessToken?.let { "${it.take(20)}... (${it.length} chars)" } ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_email: ${userEmail ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_name: ${userName ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_photo_url: ${userPhotoUrl ?: "(null)"}")
@@ -1237,15 +1254,168 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Response from local-shutdown endpoint for SmartStartup negotiation.
+     */
+    data class ShutdownResponse(
+        val status: String,           // "accepted", "busy", "error"
+        val reason: String?,
+        val retryAfterMs: Long?,
+        val serverState: String?,     // "STARTING", "INITIALIZING", "RESUMING", "READY", "SHUTTING_DOWN"
+        val uptimeSeconds: Double?,
+        val resumeElapsedSeconds: Double?,
+        val resumeTimeoutSeconds: Double?
+    )
+
+    /**
+     * Parse JSON response from local-shutdown endpoint.
+     */
+    private fun parseShutdownResponse(json: String): ShutdownResponse {
+        return try {
+            val obj = JSONObject(json)
+            ShutdownResponse(
+                status = obj.optString("status", "unknown"),
+                reason = obj.optString("reason", null),
+                retryAfterMs = if (obj.has("retry_after_ms")) obj.getLong("retry_after_ms") else null,
+                serverState = obj.optString("server_state", null),
+                uptimeSeconds = if (obj.has("uptime_seconds")) obj.getDouble("uptime_seconds") else null,
+                resumeElapsedSeconds = if (obj.has("resume_elapsed_seconds") && !obj.isNull("resume_elapsed_seconds"))
+                    obj.getDouble("resume_elapsed_seconds") else null,
+                resumeTimeoutSeconds = if (obj.has("resume_timeout_seconds"))
+                    obj.getDouble("resume_timeout_seconds") else null
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "[SmartStartup] Failed to parse JSON response: ${e.message}")
+            ShutdownResponse("unknown", null, null, null, null, null, null)
+        }
+    }
+
+    /**
      * Attempt to shut down an existing server gracefully via API.
-     * Uses saved CIRIS access token for authentication.
+     *
+     * SmartStartup Protocol:
+     * 1. Try local-shutdown endpoint (no auth required)
+     *    - 200: Shutdown initiated - wait for death
+     *    - 202: Already shutting down - wait for death
+     *    - 409: Resume in progress - RETRY with backoff
+     *    - 503: Server not ready - retry
+     * 2. Fall back to authenticated shutdown if local fails
+     *
      * Returns true if shutdown was triggered successfully.
      */
-    private fun shutdownExistingServer(): Boolean {
-        return try {
-            Log.i(TAG, "[SmartStartup] Attempting graceful shutdown of existing server...")
+    private suspend fun shutdownExistingServer(): Boolean {
+        val maxRetries = 10  // Up to 10 retries for 409 (resume in progress)
+        var retryCount = 0
+        var totalWaitMs = 0L
 
-            // Get saved auth token for the shutdown request
+        Log.i(TAG, "[SmartStartup] Starting shutdown negotiation (max retries: $maxRetries)")
+
+        while (retryCount < maxRetries) {
+            try {
+                Log.i(TAG, "[SmartStartup] Trying local-shutdown (attempt ${retryCount + 1}/$maxRetries)...")
+
+                val localUrl = URL("$SERVER_URL/v1/system/local-shutdown")
+                val localConn = localUrl.openConnection() as HttpURLConnection
+                localConn.connectTimeout = 3000
+                localConn.readTimeout = 5000
+                localConn.requestMethod = "POST"
+                localConn.doOutput = true
+                localConn.setRequestProperty("Content-Type", "application/json")
+                localConn.outputStream.bufferedWriter().use { it.write("{}") }
+
+                val responseCode = localConn.responseCode
+
+                // Read response body for JSON data
+                val responseBody = try {
+                    if (responseCode in 200..499) {
+                        val stream = if (responseCode in 200..299) localConn.inputStream else localConn.errorStream
+                        stream?.bufferedReader()?.readText() ?: "{}"
+                    } else {
+                        "{}"
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "[SmartStartup] Failed to read response body: ${e.message}")
+                    "{}"
+                }
+                localConn.disconnect()
+
+                val response = parseShutdownResponse(responseBody)
+                Log.i(TAG, "[SmartStartup] Response: code=$responseCode, status=${response.status}, " +
+                        "state=${response.serverState}, uptime=${response.uptimeSeconds}s, " +
+                        "resumeElapsed=${response.resumeElapsedSeconds}s")
+
+                when (responseCode) {
+                    200 -> {
+                        Log.i(TAG, "[SmartStartup] ✓ Shutdown initiated: ${response.reason}")
+                        return true
+                    }
+                    202 -> {
+                        Log.i(TAG, "[SmartStartup] ✓ Server already shutting down: ${response.reason}")
+                        return true  // Will wait for death
+                    }
+                    409 -> {
+                        // Resume in progress - retry with backoff
+                        val retryDelay = response.retryAfterMs ?: 2000L
+                        val resumeTimeout = response.resumeTimeoutSeconds ?: 30.0
+                        val resumeElapsed = response.resumeElapsedSeconds ?: 0.0
+
+                        Log.i(TAG, "[SmartStartup] Server busy (resume ${resumeElapsed}s / ${resumeTimeout}s), " +
+                                "retry in ${retryDelay}ms...")
+
+                        // Update console for user visibility
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("Server initializing... waiting (${resumeElapsed.toInt()}s)")
+                        }
+
+                        delay(retryDelay)
+                        totalWaitMs += retryDelay
+                        retryCount++
+
+                        // Safety limit - don't wait forever
+                        if (totalWaitMs > 60000) {
+                            Log.w(TAG, "[SmartStartup] Exceeded 60s total wait time, giving up on retries")
+                            break
+                        }
+                        continue  // Retry
+                    }
+                    503 -> {
+                        // Server not ready - brief retry
+                        val retryDelay = response.retryAfterMs ?: 1000L
+                        Log.i(TAG, "[SmartStartup] Server not ready (503), retry in ${retryDelay}ms...")
+                        delay(retryDelay)
+                        totalWaitMs += retryDelay
+                        retryCount++
+                        continue
+                    }
+                    403 -> {
+                        Log.e(TAG, "[SmartStartup] Local-shutdown rejected (403) - not localhost?!")
+                        break  // Fall through to auth
+                    }
+                    else -> {
+                        Log.w(TAG, "[SmartStartup] Unexpected response $responseCode, falling back to auth")
+                        break  // Fall through to auth
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "[SmartStartup] Local-shutdown failed: ${e.message}")
+                break  // Fall through to auth
+            }
+        }
+
+        if (retryCount >= maxRetries) {
+            Log.w(TAG, "[SmartStartup] Exhausted $maxRetries retries (${totalWaitMs}ms total), trying auth shutdown")
+        }
+
+        // Fall back to authenticated shutdown
+        return tryAuthenticatedShutdown()
+    }
+
+    /**
+     * Try authenticated shutdown endpoint as fallback.
+     */
+    private fun tryAuthenticatedShutdown(): Boolean {
+        return try {
+            Log.i(TAG, "[SmartStartup] Trying authenticated shutdown...")
+
             val prefs = getSharedPreferences("ciris_prefs", MODE_PRIVATE)
             val savedToken = prefs.getString("ciris_access_token", null)
 
@@ -1257,22 +1427,39 @@ class MainActivity : AppCompatActivity() {
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
 
-            // Add auth token if available
             if (savedToken != null) {
                 connection.setRequestProperty("Authorization", "Bearer $savedToken")
-                Log.i(TAG, "[SmartStartup] Using saved auth token for shutdown")
+                Log.i(TAG, "[SmartStartup] Using saved auth token (${savedToken.length} chars)")
             } else {
                 Log.w(TAG, "[SmartStartup] No saved auth token - shutdown may fail with 401")
             }
 
-            // Send empty body or shutdown command
             connection.outputStream.bufferedWriter().use { it.write("{}") }
             val responseCode = connection.responseCode
             connection.disconnect()
-            Log.i(TAG, "[SmartStartup] Shutdown response: $responseCode")
-            responseCode in 200..299
+
+            Log.i(TAG, "[SmartStartup] Auth shutdown response: $responseCode")
+
+            when (responseCode) {
+                in 200..299 -> {
+                    Log.i(TAG, "[SmartStartup] ✓ Auth shutdown successful")
+                    true
+                }
+                401 -> {
+                    Log.e(TAG, "[SmartStartup] ✗ Auth failed (401) - token invalid or cleared")
+                    false
+                }
+                403 -> {
+                    Log.e(TAG, "[SmartStartup] ✗ Forbidden (403) - insufficient permissions")
+                    false
+                }
+                else -> {
+                    Log.w(TAG, "[SmartStartup] ✗ Auth shutdown failed with $responseCode")
+                    false
+                }
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "[SmartStartup] Graceful shutdown failed: ${e.message}")
+            Log.e(TAG, "[SmartStartup] ✗ Auth shutdown exception: ${e.message}")
             false
         }
     }
@@ -1306,11 +1493,59 @@ class MainActivity : AppCompatActivity() {
 
                 Log.i(TAG, "Starting Python server...")
 
-                // Smart startup: Check for and handle existing server session
-                if (isExistingServerRunning()) {
-                    Log.i(TAG, "[SmartStartup] Detected existing server on port 8080")
+                // CRITICAL: Check if we already started a server in this process
+                // This prevents SmartStartup from killing our own server on activity recreation
+                if (serverStartedByThisProcess && isExistingServerRunning()) {
+                    Log.i(TAG, "[SmartStartup] ⏩ SKIPPING - server was started by THIS process")
+                    Log.i(TAG, "[SmartStartup] Activity was recreated but server is still running - reconnecting")
                     withContext(Dispatchers.Main) {
-                        appendToConsole("Found existing server - shutting down...")
+                        appendToConsole("Reconnecting to existing session...")
+                    }
+
+                    // Go straight to health check polling to reconnect
+                    val maxAttempts = 30  // Shorter wait for reconnect
+                    var attempts = 0
+                    var isHealthy = false
+
+                    withContext(Dispatchers.Main) {
+                        setPhase(StartupPhase.WAITING_SERVER)
+                        updateStartupStatus("Reconnecting...")
+                    }
+
+                    while (attempts < maxAttempts && !isHealthy) {
+                        delay(500)
+                        attempts++
+                        isHealthy = checkServerHealth()
+                    }
+
+                    if (isHealthy) {
+                        withContext(Dispatchers.Main) {
+                            serverStarted = true
+                            appendToConsole("✓ Reconnected to CIRIS runtime")
+                            updateStatus("Ready", "green")
+                            setPhase(StartupPhase.CHECKING_CONFIG)
+                            updateStartupStatus("Checking configuration...")
+                            showWebView()
+                        }
+                    } else {
+                        // Server died while we were reconnecting - clear flag and restart
+                        Log.w(TAG, "[SmartStartup] Server died during reconnect - will restart")
+                        serverStartedByThisProcess = false
+                        withContext(Dispatchers.Main) {
+                            appendToConsole("⚠ Server stopped - restarting...")
+                        }
+                        // Fall through to normal startup
+                    }
+
+                    // If healthy, we're done
+                    if (isHealthy) return@launch
+                }
+
+                // Smart startup: Check for and handle existing server session (orphan from previous app session)
+                if (isExistingServerRunning()) {
+                    Log.i(TAG, "[SmartStartup] Detected ORPHAN server on port 8080 (not started by this process)")
+                    withContext(Dispatchers.Main) {
+                        appendToConsole("Found orphan server - shutting down...")
                     }
 
                     // Try graceful shutdown first
@@ -1387,6 +1622,8 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (isHealthy) {
                         serverStarted = true
+                        serverStartedByThisProcess = true  // Mark that THIS process owns the server
+                        Log.i(TAG, "[SmartStartup] Server started successfully - marking as owned by this process")
                         updateStartupStatus("Server ready!")
                         appendToConsole("✓ CIRIS runtime ready!")
                         appendToConsole("Loading web interface...")
@@ -1402,6 +1639,8 @@ class MainActivity : AppCompatActivity() {
                         // Transition to WebView
                         showWebView()
                     } else {
+                        serverStartedByThisProcess = false  // Clear flag since server didn't start
+                        Log.w(TAG, "[SmartStartup] Server failed to start - clearing ownership flag")
                         appendToConsole("❌ Server failed to start after ${maxAttempts}s")
                         updateStartupStatus("Server failed to start")
                         updateStatus("Failed", "red")
@@ -1409,6 +1648,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
             } catch (e: Exception) {
+                serverStartedByThisProcess = false  // Clear flag on exception
                 Log.e(TAG, "Failed to start server: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     appendToConsole("❌ Failed to start CIRIS: ${e.message}")
@@ -1497,9 +1737,26 @@ class MainActivity : AppCompatActivity() {
 
                     // Use the setup status we already fetched on IO thread
                     if (setupRequired) {
-                        webView.visibility = View.VISIBLE
-                        fragmentContainer.visibility = View.GONE
-                        loadUI()  // Load index.html which will redirect to /setup
+                        if (useNativeUi) {
+                            Log.i(TAG, "Setup required - launching native SetupWizardActivity")
+                            val intent = Intent(this@MainActivity, SetupWizardActivity::class.java).apply {
+                                // Pass Google auth data so wizard can detect auth state
+                                putExtra("auth_method", authMethod)
+                                putExtra("google_id_token", googleIdToken)
+                                putExtra("google_user_id", googleUserId)
+                                putExtra("user_email", userEmail)
+                                putExtra("user_name", userName)
+                                putExtra("user_photo_url", userPhotoUrl)
+                            }
+                            Log.i(TAG, "Passing auth extras: method=$authMethod, hasToken=${googleIdToken != null}, email=$userEmail")
+                            startActivity(intent)
+                            // Don't finish MainActivity - it holds the Python process
+                            // SetupWizardActivity will restart MainActivity when done
+                        } else {
+                            webView.visibility = View.VISIBLE
+                            fragmentContainer.visibility = View.GONE
+                            loadUI()  // Load index.html which will redirect to /setup
+                        }
                     } else {
                         showInteractFragment()
                     }
@@ -1525,7 +1782,7 @@ class MainActivity : AppCompatActivity() {
                         setPhase(StartupPhase.READY)
                         updateStartupStatus("Welcome back!")
                         delay(500)
-                        Log.i(TAG, "Setup complete (API key auth) - showing Kotlin interact fragment")
+                        Log.i(TAG, "Setup complete (API key auth) - checking for token")
                     }
 
                     // Hide splash/console, show toolbar
@@ -1534,11 +1791,31 @@ class MainActivity : AppCompatActivity() {
                     findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
 
                     if (setupRequired) {
-                        webView.visibility = View.VISIBLE
-                        fragmentContainer.visibility = View.GONE
-                        loadUI()  // Load index.html which will redirect to /setup
+                        if (useNativeUi) {
+                            Log.i(TAG, "Setup required (API key auth) - launching native SetupWizardActivity")
+                            val intent = Intent(this@MainActivity, SetupWizardActivity::class.java).apply {
+                                // Pass auth method - no Google creds for API key auth
+                                putExtra("auth_method", "api_key")
+                            }
+                            startActivity(intent)
+                            // Don't finish MainActivity - it holds the Python process
+                        } else {
+                            webView.visibility = View.VISIBLE
+                            fragmentContainer.visibility = View.GONE
+                            loadUI()  // Load index.html which will redirect to /setup
+                        }
                     } else {
-                        showInteractFragment()
+                        // Setup complete - check if we have a token
+                        if (cirisAccessToken != null) {
+                            Log.i(TAG, "Setup complete (API key auth) - have token, showing interact")
+                            showInteractFragment()
+                        } else {
+                            // No token - need to authenticate with native login dialog
+                            Log.i(TAG, "Setup complete (API key auth) - NO TOKEN, showing native login dialog")
+                            updateStartupStatus("Please sign in...")
+                            delay(300)
+                            showNativeLoginDialog()
+                        }
                     }
                     loadCreditsBalance()
                 }
@@ -1931,7 +2208,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showInteractFragment() {
-        Log.i(TAG, "Showing InteractFragment")
+        Log.i(TAG, "Showing InteractFragment (hasToken=${cirisAccessToken != null}, tokenLen=${cirisAccessToken?.length ?: 0})")
         // Hide WebView, show fragment container
         webView.visibility = View.GONE
         fragmentContainer.visibility = View.VISIBLE
@@ -1945,6 +2222,127 @@ class MainActivity : AppCompatActivity() {
 
         // Refresh credits balance when showing interact fragment
         loadCreditsBalance()
+    }
+
+    /**
+     * Show a native login dialog for local users who need to re-authenticate.
+     * This is used when setup is complete but no token is available (e.g., after app restart).
+     */
+    private fun showNativeLoginDialog() {
+        Log.i(TAG, "showNativeLoginDialog: Showing native login for local user")
+
+        // Hide splash, show toolbar
+        splashContainer.visibility = View.GONE
+        consoleContainer.visibility = View.GONE
+        findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_login, null)
+        val usernameInput = dialogView.findViewById<android.widget.EditText>(R.id.edit_username)
+        val passwordInput = dialogView.findViewById<android.widget.EditText>(R.id.edit_password)
+        val errorText = dialogView.findViewById<android.widget.TextView>(R.id.text_error)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Sign In")
+            .setView(dialogView)
+            .setCancelable(false)
+            .setPositiveButton("Sign In", null) // Set to null initially, we'll override
+            .create()
+
+        dialog.setOnShowListener {
+            val button = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            button.setOnClickListener {
+                val username = usernameInput.text.toString().trim()
+                val password = passwordInput.text.toString()
+
+                if (username.isEmpty() || password.isEmpty()) {
+                    errorText.text = "Please enter username and password"
+                    errorText.visibility = View.VISIBLE
+                    return@setOnClickListener
+                }
+
+                // Disable button while authenticating
+                button.isEnabled = false
+                button.text = "Signing in..."
+                errorText.visibility = View.GONE
+
+                // Authenticate in background
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val token = authenticateLocalUser(username, password)
+                        withContext(Dispatchers.Main) {
+                            if (token != null) {
+                                Log.i(TAG, "Native login successful, got token")
+                                cirisAccessToken = token
+                                userRole = "ADMIN"
+                                dialog.dismiss()
+                                showInteractFragment()
+                            } else {
+                                Log.w(TAG, "Native login failed - invalid credentials")
+                                errorText.text = "Invalid username or password"
+                                errorText.visibility = View.VISIBLE
+                                button.isEnabled = true
+                                button.text = "Sign In"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Native login error: ${e.message}", e)
+                        withContext(Dispatchers.Main) {
+                            errorText.text = "Error: ${e.message}"
+                            errorText.visibility = View.VISIBLE
+                            button.isEnabled = true
+                            button.text = "Sign In"
+                        }
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Authenticate a local user with username/password.
+     * @return The access token if successful, null otherwise.
+     */
+    private fun authenticateLocalUser(username: String, password: String): String? {
+        Log.i(TAG, "authenticateLocalUser: Authenticating $username")
+        return try {
+            val url = java.net.URL("$SERVER_URL/v1/auth/login")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+
+            val payload = org.json.JSONObject().apply {
+                put("username", username)
+                put("password", password)
+            }
+
+            conn.outputStream.bufferedWriter().use { it.write(payload.toString()) }
+
+            val responseCode = conn.responseCode
+            Log.d(TAG, "Auth response code: $responseCode")
+
+            if (responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = org.json.JSONObject(response)
+                if (json.has("access_token")) {
+                    json.getString("access_token")
+                } else {
+                    Log.w(TAG, "Auth response missing access_token")
+                    null
+                }
+            } else {
+                val error = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                Log.e(TAG, "Auth failed: $responseCode - $error")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Auth error: ${e.message}", e)
+            null
+        }
     }
 
     private fun showAdaptersFragment() {

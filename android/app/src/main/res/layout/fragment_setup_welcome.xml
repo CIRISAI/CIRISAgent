@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Badge: 100% Free & Open Source -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/setup_badge_free"
+            android:textColor="@color/success_text"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_card_success"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Main description -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/setup_welcome_desc_simple"
+            android:textColor="@color/text_primary"
+            android:textAlignment="center"
+            android:lineSpacingMultiplier="1.3"
+            android:textSize="16sp"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Card: Google user - Ready to go! -->
+        <LinearLayout
+            android:id="@+id/card_google_ready"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_success"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✓"
+                    android:textColor="@color/success_dark"
+                    android:textSize="24sp"
+                    android:layout_marginEnd="12dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/setup_google_ready_title"
+                    android:textColor="@color/success_dark"
+                    android:textSize="18sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_google_ready_desc"
+                android:textColor="@color/success_text"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
+
+            <!-- Expandable Details -->
+            <TextView
+                android:id="@+id/details_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_details_expand"
+                android:textColor="@color/success_dark"
+                android:textSize="13sp"
+                android:layout_marginTop="12dp"
+                android:paddingVertical="4dp"/>
+
+            <TextView
+                android:id="@+id/details_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_details_content"
+                android:textColor="@color/success_text"
+                android:textSize="13sp"
+                android:lineSpacingMultiplier="1.3"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"/>
+        </LinearLayout>
+
+        <!-- Card: Non-Google user - Quick Setup Required -->
+        <LinearLayout
+            android:id="@+id/card_setup_required"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card_info"
+            android:padding="20dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="visible">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_required_title"
+                android:textColor="@color/info_dark"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_required_desc"
+                android:textColor="@color/info_text"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
+        </LinearLayout>
+
+        <!-- How it works section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/edit_text_background"
+            android:backgroundTint="@color/gray_light"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_how_it_works_title"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:id="@+id/text_how_it_works"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_how_it_works_desc"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:lineSpacingMultiplier="1.3"/>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

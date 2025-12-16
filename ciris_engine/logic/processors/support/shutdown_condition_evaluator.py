@@ -91,37 +91,43 @@ class ShutdownConditionEvaluator:
         """
         shutdown = behaviors.shutdown
 
-        # Mode: always_consent - Full Covenant compliance
         if shutdown.mode == "always_consent":
             return True, "Shutdown mode is 'always_consent' (Covenant compliance)"
 
-        # Mode: instant - Immediate termination (only for low-tier agents)
         if shutdown.mode == "instant":
             logger.info(f"Instant shutdown permitted. Rationale: {shutdown.rationale or 'No ongoing commitments'}")
             return False, f"Shutdown mode is 'instant'. Rationale: {shutdown.rationale}"
 
-        # Mode: conditional - Check each condition
         if shutdown.mode == "conditional":
-            if not context:
-                # Without context, we can't evaluate conditions - default to requiring consent
-                return True, "Conditional shutdown requires context for evaluation; defaulting to consent"
-
-            # Check each configured condition
-            for condition in shutdown.require_consent_when:
-                triggered, reason = await self._evaluate_condition(condition, context)
-                if triggered:
-                    logger.info(f"Shutdown consent required: condition '{condition}' triggered. {reason}")
-                    return True, f"Condition '{condition}' triggered: {reason}"
-
-            # No conditions triggered
-            if shutdown.instant_shutdown_otherwise:
-                return False, "No shutdown conditions triggered; instant shutdown permitted"
-            else:
-                return True, "No shutdown conditions triggered; defaulting to consent"
+            return await self._evaluate_conditional_shutdown(shutdown, context)
 
         # Unknown mode - default to consent for safety
         logger.warning(f"Unknown shutdown mode: {shutdown.mode}. Defaulting to consent.")
         return True, f"Unknown shutdown mode '{shutdown.mode}'; defaulting to consent"
+
+    async def _evaluate_conditional_shutdown(
+        self,
+        shutdown: "ShutdownBehavior",
+        context: Optional["ProcessorContext"],
+    ) -> tuple[bool, str]:
+        """Evaluate conditional shutdown mode."""
+        if not context:
+            # No context available - check if instant shutdown is permitted
+            if shutdown.instant_shutdown_otherwise:
+                return False, "No context for condition evaluation; instant_shutdown_otherwise=True permits shutdown"
+            return True, "Conditional shutdown requires context for evaluation; defaulting to consent"
+
+        # Check each configured condition
+        for condition in shutdown.require_consent_when:
+            triggered, reason = await self._evaluate_condition(condition, context)
+            if triggered:
+                logger.info(f"Shutdown consent required: condition '{condition}' triggered. {reason}")
+                return True, f"Condition '{condition}' triggered: {reason}"
+
+        # No conditions triggered
+        if shutdown.instant_shutdown_otherwise:
+            return False, "No shutdown conditions triggered; instant shutdown permitted"
+        return True, "No shutdown conditions triggered; defaulting to consent"
 
     async def _evaluate_condition(
         self,

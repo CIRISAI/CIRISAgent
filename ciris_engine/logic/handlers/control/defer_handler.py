@@ -189,7 +189,7 @@ class DeferHandler(BaseActionHandler):
         if task and task.channel_id and self._is_api_channel(task.channel_id):
             self.logger.info(f"Sending deferral notification to API channel {task.channel_id}")
             await self._send_notification(
-                task.channel_id, "The agent has contacted a human authority for help with responding to your message"
+                task.channel_id, "The agent chose to defer, check the wise authority panel if you are the setup user"
             )
 
         return None

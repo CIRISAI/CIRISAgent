@@ -221,6 +221,16 @@ if [[ "$SKIP_PYTHON" != "true" && "$SKIP_BUILD" != "true" ]]; then
         exit 1
     fi
 
+    # Copy runtime guides
+    if [[ -f "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md" ]]; then
+        cp "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md" "$PYTHON_SRC_DIR/"
+        log_info "  -> Android runtime guide copied"
+    fi
+    if [[ -f "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE.md" ]]; then
+        cp "$PROJECT_ROOT/CIRIS_COMPREHENSIVE_GUIDE.md" "$PYTHON_SRC_DIR/"
+        log_info "  -> Standard runtime guide copied"
+    fi
+
     log_success "Python sources synced"
 elif [[ "$SKIP_PYTHON" == "true" ]]; then
     log_info "Skipping Python source sync (--skip-python)"

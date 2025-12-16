@@ -7,9 +7,11 @@ New simplified runtime that properly orchestrates all components.
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -156,6 +158,12 @@ class CIRISRuntime:
         self._shutdown_reason: Optional[str] = None
         self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
+        self._shutdown_in_progress = False  # Set when shutdown has been initiated
+
+        # Resume protection - prevents SmartStartup from killing server mid-initialization
+        self._resume_in_progress = False  # Set during resume_from_first_run
+        self._resume_started_at: Optional[float] = None  # Timestamp for timeout detection
+        self._startup_time: float = time.time()  # For uptime calculation
 
         # Identity - will be loaded during initialization
         self.agent_identity: Optional[AgentIdentityRoot] = None
@@ -1626,7 +1634,7 @@ class CIRISRuntime:
         """Create and configure the CIRIS billing provider."""
         from ciris_engine.logic.services.infrastructure.resource_monitor import CIRISBillingProvider
 
-        base_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing1.ciris-services-1.ai")
+        base_url = get_billing_url()  # Checks env var first, then falls back to central config
         timeout = float(os.getenv("CIRIS_BILLING_TIMEOUT_SECONDS", "5.0"))
         cache_ttl = int(os.getenv("CIRIS_BILLING_CACHE_TTL_SECONDS", "15"))
         fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
@@ -1781,16 +1789,38 @@ class CIRISRuntime:
                 adapter.reinject_services()
                 log_step(11, total_steps, f"✓ Re-injected services into {adapter.__class__.__name__}")
 
+    async def _resume_auto_enable_android_adapters(self) -> None:
+        """Auto-enable Android-specific adapters after resume.
+
+        Calls _auto_enable_android_adapters on any adapters that have it,
+        which enables ciris_hosted_tools (web_search) when:
+        - Running on Android with Google auth
+        - The adapter is not already loaded
+        """
+        for adapter in self.adapters:
+            if hasattr(adapter, "_auto_enable_android_adapters"):
+                try:
+                    await adapter._auto_enable_android_adapters()
+                    logger.info(f"[RESUME] Called _auto_enable_android_adapters on {adapter.__class__.__name__}")
+                except Exception as e:
+                    logger.warning(
+                        f"[RESUME] Failed to auto-enable Android adapters on {adapter.__class__.__name__}: {e}"
+                    )
+
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes.
 
         This continues from the point where first-run mode paused (line 1088).
         It executes the same steps as normal mode initialization.
         """
-        import time
+        # Set flag AND timestamp to prevent premature shutdown during resume
+        # The timestamp allows timeout detection for stuck resume scenarios
+        self._resume_in_progress = True
+        self._resume_started_at = time.time()
+        logger.info(f"[RESUME] Started at {self._resume_started_at:.3f}, _resume_in_progress=True")
 
         start_time = time.time()
-        total_steps = 13
+        total_steps = 14
 
         def log_step(step_num: int, total: int, msg: str) -> None:
             elapsed = time.time() - start_time
@@ -1841,15 +1871,20 @@ class CIRISRuntime:
         # Step 11: Re-inject services into adapters
         self._resume_reinject_adapters(log_step, total_steps)
 
-        # Step 12: Build cognitive components
-        log_step(12, total_steps, "Building cognitive components...")
-        await self._build_components()
-        log_step(12, total_steps, "✓ Cognitive components built")
+        # Step 12: Auto-enable Android-specific adapters (ciris_hosted_tools with web_search)
+        log_step(12, total_steps, "Auto-enabling Android adapters...")
+        await self._resume_auto_enable_android_adapters()
+        log_step(12, total_steps, "✓ Android adapters auto-enabled")
 
-        # Step 13: Create agent processor task
-        log_step(13, total_steps, "Creating agent processor task...")
+        # Step 13: Build cognitive components
+        log_step(13, total_steps, "Building cognitive components...")
+        await self._build_components()
+        log_step(13, total_steps, "✓ Cognitive components built")
+
+        # Step 14: Create agent processor task
+        log_step(14, total_steps, "Creating agent processor task...")
         self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
-        log_step(13, total_steps, "Waiting for critical services (timeout=10s)...")
+        log_step(14, total_steps, "Waiting for critical services (timeout=10s)...")
         await self._wait_for_critical_services(timeout=10.0)
 
         elapsed = time.time() - start_time
@@ -1857,6 +1892,11 @@ class CIRISRuntime:
         logger.warning(f"✅ RESUME COMPLETE in {elapsed:.2f}s - Agent processor started!")
         logger.warning("=" * 70)
         logger.warning("")
+
+        # Clear the resume flag and timestamp - safe to shutdown now
+        self._resume_in_progress = False
+        self._resume_started_at = None
+        logger.info(f"[RESUME] Completed in {elapsed:.2f}s, _resume_in_progress=False")
 
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready.

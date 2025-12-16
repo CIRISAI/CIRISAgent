@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from ciris_engine.logic.utils.path_resolution import is_android
 from ciris_engine.schemas.covenant import (
     COVENANT_PAYLOAD_SIZE,
     CovenantExtractionResult,
@@ -34,16 +35,24 @@ _WORD_TO_INDEX: Optional[dict[str, int]] = None
 
 
 def _load_wordlist() -> tuple[list[str], dict[str, int]]:
-    """Load BIP39 wordlist for extraction."""
+    """Load BIP39 wordlist for extraction.
+
+    CRITICAL: On Android, wordlist is REQUIRED. App will not start without it.
+
+    Raises:
+        RuntimeError: On Android if wordlist not found
+    """
     global _WORDLIST, _WORD_TO_INDEX
 
     if _WORDLIST is not None and _WORD_TO_INDEX is not None:
         return _WORDLIST, _WORD_TO_INDEX
 
+    on_android = is_android()
+
     # Try multiple locations
     possible_paths = [
+        Path(__file__).parent / "bip39_english.txt",  # Same directory as extractor.py
         Path(__file__).parent.parent.parent.parent / "tools" / "security" / "bip39_english.txt",
-        Path(__file__).parent / "bip39_english.txt",
         Path("/app/tools/security/bip39_english.txt"),  # Docker path
     ]
 
@@ -51,9 +60,20 @@ def _load_wordlist() -> tuple[list[str], dict[str, int]]:
         if path.exists():
             _WORDLIST = path.read_text().strip().split("\n")
             _WORD_TO_INDEX = {word: i for i, word in enumerate(_WORDLIST)}
+            logger.info("BIP39 wordlist loaded from: %s (%d words)", path, len(_WORDLIST))
             return _WORDLIST, _WORD_TO_INDEX
 
-    # Fallback: return empty (extraction will always fail)
+    # CRITICAL: On Android, wordlist is REQUIRED for covenant extraction
+    if on_android:
+        error_msg = (
+            "FATAL: BIP39 wordlist not found on Android. "
+            f"Searched: {[str(p) for p in possible_paths]}. "
+            "Covenant extraction is REQUIRED. Build scripts must include bip39_english.txt."
+        )
+        logger.critical(error_msg)
+        raise RuntimeError(error_msg)
+
+    # Fallback for non-Android: return empty (extraction will always fail)
     logger.warning("BIP39 wordlist not found - covenant extraction disabled")
     _WORDLIST = []
     _WORD_TO_INDEX = {}

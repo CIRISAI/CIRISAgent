@@ -39,6 +39,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         archive_older_than_hours: int = 24,
         config_service: Optional[Any] = None,
         db_path: Optional[str] = None,
+        bus_manager: Optional[Any] = None,
     ) -> None:
         # Initialize BaseScheduledService with hourly maintenance interval
         super().__init__(time_service=time_service, run_interval_seconds=3600)  # Run every hour
@@ -47,6 +48,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         self.archive_older_than_hours = archive_older_than_hours
         self.config_service = config_service
         self.db_path = db_path
+        self.bus_manager = bus_manager
 
         # Tracking variables for metrics
         self._cleanup_runs = 0
@@ -356,7 +358,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         try:
             from ciris_engine.logic.persistence import update_task_status
 
-            logger.info("Checking for old active tasks from previous runs")
+            logger.info("Checking for old PENDING/ACTIVE tasks from previous runs")
 
             # Get current time
             current_time = self.time_service.now()
@@ -365,19 +367,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # We need to check ALL occurrences for old active tasks
             from ciris_engine.logic.persistence import get_db_connection
 
-            active_tasks = []
+            # Check both PENDING and ACTIVE tasks - PENDING tasks that are old
+            # indicate messages that were received but never processed
+            stale_tasks = []
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT * FROM tasks WHERE status = ?", (TaskStatus.ACTIVE.value,))
+                cursor.execute(
+                    "SELECT * FROM tasks WHERE status IN (?, ?)",
+                    (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
+                )
                 rows = cursor.fetchall()
                 from ciris_engine.logic.persistence.utils import map_row_to_task
 
                 for row in rows:
-                    active_tasks.append(map_row_to_task(row))
+                    stale_tasks.append(map_row_to_task(row))
 
             old_task_ids = []
 
-            for task in active_tasks:
+            for task in stale_tasks:
                 if not hasattr(task, "task_id"):
                     continue
 
@@ -411,9 +418,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     )
                     old_task_ids.append(task.task_id)
 
-            # Mark old tasks as completed
+            # Mark old tasks as completed and notify channels
             if old_task_ids:
-                for task in active_tasks:
+                for task in stale_tasks:
                     if task.task_id in old_task_ids:
                         # CRITICAL: Use task's own occurrence_id, not hardcoded "default"
                         update_task_status(
@@ -423,12 +430,43 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             self.time_service,
                             db_path=self.db_path,
                         )
+                        # Send notification to the channel that the task was auto-completed
+                        await self._notify_stale_task_completed(task)
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
             else:
-                logger.info("No old active tasks found")
+                logger.info("No old PENDING/ACTIVE tasks found")
 
         except Exception as e:
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
+
+    async def _notify_stale_task_completed(self, task: Any) -> None:
+        """Send a notification to the channel that a stale task was auto-completed due to restart."""
+        if not self.bus_manager:
+            logger.debug("No bus_manager available - skipping stale task notification")
+            return
+
+        channel_id = getattr(task, "channel_id", None)
+        if not channel_id:
+            logger.debug(f"Task {task.task_id} has no channel_id - skipping notification")
+            return
+
+        # Skip internal/system channels
+        if channel_id.startswith("__") or channel_id == "system":
+            return
+
+        try:
+            msg = (
+                "I was restarted while processing your request. "
+                "The previous task was auto-completed. Please resend your message if you still need a response."
+            )
+            await self.bus_manager.communication.send_message_sync(
+                channel_id=channel_id,
+                content=msg,
+                handler_name="DatabaseMaintenanceService",
+            )
+            logger.info(f"Sent stale task notification to channel {channel_id}")
+        except Exception as e:
+            logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
 
     async def _cleanup_stale_wakeup_tasks(self) -> None:
         """

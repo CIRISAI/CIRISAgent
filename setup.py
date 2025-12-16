@@ -74,6 +74,21 @@ setup(
         "console_scripts": [
             "ciris-agent=ciris_engine.cli:main",  # Thin wrapper around main.py
         ],
+        # Adapter discovery entry points - eliminates hardcoded KNOWN_MODULAR_SERVICES list
+        # Each entry point maps adapter_name -> module path for manifest loading
+        "ciris.adapters": [
+            "ciris_hosted_tools=ciris_adapters.ciris_hosted_tools",
+            "external_data_sql=ciris_adapters.external_data_sql",
+            "home_assistant=ciris_adapters.home_assistant",
+            "mcp_client=ciris_adapters.mcp_client",
+            "mcp_common=ciris_adapters.mcp_common",
+            "mcp_server=ciris_adapters.mcp_server",
+            "mock_llm=ciris_adapters.mock_llm",
+            "navigation=ciris_adapters.navigation",
+            "reddit=ciris_adapters.reddit",
+            "sample_adapter=ciris_adapters.sample_adapter",
+            "weather=ciris_adapters.weather",
+        ],
     },
     install_requires=requirements,
     extras_require={

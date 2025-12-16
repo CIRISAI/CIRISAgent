@@ -7,4 +7,76 @@
     <string name="action_refresh">Refresh</string>
     <string name="action_buy_credits">Buy Credits</string>
     <string name="action_account">Account</string>
+
+    <!-- Setup Wizard - Welcome -->
+    <string name="setup_welcome_title">Welcome to CIRIS</string>
+    <string name="setup_badge_free">✓ 100% Free &amp; Open Source</string>
+    <string name="setup_welcome_desc_simple">CIRIS is an ethical AI assistant that runs on your device. Your conversations and data stay private.</string>
+
+    <!-- Welcome - Google user -->
+    <string name="setup_google_ready_title">You\'re ready to go!</string>
+    <string name="setup_google_ready_desc">Since you signed in with Google, CIRIS can start working right away. Free access is limited and includes web search via privacy-protecting providers (Exa, Brave).</string>
+    <string name="setup_details_expand">▶ Details</string>
+    <string name="setup_details_collapse">▼ Details</string>
+    <string name="setup_details_content">• Your conversations are never sent for external AI training\n• With your consent, CIRIS can learn locally on your device to better assist you\n• All data stays on your device unless you explicitly share it\n• You control what CIRIS remembers about you</string>
+
+    <!-- Welcome - Non-Google user -->
+    <string name="setup_required_title">Quick Setup Required</string>
+    <string name="setup_required_desc">To power AI conversations, you\'ll need to connect an AI provider (like OpenAI or Anthropic). This takes about 2 minutes.</string>
+
+    <!-- Welcome - How it works -->
+    <string name="setup_how_it_works_title">How it works</string>
+    <string name="setup_how_it_works_desc">CIRIS runs entirely on your device. However, AI reasoning requires powerful servers. CIRIS connects to privacy-respecting AI providers that never train on your data and never store your conversations.</string>
+
+    <string name="setup_continue">Continue -></string>
+    <string name="setup_back">Back</string>
+    <string name="setup_finish">Finish Setup</string>
+    <string name="setup_next">Next</string>
+
+    <string name="setup_step_1">1</string>
+    <string name="setup_step_2">2</string>
+    <string name="setup_step_3">3</string>
+    <string name="setup_step_4">4</string>
+
+    <string name="setup_llm_title">AI Configuration</string>
+    <string name="setup_llm_desc">Configure how CIRIS connects to AI services.</string>
+    <string name="setup_provider_label">Provider</string>
+    <string name="setup_api_key_label">API Key</string>
+    <string name="setup_api_key_hint">sk-...</string>
+    <string name="setup_model_label">Model</string>
+    <string name="setup_model_hint">Select a model...</string>
+    <string name="setup_test_connection">Test Connection</string>
+    <string name="setup_testing">Testing...</string>
+    <string name="setup_connected">✓ Connected</string>
+    <string name="setup_connection_failed">✗ Connection failed</string>
+    <string name="setup_loading_models">Loading models...</string>
+
+    <!-- CIRIS Proxy (Free AI for Google users) -->
+    <string name="setup_free_ai_ready">Free AI Access Ready</string>
+    <string name="setup_free_ai_desc">Your Google account includes limited free AI access with web search (Exa, Brave). Privacy-protected and never used for training.</string>
+    <string name="setup_byok_advanced">I have my own AI provider (Advanced)</string>
+    <string name="setup_byok_mode_title">Using your own AI provider</string>
+    <string name="setup_byok_mode_desc">You can switch back to free AI anytime</string>
+    <string name="setup_use_free_ai">Use Free AI</string>
+
+    <!-- Confirm Setup (Step 3 for Google users) -->
+    <string name="setup_confirm_title">Confirm Setup</string>
+    <string name="setup_confirm_desc">Review your configuration and complete setup.</string>
+    <string name="setup_google_connected">Google Account Connected</string>
+    <string name="setup_google_connected_desc">You\'ll sign in to CIRIS using your Google account. A secure random password will be generated for the admin account (you won\'t need to use it).</string>
+    <string name="setup_summary_title">Setup Summary</string>
+    <string name="setup_summary_ai">AI: %s</string>
+    <string name="setup_summary_assistant">Assistant: Ally</string>
+    <string name="setup_summary_signin">Sign-in: Google Account</string>
+    <string name="setup_free_ai_via_google">Free AI Access (via Google)</string>
+    <string name="setup_your_own_provider">Your own AI provider</string>
+
+    <string name="setup_account_title">Your Account</string>
+    <string name="setup_account_desc">Create your personal account to access CIRIS.</string>
+    <string name="setup_username_label">Username</string>
+    <string name="setup_password_label">Password</string>
+    <string name="setup_email_label">Email (Optional)</string>
+
+    <string name="setup_error_empty_field">This field is required</string>
+    <string name="setup_error_password_mismatch">Passwords do not match</string>
 </resources>

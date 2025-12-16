@@ -139,10 +139,12 @@ class ComponentBuilder:
         conscience_config = ConscienceConfig()
 
         # Register UpdatedStatusConscience FIRST (priority -1) to detect channel updates
+        # CRITICAL: bypass_exemption=True ensures it runs even for TASK_COMPLETE
         conscience_registry.register_conscience(
             "updated_status",
             UpdatedStatusConscience(time_service=time_service),
             priority=-1,  # Run BEFORE all other consciences
+            bypass_exemption=True,  # Must run even for exempt actions like TASK_COMPLETE
         )
 
         conscience_registry.register_conscience(

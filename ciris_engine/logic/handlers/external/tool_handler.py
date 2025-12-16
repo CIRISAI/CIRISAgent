@@ -83,6 +83,15 @@ class ToolHandler(BaseActionHandler):
                 self.logger.info(
                     f"[TOOL_HANDLER] Tool result: success={tool_result.success}, status={tool_result.status}, error={tool_result.error}"
                 )
+                # Log full tool result data for debugging
+                if tool_result.data:
+                    import json
+
+                    try:
+                        data_str = json.dumps(tool_result.data, indent=2, default=str)
+                        self.logger.info(f"[TOOL_HANDLER] Tool result data:\n{data_str}")
+                    except Exception:
+                        self.logger.info(f"[TOOL_HANDLER] Tool result data: {tool_result.data}")
 
                 # tool_result is now ToolExecutionResult per protocol
                 if tool_result.success:

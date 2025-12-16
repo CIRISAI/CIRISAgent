@@ -62,6 +62,60 @@
 
     </LinearLayout>
 
+    <!-- AI Warning -->
+    <TextView
+        android:id="@+id/aiWarningText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚠️ AI HALLUCINATES - CHECK FACTS"
+        android:textSize="11sp"
+        android:textColor="#B45309"
+        android:background="#FEF3C7"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
+        android:gravity="center" />
+
+    <!-- Simple Processing Status (default) -->
+    <LinearLayout
+        android:id="@+id/processingStatusBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="6dp"
+        android:background="#F0F9FF"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/processingStatusIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💭"
+            android:textSize="16sp"
+            android:layout_marginEnd="8dp"/>
+
+        <TextView
+            android:id="@+id/processingStatusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Idle"
+            android:textSize="12sp"
+            android:textColor="#0369A1"
+            android:maxLines="1"
+            android:ellipsize="end"/>
+
+        <TextView
+            android:id="@+id/debugModeToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Debug ▶"
+            android:textSize="11sp"
+            android:textColor="#6B7280"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"/>
+    </LinearLayout>
+
     <!-- Loading indicator -->
     <ProgressBar
         android:id="@+id/loadingIndicator"

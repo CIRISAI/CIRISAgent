@@ -73,8 +73,10 @@ class CIRISHostedToolService:
             name="web_search",
             description=(
                 "Search the web for current information. Use this when you need "
-                "real-time data, recent news, or information beyond your training cutoff. "
-                "Returns titles, URLs, and descriptions of relevant web pages."
+                "recent news, general information, or facts beyond your training cutoff. "
+                "Returns titles, URLs, and descriptions of relevant web pages. "
+                "IMPORTANT: Do NOT use for weather queries - web search returns unreliable "
+                "weather data. For weather, tell the user you cannot provide current weather."
             ),
             parameters=ToolParameterSchema(
                 type="object",
@@ -94,8 +96,10 @@ class CIRISHostedToolService:
             category="information",
             cost=1.0,  # 1 web_search credit per query
             when_to_use=(
-                "Use when you need current information, recent events, live data, "
-                "or to verify facts that may have changed since your training cutoff."
+                "Use when you need current information, recent news, or to verify facts "
+                "that may have changed since your training cutoff. "
+                "DO NOT use for: weather queries (returns unreliable data), "
+                "stock prices, or other real-time numerical data."
             ),
             # Platform requirements: needs device attestation + native auth
             platform_requirements=[
@@ -581,7 +585,12 @@ class CIRISHostedToolService:
             ToolExecutionResult with search results or error
         """
         query = parameters.get("q", "")
-        count = min(parameters.get("count", 10), 20)  # Cap at 20
+        # Ensure count is an int (LLM may pass string)
+        raw_count = parameters.get("count", 10)
+        try:
+            count = min(int(raw_count), 20)  # Cap at 20
+        except (ValueError, TypeError):
+            count = 10  # Default if conversion fails
 
         if not query:
             return ToolExecutionResult(
@@ -712,7 +721,14 @@ class CIRISHostedToolService:
                 }
             )
 
-        logger.info(f"[WEB_SEARCH] Got {len(formatted_results)} results for: {query[:50]}")
+        logger.info(f"[WEB_SEARCH] Got {len(formatted_results)} results for: {query}")
+
+        # Log full results for debugging
+        for i, r in enumerate(formatted_results):
+            logger.info(f"[WEB_SEARCH] Result {i+1}: title='{r.get('title', '')}'")
+            logger.info(f"[WEB_SEARCH] Result {i+1}: url='{r.get('url', '')}'")
+            desc = r.get("description", "")
+            logger.info(f"[WEB_SEARCH] Result {i+1}: description='{desc}'")
 
         return ToolExecutionResult(
             tool_name="web_search",

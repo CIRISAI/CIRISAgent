@@ -257,6 +257,15 @@ class MainActivity : AppCompatActivity() {
         userPhotoUrl = intent.getStringExtra("user_photo_url")
         showSetup = intent.getBooleanExtra("show_setup", true)
 
+        // For local users: get CIRIS access token from SetupWizardActivity
+        // This is the token obtained by authenticating with username/password after setup
+        val intentCirisToken = intent.getStringExtra("ciris_access_token")
+        if (intentCirisToken != null) {
+            Log.i(TAG, "[Auth] Received CIRIS access token from setup (length=${intentCirisToken.length})")
+            cirisAccessToken = intentCirisToken
+            userRole = "ADMIN"  // Local users are ADMIN after setup
+        }
+
         // Store globally for LLM proxy access
         currentGoogleUserId = googleUserId
 
@@ -275,6 +284,7 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "[Auth Received] auth_method: $authMethod")
         Log.i(TAG, "[Auth Received] google_user_id: ${googleUserId ?: "(null/empty)"}")
         Log.i(TAG, "[Auth Received] google_id_token: ${googleIdToken?.let { "${it.take(20)}... (${it.length} chars)" } ?: "(null)"}")
+        Log.i(TAG, "[Auth Received] ciris_access_token: ${cirisAccessToken?.let { "${it.take(20)}... (${it.length} chars)" } ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_email: ${userEmail ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_name: ${userName ?: "(null)"}")
         Log.i(TAG, "[Auth Received] user_photo_url: ${userPhotoUrl ?: "(null)"}")
@@ -1772,7 +1782,7 @@ class MainActivity : AppCompatActivity() {
                         setPhase(StartupPhase.READY)
                         updateStartupStatus("Welcome back!")
                         delay(500)
-                        Log.i(TAG, "Setup complete (API key auth) - showing Kotlin interact fragment")
+                        Log.i(TAG, "Setup complete (API key auth) - checking for token")
                     }
 
                     // Hide splash/console, show toolbar
@@ -1795,7 +1805,17 @@ class MainActivity : AppCompatActivity() {
                             loadUI()  // Load index.html which will redirect to /setup
                         }
                     } else {
-                        showInteractFragment()
+                        // Setup complete - check if we have a token
+                        if (cirisAccessToken != null) {
+                            Log.i(TAG, "Setup complete (API key auth) - have token, showing interact")
+                            showInteractFragment()
+                        } else {
+                            // No token - need to authenticate with native login dialog
+                            Log.i(TAG, "Setup complete (API key auth) - NO TOKEN, showing native login dialog")
+                            updateStartupStatus("Please sign in...")
+                            delay(300)
+                            showNativeLoginDialog()
+                        }
                     }
                     loadCreditsBalance()
                 }
@@ -2188,7 +2208,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showInteractFragment() {
-        Log.i(TAG, "Showing InteractFragment")
+        Log.i(TAG, "Showing InteractFragment (hasToken=${cirisAccessToken != null}, tokenLen=${cirisAccessToken?.length ?: 0})")
         // Hide WebView, show fragment container
         webView.visibility = View.GONE
         fragmentContainer.visibility = View.VISIBLE
@@ -2202,6 +2222,127 @@ class MainActivity : AppCompatActivity() {
 
         // Refresh credits balance when showing interact fragment
         loadCreditsBalance()
+    }
+
+    /**
+     * Show a native login dialog for local users who need to re-authenticate.
+     * This is used when setup is complete but no token is available (e.g., after app restart).
+     */
+    private fun showNativeLoginDialog() {
+        Log.i(TAG, "showNativeLoginDialog: Showing native login for local user")
+
+        // Hide splash, show toolbar
+        splashContainer.visibility = View.GONE
+        consoleContainer.visibility = View.GONE
+        findViewById<View>(R.id.toolbarInclude).visibility = View.VISIBLE
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_login, null)
+        val usernameInput = dialogView.findViewById<android.widget.EditText>(R.id.edit_username)
+        val passwordInput = dialogView.findViewById<android.widget.EditText>(R.id.edit_password)
+        val errorText = dialogView.findViewById<android.widget.TextView>(R.id.text_error)
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Sign In")
+            .setView(dialogView)
+            .setCancelable(false)
+            .setPositiveButton("Sign In", null) // Set to null initially, we'll override
+            .create()
+
+        dialog.setOnShowListener {
+            val button = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            button.setOnClickListener {
+                val username = usernameInput.text.toString().trim()
+                val password = passwordInput.text.toString()
+
+                if (username.isEmpty() || password.isEmpty()) {
+                    errorText.text = "Please enter username and password"
+                    errorText.visibility = View.VISIBLE
+                    return@setOnClickListener
+                }
+
+                // Disable button while authenticating
+                button.isEnabled = false
+                button.text = "Signing in..."
+                errorText.visibility = View.GONE
+
+                // Authenticate in background
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val token = authenticateLocalUser(username, password)
+                        withContext(Dispatchers.Main) {
+                            if (token != null) {
+                                Log.i(TAG, "Native login successful, got token")
+                                cirisAccessToken = token
+                                userRole = "ADMIN"
+                                dialog.dismiss()
+                                showInteractFragment()
+                            } else {
+                                Log.w(TAG, "Native login failed - invalid credentials")
+                                errorText.text = "Invalid username or password"
+                                errorText.visibility = View.VISIBLE
+                                button.isEnabled = true
+                                button.text = "Sign In"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Native login error: ${e.message}", e)
+                        withContext(Dispatchers.Main) {
+                            errorText.text = "Error: ${e.message}"
+                            errorText.visibility = View.VISIBLE
+                            button.isEnabled = true
+                            button.text = "Sign In"
+                        }
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Authenticate a local user with username/password.
+     * @return The access token if successful, null otherwise.
+     */
+    private fun authenticateLocalUser(username: String, password: String): String? {
+        Log.i(TAG, "authenticateLocalUser: Authenticating $username")
+        return try {
+            val url = java.net.URL("$SERVER_URL/v1/auth/login")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+
+            val payload = org.json.JSONObject().apply {
+                put("username", username)
+                put("password", password)
+            }
+
+            conn.outputStream.bufferedWriter().use { it.write(payload.toString()) }
+
+            val responseCode = conn.responseCode
+            Log.d(TAG, "Auth response code: $responseCode")
+
+            if (responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = org.json.JSONObject(response)
+                if (json.has("access_token")) {
+                    json.getString("access_token")
+                } else {
+                    Log.w(TAG, "Auth response missing access_token")
+                    null
+                }
+            } else {
+                val error = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                Log.e(TAG, "Auth failed: $responseCode - $error")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Auth error: ${e.message}", e)
+            null
+        }
     }
 
     private fun showAdaptersFragment() {

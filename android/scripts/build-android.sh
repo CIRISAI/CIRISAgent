@@ -133,6 +133,30 @@ build_web_assets() {
     log_info "Web assets built successfully"
 }
 
+# Copy runtime guide to Python sources
+copy_runtime_guide() {
+    log_info "Copying runtime guide to Python sources..."
+
+    PYTHON_DIR="$ANDROID_DIR/app/src/main/python"
+    GUIDE_SOURCE="$CIRISAGENT_DIR/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md"
+    GUIDE_DEST="$PYTHON_DIR/CIRIS_COMPREHENSIVE_GUIDE_ANDROID.md"
+
+    if [ -f "$GUIDE_SOURCE" ]; then
+        cp "$GUIDE_SOURCE" "$GUIDE_DEST"
+        log_info "Copied Android guide to $GUIDE_DEST"
+    else
+        log_warn "Android guide not found at $GUIDE_SOURCE"
+    fi
+
+    # Also copy standard guide as fallback
+    STANDARD_GUIDE="$CIRISAGENT_DIR/CIRIS_COMPREHENSIVE_GUIDE.md"
+    STANDARD_DEST="$PYTHON_DIR/CIRIS_COMPREHENSIVE_GUIDE.md"
+    if [ -f "$STANDARD_GUIDE" ]; then
+        cp "$STANDARD_GUIDE" "$STANDARD_DEST"
+        log_info "Copied standard guide to $STANDARD_DEST"
+    fi
+}
+
 # Copy web assets to Android
 copy_web_assets() {
     log_info "Copying web assets to Android..."
@@ -286,6 +310,7 @@ main() {
     get_web_source
     build_web_assets
     copy_web_assets
+    copy_runtime_guide
     build_android
 
     # Skip APK validation for AAB builds

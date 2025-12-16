@@ -148,6 +148,8 @@
                 android:minHeight="48dp"
                 android:background="@drawable/edit_text_background"
                 android:padding="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
                 android:layout_marginBottom="16dp"/>
 
             <TextView
@@ -167,6 +169,8 @@
                 android:minHeight="48dp"
                 android:background="@drawable/edit_text_background"
                 android:padding="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
                 android:layout_marginBottom="16dp"/>
 
             <TextView
@@ -185,7 +189,9 @@
                 android:inputType="textPassword"
                 android:minHeight="48dp"
                 android:background="@drawable/edit_text_background"
-                android:padding="12dp"/>
+                android:padding="12dp"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"/>
         </LinearLayout>
 
     </LinearLayout>

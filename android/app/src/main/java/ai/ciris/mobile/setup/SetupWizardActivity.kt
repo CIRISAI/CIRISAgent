@@ -314,6 +314,26 @@ class SetupWizardActivity : AppCompatActivity() {
                     val response = conn.inputStream.bufferedReader().use { it.readText() }
                     Log.i(TAG, "Setup response: $response")
 
+                    // For local users (non-Google), authenticate to get a CIRIS access token
+                    val authMethod = this@SetupWizardActivity.intent.getStringExtra("auth_method")
+                    val isGoogle = authMethod == "google"
+                    var cirisAccessToken: String? = null
+
+                    if (!isGoogle) {
+                        // Local user - authenticate with username/password
+                        val username = viewModel.username.value ?: "admin"
+                        val password = viewModel.userPassword.value ?: ""
+
+                        Log.i(TAG, "Local user - authenticating to get CIRIS token...")
+                        cirisAccessToken = authenticateLocalUser(username, password)
+
+                        if (cirisAccessToken == null) {
+                            Log.w(TAG, "Failed to get CIRIS token for local user, continuing anyway")
+                        } else {
+                            Log.i(TAG, "Got CIRIS token for local user (length=${cirisAccessToken.length})")
+                        }
+                    }
+
                     withContext(Dispatchers.Main) {
                         Log.i(TAG, "Setup complete - navigating to MainActivity")
                         Toast.makeText(this@SetupWizardActivity, "Setup Complete!", Toast.LENGTH_SHORT).show()
@@ -321,6 +341,29 @@ class SetupWizardActivity : AppCompatActivity() {
                         val intent = Intent(this@SetupWizardActivity, MainActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         intent.putExtra("show_setup", false)
+
+                        // CRITICAL: Pass auth data back to MainActivity so token exchange happens
+                        // Without this, MainActivity defaults to "api_key" auth and never gets a token
+                        val googleIdToken = this@SetupWizardActivity.intent.getStringExtra("google_id_token")
+                        val googleUserId = this@SetupWizardActivity.intent.getStringExtra("google_user_id")
+                        val userEmail = this@SetupWizardActivity.intent.getStringExtra("user_email")
+                        val userName = this@SetupWizardActivity.intent.getStringExtra("user_name")
+                        val userPhotoUrl = this@SetupWizardActivity.intent.getStringExtra("user_photo_url")
+
+                        Log.i(TAG, "Passing auth back to MainActivity: method=$authMethod, hasGoogleToken=${googleIdToken != null}, hasCirisToken=${cirisAccessToken != null}")
+
+                        intent.putExtra("auth_method", authMethod)
+                        intent.putExtra("google_id_token", googleIdToken)
+                        intent.putExtra("google_user_id", googleUserId)
+                        intent.putExtra("user_email", userEmail)
+                        intent.putExtra("user_name", userName)
+                        intent.putExtra("user_photo_url", userPhotoUrl)
+
+                        // Pass CIRIS token for local users
+                        if (cirisAccessToken != null) {
+                            intent.putExtra("ciris_access_token", cirisAccessToken)
+                        }
+
                         startActivity(intent)
                         finish()
                     }
@@ -454,5 +497,60 @@ class SetupWizardActivity : AppCompatActivity() {
         Log.i(TAG, "  template=ally, adapters=[api], port=8080")
 
         return payload
+    }
+
+    /**
+     * Authenticate a local user with username/password to get a CIRIS access token.
+     * This is called after setup completes for non-Google users.
+     *
+     * @param username The username created during setup
+     * @param password The password created during setup
+     * @return The CIRIS access token, or null if authentication failed
+     */
+    private fun authenticateLocalUser(username: String, password: String): String? {
+        Log.i(TAG, "authenticateLocalUser: Authenticating $username")
+
+        return try {
+            val url = URL("$SERVER_URL/v1/auth/login")
+            Log.d(TAG, "Authenticating at: $url")
+
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+
+            val payload = JSONObject().apply {
+                put("username", username)
+                put("password", password)
+            }
+
+            conn.outputStream.bufferedWriter().use { it.write(payload.toString()) }
+
+            val responseCode = conn.responseCode
+            Log.d(TAG, "Auth response code: $responseCode")
+
+            if (responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(response)
+                val accessToken = if (json.has("access_token")) json.getString("access_token") else null
+
+                if (accessToken != null && accessToken.isNotEmpty()) {
+                    Log.i(TAG, "Local authentication successful, got access token")
+                    accessToken
+                } else {
+                    Log.w(TAG, "Auth response missing access_token")
+                    null
+                }
+            } else {
+                val error = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                Log.e(TAG, "Local authentication failed: $responseCode - $error")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Local authentication error: ${e.message}", e)
+            null
+        }
     }
 }

@@ -94,6 +94,14 @@ class ConscienceExecutionPhase:
             )
             from ciris_engine.schemas.conscience.core import EpistemicData
 
+            # CRITICAL: Include the new observation content in epistemic_data
+            # so it can be accessed by _prepare_conscience_retry_context
+            updated_obs = bypass_result.get("updated_observation_content")
+            if updated_obs:
+                logger.info(
+                    f"[CONSCIENCE_EXEC] Including updated_observation_content in result: {updated_obs[:100]}..."
+                )
+
             return ConscienceApplicationResult(
                 original_action=action_result,
                 final_action=bypass_result["final_action"],
@@ -104,6 +112,7 @@ class ConscienceExecutionPhase:
                     coherence_level=0.8,  # Good coherence
                     uncertainty_acknowledged=True,
                     reasoning_transparency=1.0,
+                    CIRIS_OBSERVATION_UPDATED_STATUS=updated_obs,  # NEW: Pass through the observation
                 ),
                 updated_status_detected=bypass_result.get("updated_status_detected"),
             )
@@ -290,12 +299,14 @@ class ConscienceExecutionPhase:
         even for TASK_COMPLETE, DEFER, REJECT actions.
 
         Returns:
-            Dict with keys: final_action, overridden, override_reason, updated_status_detected
+            Dict with keys: final_action, overridden, override_reason, updated_status_detected,
+                           updated_observation_content (the actual new message text)
         """
         final_action = action_result
         overridden = False
         override_reason: Optional[str] = None
         updated_status_detected: Optional[bool] = None
+        updated_observation_content: Optional[str] = None  # NEW: Store the actual observation
 
         # Get bypass consciences from registry
         for entry in self.conscience_registry.get_bypass_consciences():
@@ -320,13 +331,25 @@ class ConscienceExecutionPhase:
             if result.updated_status_detected is not None:
                 updated_status_detected = result.updated_status_detected
 
+            # CRITICAL: Extract the actual observation content from CIRIS_OBSERVATION_UPDATED_STATUS
+            if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
+                updated_observation_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
+                logger.info(f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100]}...")
+
             if not result.passed:
                 overridden = True
                 override_reason = result.reason
+                logger.info(f"[BYPASS_CONSCIENCE] {entry.name} overriding action {action_result.selected_action}")
+                logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
+                logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
+                logger.info(
+                    f"[BYPASS_CONSCIENCE] updated_observation_content={updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                )
 
                 # Check if the conscience provides a replacement action
                 if result.replacement_action:
                     final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
+                    logger.info(f"[BYPASS_CONSCIENCE] Using replacement action: {final_action.selected_action}")
                 else:
                     # Default behavior: create a PONDER action
                     attempted_action_desc = self._describe_action(action_result)
@@ -353,4 +376,5 @@ class ConscienceExecutionPhase:
             "overridden": overridden,
             "override_reason": override_reason,
             "updated_status_detected": updated_status_detected,
+            "updated_observation_content": updated_observation_content,  # NEW: Include the actual text
         }

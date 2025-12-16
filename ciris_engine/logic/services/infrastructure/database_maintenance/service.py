@@ -358,7 +358,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         try:
             from ciris_engine.logic.persistence import update_task_status
 
-            logger.info("Checking for old active tasks from previous runs")
+            logger.info("Checking for old PENDING/ACTIVE tasks from previous runs")
 
             # Get current time
             current_time = self.time_service.now()
@@ -367,19 +367,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # We need to check ALL occurrences for old active tasks
             from ciris_engine.logic.persistence import get_db_connection
 
-            active_tasks = []
+            # Check both PENDING and ACTIVE tasks - PENDING tasks that are old
+            # indicate messages that were received but never processed
+            stale_tasks = []
             with get_db_connection(db_path=self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT * FROM tasks WHERE status = ?", (TaskStatus.ACTIVE.value,))
+                cursor.execute(
+                    "SELECT * FROM tasks WHERE status IN (?, ?)",
+                    (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
+                )
                 rows = cursor.fetchall()
                 from ciris_engine.logic.persistence.utils import map_row_to_task
 
                 for row in rows:
-                    active_tasks.append(map_row_to_task(row))
+                    stale_tasks.append(map_row_to_task(row))
 
             old_task_ids = []
 
-            for task in active_tasks:
+            for task in stale_tasks:
                 if not hasattr(task, "task_id"):
                     continue
 
@@ -415,7 +420,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             # Mark old tasks as completed and notify channels
             if old_task_ids:
-                for task in active_tasks:
+                for task in stale_tasks:
                     if task.task_id in old_task_ids:
                         # CRITICAL: Use task's own occurrence_id, not hardcoded "default"
                         update_task_status(
@@ -429,7 +434,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                         await self._notify_stale_task_completed(task)
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
             else:
-                logger.info("No old active tasks found")
+                logger.info("No old PENDING/ACTIVE tasks found")
 
         except Exception as e:
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)

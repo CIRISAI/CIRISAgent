@@ -77,6 +77,28 @@
                 android:textColor="@color/success_text"
                 android:textSize="14sp"
                 android:lineSpacingMultiplier="1.3"/>
+
+            <!-- Expandable Details -->
+            <TextView
+                android:id="@+id/details_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_details_expand"
+                android:textColor="@color/success_dark"
+                android:textSize="13sp"
+                android:layout_marginTop="12dp"
+                android:paddingVertical="4dp"/>
+
+            <TextView
+                android:id="@+id/details_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_details_content"
+                android:textColor="@color/success_text"
+                android:textSize="13sp"
+                android:lineSpacingMultiplier="1.3"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"/>
         </LinearLayout>
 
         <!-- Card: Non-Google user - Quick Setup Required -->

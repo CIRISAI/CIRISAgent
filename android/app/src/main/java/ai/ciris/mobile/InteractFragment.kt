@@ -78,6 +78,13 @@ class InteractFragment : Fragment() {
     private lateinit var imageFilename: TextView
     private lateinit var removeImageButton: ImageButton
 
+    // Simple processing status display
+    private lateinit var processingStatusBar: LinearLayout
+    private lateinit var processingStatusIcon: TextView
+    private lateinit var processingStatusText: TextView
+    private lateinit var debugModeToggle: TextView
+    private var advancedDebugMode = false
+
     // Attached image state
     private var attachedImageUri: Uri? = null
     private var attachedImageBase64: String? = null
@@ -184,7 +191,7 @@ class InteractFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         accessToken = arguments?.getString(ARG_ACCESS_TOKEN)
-        Log.i(TAG, "InteractFragment started, hasToken=${accessToken != null}")
+        Log.i(TAG, "[INIT] InteractFragment started, hasToken=${accessToken != null}, tokenLen=${accessToken?.length ?: 0}")
 
         // Handle keyboard visibility
         val rootView = view.findViewById<LinearLayout>(R.id.interactRoot)
@@ -215,6 +222,26 @@ class InteractFragment : Fragment() {
         imagePreview = view.findViewById(R.id.imagePreview)
         imageFilename = view.findViewById(R.id.imageFilename)
         removeImageButton = view.findViewById(R.id.removeImageButton)
+
+        // Simple processing status
+        processingStatusBar = view.findViewById(R.id.processingStatusBar)
+        processingStatusIcon = view.findViewById(R.id.processingStatusIcon)
+        processingStatusText = view.findViewById(R.id.processingStatusText)
+        debugModeToggle = view.findViewById(R.id.debugModeToggle)
+
+        // Debug mode toggle
+        debugModeToggle.setOnClickListener {
+            advancedDebugMode = !advancedDebugMode
+            if (advancedDebugMode) {
+                debugModeToggle.text = "Debug ▼"
+                Toast.makeText(requireContext(), "⚠️ Advanced Debug Mode\nLogs may grow large - clear history regularly", Toast.LENGTH_LONG).show()
+            } else {
+                debugModeToggle.text = "Debug ▶"
+            }
+            // Refresh adapter to show/hide reasoning details
+            adapter.setDebugMode(advancedDebugMode)
+            adapter.notifyDataSetChanged()
+        }
 
         // Setup RecyclerView
         adapter = ChatWithReasoningAdapter(chatItems) { taskId ->
@@ -352,6 +379,27 @@ class InteractFragment : Fragment() {
 
         if (jsonObject.has("events")) {
             val events = jsonObject.getAsJsonArray("events")
+
+            // SIMPLE MODE: Just update status icon, don't store data
+            if (!advancedDebugMode) {
+                Log.d(TAG, "[SSE-SIMPLE] Processing ${events.size()} events (status only, not storing)")
+                for (eventElem in events) {
+                    val event = eventElem.asJsonObject
+                    val eventType = event.get("event_type")?.asString ?: continue
+                    val action = when (eventType) {
+                        "aspdma_result" -> event.get("selected_action")?.asString
+                        "action_result" -> event.get("action_executed")?.asString
+                        else -> null
+                    }
+                    withContext(Dispatchers.Main) {
+                        updateProcessingStatus(eventType, action)
+                    }
+                }
+                return  // Don't store anything in simple mode
+            }
+
+            // ADVANCED DEBUG MODE: Full processing and storage
+            Log.d(TAG, "[SSE-DEBUG] Processing ${events.size()} events (full storage)")
             var needsUpdate = false
 
             for (eventElem in events) {
@@ -377,6 +425,7 @@ class InteractFragment : Fragment() {
                 Log.d(TAG, "SSE event type=$eventType, keys=${eventData.keys}, contextType=${eventData["context"]?.javaClass?.simpleName}")
 
                 // Update stage based on event type
+                var actionForStatus: String? = null
                 when (eventType) {
                     "thought_start" -> {
                         thought.stages[ReasoningStage.START] = StageState(completed = true, data = eventData)
@@ -396,6 +445,7 @@ class InteractFragment : Fragment() {
                     "aspdma_result" -> {
                         thought.stages[ReasoningStage.ACTION] = StageState(completed = true, data = eventData)
                         thought.selectedAction = event.get("selected_action")?.asString
+                        actionForStatus = thought.selectedAction
                     }
                     "conscience_result" -> {
                         val passed = event.get("conscience_passed")?.asBoolean ?: true
@@ -406,12 +456,20 @@ class InteractFragment : Fragment() {
                         val executed = event.get("action_executed")?.asString ?: ""
                         thought.stages[ReasoningStage.RESULT] = StageState(completed = true, data = eventData)
                         thought.executedAction = executed
+                        actionForStatus = executed
 
                         // Check if task is complete
                         if (executed.contains("task_complete") || executed.contains("task_reject")) {
                             reasoning.isComplete = true
                         }
                     }
+                }
+
+                // Update simple status display on main thread
+                val finalAction = actionForStatus
+                val finalEventType = eventType
+                withContext(Dispatchers.Main) {
+                    updateProcessingStatus(finalEventType, finalAction)
                 }
 
                 needsUpdate = true
@@ -461,6 +519,46 @@ class InteractFragment : Fragment() {
         if (!isAdded) return
         isSseConnected = connected
         // SSE status is reflected in the connection status text
+    }
+
+    // Update simple processing status display
+    private fun updateProcessingStatus(eventType: String, action: String? = null) {
+        if (!isAdded) return
+        processingStatusBar.visibility = View.VISIBLE
+
+        val (icon, text) = when (eventType) {
+            "thought_start" -> "🤔" to "Thinking..."
+            "snapshot_and_context" -> "📋" to "Gathering context..."
+            "dma_results" -> "⚖️" to "Evaluating..."
+            "aspdma_result" -> "🎯" to "Selecting action: ${action ?: "..."}"
+            "conscience_result" -> "🧭" to "Checking ethics..."
+            "action_result" -> {
+                when {
+                    action?.contains("speak") == true -> "💬" to "Speaking..."
+                    action?.contains("task_complete") == true -> "✅" to "Complete"
+                    action?.contains("memorize") == true -> "💾" to "Saving to memory..."
+                    action?.contains("recall") == true -> "🔍" to "Recalling..."
+                    action?.contains("tool") == true -> "🔧" to "Using tool..."
+                    action?.contains("ponder") == true -> "💭" to "Pondering..."
+                    action?.contains("defer") == true -> "⏸️" to "Deferred"
+                    else -> "⚡" to "Executing: ${action ?: "action"}"
+                }
+            }
+            "idle" -> "💭" to "Idle"
+            else -> "⏳" to eventType.replace("_", " ").replaceFirstChar { it.uppercase() }
+        }
+
+        processingStatusIcon.text = icon
+        processingStatusText.text = text
+
+        // Auto-hide after completion
+        if (eventType == "action_result" && (action?.contains("task_complete") == true || action?.contains("task_reject") == true)) {
+            processingStatusBar.postDelayed({
+                if (isAdded && processingStatusText.text == text) {
+                    processingStatusBar.visibility = View.GONE
+                }
+            }, 3000)
+        }
     }
 
     private fun loadHistory() {
@@ -579,23 +677,31 @@ class InteractFragment : Fragment() {
 
     private suspend fun fetchStatus() {
         val url = "$BASE_URL/v1/agent/status"
+        val hasToken = accessToken != null
+        Log.d(TAG, "[STATUS] Fetching from $url (hasToken=$hasToken)")
+
         val requestBuilder = Request.Builder().url(url).get()
         accessToken?.let { requestBuilder.addHeader("Authorization", "Bearer $it") }
 
         try {
             val response = client.newCall(requestBuilder.build()).execute()
             val body = response.body?.string()
+            val code = response.code
+
+            Log.d(TAG, "[STATUS] Response: code=$code, hasBody=${body != null}, bodyLen=${body?.length ?: 0}")
 
             withContext(Dispatchers.Main) {
                 if (response.isSuccessful && body != null) {
                     val status = gson.fromJson(body, AgentStatusResponse::class.java)
+                    Log.i(TAG, "[STATUS] ✓ Connected, cognitiveState=${status.cognitiveState}")
                     updateConnectionStatus(true, status.cognitiveState)
                 } else {
+                    Log.w(TAG, "[STATUS] ✗ Failed: code=$code, body=${body?.take(200)}")
                     updateConnectionStatus(false, null)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Status fetch error", e)
+            Log.e(TAG, "[STATUS] ✗ Exception: ${e.javaClass.simpleName}: ${e.message}")
             withContext(Dispatchers.Main) {
                 updateConnectionStatus(false, null)
             }
@@ -608,7 +714,13 @@ class InteractFragment : Fragment() {
         if (connected) {
             statusDot.setBackgroundResource(R.drawable.status_dot_green)
             val sseStatus = if (isSseConnected) " • Live" else ""
-            statusText.text = "Connected$sseStatus"
+            // Show "Local Device" for localhost/127.0.0.1 connections
+            val connectionType = if (BASE_URL.contains("localhost") || BASE_URL.contains("127.0.0.1")) {
+                "Local Device"
+            } else {
+                "Connected"
+            }
+            statusText.text = "$connectionType$sseStatus"
             statusText.setTextColor(resources.getColor(R.color.status_green, null))
         } else {
             statusDot.setBackgroundResource(R.drawable.status_dot_red)
@@ -1037,9 +1149,13 @@ class InteractFragment : Fragment() {
     private fun performShutdown(reason: String, emergency: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val endpoint = if (emergency) "emergency-stop" else "shutdown"
-                val url = "$BASE_URL/v1/system/$endpoint"
-                val jsonBody = gson.toJson(mapOf("reason" to reason))
+                // Both use the same endpoint - emergency just uses force=true
+                val url = "$BASE_URL/v1/system/shutdown"
+                val jsonBody = gson.toJson(mapOf(
+                    "reason" to reason,
+                    "force" to emergency,
+                    "confirm" to true  // Required confirmation flag
+                ))
 
                 val requestBuilder = Request.Builder()
                     .url(url)
@@ -1124,6 +1240,12 @@ class ChatWithReasoningAdapter(
     private val onReasoningClick: (String) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
+    private var debugMode = false
+
+    fun setDebugMode(enabled: Boolean) {
+        debugMode = enabled
+    }
+
     companion object {
         private const val TYPE_USER_MESSAGE = 0
         private const val TYPE_AGENT_MESSAGE = 1
@@ -1158,7 +1280,18 @@ class ChatWithReasoningAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = items[position]) {
             is ChatItem.Message -> (holder as MessageViewHolder).bind(item)
-            is ChatItem.Reasoning -> (holder as ReasoningViewHolder).bind(item.state)
+            is ChatItem.Reasoning -> {
+                // Only show reasoning details in debug mode
+                if (debugMode) {
+                    holder.itemView.visibility = View.VISIBLE
+                    holder.itemView.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    (holder as ReasoningViewHolder).bind(item.state)
+                } else {
+                    // Hide reasoning items when debug mode is off
+                    holder.itemView.visibility = View.GONE
+                    holder.itemView.layoutParams.height = 0
+                }
+            }
         }
     }
 

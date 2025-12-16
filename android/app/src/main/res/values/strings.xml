@@ -15,7 +15,10 @@
 
     <!-- Welcome - Google user -->
     <string name="setup_google_ready_title">You\'re ready to go!</string>
-    <string name="setup_google_ready_desc">Since you signed in with Google, CIRIS can start working right away with free AI access. Your conversations are private and never used for training.</string>
+    <string name="setup_google_ready_desc">Since you signed in with Google, CIRIS can start working right away. Free access is limited and includes web search via privacy-protecting providers (Exa, Brave).</string>
+    <string name="setup_details_expand">▶ Details</string>
+    <string name="setup_details_collapse">▼ Details</string>
+    <string name="setup_details_content">• Your conversations are never sent for external AI training\n• With your consent, CIRIS can learn locally on your device to better assist you\n• All data stays on your device unless you explicitly share it\n• You control what CIRIS remembers about you</string>
 
     <!-- Welcome - Non-Google user -->
     <string name="setup_required_title">Quick Setup Required</string>
@@ -40,10 +43,17 @@
     <string name="setup_provider_label">Provider</string>
     <string name="setup_api_key_label">API Key</string>
     <string name="setup_api_key_hint">sk-...</string>
+    <string name="setup_model_label">Model</string>
+    <string name="setup_model_hint">Select a model...</string>
+    <string name="setup_test_connection">Test Connection</string>
+    <string name="setup_testing">Testing...</string>
+    <string name="setup_connected">✓ Connected</string>
+    <string name="setup_connection_failed">✗ Connection failed</string>
+    <string name="setup_loading_models">Loading models...</string>
 
     <!-- CIRIS Proxy (Free AI for Google users) -->
     <string name="setup_free_ai_ready">Free AI Access Ready</string>
-    <string name="setup_free_ai_desc">Your Google account includes free AI conversations. Privacy-protected and never used for training.</string>
+    <string name="setup_free_ai_desc">Your Google account includes limited free AI access with web search (Exa, Brave). Privacy-protected and never used for training.</string>
     <string name="setup_byok_advanced">I have my own AI provider (Advanced)</string>
     <string name="setup_byok_mode_title">Using your own AI provider</string>
     <string name="setup_byok_mode_desc">You can switch back to free AI anytime</string>

@@ -390,7 +390,7 @@ class ThoughtProcessor(
         # If there's a new observation, add it explicitly to the feedback
         if updated_observation:
             conscience_feedback["new_observation"] = updated_observation
-            conscience_feedback["updated_status_detected"] = True
+            conscience_feedback["updated_status_detected"] = "true"
 
         setattr(thought_item, "conscience_feedback", conscience_feedback)
 

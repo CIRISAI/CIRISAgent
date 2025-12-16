@@ -166,7 +166,7 @@ class ModuleTypeInfo(BaseModel):
     is_mock: bool = Field(False, description="Whether this is a mock/test module")
     safe_domain: Optional[str] = Field(None, description="Safe domain classification")
     prohibited: List[str] = Field(default_factory=list, description="Prohibited use cases")
-    metadata: Optional[Dict[str, Union[str, bool, List[str]]]] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Union[str, bool, int, List[str]]]] = Field(None, description="Additional metadata")
     # Platform requirements for this adapter
     platform_requirements: List[str] = Field(
         default_factory=list, description="Platform requirements (e.g., 'android_play_integrity', 'google_native_auth')"

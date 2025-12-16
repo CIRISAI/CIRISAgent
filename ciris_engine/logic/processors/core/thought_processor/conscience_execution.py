@@ -334,7 +334,9 @@ class ConscienceExecutionPhase:
             # CRITICAL: Extract the actual observation content from CIRIS_OBSERVATION_UPDATED_STATUS
             if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
                 updated_observation_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
-                logger.info(f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100]}...")
+                logger.info(
+                    f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                )
 
             if not result.passed:
                 overridden = True

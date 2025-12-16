@@ -1418,9 +1418,7 @@ def _check_shutdown_already_in_progress(runtime: Any, state_info: Dict[str, Any]
     shutdown_service = getattr(runtime, "shutdown_service", None)
     shutdown_in_progress = getattr(runtime, "_shutdown_in_progress", False)
 
-    is_shutting_down = shutdown_in_progress or (
-        shutdown_service and shutdown_service.is_shutdown_requested()
-    )
+    is_shutting_down = shutdown_in_progress or (shutdown_service and shutdown_service.is_shutdown_requested())
 
     if not is_shutting_down:
         return None

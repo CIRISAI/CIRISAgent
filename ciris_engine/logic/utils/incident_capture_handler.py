@@ -1,24 +1,39 @@
 """
 Incident Capture Handler for capturing WARNING and ERROR level log messages as incidents.
+
+Uses rate limiting and deduplication patterns from ciris_engine.logic.telemetry.security
+to prevent graph spam during error cascades.
 """
 
 import asyncio
+import hashlib
 import logging
-import traceback
-import uuid
+import time
+from collections import deque
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Deque, Optional
 
 from ciris_engine.protocols.services import TimeServiceProtocol
-from ciris_engine.schemas.services.graph.incident import IncidentNode, IncidentSeverity, IncidentStatus
-from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.buses.memory_bus import MemoryBus
 
 
 class IncidentCaptureHandler(logging.Handler):
     """
     A logging handler that captures WARNING and ERROR level messages as incidents.
     These incidents are stored in the graph for analysis, pattern detection, and self-improvement.
+
+    Anti-spam features (based on patterns from ciris_engine.logic.telemetry.security):
+    - Rate limiting: Max incidents per time window to prevent graph flood
+    - Deduplication: Same error within window creates single entry with count
+    - CRITICAL bypass: Critical errors always go through immediately
     """
+
+    # Default anti-spam settings
+    DEFAULT_RATE_LIMIT = 50  # Max incidents per period
+    DEFAULT_RATE_PERIOD = 60.0  # Period in seconds
+    DEFAULT_DEDUP_WINDOW = 30.0  # Deduplication window in seconds
 
     def __init__(
         self,
@@ -26,6 +41,9 @@ class IncidentCaptureHandler(logging.Handler):
         filename_prefix: str = "incidents",
         time_service: Optional[TimeServiceProtocol] = None,
         graph_audit_service: Any = None,
+        rate_limit: int = DEFAULT_RATE_LIMIT,
+        rate_period: float = DEFAULT_RATE_PERIOD,
+        dedup_window: float = DEFAULT_DEDUP_WINDOW,
     ) -> None:
         super().__init__()
         if not time_service:
@@ -34,7 +52,25 @@ class IncidentCaptureHandler(logging.Handler):
         self.log_dir.mkdir(parents=True, exist_ok=True)  # parents=True for subdirectories
         self._time_service = time_service
 
+        # Memory bus for graph storage (set later via set_memory_bus)
+        self._memory_bus: Optional["MemoryBus"] = None
+
+        # Legacy support for graph_audit_service - extract memory_bus if available
         self._graph_audit_service = graph_audit_service
+        if graph_audit_service and hasattr(graph_audit_service, "_memory_bus"):
+            self._memory_bus = graph_audit_service._memory_bus
+
+        # Anti-spam: Rate limiting (pattern from SecurityFilter._check_rate_limit)
+        self._rate_limit = rate_limit
+        self._rate_period = rate_period
+        self._rate_history: Deque[float] = deque()
+
+        # Anti-spam: Deduplication cache {hash -> (last_seen, count)}
+        self._dedup_window = dedup_window
+        self._dedup_cache: dict[str, tuple[float, int]] = {}
+
+        # Pending async tasks for fire-and-forget pattern
+        self._pending_tasks: set[asyncio.Task[Any]] = set()
 
         # Create incident log file with timestamp
         timestamp = self._time_service.now().strftime("%Y%m%d_%H%M%S")
@@ -83,6 +119,7 @@ class IncidentCaptureHandler(logging.Handler):
         Emit a record as an incident to both file and graph.
 
         Only WARNING, ERROR, and CRITICAL messages are captured as incidents.
+        Graph writes use rate limiting and deduplication to prevent spam.
         """
         try:
             # Only process WARNING and above
@@ -98,7 +135,7 @@ class IncidentCaptureHandler(logging.Handler):
                 msg += "\nException Traceback:\n"
                 msg += "".join(traceback.format_exception(*record.exc_info))
 
-            # Write to file with proper encoding
+            # Write to file with proper encoding (always, no rate limiting)
             with open(self.log_file, "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
 
@@ -106,117 +143,164 @@ class IncidentCaptureHandler(logging.Handler):
                 if record.levelno >= logging.ERROR:
                     f.write("-" * 80 + "\n")
 
-            # The IncidentManagementService will read from the incidents log file during dream cycles
+            # Attempt to save to graph with anti-spam protection
+            self._queue_graph_write(record)
 
         except Exception:
             # Failsafe - if we can't capture incident, don't crash
             self.handleError(record)
 
-    async def _save_incident_to_graph(self, record: logging.LogRecord) -> None:
-        """Save log record as incident in graph."""
+    def _queue_graph_write(self, record: logging.LogRecord) -> None:
+        """
+        Queue a graph write with rate limiting and deduplication.
+
+        CRITICAL level bypasses rate limiting but not deduplication.
+        """
+        # No memory bus available yet - skip graph write
+        if not self._memory_bus:
+            return
+
+        # Check deduplication first (applies to all levels)
+        dedup_key = self._get_dedup_key(record)
+        now = time.monotonic()
+
+        if dedup_key in self._dedup_cache:
+            last_seen, count = self._dedup_cache[dedup_key]
+            if now - last_seen < self._dedup_window:
+                # Update count but don't write again
+                self._dedup_cache[dedup_key] = (now, count + 1)
+                return
+
+        # CRITICAL bypasses rate limiting
+        is_critical = record.levelno >= logging.CRITICAL
+
+        # Check rate limit for non-critical
+        if not is_critical and not self._check_rate_limit():
+            return
+
+        # Update dedup cache
+        self._dedup_cache[dedup_key] = (now, 1)
+
+        # Clean old dedup entries periodically
+        self._cleanup_dedup_cache(now)
+
+        # Fire-and-forget async write
         try:
-            # Map log level to incident severity
-            severity = self._map_log_level_to_severity(record.levelno)
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(self._write_to_graph(record))
+            self._pending_tasks.add(task)
+            task.add_done_callback(lambda t: self._pending_tasks.discard(t))
+        except RuntimeError:
+            # No event loop running - can't write async
+            pass
 
-            # Extract correlation data from extra fields if available
-            correlation_id = getattr(record, "correlation_id", None)
-            task_id = getattr(record, "task_id", None)
-            thought_id = getattr(record, "thought_id", None)
-            handler_name = getattr(record, "handler_name", None)
+    def _get_dedup_key(self, record: logging.LogRecord) -> str:
+        """Generate a deduplication key for a log record."""
+        # Hash based on source, level, and message template (without variable parts)
+        key_parts = f"{record.name}:{record.levelno}:{record.msg}"
+        return hashlib.md5(key_parts.encode(), usedforsecurity=False).hexdigest()[:16]
 
-            # Create incident node
-            incident = IncidentNode(
-                id=f"incident_{uuid.uuid4()}",
-                type=NodeType.AUDIT_ENTRY,
-                scope=GraphScope.LOCAL,
-                attributes={},  # Required field for TypedGraphNode
-                incident_type=record.levelname,
-                severity=severity,
-                status=IncidentStatus.OPEN,
-                description=record.getMessage(),
-                source_component=record.name,
-                detected_at=self._time_service.now(),
-                # Correlation data
-                correlation_id=correlation_id,
-                task_id=task_id,
-                thought_id=thought_id,
-                handler_name=handler_name,
-                # Technical details
-                filename=record.filename,
-                line_number=record.lineno,
-                function_name=record.funcName,
-                # Exception data if present
-                exception_type=record.exc_info[0].__name__ if record.exc_info and record.exc_info[0] else None,
-                stack_trace="".join(traceback.format_exception(*record.exc_info)) if record.exc_info else None,
-                # Impact assessment (to be enhanced by analysis)
-                impact="TBD",
-                urgency=self._calculate_urgency(severity),
-                # Required base fields
-                updated_by="incident_capture_handler",
-                updated_at=self._time_service.now(),
+    def _check_rate_limit(self) -> bool:
+        """
+        Check if we're within the rate limit.
+
+        Pattern from ciris_engine.logic.telemetry.security.SecurityFilter._check_rate_limit
+        """
+        now = time.monotonic()
+
+        # Remove old entries outside the window
+        while self._rate_history and now - self._rate_history[0] > self._rate_period:
+            self._rate_history.popleft()
+
+        # Check if we're at the limit
+        if len(self._rate_history) >= self._rate_limit:
+            return False
+
+        # Record this attempt
+        self._rate_history.append(now)
+        return True
+
+    def _cleanup_dedup_cache(self, now: float) -> None:
+        """Remove expired entries from dedup cache."""
+        # Only clean every ~100 calls to avoid overhead
+        if len(self._dedup_cache) < 100:
+            return
+
+        expired_keys = [
+            key for key, (last_seen, _) in self._dedup_cache.items() if now - last_seen > self._dedup_window * 2
+        ]
+        for key in expired_keys:
+            del self._dedup_cache[key]
+
+    async def _write_to_graph(self, record: logging.LogRecord) -> None:
+        """
+        Write incident to graph using MemoryBus.memorize_log().
+
+        This creates a LOG_ENTRY correlation aligned with the CORRELATIONS_TSDB FSD.
+        """
+        if not self._memory_bus:
+            return
+
+        try:
+            # Build tags with incident metadata
+            tags = {
+                "source_component": record.name,
+                "filename": record.filename,
+                "lineno": str(record.lineno),
+                "funcName": record.funcName,
+            }
+
+            # Add correlation data if available
+            if hasattr(record, "correlation_id") and record.correlation_id:
+                tags["correlation_id"] = str(record.correlation_id)
+            if hasattr(record, "task_id") and record.task_id:
+                tags["task_id"] = str(record.task_id)
+            if hasattr(record, "thought_id") and record.thought_id:
+                tags["thought_id"] = str(record.thought_id)
+
+            # Use memorize_log which creates LOG_ENTRY correlation
+            await self._memory_bus.memorize_log(
+                log_message=record.getMessage(),
+                log_level=record.levelname,
+                tags=tags,
+                scope="local",
+                handler_name="incident_capture_handler",
             )
-
-            # Store incident node directly in graph via memory bus
-            # The graph audit service has a memory_bus we can use
-            if hasattr(self._graph_audit_service, "_memory_bus") and self._graph_audit_service._memory_bus:
-                from ciris_engine.schemas.services.operations import MemoryOpStatus
-
-                result = await self._graph_audit_service._memory_bus.memorize(
-                    node=incident.to_graph_node(),
-                    handler_name="incident_capture_handler",
-                    metadata={"source": "logging", "captured_from": record.name, "auto_captured": True},
-                )
-                if result.status != MemoryOpStatus.OK:
-                    logging.getLogger(__name__).error(f"Failed to store incident in graph: {result.error}")
-            else:
-                logging.getLogger(__name__).error("Graph audit service does not have memory bus available")
-
         except Exception as e:
-            # Log error but don't crash - incident capture should never break the system
-            logging.getLogger(__name__).error(f"Failed to save incident to graph: {e}")
+            # Never crash the logging system
+            logging.getLogger(__name__).debug(f"Failed to write incident to graph: {e}")
 
-    def _map_log_level_to_severity(self, levelno: int) -> IncidentSeverity:
-        """Map Python log level to incident severity."""
-        if levelno >= logging.CRITICAL:
-            return IncidentSeverity.CRITICAL
-        elif levelno >= logging.ERROR:
-            return IncidentSeverity.HIGH
-        elif levelno >= logging.WARNING:
-            return IncidentSeverity.MEDIUM
-        else:
-            return IncidentSeverity.LOW
+    def set_memory_bus(self, memory_bus: "MemoryBus") -> None:
+        """
+        Set the memory bus for graph storage.
 
-    def _calculate_urgency(self, severity: IncidentSeverity) -> str:
-        """Calculate urgency based on severity."""
-        urgency_map = {
-            IncidentSeverity.CRITICAL: "IMMEDIATE",
-            IncidentSeverity.HIGH: "HIGH",
-            IncidentSeverity.MEDIUM: "MEDIUM",
-            IncidentSeverity.LOW: "LOW",
-        }
-        return urgency_map.get(severity, "MEDIUM")
+        This is the preferred method for injecting the memory bus.
+        Called after service initialization when the MemoryBus is available.
+        """
+        self._memory_bus = memory_bus
+        logging.getLogger(__name__).info("Memory bus injected into incident capture handler")
 
     def set_graph_audit_service(self, graph_audit_service: Any) -> None:
-        """Set the graph audit service for storing incidents in the graph.
+        """
+        Set the graph audit service for storing incidents in the graph.
 
         This is called after service initialization when the GraphAuditService
-        is available.
+        is available. Extracts the memory_bus from the audit service for graph writes.
+
+        Note: Prefer using set_memory_bus() directly when possible.
         """
         self._graph_audit_service = graph_audit_service
-        logging.getLogger(__name__).info("Graph audit service injected into incident capture handler")
 
-        # Process any pending incidents now that we have the service
-        if hasattr(self, "_pending_incidents") and self._pending_incidents:
-            # Try to process them if we're in an async context
-            try:
-                loop = asyncio.get_running_loop()
-                for record in self._pending_incidents:
-                    loop.create_task(self._save_incident_to_graph(record))
-                logging.getLogger(__name__).info(f"Processing {len(self._pending_incidents)} queued incidents")
-                self._pending_incidents.clear()
-            except RuntimeError:
-                # Still no event loop, keep them queued
-                pass
+        # Extract memory_bus from the audit service
+        if hasattr(graph_audit_service, "_memory_bus") and graph_audit_service._memory_bus:
+            self._memory_bus = graph_audit_service._memory_bus
+            logging.getLogger(__name__).info(
+                "Memory bus extracted from graph audit service and injected into incident capture handler"
+            )
+        else:
+            logging.getLogger(__name__).warning(
+                "Graph audit service injected but no memory bus available - graph writes disabled"
+            )
 
 
 def add_incident_capture_handler(

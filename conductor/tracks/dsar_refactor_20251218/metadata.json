@@ -1,0 +1,8 @@
+{
+  "track_id": "dsar_refactor_20251218",
+  "type": "refactor",
+  "status": "new",
+  "created_at": "2025-12-18T10:00:00Z",
+  "updated_at": "2025-12-18T10:00:00Z",
+  "description": "Refactor and consolidate DSAR orchestration logic to strictly adhere to the Pydantic-based 22-service architecture and improve auditability."
+}

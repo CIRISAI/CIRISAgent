@@ -22,7 +22,8 @@ from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
+from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     DeferralApprovalContext,

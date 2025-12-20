@@ -174,15 +174,13 @@ class SpeakHandler(BaseActionHandler):
         # If SPEAK failed, inject an error message into the channel history
         if not success:
             try:
-                from ciris_engine.logic.buses.communication_bus import CommunicationBus
-
-                comm_bus = CommunicationBus.get_instance()
+                comm_bus = self.bus_manager.communication
                 if comm_bus:
                     error_message = (
-                        f"Failed to deliver agent response. The message could not be sent to the channel."
+                        "Failed to deliver agent response. The message could not be sent to the channel."
                     )
-                    # Try to send system error message
-                    comm_service = await comm_bus.get_service()
+                    # Try to send system error message via the communication bus
+                    comm_service = await comm_bus.get_service("speak_handler")
                     if comm_service and hasattr(comm_service, "send_system_message"):
                         await comm_service.send_system_message(
                             channel_id=channel_id, content=error_message, message_type="error"

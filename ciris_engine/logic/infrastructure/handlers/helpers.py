@@ -39,6 +39,7 @@ def create_follow_up_thought(
             thought_type=thought_type, task_id=parent.source_task_id, parent_thought_id=parent.thought_id
         ),
         source_task_id=parent.source_task_id,
+        agent_occurrence_id=parent.agent_occurrence_id,  # CRITICAL: Inherit occurrence ID from parent
         channel_id=channel_id,
         thought_type=thought_type,
         status=ThoughtStatus.PENDING,

@@ -661,6 +661,7 @@ class WakeupProcessor(BaseProcessor):
         thought = Thought(
             thought_id=generate_thought_id(thought_type=ThoughtType.STANDARD, task_id=step_task.task_id),
             source_task_id=step_task.task_id,
+            agent_occurrence_id=step_task.agent_occurrence_id,  # Inherit from task
             content=step_task.description,
             round_number=round_number,
             status=ThoughtStatus.PENDING,

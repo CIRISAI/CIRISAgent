@@ -219,6 +219,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                     status=ThoughtStatus.PENDING,
                     thought_type=ThoughtType.SCHEDULED,
                     source_task_id=task.task_id,
+                    agent_occurrence_id="default",  # Scheduled tasks run on default occurrence
                     created_at=(
                         self._time_service.now() if self._time_service else datetime.now(timezone.utc)
                     ).isoformat(),

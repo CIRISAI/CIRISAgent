@@ -89,6 +89,7 @@ AGAIN you observed user @{author_name} say "{message_content}", so the task is t
     thought = Thought(
         thought_id=f"th_seed_{task.task_id}_{str(uuid.uuid4())[:4]}",
         source_task_id=task.task_id,
+        agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
         channel_id=task_channel_id,
         thought_type=thought_type,
         status=ThoughtStatus.PENDING,

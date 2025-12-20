@@ -252,6 +252,20 @@ CREATE INDEX IF NOT EXISTS idx_wa_created ON wa_cert(created DESC);
 CREATE INDEX IF NOT EXISTS idx_wa_token_type ON wa_cert(token_type);
 """
 
+# Deferral reports table for WA deferral tracking
+DEFERRAL_REPORTS_TABLE_V1 = """
+CREATE TABLE IF NOT EXISTS deferral_reports (
+    message_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    thought_id TEXT NOT NULL,
+    package_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_deferral_reports_task ON deferral_reports(task_id);
+CREATE INDEX IF NOT EXISTS idx_deferral_reports_thought ON deferral_reports(thought_id);
+"""
+
 # All table definitions
 ALL_TABLES = [
     TASKS_TABLE_V1,
@@ -264,6 +278,7 @@ ALL_TABLES = [
     AUDIT_ROOTS_TABLE_V1,
     AUDIT_SIGNING_KEYS_TABLE_V1,
     WA_CERT_TABLE_V1,
+    DEFERRAL_REPORTS_TABLE_V1,
 ]
 
 __all__ = [
@@ -277,5 +292,6 @@ __all__ = [
     "AUDIT_ROOTS_TABLE_V1",
     "AUDIT_SIGNING_KEYS_TABLE_V1",
     "WA_CERT_TABLE_V1",
+    "DEFERRAL_REPORTS_TABLE_V1",
     "ALL_TABLES",
 ]

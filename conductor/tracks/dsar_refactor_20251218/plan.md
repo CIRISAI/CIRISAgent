@@ -4,13 +4,13 @@ This plan follows the Test-Driven Development (TDD) workflow and includes phase 
 
 ## Phase 1: Foundation and Models
 
-- [ ] **Task 1: Define Pydantic Schemas for DSAR**
+- [x] **Task 1: Define Pydantic Schemas for DSAR** (2082b0b)
   - [ ] Write tests for DSAR request and response schemas.
   - [ ] Implement schemas in `ciris_engine/schemas/dsar.py`.
-- [ ] **Task 2: Define DSAR Orchestrator Interface**
+- [x] **Task 2: Define DSAR Orchestrator Interface** (6e43beb)
   - [ ] Write unit tests for the orchestrator interface (mocking dependencies).
   - [ ] Create the `DsarOrchestrator` class in `ciris_engine/logic/dsar_orchestrator.py`.
-- [ ] **Task: Conductor - User Manual Verification 'Foundation and Models' (Protocol in workflow.md)**
+- [x] **Task: Conductor - User Manual Verification 'Foundation and Models' (Protocol in workflow.md)** [checkpoint: 46ae868]
 
 ## Phase 2: Core Orchestration Logic
 

@@ -92,8 +92,8 @@ class TestPDMARedaction:
             is_agent=False,
         )
 
-        # Should only have public fields
-        public_fields = {"id", "author", "content", "timestamp", "is_agent"}
+        # Should only have public fields (message_type added for system/error messages)
+        public_fields = {"id", "author", "content", "timestamp", "is_agent", "message_type"}
         assert set(ConversationMessage.model_fields.keys()) == public_fields
 
     @patch("ciris_engine.logic.adapters.api.routes.agent.logger")

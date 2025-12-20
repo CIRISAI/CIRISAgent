@@ -1515,7 +1515,8 @@ async def _verify_google_id_token(id_token: str) -> Dict[str, Optional[str]]:
 
 @router.post("/auth/native/google", response_model=NativeTokenResponse)
 async def native_google_token_exchange(
-    request: NativeTokenRequest,
+    native_request: NativeTokenRequest,
+    fastapi_request: Request,
     auth_service: APIAuthService = Depends(get_auth_service),
 ) -> NativeTokenResponse:
     """
@@ -1527,10 +1528,10 @@ async def native_google_token_exchange(
     Unlike the web OAuth flow (which uses authorization codes), native apps get
     ID tokens directly from Google Sign-In SDK and send them here.
     """
-    logger.info(f"[NativeAuth] Native Google token exchange request - provider: {request.provider}")
+    logger.info(f"[NativeAuth] Native Google token exchange request - provider: {native_request.provider}")
 
-    if request.provider != "google":
-        logger.warning(f"[NativeAuth] Unsupported provider: {request.provider}")
+    if native_request.provider != "google":
+        logger.warning(f"[NativeAuth] Unsupported provider: {native_request.provider}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only 'google' provider is currently supported for native token exchange",
@@ -1539,7 +1540,7 @@ async def native_google_token_exchange(
     try:
         # Verify the Google ID token and get user info
         logger.info("[NativeAuth] Starting token verification...")
-        user_data = await _verify_google_id_token(request.id_token)
+        user_data = await _verify_google_id_token(native_request.id_token)
         logger.info(f"[NativeAuth] Token verification complete - external_id: {user_data.get('external_id')}")
 
         external_id = user_data.get("external_id")
@@ -1622,7 +1623,14 @@ async def native_google_token_exchange(
 
         # Update billing provider with the Google ID token for credit checks
         # This ensures billing is available immediately after login
-        _update_billing_provider_token(request.id_token)
+        _update_billing_provider_token(native_request.id_token)
+
+        # Trigger billing credit check to create billing user (same as webview OAuth flow)
+        # This ensures the billing user record is created so getBalance() returns correct credits
+        logger.info(f"[NativeAuth] Triggering billing credit check for user {oauth_user.user_id}")
+        await _trigger_billing_credit_check_if_enabled(
+            fastapi_request, oauth_user, user_email=user_email, marketing_opt_in=False
+        )
 
         logger.info(f"[NativeAuth] SUCCESS - Native Google user {oauth_user.user_id} logged in, token generated")
 

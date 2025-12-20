@@ -15,6 +15,154 @@ from rich.console import Console
 
 from .config import QAConfig
 
+# PostgreSQL Docker container name for QA testing
+POSTGRES_CONTAINER_NAME = "ciris-qa-postgres"
+POSTGRES_IMAGE = "postgres:15-alpine"
+POSTGRES_PORT = 5432
+
+
+def _is_docker_available() -> bool:
+    """Check if Docker is available."""
+    try:
+        result = subprocess.run(
+            ["docker", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _is_postgres_container_running() -> bool:
+    """Check if the PostgreSQL container is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-q", "-f", f"name={POSTGRES_CONTAINER_NAME}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return bool(result.stdout.strip())
+    except Exception:
+        return False
+
+
+def _start_postgres_container(console: Console) -> bool:
+    """Start PostgreSQL container for QA testing."""
+    if not _is_docker_available():
+        console.print("[red]❌ Docker not available - cannot start PostgreSQL[/red]")
+        return False
+
+    if _is_postgres_container_running():
+        console.print("[green]✅ PostgreSQL container already running[/green]")
+        return True
+
+    console.print("[cyan]🐘 Starting PostgreSQL container...[/cyan]")
+
+    # Check if container exists but is stopped
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-aq", "-f", f"name={POSTGRES_CONTAINER_NAME}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.stdout.strip():
+            # Container exists, just start it
+            subprocess.run(
+                ["docker", "start", POSTGRES_CONTAINER_NAME],
+                capture_output=True,
+                timeout=10
+            )
+            console.print("[green]✅ Started existing PostgreSQL container[/green]")
+        else:
+            # Create and start new container
+            subprocess.run(
+                [
+                    "docker", "run", "-d",
+                    "--name", POSTGRES_CONTAINER_NAME,
+                    "-e", "POSTGRES_USER=ciris_test",
+                    "-e", "POSTGRES_PASSWORD=ciris_test_password",
+                    "-e", "POSTGRES_DB=ciris_test",
+                    "-p", f"{POSTGRES_PORT}:5432",
+                    POSTGRES_IMAGE
+                ],
+                capture_output=True,
+                timeout=60
+            )
+            console.print("[green]✅ Created new PostgreSQL container[/green]")
+    except Exception as e:
+        console.print(f"[red]❌ Failed to start PostgreSQL: {e}[/red]")
+        return False
+
+    # Wait for PostgreSQL to be ready
+    console.print("[cyan]⏳ Waiting for PostgreSQL to be ready...[/cyan]")
+    for _ in range(30):  # Wait up to 30 seconds
+        try:
+            result = subprocess.run(
+                [
+                    "docker", "exec", POSTGRES_CONTAINER_NAME,
+                    "pg_isready", "-U", "ciris_test"
+                ],
+                capture_output=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                console.print("[green]✅ PostgreSQL is ready[/green]")
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+
+    console.print("[red]❌ PostgreSQL failed to become ready[/red]")
+    return False
+
+
+def _stop_postgres_container(console: Console):
+    """Stop PostgreSQL container."""
+    if _is_postgres_container_running():
+        console.print("[cyan]🐘 Stopping PostgreSQL container...[/cyan]")
+        try:
+            subprocess.run(
+                ["docker", "stop", POSTGRES_CONTAINER_NAME],
+                capture_output=True,
+                timeout=15
+            )
+            console.print("[green]✅ PostgreSQL container stopped[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
+
+
+def _ensure_env_file(console: Console) -> bool:
+    """Ensure a minimal .env file exists for QA testing.
+
+    Returns True if .env was created/exists, False on error.
+    """
+    project_root = Path(__file__).parent.parent.parent
+    env_path = project_root / ".env"
+
+    if env_path.exists():
+        return True
+
+    console.print("[cyan]📝 Creating minimal .env for QA testing...[/cyan]")
+
+    minimal_env = """# Auto-generated minimal .env for QA testing
+# Created by QA runner - safe to delete after testing
+CIRIS_CONFIGURED=true
+CIRIS_LLM_PROVIDER=mock
+CIRIS_MOCK_LLM=true
+"""
+
+    try:
+        env_path.write_text(minimal_env)
+        console.print("[green]✅ Created minimal .env file[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]❌ Failed to create .env: {e}[/red]")
+        return False
+
 
 class APIServerManager:
     """Manages the API server lifecycle for testing."""
@@ -40,6 +188,17 @@ class APIServerManager:
         if self._is_server_running():
             self.console.print("[yellow]⚠️  Server already running[/yellow]")
             return True
+
+        # Ensure minimal .env exists for QA testing
+        if not _ensure_env_file(self.console):
+            self.console.print("[red]❌ Failed to create .env - cannot proceed[/red]")
+            return False
+
+        # Auto-start PostgreSQL container if using postgres backend
+        if self.database_backend == "postgres":
+            if not _start_postgres_container(self.console):
+                self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
+                return False
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 

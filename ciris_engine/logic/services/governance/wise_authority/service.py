@@ -653,11 +653,15 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 guidance_context_dict["original_task_id"] = original_task_id
                 guidance_context_dict["resolved_deferral_id"] = deferral_id
 
-                # Get correlation_id from original context or generate new one
+                # Always generate a NEW correlation_id for the guidance task
+                # Tasks have a unique index on (agent_occurrence_id, correlation_id)
+                # so reusing the original would cause a constraint violation
                 import uuid
                 correlation_id = str(uuid.uuid4())
+
+                # Store original correlation_id in context for linkage/tracing
                 if "correlation_id" in context:
-                    correlation_id = context["correlation_id"]
+                    guidance_context_dict["original_correlation_id"] = context["correlation_id"]
 
                 # Build TaskContext from the guidance context dict
                 task_context = TaskContext(

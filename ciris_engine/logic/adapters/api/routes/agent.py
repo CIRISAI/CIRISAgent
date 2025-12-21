@@ -626,6 +626,20 @@ def _cleanup_interaction_tracking(message_id: str) -> None:
     _message_responses.pop(message_id, None)
 
 
+async def _inject_error_to_channel(request: Request, channel_id: str, content: str) -> None:
+    """Inject an error message into channel history for user visibility."""
+    try:
+        comm_service = getattr(request.app.state, "communication_service", None)
+        if comm_service and hasattr(comm_service, "send_system_message"):
+            await comm_service.send_system_message(
+                channel_id=channel_id,
+                content=content,
+                message_type="error",
+            )
+    except Exception as e:
+        logger.warning(f"Could not inject error message to channel: {e}")
+
+
 @router.post("/message", response_model=SuccessResponse[MessageSubmissionResponse])
 async def submit_message(
     request: Request, body: MessageRequest, auth: AuthContext = Depends(require_observer)
@@ -682,19 +696,7 @@ async def submit_message(
         else:
             raise HTTPException(status_code=503, detail="Message handler not configured")
     except CreditDenied as exc:
-        # Inject error message into channel history
-        try:
-            comm_service = request.app.state.communication_service
-            if comm_service and hasattr(comm_service, "send_system_message"):
-                await comm_service.send_system_message(
-                    channel_id=channel_id,
-                    content=f"Message blocked: {exc.reason}",
-                    message_type="error",
-                )
-        except Exception as e:
-            logger.warning(f"Could not inject credit denial error message: {e}")
-
-        # Return rejection for credit denial
+        await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
         response = MessageSubmissionResponse(
             message_id=message_id,
             task_id=None,
@@ -706,19 +708,9 @@ async def submit_message(
         )
         return SuccessResponse(data=response)
     except CreditCheckFailed as exc:
-        # Inject error message into channel history
-        try:
-            comm_service = request.app.state.communication_service
-            if comm_service and hasattr(comm_service, "send_system_message"):
-                await comm_service.send_system_message(
-                    channel_id=channel_id,
-                    content="Message blocked: Credit service temporarily unavailable. Please try again later.",
-                    message_type="error",
-                )
-        except Exception as e:
-            logger.warning(f"Could not inject credit check error message: {e}")
-
-        # Return rejection for credit check failure
+        await _inject_error_to_channel(
+            request, channel_id, "Message blocked: Credit service temporarily unavailable. Please try again later."
+        )
         response = MessageSubmissionResponse(
             message_id=message_id,
             task_id=None,
@@ -805,18 +797,7 @@ async def interact(
         else:
             raise HTTPException(status_code=503, detail="Message handler not configured")
     except CreditDenied as exc:
-        # Inject error message into channel history
-        try:
-            comm_service = request.app.state.communication_service
-            if comm_service and hasattr(comm_service, "send_system_message"):
-                await comm_service.send_system_message(
-                    channel_id=channel_id,
-                    content=f"Message blocked: {exc.reason}",
-                    message_type="error",
-                )
-        except Exception as e:
-            logger.warning(f"Could not inject credit denial error message: {e}")
-
+        await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
         _cleanup_interaction_tracking(message_id)
         raise HTTPException(
             status_code=402,
@@ -827,33 +808,13 @@ async def interact(
             },
         ) from exc
     except CreditCheckFailed as exc:
-        # Inject error message into channel history
-        try:
-            comm_service = request.app.state.communication_service
-            if comm_service and hasattr(comm_service, "send_system_message"):
-                await comm_service.send_system_message(
-                    channel_id=channel_id,
-                    content="Message blocked: Credit service temporarily unavailable. Please try again later.",
-                    message_type="error",
-                )
-        except Exception as e:
-            logger.warning(f"Could not inject credit check error message: {e}")
-
+        await _inject_error_to_channel(
+            request, channel_id, "Message blocked: Credit service temporarily unavailable. Please try again later."
+        )
         _cleanup_interaction_tracking(message_id)
         raise HTTPException(status_code=503, detail="Credit provider unavailable") from exc
     except BillingServiceError as exc:
-        # Inject error message into channel history
-        try:
-            comm_service = request.app.state.communication_service
-            if comm_service and hasattr(comm_service, "send_system_message"):
-                await comm_service.send_system_message(
-                    channel_id=channel_id,
-                    content=f"Service error: {exc.message}",
-                    message_type="error",
-                )
-        except Exception as e:
-            logger.warning(f"Could not inject billing error message: {e}")
-
+        await _inject_error_to_channel(request, channel_id, f"Service error: {exc.message}")
         _cleanup_interaction_tracking(message_id)
         raise HTTPException(
             status_code=402,
@@ -1196,7 +1157,7 @@ def _safe_convert_message_timestamp(msg: Any) -> datetime:
     timestamp_val = msg.timestamp
     if isinstance(timestamp_val, datetime):
         return timestamp_val
-    elif timestamp_val:
+    if timestamp_val:
         try:
             return datetime.fromisoformat(str(timestamp_val))
         except (ValueError, TypeError):
@@ -1204,29 +1165,32 @@ def _safe_convert_message_timestamp(msg: Any) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _convert_service_message_to_conversation(msg: Any) -> ConversationMessage:
-    """Convert communication service message to ConversationMessage."""
-    # Determine message type based on message attributes
-    is_agent = bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False))
-
-    # Check if this is a system or error message
-    message_type: Literal["user", "agent", "system", "error"] = "user"
-
-    # Check for explicit message_type attribute
+def _determine_message_type(msg: Any, is_agent: bool) -> Literal["user", "agent", "system", "error"]:
+    """Determine the message type from message attributes."""
+    # Check for explicit message_type attribute first
     if hasattr(msg, "message_type"):
         explicit_type = str(msg.message_type).lower()
-        if explicit_type in ["user", "agent", "system", "error"]:
-            message_type = explicit_type  # type: ignore[assignment]
-    # Infer from author if not explicit
-    elif is_agent:
-        message_type = "agent"
-    else:
-        # Check if author indicates system message
-        author = str(msg.author_name or msg.author_id or "").lower()
-        if author in ["system", "ciris_system", "error"]:
-            message_type = "system" if author != "error" else "error"
-        else:
-            message_type = "user"
+        if explicit_type in ("user", "agent", "system", "error"):
+            return explicit_type  # type: ignore[return-value]
+
+    # Infer from is_agent flag
+    if is_agent:
+        return "agent"
+
+    # Check if author indicates system message
+    author = str(msg.author_name or msg.author_id or "").lower()
+    if author == "error":
+        return "error"
+    if author in ("system", "ciris_system"):
+        return "system"
+
+    return "user"
+
+
+def _convert_service_message_to_conversation(msg: Any) -> ConversationMessage:
+    """Convert communication service message to ConversationMessage."""
+    is_agent = bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False))
+    message_type = _determine_message_type(msg, is_agent)
 
     return ConversationMessage(
         id=str(msg.message_id or ""),

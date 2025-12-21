@@ -618,11 +618,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 }
 
             # Mark original deferred task as COMPLETED with outcome
-            outcome = (
-                f"Resolved by WA {response.wa_id}: {'Approved' if response.approved else 'Rejected'}"
-                if response.approved
-                else f"Rejected by WA {response.wa_id}: {response.reason}"
-            )
+            if response.approved:
+                outcome = f"Resolved by WA {response.wa_id}: Approved"
+            else:
+                outcome = f"Rejected by WA {response.wa_id}: {response.reason}"
 
             cursor.execute(
                 f"""

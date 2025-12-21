@@ -66,7 +66,7 @@ lib_dir=$PYTHON_FRAMEWORK
 pointer_width=64
 build_flags=
 suppress_build_script_link_lines=true
-ext_suffix=.cpython-310-iphoneos-arm64.so
+ext_suffix=.cpython-310-iphoneos.so
 executable=/opt/homebrew/bin/python3.10
 EOF
 
@@ -159,7 +159,7 @@ lib_dir=$PYTHON_FRAMEWORK
 pointer_width=64
 build_flags=
 suppress_build_script_link_lines=true
-ext_suffix=.cpython-310-iphonesimulator-arm64.so
+ext_suffix=.cpython-310-iphonesimulator.so
 executable=/opt/homebrew/bin/python3.10
 EOF
 

@@ -243,8 +243,9 @@ class SpeakHandler(BaseActionHandler):
         persistence.add_correlation(correlation, self.time_service)
 
         follow_up_text = (
-            f"CIRIS_FOLLOW_UP_THOUGHT: Message sent to channel {channel_id}. "
-            "If this task is complete, use TASK_COMPLETE. New user messages create new tasks automatically."
+            f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
+            "Speaking repeatedly on the same task is not useful - if you have nothing new to add, use TASK_COMPLETE. "
+            "New user messages will create new tasks automatically."
             if success
             else f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK action failed for thought {thought_id}."
         )

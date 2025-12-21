@@ -13,7 +13,7 @@ author_email = "team@ciris.ai"
 [tool.briefcase.app.ciris_ios]
 formal_name = "Ciris iOS"
 description = "CIRIS Engine on iOS"
-sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_adapters", "src/ciris_sdk"]
+sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_adapters", "src/ciris_sdk", "src/ios_gui_static"]
 requires = [
     "pydantic==2.9.2",
     "cryptography==3.4.8",  # Available in BeeWare repo for Python 3.10
@@ -21,8 +21,12 @@ requires = [
     "uvicorn",
     "httpx",
     "aiosqlite",
+    "aiofiles",
+    "python-dotenv",
     "std-nslog"
 ]
+# Note: pyyaml and jinja2 not available for iOS (require C extensions)
+# CIRIS engine may need iOS-specific modifications
 # Point pip to local wheels directory for pydantic-core iOS builds
 requirement_installer_args = ["--find-links", "../wheels"]
 

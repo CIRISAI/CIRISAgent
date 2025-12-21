@@ -101,10 +101,12 @@ if [[ "$SKIP_WHEELS" != "true" ]]; then
     log_success "Wheels built"
 else
     log_step "4/6 Skipping wheel build (--skip-wheels)"
-    if [[ ! -f "$IOS_DIR/wheels/"*"iphoneos.whl" ]]; then
+    WHEEL_COUNT=$(ls "$IOS_DIR/wheels/"*.whl 2>/dev/null | wc -l)
+    if [[ "$WHEEL_COUNT" -eq 0 ]]; then
         log_error "No wheels found! Remove --skip-wheels to build them."
         exit 1
     fi
+    log_info "Found $WHEEL_COUNT existing wheel(s)"
 fi
 
 # Step 5: Recreate iOS project with wheels

@@ -6,23 +6,25 @@ project_name = "Ciris iOS"
 bundle = "ai.ciris"
 version = "0.1.0"
 url = "https://ciris.ai"
-license = "Proprietary"
+license.text = "Proprietary"
 author = "CIRIS Team"
 author_email = "team@ciris.ai"
 
 [tool.briefcase.app.ciris_ios]
 formal_name = "Ciris iOS"
 description = "CIRIS Engine on iOS"
-sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_modular_services"]
+sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_adapters", "src/ciris_sdk"]
 requires = [
     "pydantic==2.9.2",
-    "cryptography==42.0.8",
+    "cryptography==3.4.8",  # Available in BeeWare repo for Python 3.10
     "fastapi",
     "uvicorn",
     "httpx",
     "aiosqlite",
     "std-nslog"
 ]
+# Point pip to local wheels directory for pydantic-core iOS builds
+requirement_installer_args = ["--find-links", "../wheels"]
 
 [tool.briefcase.app.ciris_ios.iOS]
 requires = [

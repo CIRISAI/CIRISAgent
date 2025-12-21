@@ -274,7 +274,13 @@ check_health() {
 
     if response=$(http_get "$health_url" "$TIMEOUT"); then
         local status
-        status=$(json_get "$response" "status")
+        # Try nested path first (data.status), then top-level
+        if command_exists jq; then
+            status=$(echo "$response" | jq -r '.data.status // .status // empty' 2>/dev/null)
+        else
+            # Fallback: grep for status value
+            status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+        fi
 
         if [ "$status" = "healthy" ] || [ "$status" = "ok" ]; then
             RESULTS[health]="pass"

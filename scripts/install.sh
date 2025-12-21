@@ -757,176 +757,18 @@ create_env_file() {
     local env_file="$INSTALL_DIR/.env"
 
     if [ "$DRY_RUN" = true ]; then
-        log_info "[dry-run] Would generate $env_file with LLM and system defaults"
+        log_info "[dry-run] Would skip .env generation (use GUI wizard instead)"
         return
     fi
 
     if [ -f "$env_file" ]; then
-        log_warn "Environment file already exists at $env_file"
-        # Prompt if we have a terminal (even when piped)
-        if [ -t 1 ] && [ -r /dev/tty ]; then
-            read -r -p "Overwrite? [y/N] " response </dev/tty || response="N"
-            if [[ ! "$response" =~ ^[Yy]$ ]]; then
-                log_info "Keeping existing .env file"
-                return
-            fi
-        else
-            log_info "Keeping existing .env file (non-interactive mode)"
-            return
-        fi
+        log_info "Environment file already exists at $env_file"
+        return
     fi
 
-    # Generate encryption keys
-    local secrets_key
-    local telemetry_key
-    secrets_key=$(openssl rand -base64 32)
-    telemetry_key=$(openssl rand -base64 32)
-
-    # LLM Configuration
-    local llm_provider="openai"
-    local llm_api_key=""
-    local llm_base_url=""
-    local llm_model=""
-
-    if [ -t 1 ] && [ -r /dev/tty ]; then
-        # Interactive mode - ask about LLM provider
-        echo ""
-        read -r -p "Will you be using OpenAI or another OpenAI-compatible provider? (local models, Together, Groq, etc.) [openai/other] (default: openai): " provider_choice </dev/tty || provider_choice="openai"
-        provider_choice=${provider_choice:-openai}
-
-        if [[ "$provider_choice" =~ ^[Oo]penai$ ]] || [[ -z "$provider_choice" ]]; then
-            # OpenAI configuration (only if explicitly "openai" or empty)
-            llm_provider="openai"
-            read -r -p "Enter your OpenAI API key (or press Enter to skip): " llm_api_key </dev/tty || llm_api_key=""
-        else
-            # Any other provider (ollama, anthropic, groq, together, etc.)
-            llm_provider="$provider_choice"
-
-            read -r -p "Enter the LLM base URL (default: http://localhost:11434 for Ollama): " llm_base_url </dev/tty || llm_base_url="http://localhost:11434"
-            llm_base_url=${llm_base_url:-http://localhost:11434}
-
-            read -r -p "Enter the model name (e.g., llama3, mistral, meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo): " llm_model </dev/tty || llm_model="llama3"
-            llm_model=${llm_model:-llama3}
-
-            read -r -p "Enter API key (or 'local' if no auth required) (default: local): " llm_api_key </dev/tty || llm_api_key="local"
-            llm_api_key=${llm_api_key:-local}
-        fi
-    else
-        # Non-interactive mode - default to OpenAI
-        log_info "Non-interactive mode: defaulting to OpenAI (configure manually in .env)"
-        llm_provider="openai"
-    fi
-
-    # Create .env file
-    cat > "$env_file" << EOF
-# CIRIS Configuration
-# Generated on $(date)
-
-# ============================================================================
-# LLM Configuration
-# ============================================================================
-
-EOF
-
-    # Add LLM configuration based on provider choice
-    if [ "$llm_provider" != "openai" ]; then
-        cat >> "$env_file" << EOF
-# OpenAI-Compatible LLM Configuration
-OPENAI_API_KEY="$llm_api_key"
-OPENAI_API_BASE="$llm_base_url"
-OPENAI_MODEL="$llm_model"
-
-# Popular OpenAI-compatible providers:
-#
-# Local Models:
-#   Ollama:    http://localhost:11434
-#   LM Studio: http://localhost:1234/v1
-#   vLLM:      http://localhost:8000/v1
-#   LocalAI:   http://localhost:8080/v1
-#
-# Commercial Providers:
-#   Together AI: https://api.together.xyz/v1
-#   Groq:        https://api.groq.com/openai/v1
-#   Fireworks:   https://api.fireworks.ai/inference/v1
-#   Anyscale:    https://api.endpoints.anyscale.com/v1
-
-EOF
-    else
-        cat >> "$env_file" << EOF
-# OpenAI Configuration
-OPENAI_API_KEY="${llm_api_key:-your_openai_api_key_here}"
-
-# Optional: Use a different OpenAI model
-# OPENAI_MODEL="gpt-4"
-
-# Optional: Use OpenAI-compatible endpoint
-# OPENAI_API_BASE="https://api.openai.com/v1"
-
-EOF
-    fi
-
-    cat >> "$env_file" << EOF
-# ============================================================================
-# Security Keys (auto-generated)
-# ============================================================================
-
-SECRETS_MASTER_KEY="$secrets_key"
-TELEMETRY_ENCRYPTION_KEY="$telemetry_key"
-
-# ============================================================================
-# Application Configuration
-# ============================================================================
-
-# Log Level
-LOG_LEVEL="INFO"
-
-# Ports
-CIRIS_AGENT_PORT=$AGENT_PORT
-NEXT_PUBLIC_API_BASE_URL="http://localhost:$AGENT_PORT"
-
-# Database Paths
-CIRIS_DB_PATH="./data/ciris_engine.db"
-CIRIS_DATA_DIR="./data"
-SECRETS_DB_PATH="./secrets.db"
-AUDIT_LOG_PATH="./audit_logs.jsonl"
-
-# ============================================================================
-# Optional: Discord Integration
-# ============================================================================
-
-# Uncomment and configure if using Discord adapter
-# DISCORD_BOT_TOKEN="your_discord_bot_token_here"
-# DISCORD_CHANNEL_ID="your_channel_id_here"
-
-# ============================================================================
-# Optional: Reddit Integration
-# ============================================================================
-
-# Uncomment and configure if using Reddit adapter
-# CIRIS_REDDIT_CLIENT_ID="your_client_id"
-# CIRIS_REDDIT_CLIENT_SECRET="your_client_secret"
-# CIRIS_REDDIT_USERNAME="your_username"
-# CIRIS_REDDIT_PASSWORD="your_password"
-
-# ============================================================================
-# Optional: Production Settings
-# ============================================================================
-
-# CIRISNode Configuration
-# CIRISNODE_BASE_URL="https://your-cirisnode.com:8001"
-# CIRISNODE_AGENT_SECRET_JWT="your_jwt_token"
-
-EOF
-
-    log_success "Environment file created at $env_file"
-
-    if [ -z "$llm_api_key" ]; then
-        if [ "$llm_provider" = "local" ]; then
-            log_warn "Don't forget to configure your local LLM in $env_file"
-        else
-            log_warn "Don't forget to add your OpenAI API key to $env_file"
-        fi
-    fi
+    # Don't create .env here - the GUI wizard will handle all configuration
+    # including LLM setup, security keys, and other settings
+    log_info "Skipping .env creation - use the GUI setup wizard to configure CIRIS"
 }
 
 # ============================================================================
@@ -1572,8 +1414,7 @@ main() {
     echo -e "${GREEN}${BOLD}✓ Installation Complete!${RESET}"
     echo ""
     echo "Next steps:"
-    echo "  1. Review/edit configuration in: $INSTALL_DIR/.env"
-    echo "  2. Start CIRIS with one of these methods:"
+    echo "  1. Start CIRIS with one of these methods:"
     echo ""
 
     local init_system
@@ -1597,10 +1438,10 @@ main() {
     echo -e "     ${CYAN}# Or start manually${RESET}"
     echo "     $INSTALL_DIR/scripts/start.sh"
     echo ""
-    echo "  3. Open your browser to:"
-    echo -e "     ${BOLD}http://localhost:$GUI_PORT${RESET}"
+    echo "  2. Open your browser to complete setup:"
+    echo -e "     ${BOLD}http://localhost:$AGENT_PORT${RESET}"
     echo ""
-    echo "     Default credentials: admin / ciris_admin_password"
+    echo "     You will be guided through LLM and adapter configuration."
     echo ""
     echo "Documentation: https://github.com/CIRISAI/CIRISAgent/blob/main/docs/README.md"
     echo "Support: https://github.com/CIRISAI/CIRISAgent/issues"

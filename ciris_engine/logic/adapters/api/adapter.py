@@ -870,6 +870,18 @@ class ApiPlatform(Service):
 
         logger.info(f"API server starting on http://{self.config.host}:{self.config.port}")
 
+        # Show setup wizard message if this is a first run
+        from ciris_engine.logic.setup.first_run import is_first_run
+        if is_first_run():
+            # Use print for visibility - this is important user-facing info
+            url = f"http://{self.config.host}:{self.config.port}"
+            print("\n" + "=" * 60)
+            print("  CIRIS Setup Required")
+            print("=" * 60)
+            print(f"\n  Open your browser to complete setup:\n")
+            print(f"    {url}")
+            print("\n" + "=" * 60 + "\n")
+
         # Wait a moment for server to start and check for immediate failures
         await asyncio.sleep(1)
 

@@ -73,16 +73,15 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# Results storage for JSON output
-declare -A RESULTS
-RESULTS[health]="pending"
-RESULTS[version]="pending"
-RESULTS[setup_status]="pending"
-RESULTS[setup_providers]="pending"
-RESULTS[setup_templates]="pending"
-RESULTS[setup_complete]="pending"
-RESULTS[auth]="pending"
-RESULTS[interaction]="pending"
+# Results storage for JSON output (individual vars for bash 3.2 compat)
+RESULT_health="pending"
+RESULT_version="pending"
+RESULT_setup_status="pending"
+RESULT_setup_providers="pending"
+RESULT_setup_templates="pending"
+RESULT_setup_complete="pending"
+RESULT_auth="pending"
+RESULT_interaction="pending"
 
 # ============================================================================
 # Utility Functions
@@ -283,11 +282,11 @@ check_health() {
         fi
 
         if [ "$status" = "healthy" ] || [ "$status" = "ok" ]; then
-            RESULTS[health]="pass"
+            RESULT_health="pass"
             log_success "Server is healthy"
             return 0
         else
-            RESULTS[health]="fail"
+            RESULT_health="fail"
             log_error "Server reported unhealthy status: $status"
             return 1
         fi
@@ -295,12 +294,12 @@ check_health() {
         # Try alternate health endpoint
         local alt_url="${BASE_URL}/health"
         if response=$(http_get "$alt_url" "$TIMEOUT" 2>/dev/null); then
-            RESULTS[health]="pass"
+            RESULT_health="pass"
             log_success "Server is healthy (alternate endpoint)"
             return 0
         fi
 
-        RESULTS[health]="fail"
+        RESULT_health="fail"
         log_error "Server health check failed - is CIRIS running at $BASE_URL?"
         return 1
     fi
@@ -324,16 +323,16 @@ check_version() {
         if [ -n "$server_version" ]; then
             if [ -n "$VERSION" ]; then
                 if [ "$server_version" = "$VERSION" ]; then
-                    RESULTS[version]="pass"
+                    RESULT_version="pass"
                     log_success "Version matches: $server_version"
                     return 0
                 else
-                    RESULTS[version]="fail"
+                    RESULT_version="fail"
                     log_error "Version mismatch: expected $VERSION, got $server_version"
                     return 2
                 fi
             else
-                RESULTS[version]="pass"
+                RESULT_version="pass"
                 log_success "Version: $server_version"
                 return 0
             fi
@@ -341,7 +340,7 @@ check_version() {
     fi
 
     # Version check is optional - warn but don't fail
-    RESULTS[version]="skip"
+    RESULT_version="skip"
     log_warn "Could not determine version (endpoint may require auth)"
     return 0
 }
@@ -361,7 +360,7 @@ check_setup_status() {
 
     if [ "$status_code" = "200" ]; then
         if response=$(http_get "$status_url" "$TIMEOUT"); then
-            RESULTS[setup_status]="pass"
+            RESULT_setup_status="pass"
             log_success "Setup status endpoint accessible"
             return 0
         fi
@@ -369,12 +368,12 @@ check_setup_status() {
 
     # 401/403 means setup already completed (needs auth)
     if [ "$status_code" = "401" ] || [ "$status_code" = "403" ]; then
-        RESULTS[setup_status]="pass"
+        RESULT_setup_status="pass"
         log_success "Setup already completed (auth required)"
         return 0
     fi
 
-    RESULTS[setup_status]="fail"
+    RESULT_setup_status="fail"
     log_error "Setup status check failed (status: $status_code)"
     return 3
 }
@@ -388,11 +387,11 @@ check_setup_providers() {
     if response=$(http_get "$providers_url" "$TIMEOUT" 2>/dev/null); then
         # Verify response contains expected providers
         if echo "$response" | grep -q "openai\|local\|other"; then
-            RESULTS[setup_providers]="pass"
+            RESULT_setup_providers="pass"
             log_success "LLM providers listed successfully"
             return 0
         else
-            RESULTS[setup_providers]="warn"
+            RESULT_setup_providers="warn"
             log_warn "Providers response doesn't contain expected values"
             return 0
         fi
@@ -402,12 +401,12 @@ check_setup_providers() {
     status_code=$(http_get_status "$providers_url" "$TIMEOUT")
 
     if [ "$status_code" = "401" ] || [ "$status_code" = "403" ]; then
-        RESULTS[setup_providers]="skip"
+        RESULT_setup_providers="skip"
         log_info "Providers endpoint requires auth (setup completed)"
         return 0
     fi
 
-    RESULTS[setup_providers]="fail"
+    RESULT_setup_providers="fail"
     log_error "Failed to get LLM providers (status: $status_code)"
     return 3
 }
@@ -431,11 +430,11 @@ check_setup_templates() {
         fi
 
         if [ "$has_default" = true ] && [ "$has_ally" = true ]; then
-            RESULTS[setup_templates]="pass"
+            RESULT_setup_templates="pass"
             log_success "Agent templates include default (Datum) and ally"
             return 0
         else
-            RESULTS[setup_templates]="warn"
+            RESULT_setup_templates="warn"
             log_warn "Templates missing: default=$has_default, ally=$has_ally"
             return 0
         fi
@@ -445,12 +444,12 @@ check_setup_templates() {
     status_code=$(http_get_status "$templates_url" "$TIMEOUT")
 
     if [ "$status_code" = "401" ] || [ "$status_code" = "403" ]; then
-        RESULTS[setup_templates]="skip"
+        RESULT_setup_templates="skip"
         log_info "Templates endpoint requires auth (setup completed)"
         return 0
     fi
 
-    RESULTS[setup_templates]="fail"
+    RESULT_setup_templates="fail"
     log_error "Failed to get agent templates (status: $status_code)"
     return 3
 }
@@ -481,7 +480,7 @@ EOF
 )
 
     if response=$(http_post "$complete_url" "$payload" "$TIMEOUT" 2>/dev/null); then
-        RESULTS[setup_complete]="pass"
+        RESULT_setup_complete="pass"
         log_success "Setup completed successfully"
         return 0
     fi
@@ -490,21 +489,21 @@ EOF
     status_code=$(http_post_status "$complete_url" "$payload" "$TIMEOUT")
 
     if [ "$status_code" = "200" ]; then
-        RESULTS[setup_complete]="pass"
+        RESULT_setup_complete="pass"
         log_success "Setup completed (status: 200)"
         return 0
     elif [ "$status_code" = "403" ]; then
         # Setup already completed
-        RESULTS[setup_complete]="skip"
+        RESULT_setup_complete="skip"
         log_info "Setup already completed (cannot repeat)"
         return 0
     elif [ "$status_code" = "422" ]; then
         # Validation error - still indicates endpoint works
-        RESULTS[setup_complete]="warn"
+        RESULT_setup_complete="warn"
         log_warn "Setup validation error (status: 422) - check payload"
         return 0
     else
-        RESULTS[setup_complete]="fail"
+        RESULT_setup_complete="fail"
         log_error "Setup completion failed (status: $status_code)"
         return 3
     fi
@@ -512,7 +511,7 @@ EOF
 
 check_auth() {
     if [ "$SKIP_AUTH" = true ]; then
-        RESULTS[auth]="skip"
+        RESULT_auth="skip"
         log_info "Skipping authentication check"
         return 0
     fi
@@ -534,7 +533,7 @@ check_auth() {
         token=$(json_get "$response" "access_token")
 
         if [ -n "$token" ] && [ "$token" != "null" ]; then
-            RESULTS[auth]="pass"
+            RESULT_auth="pass"
             # Store token for interaction test
             AUTH_TOKEN="$token"
             log_success "Authentication successful (user: $test_user)"
@@ -549,7 +548,7 @@ check_auth() {
             local token
             token=$(json_get "$response" "access_token")
             if [ -n "$token" ] && [ "$token" != "null" ]; then
-                RESULTS[auth]="pass"
+                RESULT_auth="pass"
                 AUTH_TOKEN="$token"
                 log_success "Authentication successful (user: admin)"
                 return 0
@@ -562,15 +561,15 @@ check_auth() {
     status_code=$(http_get_status "$login_url" "$TIMEOUT")
 
     if [ "$status_code" = "405" ]; then
-        RESULTS[auth]="pass"
+        RESULT_auth="pass"
         log_success "Auth endpoint exists (POST required)"
         return 0
     elif [ "$status_code" = "401" ] || [ "$status_code" = "422" ]; then
-        RESULTS[auth]="warn"
+        RESULT_auth="warn"
         log_warn "Auth endpoint works but credentials rejected"
         return 0
     else
-        RESULTS[auth]="fail"
+        RESULT_auth="fail"
         log_error "Authentication check failed (status: $status_code)"
         return 4
     fi
@@ -578,7 +577,7 @@ check_auth() {
 
 check_interaction() {
     if [ "$SKIP_INTERACTION" = true ]; then
-        RESULTS[interaction]="skip"
+        RESULT_interaction="skip"
         log_info "Skipping agent interaction check"
         return 0
     fi
@@ -596,7 +595,7 @@ check_interaction() {
     local interact_data='{"message":"ping","channel_id":"verify_test"}'
 
     if response=$(http_post "$interact_url" "$interact_data" "$TIMEOUT" "$auth_header" 2>/dev/null); then
-        RESULTS[interaction]="pass"
+        RESULT_interaction="pass"
         log_success "Agent interaction successful"
         return 0
     fi
@@ -613,19 +612,19 @@ check_interaction() {
     fi
 
     if [ "$status_code" = "401" ] || [ "$status_code" = "403" ]; then
-        RESULTS[interaction]="warn"
+        RESULT_interaction="warn"
         log_warn "Interaction requires auth (could not authenticate)"
         return 0
     elif [ "$status_code" = "503" ]; then
-        RESULTS[interaction]="warn"
+        RESULT_interaction="warn"
         log_warn "Agent not ready for interaction (still starting up?)"
         return 0
     elif [ "$status_code" = "200" ] || [ "$status_code" = "202" ]; then
-        RESULTS[interaction]="pass"
+        RESULT_interaction="pass"
         log_success "Agent interaction accepted"
         return 0
     else
-        RESULTS[interaction]="fail"
+        RESULT_interaction="fail"
         log_error "Agent interaction check failed (status: $status_code)"
         return 5
     fi
@@ -642,22 +641,22 @@ output_json() {
     local checks
     if [ "$FIRST_RUN_MODE" = true ]; then
         checks=$(cat << EOF
-    "health": "${RESULTS[health]}",
-    "version": "${RESULTS[version]}",
-    "setup_status": "${RESULTS[setup_status]}",
-    "setup_providers": "${RESULTS[setup_providers]}",
-    "setup_templates": "${RESULTS[setup_templates]}",
-    "setup_complete": "${RESULTS[setup_complete]}",
-    "auth": "${RESULTS[auth]}",
-    "interaction": "${RESULTS[interaction]}"
+    "health": "${RESULT_health}",
+    "version": "${RESULT_version}",
+    "setup_status": "${RESULT_setup_status}",
+    "setup_providers": "${RESULT_setup_providers}",
+    "setup_templates": "${RESULT_setup_templates}",
+    "setup_complete": "${RESULT_setup_complete}",
+    "auth": "${RESULT_auth}",
+    "interaction": "${RESULT_interaction}"
 EOF
 )
     else
         checks=$(cat << EOF
-    "health": "${RESULTS[health]}",
-    "version": "${RESULTS[version]}",
-    "auth": "${RESULTS[auth]}",
-    "interaction": "${RESULTS[interaction]}"
+    "health": "${RESULT_health}",
+    "version": "${RESULT_version}",
+    "auth": "${RESULT_auth}",
+    "interaction": "${RESULT_interaction}"
 EOF
 )
     fi
@@ -696,7 +695,9 @@ output_summary() {
     fi
 
     for check in $checks; do
-        local result="${RESULTS[$check]}"
+        # Use indirect reference for bash 3.2 compatibility
+        local varname="RESULT_$check"
+        local result="${!varname}"
         local icon
         case "$result" in
             pass) icon="${GREEN}[PASS]${RESET}" ;;

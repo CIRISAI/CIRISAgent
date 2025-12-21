@@ -62,40 +62,59 @@ echo ""
 START_TIME=$(date +%s)
 
 # Step 1: Clean everything
-log_step "1/5 Cleaning previous builds..."
+log_step "1/6 Cleaning previous builds..."
 rm -rf "$CIRISIOS_DIR/build"
 rm -rf "$CIRISIOS_DIR/logs"
 rm -rf "$IOS_DIR/pyo3-ios-config.txt"
 log_success "Clean complete"
 
-# Step 2: Build pydantic-core wheels
+# Step 2: Sync source code (needed before briefcase create)
+log_step "2/6 Syncing source code..."
+"$SCRIPT_DIR/prepare_source.sh"
+log_success "Source synced"
+
+# Step 3: Create initial iOS project to get Python framework
+log_step "3/6 Creating initial iOS project (for Python framework)..."
+cd "$CIRISIOS_DIR"
+
+# Temporarily disable pydantic requirement to bootstrap
+TEMP_PYPROJECT=$(mktemp)
+cp pyproject.toml "$TEMP_PYPROJECT"
+
+# Comment out pydantic temporarily
+sed -i.bak 's/"pydantic==/#"pydantic==/g' pyproject.toml
+
+briefcase create iOS 2>&1 | grep -v "^$" || true
+
+# Restore original pyproject.toml
+mv "$TEMP_PYPROJECT" pyproject.toml
+rm -f pyproject.toml.bak
+
+log_success "Python framework downloaded"
+
+# Step 4: Build pydantic-core wheels (now that we have the framework)
 if [[ "$SKIP_WHEELS" != "true" ]]; then
-    log_step "2/5 Building pydantic-core wheels..."
+    log_step "4/6 Building pydantic-core wheels..."
     rm -rf "$IOS_DIR/wheels"
     mkdir -p "$IOS_DIR/wheels"
     "$SCRIPT_DIR/build_wheels.sh"
     log_success "Wheels built"
 else
-    log_step "2/5 Skipping wheel build (--skip-wheels)"
+    log_step "4/6 Skipping wheel build (--skip-wheels)"
     if [[ ! -f "$IOS_DIR/wheels/"*"iphoneos.whl" ]]; then
         log_error "No wheels found! Remove --skip-wheels to build them."
         exit 1
     fi
 fi
 
-# Step 3: Sync source code
-log_step "3/5 Syncing source code..."
-"$SCRIPT_DIR/prepare_source.sh"
-log_success "Source synced"
-
-# Step 4: Create iOS project
-log_step "4/5 Creating iOS project..."
-cd "$CIRISIOS_DIR"
+# Step 5: Recreate iOS project with wheels
+log_step "5/6 Recreating iOS project with pydantic wheels..."
+rm -rf build/
 briefcase create iOS
-log_success "iOS project created"
+log_success "iOS project created with wheels"
 
-# Step 5: Build iOS app
-log_step "5/5 Building iOS app..."
+# Step 6: Build iOS app
+log_step "6/6 Building iOS app..."
 briefcase build iOS
 log_success "iOS app built"
 

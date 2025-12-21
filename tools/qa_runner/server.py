@@ -85,7 +85,7 @@ def _start_postgres_container(console: Console) -> bool:
                     "--name", POSTGRES_CONTAINER_NAME,
                     "-e", "POSTGRES_USER=ciris_test",
                     "-e", "POSTGRES_PASSWORD=ciris_test_password",
-                    "-e", "POSTGRES_DB=ciris_test",
+                    "-e", "POSTGRES_DB=ciris_test_db",
                     "-p", f"{POSTGRES_PORT}:5432",
                     POSTGRES_IMAGE
                 ],
@@ -111,6 +111,9 @@ def _start_postgres_container(console: Console) -> bool:
             )
             if result.returncode == 0:
                 console.print("[green]✅ PostgreSQL is ready[/green]")
+                # Create derivative databases (_secrets, _auth)
+                if not _create_derivative_databases(console):
+                    console.print("[yellow]⚠️  Failed to create derivative databases, continuing anyway[/yellow]")
                 return True
         except Exception:
             pass
@@ -118,6 +121,52 @@ def _start_postgres_container(console: Console) -> bool:
 
     console.print("[red]❌ PostgreSQL failed to become ready[/red]")
     return False
+
+
+def _create_derivative_databases(console: Console) -> bool:
+    """Create derivative databases (_secrets, _auth) for CIRIS."""
+    try:
+        # Use docker exec to run SQL commands as postgres superuser
+        # Create ciris_test_db_secrets
+        result = subprocess.run(
+            [
+                "docker", "exec", POSTGRES_CONTAINER_NAME,
+                "psql", "-U", "ciris_test", "-d", "postgres", "-c",
+                "CREATE DATABASE ciris_test_db_secrets OWNER ciris_test;"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            console.print("[green]✅ Created ciris_test_db_secrets[/green]")
+        elif "already exists" in result.stderr:
+            console.print("[dim]ciris_test_db_secrets already exists[/dim]")
+        else:
+            console.print(f"[yellow]⚠️  Could not create secrets db: {result.stderr}[/yellow]")
+
+        # Create ciris_test_db_auth
+        result = subprocess.run(
+            [
+                "docker", "exec", POSTGRES_CONTAINER_NAME,
+                "psql", "-U", "ciris_test", "-d", "postgres", "-c",
+                "CREATE DATABASE ciris_test_db_auth OWNER ciris_test;"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            console.print("[green]✅ Created ciris_test_db_auth[/green]")
+        elif "already exists" in result.stderr:
+            console.print("[dim]ciris_test_db_auth already exists[/dim]")
+        else:
+            console.print(f"[yellow]⚠️  Could not create auth db: {result.stderr}[/yellow]")
+
+        return True
+    except Exception as e:
+        console.print(f"[yellow]⚠️  Failed to create derivative databases: {e}[/yellow]")
+        return False
 
 
 def _stop_postgres_container(console: Console):

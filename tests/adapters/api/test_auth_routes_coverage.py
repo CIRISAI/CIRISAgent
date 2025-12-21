@@ -2076,41 +2076,44 @@ class TestNativeGoogleTokenExchange:
         """Test successful native Google token exchange."""
         from ciris_engine.logic.adapters.api.routes.auth import NativeTokenRequest, native_google_token_exchange
 
-        request = NativeTokenRequest(id_token="valid-id-token", provider="google")
+        native_request = NativeTokenRequest(id_token="valid-id-token", provider="google")
+        mock_fastapi_request = Mock()
 
         with patch("ciris_engine.logic.adapters.api.routes.auth._verify_google_id_token") as mock_verify:
-            mock_verify.return_value = {
-                "external_id": "google-123",
-                "email": "native@example.com",
-                "name": "Native User",
-                "picture": None,
-            }
+            with patch("ciris_engine.logic.adapters.api.routes.auth._trigger_billing_credit_check_if_enabled"):
+                mock_verify.return_value = {
+                    "external_id": "google-123",
+                    "email": "native@example.com",
+                    "name": "Native User",
+                    "picture": None,
+                }
 
-            mock_auth_service = Mock()
-            mock_oauth_user = Mock()
-            mock_oauth_user.user_id = "google:google-123"
-            mock_oauth_user.role = UserRole.OBSERVER
-            mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
-            mock_auth_service.get_user = Mock(return_value=None)
-            mock_auth_service.store_api_key = Mock()
-            mock_auth_service._oauth_users = {"existing": Mock()}  # Not first user
+                mock_auth_service = Mock()
+                mock_oauth_user = Mock()
+                mock_oauth_user.user_id = "google:google-123"
+                mock_oauth_user.role = UserRole.OBSERVER
+                mock_auth_service.create_oauth_user = Mock(return_value=mock_oauth_user)
+                mock_auth_service.get_user = Mock(return_value=None)
+                mock_auth_service.store_api_key = Mock()
+                mock_auth_service._oauth_users = {"existing": Mock()}  # Not first user
 
-            response = await native_google_token_exchange(request, mock_auth_service)
+                response = await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
 
-            assert response.user_id == "google:google-123"
-            assert response.role == "OBSERVER"
-            assert response.email == "native@example.com"
+                assert response.user_id == "google:google-123"
+                assert response.role == "OBSERVER"
+                assert response.email == "native@example.com"
 
     @pytest.mark.asyncio
     async def test_native_google_token_exchange_unsupported_provider(self):
         """Test native token exchange with unsupported provider."""
         from ciris_engine.logic.adapters.api.routes.auth import NativeTokenRequest, native_google_token_exchange
 
-        request = NativeTokenRequest(id_token="token", provider="facebook")
+        native_request = NativeTokenRequest(id_token="token", provider="facebook")
+        mock_fastapi_request = Mock()
         mock_auth_service = Mock()
 
         with pytest.raises(HTTPException) as exc_info:
-            await native_google_token_exchange(request, mock_auth_service)
+            await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
 
         assert exc_info.value.status_code == 400
         assert "Only 'google' provider is currently supported" in exc_info.value.detail
@@ -2120,7 +2123,8 @@ class TestNativeGoogleTokenExchange:
         """Test native token exchange when external_id is missing."""
         from ciris_engine.logic.adapters.api.routes.auth import NativeTokenRequest, native_google_token_exchange
 
-        request = NativeTokenRequest(id_token="token", provider="google")
+        native_request = NativeTokenRequest(id_token="token", provider="google")
+        mock_fastapi_request = Mock()
 
         with patch("ciris_engine.logic.adapters.api.routes.auth._verify_google_id_token") as mock_verify:
             mock_verify.return_value = {
@@ -2133,7 +2137,7 @@ class TestNativeGoogleTokenExchange:
             mock_auth_service = Mock()
 
             with pytest.raises(HTTPException) as exc_info:
-                await native_google_token_exchange(request, mock_auth_service)
+                await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
 
             assert exc_info.value.status_code == 400
             assert "did not contain user ID" in exc_info.value.detail
@@ -2143,7 +2147,8 @@ class TestNativeGoogleTokenExchange:
         """Test native token exchange exception handling."""
         from ciris_engine.logic.adapters.api.routes.auth import NativeTokenRequest, native_google_token_exchange
 
-        request = NativeTokenRequest(id_token="token", provider="google")
+        native_request = NativeTokenRequest(id_token="token", provider="google")
+        mock_fastapi_request = Mock()
 
         with patch("ciris_engine.logic.adapters.api.routes.auth._verify_google_id_token") as mock_verify:
             mock_verify.side_effect = RuntimeError("Unexpected error")
@@ -2151,7 +2156,7 @@ class TestNativeGoogleTokenExchange:
             mock_auth_service = Mock()
 
             with pytest.raises(HTTPException) as exc_info:
-                await native_google_token_exchange(request, mock_auth_service)
+                await native_google_token_exchange(native_request, mock_fastapi_request, mock_auth_service)
 
             assert exc_info.value.status_code == 500
             assert "Native token exchange failed" in exc_info.value.detail

@@ -52,11 +52,13 @@ def temp_db():
             updated_at TEXT NOT NULL,
             parent_task_id TEXT,
             context_json TEXT,
+            outcome TEXT,
             outcome_json TEXT,
             retry_count INTEGER DEFAULT 0,
             signed_by TEXT,
             signature TEXT,
-            signed_at TEXT
+            signed_at TEXT,
+            agent_occurrence_id TEXT NOT NULL DEFAULT 'default'
         )
     """
     )
@@ -311,7 +313,7 @@ async def test_get_pending_deferrals(wise_authority_service, time_service, temp_
 
 @pytest.mark.asyncio
 async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
-    """Test resolving deferrals."""
+    """Test resolving deferrals creates new guidance task."""
     await wise_authority_service.start()
 
     # Create task in database first
@@ -321,17 +323,19 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at, agent_occurrence_id, context_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             "task-resolve",
             "test-channel",
             "Test task",
             "active",
-            0,
+            5,
             time_service.now().isoformat(),
             time_service.now().isoformat(),
+            "default",
+            '{"correlation_id": "test-correlation-123"}',
         ),
     )
     conn.commit()
@@ -347,7 +351,7 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     )
     deferral_id = await wise_authority_service.send_deferral(deferral)
 
-    # Resolve it
+    # Resolve it with approval
     response = DeferralResponse(
         approved=True, reason="Approved after review", wa_id="wa-2025-06-24-AUTH01", signature="test-signature"
     )
@@ -355,9 +359,45 @@ async def test_resolve_deferral(wise_authority_service, time_service, temp_db):
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
     assert resolved is True
 
-    # Check it was marked as resolved by verifying no pending deferrals remain
+    # Check original task was marked as COMPLETED
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT status, outcome FROM tasks WHERE task_id = ?", ("task-resolve",))
+    row = cursor.fetchone()
+    assert row is not None
+    status, outcome = row
+    assert status == "completed"
+    assert "Approved" in outcome
+    assert "wa-2025-06-24-AUTH01" in outcome
+
+    # Check new guidance task was created
+    cursor.execute(
+        "SELECT task_id, description, status, priority, parent_task_id, context_json FROM tasks WHERE parent_task_id = ?",
+        ("task-resolve",),
+    )
+    guidance_row = cursor.fetchone()
+    assert guidance_row is not None
+    guidance_task_id, description, status, priority, parent_task_id, context_json = guidance_row
+
+    assert status == "pending"
+    assert parent_task_id == "task-resolve"
+    assert "[WA GUIDANCE]" in description
+    assert "Approved after review" in description
+    assert priority == 5  # Same priority as original
+
+    # Check context includes WA guidance
+    import json
+
+    context = json.loads(context_json)
+    assert "wa_guidance" in context
+    assert context["wa_guidance"] == "Approved after review"
+    assert context["original_task_id"] == "task-resolve"
+    assert context["resolved_deferral_id"] == deferral_id
+
+    conn.close()
+
+    # Check no pending deferrals remain (original marked complete)
     pending = await wise_authority_service.get_pending_deferrals()
-    # Should be empty after resolution
     assert len(pending) == 0
 
 
@@ -489,7 +529,7 @@ async def test_grant_revoke_permissions(wise_authority_service):
 
 @pytest.mark.asyncio
 async def test_deferral_with_modified_time(wise_authority_service, time_service, temp_db):
-    """Test resolving deferral with modified time."""
+    """Test resolving deferral with modified time creates new task."""
     await wise_authority_service.start()
 
     # Create task in database first
@@ -499,8 +539,8 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (task_id, channel_id, description, status, priority, created_at, updated_at, agent_occurrence_id, context_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             "task-mod-time",
@@ -510,6 +550,8 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
             0,
             time_service.now().isoformat(),
             time_service.now().isoformat(),
+            "default",
+            '{"correlation_id": "test-mod-time-123"}',
         ),
     )
     conn.commit()
@@ -539,8 +581,14 @@ async def test_deferral_with_modified_time(wise_authority_service, time_service,
     resolved = await wise_authority_service.resolve_deferral(deferral_id, response)
     assert resolved is True
 
-    # Resolution with modification should succeed
-    # The actual defer_until modification is handled during resolution
+    # Resolution with modification should succeed and create new task
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT status FROM tasks WHERE task_id = ?", ("task-mod-time",))
+    row = cursor.fetchone()
+    assert row is not None
+    assert row[0] == "completed"
+    conn.close()
 
 
 # ========== Helper Method Tests ==========

@@ -22,7 +22,8 @@ from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
+from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     DeferralApprovalContext,
@@ -500,8 +501,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         return result
 
     async def resolve_deferral(self, deferral_id: str, response: DeferralResponse) -> bool:
-        """Resolve a deferral by updating task status and adding resolution to context."""
+        """Resolve a deferral by creating a new guidance task.
+
+        When a deferral is resolved:
+        1. Original deferred task is marked COMPLETED with outcome
+        2. New guidance TASK is created (not just a thought) to ensure proper billing
+        3. New task copies context from original and includes WA guidance
+        4. New task is PENDING and ready for normal processing
+
+        This ensures:
+        - New billing cycle starts (new task = new credit charge)
+        - Original task/thought history preserved
+        - Proper task resumption flow
+        """
         try:
+            from ciris_engine.logic.utils.task_thought_factory import create_task
+
             conn = get_db_connection(db_path=self.db_path)
             cursor = conn.cursor()
 
@@ -553,11 +568,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     conn.close()
                     return False
 
-            # Get existing context
+            # Get existing task details
             placeholder = self._get_placeholder()
             cursor.execute(
                 f"""
-                SELECT context_json FROM tasks
+                SELECT task_id, channel_id, description, priority, context_json, agent_occurrence_id
+                FROM tasks
                 WHERE task_id = {placeholder} AND status = 'deferred'
             """,
                 (task_id,),
@@ -569,15 +585,30 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 conn.close()
                 return False
 
-            # Update context with resolution
+            # Handle both dict (PostgreSQL) and tuple (SQLite) row formats
+            if isinstance(row, dict):
+                original_task_id = row["task_id"]
+                channel_id = row["channel_id"]
+                original_description = row["description"]
+                priority = row["priority"]
+                context_json = row["context_json"]
+                agent_occurrence_id = row["agent_occurrence_id"]
+            else:
+                original_task_id, channel_id, original_description, priority, context_json, agent_occurrence_id = row
+
+            # Parse existing context
             context = {}
-            if row[0]:
+            if context_json:
                 try:
-                    context = json.loads(row[0])
+                    # Handle both string JSON and pre-parsed dict (PostgreSQL jsonb)
+                    if isinstance(context_json, dict):
+                        context = context_json
+                    else:
+                        context = json.loads(context_json)
                 except json.JSONDecodeError:
                     pass
 
-            # Add resolution to deferral info
+            # Add resolution to deferral info in the original task
             if "deferral" in context:
                 context["deferral"]["resolution"] = {
                     "approved": response.approved,
@@ -586,34 +617,130 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     "resolved_at": self._now().isoformat(),
                 }
 
-            # If approved, add guidance to context for the agent
-            if response.approved and response.reason:
-                context["wa_guidance"] = response.reason
-                # Track guidance provided via deferral resolution
-                self._guidance_provided_count += 1
+            # Mark original deferred task as COMPLETED with outcome
+            if response.approved:
+                outcome = f"Resolved by WA {response.wa_id}: Approved"
+            else:
+                outcome = f"Rejected by WA {response.wa_id}: {response.reason}"
 
-            # Update task status to pending so it will be picked up
             cursor.execute(
                 f"""
                 UPDATE tasks
-                SET status = 'pending',
+                SET status = 'completed',
                     context_json = {placeholder},
+                    outcome = {placeholder},
                     updated_at = {placeholder}
                 WHERE task_id = {placeholder}
             """,
-                (json.dumps(context), self._now().isoformat(), task_id),
+                (json.dumps(context), outcome, self._now().isoformat(), task_id),
             )
 
             if cursor.rowcount == 0:
-                logger.error(f"Failed to update task {task_id}")
+                logger.error(f"Failed to update original task {task_id}")
                 conn.close()
                 return False
+
+            logger.info(f"Marked original deferred task {task_id} as COMPLETED with outcome")
+
+            # If approved, create a NEW guidance task
+            if response.approved and response.reason:
+                # Track guidance provided via deferral resolution
+                self._guidance_provided_count += 1
+
+                # Create new context for guidance task - copy from original and add guidance
+                guidance_context_dict = context.copy()
+                guidance_context_dict["wa_guidance"] = response.reason
+                guidance_context_dict["original_task_id"] = original_task_id
+                guidance_context_dict["resolved_deferral_id"] = deferral_id
+
+                # Always generate a NEW correlation_id for the guidance task
+                # Tasks have a unique index on (agent_occurrence_id, correlation_id)
+                # so reusing the original would cause a constraint violation
+                import uuid
+                correlation_id = str(uuid.uuid4())
+
+                # Store original correlation_id in context for linkage/tracing
+                if "correlation_id" in context:
+                    guidance_context_dict["original_correlation_id"] = context["correlation_id"]
+
+                # Build TaskContext from the guidance context dict
+                task_context = TaskContext(
+                    channel_id=channel_id,
+                    user_id=context.get("user_id"),
+                    correlation_id=correlation_id,
+                    parent_task_id=original_task_id,
+                    agent_occurrence_id=agent_occurrence_id,
+                )
+
+                # Create new task description incorporating WA guidance
+                new_description = (
+                    f"[WA GUIDANCE] Original: {original_description}\n\n"
+                    f"WA Response: {response.reason}"
+                )
+
+                # Use factory to create new guidance task
+                guidance_task = create_task(
+                    description=new_description,
+                    channel_id=channel_id,
+                    agent_occurrence_id=agent_occurrence_id,
+                    correlation_id=correlation_id,
+                    time_service=self._time_service,
+                    status=TaskStatus.PENDING,
+                    priority=priority if priority is not None else 5,
+                    user_id=context.get("user_id"),
+                    parent_task_id=original_task_id,
+                    context=task_context,
+                )
+
+                # Add the guidance task to database
+                # We need to manually insert since we're already in a transaction
+                task_json = {
+                    "task_id": guidance_task.task_id,
+                    "channel_id": guidance_task.channel_id,
+                    "agent_occurrence_id": guidance_task.agent_occurrence_id,
+                    "description": guidance_task.description,
+                    "status": guidance_task.status.value,
+                    "priority": guidance_task.priority,
+                    "created_at": guidance_task.created_at,
+                    "updated_at": guidance_task.updated_at,
+                    "parent_task_id": guidance_task.parent_task_id,
+                    "context_json": json.dumps(guidance_context_dict),
+                }
+
+                cursor.execute(
+                    f"""
+                    INSERT INTO tasks (
+                        task_id, channel_id, agent_occurrence_id, description,
+                        status, priority, created_at, updated_at, parent_task_id, context_json
+                    ) VALUES (
+                        {placeholder}, {placeholder}, {placeholder}, {placeholder},
+                        {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}
+                    )
+                    """,
+                    (
+                        task_json["task_id"],
+                        task_json["channel_id"],
+                        task_json["agent_occurrence_id"],
+                        task_json["description"],
+                        task_json["status"],
+                        task_json["priority"],
+                        task_json["created_at"],
+                        task_json["updated_at"],
+                        task_json["parent_task_id"],
+                        task_json["context_json"],
+                    ),
+                )
+
+                logger.info(
+                    f"Created new guidance task {guidance_task.task_id} for resolved deferral {deferral_id}"
+                )
 
             conn.commit()
             conn.close()
 
             logger.info(
-                f"Deferral {deferral_id} {'approved' if response.approved else 'rejected'} by {response.wa_id}, task {task_id} now pending"
+                f"Deferral {deferral_id} {'approved' if response.approved else 'rejected'} by {response.wa_id}, "
+                f"original task {task_id} completed, new guidance task created"
             )
             return True
 

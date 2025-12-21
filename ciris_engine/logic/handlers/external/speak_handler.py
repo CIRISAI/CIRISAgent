@@ -171,6 +171,24 @@ class SpeakHandler(BaseActionHandler):
 
         final_thought_status = ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED
 
+        # If SPEAK failed, inject an error message into the channel history
+        if not success:
+            try:
+                comm_bus = self.bus_manager.communication
+                if comm_bus:
+                    error_message = (
+                        "Failed to deliver agent response. The message could not be sent to the channel."
+                    )
+                    # Try to send system error message via the communication bus
+                    comm_service = await comm_bus.get_service("speak_handler")
+                    if comm_service and hasattr(comm_service, "send_system_message"):
+                        await comm_service.send_system_message(
+                            channel_id=channel_id, content=error_message, message_type="error"
+                        )
+                        logger.info(f"Injected error message into channel {channel_id} after SPEAK failure")
+            except Exception as e:
+                logger.warning(f"Could not inject error message after SPEAK failure: {e}")
+
         # Build error context if needed
         assert isinstance(params, SpeakParams)  # Type assertion - validated earlier
         _follow_up_error_context = None if success else _build_speak_error_context(params, thought_id)
@@ -225,8 +243,9 @@ class SpeakHandler(BaseActionHandler):
         persistence.add_correlation(correlation, self.time_service)
 
         follow_up_text = (
-            f"CIRIS_FOLLOW_UP_THOUGHT: Message sent to channel {channel_id}. "
-            "If this task is complete, use TASK_COMPLETE. New user messages create new tasks automatically."
+            f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
+            "Speaking repeatedly on the same task is not useful - if you have nothing new to add, use TASK_COMPLETE. "
+            "New user messages will create new tasks automatically."
             if success
             else f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK action failed for thought {thought_id}."
         )

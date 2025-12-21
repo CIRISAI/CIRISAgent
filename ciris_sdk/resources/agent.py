@@ -73,6 +73,7 @@ class ConversationMessage(BaseModel):
     content: str = Field(..., description="Message content")
     timestamp: datetime = Field(..., description="When sent")
     is_agent: bool = Field(..., description="Whether this was from the agent")
+    message_type: str = Field("user", description="Type of message (user, agent, system, error)")
 
 
 class ConversationHistory(BaseModel):

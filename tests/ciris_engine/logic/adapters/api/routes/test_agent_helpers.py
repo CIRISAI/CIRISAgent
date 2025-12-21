@@ -23,6 +23,7 @@ from ciris_engine.logic.adapters.api.routes.agent import (
     _convert_service_message_to_conversation,
     _convert_timestamp,
     _create_conversation_message_from_mock,
+    _determine_message_type,
     _expand_mock_messages,
     _fetch_messages_from_channels,
     _get_admin_channels,
@@ -35,6 +36,7 @@ from ciris_engine.logic.adapters.api.routes.agent import (
     _get_memory_usage,
     _get_version_info,
     _handle_websocket_subscription_action,
+    _inject_error_to_channel,
     _register_websocket_client,
     _safe_convert_message_timestamp,
     _sort_and_filter_messages,
@@ -1036,3 +1038,167 @@ class TestCognitiveStateHelpers:
         result = _get_cognitive_state(runtime)
 
         assert result == "42"  # str(42) = "42"
+
+
+class TestMessageTypeHelpers:
+    """Test helper functions for message type determination."""
+
+    def test_determine_message_type_explicit_user(self):
+        """Test determining message type with explicit 'user' attribute."""
+        msg = Mock()
+        msg.message_type = "user"
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "user"
+
+    def test_determine_message_type_explicit_agent(self):
+        """Test determining message type with explicit 'agent' attribute."""
+        msg = Mock()
+        msg.message_type = "agent"
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "agent"
+
+    def test_determine_message_type_explicit_system(self):
+        """Test determining message type with explicit 'system' attribute."""
+        msg = Mock()
+        msg.message_type = "SYSTEM"  # Test case insensitivity
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "system"
+
+    def test_determine_message_type_explicit_error(self):
+        """Test determining message type with explicit 'error' attribute."""
+        msg = Mock()
+        msg.message_type = "Error"  # Test case insensitivity
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "error"
+
+    def test_determine_message_type_from_is_agent_flag(self):
+        """Test determining message type from is_agent flag."""
+        msg = Mock(spec=[])  # No message_type attribute
+
+        result = _determine_message_type(msg, is_agent=True)
+
+        assert result == "agent"
+
+    def test_determine_message_type_from_error_author(self):
+        """Test determining message type from 'error' author."""
+        msg = Mock(spec=["author_name", "author_id"])
+        msg.author_name = None
+        msg.author_id = "error"
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "error"
+
+    def test_determine_message_type_from_system_author(self):
+        """Test determining message type from 'system' author."""
+        msg = Mock(spec=["author_name", "author_id"])
+        msg.author_name = "system"
+        msg.author_id = None
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "system"
+
+    def test_determine_message_type_from_ciris_system_author(self):
+        """Test determining message type from 'ciris_system' author."""
+        msg = Mock(spec=["author_name", "author_id"])
+        msg.author_name = "ciris_system"
+        msg.author_id = None
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "system"
+
+    def test_determine_message_type_default_user(self):
+        """Test default message type is 'user'."""
+        msg = Mock(spec=["author_name", "author_id"])
+        msg.author_name = "regular_user"
+        msg.author_id = "user123"
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "user"
+
+    def test_determine_message_type_invalid_explicit_type(self):
+        """Test with invalid explicit message type falls through to inference."""
+        msg = Mock()
+        msg.message_type = "invalid_type"
+        msg.author_name = None
+        msg.author_id = "user123"
+
+        result = _determine_message_type(msg, is_agent=False)
+
+        assert result == "user"
+
+
+class TestErrorInjectionHelpers:
+    """Test helper functions for error injection to channels."""
+
+    @pytest.mark.asyncio
+    async def test_inject_error_to_channel_success(self):
+        """Test successful error injection to channel."""
+        request = Mock()
+        comm_service = Mock()
+        comm_service.send_system_message = AsyncMock()
+        request.app.state.communication_service = comm_service
+
+        await _inject_error_to_channel(request, "channel123", "Test error message")
+
+        comm_service.send_system_message.assert_called_once_with(
+            channel_id="channel123",
+            content="Test error message",
+            message_type="error",
+        )
+
+    @pytest.mark.asyncio
+    async def test_inject_error_to_channel_no_comm_service(self, caplog):
+        """Test error injection with no communication service."""
+        request = Mock()
+        request.app.state.communication_service = None
+
+        # Should not raise exception
+        await _inject_error_to_channel(request, "channel123", "Test error message")
+
+        # No error should be logged since service is None
+        assert "Could not inject error message" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_inject_error_to_channel_missing_method(self, caplog):
+        """Test error injection with comm service missing method."""
+        request = Mock()
+        comm_service = Mock(spec=[])  # No send_system_message method
+        request.app.state.communication_service = comm_service
+
+        # Should not raise exception
+        await _inject_error_to_channel(request, "channel123", "Test error message")
+
+    @pytest.mark.asyncio
+    async def test_inject_error_to_channel_exception(self, caplog):
+        """Test error injection handles exceptions gracefully."""
+        request = Mock()
+        comm_service = Mock()
+        comm_service.send_system_message = AsyncMock(side_effect=Exception("Service error"))
+        request.app.state.communication_service = comm_service
+
+        # Should not raise exception
+        await _inject_error_to_channel(request, "channel123", "Test error message")
+
+        assert "Could not inject error message to channel" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_inject_error_to_channel_with_getattr_fallback(self):
+        """Test error injection using getattr for communication_service."""
+        request = Mock()
+        # Simulate attribute access via getattr
+        request.app.state = Mock(spec=[])  # No communication_service attribute
+
+        # Should not raise exception
+        await _inject_error_to_channel(request, "channel123", "Test error message")

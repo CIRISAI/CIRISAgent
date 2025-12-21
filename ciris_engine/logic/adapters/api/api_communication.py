@@ -141,6 +141,82 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         if len(self._response_times) > self._max_response_times:
             self._response_times = self._response_times[-self._max_response_times :]
 
+    async def send_system_message(
+        self, channel_id: str, content: str, message_type: str = "system", author_name: str = "System"
+    ) -> bool:
+        """
+        Send a system or error message to a channel.
+
+        Args:
+            channel_id: Target channel
+            content: Message content
+            message_type: Type of message (system, error)
+            author_name: Name to display as author (default: System)
+
+        Returns:
+            True if message was sent successfully
+        """
+        import uuid
+
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.telemetry.core import (
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
+        start_time = datetime.now(timezone.utc)
+        logger.info(
+            f"[SEND_SYSTEM_MESSAGE] channel_id={channel_id}, message_type={message_type}, content_len={len(content)}"
+        )
+
+        try:
+            # Create correlation for tracking with message_type in parameters
+            correlation_id = str(uuid.uuid4())
+            correlation = ServiceCorrelation(
+                correlation_id=correlation_id,
+                service_type="api",
+                handler_name="APIAdapter",
+                action_type="speak",
+                request_data=ServiceRequestData(
+                    service_type="api",
+                    method_name="speak",
+                    channel_id=channel_id,
+                    parameters={"content": content, "channel_id": channel_id, "message_type": message_type},
+                    request_timestamp=start_time,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, result_summary=f"{message_type} message sent", execution_time_ms=0, response_timestamp=start_time
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                created_at=start_time,
+                updated_at=start_time,
+                timestamp=start_time,
+            )
+
+            time_service = getattr(self, "_time_service", None)
+            persistence.add_correlation(correlation, time_service)
+            logger.debug(f"Created {message_type} message correlation for channel {channel_id}")
+
+            # Try WebSocket first
+            if await self._send_websocket_message(channel_id, content):
+                return True
+
+            # Queue for HTTP response
+            await self._response_queue.put({"channel_id": channel_id, "content": content})
+
+            # Track successful request
+            self._track_request()
+            self._track_response_time(start_time)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send {message_type} message: {e}")
+            self._track_error(e)
+            return False
+
     async def send_message(self, channel_id: str, content: str) -> bool:
         """Send message through API response or WebSocket."""
         start_time = datetime.now(timezone.utc)
@@ -197,6 +273,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         """Create a FetchedMessage from a 'speak' correlation (outgoing agent message)."""
         params = self._extract_parameters(correlation.request_data)
         content = params.get("content", "")
+        message_type = params.get("message_type", "agent")
 
         return FetchedMessage(
             message_id=correlation.correlation_id,
@@ -205,6 +282,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             content=content,
             timestamp=self._format_timestamp(correlation),
             is_bot=True,
+            message_type=message_type,
         )
 
     def _create_observe_message(self, correlation: Any) -> FetchedMessage:
@@ -218,6 +296,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             content=params.get("content", ""),
             timestamp=self._format_timestamp(correlation),
             is_bot=False,
+            message_type="user",
         )
 
     def _format_timestamp(self, correlation: Any) -> Optional[str]:

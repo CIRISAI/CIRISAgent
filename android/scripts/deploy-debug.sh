@@ -48,17 +48,123 @@ log_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step()    { echo -e "${CYAN}[STEP]${NC} $1"; }
 
-# Find ADB with multiple fallback locations
-find_adb() {
-    local adb_paths=(
-        "/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
-        "/mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe"
-        "$ANDROID_HOME/platform-tools/adb"
-        "$HOME/Android/Sdk/platform-tools/adb"
-        "$(which adb 2>/dev/null)"
+# Detect if running in WSL2
+is_wsl() {
+    if [[ -f /proc/version ]]; then
+        grep -qi "microsoft\|wsl" /proc/version 2>/dev/null && return 0
+    fi
+    [[ -d /mnt/c/Windows ]] && return 0
+    return 1
+}
+
+# Find Java 17 with multiple fallback locations
+find_java() {
+    local java_paths=(
+        "/usr/lib/jvm/java-17-openjdk-amd64"
+        "/usr/lib/jvm/java-17-openjdk"
+        "/snap/android-studio/current/jbr"
+        "$JAVA_HOME"
     )
 
+    for java_path in "${java_paths[@]}"; do
+        if [[ -n "$java_path" && -x "$java_path/bin/java" ]]; then
+            echo "$java_path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Find Android SDK with multiple fallback locations
+find_android_sdk() {
+    local sdk_paths=(
+        "$ANDROID_HOME"
+        "$HOME/Android/Sdk"
+        "/opt/android-sdk"
+        "/usr/lib/android-sdk"
+    )
+
+    for sdk_path in "${sdk_paths[@]}"; do
+        if [[ -n "$sdk_path" && -d "$sdk_path/platform-tools" ]]; then
+            echo "$sdk_path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Setup keystore environment variables
+setup_keystore() {
+    local keystore_paths=(
+        "$HOME/ciris-release-key.jks"
+        "$ANDROID_DIR/ciris-release-key.jks"
+        "$PROJECT_ROOT/ciris-release-key.jks"
+    )
+
+    local keystore_path=""
+    for path in "${keystore_paths[@]}"; do
+        if [[ -f "$path" ]]; then
+            keystore_path="$path"
+            break
+        fi
+    done
+
+    if [[ -z "$keystore_path" ]]; then
+        log_error "Release keystore not found. Checked:"
+        for path in "${keystore_paths[@]}"; do
+            echo "  - $path"
+        done
+        echo ""
+        echo "Create a keystore with:"
+        echo "  keytool -genkeypair -v -keystore ~/ciris-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias ciris-key"
+        return 1
+    fi
+
+    export CIRIS_KEYSTORE_PATH="$keystore_path"
+
+    # Set default password if not already set
+    if [[ -z "$CIRIS_KEYSTORE_PASSWORD" ]]; then
+        # Try common default passwords
+        export CIRIS_KEYSTORE_PASSWORD="${CIRIS_KEYSTORE_PASSWORD:-changeme123}"
+    fi
+    if [[ -z "$CIRIS_KEY_PASSWORD" ]]; then
+        export CIRIS_KEY_PASSWORD="${CIRIS_KEY_PASSWORD:-$CIRIS_KEYSTORE_PASSWORD}"
+    fi
+
+    log_info "Keystore: $keystore_path"
+    return 0
+}
+
+# Find ADB with environment-aware fallback locations
+find_adb() {
+    local adb_paths=()
+
+    if is_wsl; then
+        # WSL2: Prefer Windows ADB for USB device access
+        adb_paths=(
+            "/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+            "/mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+            "/mnt/c/Program Files/Android/Android Studio/platform-tools/adb.exe"
+            "$ANDROID_HOME/platform-tools/adb"
+            "$HOME/Android/Sdk/platform-tools/adb"
+            "$(which adb 2>/dev/null)"
+        )
+    else
+        # Native Linux: Prefer Linux ADB
+        adb_paths=(
+            "$ANDROID_HOME/platform-tools/adb"
+            "$HOME/Android/Sdk/platform-tools/adb"
+            "/opt/android-sdk/platform-tools/adb"
+            "/usr/lib/android-sdk/platform-tools/adb"
+            "/usr/bin/adb"
+            "$(which adb 2>/dev/null)"
+        )
+    fi
+
     for adb in "${adb_paths[@]}"; do
+        # Handle glob patterns (e.g., /mnt/c/Users/*)
         for expanded in $adb; do
             if [[ -x "$expanded" ]]; then
                 echo "$expanded"
@@ -183,13 +289,26 @@ fi
 DEVICE_MODEL=$(adb_cmd shell getprop ro.product.model 2>/dev/null | tr -d '\r' || echo "Unknown")
 log_success "Device: $DEVICE ($DEVICE_MODEL)"
 
-# Ensure Java 17
-export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
-if [[ ! -d "$JAVA_HOME" ]]; then
-    log_error "Java 17 not found at $JAVA_HOME"
+# Find and export Java
+if ! JAVA_HOME=$(find_java); then
+    log_error "Java 17 not found. Please install: sudo apt install openjdk-17-jdk"
     exit 1
 fi
+export JAVA_HOME
 log_info "Java: $JAVA_HOME"
+
+# Find and export Android SDK
+if ! ANDROID_HOME=$(find_android_sdk); then
+    log_error "Android SDK not found. Please set ANDROID_HOME or install Android Studio."
+    exit 1
+fi
+export ANDROID_HOME
+log_info "Android SDK: $ANDROID_HOME"
+
+# Setup keystore for signing
+if ! setup_keystore; then
+    exit 1
+fi
 
 cd "$ANDROID_DIR"
 

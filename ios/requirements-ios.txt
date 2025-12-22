@@ -1,2 +1,2 @@
 pydantic==2.9.2
-cryptography==42.0.8
+cryptography==44.0.1

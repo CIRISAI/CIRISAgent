@@ -349,8 +349,10 @@ class ApiPlatform(Service):
         if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
             # Update the existing instance's auth_service reference but preserve API keys
             existing_auth_service._auth_service = auth_service
+            # Reset users_loaded so users are reloaded from DB on next access
+            existing_auth_service._users_loaded = False
             logger.info(
-                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference"
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference, reset _users_loaded"
             )
         else:
             # First time initialization - create new instance

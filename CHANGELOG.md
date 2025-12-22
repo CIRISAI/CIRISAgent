@@ -5,6 +5,45 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.9] - 2025-12-21
+
+### Added
+
+- **iOS Build Infrastructure** - Complete iOS app with BeeWare/Toga
+  - iOS WebView app with Python backend via Briefcase
+  - Build scripts: `build-ios.sh`, `deploy-ios.sh`, `full-rebuild.sh`, `pull-logs-ios.sh`
+  - pydantic-core cross-compilation for iOS (arm64)
+  - bcrypt stub using PBKDF2 (pure Python for iOS)
+  - psutil stub with dummy values for iOS resource monitoring
+  - cryptography compatibility shim for asymmetric.types
+
+- **iOS Authentication Fixes**
+  - Case-insensitive username comparison for login
+  - Fixed user loading from database after auth_service injection
+  - Proper .env location handling for iOS first_run
+
+- **Platform Detection Improvements**
+  - Added `is_ios()` detection in path_resolution and platform_detection
+  - iOS-specific paths and configuration
+
+### Fixed
+
+- **Android Build Scripts** - Environment-aware ADB and SDK detection
+  - Scripts now auto-detect WSL2 vs native Linux
+  - Auto-find Java 17 from multiple locations
+  - Auto-find Android SDK from standard paths
+  - Auto-setup keystore with helpful error messages
+  - Updated: `deploy-debug.sh`, `full-rebuild.sh`, `pull-device-logs.sh`, `full-wipe.sh`
+
+### Dependencies
+
+- Pinned httpx==0.27.2 for OpenAI compatibility
+- Added instructor, openai, tenacity for iOS
+
+### Android
+
+- Version bumped to **1.7.42** (build 42)
+
 ## [1.7.8] - 2025-12-21
 
 ### Fixed

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["briefcase"]
+
+[tool.briefcase]
+project_name = "Ciris iOS"
+bundle = "ai.ciris"
+version = "0.1.0"
+url = "https://ciris.ai"
+license.text = "Proprietary"
+author = "CIRIS Team"
+author_email = "team@ciris.ai"
+
+[tool.briefcase.app.ciris_ios]
+formal_name = "Ciris iOS"
+description = "CIRIS Engine on iOS"
+sources = ["src/ciris_ios", "src/ciris_engine", "src/ciris_adapters", "src/ciris_sdk", "src/ios_gui_static"]
+requires = [
+    "pydantic==2.9.2",
+    "cryptography==3.4.8",  # Available in BeeWare repo for Python 3.10
+    "fastapi",
+    "uvicorn",
+    "httpx==0.27.2",
+    "aiosqlite",
+    "aiofiles",
+    "python-dotenv",
+    "pyyaml",  # Pure Python wheel in ../wheels/
+    "pyjwt",
+    "instructor",
+    "openai",
+    "tenacity",
+    "std-nslog"
+]
+# Point pip to local wheels directory for pydantic-core iOS builds
+requirement_installer_args = ["--find-links", "../wheels"]
+
+[tool.briefcase.app.ciris_ios.iOS]
+requires = [
+    "toga-iOS~=0.4.0",
+]
+
+[tool.briefcase.app.ciris_ios.macOS]
+requires = [
+    "toga-cocoa~=0.4.0",
+]

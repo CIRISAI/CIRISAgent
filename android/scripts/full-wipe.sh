@@ -8,13 +8,57 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Detect if running in WSL2
+is_wsl() {
+    if [[ -f /proc/version ]]; then
+        grep -qi "microsoft\|wsl" /proc/version 2>/dev/null && return 0
+    fi
+    [[ -d /mnt/c/Windows ]] && return 0
+    return 1
+}
+
+# Find ADB with environment-aware fallback locations
+find_adb() {
+    local adb_paths=()
+
+    if is_wsl; then
+        # WSL2: Prefer Windows ADB for USB device access
+        adb_paths=(
+            "/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+            "/mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+            "/mnt/c/Program Files/Android/Android Studio/platform-tools/adb.exe"
+            "$ANDROID_HOME/platform-tools/adb"
+            "$HOME/Android/Sdk/platform-tools/adb"
+            "$(which adb 2>/dev/null)"
+        )
+    else
+        # Native Linux: Prefer Linux ADB
+        adb_paths=(
+            "$ANDROID_HOME/platform-tools/adb"
+            "$HOME/Android/Sdk/platform-tools/adb"
+            "/opt/android-sdk/platform-tools/adb"
+            "/usr/lib/android-sdk/platform-tools/adb"
+            "/usr/bin/adb"
+            "$(which adb 2>/dev/null)"
+        )
+    fi
+
+    for adb in "${adb_paths[@]}"; do
+        # Handle glob patterns (e.g., /mnt/c/Users/*)
+        for expanded in $adb; do
+            if [[ -x "$expanded" ]]; then
+                echo "$expanded"
+                return 0
+            fi
+        done
+    done
+
+    return 1
+}
+
 # Find ADB
-if [[ -f "/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe" ]]; then
-    ADB="/mnt/c/Users/moore/AppData/Local/Android/Sdk/platform-tools/adb.exe"
-elif command -v adb &> /dev/null; then
-    ADB="adb"
-else
-    echo "ERROR: adb not found"
+if ! ADB=$(find_adb); then
+    echo "ERROR: adb not found. Please set ANDROID_HOME or install Android SDK."
     exit 1
 fi
 

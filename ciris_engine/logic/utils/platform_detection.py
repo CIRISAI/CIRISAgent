@@ -31,14 +31,24 @@ logger = logging.getLogger(__name__)
 def is_ios() -> bool:
     """Detect if running on iOS platform.
 
-    Currently iOS is not supported for Python execution,
-    but this is here for future compatibility.
+    Checks multiple indicators:
+    - sys.platform == 'ios' (set by BeeWare/Briefcase)
+    - Running under BeeWare with iOS-specific paths
 
     Returns:
-        True if running on iOS (currently always False)
+        True if running on iOS
     """
-    # iOS detection would go here when/if we support it
-    # Could check for specific environment variables or paths
+    # BeeWare/Briefcase sets sys.platform to 'ios'
+    if sys.platform == "ios":
+        return True
+
+    # Check for iOS-specific paths
+    if sys.platform == "darwin":
+        # Check for iOS Simulator or device paths
+        home = str(Path.home())
+        if "CoreSimulator/Devices" in home or "/var/mobile" in home:
+            return True
+
     return False
 
 

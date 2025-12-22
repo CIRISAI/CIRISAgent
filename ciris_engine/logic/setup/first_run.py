@@ -34,7 +34,7 @@ def get_config_paths() -> list[Path]:
 
         Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
     """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_managed
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_ios, is_managed
 
     paths = []
 
@@ -48,6 +48,13 @@ def get_config_paths() -> list[Path]:
         ciris_home = get_ciris_home()
         paths.append(ciris_home / ".env")
         logger.info(f"Android mode: checking {ciris_home / '.env'}")
+        return paths
+
+    # iOS mode: use get_ciris_home() which handles iOS-specific paths
+    if is_ios():
+        ciris_home = get_ciris_home()
+        paths.append(ciris_home / ".env")
+        logger.info(f"iOS mode: checking {ciris_home / '.env'}")
         return paths
 
     # Development mode: check current directory first
@@ -230,13 +237,20 @@ def get_default_config_path() -> Path:
 
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_ios
 
     # Android mode - use get_ciris_home() which handles Android paths
     if is_android():
         ciris_home = get_ciris_home()
         ciris_home.mkdir(parents=True, exist_ok=True)
         logger.info(f"Android mode: config path is {ciris_home / '.env'}")
+        return ciris_home / ".env"
+
+    # iOS mode - use get_ciris_home() which handles iOS paths
+    if is_ios():
+        ciris_home = get_ciris_home()
+        ciris_home.mkdir(parents=True, exist_ok=True)
+        logger.info(f"iOS mode: config path is {ciris_home / '.env'}")
         return ciris_home / ".env"
 
     # Development mode - save in current directory

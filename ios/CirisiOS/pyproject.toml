@@ -19,14 +19,17 @@ requires = [
     "cryptography==3.4.8",  # Available in BeeWare repo for Python 3.10
     "fastapi",
     "uvicorn",
-    "httpx",
+    "httpx==0.27.2",
     "aiosqlite",
     "aiofiles",
     "python-dotenv",
+    "pyyaml",  # Pure Python wheel in ../wheels/
+    "pyjwt",
+    "instructor",
+    "openai",
+    "tenacity",
     "std-nslog"
 ]
-# Note: pyyaml and jinja2 not available for iOS (require C extensions)
-# CIRIS engine may need iOS-specific modifications
 # Point pip to local wheels directory for pydantic-core iOS builds
 requirement_installer_args = ["--find-links", "../wheels"]
 

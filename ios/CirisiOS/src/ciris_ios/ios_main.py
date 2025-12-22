@@ -124,12 +124,9 @@ def check_ciris_engine() -> bool:
 def setup_ios_environment() -> Path:
     """Configure environment for iOS on-device operation.
 
-    Returns the CIRIS home directory path.
+    Sets up CIRIS_HOME and loads .env if present.
+    First-run detection is handled by is_first_run() which is iOS-aware.
     """
-    print("=" * 50)
-    print("Setting up iOS environment...")
-    print("=" * 50)
-
     # Get the app's Documents directory for persistent storage
     home = Path.home()
 
@@ -139,39 +136,35 @@ def setup_ios_environment() -> Path:
     (ciris_home / "databases").mkdir(parents=True, exist_ok=True)
     (ciris_home / "logs").mkdir(parents=True, exist_ok=True)
 
-    # Configure CIRIS environment
+    # Configure CIRIS environment - use standard paths
+    # CIRIS_HOME is used by path_resolution.py for iOS-aware path detection
     os.environ.setdefault("CIRIS_HOME", str(ciris_home))
     os.environ.setdefault("CIRIS_DATA_DIR", str(ciris_home))
     os.environ.setdefault("CIRIS_DB_PATH", str(ciris_home / "databases" / "ciris.db"))
     os.environ.setdefault("CIRIS_LOG_DIR", str(ciris_home / "logs"))
 
-    # Load .env file if it exists
+    # Load .env file if it exists (sets OPENAI_API_KEY, OPENAI_API_BASE, etc.)
+    # First-run detection is handled by is_first_run() - don't duplicate logic here
     env_file = ciris_home / ".env"
     if env_file.exists():
         try:
             from dotenv import load_dotenv
             load_dotenv(env_file, override=True)
-            print(f"Loaded .env from {env_file}")
-            print(f"OPENAI_API_KEY set: {bool(os.environ.get('OPENAI_API_KEY'))}")
-            print(f"OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE', 'NOT SET')}")
+            logger.info(f"Loaded configuration from {env_file}")
         except ImportError:
-            print("dotenv not available, skipping .env loading")
+            logger.warning("dotenv not available, skipping .env loading")
     else:
-        print(f"No .env file at {env_file}")
+        logger.info(f"No .env file at {env_file} - is_first_run() will detect this")
 
-    # Disable cloud components for offline operation
+    # Disable ciris.ai cloud components
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
 
-    # Optimize for mobile
+    # Optimize for low-resource devices
     os.environ.setdefault("CIRIS_MAX_WORKERS", "1")
     os.environ.setdefault("CIRIS_LOG_LEVEL", "INFO")
     os.environ.setdefault("CIRIS_API_HOST", "127.0.0.1")
     os.environ.setdefault("CIRIS_API_PORT", "8080")
-
-    print(f"CIRIS_HOME: {ciris_home}")
-    print("Environment setup complete.")
-    print("")
 
     return ciris_home
 
@@ -180,28 +173,56 @@ def setup_ios_environment() -> Path:
 # RUNTIME STARTUP
 # =============================================================================
 
-async def start_mobile_runtime():
-    """Start the full CIRIS runtime with API adapter for iOS."""
-    from ciris_engine.logic.adapters.api.config import APIAdapterConfig
-    from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
-    from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig, SecurityConfig
+def _runtime_log(msg):
+    """Log to both stdout and stderr for visibility."""
+    print(msg, flush=True)
+    sys.stderr.write(f"{msg}\n")
+    sys.stderr.flush()
 
-    print("=" * 50)
-    print("Starting CIRIS Mobile Runtime")
-    print("=" * 50)
-    print(f"API endpoint: http://127.0.0.1:8080")
-    print(f"LLM endpoint: {os.environ.get('OPENAI_API_BASE', 'NOT CONFIGURED')}")
-    print("")
+
+async def start_mobile_runtime():
+    """Start the full CIRIS runtime with API adapter for iOS.
+
+    Auto-loads adapters based on platform capabilities:
+    - api: Always loaded (core functionality)
+    """
+    _runtime_log("[CIRIS RUNTIME] ========================================")
+    _runtime_log("[CIRIS RUNTIME] start_mobile_runtime() called")
+    _runtime_log("[CIRIS RUNTIME] ========================================")
+
+    try:
+        _runtime_log("[CIRIS RUNTIME] Importing APIAdapterConfig...")
+        from ciris_engine.logic.adapters.api.config import APIAdapterConfig
+
+        _runtime_log("[CIRIS RUNTIME] Importing CIRISRuntime...")
+        from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+        _runtime_log("[CIRIS RUNTIME] Importing AdapterConfig...")
+        from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+        _runtime_log("[CIRIS RUNTIME] Importing path_resolution...")
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home, get_data_dir
+
+        _runtime_log("[CIRIS RUNTIME] Importing config schemas...")
+        from ciris_engine.schemas.config.essential import DatabaseConfig, EssentialConfig, SecurityConfig
+
+        _runtime_log("[CIRIS RUNTIME] All imports successful!")
+    except Exception as e:
+        _runtime_log(f"[CIRIS RUNTIME] !!!!! IMPORT ERROR !!!!!")
+        _runtime_log(f"[CIRIS RUNTIME] Error: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        for line in tb.split('\n'):
+            _runtime_log(f"[CIRIS RUNTIME] {line}")
+        return
+
+    _runtime_log("[CIRIS RUNTIME] Starting CIRIS on-device runtime...")
+    _runtime_log("[CIRIS RUNTIME] API endpoint: http://127.0.0.1:8080")
 
     # Get iOS-specific paths
     ciris_home = get_ciris_home()
     data_dir = get_data_dir()
-
-    print(f"CIRIS_HOME: {ciris_home}")
-    print(f"Data dir: {data_dir}")
-    print("")
+    logger.info(f"Using iOS config - CIRIS_HOME: {ciris_home}, data_dir: {data_dir}")
 
     # Create security config with absolute paths
     security_config = SecurityConfig(
@@ -233,8 +254,6 @@ async def start_mobile_runtime():
 
     startup_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
 
-    print("Creating CIRIS runtime...")
-
     # Create the full CIRIS runtime
     runtime = CIRISRuntime(
         adapter_types=adapter_types,
@@ -246,15 +265,10 @@ async def start_mobile_runtime():
         port=8080,
     )
 
-    # Initialize all services
-    print("Initializing services...")
+    # Initialize all services (22 services, buses, etc.)
+    logger.info("Initializing CIRIS services...")
     await runtime.initialize()
-    print("")
-    print("=" * 50)
-    print("CIRIS runtime initialized successfully")
-    print("API server starting on http://127.0.0.1:8080")
-    print("=" * 50)
-    print("")
+    logger.info("CIRIS runtime initialized successfully")
 
     # Run the runtime
     try:
@@ -320,21 +334,36 @@ def start_runtime_thread():
     """Start the CIRIS runtime in a background thread."""
     import threading
 
+    def _log(msg):
+        """Log to both stdout and stderr for visibility."""
+        print(msg, flush=True)
+        sys.stderr.write(f"{msg}\n")
+        sys.stderr.flush()
+
     def run_async_runtime():
         try:
-            # Setup environment first
-            setup_ios_environment()
+            _log("[CIRIS THREAD] ========================================")
+            _log("[CIRIS THREAD] Starting CIRIS runtime thread")
+            _log("[CIRIS THREAD] ========================================")
+
+            # Environment already setup by app.py - skip duplicate setup
+            _log("[CIRIS THREAD] Calling asyncio.run(start_mobile_runtime())...")
 
             # Run the async runtime
             asyncio.run(start_mobile_runtime())
+
+            _log("[CIRIS THREAD] asyncio.run() completed normally")
         except Exception as e:
-            print(f"Runtime thread error: {e}")
+            _log(f"[CIRIS THREAD] !!!!! RUNTIME ERROR !!!!!")
+            _log(f"[CIRIS THREAD] Error: {e}")
             import traceback
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            for line in tb.split('\n'):
+                _log(f"[CIRIS THREAD] {line}")
 
     thread = threading.Thread(target=run_async_runtime, daemon=True, name="CIRIS-Runtime")
     thread.start()
-    print("CIRIS runtime started in background thread")
+    print("CIRIS runtime started in background thread", flush=True)
     return thread
 
 

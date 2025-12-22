@@ -4,6 +4,9 @@ CIRIS iOS App - WebView-based GUI with Python Backend
 Displays startup checks during initialization, then loads the CIRIS GUI
 from the local FastAPI server once the backend is ready.
 """
+# Import compatibility shims FIRST before any CIRIS imports
+import ciris_ios.crypto_compat  # noqa: F401 - Provides asymmetric.types for old cryptography
+
 import sys
 import threading
 import time
@@ -201,7 +204,7 @@ class CirisiOS(toga.App):
 
             import httpx
             try:
-                response = httpx.get("http://127.0.0.1:8080/health", timeout=5.0)
+                response = httpx.get("http://127.0.0.1:8080/v1/system/health", timeout=5.0)
                 if response.status_code == 200:
                     log("API server is ready!")
                     BACKEND_READY = True
@@ -223,7 +226,7 @@ class CirisiOS(toga.App):
                 for i in range(10):
                     time.sleep(2)
                     try:
-                        response = httpx.get("http://127.0.0.1:8080/health", timeout=5.0)
+                        response = httpx.get("http://127.0.0.1:8080/v1/system/health", timeout=5.0)
                         if response.status_code == 200:
                             log("API server is ready!")
                             BACKEND_READY = True

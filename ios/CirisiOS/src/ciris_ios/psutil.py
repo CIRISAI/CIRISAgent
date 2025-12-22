@@ -200,3 +200,12 @@ class NoSuchProcess(Exception):
 class AccessDenied(Exception):
     """Exception raised when access is denied."""
     pass
+
+
+# =============================================================================
+# REGISTER AS 'psutil' IN sys.modules
+# =============================================================================
+
+import sys
+print("[iOS] Using psutil stub (pure Python)", flush=True)
+sys.modules['psutil'] = sys.modules[__name__]

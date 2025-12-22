@@ -642,7 +642,8 @@ class APIAuthService:
         logger.debug(f"[AUTH DEBUG] Available usernames: {usernames}")
 
         for user in self._users.values():
-            if user.name == username:
+            # Case-insensitive username comparison
+            if user.name.lower() == username.lower():
                 logger.debug(
                     f"[AUTH DEBUG] FOUND user: wa_id={user.wa_id}, name={user.name}, has_password={user.password_hash is not None}"
                 )

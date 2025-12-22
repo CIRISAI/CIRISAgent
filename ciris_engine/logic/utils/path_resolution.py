@@ -64,6 +64,30 @@ def is_android() -> bool:
     return False
 
 
+def is_ios() -> bool:
+    """Detect if running on iOS platform.
+
+    Checks multiple indicators:
+    - sys.platform == 'ios' (set by BeeWare/Briefcase)
+    - Running under BeeWare with iOS-specific paths
+
+    Returns:
+        True if running on iOS
+    """
+    # BeeWare/Briefcase sets sys.platform to 'ios'
+    if sys.platform == "ios":
+        return True
+
+    # Check for iOS-specific paths
+    if sys.platform == "darwin":
+        # Check for iOS Simulator or device paths
+        home = str(Path.home())
+        if "CoreSimulator/Devices" in home or "/var/mobile" in home:
+            return True
+
+    return False
+
+
 def is_managed() -> bool:
     """Detect if running under CIRIS Manager using multiple signals.
 

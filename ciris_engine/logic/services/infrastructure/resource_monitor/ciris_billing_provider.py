@@ -59,8 +59,9 @@ class CIRISBillingProvider(CreditGateProtocol):
             fail_open: If True, allow requests when billing backend is unavailable
             transport: Optional custom HTTP transport for testing
         """
-        self._api_key = api_key
-        self._google_id_token = google_id_token
+        # Read from env as fallback if not passed directly
+        self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
+        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
         self._base_url = (base_url or get_billing_url()).rstrip("/")
@@ -150,7 +151,12 @@ class CIRISBillingProvider(CreditGateProtocol):
                 transport=self._transport,
             )
             auth_mode = "JWT (Google ID token)" if self._use_jwt_auth else "API Key"
-            token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
+            if self._use_jwt_auth:
+                token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
+                token_length = len(self._google_id_token) if self._google_id_token else 0
+            else:
+                token_preview = self._api_key[:8] + "..." if self._api_key else "None"
+                token_length = len(self._api_key) if self._api_key else 0
             logger.info(
                 "[BILLING_PROVIDER] Started:\n"
                 "  base_url: %s\n"
@@ -163,7 +169,7 @@ class CIRISBillingProvider(CreditGateProtocol):
                 self._base_url,
                 auth_mode,
                 token_preview,
-                len(self._google_id_token) if self._google_id_token else 0,
+                token_length,
                 self._token_refresh_callback is not None,
                 self._cache_ttl,
                 self._fail_open,

@@ -24,6 +24,33 @@ expect class PythonRuntime() {
     suspend fun startServer(): Result<String>
 
     /**
+     * Start Python server with full lifecycle management
+     * Extracted from MainActivity.kt lines 1485-1660
+     *
+     * This handles:
+     * - SmartStartup detection (reconnect vs restart)
+     * - Orphan server shutdown
+     * - Python mobile_main.main() invocation
+     * - Health check polling
+     *
+     * @param onStatus Callback for status updates (for UI)
+     * @return Result with server URL on success
+     */
+    suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String>
+
+    /**
+     * Inject Python configuration from encrypted preferences
+     * Extracted from MainActivity.kt lines 822-852
+     *
+     * Sets environment variables:
+     * - OPENAI_API_BASE
+     * - OPENAI_API_KEY
+     *
+     * @param config Map of config key-value pairs
+     */
+    fun injectPythonConfig(config: Map<String, String>)
+
+    /**
      * Check if CIRIS server is responding to health checks
      * Polls http://localhost:8080/v1/system/health
      * @return Result with true if healthy, false if not yet ready
@@ -53,6 +80,12 @@ expect class PythonRuntime() {
      * Check if server has been started
      */
     fun isServerStarted(): Boolean
+
+    /**
+     * Get the server URL
+     * Default: http://localhost:8080
+     */
+    val serverUrl: String
 }
 
 /**

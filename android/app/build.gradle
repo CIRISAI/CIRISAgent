@@ -129,8 +129,7 @@ android {
 
         debug {
             debuggable true
-            // Use release signing so Google Sign-In works
-            signingConfig signingConfigs.release
+            // Default debug signing (release signing disabled for runtime testing)
         }
     }
 

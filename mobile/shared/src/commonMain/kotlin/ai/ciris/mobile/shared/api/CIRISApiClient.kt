@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.api
 
 import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.viewmodels.SetupCompletionResult
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -103,12 +104,28 @@ class CIRISApiClient(
     }
 
     // Setup wizard (from SetupWizardActivity.kt)
-    suspend fun completeSetup(llmProvider: String, apiKey: String) {
-        client.post("$baseUrl/v1/setup/complete") {
-            setBody(mapOf(
-                "llm_provider" to llmProvider,
-                "api_key" to apiKey
-            ))
+    suspend fun getSetupStatus(): SetupStatusResponse {
+        return client.get("$baseUrl/v1/setup/status").body()
+    }
+
+    suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
+        return try {
+            val response: CompleteSetupResponse = client.post("$baseUrl/v1/setup/complete") {
+                setBody(request)
+            }.body()
+            SetupCompletionResult(
+                success = response.success,
+                message = response.message,
+                agentId = response.agent_id,
+                adminUserId = response.admin_user_id,
+                error = null
+            )
+        } catch (e: Exception) {
+            SetupCompletionResult(
+                success = false,
+                message = "Setup failed",
+                error = e.message ?: "Unknown error"
+            )
         }
     }
 

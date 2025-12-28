@@ -27,7 +27,7 @@ android {
             extractPackages "pydantic_core"
 
             pip {
-                options "--find-links", "../android/app/wheels"  // Reuse existing wheels
+                options "--find-links", "../../android/app/wheels"  // Reuse existing wheels
 
                 // Core dependencies (same as original android/app/build.gradle)
                 install "pydantic-core==2.23.4"
@@ -83,7 +83,7 @@ android {
 
         debug {
             debuggable true
-            signingConfig signingConfigs.release
+            // Use default debug signing config
         }
     }
 
@@ -98,6 +98,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
 
     packaging {
@@ -227,6 +231,6 @@ dependencies {
     implementation "androidx.core:core-ktx:1.12.0"
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
 
-    // Existing native features that aren't in shared yet
-    implementation "com.chaquo.python:gradle:15.0.1"
+    // Google Sign-In (same as original android/ project)
+    implementation "com.google.android.gms:play-services-auth:20.7.0"
 }

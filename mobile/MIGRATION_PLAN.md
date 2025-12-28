@@ -1,754 +1,327 @@
-# CIRIS Mobile Kotlin Multiplatform Migration Plan
+# MainActivity.kt Migration Plan for KMP
 
-## Executive Summary
+## Overview
 
-**Goal:** Unify Android and iOS mobile apps using Kotlin Multiplatform + Compose Multiplatform
+Migrate 2986-line monolithic `android/app/.../MainActivity.kt` (81 methods) to modular KMP architecture in `mobile/` with minimal code changes and test-driven approach.
 
-**Status:** Ready to execute - scaffold complete, immediate cutover possible
+## Source Analysis
 
-**License:** ✅ Apache 2.0 (Compose) compatible with AGPL 3.0 (CIRIS)
+**File:** `android/app/src/main/java/ai/ciris/mobile/MainActivity.kt`
+- **Lines:** 2986
+- **Methods:** 81
+- **Key Dependencies:** Chaquopy, Google Sign-In, Play Billing, Play Integrity
 
-**Timeline:** Immediate start - parallel development with existing Android app
+### Logical Sections Identified
 
----
-
-## Project Structure
-
-```
-mobile/
-├── shared/                           # KMP shared code (Android + iOS)
-│   ├── src/
-│   │   ├── commonMain/kotlin/       # Shared UI + Business Logic
-│   │   │   ├── api/                 # ✅ CIRISApiClient (replaces OkHttp)
-│   │   │   ├── models/              # ✅ Data models
-│   │   │   ├── viewmodels/          # ✅ InteractViewModel
-│   │   │   ├── ui/screens/          # ✅ InteractScreen (Compose)
-│   │   │   └── CIRISApp.kt          # ✅ Main app entry
-│   │   ├── androidMain/kotlin/      # Android-specific
-│   │   └── iosMain/kotlin/          # iOS-specific
-│   └── build.gradle.kts             # ✅ Created
-├── androidApp/                       # Android wrapper
-│   ├── build.gradle                 # ✅ Created (with Chaquopy)
-│   └── src/main/kotlin/             # Thin wrapper
-└── iosApp/                          # iOS wrapper (native Swift)
-    └── iosApp/                      # Swift UI wrapper
-```
+| Section | Lines | Methods | Purpose |
+|---------|-------|---------|---------|
+| **Startup/UI** | 212-720 | 15 | Splash, lights, phases, elapsed timer |
+| **Python Runtime** | 721-860 | 5 | Chaquopy init, config injection |
+| **Server Management** | 1241-1660 | 10 | Start/stop/health check server |
+| **WebView/JS Bridge** | 854-1240 | 12 | WebView setup, JS interface |
+| **Auth/Token** | 1830-2030 | 8 | Google OAuth, token exchange |
+| **Navigation** | 2030-2550 | 15 | Fragment navigation, menu |
+| **Setup Detection** | 1859-1900 | 3 | First-run detection |
+| **Billing Integration** | 2678-2986 | 8 | Credits, token refresh |
 
 ---
 
-## Phase 1: IMMEDIATE (Days 1-3) - Core Infrastructure
+## Migration Strategy: "Extract → Test → Integrate"
 
-### ✅ COMPLETED
-- [x] Project scaffold created
-- [x] Gradle configuration (root, shared, androidApp)
-- [x] Shared models (ChatMessage, SystemStatus, Auth)
-- [x] CIRISApiClient (Ktor - replaces OkHttp)
-- [x] InteractViewModel (shared business logic)
-- [x] InteractScreen (Compose UI - replaces InteractActivity.kt + XML)
+### Principle: Minimal Code Changes
+- **Copy** working methods from android/ → don't rewrite
+- **Wrap** platform-specific code with expect/actual
+- **Test** each module independently before integration
 
-### 🔧 TODO: Build System
-- [ ] Copy `android/app/wheels/` to `mobile/androidApp/wheels/` (pydantic-core wheels)
-- [ ] Test Gradle build: `cd mobile && ./gradlew :shared:build`
-- [ ] Test Android build: `./gradlew :androidApp:assembleDebug`
-- [ ] Verify Chaquopy Python runtime initialization
-- [ ] Test CIRIS engine startup (FastAPI on localhost:8080)
+---
 
-### 🔧 TODO: Android Wrapper App
-- [ ] Create `androidApp/src/main/kotlin/ai/ciris/mobile/MainActivity.kt`
-  - Initialize Python runtime (Chaquopy)
-  - Show startup splash with 22 service lights
-  - Launch Compose UI when ready
-  - Handle authentication (Google Sign-In)
+## Phase 1: Core Infrastructure
+
+### 1.1 Extract PythonRuntimeManager
+**Source:** Lines 721-860, 1485-1660
+**Target:** `shared/src/commonMain/.../platform/PythonRuntimeManager.kt`
+
+Methods to extract:
+- initializePythonAndStartServer() → split into init + start
+- injectPythonConfig()
+- startPythonServer()
+- setupPythonOutputRedirect() → logcat parsing
+
+**Test Strategy:**
+- Test: initialize returns success on valid python home
+- Test: startServer launches mobile_main
+- Test: logcat parser extracts service counts
+- Test: health check returns true when server responds
+
+### 1.2 Extract ServerManager
+**Source:** Lines 1241-1480
+**Target:** `shared/src/commonMain/.../services/ServerManager.kt`
+
+Methods to extract:
+- isExistingServerRunning()
+- shutdownExistingServer()
+- tryAuthenticatedShutdown()
+- waitForServerShutdown()
+- checkServerHealth()
+
+**Test Strategy:**
+- Test: health check parses JSON response correctly
+- Test: shutdown handles 401 unauthorized
+- Test: shutdown handles server not running
+
+---
+
+## Phase 2: Startup UI
+
+### 2.1 Enhance StartupViewModel (existing)
+**Source:** Lines 199-210, 431-620
+**Target:** `shared/src/commonMain/.../viewmodels/StartupViewModel.kt`
+
+State to manage:
+- currentPhase: StartupPhase
+- servicesOnline: Int (0-22)
+- prepStepsCompleted: Int (0-6)
+- elapsedSeconds: Int
+- errorMessage: String?
+- hasError: Boolean
+
+Methods to extract:
+- setPhase()
+- onPrepStepCompleted()
+- onServiceStarted()
+- onErrorDetected()
+- startElapsedTimer() / stopElapsedTimer()
+
+**Test Strategy:**
+- Test: phase transitions correctly from INITIALIZING to LOADING_RUNTIME
+- Test: service count increments uniquely (no duplicates)
+- Test: error detection sets hasError flag
+- Test: elapsed timer increments every second
+
+### 2.2 Enhance StartupScreen (existing)
+**Source:** Lines 504-574 (light creation/animation)
+**Target:** `shared/src/commonMain/.../ui/screens/StartupScreen.kt`
+
+Enhancements needed:
+- Add prep lights (6 lights for pydantic setup)
+- Add phase indicator text
+- Add "Show Logs" / "Back to Splash" toggle
+- Match exact colors from android/
+
+---
+
+## Phase 3: Setup Wizard
+
+### 3.1 Create SetupViewModel
+**Source:** `android/app/.../setup/SetupViewModel.kt` (167 lines)
+**Target:** `shared/src/commonMain/.../viewmodels/SetupViewModel.kt`
+
+State to manage:
+- currentStep: Int (0-2)
+- isGoogleAuth: Boolean
+- llmMode: LlmMode (CIRIS_PROXY / BYOK)
+- llmProvider: String
+- llmApiKey: String
+- llmModel: String
+- username: String (for local auth)
+- password: String (for local auth)
+
+**Test Strategy:**
+- Test: Google auth defaults to CIRIS_PROXY mode
+- Test: non-Google auth forces BYOK mode
+- Test: validation fails without API key in BYOK mode
+- Test: admin password is auto-generated (32 chars)
+
+### 3.2 Create SetupScreen (Compose Multiplatform)
+**Source:** SetupWizardActivity + 3 Fragments (combined ~800 lines)
+**Target:** `shared/src/commonMain/.../ui/screens/SetupScreen.kt`
+
+Single Composable with internal step navigation:
+- Step 0: WelcomeStep (context-aware for Google vs non-Google)
+- Step 1: LlmConfigStep (CIRIS proxy vs BYOK)
+- Step 2: ConfirmStep (summary for Google, account creation for local)
+
+---
+
+## Phase 4: Auth Management
+
+### 4.1 Extract AuthManager
+**Source:** Lines 1903-2030
+**Target:** `shared/src/commonMain/.../platform/AuthManager.kt` (expect/actual)
 
 ```kotlin
-// mobile/androidApp/src/main/kotlin/ai/ciris/mobile/MainActivity.kt
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Initialize Python (from original android/app MainActivity.kt)
-        if (!Python.isStarted()) {
-            Python.start(AndroidPlatform(this))
-        }
-
-        // Start CIRIS runtime (existing logic)
-        startCIRISRuntime()
-
-        // Launch Compose UI
-        setContent {
-            CIRISApp(
-                accessToken = getAccessToken(),
-                baseUrl = "http://localhost:8080"
-            )
-        }
-    }
+expect class AuthManager {
+    suspend fun exchangeGoogleIdToken(idToken: String): Result<TokenResponse>
+    suspend fun authenticateLocal(username: String, password: String): Result<TokenResponse>
+    suspend fun refreshToken(): Result<String>
+    fun isGoogleAuthAvailable(): Boolean
 }
 ```
 
-- [ ] Copy Python initialization logic from `android/app/src/main/java/ai/ciris/mobile/MainActivity.kt:150-400`
-- [ ] Copy splash screen animation from `android/app/src/main/java/ai/ciris/mobile/MainActivity.kt:95-135`
-- [ ] Copy auth logic from `android/app/src/main/java/ai/ciris/mobile/auth/`
+**Android actual:** Uses GoogleSignInHelper, calls `/v1/auth/google/token`
+**iOS actual:** Stub for now (returns failure)
+
+**Test Strategy:**
+- Test: token exchange parses access_token from response
+- Test: token exchange handles 401 error
+- Test: local auth works with valid credentials
 
 ---
 
-## Phase 2: PRIORITY (Days 4-7) - Migrate Core Screens
+## Phase 5: Navigation & Integration
 
-### Day 4: Settings Screen
-**From:** `android/app/src/main/java/ai/ciris/mobile/SettingsActivity.kt` + `activity_settings.xml`
-**To:** `shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/SettingsScreen.kt`
+### 5.1 Update CIRISApp.kt
+**Target:** `shared/src/commonMain/.../CIRISApp.kt`
 
-- [ ] Create SettingsViewModel
-- [ ] Create SettingsScreen (Compose)
-- [ ] Implement preferences (expect/actual for storage)
-  - Android: EncryptedSharedPreferences
-  - iOS: UserDefaults (Keychain for secrets)
-- [ ] Migrate settings options:
-  - LLM API key management
-  - Model selection
-  - App theme
-  - Logout
+Add navigation states:
+- Screen.Startup → existing
+- Screen.Setup → NEW (first-run wizard)
+- Screen.Interact → existing
+- Screen.Settings → existing
 
-**Estimate:** 4-6 hours
+Add first-run detection:
+- Check for .env file existence
+- Route to Setup if first-run, else to Startup
 
-### Day 5: Purchase Flow
-**From:** `android/app/src/main/java/ai/ciris/mobile/PurchaseActivity.kt` + `activity_purchase.xml`
-**To:** `shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/PurchaseScreen.kt`
+### 5.2 Update MainActivity.kt (mobile/)
+**Target:** `mobile/androidApp/.../MainActivity.kt`
 
-- [ ] Create BillingClient abstraction (expect/actual)
-  ```kotlin
-  // shared/src/commonMain/kotlin/platform/BillingClient.kt
-  expect class BillingClient {
-      suspend fun queryProducts(): List<Product>
-      suspend fun purchase(productId: String): PurchaseResult
-  }
-
-  // shared/src/androidMain/kotlin/platform/BillingClient.android.kt
-  actual class BillingClient {
-      // Use Google Play Billing
-  }
-
-  // shared/src/iosMain/kotlin/platform/BillingClient.ios.kt
-  actual class BillingClient {
-      // Use StoreKit 2
-  }
-  ```
-- [ ] Create PurchaseViewModel
-- [ ] Create PurchaseScreen (Compose)
-- [ ] Product listing (100, 250, 600 credits)
-- [ ] Purchase flow
-- [ ] Server verification via CIRISApiClient
-
-**Estimate:** 8-10 hours
-
-### Days 6-7: Setup Wizard
-**From:**
-- `android/app/src/main/java/ai/ciris/mobile/setup/SetupWizardActivity.kt`
-- `android/app/src/main/java/ai/ciris/mobile/setup/SetupWelcomeFragment.kt`
-- `android/app/src/main/java/ai/ciris/mobile/setup/SetupLlmFragment.kt`
-- `android/app/src/main/java/ai/ciris/mobile/setup/SetupConfirmFragment.kt`
-
-**To:** `shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/screens/setup/`
-
-- [ ] Create SetupViewModel
-- [ ] Create SetupWelcomeScreen
-- [ ] Create SetupLlmScreen (API key input, provider selection)
-- [ ] Create SetupConfirmScreen
-- [ ] Navigation flow using Compose Navigation
-- [ ] Save setup state to secure storage
-
-**Estimate:** 6-8 hours
+Minimal changes:
+- Pass isFirstRun to CIRISApp
+- Pass Google auth state if available
+- Handle setup completion callback
 
 ---
 
-## Phase 3: ADVANCED (Days 8-12) - Complex Features
+## Sub-Agent Assignments
 
-### Days 8-9: Runtime Monitor
-**From:** `android/app/src/main/java/ai/ciris/mobile/RuntimeActivity.kt` + animations
-
-- [ ] Create RuntimeViewModel
-- [ ] Create RuntimeScreen (Compose)
-- [ ] Implement 22-service light grid animation
-  ```kotlin
-  @Composable
-  fun ServiceLightsGrid(services: Map<String, ServiceHealth>) {
-      LazyVerticalGrid(columns = GridCells.Fixed(11)) {
-          items(services.entries.toList()) { (name, health) ->
-              ServiceLight(
-                  name = name,
-                  healthy = health.healthy,
-                  animated = true
-              )
-          }
-      }
-  }
-  ```
-- [ ] Real-time service health polling
-- [ ] Console output view (scrolling logs)
-- [ ] Prep phase (6 lights for pydantic-core setup)
-
-**Estimate:** 8-10 hours
-
-### Days 10-11: Telemetry Dashboard
-**From:** `android/app/src/main/java/ai/ciris/mobile/TelemetryFragment.kt`
-
-- [ ] Create TelemetryViewModel
-- [ ] Create TelemetryScreen (Compose)
-- [ ] Service health cards
-- [ ] Metrics display (uptime, cognitive state, memory usage)
-- [ ] Consider: `io.github.koalaplot:koalaplot-core:0.5.1` for charts
-
-**Estimate:** 6-8 hours
-
-### Day 12: Sessions View
-**From:** `android/app/src/main/java/ai/ciris/mobile/SessionsFragment.kt`
-
-- [ ] Create SessionsViewModel
-- [ ] Create SessionsScreen (Compose)
-- [ ] List conversation sessions
-- [ ] Session selection and restoration
-
-**Estimate:** 4-6 hours
-
----
-
-## Phase 4: iOS NATIVE (Days 13-17) - iOS App
-
-### Day 13-14: iOS Python Runtime
-**Critical:** Replace BeeWare/Toga with native Swift + Python C API
-
-- [ ] Create `mobile/iosApp/` Xcode project
-- [ ] Integrate KMP shared framework
-  ```swift
-  // ContentView.swift
-  import SwiftUI
-  import shared
-
-  struct ContentView: View {
-      var body: some View {
-          ComposeView()
-              .ignoresSafeArea()
-      }
-  }
-
-  struct ComposeView: UIViewControllerRepresentable {
-      func makeUIViewController(context: Context) -> UIViewController {
-          return MainKt.MainViewController()
-      }
-      func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-  }
-  ```
-- [ ] Embed Python runtime via Python C API (NOT BeeWare)
-  - Link against Python framework
-  - Initialize Python interpreter
-  - Set PYTHONPATH to bundled CIRIS engine
-  - Start FastAPI server on localhost:8080
-- [ ] Test CIRIS runtime startup on iOS simulator
-- [ ] Test on physical iOS device
-
-**Estimate:** 16-20 hours (most complex part)
-
-**Resources needed:**
-- Python C API documentation
-- iOS Python embedding examples
-- Test devices (iPhone 12+, iOS 15+)
-
-### Days 15-16: iOS Platform Features
-
-- [ ] Implement iOS BillingClient (StoreKit 2)
-  ```swift
-  // BillingClient.ios.swift
-  import StoreKit
-
-  @available(iOS 15.0, *)
-  class IOSBillingClient {
-      func queryProducts() async -> [Product] {
-          let products = try? await Product.products(for: productIds)
-          return products ?? []
-      }
-  }
-  ```
-- [ ] Implement iOS secure storage (Keychain)
-- [ ] Implement Sign in with Apple
-- [ ] Test purchase flow end-to-end
-
-**Estimate:** 10-12 hours
-
-### Day 17: iOS Polish
-
-- [ ] Test all screens on iOS
-- [ ] Fix iOS-specific bugs
-- [ ] Platform-specific UI adjustments (safe areas, navigation)
-- [ ] Performance profiling (ensure >50 FPS scrolling)
-
-**Estimate:** 8 hours
-
----
-
-## Phase 5: CUTOVER (Days 18-20) - Production Migration
-
-### Day 18: Parallel Testing
-
-- [ ] Run QA tests on both old Android app and new KMP app
-  ```bash
-  # Old app
-  cd android && ./gradlew assembleDebug && ./gradlew connectedAndroidTest
-
-  # New KMP app
-  cd mobile && ./gradlew :androidApp:assembleDebug && ./gradlew :androidApp:connectedAndroidTest
-  ```
-- [ ] Compare performance (startup time, memory, battery)
-- [ ] Verify feature parity (checklist below)
-- [ ] Test on multiple devices (Android 7-15, iOS 15-18)
-
-### Day 19: Alpha Release
-
-- [ ] Deploy KMP Android app to internal testing track (Google Play)
-- [ ] Deploy iOS app to TestFlight
-- [ ] Gather feedback from alpha testers
-- [ ] Fix critical bugs
-
-### Day 20: Production Cutover
-
-- [ ] Bump version: `2.0.0` (KMP unified version)
-- [ ] Update release notes (highlight unified codebase)
-- [ ] Deploy to production (Google Play + App Store)
-- [ ] Monitor crash reports (Firebase Crashlytics)
-- [ ] Keep old `android/` codebase for 1 release cycle (rollback safety)
-
----
-
-## Feature Parity Checklist
-
-### ✅ Authentication
-- [ ] Google Sign-In (Android)
-- [ ] Sign in with Apple (iOS)
-- [ ] Token refresh management
-- [ ] Secure credential storage
-- [ ] Logout
-
-### ✅ Chat Interface
-- [x] Message sending/receiving (InteractScreen created)
-- [ ] Real-time status updates
-- [ ] Reasoning display
-- [ ] Conversation history (20 messages)
-- [ ] Agent status indicator
-- [ ] Graceful/emergency shutdown controls
-
-### ✅ Billing
-- [ ] Product listing (100, 250, 600 credits)
-- [ ] Purchase flow (Google Play / App Store)
-- [ ] Server-side verification
-- [ ] Purchase history
-- [ ] Credit display
-
-### ✅ Settings
-- [ ] LLM API key management
-- [ ] Model selection
-- [ ] App preferences
-- [ ] Account management
-- [ ] Logout
-
-### ✅ Runtime Management
-- [ ] 22-service health monitoring
-- [ ] Startup animation (lights)
-- [ ] Console logs
-- [ ] Service restart controls
-- [ ] Error handling
-
-### ✅ Setup Wizard
-- [ ] First-run onboarding
-- [ ] LLM configuration
-- [ ] API key entry
-- [ ] Setup completion
-
-### ✅ Additional Features
-- [ ] Telemetry dashboard
-- [ ] Session history
-- [ ] Offline mode
-- [ ] Deep linking (OAuth callbacks)
-
----
-
-## Migration Strategy: Old vs New
-
-### Parallel Development (Recommended)
-
-**Keep `android/` running while building `mobile/`:**
-
+### Agent 1: PythonRuntimeManager + ServerManager
 ```
-CIRISAgent/
-├── android/              # OLD - Keep for now
-│   └── app/
-│       ├── build.gradle  # v1.7.42
-│       └── src/
-├── mobile/               # NEW - Build in parallel
-│   ├── shared/
-│   ├── androidApp/       # v2.0.0
-│   └── iosApp/
+Tasks:
+1. Extract methods from MainActivity.kt lines 721-860, 1241-1660
+2. Create expect/actual structure
+3. Write unit tests
+4. Integrate with existing PythonRuntime.android.kt
 ```
 
-**Advantages:**
-- Zero risk to production Android app
-- Validate KMP approach before committing
-- Easy rollback if issues arise
-- Compare performance side-by-side
-
-**When to remove `android/`:**
-- After 2.0.0 is stable in production (1-2 release cycles)
-- After iOS app is also in production
-- After confirming no regression in metrics
-
-### Direct Cutover (Aggressive)
-
-**Replace `android/` immediately:**
-```bash
-cd /home/user/CIRISAgent
-mv android android_backup_v1.7.42
-mv mobile android
+### Agent 2: StartupViewModel + StartupScreen Enhancement
+```
+Tasks:
+1. Enhance existing StartupViewModel with phases, prep steps
+2. Add prep lights row to StartupScreen
+3. Add phase indicator and elapsed timer
+4. Match colors/styling from android/
+5. Write unit tests
 ```
 
-**Advantages:**
-- Faster unified development
-- Cleaner repo structure
-- Forces commitment to KMP
-
-**Disadvantages:**
-- ❌ Risky - no easy rollback
-- ❌ Breaks existing workflows
-- ❌ High stakes for first KMP release
-
-**Recommendation:** Use parallel development first.
-
----
-
-## Code Reuse Analysis
-
-### Already Shared (99%)
-- ✅ **CIRIS Engine:** 640 Python files (100% reused)
-- ✅ **Python Runtime:** Chaquopy (Android) + Python C API (iOS) - same codebase
-
-### Now Shared with KMP (90%)
-- ✅ **API Client:** CIRISApiClient (Ktor) - replaces Android OkHttp
-- ✅ **Models:** All data classes (ChatMessage, SystemStatus, Auth, etc.)
-- ✅ **ViewModels:** Business logic (InteractViewModel, etc.)
-- ✅ **UI:** Compose screens (InteractScreen, SettingsScreen, etc.)
-
-### Platform-Specific (10%)
-- **Android:**
-  - Google Play Billing client
-  - Google Sign-In integration
-  - EncryptedSharedPreferences
-  - Play Integrity API
-  - Chrome Custom Tabs (OAuth)
-
-- **iOS:**
-  - StoreKit 2 billing client
-  - Sign in with Apple
-  - Keychain storage
-  - Python C API embedding
-  - Safari View Controller (OAuth)
-
-### Code Reduction
-
-| Component | Before (Lines) | After (Lines) | Savings |
-|-----------|----------------|---------------|---------|
-| **UI Code** | 11K Android + 5K WebView = 16K | 6K shared | **62%** |
-| **API Client** | 2K Android OkHttp | 500 shared Ktor | **75%** |
-| **ViewModels** | 3K Android | 1.5K shared | **50%** |
-| **Total Platform Code** | ~16K Android | ~8K (6K shared + 2K platform) | **50%** |
-
-**And iOS gets it all for FREE!**
-
----
-
-## Build Commands
-
-### Shared Module
-```bash
-cd mobile
-./gradlew :shared:build                    # Build shared code
-./gradlew :shared:test                     # Run unit tests
-./gradlew :shared:assembleDebugXCFramework # Build iOS framework
+### Agent 3: SetupViewModel + SetupScreen
+```
+Tasks:
+1. Port SetupViewModel from android/setup/
+2. Create SetupScreen with 3 steps (Compose)
+3. Implement validation logic
+4. Wire up API calls (/v1/setup/complete)
+5. Write unit tests
 ```
 
-### Android App
-```bash
-cd mobile
-./gradlew :androidApp:assembleDebug        # Build debug APK
-./gradlew :androidApp:assembleRelease      # Build release APK
-./gradlew :androidApp:installDebug         # Install on device
-adb logcat | grep CIRIS                    # View logs
+### Agent 4: AuthManager + First-Run Detection
 ```
-
-### iOS App
-```bash
-cd mobile/iosApp
-xcodebuild -workspace iosApp.xcworkspace \
-           -scheme iosApp \
-           -configuration Debug \
-           -destination 'platform=iOS Simulator,name=iPhone 15'
+Tasks:
+1. Create expect/actual AuthManager
+2. Port token exchange logic
+3. Implement first-run detection (check .env)
+4. Update CIRISApp navigation
+5. Write integration tests
 ```
 
 ---
 
-## Testing Strategy
+## File Changes Summary
 
-### Unit Tests (Shared)
-```kotlin
-// shared/src/commonTest/kotlin/api/CIRISApiClientTest.kt
-class CIRISApiClientTest {
-    @Test
-    fun testSendMessage() = runTest {
-        val client = CIRISApiClient("http://localhost:8080", "test_token")
-        val response = client.sendMessage("Hello")
-        assertEquals("msg_", response.message_id.substring(0, 4))
-    }
-}
+### New Files to Create
+```
+shared/src/commonMain/kotlin/ai/ciris/mobile/shared/
+├── services/
+│   └── ServerManager.kt
+├── viewmodels/
+│   └── SetupViewModel.kt
+├── ui/screens/
+│   └── SetupScreen.kt
+└── platform/
+    └── AuthManager.kt (expect)
+
+shared/src/androidMain/kotlin/ai/ciris/mobile/shared/
+└── platform/
+    └── AuthManager.android.kt (actual)
+
+shared/src/commonTest/kotlin/
+├── StartupViewModelTest.kt
+├── SetupViewModelTest.kt
+└── ServerManagerTest.kt
 ```
 
-### Android Tests
-```kotlin
-// androidApp/src/androidTest/kotlin/MainActivityTest.kt
-@Test
-fun testPythonRuntimeStarts() {
-    val scenario = launchActivity<MainActivity>()
-    onView(withText("Connected")).check(matches(isDisplayed()))
-}
+### Files to Modify
+```
+shared/.../CIRISApp.kt                    # Add Setup screen, first-run routing
+shared/.../viewmodels/StartupViewModel.kt # Add phases, prep steps
+shared/.../ui/screens/StartupScreen.kt    # Add prep lights
+shared/.../platform/PythonRuntime.kt      # Add config injection
+shared/androidMain/.../PythonRuntime.android.kt  # Enhanced implementation
+mobile/androidApp/.../MainActivity.kt     # Pass auth state, handle setup
 ```
 
-### iOS Tests
-```swift
-// iosApp/iosAppTests/CIRISAppTests.swift
-func testComposeUILoads() throws {
-    let app = XCUIApplication()
-    app.launch()
-    XCTAssertTrue(app.staticTexts["Chat with CIRIS"].exists)
-}
+### Files to Copy (reference only)
 ```
-
-### Integration Tests
-- [ ] End-to-end chat flow
-- [ ] Authentication flow (Google + Apple)
-- [ ] Purchase flow (test products)
-- [ ] Runtime monitoring
-- [ ] Offline mode
+FROM android/app/src/main/java/ai/ciris/mobile/
+├── setup/SetupViewModel.kt      → Reference for SetupViewModel
+├── setup/SetupWizardActivity.kt → Reference for SetupScreen
+├── auth/GoogleSignInHelper.kt   → Copy to androidMain
+├── auth/TokenRefreshManager.kt  → Copy to androidMain
+└── config/CIRISConfig.kt        → Copy to shared
+```
 
 ---
 
-## Performance Targets
+## Execution Order (Parallel Sub-Agents)
 
-### Android (Must Match or Exceed Current)
-- **Startup time:** <5 seconds (cold start to UI ready)
-- **Chat scroll:** 60 FPS (current native XML performance)
-- **Memory:** <200 MB (without Python engine)
-- **APK size:** <60 MB (similar to current)
-
-### iOS (New Baseline)
-- **Startup time:** <6 seconds (Python init + UI)
-- **Chat scroll:** >50 FPS (acceptable for Compose iOS)
-- **Memory:** <250 MB (Python + UI)
-- **IPA size:** <70 MB
-
-### Shared
-- **API response time:** <100ms (local FastAPI)
-- **Message latency:** <200ms (send to response)
-- **Battery:** <5% drain per hour (idle)
-
----
-
-## Risk Mitigation
-
-### High Risk: iOS Python Runtime Embedding
-
-**Risk:** Python C API embedding on iOS is non-trivial, may hit issues with:
-- Dynamic library loading
-- pydantic-core native extensions
-- App Store review (dynamic code execution)
-
-**Mitigation:**
-1. **Proof of concept first** (2 days dedicated)
-2. **Test on real device early** (simulator != device for native libs)
-3. **Consult Python iOS community** (e.g., BeeWare team, python-apple-support)
-4. **Fallback:** Keep iOS with BeeWare + shared business logic only (70% sharing vs 95%)
-
-### Medium Risk: Compose iOS Performance
-
-**Risk:** iOS Compose may have layout jank or high CPU usage
-
-**Mitigation:**
-1. **Profile early** with Instruments
-2. **Optimize aggressively** (remember(), keys, derivedStateOf)
-3. **Fallback:** Native SwiftUI for complex screens + shared ViewModels
-
-### Low Risk: Billing Abstraction
-
-**Risk:** Google Play Billing + StoreKit 2 APIs differ significantly
-
-**Mitigation:**
-1. **Shared interface is simple** (query products, purchase, verify)
-2. **Platform-specific implementations** handle complexity
-3. **Well-tested pattern** (many KMP apps do this)
-
----
-
-## Rollback Plan
-
-If KMP migration fails or has critical issues:
-
-### Stage 1: Hotfix in KMP
-- Fix bugs in `mobile/` codebase
-- Deploy patched version
-
-### Stage 2: Rollback to v1.7.42
-```bash
-# If kept android/ directory
-cd /home/user/CIRISAgent
-mv mobile mobile_kmp_backup
-mv android_backup_v1.7.42 android
-
-# Rebuild old version
-cd android
-./gradlew assembleRelease
-
-# Deploy to Google Play (rollback)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Phase 1: Agent 1 (Python/Server) ─────────────────────────────▶ │
+│ Phase 2: Agent 2 (Startup UI) ────────────────────────────────▶ │
+│                                                                 │
+│ Phase 3: Agent 3 (Setup Wizard) ──────────────────────────────▶ │
+│ Phase 4: Agent 4 (Auth + First-Run) ──────────────────────────▶ │
+│                                                                 │
+│ Phase 5: Integration (Sequential) ────────────────────────────▶ │
+│ Phase 6: QA/Testing ──────────────────────────────────────────▶ │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Stage 3: Revert in Git
-```bash
-git revert <migration-commit>
-git push origin main
-```
-
-**Prevention:** Keep `android/` for 2 release cycles before removing.
+Agents 1+2 run in parallel (no dependencies)
+Agents 3+4 run in parallel (no dependencies)
+Integration waits for all agents to complete
 
 ---
 
 ## Success Criteria
 
-### Must Have (Required for Cutover)
-- ✅ All current Android features work in KMP version
-- ✅ Performance matches or exceeds current Android app
-- ✅ iOS app reaches feature parity with Android
-- ✅ Zero regressions in QA testing
-- ✅ Passes internal alpha testing (10+ users, 7 days)
-
-### Nice to Have (Post-Cutover)
-- 🎯 iOS App Store approval (may take 2-3 submissions)
-- 🎯 Positive user feedback on iOS
-- 🎯 Improved development velocity (50% faster features)
-- 🎯 Reduced bug count (fewer platform-specific bugs)
-
-### Metrics to Track
-- **Development velocity:** Time to implement new feature (before vs after)
-- **Bug count:** Platform-specific bugs (Android vs iOS)
-- **Code review time:** Less code to review
-- **Test coverage:** Unit test coverage % (target 80%)
-- **User satisfaction:** App Store ratings (target 4.5+)
+1. **Build passes:** `./gradlew :androidApp:assembleDebug`
+2. **All tests pass:** `./gradlew :shared:allTests`
+3. **Fresh install:** Shows setup wizard, completes successfully
+4. **Repeat install:** Skips setup, shows 22 lights, reaches READY
+5. **First-run mode:** 10/10 minimal services start (waiting for setup)
+6. **Full mode:** 22/22 services start after setup complete
 
 ---
 
-## Next Steps - START TODAY
+## QA Test Matrix
 
-### Immediate Actions (Next 2 Hours)
-
-1. **Copy wheels directory**
-   ```bash
-   cp -r android/app/wheels mobile/androidApp/wheels
-   ```
-
-2. **Create Android wrapper MainActivity**
-   ```bash
-   mkdir -p mobile/androidApp/src/main/kotlin/ai/ciris/mobile
-   # Create MainActivity.kt (template in Phase 1)
-   ```
-
-3. **Test build**
-   ```bash
-   cd mobile
-   ./gradlew :shared:build
-   ./gradlew :androidApp:assembleDebug
-   ```
-
-4. **Verify Python runtime**
-   ```bash
-   adb install androidApp/build/outputs/apk/debug/androidApp-debug.apk
-   adb logcat | grep -E "CIRIS|Python|FastAPI"
-   ```
-
-5. **Test Compose UI**
-   - Launch app
-   - Verify chat screen appears
-   - Test message input (may fail if FastAPI not started yet)
-
-### This Week (Days 1-5)
-
-- [ ] Complete Phase 1 (build system)
-- [ ] Implement Phase 2 (Settings + Purchase screens)
-- [ ] Start Phase 3 (Runtime monitor)
-
-### Next Week (Days 6-10)
-
-- [ ] Complete Phase 3 (all advanced screens)
-- [ ] Start Phase 4 (iOS app)
-
-### Week 3 (Days 11-15)
-
-- [ ] Complete iOS native app
-- [ ] Parallel testing
-- [ ] Alpha release
-
-### Week 4 (Days 16-20)
-
-- [ ] Production cutover
-- [ ] Monitor stability
-- [ ] Begin iOS App Store submission
-
----
-
-## Resources & Documentation
-
-### Official Docs
-- [Kotlin Multiplatform](https://kotlinlang.org/docs/multiplatform.html)
-- [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/)
-- [Ktor Client](https://ktor.io/docs/getting-started-ktor-client.html)
-- [Python C API](https://docs.python.org/3/c-api/)
-
-### Community Examples
-- [JetBrains KMP Samples](https://github.com/Kotlin/kmm-production-sample)
-- [Compose Multiplatform iOS](https://github.com/JetBrains/compose-multiplatform-ios-android-template)
-
-### Support
-- Kotlin Slack: #multiplatform, #compose-ios
-- Stack Overflow: [kotlin-multiplatform]
-- CIRIS Internal: Check with team on Python iOS embedding
-
----
-
-## Appendix: File Mapping
-
-### Android Activities → Compose Screens
-
-| Old (android/) | New (mobile/shared/) | Status |
-|----------------|----------------------|--------|
-| `InteractActivity.kt` (372 lines) | `InteractScreen.kt` (180 lines) | ✅ Created |
-| `SettingsActivity.kt` (250 lines) | `SettingsScreen.kt` (120 lines) | ⏳ TODO |
-| `PurchaseActivity.kt` (400 lines) | `PurchaseScreen.kt` (200 lines) | ⏳ TODO |
-| `RuntimeActivity.kt` (500 lines) | `RuntimeScreen.kt` (250 lines) | ⏳ TODO |
-| `SetupWizardActivity.kt` (300 lines) | `setup/SetupFlow.kt` (150 lines) | ⏳ TODO |
-| `TelemetryFragment.kt` (200 lines) | `TelemetryScreen.kt` (100 lines) | ⏳ TODO |
-| `SessionsFragment.kt` (150 lines) | `SessionsScreen.kt` (80 lines) | ⏳ TODO |
-| `LoginActivity.kt` (300 lines) | `AuthScreen.kt` (150 lines) | ⏳ TODO |
-
-**Total:** ~2,500 lines → ~1,200 lines (52% reduction)
-
----
-
-## Conclusion
-
-**We're ready to move.** The scaffold is complete, licensing is clear, and the path forward is defined.
-
-**Start with Phase 1 today** - get the build working, then incrementally migrate screens. Keep `android/` as backup until v2.0.0 is proven stable.
-
-**iOS will catch up instantly** once the shared code is complete - that's the power of KMP.
-
-Let's ship unified CIRIS mobile apps. 🚀
+| Scenario | Expected Result |
+|----------|-----------------|
+| Fresh install | Setup wizard appears |
+| Google OAuth available | "Free AI" option shown |
+| No Google OAuth | BYOK only |
+| Setup complete | .env created, full services start |
+| Second launch | Skip setup, 22 lights animate |
+| Server health fail | Error state, red lights |
+| Timeout (60s) | Error message shown |

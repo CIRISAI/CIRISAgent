@@ -1,31 +1,56 @@
 package ai.ciris.mobile
 
 import ai.ciris.mobile.shared.CIRISApp
+import ai.ciris.mobile.shared.GoogleSignInCallback
+import ai.ciris.mobile.shared.GoogleSignInResult
+import ai.ciris.mobile.shared.config.CIRISConfig
+import ai.ciris.mobile.shared.platform.PythonRuntime
+import android.content.Intent
 import android.os.Bundle
+import android.os.Process
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.system.exitProcess
 
 /**
- * Main Activity for CIRIS Android (KMP version)
+ * MainActivity for CIRIS Android (KMP version)
  *
- * Responsibilities:
- * 1. Initialize Python runtime (Chaquopy)
- * 2. Start CIRIS engine (FastAPI server on localhost:8080)
- * 3. Show startup splash (22 service lights)
- * 4. Launch Compose UI when ready
- *
- * Based on original android/app/src/main/java/ai/ciris/mobile/MainActivity.kt
+ * Flow:
+ * 1. Show minimal Python init splash
+ * 2. Start Python runtime & CIRIS server
+ * 3. Once server responds, show CIRISApp (which has its own StartupScreen with 22 lights)
+ * 4. CIRISApp handles navigation to InteractScreen or SettingsScreen
  */
 class MainActivity : ComponentActivity() {
 
-    private var serverStarted = false
     private val TAG = "MainActivity"
+    private val RC_SIGN_IN = 9001
+
+    // Google Sign-In
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private var pendingGoogleSignInCallback: ((GoogleSignInResult) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,89 +62,204 @@ class MainActivity : ComponentActivity() {
             Log.i(TAG, "Python runtime started")
         }
 
+        // Initialize Google Sign-In
+        initGoogleSignIn()
+
         setContent {
-            var isReady by remember { mutableStateOf(false) }
-            var statusMessage by remember { mutableStateOf("Initializing CIRIS...") }
+            var pythonReady by remember { mutableStateOf(false) }
+            var statusMessage by remember { mutableStateOf("Starting Python...") }
 
             LaunchedEffect(Unit) {
+                // Start logcat reader for service status updates
                 launch {
-                    initializeCIRIS { status ->
-                        statusMessage = status
+                    startLogcatReader()
+                }
+
+                // Start Python server
+                launch {
+                    statusMessage = "Loading CIRIS..."
+
+                    // Start Python mobile_main in background thread
+                    Thread {
+                        try {
+                            Log.i(TAG, "Starting mobile_main.main()...")
+                            val py = Python.getInstance()
+                            val module = py.getModule("mobile_main")
+                            module.callAttr("main")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Python runtime error", e)
+                        }
+                    }.start()
+
+                    // Wait for server to respond
+                    statusMessage = "Waiting for server..."
+                    val ready = waitForServer()
+
+                    if (ready) {
+                        Log.i(TAG, "Server ready - showing CIRISApp")
+                        pythonReady = true
+                    } else {
+                        statusMessage = "Server failed to start"
                     }
-                    isReady = true
                 }
             }
 
-            if (isReady) {
-                // Launch main Compose UI
+            if (pythonReady) {
+                // Show the full KMP app with native StartupScreen (22 lights)
                 CIRISApp(
-                    accessToken = "temp_token", // TODO: Get from auth
-                    baseUrl = "http://localhost:8080"
+                    accessToken = "pending", // Will be set after auth
+                    baseUrl = "http://localhost:8080",
+                    googleSignInCallback = googleSignInCallback
                 )
             } else {
-                // Show startup splash
-                StartupSplashScreen(statusMessage)
+                // Minimal splash while Python starts
+                PythonInitSplash(statusMessage)
             }
         }
     }
 
     /**
-     * Initialize CIRIS runtime
-     * TODO: Port full initialization logic from original MainActivity.kt:150-400
+     * Initialize Google Sign-In client
      */
-    private suspend fun initializeCIRIS(onStatusUpdate: (String) -> Unit) {
-        try {
-            onStatusUpdate("Starting Python interpreter...")
-            delay(500)
+    private fun initGoogleSignIn() {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(CIRISConfig.GOOGLE_WEB_CLIENT_ID)
+            .requestEmail()
+            .requestProfile()
+            .build()
 
-            onStatusUpdate("Loading CIRIS engine...")
-            delay(500)
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
+        Log.i(TAG, "Google Sign-In initialized with client ID: ${CIRISConfig.GOOGLE_WEB_CLIENT_ID.take(20)}...")
+    }
 
-            // TODO: Call Python mobile_main.py
-            // val py = Python.getInstance()
-            // val module = py.getModule("mobile_main")
-            // module.callAttr("start_ciris_runtime")
+    /**
+     * GoogleSignInCallback implementation for CIRISApp
+     */
+    private val googleSignInCallback = object : GoogleSignInCallback {
+        override fun onGoogleSignInRequested(onResult: (GoogleSignInResult) -> Unit) {
+            Log.i(TAG, "Google Sign-In requested from CIRISApp")
+            pendingGoogleSignInCallback = onResult
+            val signInIntent = googleSignInClient.signInIntent
+            startActivityForResult(signInIntent, RC_SIGN_IN)
+        }
+    }
 
-            onStatusUpdate("Starting FastAPI server...")
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == RC_SIGN_IN) {
+            val callback = pendingGoogleSignInCallback
+            pendingGoogleSignInCallback = null
+
+            try {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+                val account = task.getResult(ApiException::class.java)
+
+                Log.i(TAG, "Google Sign-In successful: ${account.email}")
+
+                val result = GoogleSignInResult.Success(
+                    idToken = account.idToken ?: "",
+                    userId = account.id ?: "",
+                    email = account.email,
+                    displayName = account.displayName
+                )
+
+                callback?.invoke(result)
+
+            } catch (e: ApiException) {
+                Log.e(TAG, "Google Sign-In failed: ${e.statusCode} - ${e.message}")
+
+                val result = when (e.statusCode) {
+                    12501 -> GoogleSignInResult.Cancelled // SIGN_IN_CANCELLED
+                    else -> GoogleSignInResult.Error("Sign-in failed: ${e.statusCode}")
+                }
+
+                callback?.invoke(result)
+            }
+        }
+    }
+
+    private suspend fun waitForServer(): Boolean = withContext(Dispatchers.IO) {
+        var attempts = 0
+        val maxAttempts = 60
+
+        while (attempts < maxAttempts) {
             delay(1000)
+            attempts++
 
-            onStatusUpdate("Checking service health...")
-            delay(500)
+            try {
+                val url = URL("http://localhost:8080/v1/system/health")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 2000
+                connection.readTimeout = 2000
 
-            // TODO: Poll http://localhost:8080/v1/system/health
-            // Wait for all 22 services to be online
+                if (connection.responseCode == 200) {
+                    connection.disconnect()
+                    Log.i(TAG, "Server ready after $attempts seconds")
+                    return@withContext true
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                // Server not ready
+            }
+        }
+        return@withContext false
+    }
 
-            onStatusUpdate("CIRIS ready!")
-            serverStarted = true
+    private suspend fun startLogcatReader() = withContext(Dispatchers.IO) {
+        try {
+            PythonRuntime.resetServiceCount()
 
+            val process = Runtime.getRuntime().exec("logcat -v raw python.stdout:I python.stderr:W *:S")
+            val reader = process.inputStream.bufferedReader()
+            val servicePattern = Regex("""\[SERVICE (\d+)/(\d+)\].*STARTED""")
+
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (line.isNotBlank()) {
+                    val match = servicePattern.find(line)
+                    if (match != null) {
+                        val serviceNum = match.groupValues[1].toIntOrNull() ?: 0
+                        val total = match.groupValues[2].toIntOrNull() ?: 22
+                        PythonRuntime.updateServiceCount(serviceNum, total)
+                        Log.d(TAG, "Service $serviceNum started (${PythonRuntime.servicesOnline}/$total)")
+                    }
+                }
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize CIRIS", e)
-            onStatusUpdate("Error: ${e.message}")
+            Log.e(TAG, "Logcat reader error: ${e.message}")
         }
     }
 }
 
 @Composable
-private fun StartupSplashScreen(status: String) {
-    // TODO: Port splash screen with 22 service lights animation
-    // from original MainActivity.kt:95-135
-
-    androidx.compose.foundation.layout.Box(
-        modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-        contentAlignment = androidx.compose.ui.Alignment.Center
+private fun PythonInitSplash(status: String) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(0xFF1a1a2e)
     ) {
-        androidx.compose.foundation.layout.Column(
-            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            androidx.compose.material3.Text(
+            Text(
                 text = "CIRIS",
-                style = androidx.compose.material3.MaterialTheme.typography.displayLarge
+                fontSize = 48.sp,
+                color = Color(0xFF00d4ff)
             )
-            androidx.compose.material3.CircularProgressIndicator()
-            androidx.compose.material3.Text(
+
+            Spacer(Modifier.height(24.dp))
+
+            CircularProgressIndicator(color = Color(0xFF00d4ff))
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
                 text = status,
-                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                fontSize = 14.sp,
+                color = Color(0xFFaaaaaa)
             )
         }
     }

@@ -754,8 +754,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                                 f"  Error: {full_error[:500]}"
                             )
                             raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e
-                # Re-raise other exceptions
-                raise
+                # Wrap all other exceptions with context to avoid empty error messages
+                self.circuit_breaker.record_failure()
+                self._track_error(e)
+                self._total_errors += 1
+                error_msg = str(e).strip() if str(e).strip() else f"<{type(e).__name__} with no message>"
+                logger.error(
+                    f"LLM UNEXPECTED ERROR - {type(e).__name__}.\n"
+                    f"  Model: {self.model_name}\n"
+                    f"  Provider: {self.openai_config.base_url or 'default'}\n"
+                    f"  Expected Schema: {resp_model.__name__}\n"
+                    f"  Error: {error_msg[:500]}"
+                )
+                raise RuntimeError(f"LLM call failed ({type(e).__name__}): {error_msg[:300]}") from e
 
         # Implement retry logic with OpenAI-specific error handling
         try:

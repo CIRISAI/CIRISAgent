@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
@@ -50,7 +51,13 @@ class DMAOrchestrator:
         self.memory_service = memory_service
 
         self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
-        self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
+        # DMA timeout can be overridden via environment variable for slow LLM providers
+        # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
+        dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
+        if dma_timeout_env:
+            self.timeout_seconds = float(dma_timeout_env)
+        else:
+            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),

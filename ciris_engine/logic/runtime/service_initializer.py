@@ -948,12 +948,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
             config, "llm_model", "gpt-4o-mini"
         )
 
+        # LLM timeout can be overridden via environment variable for slow providers
+        # Together.ai with Llama 4 can take 30-60+ seconds for large prompts
+        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+            config, "llm_timeout", 60
+        )
+
         llm_config = OpenAIConfig(
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
-            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            timeout_seconds=llm_timeout,
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 
@@ -1017,13 +1023,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
+        # Use same timeout override as primary LLM
+        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
+            config, "llm_timeout", 60
+        )
+
         # Create config
         llm_config = OpenAIConfig(
             base_url=base_url,
             model_name=model_name,
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
-            timeout_seconds=self._get_llm_service_config_value(config, "llm_timeout", 60),
+            timeout_seconds=llm_timeout,
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
         )
 

@@ -328,14 +328,14 @@ CIRIS_MODE=installed
         except Exception as e:
             return f"Error getting logcat: {e}"
     
-    def run_qa_module(self, *modules, force: bool = False) -> Tuple[bool, str]:
+    def run_qa_module(self, *modules, _force: bool = False) -> Tuple[bool, str]:
         """
         Run QA modules via the main QA runner using the project's venv.
-        
+
         Args:
             modules: Test modules to run (e.g., "setup", "auth", "telemetry")
-            force: Run even if server not fully healthy
-            
+            _force: Reserved for future use (run even if server not fully healthy)
+
         Returns:
             (success, message) tuple
         """

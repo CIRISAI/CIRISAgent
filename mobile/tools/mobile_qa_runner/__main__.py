@@ -51,7 +51,7 @@ def cmd_status(bridge: EmulatorBridge, args):
     
     status = bridge.check_server_status()
     if status.reachable:
-        print(f"\n✓ Server reachable")
+        print("\n✓ Server reachable")
         print(f"  Healthy: {status.healthy}")
         print(f"  Services: {status.services_online}/{status.total_services}")
         if status.is_first_run:

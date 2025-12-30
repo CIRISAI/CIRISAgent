@@ -1,7 +1,7 @@
 package ai.ciris.mobile.shared.viewmodels
 
-import ai.ciris.mobile.shared.api.CIRISApiClient
-import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
@@ -20,8 +20,8 @@ import kotlinx.datetime.Clock
  * Based on android/app/.../MainActivity.kt startup logic
  */
 class StartupViewModel(
-    private val pythonRuntime: PythonRuntime,
-    private val apiClient: CIRISApiClient,
+    private val pythonRuntime: PythonRuntimeProtocol,
+    private val apiClient: CIRISApiClientProtocol,
     private val pythonHomePath: String = "/default/python/path"
 ) : ViewModel() {
 

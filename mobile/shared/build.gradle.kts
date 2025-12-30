@@ -57,9 +57,9 @@ kotlin {
                 implementation("io.ktor:ktor-client-logging:2.3.7")
                 implementation("io.ktor:ktor-client-auth:2.3.7")
 
-                // ViewModel
-                implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-                implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+                // Multiplatform ViewModel (KMP-compatible)
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
 
                 // Navigation
                 implementation("org.jetbrains.androidx.navigation:navigation-compose:2.7.0-alpha03")

@@ -22,7 +22,7 @@ import kotlinx.serialization.json.Json
 class CIRISApiClient(
     private val baseUrl: String = "http://localhost:8080",
     private var accessToken: String? = null
-) {
+) : CIRISApiClientProtocol {
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -51,64 +51,64 @@ class CIRISApiClient(
         }
     }
 
-    fun setAccessToken(token: String) {
+    override fun setAccessToken(token: String) {
         accessToken = token
     }
 
     // Chat / Interact
-    suspend fun sendMessage(message: String, channelId: String = "mobile_app"): InteractResponse {
+    override suspend fun sendMessage(message: String, channelId: String): InteractResponse {
         return client.post("$baseUrl/v1/agent/interact") {
             setBody(InteractRequest(message, channelId))
         }.body()
     }
 
-    suspend fun getMessages(limit: Int = 20): List<ChatMessage> {
+    override suspend fun getMessages(limit: Int): List<ChatMessage> {
         return client.get("$baseUrl/v1/agent/messages") {
             parameter("limit", limit)
         }.body()
     }
 
     // System Status (from InteractActivity.kt polling)
-    suspend fun getSystemStatus(): SystemStatus {
+    override suspend fun getSystemStatus(): SystemStatus {
         return client.get("$baseUrl/v1/system/health").body()
     }
 
-    suspend fun getTelemetry(): TelemetryResponse {
+    override suspend fun getTelemetry(): TelemetryResponse {
         return client.get("$baseUrl/v1/telemetry/unified").body()
     }
 
     // Authentication (from LoginActivity.kt)
-    suspend fun login(username: String, password: String): AuthResponse {
+    override suspend fun login(username: String, password: String): AuthResponse {
         return client.post("$baseUrl/v1/auth/login") {
             setBody(LoginRequest(username, password))
         }.body()
     }
 
-    suspend fun googleAuth(idToken: String, userId: String? = null): AuthResponse {
+    override suspend fun googleAuth(idToken: String, userId: String?): AuthResponse {
         return client.post("$baseUrl/v1/auth/google") {
             setBody(GoogleAuthRequest(idToken, userId))
         }.body()
     }
 
-    suspend fun logout() {
+    override suspend fun logout() {
         client.post("$baseUrl/v1/auth/logout")
     }
 
     // Shutdown controls (from InteractActivity.kt:shutdownButton)
-    suspend fun initiateShutdown() {
+    override suspend fun initiateShutdown() {
         client.post("$baseUrl/v1/system/shutdown")
     }
 
-    suspend fun emergencyShutdown() {
+    override suspend fun emergencyShutdown() {
         client.post("$baseUrl/v1/system/emergency-shutdown")
     }
 
     // Setup wizard (from SetupWizardActivity.kt)
-    suspend fun getSetupStatus(): SetupStatusResponse {
+    override suspend fun getSetupStatus(): SetupStatusResponse {
         return client.get("$baseUrl/v1/setup/status").body()
     }
 
-    suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
+    override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
         return try {
             val response: CompleteSetupResponse = client.post("$baseUrl/v1/setup/complete") {
                 setBody(request)
@@ -129,7 +129,7 @@ class CIRISApiClient(
         }
     }
 
-    fun close() {
+    override fun close() {
         client.close()
     }
 }

@@ -1,7 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
-import ai.ciris.mobile.shared.api.CIRISApiClient
-import ai.ciris.mobile.shared.platform.PythonRuntime
+import ai.ciris.mobile.shared.api.CIRISApiClientProtocol
+import ai.ciris.mobile.shared.models.*
+import ai.ciris.mobile.shared.platform.PythonRuntimeProtocol
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -167,6 +168,7 @@ class StartupViewModelTest {
 
 /**
  * Fake Python runtime for testing
+ * Implements PythonRuntimeProtocol interface for testability
  */
 class FakePythonRuntime(
     var initSuccess: Boolean = true,
@@ -174,7 +176,7 @@ class FakePythonRuntime(
     var healthy: Boolean = false,
     var servicesOnline: Int = 0,
     private val servicesTotal: Int = 22
-) : PythonRuntime() {
+) : PythonRuntimeProtocol {
 
     private var initialized = false
     private var started = false
@@ -199,6 +201,15 @@ class FakePythonRuntime(
         }
     }
 
+    override suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> {
+        onStatus?.invoke("Starting server...")
+        return startServer()
+    }
+
+    override fun injectPythonConfig(config: Map<String, String>) {
+        // No-op for testing
+    }
+
     override suspend fun checkHealth(): Result<Boolean> {
         delay(50) // Simulate network delay
         return Result.success(healthy && started)
@@ -216,12 +227,15 @@ class FakePythonRuntime(
     override fun isInitialized(): Boolean = initialized
 
     override fun isServerStarted(): Boolean = started
+
+    override val serverUrl: String = "http://localhost:8080"
 }
 
 /**
  * Fake Python runtime that simulates gradual service startup
+ * Implements PythonRuntimeProtocol interface for testability
  */
-class FakePythonRuntimeGradual : PythonRuntime() {
+class FakePythonRuntimeGradual : PythonRuntimeProtocol {
     private var initialized = false
     private var started = false
     private var checkCount = 0
@@ -234,6 +248,15 @@ class FakePythonRuntimeGradual : PythonRuntime() {
     override suspend fun startServer(): Result<String> {
         started = true
         return Result.success("http://localhost:8080")
+    }
+
+    override suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> {
+        onStatus?.invoke("Starting server...")
+        return startServer()
+    }
+
+    override fun injectPythonConfig(config: Map<String, String>) {
+        // No-op for testing
     }
 
     override suspend fun checkHealth(): Result<Boolean> {
@@ -254,9 +277,87 @@ class FakePythonRuntimeGradual : PythonRuntime() {
 
     override fun isInitialized(): Boolean = initialized
     override fun isServerStarted(): Boolean = started
+    override val serverUrl: String = "http://localhost:8080"
 }
 
 /**
  * Fake API client for testing
+ * Implements CIRISApiClientProtocol interface for testability
  */
-class FakeCIRISApiClient : CIRISApiClient("http://localhost:8080", "test-token")
+class FakeCIRISApiClient : CIRISApiClientProtocol {
+    private var token: String? = null
+
+    override fun setAccessToken(token: String) {
+        this.token = token
+    }
+
+    override suspend fun sendMessage(message: String, channelId: String): InteractResponse {
+        return InteractResponse(response = "Test response", message_id = "test-id")
+    }
+
+    override suspend fun getMessages(limit: Int): List<ChatMessage> {
+        return emptyList()
+    }
+
+    override suspend fun getSystemStatus(): SystemStatus {
+        return SystemStatus(
+            status = "healthy",
+            cognitive_state = "WORK",
+            services_online = 22,
+            services_total = 22
+        )
+    }
+
+    override suspend fun getTelemetry(): TelemetryResponse {
+        return TelemetryResponse(
+            agent_id = "test-agent",
+            uptime_seconds = 100.0,
+            cognitive_state = "WORK",
+            services_online = 22,
+            services_total = 22,
+            services = emptyMap()
+        )
+    }
+
+    override suspend fun login(username: String, password: String): AuthResponse {
+        return AuthResponse(
+            access_token = "test-token",
+            token_type = "bearer",
+            user = UserInfo(user_id = "test-user", email = "test@example.com")
+        )
+    }
+
+    override suspend fun googleAuth(idToken: String, userId: String?): AuthResponse {
+        return AuthResponse(
+            access_token = "test-token",
+            token_type = "bearer",
+            user = UserInfo(user_id = "test-user", email = "test@example.com")
+        )
+    }
+
+    override suspend fun logout() {
+        token = null
+    }
+
+    override suspend fun initiateShutdown() {
+        // No-op for testing
+    }
+
+    override suspend fun emergencyShutdown() {
+        // No-op for testing
+    }
+
+    override suspend fun getSetupStatus(): SetupStatusResponse {
+        return SetupStatusResponse(
+            data = SetupStatusData(setup_required = false, has_env_file = true, has_admin_user = true)
+        )
+    }
+
+    override suspend fun completeSetup(request: CompleteSetupRequest): SetupCompletionResult {
+        return SetupCompletionResult(success = true, message = "Setup complete")
+    }
+
+    override fun close() {
+        // No-op for testing
+    }
+}

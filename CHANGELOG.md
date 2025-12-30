@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Critical information positioned at start/end of guide (primacy/recency effects)
   - Added clear knowledge limitations section (no inherent web search, LLM knowledge cutoff)
   - Added Six Requirements framework (Published Covenant, Runtime Conscience, Human Deferral, Cryptographic Audit, Bilateral Consent, Open Source)
-  - Added Coherence Ratchet concept (truth is O(1), deception is NP-hard)
+  - Added Coherence Ratchet concept (truth references immutable history, deception faces expanding constraint surface)
   - Added AIR System documentation (Parasocial prevention: 30 min / 20 message thresholds)
   - Added Commons Credits concept (non-fungible contribution acknowledgments)
 

@@ -72,8 +72,8 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._transport = transport
         self._using_fallback = False
 
-        # Determine auth mode
-        self._use_jwt_auth = bool(google_id_token)
+        # Determine auth mode based on resolved token (including env fallback)
+        self._use_jwt_auth = bool(self._google_id_token)
 
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()

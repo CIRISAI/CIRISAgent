@@ -244,6 +244,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
+            QAModule.COVENANT_METRICS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -853,6 +854,7 @@ class QARunner:
         from .modules.mcp_tests import MCPTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
+        from .modules.covenant_metrics_tests import CovenantMetricsTests
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.vision_tests import VisionTests
 
@@ -877,6 +879,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
+            QAModule.COVENANT_METRICS: CovenantMetricsTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

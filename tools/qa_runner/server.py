@@ -463,8 +463,10 @@ class APIServerManager:
             )
             if auth_response.status_code == 200:
                 token = auth_response.json()["access_token"]
-        except:
-            self.console.print("[yellow]⚠️  Could not authenticate for state check[/yellow]")
+            else:
+                self.console.print(f"[yellow]⚠️  Auth failed: {auth_response.status_code} - {auth_response.text[:100]}[/yellow]")
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️  Could not authenticate for state check: {e}[/yellow]")
 
         while time.time() - start_time < self.config.server_startup_timeout:
             try:
@@ -479,7 +481,7 @@ class APIServerManager:
                     cognitive_state = data.get("data", {}).get("cognitive_state", "")
 
                     # Check for WORK state (handle both "work" and "AgentState.WORK" enum string)
-                    state_lower = cognitive_state.lower()
+                    state_lower = cognitive_state.lower() if cognitive_state else ""
                     is_work = (
                         state_lower == "work" or state_lower == "agentstate.work" or cognitive_state.endswith(".WORK")
                     )
@@ -492,7 +494,7 @@ class APIServerManager:
                     if cognitive_state:
                         # Use \r to overwrite previous line
                         self.console.print(f"[dim]Current state: {cognitive_state:<30}[/dim]", end="\r")
-            except Exception as e:
+            except Exception:
                 pass
 
             time.sleep(1)

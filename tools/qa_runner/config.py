@@ -41,6 +41,7 @@ class QAModule(Enum):
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
     COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
+    COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -218,6 +219,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.COVENANT:
             # Covenant tests run standalone (no server needed)
+            return []  # Will be handled separately by runner
+        elif module == QAModule.COVENANT_METRICS:
+            # Covenant metrics trace capture tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

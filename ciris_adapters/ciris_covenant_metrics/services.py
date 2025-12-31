@@ -1,17 +1,30 @@
 """
-Covenant Metrics Services - WBD and PDMA event collection for CIRISLens.
+Covenant Metrics Services - Full trace capture for CIRISLens.
 
 This module implements the CovenantMetricsService which:
-1. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
-2. Batches events and sends them to CIRISLens API
-3. Only operates when explicit consent has been given
+1. Subscribes to reasoning_event_stream for FULL trace capture (6 components)
+2. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
+3. Batches events and sends them to CIRISLens API
+4. Signs complete traces with Ed25519 for integrity verification
+5. Only operates when explicit consent has been given
+
+Trace Components (from coherence-ratchet):
+1. Observation - What triggered processing (THOUGHT_START)
+2. Context - System snapshot and environment (SNAPSHOT_AND_CONTEXT)
+3. Rationale - DMA reasoning analysis (DMA_RESULTS + ASPDMA_RESULT)
+4. Conscience - Ethical validation (CONSCIENCE_RESULT)
+5. Action - Final action taken (ACTION_RESULT)
+6. Outcome - Execution results and audit (ACTION_RESULT audit data)
 """
 
 import asyncio
+import base64
 import hashlib
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -30,12 +43,185 @@ class SimpleCapabilities:
     scopes: List[str]
 
 
+@dataclass
+class TraceComponent:
+    """A single component of a reasoning trace."""
+
+    component_type: str  # observation, context, rationale, conscience, action, outcome
+    event_type: str  # THOUGHT_START, SNAPSHOT_AND_CONTEXT, etc.
+    timestamp: str
+    data: Dict[str, Any]
+
+
+@dataclass
+class CompleteTrace:
+    """A complete 6-component reasoning trace."""
+
+    trace_id: str
+    thought_id: str
+    task_id: Optional[str]
+    agent_id_hash: str
+    started_at: str
+    completed_at: Optional[str] = None
+    components: List[TraceComponent] = field(default_factory=list)
+    signature: Optional[str] = None
+    signature_key_id: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "trace_id": self.trace_id,
+            "thought_id": self.thought_id,
+            "task_id": self.task_id,
+            "agent_id_hash": self.agent_id_hash,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "components": [
+                {
+                    "component_type": c.component_type,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                    "data": c.data,
+                }
+                for c in self.components
+            ],
+            "signature": self.signature,
+            "signature_key_id": self.signature_key_id,
+        }
+
+    def compute_hash(self) -> str:
+        """Compute SHA-256 hash of trace content (excluding signature)."""
+        # Build deterministic representation
+        content = {
+            "trace_id": self.trace_id,
+            "thought_id": self.thought_id,
+            "task_id": self.task_id,
+            "agent_id_hash": self.agent_id_hash,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "components": [
+                {
+                    "component_type": c.component_type,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                    "data": c.data,
+                }
+                for c in self.components
+            ],
+        }
+        json_str = json.dumps(content, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(json_str.encode()).hexdigest()
+
+
+class Ed25519TraceSigner:
+    """Sign traces using Ed25519 keys (compatible with root WA keys)."""
+
+    def __init__(self, seed_dir: Optional[Path] = None):
+        """Initialize signer with optional seed directory for root public key."""
+        self._private_key: Optional[Any] = None
+        self._public_key: Optional[Any] = None
+        self._key_id: Optional[str] = None
+        self._root_pubkey: Optional[str] = None
+
+        # Load root public key from seed directory
+        if seed_dir is None:
+            seed_dir = Path(__file__).parent.parent.parent / "seed"
+
+        root_pub_file = seed_dir / "root_pub.json"
+        if root_pub_file.exists():
+            with open(root_pub_file) as f:
+                root_data = json.load(f)
+                self._root_pubkey = root_data.get("pubkey")
+                self._key_id = root_data.get("wa_id", "wa-unknown")
+                logger.info(f"Loaded root public key: {self._key_id}")
+
+    def _load_private_key_if_available(self) -> bool:
+        """Try to load private key from standard location."""
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+
+            private_key_file = Path.home() / ".ciris" / "wa_keys" / "root_wa.key"
+            if private_key_file.exists():
+                private_bytes = private_key_file.read_bytes()
+                self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
+                self._public_key = self._private_key.public_key()
+                logger.info("Loaded Ed25519 private key for trace signing")
+                return True
+        except Exception as e:
+            logger.debug(f"Could not load private key: {e}")
+        return False
+
+    def sign_trace(self, trace: CompleteTrace) -> bool:
+        """Sign a trace with Ed25519 private key.
+
+        Returns True if signing succeeded, False if private key not available.
+        """
+        if not self._private_key and not self._load_private_key_if_available():
+            logger.warning("No private key available for trace signing")
+            return False
+
+        try:
+            # Compute trace hash
+            trace_hash = trace.compute_hash()
+
+            # Sign the hash
+            signature_bytes = self._private_key.sign(trace_hash.encode())
+
+            # URL-safe base64 encode
+            trace.signature = base64.urlsafe_b64encode(signature_bytes).decode().rstrip("=")
+            trace.signature_key_id = self._key_id
+
+            logger.debug(f"Signed trace {trace.trace_id} with key {self._key_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to sign trace: {e}")
+            return False
+
+    def verify_trace(self, trace: CompleteTrace) -> bool:
+        """Verify a trace signature using root public key."""
+        if not trace.signature or not self._root_pubkey:
+            return False
+
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+
+            # Decode public key
+            pubkey_bytes = base64.urlsafe_b64decode(self._root_pubkey + "==")
+            public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+
+            # Decode signature
+            sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
+
+            # Compute expected hash
+            expected_hash = trace.compute_hash()
+
+            # Verify
+            public_key.verify(sig_bytes, expected_hash.encode())
+            return True
+
+        except Exception as e:
+            logger.warning(f"Trace signature verification failed: {e}")
+            return False
+
+    @property
+    def key_id(self) -> Optional[str]:
+        return self._key_id
+
+    @property
+    def has_signing_key(self) -> bool:
+        return self._private_key is not None or self._load_private_key_if_available()
+
+
 class CovenantMetricsService:
     """
     Covenant compliance metrics service for CIRISLens.
 
-    This service receives WBD (Wisdom-Based Deferral) events from WiseBus
-    and forwards them to the CIRISLens API for covenant compliance tracking.
+    This service:
+    1. Subscribes to reasoning_event_stream for FULL 6-component trace capture
+    2. Receives WBD (Wisdom-Based Deferral) events from WiseBus
+    3. Batches and sends traces to CIRISLens API
+    4. Signs complete traces with Ed25519 for integrity verification
 
     CRITICAL: This service ONLY sends data when:
     1. User has explicitly consented via the setup wizard
@@ -47,6 +233,16 @@ class CovenantMetricsService:
     - No user message content is included
     - Only structural decision metadata
     """
+
+    # Map reasoning events to trace components
+    EVENT_TO_COMPONENT = {
+        "THOUGHT_START": "observation",
+        "SNAPSHOT_AND_CONTEXT": "context",
+        "DMA_RESULTS": "rationale",
+        "ASPDMA_RESULT": "rationale",
+        "CONSCIENCE_RESULT": "conscience",
+        "ACTION_RESULT": "action",  # Also contains outcome data
+    }
 
     def __init__(self, config: Optional[JSONDict] = None) -> None:
         """Initialize CovenantMetricsService.
@@ -91,14 +287,30 @@ class CovenantMetricsService:
         self._events_received = 0
         self._events_sent = 0
         self._events_failed = 0
+        self._traces_completed = 0
+        self._traces_signed = 0
         self._last_send_time: Optional[datetime] = None
 
         # Agent ID for anonymization (set during start)
         self._agent_id_hash: Optional[str] = None
 
+        # Reasoning event stream subscription
+        self._reasoning_queue: Optional[asyncio.Queue[Any]] = None
+        self._reasoning_task: Optional[asyncio.Task[None]] = None
+
+        # Active traces being built (keyed by thought_id)
+        self._active_traces: Dict[str, CompleteTrace] = {}
+        self._traces_lock = asyncio.Lock()
+
+        # Completed traces ready for sending
+        self._completed_traces: List[CompleteTrace] = []
+
+        # Trace signer
+        self._signer = Ed25519TraceSigner()
+
         logger.info(
             f"CovenantMetricsService initialized (consent_given={self._consent_given}, "
-            f"endpoint={self._endpoint_url})"
+            f"endpoint={self._endpoint_url}, signer_key={self._signer.key_id})"
         )
 
     def _anonymize_agent_id(self, agent_id: str) -> str:
@@ -127,10 +339,22 @@ class CovenantMetricsService:
         """Start the service and initialize HTTP client."""
         logger.info("Starting CovenantMetricsService")
 
+        # Subscribe to reasoning_event_stream for trace capture
+        # This happens regardless of consent - we just don't SEND until consent
+        try:
+            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
+            self._reasoning_queue = asyncio.Queue(maxsize=1000)
+            reasoning_event_stream.subscribe(self._reasoning_queue)
+            self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
+            logger.info("Subscribed to reasoning_event_stream for trace capture")
+        except Exception as e:
+            logger.warning(f"Could not subscribe to reasoning_event_stream: {e}")
+
         if not self._consent_given:
             logger.warning(
                 "CovenantMetricsService started but consent not given - "
-                "no data will be sent until user consents via setup wizard"
+                "traces will be captured but NOT sent until user consents via setup wizard"
             )
             return
 
@@ -152,6 +376,23 @@ class CovenantMetricsService:
         """Stop the service and flush remaining events."""
         logger.info("Stopping CovenantMetricsService")
 
+        # Unsubscribe from reasoning_event_stream
+        if self._reasoning_queue:
+            try:
+                from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
+                reasoning_event_stream.unsubscribe(self._reasoning_queue)
+            except Exception as e:
+                logger.debug(f"Could not unsubscribe from reasoning_event_stream: {e}")
+
+        # Cancel reasoning task
+        if self._reasoning_task and not self._reasoning_task.done():
+            self._reasoning_task.cancel()
+            try:
+                await self._reasoning_task
+            except asyncio.CancelledError:
+                pass
+
         # Cancel flush task
         if self._flush_task and not self._flush_task.done():
             self._flush_task.cancel()
@@ -169,7 +410,8 @@ class CovenantMetricsService:
             self._session = None
 
         logger.info(
-            f"CovenantMetricsService stopped (events_sent={self._events_sent}, " f"events_failed={self._events_failed})"
+            f"CovenantMetricsService stopped (events_sent={self._events_sent}, "
+            f"events_failed={self._events_failed}, traces_completed={self._traces_completed})"
         )
 
     async def _periodic_flush(self) -> None:
@@ -261,6 +503,227 @@ class CovenantMetricsService:
             except Exception as e:
                 self._events_failed += len(events_to_send)
                 logger.error(f"Failed to send batch: {e}")
+
+    # =========================================================================
+    # Reasoning Event Stream Processing (6-Component Trace Capture)
+    # =========================================================================
+
+    async def _process_reasoning_events(self) -> None:
+        """Process reasoning events from the stream and build traces."""
+        logger.info("Starting reasoning event processor")
+        while True:
+            try:
+                # Wait for next event
+                event_data = await self._reasoning_queue.get()
+                await self._handle_reasoning_event(event_data)
+            except asyncio.CancelledError:
+                logger.info("Reasoning event processor cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error processing reasoning event: {e}")
+
+    async def _handle_reasoning_event(self, event_data: Dict[str, Any]) -> None:
+        """Handle a single reasoning event and add to appropriate trace.
+
+        Args:
+            event_data: ReasoningStreamUpdate dict from step_streaming
+        """
+        # Extract events from stream update
+        events = event_data.get("events", [])
+        for event in events:
+            await self._process_single_event(event)
+
+    async def _process_single_event(self, event: Dict[str, Any]) -> None:
+        """Process a single reasoning event.
+
+        Args:
+            event: Individual reasoning event dict
+        """
+        event_type = event.get("event_type", "")
+        thought_id = event.get("thought_id", "")
+        task_id = event.get("task_id")
+        timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+        if not thought_id:
+            logger.debug(f"Ignoring event without thought_id: {event_type}")
+            return
+
+        self._events_received += 1
+
+        # Get or create trace for this thought
+        async with self._traces_lock:
+            if thought_id not in self._active_traces:
+                # Create new trace
+                trace_id = f"trace-{thought_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+                self._active_traces[thought_id] = CompleteTrace(
+                    trace_id=trace_id,
+                    thought_id=thought_id,
+                    task_id=task_id,
+                    agent_id_hash=self._agent_id_hash or "unknown",
+                    started_at=timestamp,
+                )
+                logger.debug(f"Created new trace {trace_id} for thought {thought_id}")
+
+            trace = self._active_traces[thought_id]
+
+        # Map event type to trace component
+        component_type = self.EVENT_TO_COMPONENT.get(event_type, "unknown")
+
+        # Extract relevant data based on event type
+        component_data = self._extract_component_data(event_type, event)
+
+        # Add component to trace
+        component = TraceComponent(
+            component_type=component_type,
+            event_type=event_type,
+            timestamp=timestamp,
+            data=component_data,
+        )
+
+        async with self._traces_lock:
+            trace.components.append(component)
+
+        # Check if trace is complete (has ACTION_RESULT)
+        if event_type == "ACTION_RESULT":
+            await self._complete_trace(thought_id, timestamp)
+
+    def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract relevant data from event for trace component.
+
+        Args:
+            event_type: Type of reasoning event
+            event: Full event data
+
+        Returns:
+            Anonymized/structured component data
+        """
+        # Common fields to exclude (contain sensitive content)
+        sensitive_fields = {"message", "content", "user_input", "raw_response"}
+
+        if event_type == "THOUGHT_START":
+            return {
+                "thought_type": event.get("thought_type"),
+                "thought_status": event.get("thought_status"),
+                "round_number": event.get("round_number"),
+                "thought_depth": event.get("thought_depth"),
+                "parent_thought_id": event.get("parent_thought_id"),
+                "task_priority": event.get("task_priority"),
+                "updated_info_available": event.get("updated_info_available"),
+            }
+
+        elif event_type == "SNAPSHOT_AND_CONTEXT":
+            # Include system snapshot summary, not full content
+            snapshot = event.get("system_snapshot", {})
+            if hasattr(snapshot, "model_dump"):
+                snapshot = snapshot.model_dump()
+            return {
+                "has_snapshot": bool(snapshot),
+                "current_time_utc": snapshot.get("current_time_utc") if isinstance(snapshot, dict) else None,
+            }
+
+        elif event_type == "DMA_RESULTS":
+            # Summarize DMA results without full content
+            return {
+                "has_csdma": event.get("csdma") is not None,
+                "has_dsdma": event.get("dsdma") is not None,
+                "has_pdma": event.get("pdma") is not None,
+            }
+
+        elif event_type == "ASPDMA_RESULT":
+            return {
+                "selected_action": event.get("selected_action"),
+                "is_recursive": event.get("is_recursive", False),
+                "has_rationale": bool(event.get("action_rationale")),
+            }
+
+        elif event_type == "CONSCIENCE_RESULT":
+            return {
+                "conscience_passed": event.get("conscience_passed"),
+                "action_was_overridden": event.get("action_was_overridden", False),
+                "updated_status_available": event.get("updated_status_available"),
+                "final_action": event.get("final_action"),
+            }
+
+        elif event_type == "ACTION_RESULT":
+            return {
+                "action_executed": event.get("action_executed"),
+                "execution_success": event.get("execution_success"),
+                "execution_time_ms": event.get("execution_time_ms"),
+                "follow_up_thought_id": event.get("follow_up_thought_id"),
+                # Audit data (outcome)
+                "audit_entry_id": event.get("audit_entry_id"),
+                "audit_sequence_number": event.get("audit_sequence_number"),
+                "audit_signature": event.get("audit_signature"),
+                # Resource usage
+                "tokens_total": event.get("tokens_total"),
+                "cost_cents": event.get("cost_cents"),
+                "llm_calls": event.get("llm_calls"),
+            }
+
+        else:
+            # Unknown event type - return minimal data
+            return {"event_type": event_type}
+
+    async def _complete_trace(self, thought_id: str, completion_time: str) -> None:
+        """Complete and sign a trace.
+
+        Args:
+            thought_id: ID of the thought whose trace is complete
+            completion_time: Timestamp of completion
+        """
+        async with self._traces_lock:
+            if thought_id not in self._active_traces:
+                return
+
+            trace = self._active_traces.pop(thought_id)
+            trace.completed_at = completion_time
+
+        # Sign the trace
+        if self._signer.sign_trace(trace):
+            self._traces_signed += 1
+            logger.info(
+                f"Signed trace {trace.trace_id} with {len(trace.components)} components"
+            )
+        else:
+            logger.debug(f"Trace {trace.trace_id} completed but not signed (no key)")
+
+        self._traces_completed += 1
+
+        # Add to completed traces
+        self._completed_traces.append(trace)
+
+        # Queue trace as event for sending
+        await self._queue_trace_event(trace)
+
+    async def _queue_trace_event(self, trace: CompleteTrace) -> None:
+        """Queue a completed trace for sending to CIRISLens.
+
+        Args:
+            trace: Completed trace to send
+        """
+        trace_event = {
+            "event_type": "complete_trace",
+            "trace": trace.to_dict(),
+        }
+        await self._queue_event(trace_event)
+
+    def get_completed_traces(self) -> List[CompleteTrace]:
+        """Get list of completed traces (for testing/export).
+
+        Returns:
+            List of completed traces
+        """
+        return self._completed_traces.copy()
+
+    def get_latest_trace(self) -> Optional[CompleteTrace]:
+        """Get the most recently completed trace.
+
+        Returns:
+            Most recent trace or None
+        """
+        if self._completed_traces:
+            return self._completed_traces[-1]
+        return None
 
     # =========================================================================
     # WiseBus-Compatible Interface (Duck-typed)
@@ -400,4 +863,10 @@ class CovenantMetricsService:
             "events_failed": self._events_failed,
             "events_queued": len(self._event_queue),
             "last_send_time": self._last_send_time.isoformat() if self._last_send_time else None,
+            # Trace capture metrics
+            "traces_active": len(self._active_traces),
+            "traces_completed": self._traces_completed,
+            "traces_signed": self._traces_signed,
+            "signer_key_id": self._signer.key_id,
+            "has_signing_key": self._signer.has_signing_key,
         }

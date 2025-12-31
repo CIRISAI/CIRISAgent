@@ -200,15 +200,46 @@ class CovenantMetricsTests:
             return False, str(e)
 
     async def _test_export_sample_trace(self) -> tuple[bool, str]:
-        """Export a sample signed trace for website use."""
+        """Export a REAL captured trace from the transparency endpoint."""
         try:
-            # Create a sample trace structure that demonstrates all 6 components
-            sample_trace = self._create_sample_trace()
+            # Wait a moment for trace capture to complete
+            await asyncio.sleep(2)
 
-            # Try to sign with real key if available
+            # Fetch the real captured trace from the transparency endpoint
+            trace_response = await self.client._transport.request(
+                "GET", "/v1/transparency/traces/latest"
+            )
+
+            if not trace_response:
+                # Fall back to creating sample if no real trace captured
+                return await self._export_fallback_sample()
+
+            # Export the REAL trace
+            output_dir = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            output_dir.mkdir(exist_ok=True)
+
+            output_file = output_dir / f"real_trace_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+            with open(output_file, "w") as f:
+                json.dump(trace_response, f, indent=2, default=str)
+
+            # Check if signed
+            signed = trace_response.get("signature") is not None
+            components = len(trace_response.get("components", []))
+            sign_status = "signed" if signed else "unsigned"
+
+            return True, f"REAL trace exported ({sign_status}, {components} components): {output_file.name}"
+
+        except Exception as e:
+            # Fall back to sample on error
+            logger.warning(f"Could not get real trace, using sample: {e}")
+            return await self._export_fallback_sample()
+
+    async def _export_fallback_sample(self) -> tuple[bool, str]:
+        """Export a sample trace as fallback when real trace not available."""
+        try:
+            sample_trace = self._create_sample_trace()
             signed = await self._sign_sample_trace(sample_trace)
 
-            # Export to file
             output_dir = Path(__file__).parent.parent.parent.parent / "qa_reports"
             output_dir.mkdir(exist_ok=True)
 
@@ -223,7 +254,11 @@ class CovenantMetricsTests:
             return False, str(e)
 
     def _create_sample_trace(self) -> Dict[str, Any]:
-        """Create a sample trace structure demonstrating all 6 components."""
+        """Create a comprehensive sample trace demonstrating full Coherence Ratchet data.
+
+        This sample shows the complete reasoning chain that opted-in agents
+        contribute to the corpus for pattern analysis.
+        """
         now = datetime.now(timezone.utc).isoformat()
 
         return {
@@ -234,6 +269,7 @@ class CovenantMetricsTests:
             "started_at": now,
             "completed_at": now,
             "components": [
+                # OBSERVATION: What triggered processing
                 {
                     "component_type": "observation",
                     "event_type": "THOUGHT_START",
@@ -243,38 +279,99 @@ class CovenantMetricsTests:
                         "thought_status": "pending",
                         "round_number": 0,
                         "thought_depth": 0,
+                        "parent_thought_id": None,
                         "task_priority": 5,
+                        "task_description": "User asked about weather conditions",
+                        "initial_context": "Conversation about planning outdoor activities",
+                        "channel_id": "discord-general-12345",
+                        "source_adapter": "discord",
+                        "updated_info_available": False,
+                        "requires_human_input": False,
                     },
                 },
+                # CONTEXT: Environmental state
                 {
                     "component_type": "context",
                     "event_type": "SNAPSHOT_AND_CONTEXT",
                     "timestamp": now,
                     "data": {
-                        "has_snapshot": True,
-                        "current_time_utc": now,
+                        "system_snapshot": {
+                            "current_time_utc": now,
+                            "agent_identity": {
+                                "name": "CIRIS-Echo",
+                                "version": "1.8.0",
+                                "dsdma_identifier": "general_assistant",
+                            },
+                            "cognitive_state": "WORK",
+                            "active_task_count": 1,
+                            "memory_usage_mb": 256,
+                        },
+                        "gathered_context": {
+                            "user_history": "3 previous interactions today",
+                            "topic_continuity": "weather discussion",
+                        },
+                        "context_sources": ["conversation_history", "user_profile"],
+                        "relevant_memories": [
+                            {"type": "episodic", "summary": "User mentioned hiking plans earlier"},
+                        ],
+                        "active_services": ["memory", "llm", "wise_authority"],
+                        "cognitive_state": "WORK",
                     },
                 },
+                # RATIONALE Part 1: DMA reasoning outputs
                 {
                     "component_type": "rationale",
                     "event_type": "DMA_RESULTS",
                     "timestamp": now,
                     "data": {
-                        "has_csdma": True,
-                        "has_dsdma": True,
-                        "has_pdma": True,
+                        "csdma": {
+                            "output": {
+                                "action": "SPEAK",
+                                "reasoning": "User's question about weather is straightforward and can be answered directly.",
+                            },
+                            "prompt_used": "Analyze the following request using common sense...",
+                            "reasoning": "The request is clear and appropriate for direct response.",
+                        },
+                        "dsdma": {
+                            "output": {
+                                "domain_relevance": "general_knowledge",
+                                "confidence": 0.85,
+                            },
+                            "prompt_used": "Apply domain-specific knowledge...",
+                            "domain_context": "General assistant without specialized weather data access",
+                        },
+                        "pdma": {
+                            "output": {
+                                "ethical_assessment": "benign",
+                                "value_alignment": "helpful",
+                            },
+                            "prompt_used": "Evaluate the ethical implications...",
+                            "principles_applied": ["helpfulness", "honesty", "harmlessness"],
+                            "ethical_considerations": "No ethical concerns with weather information",
+                        },
+                        "combined_analysis": "All DMAs agree: SPEAK is appropriate response",
                     },
                 },
+                # RATIONALE Part 2: Action selection
                 {
                     "component_type": "rationale",
                     "event_type": "ASPDMA_RESULT",
                     "timestamp": now,
                     "data": {
                         "selected_action": "SPEAK",
+                        "action_rationale": "The user asked a direct question about weather. Based on CSDMA analysis showing this is a straightforward request, DSDMA confirming general knowledge domain, and PDMA finding no ethical concerns, SPEAK is the appropriate action to provide helpful information.",
+                        "reasoning_summary": "Direct helpful response to clear user question",
+                        "action_parameters": {
+                            "response_type": "informative",
+                            "tone": "friendly",
+                        },
+                        "alternatives_considered": ["DEFER", "PONDER"],
+                        "selection_confidence": 0.92,
                         "is_recursive": False,
-                        "has_rationale": True,
+                        "aspdma_prompt": "Select the most appropriate action...",
                     },
                 },
+                # CONSCIENCE: Ethical validation
                 {
                     "component_type": "conscience",
                     "event_type": "CONSCIENCE_RESULT",
@@ -283,21 +380,57 @@ class CovenantMetricsTests:
                         "conscience_passed": True,
                         "action_was_overridden": False,
                         "final_action": "SPEAK",
+                        "epistemic_data": {
+                            "certainty_level": "high",
+                            "knowledge_gaps": [],
+                            "assumptions_made": ["User wants current conditions"],
+                        },
+                        "uncertainty_flags": [],
+                        "confidence_score": 0.91,
+                        "override_reason": None,
+                        "original_action": "SPEAK",
+                        "conscience_checks": {
+                            "harm_check": {"passed": True, "details": "No potential for harm"},
+                            "honesty_check": {"passed": True, "details": "Response will be truthful"},
+                            "helpfulness_check": {"passed": True, "details": "Directly addresses user need"},
+                            "scope_check": {"passed": True, "details": "Within agent capabilities"},
+                            "consent_check": {"passed": True, "details": "No sensitive data involved"},
+                        },
+                        "guardrails_triggered": [],
+                        "safety_flags": [],
                     },
                 },
+                # ACTION + OUTCOME: Execution and results
                 {
                     "component_type": "action",
                     "event_type": "ACTION_RESULT",
                     "timestamp": now,
                     "data": {
                         "action_executed": "SPEAK",
+                        "action_parameters": {
+                            "channel_id": "discord-general-12345",
+                            "response_format": "text",
+                        },
                         "execution_success": True,
+                        "execution_result": {
+                            "message_sent": True,
+                            "message_id": "msg-abc123",
+                        },
+                        "execution_error": None,
                         "execution_time_ms": 150.5,
+                        "follow_up_thought_id": None,
+                        "requires_follow_up": False,
                         "audit_entry_id": "audit-sample-001",
                         "audit_sequence_number": 1,
+                        "audit_signature": "ed25519-sig-placeholder",
+                        "audit_hash_chain": "sha256-chain-link",
+                        "tokens_input": 450,
+                        "tokens_output": 800,
                         "tokens_total": 1250,
                         "cost_cents": 0.025,
                         "llm_calls": 4,
+                        "llm_model": "claude-3-5-sonnet",
+                        "response_content": "Based on general knowledge, I'd recommend checking a weather service for current conditions in your area before your hiking trip.",
                     },
                 },
             ],

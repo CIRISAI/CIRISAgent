@@ -279,3 +279,162 @@ async def get_system_status() -> JSONDict:
         "pause_reason": None,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ============================================================================
+# Coherence Ratchet Trace Endpoints
+# ============================================================================
+
+
+class TraceComponent(BaseModel):
+    """A single component of a reasoning trace."""
+
+    component_type: str = Field(..., description="Type: observation, context, rationale, conscience, action")
+    event_type: str = Field(..., description="Event type: THOUGHT_START, DMA_RESULTS, etc.")
+    timestamp: str = Field(..., description="ISO timestamp")
+    data: Dict[str, Any] = Field(..., description="Component data")
+
+
+class CompleteTraceResponse(BaseModel):
+    """A complete 6-component reasoning trace for Coherence Ratchet."""
+
+    trace_id: str = Field(..., description="Unique trace identifier")
+    thought_id: str = Field(..., description="Associated thought ID")
+    task_id: Optional[str] = Field(None, description="Associated task ID")
+    agent_id_hash: str = Field(..., description="Anonymized agent identifier")
+    started_at: str = Field(..., description="Trace start time")
+    completed_at: Optional[str] = Field(None, description="Trace completion time")
+    components: List[TraceComponent] = Field(..., description="6 reasoning components")
+    signature: Optional[str] = Field(None, description="Ed25519 signature")
+    signature_key_id: Optional[str] = Field(None, description="Signing key ID")
+
+
+class TracesListResponse(BaseModel):
+    """List of captured traces."""
+
+    traces: List[CompleteTraceResponse] = Field(..., description="Captured traces")
+    total: int = Field(..., description="Total trace count")
+    consent_given: bool = Field(..., description="Whether metrics consent is active")
+
+
+@router.get("/traces", response_model=TracesListResponse)
+async def get_coherence_traces(
+    request: Request,
+    limit: int = 10,
+) -> TracesListResponse:
+    """
+    Get captured reasoning traces for Coherence Ratchet corpus.
+
+    Returns complete 6-component traces from opted-in agents.
+    Traces include: Observation, Context, Rationale, Conscience, Action, Outcome.
+
+    Requires metrics consent to be enabled.
+    """
+    # Try to get covenant metrics service from adapter registry
+    covenant_service = None
+
+    # Check if we have access to the runtime's adapter services
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime:
+        # Try to find the covenant metrics service in loaded adapters
+        for adapter in getattr(runtime, "_adapters", {}).values():
+            if hasattr(adapter, "metrics_service"):
+                covenant_service = adapter.metrics_service
+                break
+
+    # Also check app.state directly
+    if not covenant_service:
+        covenant_service = getattr(request.app.state, "covenant_metrics_service", None)
+
+    if not covenant_service:
+        # Return empty response if service not loaded
+        return TracesListResponse(
+            traces=[],
+            total=0,
+            consent_given=False,
+        )
+
+    # Get consent status
+    consent_given = getattr(covenant_service, "_consent_given", False)
+
+    # Get completed traces
+    traces = []
+    if hasattr(covenant_service, "get_completed_traces"):
+        raw_traces = covenant_service.get_completed_traces()
+        for trace in raw_traces[-limit:]:  # Get last N traces
+            trace_dict = trace.to_dict() if hasattr(trace, "to_dict") else trace
+            traces.append(CompleteTraceResponse(
+                trace_id=trace_dict.get("trace_id", ""),
+                thought_id=trace_dict.get("thought_id", ""),
+                task_id=trace_dict.get("task_id"),
+                agent_id_hash=trace_dict.get("agent_id_hash", ""),
+                started_at=trace_dict.get("started_at", ""),
+                completed_at=trace_dict.get("completed_at"),
+                components=[
+                    TraceComponent(
+                        component_type=c.get("component_type", ""),
+                        event_type=c.get("event_type", ""),
+                        timestamp=c.get("timestamp", ""),
+                        data=c.get("data", {}),
+                    )
+                    for c in trace_dict.get("components", [])
+                ],
+                signature=trace_dict.get("signature"),
+                signature_key_id=trace_dict.get("signature_key_id"),
+            ))
+
+    return TracesListResponse(
+        traces=traces,
+        total=len(traces),
+        consent_given=consent_given,
+    )
+
+
+@router.get("/traces/latest", response_model=Optional[CompleteTraceResponse])
+async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
+    """
+    Get the most recently captured reasoning trace.
+
+    Returns the latest complete trace with all 6 components.
+    """
+    # Try to get covenant metrics service
+    covenant_service = None
+
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime:
+        for adapter in getattr(runtime, "_adapters", {}).values():
+            if hasattr(adapter, "metrics_service"):
+                covenant_service = adapter.metrics_service
+                break
+
+    if not covenant_service:
+        covenant_service = getattr(request.app.state, "covenant_metrics_service", None)
+
+    if not covenant_service or not hasattr(covenant_service, "get_latest_trace"):
+        return None
+
+    trace = covenant_service.get_latest_trace()
+    if not trace:
+        return None
+
+    trace_dict = trace.to_dict() if hasattr(trace, "to_dict") else trace
+
+    return CompleteTraceResponse(
+        trace_id=trace_dict.get("trace_id", ""),
+        thought_id=trace_dict.get("thought_id", ""),
+        task_id=trace_dict.get("task_id"),
+        agent_id_hash=trace_dict.get("agent_id_hash", ""),
+        started_at=trace_dict.get("started_at", ""),
+        completed_at=trace_dict.get("completed_at"),
+        components=[
+            TraceComponent(
+                component_type=c.get("component_type", ""),
+                event_type=c.get("event_type", ""),
+                timestamp=c.get("timestamp", ""),
+                data=c.get("data", {}),
+            )
+            for c in trace_dict.get("components", [])
+        ],
+        signature=trace_dict.get("signature"),
+        signature_key_id=trace_dict.get("signature_key_id"),
+    )

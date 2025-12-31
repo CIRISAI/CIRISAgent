@@ -588,81 +588,186 @@ class CovenantMetricsService:
             await self._complete_trace(thought_id, timestamp)
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract relevant data from event for trace component.
+        """Extract FULL reasoning data from event for trace component.
+
+        User has opted in to share data for the Coherence Ratchet corpus.
+        We capture complete reasoning content to enable pattern analysis
+        across thousands of agents running different AI models.
 
         Args:
             event_type: Type of reasoning event
             event: Full event data
 
         Returns:
-            Anonymized/structured component data
+            Complete component data for corpus analysis
         """
-        # Common fields to exclude (contain sensitive content)
-        sensitive_fields = {"message", "content", "user_input", "raw_response"}
+
+        def _serialize(obj: Any) -> Any:
+            """Recursively serialize objects to JSON-safe format."""
+            if obj is None:
+                return None
+            if isinstance(obj, (str, int, float, bool)):
+                return obj
+            if isinstance(obj, (list, tuple)):
+                return [_serialize(item) for item in obj]
+            if isinstance(obj, dict):
+                return {k: _serialize(v) for k, v in obj.items()}
+            if hasattr(obj, "model_dump"):
+                return obj.model_dump()
+            if hasattr(obj, "__dict__"):
+                return {k: _serialize(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
+            return str(obj)
 
         if event_type == "THOUGHT_START":
+            # OBSERVATION: What triggered processing
+            # Include full task context for pattern analysis
             return {
+                # Core thought metadata
                 "thought_type": event.get("thought_type"),
                 "thought_status": event.get("thought_status"),
                 "round_number": event.get("round_number"),
                 "thought_depth": event.get("thought_depth"),
                 "parent_thought_id": event.get("parent_thought_id"),
+                # Task details - what was the observation/trigger
                 "task_priority": event.get("task_priority"),
+                "task_description": event.get("task_description"),
+                "initial_context": event.get("initial_context"),
+                "channel_id": event.get("channel_id"),
+                "source_adapter": event.get("source_adapter"),
+                # Flags
                 "updated_info_available": event.get("updated_info_available"),
+                "requires_human_input": event.get("requires_human_input"),
             }
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":
-            # Include system snapshot summary, not full content
+            # CONTEXT: Environmental state when decision was made
+            # Full snapshot enables understanding decision context
             snapshot = event.get("system_snapshot", {})
-            if hasattr(snapshot, "model_dump"):
-                snapshot = snapshot.model_dump()
+            snapshot_data = _serialize(snapshot)
+
             return {
-                "has_snapshot": bool(snapshot),
-                "current_time_utc": snapshot.get("current_time_utc") if isinstance(snapshot, dict) else None,
+                # Full system snapshot
+                "system_snapshot": snapshot_data,
+                # Context gathered for this thought
+                "gathered_context": _serialize(event.get("gathered_context")),
+                "context_sources": event.get("context_sources"),
+                # Memory and history context
+                "relevant_memories": _serialize(event.get("relevant_memories")),
+                "conversation_history": _serialize(event.get("conversation_history")),
+                # Active state
+                "active_services": event.get("active_services"),
+                "cognitive_state": event.get("cognitive_state"),
             }
 
         elif event_type == "DMA_RESULTS":
-            # Summarize DMA results without full content
+            # RATIONALE (Part 1): DMA reasoning outputs
+            # Full reasoning text enables pattern comparison
+            csdma = event.get("csdma", {})
+            dsdma = event.get("dsdma", {})
+            pdma = event.get("pdma", {})
+
             return {
-                "has_csdma": event.get("csdma") is not None,
-                "has_dsdma": event.get("dsdma") is not None,
-                "has_pdma": event.get("pdma") is not None,
+                # Common Sense DMA - basic reasoning
+                "csdma": {
+                    "output": _serialize(csdma.get("output") if isinstance(csdma, dict) else csdma),
+                    "prompt_used": event.get("csdma_prompt"),
+                    "reasoning": csdma.get("reasoning") if isinstance(csdma, dict) else None,
+                },
+                # Domain Specific DMA - specialized knowledge
+                "dsdma": {
+                    "output": _serialize(dsdma.get("output") if isinstance(dsdma, dict) else dsdma),
+                    "prompt_used": event.get("dsdma_prompt"),
+                    "domain_context": dsdma.get("domain_context") if isinstance(dsdma, dict) else None,
+                },
+                # Principled DMA - ethical/value reasoning
+                "pdma": {
+                    "output": _serialize(pdma.get("output") if isinstance(pdma, dict) else pdma),
+                    "prompt_used": event.get("pdma_prompt"),
+                    "principles_applied": pdma.get("principles_applied") if isinstance(pdma, dict) else None,
+                    "ethical_considerations": pdma.get("ethical_considerations") if isinstance(pdma, dict) else None,
+                },
+                # Aggregate reasoning
+                "combined_analysis": event.get("combined_analysis"),
             }
 
         elif event_type == "ASPDMA_RESULT":
+            # RATIONALE (Part 2): Action selection reasoning
+            # Full rationale text for action selection
             return {
+                # Selected action and reasoning
                 "selected_action": event.get("selected_action"),
+                "action_rationale": event.get("action_rationale"),  # Full text
+                "reasoning_summary": event.get("reasoning_summary"),
+                # Action parameters
+                "action_parameters": _serialize(event.get("action_parameters")),
+                # Selection process
+                "alternatives_considered": event.get("alternatives_considered"),
+                "selection_confidence": event.get("selection_confidence"),
+                # Recursive flag
                 "is_recursive": event.get("is_recursive", False),
-                "has_rationale": bool(event.get("action_rationale")),
+                # Prompt used for decision
+                "aspdma_prompt": event.get("aspdma_prompt"),
             }
 
         elif event_type == "CONSCIENCE_RESULT":
+            # CONSCIENCE: Ethical validation details
+            # Full epistemic and ethical check data
             return {
+                # Overall result
                 "conscience_passed": event.get("conscience_passed"),
                 "action_was_overridden": event.get("action_was_overridden", False),
-                "updated_status_available": event.get("updated_status_available"),
                 "final_action": event.get("final_action"),
+                # Epistemic checks - uncertainty/confidence
+                "epistemic_data": _serialize(event.get("epistemic_data")),
+                "uncertainty_flags": event.get("uncertainty_flags"),
+                "confidence_score": event.get("confidence_score"),
+                # Override details if action was changed
+                "override_reason": event.get("override_reason"),
+                "original_action": event.get("original_action"),
+                # Individual conscience check results
+                "conscience_checks": _serialize(event.get("conscience_checks")),
+                # Guardrail activations
+                "guardrails_triggered": event.get("guardrails_triggered"),
+                "safety_flags": event.get("safety_flags"),
             }
 
         elif event_type == "ACTION_RESULT":
+            # ACTION + OUTCOME: What happened and results
+            # Full execution details and audit trail
             return {
+                # Action executed
                 "action_executed": event.get("action_executed"),
+                "action_parameters": _serialize(event.get("action_parameters")),
+                # Execution outcome
                 "execution_success": event.get("execution_success"),
+                "execution_result": _serialize(event.get("execution_result")),
+                "execution_error": event.get("execution_error"),
                 "execution_time_ms": event.get("execution_time_ms"),
+                # Follow-up
                 "follow_up_thought_id": event.get("follow_up_thought_id"),
-                # Audit data (outcome)
+                "requires_follow_up": event.get("requires_follow_up"),
+                # Full audit trail (OUTCOME)
                 "audit_entry_id": event.get("audit_entry_id"),
                 "audit_sequence_number": event.get("audit_sequence_number"),
                 "audit_signature": event.get("audit_signature"),
-                # Resource usage
+                "audit_hash_chain": event.get("audit_hash_chain"),
+                # Resource consumption
+                "tokens_input": event.get("tokens_input"),
+                "tokens_output": event.get("tokens_output"),
                 "tokens_total": event.get("tokens_total"),
                 "cost_cents": event.get("cost_cents"),
                 "llm_calls": event.get("llm_calls"),
+                "llm_model": event.get("llm_model"),
+                # Response content (for SPEAK actions)
+                "response_content": event.get("response_content"),
             }
 
         else:
-            # Unknown event type - return minimal data
-            return {"event_type": event_type}
+            # Unknown event type - capture everything we can
+            return {
+                "event_type": event_type,
+                "raw_data": _serialize(event),
+            }
 
     async def _complete_trace(self, thought_id: str, completion_time: str) -> None:
         """Complete and sign a trace.

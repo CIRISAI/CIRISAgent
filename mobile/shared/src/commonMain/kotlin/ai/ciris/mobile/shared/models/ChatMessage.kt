@@ -16,7 +16,8 @@ data class ChatMessage(
 enum class MessageType {
     USER,
     AGENT,
-    SYSTEM
+    SYSTEM,
+    ERROR
 }
 
 @Serializable

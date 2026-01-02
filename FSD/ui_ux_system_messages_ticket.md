@@ -156,6 +156,89 @@ Clients may receive these error types (for potential special handling):
 
 ---
 
+## Implementation Notes (from Android/KMP Mobile)
+
+The Android and KMP Mobile clients have been updated. Key learnings:
+
+### 1. Data Model Updates
+
+**Add `message_type` to your message model:**
+```kotlin
+// Android (Gson)
+data class HistoryMessage(
+    val id: String?,
+    val content: String?,
+    @SerializedName("is_agent") val isAgent: Boolean?,
+    val author: String?,
+    val timestamp: String?,
+    @SerializedName("message_type") val messageType: String?  // NEW FIELD
+)
+
+// KMP Mobile (kotlinx.serialization)
+enum class MessageType { USER, AGENT, SYSTEM, ERROR }
+
+data class ChatMessage(
+    val id: String,
+    val text: String,
+    val type: MessageType,  // Use enum, parse from API string
+    val timestamp: Instant
+)
+```
+
+### 2. Backwards Compatibility
+
+**Handle missing/null `message_type` gracefully:**
+```kotlin
+val messageType = when (msg.messageType?.lowercase()) {
+    "user" -> MessageType.USER
+    "agent" -> MessageType.AGENT
+    "system" -> MessageType.SYSTEM
+    "error" -> MessageType.ERROR
+    else -> if (isAgent) MessageType.AGENT else MessageType.USER  // Fallback
+}
+```
+
+### 3. Color Constants
+
+**Recommended hex colors (matches design spec):**
+| Type | Background | Text Color |
+|------|------------|------------|
+| System | `#E0F2FE` (light blue) | `#0369A1` (dark blue) |
+| Error | `#FEE2E2` (light red) | `#DC2626` (red) |
+
+### 4. Adapter Pattern (RecyclerView/LazyColumn)
+
+**Add new view types in adapter:**
+```kotlin
+// Android RecyclerView
+companion object {
+    private const val TYPE_USER_MESSAGE = 0
+    private const val TYPE_AGENT_MESSAGE = 1
+    private const val TYPE_SYSTEM_MESSAGE = 3  // NEW
+    private const val TYPE_ERROR_MESSAGE = 4   // NEW
+}
+
+// Compose
+when (message.type) {
+    MessageType.USER -> UserChatBubble(message)
+    MessageType.AGENT -> AgentChatBubble(message)
+    MessageType.SYSTEM -> SystemMessage(message)
+    MessageType.ERROR -> ErrorMessage(message)
+}
+```
+
+### 5. Reference Implementations
+
+- **KMP Mobile (Compose Multiplatform):**
+  - `mobile/shared/src/commonMain/kotlin/.../models/ChatMessage.kt` - Model with enum
+  - `mobile/shared/src/commonMain/kotlin/.../ui/screens/InteractScreen.kt` - Composables
+
+- **Android (View-based):**
+  - `android/app/src/main/java/.../InteractActivity.kt` - HistoryMessage data class
+  - `android/app/src/main/java/.../InteractFragment.kt` - ChatWithReasoningAdapter
+
+---
+
 ## Questions?
 
 Contact the backend team or refer to:

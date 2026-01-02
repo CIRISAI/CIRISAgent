@@ -368,6 +368,7 @@ private fun ChatMessageList(
                 MessageType.USER -> UserChatBubble(message)
                 MessageType.AGENT -> AgentChatBubble(message)
                 MessageType.SYSTEM -> SystemMessage(message)
+                MessageType.ERROR -> ErrorMessage(message)
             }
         }
     }
@@ -499,7 +500,8 @@ private fun AgentChatBubble(message: ChatMessage, modifier: Modifier = Modifier)
 }
 
 /**
- * System message
+ * System message (informational notifications)
+ * Styled with light blue/gray background and info styling
  */
 @Composable
 private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
@@ -511,15 +513,60 @@ private fun SystemMessage(message: ChatMessage, modifier: Modifier = Modifier) {
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = Color(0xFFF3F4F6),
+            color = Color(0xFFE0F2FE), // Light blue info background
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
-            Text(
-                text = message.text,
+            Row(
                 modifier = Modifier.padding(8.dp),
-                fontSize = 12.sp,
-                color = Color(0xFF6B7280)
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "\u2139\uFE0F", // ℹ️ info icon
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = message.text,
+                    fontSize = 12.sp,
+                    color = Color(0xFF0369A1) // Dark blue text
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Error message (error/warning notifications)
+ * Styled with light red/orange background and warning styling
+ */
+@Composable
+private fun ErrorMessage(message: ChatMessage, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFFFEE2E2), // Light red error background
+            modifier = Modifier.widthIn(max = 280.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "\u26A0\uFE0F", // ⚠️ warning icon
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = message.text,
+                    fontSize = 12.sp,
+                    color = Color(0xFFDC2626) // Red text
+                )
+            }
         }
     }
 }

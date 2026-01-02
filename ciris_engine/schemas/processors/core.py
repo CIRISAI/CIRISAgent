@@ -8,7 +8,13 @@ from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.conscience.core import EpistemicData
+from ciris_engine.schemas.conscience.core import (
+    CoherenceCheckResult,
+    EntropyCheckResult,
+    EpistemicData,
+    EpistemicHumilityResult,
+    OptimizationVetoResult,
+)
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 
 from ..actions.parameters import (
@@ -71,18 +77,59 @@ class ConscienceCheckInternalResult(BaseModel):
 
 
 class ConscienceApplicationResult(BaseModel):
-    """Result from conscience application."""
+    """Result from conscience application with all 6 conscience check details.
+
+    Captures results from:
+    - Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
+    - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
+    """
 
     original_action: ActionSelectionDMAResult = Field(..., description="Original action selected")
     final_action: ActionSelectionDMAResult = Field(..., description="Final action after consciences")
     overridden: bool = Field(False, description="Whether action was overridden")
     override_reason: Optional[str] = Field(None, description="Reason for override")
     epistemic_data: EpistemicData = Field(..., description="Epistemic faculty data from conscience checks (REQUIRED)")
-    thought_depth_triggered: Optional[bool] = Field(
-        None, description="Whether the thought depth guardrail forced an override"
-    )
+
+    # === BYPASS GUARDRAILS ===
+    # 1. Updated Status Conscience
     updated_status_detected: Optional[bool] = Field(
-        None, description="Whether the updated status conscience detected new information"
+        None, description="Whether UpdatedStatusConscience detected new information"
+    )
+    updated_status_content: Optional[str] = Field(
+        None, description="Content of new observation if detected"
+    )
+
+    # 2. Thought Depth Conscience
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether ThoughtDepthGuardrail forced DEFER due to max depth"
+    )
+    thought_depth_current: Optional[int] = Field(None, description="Current thought depth")
+    thought_depth_max: Optional[int] = Field(None, description="Maximum allowed depth")
+
+    # === ETHICAL FACULTIES ===
+    # Flag for exempt actions (skip ethical faculties)
+    ethical_faculties_skipped: Optional[bool] = Field(
+        None, description="Whether ethical faculties were skipped due to exempt action"
+    )
+
+    # 3. Entropy Conscience
+    entropy_check: Optional[EntropyCheckResult] = Field(
+        None, description="Entropy conscience check result"
+    )
+
+    # 4. Coherence Conscience
+    coherence_check: Optional[CoherenceCheckResult] = Field(
+        None, description="Coherence conscience check result"
+    )
+
+    # 5. Optimization Veto Conscience
+    optimization_veto_check: Optional[OptimizationVetoResult] = Field(
+        None, description="Optimization veto conscience check result"
+    )
+
+    # 6. Epistemic Humility Conscience
+    epistemic_humility_check: Optional[EpistemicHumilityResult] = Field(
+        None, description="Epistemic humility conscience check result"
     )
 
     model_config = ConfigDict(extra="forbid")

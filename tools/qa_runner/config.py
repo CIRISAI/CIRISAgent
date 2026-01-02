@@ -42,6 +42,7 @@ class QAModule(Enum):
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
     COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
     COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
+    SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -128,7 +129,7 @@ class QAConfig:
     # Server management
     auto_start_server: bool = True
     server_startup_timeout: float = (
-        180.0  # Startup with TSDB consolidation can take 45-60 seconds (up to 3 min for PostgreSQL with weekly consolidation)
+        600.0  # Wakeup with rate-limited LLM: 60 LLM calls × ~40K tokens = 2.4M tokens, at 300K TPM = ~8-10 min
     )
     mock_llm: bool = True
     adapter: str = "api"
@@ -138,6 +139,11 @@ class QAConfig:
     postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"
     postgres_port: int = 8001  # Port for PostgreSQL backend server (SQLite uses api_port)
     parallel_backends: bool = False  # Run backend tests in parallel instead of sequentially
+
+    # Live LLM configuration (--live flag)
+    live_api_key: Optional[str] = None
+    live_model: Optional[str] = None
+    live_base_url: Optional[str] = None
 
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
@@ -222,6 +228,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.COVENANT_METRICS:
             # Covenant metrics trace capture tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.SYSTEM_MESSAGES:
+            # System messages visibility tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

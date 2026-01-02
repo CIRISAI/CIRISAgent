@@ -22,6 +22,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -235,6 +236,7 @@ class CovenantMetricsService:
     """
 
     # Map reasoning events to trace components
+    # Handle both formats: "THOUGHT_START" and "ReasoningEvent.THOUGHT_START"
     EVENT_TO_COMPONENT = {
         "THOUGHT_START": "observation",
         "SNAPSHOT_AND_CONTEXT": "context",
@@ -242,6 +244,13 @@ class CovenantMetricsService:
         "ASPDMA_RESULT": "rationale",
         "CONSCIENCE_RESULT": "conscience",
         "ACTION_RESULT": "action",  # Also contains outcome data
+        # Also handle full enum names from streaming
+        "ReasoningEvent.THOUGHT_START": "observation",
+        "ReasoningEvent.SNAPSHOT_AND_CONTEXT": "context",
+        "ReasoningEvent.DMA_RESULTS": "rationale",
+        "ReasoningEvent.ASPDMA_RESULT": "rationale",
+        "ReasoningEvent.CONSCIENCE_RESULT": "conscience",
+        "ReasoningEvent.ACTION_RESULT": "action",
     }
 
     def __init__(self, config: Optional[JSONDict] = None) -> None:
@@ -252,16 +261,30 @@ class CovenantMetricsService:
         """
         self._config = config or {}
 
-        # Consent state
-        self._consent_given = bool(self._config.get("consent_given", False))
+        # Consent state - check env var first for QA testing
+        env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
+        env_timestamp = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP")
+
+        config_consent = bool(self._config.get("consent_given", False))
+        self._consent_given = config_consent or env_consent
+
         self._consent_timestamp: Optional[str] = None
-        raw_timestamp = self._config.get("consent_timestamp")
+        raw_timestamp = self._config.get("consent_timestamp") or env_timestamp
         if raw_timestamp is not None:
             self._consent_timestamp = str(raw_timestamp)
 
-        # Endpoint configuration
+        if env_consent and not config_consent:
+            logger.info("✅ CONSENT enabled via environment variable CIRIS_COVENANT_METRICS_CONSENT")
+
+        # Endpoint configuration - check env var first for QA testing
+        env_endpoint = os.environ.get("CIRIS_COVENANT_METRICS_ENDPOINT")
         raw_url = self._config.get("endpoint_url")
-        self._endpoint_url: str = str(raw_url) if raw_url else "https://lens.ciris.ai/v1"
+        if env_endpoint:
+            self._endpoint_url: str = env_endpoint
+        elif raw_url:
+            self._endpoint_url = str(raw_url)
+        else:
+            self._endpoint_url = "https://lens.ciris.ai/v1"
 
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
@@ -337,7 +360,11 @@ class CovenantMetricsService:
 
     async def start(self) -> None:
         """Start the service and initialize HTTP client."""
-        logger.info("Starting CovenantMetricsService")
+        logger.info("=" * 70)
+        logger.info("🚀 COVENANT METRICS SERVICE STARTING")
+        logger.info(f"   Consent given: {self._consent_given}")
+        logger.info(f"   Endpoint: {self._endpoint_url}")
+        logger.info("=" * 70)
 
         # Subscribe to reasoning_event_stream for trace capture
         # This happens regardless of consent - we just don't SEND until consent
@@ -347,15 +374,23 @@ class CovenantMetricsService:
             self._reasoning_queue = asyncio.Queue(maxsize=1000)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            logger.info("Subscribed to reasoning_event_stream for trace capture")
+            subscriber_count = len(reasoning_event_stream._subscribers)
+            logger.info("=" * 70)
+            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream")
+            logger.info(f"   Total subscribers: {subscriber_count}")
+            logger.info(f"   Queue maxsize: 1000")
+            logger.info("=" * 70)
         except Exception as e:
-            logger.warning(f"Could not subscribe to reasoning_event_stream: {e}")
+            logger.error("=" * 70)
+            logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
+            logger.error("   Traces will NOT be captured!")
+            logger.error("=" * 70)
 
         if not self._consent_given:
-            logger.warning(
-                "CovenantMetricsService started but consent not given - "
-                "traces will be captured but NOT sent until user consents via setup wizard"
-            )
+            logger.warning("=" * 70)
+            logger.warning("⚠️  CONSENT NOT GIVEN - traces captured but NOT sent")
+            logger.warning("   Complete setup wizard to enable sending")
+            logger.warning("=" * 70)
             return
 
         # Initialize HTTP session
@@ -370,11 +405,21 @@ class CovenantMetricsService:
         # Start flush task
         self._flush_task = asyncio.create_task(self._periodic_flush())
 
-        logger.info(f"CovenantMetricsService started with consent (timestamp={self._consent_timestamp})")
+        logger.info("=" * 70)
+        logger.info(f"✅ COVENANT METRICS SERVICE READY")
+        logger.info(f"   Sending to: {self._endpoint_url}")
+        logger.info(f"   Consent timestamp: {self._consent_timestamp}")
+        logger.info(f"   Batch size: {self._batch_size}")
+        logger.info(f"   Flush interval: {self._flush_interval}s")
+        logger.info("=" * 70)
 
     async def stop(self) -> None:
         """Stop the service and flush remaining events."""
-        logger.info("Stopping CovenantMetricsService")
+        logger.info("=" * 70)
+        logger.info("🛑 COVENANT METRICS SERVICE STOPPING")
+        logger.info(f"   Traces completed: {self._traces_completed}")
+        logger.info(f"   Events in queue: {len(self._event_queue)}")
+        logger.info("=" * 70)
 
         # Unsubscribe from reasoning_event_stream
         if self._reasoning_queue:
@@ -382,6 +427,7 @@ class CovenantMetricsService:
                 from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
 
                 reasoning_event_stream.unsubscribe(self._reasoning_queue)
+                logger.info("   Unsubscribed from reasoning_event_stream")
             except Exception as e:
                 logger.debug(f"Could not unsubscribe from reasoning_event_stream: {e}")
 
@@ -402,6 +448,7 @@ class CovenantMetricsService:
                 pass
 
         # Flush remaining events
+        logger.info("   Performing final flush...")
         await self._flush_events()
 
         # Close HTTP session
@@ -409,10 +456,13 @@ class CovenantMetricsService:
             await self._session.close()
             self._session = None
 
-        logger.info(
-            f"CovenantMetricsService stopped (events_sent={self._events_sent}, "
-            f"events_failed={self._events_failed}, traces_completed={self._traces_completed})"
-        )
+        logger.info("=" * 70)
+        logger.info("📊 COVENANT METRICS FINAL STATS")
+        logger.info(f"   Traces completed: {self._traces_completed}")
+        logger.info(f"   Events sent: {self._events_sent}")
+        logger.info(f"   Events failed: {self._events_failed}")
+        logger.info(f"   Events received: {self._events_received}")
+        logger.info("=" * 70)
 
     async def _periodic_flush(self) -> None:
         """Periodically flush events even if batch is not full."""
@@ -427,7 +477,11 @@ class CovenantMetricsService:
 
     async def _flush_events(self) -> None:
         """Send all queued events to CIRISLens."""
-        if not self._consent_given or not self._session:
+        if not self._consent_given:
+            logger.debug("⏭️  Flush skipped - no consent")
+            return
+        if not self._session:
+            logger.debug("⏭️  Flush skipped - no HTTP session")
             return
 
         async with self._queue_lock:
@@ -437,18 +491,21 @@ class CovenantMetricsService:
             events_to_send = self._event_queue.copy()
             self._event_queue.clear()
 
+        logger.info(f"📤 FLUSHING {len(events_to_send)} events to {self._endpoint_url}")
+
         try:
             await self._send_events_batch(events_to_send)
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
-            logger.debug(f"Flushed {len(events_to_send)} events to CIRISLens")
+            logger.info(f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent})")
         except Exception as e:
             self._events_failed += len(events_to_send)
-            logger.error(f"Failed to send {len(events_to_send)} events: {e}")
+            logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
             # Re-queue failed events (up to a limit)
             async with self._queue_lock:
                 if len(self._event_queue) < self._batch_size * 10:
                     self._event_queue = events_to_send + self._event_queue
+                    logger.info(f"   Re-queued {len(events_to_send)} events for retry")
 
     async def _send_events_batch(self, events: List[Dict[str, Any]]) -> None:
         """Send a batch of events to CIRISLens API.
@@ -465,13 +522,14 @@ class CovenantMetricsService:
             "consent_timestamp": self._consent_timestamp,
         }
 
-        async with self._session.post(
-            f"{self._endpoint_url}/covenant/events",
-            json=payload,
-        ) as response:
+        url = f"{self._endpoint_url}/covenant/events"
+        logger.info(f"📡 POST {url} ({len(events)} events)")
+
+        async with self._session.post(url, json=payload) as response:
             if response.status != 200:
                 error_text = await response.text()
                 raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
+            logger.info(f"✅ POST success: {response.status}")
 
     async def _queue_event(self, event: Dict[str, Any]) -> None:
         """Add event to queue and flush if batch is full.
@@ -510,14 +568,21 @@ class CovenantMetricsService:
 
     async def _process_reasoning_events(self) -> None:
         """Process reasoning events from the stream and build traces."""
-        logger.info("Starting reasoning event processor")
+        logger.info("🎯 Starting reasoning event processor - listening for H3ERE pipeline events")
+        events_processed = 0
         while True:
             try:
-                # Wait for next event
-                event_data = await self._reasoning_queue.get()
-                await self._handle_reasoning_event(event_data)
+                # Wait for next event with timeout to check for cancellation
+                try:
+                    event_data = await asyncio.wait_for(self._reasoning_queue.get(), timeout=1.0)
+                    events_processed += 1
+                    logger.info(f"📥 RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
+                    await self._handle_reasoning_event(event_data)
+                except asyncio.TimeoutError:
+                    # No event, just continue waiting
+                    continue
             except asyncio.CancelledError:
-                logger.info("Reasoning event processor cancelled")
+                logger.info(f"Reasoning event processor cancelled (processed {events_processed} events)")
                 break
             except Exception as e:
                 logger.error(f"Error processing reasoning event: {e}")
@@ -530,6 +595,7 @@ class CovenantMetricsService:
         """
         # Extract events from stream update
         events = event_data.get("events", [])
+        logger.debug(f"Handling event_data with {len(events)} events")
         for event in events:
             await self._process_single_event(event)
 
@@ -539,7 +605,15 @@ class CovenantMetricsService:
         Args:
             event: Individual reasoning event dict
         """
-        event_type = event.get("event_type", "")
+        raw_event_type = event.get("event_type", "")
+        # Handle both enum objects and strings
+        # Enums show as <ReasoningEvent.THOUGHT_START: 'thought_start'>
+        if hasattr(raw_event_type, "value"):
+            event_type = raw_event_type.value.upper()  # 'thought_start' -> 'THOUGHT_START'
+        else:
+            # String like "ReasoningEvent.THOUGHT_START" - extract the last part
+            event_type = str(raw_event_type).replace("ReasoningEvent.", "")
+
         thought_id = event.get("thought_id", "")
         task_id = event.get("task_id")
         timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
@@ -568,6 +642,8 @@ class CovenantMetricsService:
 
         # Map event type to trace component
         component_type = self.EVENT_TO_COMPONENT.get(event_type, "unknown")
+        if component_type == "unknown":
+            logger.debug(f"Unknown event type: {event_type}")
 
         # Extract relevant data based on event type
         component_data = self._extract_component_data(event_type, event)
@@ -584,7 +660,8 @@ class CovenantMetricsService:
             trace.components.append(component)
 
         # Check if trace is complete (has ACTION_RESULT)
-        if event_type == "ACTION_RESULT":
+        # Handle both formats
+        if event_type in ("ACTION_RESULT", "ReasoningEvent.ACTION_RESULT"):
             await self._complete_trace(thought_id, timestamp)
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -666,25 +743,37 @@ class CovenantMetricsService:
             dsdma = event.get("dsdma", {})
             pdma = event.get("pdma", {})
 
+            # Handle both dict and Pydantic model objects
+            if hasattr(csdma, "model_dump"):
+                csdma = csdma.model_dump()
+            if hasattr(dsdma, "model_dump"):
+                dsdma = dsdma.model_dump()
+            if hasattr(pdma, "model_dump"):
+                pdma = pdma.model_dump()
+
             return {
-                # Common Sense DMA - basic reasoning
+                # Common Sense DMA - CSDMAResult schema: plausibility_score, flags, reasoning
                 "csdma": {
-                    "output": _serialize(csdma.get("output") if isinstance(csdma, dict) else csdma),
-                    "prompt_used": event.get("csdma_prompt"),
+                    "plausibility_score": csdma.get("plausibility_score") if isinstance(csdma, dict) else None,
+                    "flags": csdma.get("flags", []) if isinstance(csdma, dict) else [],
                     "reasoning": csdma.get("reasoning") if isinstance(csdma, dict) else None,
+                    "prompt_used": event.get("csdma_prompt"),
                 },
-                # Domain Specific DMA - specialized knowledge
+                # Domain Specific DMA - DSDMAResult schema: domain, domain_alignment, flags, reasoning
                 "dsdma": {
-                    "output": _serialize(dsdma.get("output") if isinstance(dsdma, dict) else dsdma),
+                    "domain": dsdma.get("domain") if isinstance(dsdma, dict) else None,
+                    "domain_alignment": dsdma.get("domain_alignment") if isinstance(dsdma, dict) else None,
+                    "flags": dsdma.get("flags", []) if isinstance(dsdma, dict) else [],
+                    "reasoning": dsdma.get("reasoning") if isinstance(dsdma, dict) else None,
                     "prompt_used": event.get("dsdma_prompt"),
-                    "domain_context": dsdma.get("domain_context") if isinstance(dsdma, dict) else None,
                 },
-                # Principled DMA - ethical/value reasoning
+                # Principled DMA - EthicalDMAResult schema: stakeholders, conflicts, reasoning, alignment_check
                 "pdma": {
-                    "output": _serialize(pdma.get("output") if isinstance(pdma, dict) else pdma),
+                    "stakeholders": pdma.get("stakeholders") if isinstance(pdma, dict) else None,
+                    "conflicts": pdma.get("conflicts") if isinstance(pdma, dict) else None,
+                    "reasoning": pdma.get("reasoning") if isinstance(pdma, dict) else None,
+                    "alignment_check": pdma.get("alignment_check") if isinstance(pdma, dict) else None,
                     "prompt_used": event.get("pdma_prompt"),
-                    "principles_applied": pdma.get("principles_applied") if isinstance(pdma, dict) else None,
-                    "ethical_considerations": pdma.get("ethical_considerations") if isinstance(pdma, dict) else None,
                 },
                 # Aggregate reasoning
                 "combined_analysis": event.get("combined_analysis"),
@@ -710,56 +799,78 @@ class CovenantMetricsService:
             }
 
         elif event_type == "CONSCIENCE_RESULT":
-            # CONSCIENCE: Ethical validation details
-            # Full epistemic and ethical check data
+            # CONSCIENCE: Ethical validation details with all 6 conscience check results
+            # Full epistemic and ethical check data for Coherence Ratchet corpus
             return {
                 # Overall result
                 "conscience_passed": event.get("conscience_passed"),
                 "action_was_overridden": event.get("action_was_overridden", False),
                 "final_action": event.get("final_action"),
+                "conscience_override_reason": event.get("conscience_override_reason"),
                 # Epistemic checks - uncertainty/confidence
                 "epistemic_data": _serialize(event.get("epistemic_data")),
-                "uncertainty_flags": event.get("uncertainty_flags"),
-                "confidence_score": event.get("confidence_score"),
-                # Override details if action was changed
-                "override_reason": event.get("override_reason"),
-                "original_action": event.get("original_action"),
-                # Individual conscience check results
-                "conscience_checks": _serialize(event.get("conscience_checks")),
-                # Guardrail activations
-                "guardrails_triggered": event.get("guardrails_triggered"),
-                "safety_flags": event.get("safety_flags"),
+                # Exempt actions flag (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT skip ethical faculties)
+                "ethical_faculties_skipped": event.get("ethical_faculties_skipped"),
+                # === BYPASS GUARDRAIL 1: Updated Status Conscience ===
+                "updated_status_detected": event.get("updated_status_detected"),
+                "updated_status_content": event.get("updated_status_content"),
+                # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
+                "thought_depth_triggered": event.get("thought_depth_triggered"),
+                "thought_depth_current": event.get("thought_depth_current"),
+                "thought_depth_max": event.get("thought_depth_max"),
+                # === ETHICAL FACULTY 1: Entropy Conscience ===
+                "entropy_passed": event.get("entropy_passed"),
+                "entropy_score": event.get("entropy_score"),
+                "entropy_threshold": event.get("entropy_threshold"),
+                "entropy_reason": event.get("entropy_reason"),
+                # === ETHICAL FACULTY 2: Coherence Conscience ===
+                "coherence_passed": event.get("coherence_passed"),
+                "coherence_score": event.get("coherence_score"),
+                "coherence_threshold": event.get("coherence_threshold"),
+                "coherence_reason": event.get("coherence_reason"),
+                # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
+                "optimization_veto_passed": event.get("optimization_veto_passed"),
+                "optimization_veto_decision": event.get("optimization_veto_decision"),
+                "optimization_veto_justification": event.get("optimization_veto_justification"),
+                "optimization_veto_entropy_ratio": event.get("optimization_veto_entropy_ratio"),
+                "optimization_veto_affected_values": event.get("optimization_veto_affected_values"),
+                # === ETHICAL FACULTY 4: Epistemic Humility Conscience ===
+                "epistemic_humility_passed": event.get("epistemic_humility_passed"),
+                "epistemic_humility_certainty": event.get("epistemic_humility_certainty"),
+                "epistemic_humility_uncertainties": event.get("epistemic_humility_uncertainties"),
+                "epistemic_humility_justification": event.get("epistemic_humility_justification"),
+                "epistemic_humility_recommendation": event.get("epistemic_humility_recommendation"),
             }
 
         elif event_type == "ACTION_RESULT":
             # ACTION + OUTCOME: What happened and results
             # Full execution details and audit trail
+            action_params = event.get("action_parameters")
             return {
                 # Action executed
                 "action_executed": event.get("action_executed"),
-                "action_parameters": _serialize(event.get("action_parameters")),
+                # Default to {} if action_parameters is None
+                "action_parameters": _serialize(action_params) if action_params is not None else {},
                 # Execution outcome
                 "execution_success": event.get("execution_success"),
-                "execution_result": _serialize(event.get("execution_result")),
-                "execution_error": event.get("execution_error"),
+                "execution_error": event.get("error"),  # Field name is 'error' in ActionResultEvent
                 "execution_time_ms": event.get("execution_time_ms"),
                 # Follow-up
                 "follow_up_thought_id": event.get("follow_up_thought_id"),
-                "requires_follow_up": event.get("requires_follow_up"),
-                # Full audit trail (OUTCOME)
+                # Full audit trail (OUTCOME) - tamper-evident chain
                 "audit_entry_id": event.get("audit_entry_id"),
                 "audit_sequence_number": event.get("audit_sequence_number"),
+                "audit_entry_hash": event.get("audit_entry_hash"),  # Correct field name
                 "audit_signature": event.get("audit_signature"),
-                "audit_hash_chain": event.get("audit_hash_chain"),
-                # Resource consumption
-                "tokens_input": event.get("tokens_input"),
-                "tokens_output": event.get("tokens_output"),
-                "tokens_total": event.get("tokens_total"),
-                "cost_cents": event.get("cost_cents"),
-                "llm_calls": event.get("llm_calls"),
-                "llm_model": event.get("llm_model"),
-                # Response content (for SPEAK actions)
-                "response_content": event.get("response_content"),
+                # Resource consumption (queried from telemetry by thought_id)
+                "tokens_input": event.get("tokens_input", 0),
+                "tokens_output": event.get("tokens_output", 0),
+                "tokens_total": event.get("tokens_total", 0),
+                "cost_cents": event.get("cost_cents", 0.0),
+                "carbon_grams": event.get("carbon_grams", 0.0),
+                "energy_mwh": event.get("energy_mwh", 0.0),
+                "llm_calls": event.get("llm_calls", 0),
+                "models_used": event.get("models_used", []),
             }
 
         else:
@@ -786,11 +897,13 @@ class CovenantMetricsService:
         # Sign the trace
         if self._signer.sign_trace(trace):
             self._traces_signed += 1
+            component_types = [c.event_type for c in trace.components]
             logger.info(
-                f"Signed trace {trace.trace_id} with {len(trace.components)} components"
+                f"✅ TRACE COMPLETE #{self._traces_completed + 1}: {trace.trace_id} "
+                f"with {len(trace.components)} components: {component_types}"
             )
         else:
-            logger.debug(f"Trace {trace.trace_id} completed but not signed (no key)")
+            logger.warning(f"⚠️ Trace {trace.trace_id} completed but NOT signed (no key)")
 
         self._traces_completed += 1
 

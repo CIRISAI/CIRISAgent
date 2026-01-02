@@ -792,6 +792,26 @@ class ApiPlatform(Service):
         await self.communication.start()
         logger.info("Started API communication service")
 
+        # Wire up error emitter to send system/error messages
+        from ciris_engine.logic.utils import error_emitter
+
+        async def emit_error_to_communication(
+            channel_id: str, content: str, message_type: str
+        ) -> None:
+            """Send error/system messages through the communication service."""
+            try:
+                await self.communication.send_system_message(
+                    channel_id=channel_id,
+                    content=content,
+                    message_type=message_type,
+                    author_name="System",
+                )
+            except Exception as e:
+                logger.warning(f"Failed to emit error message: {e}")
+
+        error_emitter.set_error_callback(emit_error_to_communication)
+        logger.info("Wired up error emitter to API communication")
+
         # Start the tool service
         await self.tool_service.start()
         logger.info("Started API tool service")

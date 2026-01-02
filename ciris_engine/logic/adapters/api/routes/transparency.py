@@ -337,7 +337,8 @@ async def get_coherence_traces(
     runtime = getattr(request.app.state, "runtime", None)
     if runtime:
         # Try to find the covenant metrics service in loaded adapters
-        for adapter in getattr(runtime, "_adapters", {}).values():
+        # Adapters are stored in runtime.adapters (a list)
+        for adapter in getattr(runtime, "adapters", []):
             if hasattr(adapter, "metrics_service"):
                 covenant_service = adapter.metrics_service
                 break
@@ -397,23 +398,45 @@ async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
 
     Returns the latest complete trace with all 6 components.
     """
-    # Try to get covenant metrics service
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    # Try to get covenant metrics service from ServiceRegistry
+    # Modular adapters register services there, not in runtime.adapters
     covenant_service = None
 
-    runtime = getattr(request.app.state, "runtime", None)
-    if runtime:
-        for adapter in getattr(runtime, "_adapters", {}).values():
-            if hasattr(adapter, "metrics_service"):
-                covenant_service = adapter.metrics_service
-                break
+    service_registry = getattr(request.app.state, "service_registry", None)
+    if service_registry:
+        # Get WISE_AUTHORITY services with covenant_metrics capability
+        try:
+            providers = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+            for provider in providers:
+                if hasattr(provider, "get_latest_trace"):
+                    covenant_service = provider
+                    logger.info(f"[TRACE_API] Found covenant service via ServiceRegistry: {provider.__class__.__name__}")
+                    break
+        except Exception as e:
+            logger.warning(f"[TRACE_API] Error querying ServiceRegistry: {e}")
 
+    # Fallback: check runtime.adapters (for core adapters)
+    if not covenant_service:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime:
+            for adapter in getattr(runtime, "adapters", []):
+                if hasattr(adapter, "metrics_service"):
+                    covenant_service = adapter.metrics_service
+                    logger.info(f"[TRACE_API] Found covenant service via runtime.adapters")
+                    break
+
+    # Final fallback: direct app.state
     if not covenant_service:
         covenant_service = getattr(request.app.state, "covenant_metrics_service", None)
 
     if not covenant_service or not hasattr(covenant_service, "get_latest_trace"):
+        logger.warning(f"[TRACE_API] No covenant service found or no get_latest_trace method")
         return None
 
     trace = covenant_service.get_latest_trace()
+    logger.debug(f"[TRACE_API] get_latest_trace returned: {trace is not None}")
     if not trace:
         return None
 

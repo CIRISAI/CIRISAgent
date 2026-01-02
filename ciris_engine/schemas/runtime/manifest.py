@@ -69,6 +69,10 @@ class ModuleInfo(BaseModel):
     safe_domain: Optional[bool] = Field(None, description="Whether module operates in safe domains")
     reference: bool = Field(False, description="Whether this is a reference/example module")
     for_qa: bool = Field(False, description="Whether this module is for QA/testing")
+    # Consent/opt-in fields for privacy-sensitive adapters
+    auto_load: bool = Field(True, description="Whether to auto-load this module")
+    opt_in_required: bool = Field(False, description="Whether explicit opt-in is required")
+    requires_consent: bool = Field(False, description="Whether user consent is required for data collection")
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

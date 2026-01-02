@@ -2,18 +2,161 @@
 API server management for QA testing.
 """
 
+import asyncio
+import hashlib
+import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime, timezone
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import psutil
 import requests
 from rich.console import Console
 
 from .config import QAConfig
+
+
+# ============================================================================
+# Mock Logshipper Server - Receives covenant traces from agents
+# ============================================================================
+
+class MockLogshipperHandler(BaseHTTPRequestHandler):
+    """HTTP handler for mock logshipper that receives covenant traces."""
+
+    # Class-level storage for received traces
+    received_traces: List[Dict[str, Any]] = []
+    output_dir: Optional[Path] = None
+
+    def log_message(self, format: str, *args: Any) -> None:
+        """Suppress default logging."""
+        pass
+
+    def do_POST(self) -> None:
+        """Handle POST requests to /v1/covenant/events or /covenant/events."""
+        if self.path in ("/v1/covenant/events", "/covenant/events"):
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                events = payload.get("events", [])
+
+                for event in events:
+                    if event.get("event_type") == "complete_trace":
+                        trace = event.get("trace", {})
+                        self._save_trace(trace)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"status": "ok"}')
+
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'{{"error": "{str(e)}"}}'.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _save_trace(self, trace: Dict[str, Any]) -> None:
+        """Save a trace to file with task-based name."""
+        if not self.output_dir:
+            return
+
+        # Extract task name from first component
+        task_name = "unknown"
+        components = trace.get("components", [])
+        for comp in components:
+            if comp.get("event_type") == "THOUGHT_START":
+                data = comp.get("data", {})
+                task_desc = data.get("task_description", "").lower()
+                # Map wakeup task descriptions to standard task names
+                # These are the 5 wakeup steps in CIRIS
+                # Check most specific patterns first, then more general ones
+                if "you are datum" in task_desc or "humble measurement" in task_desc:
+                    task_name = "VERIFY_IDENTITY"
+                elif "validate your internal state" in task_desc:
+                    task_name = "VALIDATE_INTEGRITY"
+                elif "you are robust" in task_desc and ("resilience" in task_desc or "adaptive" in task_desc):
+                    task_name = "EVALUATE_RESILIENCE"
+                elif "you recognize your incompleteness" in task_desc:
+                    task_name = "ACCEPT_INCOMPLETENESS"
+                elif "you are grateful" in task_desc:
+                    task_name = "EXPRESS_GRATITUDE"
+                else:
+                    # Use sanitized first 30 chars of description as name
+                    raw_name = data.get("task_description", "unknown")[:30]
+                    task_name = raw_name.replace(" ", "_").replace("/", "_").replace(",", "")
+                break
+
+        # Save trace with task-based name and unique hash of trace_id
+        trace_id = trace.get("trace_id", "unknown")
+        # Create short unique ID from hash of trace_id
+        short_id = hashlib.md5(trace_id.encode()).hexdigest()[:8]
+        filename = f"trace_{task_name}_{short_id}.json"
+        filepath = self.output_dir / filename
+
+        with open(filepath, 'w') as f:
+            json.dump(trace, f, indent=2, default=str)
+
+        MockLogshipperHandler.received_traces.append({
+            "task_name": task_name,
+            "filepath": str(filepath),
+            "components": len(components),
+        })
+
+
+class MockLogshipperServer:
+    """Mock logshipper server that receives and saves covenant traces."""
+
+    def __init__(self, port: int = 18080, output_dir: Optional[Path] = None):
+        """Initialize mock server.
+
+        Args:
+            port: Port to listen on
+            output_dir: Directory to save traces to
+        """
+        self.port = port
+        self.output_dir = output_dir or Path(__file__).parent.parent.parent / "qa_reports"
+        self.output_dir.mkdir(exist_ok=True)
+        self.server: Optional[HTTPServer] = None
+        self.thread: Optional[threading.Thread] = None
+
+        # Configure handler
+        MockLogshipperHandler.output_dir = self.output_dir
+        MockLogshipperHandler.received_traces = []
+
+    def start(self) -> bool:
+        """Start the mock server in a background thread."""
+        try:
+            self.server = HTTPServer(('127.0.0.1', self.port), MockLogshipperHandler)
+            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+            self.thread.start()
+            return True
+        except Exception:
+            return False
+
+    def stop(self) -> None:
+        """Stop the mock server."""
+        if self.server:
+            self.server.shutdown()
+            self.server = None
+
+    def get_received_traces(self) -> List[Dict[str, Any]]:
+        """Get list of received traces."""
+        return MockLogshipperHandler.received_traces.copy()
+
+    @property
+    def endpoint_url(self) -> str:
+        """Get the endpoint URL for configuring the adapter."""
+        return f"http://127.0.0.1:{self.port}"
 
 # PostgreSQL Docker container name for QA testing
 POSTGRES_CONTAINER_NAME = "ciris-qa-postgres"
@@ -184,28 +327,52 @@ def _stop_postgres_container(console: Console):
             console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
 
 
-def _ensure_env_file(console: Console) -> bool:
+def _ensure_env_file(console: Console, mock_llm: bool = True) -> bool:
     """Ensure a minimal .env file exists for QA testing.
 
-    Returns True if .env was created/exists, False on error.
+    Args:
+        console: Rich console for output
+        mock_llm: Whether to use mock LLM (True) or live LLM (False)
+
+    Returns True if .env was created/updated/exists, False on error.
     """
     project_root = Path(__file__).parent.parent.parent
     env_path = project_root / ".env"
 
-    if env_path.exists():
-        return True
-
-    console.print("[cyan]📝 Creating minimal .env for QA testing...[/cyan]")
-
-    minimal_env = """# Auto-generated minimal .env for QA testing
+    # Generate expected content based on mock_llm setting
+    if mock_llm:
+        expected_env = """# Auto-generated minimal .env for QA testing
 # Created by QA runner - safe to delete after testing
 CIRIS_CONFIGURED=true
 CIRIS_LLM_PROVIDER=mock
 CIRIS_MOCK_LLM=true
 """
+    else:
+        # Live LLM mode - don't set CIRIS_MOCK_LLM at all
+        expected_env = """# Auto-generated minimal .env for QA testing
+# Created by QA runner - safe to delete after testing
+CIRIS_CONFIGURED=true
+# Live LLM mode - CIRIS_MOCK_LLM not set
+"""
+
+    # Check if .env exists and has correct content
+    if env_path.exists():
+        current_content = env_path.read_text()
+        # If using live mode but .env has CIRIS_MOCK_LLM=true, update it
+        if not mock_llm and "CIRIS_MOCK_LLM=true" in current_content:
+            console.print("[cyan]📝 Updating .env for live LLM mode...[/cyan]")
+            try:
+                env_path.write_text(expected_env)
+                console.print("[green]✅ Updated .env for live LLM[/green]")
+            except Exception as e:
+                console.print(f"[red]❌ Failed to update .env: {e}[/red]")
+                return False
+        return True
+
+    console.print("[cyan]📝 Creating minimal .env for QA testing...[/cyan]")
 
     try:
-        env_path.write_text(minimal_env)
+        env_path.write_text(expected_env)
         console.print("[green]✅ Created minimal .env file[/green]")
         return True
     except Exception as e:
@@ -230,6 +397,67 @@ class APIServerManager:
         self.console = Console()
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
+        self.mock_logshipper: Optional[MockLogshipperServer] = None
+
+    def _clear_wakeup_state(self) -> bool:
+        """Clear wakeup state from database for fresh wakeup run.
+
+        Returns:
+            True if cleared successfully or not needed, False on error
+        """
+        db_path = Path(__file__).parent.parent.parent / "data" / "ciris_engine.db"
+        if not db_path.exists():
+            return True  # No database yet
+
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+
+            # Delete shared wakeup tasks and individual wakeup step tasks
+            cursor.execute("""
+                DELETE FROM tasks WHERE
+                task_id LIKE '%WAKEUP%' OR
+                task_id LIKE '%VERIFY_IDENTITY%' OR
+                task_id LIKE '%VALIDATE_INTEGRITY%' OR
+                task_id LIKE '%EVALUATE_RESILIENCE%' OR
+                task_id LIKE '%ACCEPT_INCOMPLETENESS%' OR
+                task_id LIKE '%EXPRESS_GRATITUDE%'
+            """)
+            tasks_deleted = cursor.rowcount
+
+            # Delete related thoughts
+            cursor.execute("""
+                DELETE FROM thoughts WHERE
+                source_task_id LIKE '%WAKEUP%' OR
+                source_task_id LIKE '%VERIFY_IDENTITY%' OR
+                source_task_id LIKE '%VALIDATE_INTEGRITY%' OR
+                source_task_id LIKE '%EVALUATE_RESILIENCE%' OR
+                source_task_id LIKE '%ACCEPT_INCOMPLETENESS%' OR
+                source_task_id LIKE '%EXPRESS_GRATITUDE%'
+            """)
+            thoughts_deleted = cursor.rowcount
+
+            conn.commit()
+            conn.close()
+
+            if tasks_deleted > 0 or thoughts_deleted > 0:
+                self.console.print(f"[cyan]🧹 Cleared wakeup state: {tasks_deleted} tasks, {thoughts_deleted} thoughts[/cyan]")
+            return True
+        except Exception as e:
+            self.console.print(f"[yellow]⚠️  Could not clear wakeup state: {e}[/yellow]")
+            return True  # Continue anyway
+
+    def _clear_trace_files(self) -> None:
+        """Clear existing trace files for fresh capture."""
+        qa_reports = Path(__file__).parent.parent.parent / "qa_reports"
+        if qa_reports.exists():
+            # Clear both old format (real_trace_*) and new format (trace_*)
+            trace_files = list(qa_reports.glob("real_trace_*.json")) + list(qa_reports.glob("trace_*.json"))
+            for f in trace_files:
+                f.unlink()
+            if trace_files:
+                self.console.print(f"[cyan]🧹 Cleared {len(trace_files)} old trace files[/cyan]")
 
     def start(self) -> bool:
         """Start the API server."""
@@ -238,8 +466,13 @@ class APIServerManager:
             self.console.print("[yellow]⚠️  Server already running[/yellow]")
             return True
 
-        # Ensure minimal .env exists for QA testing
-        if not _ensure_env_file(self.console):
+        # For live mode, clear wakeup state and traces for fresh 5-step wakeup
+        if self.config.live_api_key:
+            self._clear_wakeup_state()
+            self._clear_trace_files()
+
+        # Ensure minimal .env exists for QA testing (respects mock_llm setting)
+        if not _ensure_env_file(self.console, mock_llm=self.config.mock_llm):
             self.console.print("[red]❌ Failed to create .env - cannot proceed[/red]")
             return False
 
@@ -248,6 +481,14 @@ class APIServerManager:
             if not _start_postgres_container(self.console):
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
+
+        # Start mock logshipper to receive covenant traces
+        self.mock_logshipper = MockLogshipperServer(port=18080)
+        if self.mock_logshipper.start():
+            self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
+        else:
+            self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+            self.mock_logshipper = None
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 
@@ -265,6 +506,21 @@ class APIServerManager:
         # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
         # This allows loading modular services like Reddit alongside built-in adapters
         env["CIRIS_ADAPTER"] = self.config.adapter
+
+        # Live LLM configuration (--live flag)
+        if self.config.live_api_key:
+            env["OPENAI_API_KEY"] = self.config.live_api_key
+            self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set[/cyan]")
+        if self.config.live_base_url:
+            env["OPENAI_API_BASE"] = self.config.live_base_url
+            self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
+        if self.config.live_model:
+            env["OPENAI_MODEL_NAME"] = self.config.live_model
+            self.console.print(f"[cyan]🤖 Live LLM: OPENAI_MODEL_NAME={self.config.live_model}[/cyan]")
+
+        # Configure covenant_metrics adapter to use mock logshipper
+        if self.mock_logshipper:
+            env["CIRIS_COVENANT_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
         # Force first-run mode for SETUP module tests
         from .config import QAModule
@@ -317,6 +573,17 @@ class APIServerManager:
         if hasattr(self, "_sql_config_path") and self._sql_config_path:
             env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
+
+        # Enable covenant_metrics adapter with consent for trace capture tests
+        if any(m == QAModule.COVENANT_METRICS for m in self.modules):
+            # Load the covenant_metrics adapter alongside the main adapter
+            if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
+                current_adapter = env.get("CIRIS_ADAPTER", "api")
+                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"
+            # Enable consent for trace capture
+            env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
+            env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
+            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
@@ -393,6 +660,16 @@ class APIServerManager:
 
             except Exception as e:
                 self.console.print(f"[red]Error stopping server: {e}[/red]")
+
+        # Stop mock logshipper and report received traces
+        if self.mock_logshipper:
+            received = self.mock_logshipper.get_received_traces()
+            self.mock_logshipper.stop()
+            if received:
+                self.console.print(f"[green]📥 Mock logshipper received {len(received)} traces:[/green]")
+                for trace in received:
+                    self.console.print(f"   • {trace['task_name']}: {trace['filepath']}")
+            self.mock_logshipper = None
 
         # Skip port cleanup - it's causing hangs
 

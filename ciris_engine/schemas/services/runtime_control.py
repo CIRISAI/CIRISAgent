@@ -762,15 +762,67 @@ class RecursiveConscienceStepData(BaseStepData):
 
 
 class FinalizeActionStepData(BaseStepData):
-    """Step data for FINALIZE_ACTION step."""
+    """Step data for FINALIZE_ACTION step with all 6 conscience results.
+
+    Captures results from:
+    - Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
+    - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
+    """
 
     selected_action: str = Field(..., description="Final selected action")
     conscience_passed: bool = Field(..., description="Whether conscience checks passed")
     conscience_override_reason: Optional[str] = Field(None, description="Reason if conscience overrode action")
     epistemic_data: EpistemicData = Field(..., description="Rich conscience evaluation data from all checks")
+
+    # Exempt actions flag (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT skip ethical faculties)
+    ethical_faculties_skipped: Optional[bool] = Field(
+        None, description="Whether ethical faculties were skipped due to exempt action type"
+    )
+
+    # === BYPASS GUARDRAIL 1: Updated Status Conscience ===
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether UpdatedStatusConscience detected new information during task processing"
     )
+    updated_status_content: Optional[str] = Field(
+        None, description="Content of new observation if detected"
+    )
+
+    # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether ThoughtDepthGuardrail forced DEFER due to max depth"
+    )
+    thought_depth_current: Optional[int] = Field(
+        None, description="Current thought depth when evaluated"
+    )
+    thought_depth_max: Optional[int] = Field(
+        None, description="Maximum allowed thought depth"
+    )
+
+    # === ETHICAL FACULTY 1: Entropy Conscience ===
+    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
+    entropy_score: Optional[float] = Field(None, description="Entropy score (0=ordered, 1=chaotic)")
+    entropy_threshold: Optional[float] = Field(None, description="Threshold used")
+    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+
+    # === ETHICAL FACULTY 2: Coherence Conscience ===
+    coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
+    coherence_score: Optional[float] = Field(None, description="Coherence score (0=incoherent, 1=coherent)")
+    coherence_threshold: Optional[float] = Field(None, description="Threshold used")
+    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+
+    # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
+    optimization_veto_passed: Optional[bool] = Field(None, description="Whether optimization veto passed")
+    optimization_veto_decision: Optional[str] = Field(None, description="Decision: proceed, abort, defer")
+    optimization_veto_justification: Optional[str] = Field(None, description="Justification for decision")
+    optimization_veto_entropy_ratio: Optional[float] = Field(None, description="Estimated entropy reduction ratio")
+    optimization_veto_affected_values: Optional[List[str]] = Field(None, description="Values affected")
+
+    # === ETHICAL FACULTY 4: Epistemic Humility Conscience ===
+    epistemic_humility_passed: Optional[bool] = Field(None, description="Whether epistemic humility passed")
+    epistemic_humility_certainty: Optional[float] = Field(None, description="Epistemic certainty level")
+    epistemic_humility_uncertainties: Optional[List[str]] = Field(None, description="Identified uncertainties")
+    epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
+    epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
 
 class PerformActionStepData(BaseStepData):
@@ -785,6 +837,7 @@ class ActionCompleteStepData(BaseStepData):
     """Step data for ACTION_COMPLETE step with audit trail and resource usage information."""
 
     action_executed: str = Field(..., description="Action that was executed")
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
     handler_completed: bool = Field(..., description="Whether action handler completed")
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
@@ -814,6 +867,8 @@ class ActionResponse(BaseModel):
     action_type: str = Field(..., description="Type of action executed")
     follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
     execution_time_ms: float = Field(0.0, description="Action execution time in milliseconds")
+    # Action parameters (captures content for SPEAK, tool params, etc.)
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
 
     # Audit trail data (REQUIRED) from AuditEntryResult
     audit_data: AuditEntryResult = Field(..., description="Audit entry with hash chain data (REQUIRED)")
@@ -955,7 +1010,12 @@ class ASPDMAResultEvent(BaseModel):
 
 
 class ConscienceResultEvent(BaseModel):
-    """Event 4: Conscience evaluation and final action (CONSCIENCE_EXECUTION + RECURSIVE_CONSCIENCE + FINALIZE_ACTION steps)."""
+    """Event 4: Conscience evaluation and final action (CONSCIENCE_EXECUTION + RECURSIVE_CONSCIENCE + FINALIZE_ACTION steps).
+
+    Captures results from all 6 consciences:
+    - Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
+    - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
+    """
 
     event_type: ReasoningEvent = Field(ReasoningEvent.CONSCIENCE_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -963,7 +1023,7 @@ class ConscienceResultEvent(BaseModel):
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
     is_recursive: bool = Field(False, description="Whether this is a recursive conscience check after override")
 
-    # Conscience evaluation
+    # Overall conscience evaluation
     conscience_passed: bool = Field(..., description=DESC_CONSCIENCE_PASSED)
     conscience_override_reason: Optional[str] = Field(None, description=DESC_CONSCIENCE_OVERRIDE_REASON)
     epistemic_data: EpistemicData = Field(..., description="Rich conscience evaluation data from all checks")
@@ -972,10 +1032,61 @@ class ConscienceResultEvent(BaseModel):
     final_action: str = Field(..., description="Final action after conscience evaluation")
     action_was_overridden: bool = Field(..., description="Whether conscience changed the action")
 
-    # UpdatedStatusConscience detection
-    updated_status_available: Optional[bool] = Field(
-        None, description="Whether UpdatedStatusConscience detected new information during task processing"
+    # Exempt actions flag (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT skip ethical faculties)
+    ethical_faculties_skipped: Optional[bool] = Field(
+        None, description="Whether ethical faculties were skipped due to exempt action type"
     )
+
+    # === BYPASS GUARDRAIL 1: Updated Status Conscience ===
+    # Detects new information arrival, forces PONDER to incorporate updated context
+    updated_status_detected: Optional[bool] = Field(
+        None, description="Whether UpdatedStatusConscience detected new information"
+    )
+    updated_status_content: Optional[str] = Field(
+        None, description="Content of new observation if detected"
+    )
+
+    # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
+    # Monitors reasoning depth, forces DEFER to prevent infinite loops
+    thought_depth_triggered: Optional[bool] = Field(
+        None, description="Whether ThoughtDepthGuardrail forced DEFER due to max depth"
+    )
+    thought_depth_current: Optional[int] = Field(
+        None, description="Current thought depth when evaluated"
+    )
+    thought_depth_max: Optional[int] = Field(
+        None, description="Maximum allowed thought depth"
+    )
+
+    # === ETHICAL FACULTY 1: Entropy Conscience ===
+    # Ensures appropriate information uncertainty, prevents overconfident assertions
+    entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
+    entropy_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Entropy score (0=ordered, 1=chaotic)")
+    entropy_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threshold used")
+    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+
+    # === ETHICAL FACULTY 2: Coherence Conscience ===
+    # Verifies internal consistency with prior commitments
+    coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
+    coherence_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)")
+    coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threshold used")
+    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+
+    # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
+    # Preserves human values, vetoes actions that compromise them for efficiency
+    optimization_veto_passed: Optional[bool] = Field(None, description="Whether optimization veto passed")
+    optimization_veto_decision: Optional[str] = Field(None, description="Decision: proceed, abort, defer")
+    optimization_veto_justification: Optional[str] = Field(None, description="Justification for decision")
+    optimization_veto_entropy_ratio: Optional[float] = Field(None, description="Estimated entropy reduction ratio")
+    optimization_veto_affected_values: Optional[List[str]] = Field(None, description="Values affected")
+
+    # === ETHICAL FACULTY 4: Epistemic Humility Conscience ===
+    # Demonstrates appropriate uncertainty, flags overconfidence
+    epistemic_humility_passed: Optional[bool] = Field(None, description="Whether epistemic humility passed")
+    epistemic_humility_certainty: Optional[float] = Field(None, ge=0.0, le=1.0, description="Epistemic certainty level")
+    epistemic_humility_uncertainties: Optional[List[str]] = Field(None, description="Identified uncertainties")
+    epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
+    epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
 
 class ActionResultEvent(BaseModel):
@@ -988,6 +1099,7 @@ class ActionResultEvent(BaseModel):
 
     # Action execution
     action_executed: str = Field(..., description="Action that was executed")
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
     execution_success: bool = Field(..., description="Whether execution succeeded")
     execution_time_ms: float = Field(..., description="Execution time in milliseconds")
     follow_up_thought_id: Optional[str] = Field(None, description="Follow-up thought created if any")

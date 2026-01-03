@@ -617,13 +617,23 @@ class InteractFragment : Fragment() {
         for (msg in sorted) {
             val isAgent = msg.author?.equals("CIRIS", ignoreCase = true) == true || msg.isAgent == true
 
+            // Parse message_type from API response
+            val messageType = when (msg.messageType?.lowercase()) {
+                "user" -> MessageType.USER
+                "agent" -> MessageType.AGENT
+                "system" -> MessageType.SYSTEM
+                "error" -> MessageType.ERROR
+                else -> if (isAgent) MessageType.AGENT else MessageType.USER
+            }
+
             // Add message item
             newItems.add(ChatItem.Message(
                 id = msg.id ?: "",
                 content = msg.content ?: "",
                 isAgent = isAgent,
                 author = msg.author ?: if (isAgent) "CIRIS" else "You",
-                timestamp = formatTimestamp(msg.timestamp)
+                timestamp = formatTimestamp(msg.timestamp),
+                messageType = messageType
             ))
 
             // If this is a user message, check for associated reasoning
@@ -1220,6 +1230,11 @@ data class ReasoningState(
     val thoughts: MutableMap<String, ThoughtState> = mutableMapOf()
 )
 
+// Message types for visual styling
+enum class MessageType {
+    USER, AGENT, SYSTEM, ERROR
+}
+
 // Chat items (messages + reasoning)
 sealed class ChatItem {
     data class Message(
@@ -1227,7 +1242,8 @@ sealed class ChatItem {
         val content: String,
         val isAgent: Boolean,
         val author: String,
-        val timestamp: String
+        val timestamp: String,
+        val messageType: MessageType = MessageType.USER // Default for backwards compatibility
     ) : ChatItem()
 
     data class Reasoning(val state: ReasoningState) : ChatItem()
@@ -1250,11 +1266,18 @@ class ChatWithReasoningAdapter(
         private const val TYPE_USER_MESSAGE = 0
         private const val TYPE_AGENT_MESSAGE = 1
         private const val TYPE_REASONING = 2
+        private const val TYPE_SYSTEM_MESSAGE = 3
+        private const val TYPE_ERROR_MESSAGE = 4
     }
 
     override fun getItemViewType(position: Int): Int {
         return when (val item = items[position]) {
-            is ChatItem.Message -> if (item.isAgent) TYPE_AGENT_MESSAGE else TYPE_USER_MESSAGE
+            is ChatItem.Message -> when (item.messageType) {
+                MessageType.USER -> TYPE_USER_MESSAGE
+                MessageType.AGENT -> TYPE_AGENT_MESSAGE
+                MessageType.SYSTEM -> TYPE_SYSTEM_MESSAGE
+                MessageType.ERROR -> TYPE_ERROR_MESSAGE
+            }
             is ChatItem.Reasoning -> TYPE_REASONING
         }
     }
@@ -1270,6 +1293,10 @@ class ChatWithReasoningAdapter(
                 val view = inflater.inflate(R.layout.item_chat_user, parent, false)
                 MessageViewHolder(view)
             }
+            TYPE_SYSTEM_MESSAGE, TYPE_ERROR_MESSAGE -> {
+                val view = inflater.inflate(R.layout.item_chat_agent, parent, false)
+                SystemErrorViewHolder(view, viewType == TYPE_ERROR_MESSAGE)
+            }
             else -> {
                 val view = inflater.inflate(R.layout.item_reasoning, parent, false)
                 ReasoningViewHolder(view, onReasoningClick)
@@ -1279,7 +1306,10 @@ class ChatWithReasoningAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = items[position]) {
-            is ChatItem.Message -> (holder as MessageViewHolder).bind(item)
+            is ChatItem.Message -> when (holder) {
+                is MessageViewHolder -> holder.bind(item)
+                is SystemErrorViewHolder -> holder.bind(item)
+            }
             is ChatItem.Reasoning -> {
                 // Only show reasoning details in debug mode
                 if (debugMode) {
@@ -1304,6 +1334,35 @@ class ChatWithReasoningAdapter(
 
         fun bind(message: ChatItem.Message) {
             authorText.text = message.author
+            contentText.text = message.content
+            timestampText.text = message.timestamp
+        }
+    }
+
+    /**
+     * ViewHolder for system and error messages
+     * Displays centered notifications with appropriate styling
+     */
+    class SystemErrorViewHolder(
+        itemView: View,
+        private val isError: Boolean
+    ) : RecyclerView.ViewHolder(itemView) {
+        private val authorText: TextView = itemView.findViewById(R.id.authorText)
+        private val contentText: TextView = itemView.findViewById(R.id.contentText)
+        private val timestampText: TextView = itemView.findViewById(R.id.timestampText)
+        private val bubbleContainer: View? = itemView.findViewById(R.id.bubbleContainer)
+
+        fun bind(message: ChatItem.Message) {
+            // Set icon prefix and author based on message type
+            if (isError) {
+                authorText.text = "\u26A0\uFE0F Error" // ⚠️ Error
+                contentText.setTextColor(android.graphics.Color.parseColor("#DC2626")) // Red text
+                bubbleContainer?.setBackgroundColor(android.graphics.Color.parseColor("#FEE2E2")) // Light red bg
+            } else {
+                authorText.text = "\u2139\uFE0F System" // ℹ️ System
+                contentText.setTextColor(android.graphics.Color.parseColor("#0369A1")) // Blue text
+                bubbleContainer?.setBackgroundColor(android.graphics.Color.parseColor("#E0F2FE")) // Light blue bg
+            }
             contentText.text = message.content
             timestampText.text = message.timestamp
         }

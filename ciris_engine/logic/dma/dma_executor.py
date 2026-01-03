@@ -95,8 +95,12 @@ async def run_dma_with_retries(
             attempt += 1
             # Only log full details on first failure
             if attempt == 1:
+                # Ensure we never log empty error messages
+                error_msg = str(e).replace("\n", " ").strip()
+                if not error_msg:
+                    error_msg = f"<{type(e).__name__} with no message>"
                 logger.warning(
-                    "DMA %s attempt %s failed: %s", run_fn.__name__, attempt, str(e).replace("\n", " ")[:200]
+                    "DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200]
                 )
             elif attempt == retry_limit:
                 logger.warning(
@@ -118,7 +122,11 @@ async def run_dma_with_retries(
     if thought_arg is not None and last_error is not None and time_service is not None:
         escalate_dma_failure(thought_arg, run_fn.__name__, last_error, retry_limit, time_service)
 
-    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error}")
+    # Ensure DMAFailure has meaningful error context
+    last_error_msg = str(last_error).strip() if last_error else "unknown error"
+    if not last_error_msg:
+        last_error_msg = f"<{type(last_error).__name__} with no message>"
+    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error_msg}")
 
 
 async def run_pdma(

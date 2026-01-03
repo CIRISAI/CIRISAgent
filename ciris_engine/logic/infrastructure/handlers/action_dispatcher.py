@@ -279,12 +279,24 @@ class ActionDispatcher:
             logger.info(f"Created audit entry {audit_result.entry_id} for action {action_type.value}")
 
             # Step 10: ACTION_COMPLETE - Create typed ActionResponse
+            # Extract action_parameters for trace capture (content for SPEAK, tool params, etc.)
+            action_params_dict = {}
+            if hasattr(final_action_result, "action_parameters") and final_action_result.action_parameters:
+                ap = final_action_result.action_parameters
+                if hasattr(ap, "model_dump"):
+                    action_params_dict = ap.model_dump()
+                elif hasattr(ap, "dict"):
+                    action_params_dict = ap.dict()
+                elif isinstance(ap, dict):
+                    action_params_dict = ap
+
             dispatch_result = ActionResponse(
                 success=True,
                 handler=handler_instance.__class__.__name__,
                 action_type=action_type.value,
                 follow_up_thought_id=follow_up_thought_id,
                 execution_time_ms=execution_time_ms,
+                action_parameters=action_params_dict,
                 audit_data=audit_result,
             )
             await self._action_complete_step(thought_item, dispatch_result)

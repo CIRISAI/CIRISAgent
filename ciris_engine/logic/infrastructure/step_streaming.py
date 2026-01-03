@@ -15,8 +15,7 @@ Images remain available in OpenTelemetry traces for debugging purposes.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict
-from weakref import WeakSet
+from typing import Any, Dict, Set
 
 from ciris_engine.schemas.streaming.reasoning_stream import ReasoningEventUnion, ReasoningStreamUpdate
 from ciris_engine.schemas.types import JSONDict
@@ -66,14 +65,16 @@ class ReasoningEventStream:
     """Global broadcaster for H3ERE reasoning events (5 simplified events only)."""
 
     def __init__(self) -> None:
-        self._subscribers: WeakSet[asyncio.Queue[Any]] = WeakSet()
+        # Use a regular set instead of WeakSet to prevent garbage collection
+        # of subscriber queues before events can be delivered
+        self._subscribers: set[asyncio.Queue[Any]] = set()
         self._sequence_number = 0
         self._is_enabled = True
 
     def subscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Subscribe a queue to receive reasoning events."""
         self._subscribers.add(queue)
-        logger.debug(f"New subscriber added, total: {len(self._subscribers)}")
+        logger.debug(f"New subscriber added to reasoning_event_stream, total: {len(self._subscribers)}")
 
     def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Unsubscribe a queue from reasoning events."""
@@ -87,7 +88,11 @@ class ReasoningEventStream:
         Args:
             event: One of the 5 reasoning events (SNAPSHOT_AND_CONTEXT, DMA_RESULTS, etc)
         """
-        if not self._is_enabled or not self._subscribers:
+        if not self._is_enabled:
+            logger.debug(f"Reasoning event stream disabled, skipping {event.event_type}")
+            return
+        if not self._subscribers:
+            logger.debug(f"No subscribers for {event.event_type}")
             return
 
         self._sequence_number += 1
@@ -110,7 +115,6 @@ class ReasoningEventStream:
         dead_queues = []
         for queue in self._subscribers:
             try:
-                # Use put_nowait to avoid blocking
                 queue.put_nowait(update_dict)
             except asyncio.QueueFull:
                 logger.warning("Subscriber queue is full, dropping reasoning event")

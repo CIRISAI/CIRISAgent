@@ -3,6 +3,10 @@ Conscience Execution Phase - H3ERE Pipeline Step 4.
 
 Applies ethical safety validation to the selected action using the
 conscience registry to ensure alignment with ethical principles.
+
+Captures detailed results from all 6 consciences:
+- Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
+- Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
 """
 
 import logging
@@ -12,6 +16,12 @@ from ciris_engine.logic.processors.core.step_decorators import step_point, strea
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 from ciris_engine.schemas.actions.parameters import PonderParams
+from ciris_engine.schemas.conscience.core import (
+    CoherenceCheckResult,
+    EntropyCheckResult,
+    EpistemicHumilityResult,
+    OptimizationVetoResult,
+)
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.runtime_control import StepPoint
@@ -153,6 +163,9 @@ class ConscienceExecutionPhase:
         override_reason = None
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
+        updated_status_content: Optional[str] = None
+        thought_depth_current: Optional[int] = None
+        thought_depth_max: Optional[int] = None
 
         # Track conscience check results for epistemic data aggregation
         entropy_level: Optional[float] = None
@@ -160,6 +173,12 @@ class ConscienceExecutionPhase:
         uncertainty_acknowledged: bool = False
         reasoning_transparency: float = 0.0
         conscience_checks_ran: int = 0
+
+        # Individual conscience check results (all 6)
+        entropy_check_result: Optional[EntropyCheckResult] = None
+        coherence_check_result: Optional[CoherenceCheckResult] = None
+        optimization_veto_result: Optional[OptimizationVetoResult] = None
+        epistemic_humility_result: Optional[EpistemicHumilityResult] = None
 
         # Get consciences from registry
         for entry in self.conscience_registry.get_consciences():
@@ -185,20 +204,43 @@ class ConscienceExecutionPhase:
             # Aggregate epistemic metrics from conscience results
             if result.entropy_score is not None:
                 entropy_level = result.entropy_score
+                # Capture full entropy check result
+                entropy_check_result = EntropyCheckResult(
+                    passed=result.passed,
+                    entropy_score=result.entropy_score,
+                    threshold=0.4,  # Default threshold from ConscienceConfig
+                    message=result.reason or f"Entropy: {result.entropy_score:.2f}",
+                )
             if result.coherence_score is not None:
                 coherence_level = result.coherence_score
+                # Capture full coherence check result
+                coherence_check_result = CoherenceCheckResult(
+                    passed=result.passed,
+                    coherence_score=result.coherence_score,
+                    threshold=0.6,  # Default threshold from ConscienceConfig
+                    message=result.reason or f"Coherence: {result.coherence_score:.2f}",
+                )
+            if result.optimization_veto_check is not None:
+                optimization_veto_result = result.optimization_veto_check
             if result.epistemic_humility_check is not None:
+                epistemic_humility_result = result.epistemic_humility_check
                 uncertainty_acknowledged = True
                 reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
 
-            # Note: Individual conscience epistemic_data is now aggregated below
-            # Legacy per-conscience epistemic_data storage removed
-
+            # Capture bypass guardrail results
             if result.thought_depth_triggered is not None:
                 thought_depth_triggered = result.thought_depth_triggered
+                # Try to extract depth info from result if available
+                if hasattr(result, "thought_depth_current"):
+                    thought_depth_current = getattr(result, "thought_depth_current", None)
+                if hasattr(result, "thought_depth_max"):
+                    thought_depth_max = getattr(result, "thought_depth_max", None)
 
             if result.updated_status_detected is not None:
                 updated_status_detected = result.updated_status_detected
+                # Capture the content of the updated observation
+                if result.CIRIS_OBSERVATION_UPDATED_STATUS:
+                    updated_status_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
 
             if not result.passed:
                 overridden = True
@@ -274,18 +316,26 @@ class ConscienceExecutionPhase:
             reasoning_transparency=reasoning_transparency,
         )
 
-        # Build final application result (explicitly typed for mypy)
+        # Build final application result with all 6 conscience check details
         application_result: ConscienceApplicationResult = ConscienceApplicationResult(
             original_action=action_result,
             final_action=final_action,
             overridden=overridden,
             override_reason=override_reason,
             epistemic_data=epistemic_data,
+            # Bypass guardrails
+            updated_status_detected=updated_status_detected,
+            updated_status_content=updated_status_content,
+            thought_depth_triggered=thought_depth_triggered,
+            thought_depth_current=thought_depth_current,
+            thought_depth_max=thought_depth_max,
+            # Ethical faculties (None if skipped due to exempt action)
+            ethical_faculties_skipped=False,  # Non-exempt actions always run faculties
+            entropy_check=entropy_check_result,
+            coherence_check=coherence_check_result,
+            optimization_veto_check=optimization_veto_result,
+            epistemic_humility_check=epistemic_humility_result,
         )
-        if thought_depth_triggered is not None:
-            application_result.thought_depth_triggered = thought_depth_triggered
-        if updated_status_detected is not None:
-            application_result.updated_status_detected = updated_status_detected
         return application_result
 
     async def _run_bypass_conscience_entries(

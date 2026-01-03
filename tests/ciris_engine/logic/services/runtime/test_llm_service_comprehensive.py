@@ -318,12 +318,14 @@ class TestOpenAICompatibleClient:
             side_effect=TimeoutError("Request timed out")
         )
 
-        # Test timeout error handling
-        with pytest.raises(TimeoutError) as exc_info:
+        # Test timeout error handling - exceptions are now wrapped in RuntimeError
+        with pytest.raises(RuntimeError) as exc_info:
             await llm_service.call_llm_structured(
                 messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
             )
 
+        # Check wrapped error contains original info
+        assert "TimeoutError" in str(exc_info.value)
         assert "Request timed out" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -337,10 +339,15 @@ class TestOpenAICompatibleClient:
 
         llm_service.instruct_client.chat.completions.create_with_completion = AsyncMock(side_effect=error)
 
-        with pytest.raises(APIStatusError) as exc_info:
+        # APIStatusError is now wrapped in RuntimeError
+        with pytest.raises(RuntimeError) as exc_info:
             await llm_service.call_llm_structured(
                 messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
             )
+
+        # Check wrapped error contains original info
+        assert "APIStatusError" in str(exc_info.value)
+        assert "Bad request" in str(exc_info.value)
 
         # Should fail immediately without retry
         llm_service.instruct_client.chat.completions.create_with_completion.assert_called_once()

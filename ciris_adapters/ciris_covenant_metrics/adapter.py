@@ -10,6 +10,7 @@ No data is collected or sent without user consent.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -61,15 +62,37 @@ class CovenantMetricsAdapter(Service):
         # Extract config from kwargs
         adapter_config = kwargs.get("adapter_config", {})
 
-        # Check consent state from config
-        self._consent_given = adapter_config.get("consent_given", False)
-        self._consent_timestamp = adapter_config.get("consent_timestamp")
+        # Check consent state from config OR environment variables (for QA testing)
+        env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
+        env_timestamp = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP")
+
+        self._consent_given = adapter_config.get("consent_given", False) or env_consent
+        self._consent_timestamp = adapter_config.get("consent_timestamp") or env_timestamp
+
+        # =====================================================================
+        # CONSENT STATE LOGGING - Make it OBVIOUS what's happening
+        # =====================================================================
+        logger.info("=" * 70)
+        logger.info("📊 COVENANT METRICS ADAPTER INITIALIZING")
+        logger.info(f"   Config consent_given: {adapter_config.get('consent_given', False)}")
+        logger.info(f"   Env CIRIS_COVENANT_METRICS_CONSENT: {os.environ.get('CIRIS_COVENANT_METRICS_CONSENT', 'not set')}")
+        logger.info(f"   Env CIRIS_COVENANT_METRICS_ENDPOINT: {os.environ.get('CIRIS_COVENANT_METRICS_ENDPOINT', 'not set')}")
+
+        if env_consent:
+            logger.info("✅ CONSENT ENABLED via environment variable")
+            # Update adapter_config so the service also gets consent
+            adapter_config["consent_given"] = True
+            adapter_config["consent_timestamp"] = env_timestamp or datetime.now(timezone.utc).isoformat()
+            logger.info(f"   Updated config consent_given: True")
+            logger.info(f"   Consent timestamp: {adapter_config['consent_timestamp']}")
 
         if not self._consent_given:
-            logger.warning(
-                "CovenantMetricsAdapter initialized WITHOUT consent - "
-                "complete setup wizard to enable data collection"
-            )
+            logger.warning("❌ CONSENT NOT GIVEN - traces will NOT be captured")
+            logger.warning("   Set CIRIS_COVENANT_METRICS_CONSENT=true or complete setup wizard")
+        else:
+            logger.info(f"✅ CONSENT GIVEN - traces WILL be captured and sent")
+
+        logger.info("=" * 70)
 
         # Create the underlying service with config
         self.metrics_service = CovenantMetricsService(config=adapter_config)
@@ -93,6 +116,10 @@ class CovenantMetricsAdapter(Service):
         Returns:
             List of service registrations for WiseAuthority bus
         """
+        logger.info("=" * 70)
+        logger.info("📋 COVENANT METRICS - get_services_to_register() called")
+        logger.info(f"   Current consent state: {self._consent_given}")
+
         registrations = []
 
         # Only register if consent is given
@@ -109,17 +136,21 @@ class CovenantMetricsAdapter(Service):
                     ],
                 )
             )
-            logger.info("Registered CovenantMetricsService with send_deferral capability")
+            logger.info("✅ REGISTERED CovenantMetricsService on WiseAuthority bus")
+            logger.info("   Capabilities: send_deferral, covenant_metrics")
         else:
-            logger.warning(
-                "CovenantMetricsService NOT registered - consent required. " "Complete setup wizard to enable."
-            )
+            logger.warning("❌ NOT REGISTERED - consent required")
+            logger.warning("   Set CIRIS_COVENANT_METRICS_CONSENT=true to enable")
 
+        logger.info("=" * 70)
         return registrations
 
     async def start(self) -> None:
         """Start the Covenant Metrics adapter."""
-        logger.info("Starting CovenantMetricsAdapter")
+        logger.info("=" * 70)
+        logger.info("🚀 COVENANT METRICS ADAPTER STARTING")
+        logger.info(f"   Consent: {self._consent_given}")
+        logger.info("=" * 70)
 
         await self.metrics_service.start()
 
@@ -127,11 +158,9 @@ class CovenantMetricsAdapter(Service):
         self._started_at = datetime.now(timezone.utc)
 
         if self._consent_given:
-            logger.info("CovenantMetricsAdapter started with consent - collecting metrics")
+            logger.info("✅ CovenantMetricsAdapter STARTED - collecting metrics")
         else:
-            logger.info(
-                "CovenantMetricsAdapter started WITHOUT consent - " "no metrics will be collected until user consents"
-            )
+            logger.warning("⚠️  CovenantMetricsAdapter started WITHOUT consent - NO metrics collected")
 
     async def stop(self) -> None:
         """Stop the Covenant Metrics adapter."""

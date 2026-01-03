@@ -466,7 +466,8 @@ data class HistoryMessage(
     val content: String?,
     @SerializedName("is_agent") val isAgent: Boolean?,
     val author: String?,
-    val timestamp: String?
+    val timestamp: String?,
+    @SerializedName("message_type") val messageType: String? // "user", "agent", "system", "error"
 )
 
 data class AgentStatusResponse(

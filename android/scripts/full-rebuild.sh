@@ -365,9 +365,12 @@ copy_web_assets() {
 
     # Location 1: android_gui_static (project root)
     log_step "Copying to android_gui_static..."
-    rm -rf "$GUI_STATIC_DIR"
-    mkdir -p "$GUI_STATIC_DIR"
-    cp -r "$source_dir/"* "$GUI_STATIC_DIR/"
+    # Only clear and copy if source is different from destination (not --skip-web)
+    if [ "$source_dir" != "$GUI_STATIC_DIR" ]; then
+        rm -rf "$GUI_STATIC_DIR"
+        mkdir -p "$GUI_STATIC_DIR"
+        cp -r "$source_dir/"* "$GUI_STATIC_DIR/"
+    fi
     local count1
     count1=$(find "$GUI_STATIC_DIR" -type f | wc -l)
     log_info "  -> $count1 files"

@@ -132,8 +132,9 @@ class TestChannelHelpers:
 
         assert f"api_{auth.user_id}" in channels
         assert "api_localhost_8080" in channels
-        # After deduplication: user channel + 3 unique admin channels (localhost appears twice in raw list)
-        assert len(channels) == 4
+        assert "system" in channels  # System channel for system/error messages
+        # After deduplication: user channel + 3 unique admin channels + system channel
+        assert len(channels) == 5
         # Verify no duplicates
         assert len(channels) == len(set(channels))
 
@@ -146,7 +147,10 @@ class TestChannelHelpers:
 
         channels = _build_channels_to_query(auth, request)
 
-        assert channels == [f"api_{auth.user_id}"]
+        # Observer gets their channel + system channel for system/error messages
+        assert f"api_{auth.user_id}" in channels
+        assert "system" in channels
+        assert len(channels) == 2
 
 
 class TestTimestampHelpers:

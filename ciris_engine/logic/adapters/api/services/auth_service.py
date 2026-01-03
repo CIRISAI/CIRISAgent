@@ -270,6 +270,16 @@ class APIAuthService:
                 )
                 await self._process_wa_record(wa)
 
+            # Clear the fallback admin FIRST if it wasn't loaded from the database
+            # The fallback admin is only meant for when there's no auth_service
+            # If wa-system-admin is in the DB, it's a real user and should be kept
+            # IMPORTANT: This must happen BEFORE checking for has_admin, otherwise
+            # the fallback admin tricks the code into thinking admin exists
+            loaded_wa_ids = {wa.wa_id for wa in was}
+            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
+                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
+                del self._users["wa-system-admin"]
+
             # Check if we need to create a default admin
             # Skip if:
             # 1. Any user named 'admin' exists, OR
@@ -284,14 +294,6 @@ class APIAuthService:
                 await self._create_default_admin()
             else:
                 logger.info("CIRIS_USER_CREATE: Skipping default admin creation - admin or ROOT already exists")
-
-            # Clear the fallback admin if it wasn't loaded from the database
-            # The fallback admin is only meant for when there's no auth_service
-            # If wa-system-admin is in the DB, it's a real user and should be kept
-            loaded_wa_ids = {wa.wa_id for wa in was}
-            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
-                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
-                del self._users["wa-system-admin"]
 
             logger.info(f"CIRIS_USER_CREATE: User loading complete. Total users in cache: {len(self._users)}")
             unique_users = {u.wa_id: u for u in self._users.values()}

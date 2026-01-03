@@ -18,7 +18,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ciris_adapters.ciris_covenant_metrics.services import CovenantMetricsService, SimpleCapabilities
+from ciris_adapters.ciris_covenant_metrics.services import (
+    CovenantMetricsService,
+    SimpleCapabilities,
+    TraceComponent,
+    CompleteTrace,
+)
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 
 
@@ -533,3 +538,189 @@ class TestCovenantMetricsServiceFlush:
 
         service._send_events_batch.assert_called_once()
         assert service._events_sent == 3
+
+
+class TestTraceComponent:
+    """Tests for TraceComponent dataclass."""
+
+    def test_trace_component_creation(self):
+        """Test creating a TraceComponent."""
+        component = TraceComponent(
+            component_type="observation",
+            event_type="THOUGHT_START",
+            timestamp="2025-01-01T12:00:00Z",
+            data={"thought_id": "test-123", "content": "Hello"},
+        )
+        assert component.component_type == "observation"
+        assert component.event_type == "THOUGHT_START"
+        assert component.timestamp == "2025-01-01T12:00:00Z"
+        assert component.data["thought_id"] == "test-123"
+
+    def test_trace_component_empty_data(self):
+        """Test TraceComponent with empty data."""
+        component = TraceComponent(
+            component_type="context",
+            event_type="SNAPSHOT_AND_CONTEXT",
+            timestamp="2025-01-01T12:00:00Z",
+            data={},
+        )
+        assert component.data == {}
+
+    def test_trace_component_complex_data(self):
+        """Test TraceComponent with complex nested data."""
+        complex_data = {
+            "system_snapshot": {
+                "services_online": 22,
+                "memory_usage": {"current": 1024, "max": 4096},
+            },
+            "user_context": {"user_id": "user-1", "channels": ["general", "dm"]},
+        }
+        component = TraceComponent(
+            component_type="context",
+            event_type="SNAPSHOT_AND_CONTEXT",
+            timestamp="2025-01-01T12:00:00Z",
+            data=complex_data,
+        )
+        assert component.data["system_snapshot"]["services_online"] == 22
+        assert component.data["user_context"]["channels"] == ["general", "dm"]
+
+
+class TestCompleteTrace:
+    """Tests for CompleteTrace dataclass."""
+
+    def test_complete_trace_creation(self):
+        """Test creating a CompleteTrace."""
+        trace = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id="task-789",
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+        )
+        assert trace.trace_id == "trace-abc123"
+        assert trace.thought_id == "thought-456"
+        assert trace.task_id == "task-789"
+        assert trace.agent_id_hash == "hash123"
+        assert trace.started_at == "2025-01-01T12:00:00Z"
+        assert trace.completed_at is None
+        assert trace.components == []
+        assert trace.signature is None
+
+    def test_complete_trace_with_components(self):
+        """Test CompleteTrace with components."""
+        trace = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id=None,
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+            components=[
+                TraceComponent(
+                    component_type="observation",
+                    event_type="THOUGHT_START",
+                    timestamp="2025-01-01T12:00:00Z",
+                    data={"content": "Hello"},
+                ),
+                TraceComponent(
+                    component_type="action",
+                    event_type="ACTION_RESULT",
+                    timestamp="2025-01-01T12:00:01Z",
+                    data={"action": "SPEAK"},
+                ),
+            ],
+        )
+        assert len(trace.components) == 2
+        assert trace.components[0].component_type == "observation"
+        assert trace.components[1].component_type == "action"
+
+    def test_complete_trace_to_dict(self):
+        """Test CompleteTrace serialization to dict."""
+        trace = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id="task-789",
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+            completed_at="2025-01-01T12:00:05Z",
+            components=[
+                TraceComponent(
+                    component_type="observation",
+                    event_type="THOUGHT_START",
+                    timestamp="2025-01-01T12:00:00Z",
+                    data={"content": "Test"},
+                ),
+            ],
+            signature="sig123",
+            signature_key_id="key-1",
+        )
+
+        result = trace.to_dict()
+
+        assert result["trace_id"] == "trace-abc123"
+        assert result["thought_id"] == "thought-456"
+        assert result["task_id"] == "task-789"
+        assert result["agent_id_hash"] == "hash123"
+        assert result["started_at"] == "2025-01-01T12:00:00Z"
+        assert result["completed_at"] == "2025-01-01T12:00:05Z"
+        assert len(result["components"]) == 1
+        assert result["components"][0]["component_type"] == "observation"
+        assert result["signature"] == "sig123"
+        assert result["signature_key_id"] == "key-1"
+
+    def test_complete_trace_compute_hash(self):
+        """Test CompleteTrace hash computation."""
+        trace = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id="task-789",
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+            components=[
+                TraceComponent(
+                    component_type="observation",
+                    event_type="THOUGHT_START",
+                    timestamp="2025-01-01T12:00:00Z",
+                    data={"content": "Test"},
+                ),
+            ],
+        )
+
+        hash1 = trace.compute_hash()
+        hash2 = trace.compute_hash()
+
+        # Same trace should produce same hash
+        assert hash1 == hash2
+        assert len(hash1) == 64  # SHA-256 hex is 64 chars
+
+    def test_complete_trace_hash_changes_with_content(self):
+        """Test that hash changes when content changes."""
+        trace1 = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id="task-789",
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+        )
+
+        trace2 = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id="task-789",
+            agent_id_hash="hash123-different",  # Changed
+            started_at="2025-01-01T12:00:00Z",
+        )
+
+        assert trace1.compute_hash() != trace2.compute_hash()
+
+    def test_complete_trace_optional_task_id(self):
+        """Test CompleteTrace with optional task_id as None."""
+        trace = CompleteTrace(
+            trace_id="trace-abc123",
+            thought_id="thought-456",
+            task_id=None,
+            agent_id_hash="hash123",
+            started_at="2025-01-01T12:00:00Z",
+        )
+
+        result = trace.to_dict()
+        assert result["task_id"] is None

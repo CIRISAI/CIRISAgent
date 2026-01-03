@@ -14,10 +14,9 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 
 from .bridge import EmulatorBridge
-from .config import MobileQAConfig, MobileQAModule
+from .config import MobileQAConfig
 
 
 def cmd_status(bridge: EmulatorBridge, args):

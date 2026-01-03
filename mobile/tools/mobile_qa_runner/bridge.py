@@ -10,10 +10,7 @@ Android emulator running CIRIS. It provides:
 - Bridge to main QA runner
 """
 
-import json
-import os
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path

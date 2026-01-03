@@ -120,6 +120,9 @@ class LLMBus(BaseBus[LLMService]):
         # Track services that have had full error logs to reduce log verbosity
         self._services_with_full_error_logged: set[str] = set()
 
+        # Background tasks set to prevent garbage collection (SonarCloud fix)
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
@@ -331,12 +334,14 @@ class LLMBus(BaseBus[LLMService]):
                         logger.warning(f"Rate limited on {service_name}, waiting {wait_time:.1f}s before retry ({rate_limit_retry_count}/{max_rate_limit_retries}, {remaining:.1f}s budget)")
 
                         # Emit error message to UI (fire and forget, don't await blocking)
-                        asyncio.create_task(
+                        task = asyncio.create_task(
                             error_emitter.emit_rate_limit_error(
                                 provider=service_name,
                                 wait_time=wait_time,
                             )
                         )
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
 
                         await asyncio.sleep(wait_time)
                         retry_count -= 1  # Don't count rate limit as a regular retry
@@ -383,13 +388,15 @@ class LLMBus(BaseBus[LLMService]):
 
         # All services failed - emit error to UI
         error_msg = f"All LLM services failed for {handler_name}"
-        asyncio.create_task(
+        task = asyncio.create_task(
             error_emitter.emit_llm_failure(
                 error_summary=str(last_error)[:100] if last_error else "Unknown error",
                 retry_count=max_retries_per_service,
                 max_retries=max_retries_per_service,
             )
         )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
         raise RuntimeError(f"{error_msg}. Last error: {last_error}")
 
     # Note: This method is not in the protocol but kept for internal use

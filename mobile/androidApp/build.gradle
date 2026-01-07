@@ -1,0 +1,232 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "com.chaquo.python"
+    id "org.jetbrains.compose"
+}
+
+android {
+    namespace "ai.ciris.mobile"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "ai.ciris.mobile"
+        minSdk 24
+        targetSdk 35
+        versionCode 43
+        versionName "2.0.0"  // KMP version
+
+        ndk {
+            abiFilters "x86_64", "arm64-v8a", "armeabi-v7a"
+        }
+
+        // Chaquopy Python configuration
+        python {
+            version "3.10"
+            buildPython "/usr/bin/python3.10"
+            extractPackages "pydantic_core"
+
+            pip {
+                options "--find-links", "../android/app/wheels"  // Reuse existing wheels
+
+                // Core dependencies (same as original android/app/build.gradle)
+                install "pydantic-core==2.23.4"
+                install "pydantic==2.9.2"
+                install "fastapi==0.115.0"
+                install "uvicorn==0.30.0"
+                install "httpx==0.27.0"
+                install "aiosqlite==0.20.0"
+                install "aiofiles==23.2.1"
+                install "pyyaml==6.0.3"
+                install "python-dotenv==1.0.1"
+                install "cryptography==42.0.8"
+                install "bcrypt"
+                install "PyJWT==2.8.0"
+                install "python-jose==3.3.0"
+                install "passlib==1.7.4"
+                install "python-multipart==0.0.9"
+                install "openai==1.12.0"
+                install "instructor==1.2.6"
+                install "pypdf==5.1.0"
+                install "docx2txt==0.9"
+                install "croniter==2.0.7"
+                install "python-dateutil==2.8.2"
+                install "zeroconf==0.39.4"
+                install "ifaddr==0.2.0"
+            }
+        }
+    }
+
+    // Include CIRIS Python source (reuse from ../android/app/src/main/python/)
+    sourceSets {
+        main {
+            python.srcDirs = ["../../android/app/src/main/python"]
+        }
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("CIRIS_KEYSTORE_PATH") ?: "${System.getProperty('user.home')}/ciris-release-key.jks")
+            storePassword System.getenv("CIRIS_KEYSTORE_PASSWORD") ?: findProperty("cirisKeystorePassword") ?: ""
+            keyAlias System.getenv("CIRIS_KEY_ALIAS") ?: findProperty("cirisKeyAlias") ?: "ciris-key"
+            keyPassword System.getenv("CIRIS_KEY_PASSWORD") ?: findProperty("cirisKeyPassword") ?: ""
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+
+        debug {
+            debuggable true
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+// Copy pydantic_core task (from original android/app/build.gradle:161-274)
+android.applicationVariants.all { variant ->
+    def variantName = variant.name.capitalize()
+
+    tasks.whenTaskAdded { task ->
+        if (task.name == "generate${variantName}PythonRequirementsAssets") {
+            task.doFirst {
+                def commonDir = file("${buildDir}/python/pip/${variant.name}/common")
+                def x86_64Dir = file("${buildDir}/python/pip/${variant.name}/x86_64")
+                def arm64Dir = file("${buildDir}/python/pip/${variant.name}/arm64-v8a")
+                def armeabiDir = file("${buildDir}/python/pip/${variant.name}/armeabi-v7a")
+                def commonPydanticCore = file("${commonDir}/pydantic_core")
+                def commonDistInfo = file("${commonDir}/pydantic_core-2.23.4.dist-info")
+
+                if (commonPydanticCore.exists()) {
+                    println "Moving pydantic_core from common to x86_64..."
+                    x86_64Dir.mkdirs()
+                    def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+
+                    copy {
+                        from commonPydanticCore
+                        into x86_64PydanticCore
+                    }
+                    copy {
+                        from commonDistInfo
+                        into x86_64DistInfo
+                    }
+                    file("${x86_64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_x86_64
+"""
+
+                    delete commonPydanticCore
+                    delete commonDistInfo
+                    println "pydantic_core moved to ${x86_64Dir}"
+                }
+
+                // Copy to ARM architectures (same logic as original)
+                def x86_64PydanticCore = file("${x86_64Dir}/pydantic_core")
+                def arm64PydanticCore = file("${arm64Dir}/pydantic_core")
+                def arm64HasSo = arm64PydanticCore.exists() && arm64PydanticCore.listFiles()?.any { it.name.endsWith('.so') }
+                def arm64Init = file("${arm64PydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && arm64HasSo && !arm64Init.exists()) {
+                    println "Copying pydantic_core Python sources to arm64-v8a..."
+                    copy {
+                        from x86_64PydanticCore
+                        into arm64PydanticCore
+                        exclude "*.so"
+                    }
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def arm64DistInfo = file("${arm64Dir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into arm64DistInfo
+                        }
+                        file("${arm64DistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_arm64_v8a
+"""
+                    }
+                    println "pydantic_core Python sources copied to arm64-v8a"
+                }
+
+                def armeabiPydanticCore = file("${armeabiDir}/pydantic_core")
+                def armeabiHasSo = armeabiPydanticCore.exists() && armeabiPydanticCore.listFiles()?.any { it.name.endsWith('.so') }
+                def armeabiInit = file("${armeabiPydanticCore}/__init__.py")
+
+                if (x86_64PydanticCore.exists() && armeabiHasSo && !armeabiInit.exists()) {
+                    println "Copying pydantic_core Python sources to armeabi-v7a..."
+                    copy {
+                        from x86_64PydanticCore
+                        into armeabiPydanticCore
+                        exclude "*.so"
+                    }
+                    def x86_64DistInfo = file("${x86_64Dir}/pydantic_core-2.23.4.dist-info")
+                    def armeabiDistInfo = file("${armeabiDir}/pydantic_core-2.23.4.dist-info")
+                    if (x86_64DistInfo.exists()) {
+                        copy {
+                            from x86_64DistInfo
+                            into armeabiDistInfo
+                        }
+                        file("${armeabiDistInfo}/WHEEL").text = """Wheel-Version: 1.0
+Generator: maturin (1.10.2)
+Root-Is-Purelib: false
+Tag: cp310-cp310-android_24_armeabi_v7a
+"""
+                    }
+                    println "pydantic_core Python sources copied to armeabi-v7a"
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation project(":shared")
+
+    // Compose
+    implementation "androidx.activity:activity-compose:1.8.2"
+    implementation "androidx.compose.ui:ui:1.6.1"
+    implementation "androidx.compose.material3:material3:1.2.0"
+    implementation "androidx.compose.ui:ui-tooling-preview:1.6.1"
+    debugImplementation "androidx.compose.ui:ui-tooling:1.6.1"
+
+    // ViewModel
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0"
+    implementation "androidx.lifecycle:lifecycle-runtime-compose:2.7.0"
+
+    // Navigation
+    implementation "androidx.navigation:navigation-compose:2.7.6"
+
+    // Core Android (still needed for Python runtime and some platform features)
+    implementation "androidx.core:core-ktx:1.12.0"
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+
+    // Existing native features that aren't in shared yet
+    implementation "com.chaquo.python:gradle:15.0.1"
+}

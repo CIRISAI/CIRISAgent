@@ -116,7 +116,7 @@ pip install --upgrade pip setuptools wheel
 ```bash
 # Clone the repository
 cd ~/ciris
-git clone https://github.com/your-org/CIRISAgent.git
+git clone https://github.com/CIRISAI/CIRISAgent.git
 cd CIRISAgent
 
 # Activate virtual environment

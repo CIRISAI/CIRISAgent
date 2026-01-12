@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
@@ -9,15 +10,17 @@ from ciris_engine.logic.dma.dma_executor import (
     run_csdma,
     run_dma_with_retries,
     run_dsdma,
+    run_idma,
     run_pdma,
 )
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
+from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.processors.dma import DMAError, DMAErrors, DMAMetadata, InitialDMAResults
 from ciris_engine.schemas.runtime.models import Thought
@@ -39,18 +42,26 @@ class DMAOrchestrator:
         app_config: Optional[Any] = None,
         llm_service: Optional[Any] = None,
         memory_service: Optional[Any] = None,
+        idma_evaluator: Optional[IDMAEvaluator] = None,
     ) -> None:
         self.ethical_pdma_evaluator = ethical_pdma_evaluator
         self.csdma_evaluator = csdma_evaluator
         self.dsdma = dsdma
         self.action_selection_pdma_evaluator = action_selection_pdma_evaluator
+        self.idma_evaluator = idma_evaluator
         self.time_service = time_service
         self.app_config = app_config
         self.llm_service = llm_service
         self.memory_service = memory_service
 
         self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
-        self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
+        # DMA timeout can be overridden via environment variable for slow LLM providers
+        # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
+        dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
+        if dma_timeout_env:
+            self.timeout_seconds = float(dma_timeout_env)
+        else:
+            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),
@@ -58,6 +69,83 @@ class DMAOrchestrator:
         }
         if self.dsdma is not None:
             self._circuit_breakers["dsdma"] = CircuitBreaker("dsdma")
+        if self.idma_evaluator is not None:
+            self._circuit_breakers["idma"] = CircuitBreaker("idma")
+
+    def _set_dma_error(self, errors: DMAErrors, name: str, error: DMAError) -> None:
+        """Set a DMA error by name."""
+        error_map = {"ethical_pdma": "ethical_pdma", "csdma": "csdma", "dsdma": "dsdma", "idma": "idma"}
+        if name in error_map:
+            setattr(errors, error_map[name], error)
+
+    async def _run_idma_evaluation(
+        self,
+        thought_item: ProcessingQueueItem,
+        processing_context: Optional[Any],
+        dma_results: Dict[str, Any],
+    ) -> tuple[Optional[IDMAResult], Optional[str]]:
+        """Run IDMA evaluation with circuit breaker protection. Returns (result, prompt)."""
+        # If IDMA not configured, return None (optional DMA)
+        if not self.idma_evaluator:
+            return None, None
+
+        cb = self._circuit_breakers.get("idma")
+        if not cb:
+            return None, None
+
+        # Circuit breaker tripped = IDMA has failed too many times, treat as error
+        if not cb.is_available():
+            raise Exception("IDMA circuit breaker open - too many recent failures")
+
+        try:
+            idma_result = await run_dma_with_retries(
+                run_idma,
+                self.idma_evaluator,
+                thought_item,
+                processing_context,
+                retry_limit=self.retry_limit,
+                timeout_seconds=self.timeout_seconds,
+                time_service=self.time_service,
+                ethical_result=dma_results["ethical_pdma"],
+                csdma_result=dma_results["csdma"],
+                dsdma_result=dma_results["dsdma"],
+            )
+            idma_prompt = getattr(self.idma_evaluator, "last_user_prompt", None)
+            cb.record_success()
+
+            if idma_result and idma_result.fragility_flag:
+                logger.warning(
+                    f"IDMA fragility detected for thought {thought_item.thought_id}: "
+                    f"k_eff={idma_result.k_eff:.2f}, phase={idma_result.phase}"
+                )
+            return idma_result, idma_prompt
+
+        except Exception as e:
+            logger.error(f"IDMA evaluation failed: {e}")
+            cb.record_failure()
+            # NO BYPASS - re-raise to trigger proper deferral/ponder behavior
+            # If IDMA runs and fails, the thought should defer, not continue without epistemic grounding
+            raise
+
+    def _create_dma_task(
+        self,
+        run_func: Any,
+        evaluator: Any,
+        thought_item: ProcessingQueueItem,
+        context: Any,
+    ) -> "asyncio.Task[Any]":
+        """Create a DMA task with standard retry configuration."""
+        return asyncio.create_task(
+            run_dma_with_retries(
+                run_func,
+                evaluator,
+                thought_item,
+                context,
+                retry_limit=self.retry_limit,
+                timeout_seconds=self.timeout_seconds,
+                time_service=self.time_service,
+            )
+        )
 
     async def run_initial_dmas(
         self,
@@ -70,78 +158,51 @@ class DMAOrchestrator:
         """
         logger.debug(f"[DEBUG TIMING] run_initial_dmas START for thought {thought_item.thought_id}")
 
-        # FAIL FAST: All 3 DMAs are required
         if not self.dsdma:
             raise RuntimeError("DSDMA is not configured - all 3 DMA results (ethical_pdma, csdma, dsdma) are required")
 
         errors = DMAErrors()
         tasks = {
-            "ethical_pdma": asyncio.create_task(
-                run_dma_with_retries(
-                    run_pdma,
-                    self.ethical_pdma_evaluator,
-                    thought_item,
-                    processing_context,
-                    retry_limit=self.retry_limit,
-                    timeout_seconds=self.timeout_seconds,
-                    time_service=self.time_service,
-                )
-            ),
-            "csdma": asyncio.create_task(
-                run_dma_with_retries(
-                    run_csdma,
-                    self.csdma_evaluator,
-                    thought_item,
-                    processing_context,
-                    retry_limit=self.retry_limit,
-                    timeout_seconds=self.timeout_seconds,
-                    time_service=self.time_service,
-                )
-            ),
-            "dsdma": asyncio.create_task(
-                run_dma_with_retries(
-                    run_dsdma,
-                    self.dsdma,
-                    thought_item,
-                    dsdma_context or DMAMetadata(),
-                    retry_limit=self.retry_limit,
-                    timeout_seconds=self.timeout_seconds,
-                    time_service=self.time_service,
-                )
-            ),
+            "ethical_pdma": self._create_dma_task(run_pdma, self.ethical_pdma_evaluator, thought_item, processing_context),
+            "csdma": self._create_dma_task(run_csdma, self.csdma_evaluator, thought_item, processing_context),
+            "dsdma": self._create_dma_task(run_dsdma, self.dsdma, thought_item, dsdma_context or DMAMetadata()),
         }
 
         # Collect results - must get ALL 3
-        dma_results = {}
+        dma_results: Dict[str, Any] = {}
         for name, task in tasks.items():
             try:
                 dma_results[name] = await task
             except Exception as e:
                 logger.error(f"DMA '{name}' failed: {e}", exc_info=True)
                 error = DMAError(dma_name=name, error_message=str(e), error_type=type(e).__name__)
-                if name == "ethical_pdma":
-                    errors.ethical_pdma = error
-                elif name == "csdma":
-                    errors.csdma = error
-                elif name == "dsdma":
-                    errors.dsdma = error
+                self._set_dma_error(errors, name, error)
 
         if errors.has_errors():
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
 
-        # Capture prompts from evaluators (set during evaluation)
-        ethical_pdma_prompt = getattr(self.ethical_pdma_evaluator, "last_user_prompt", None)
-        csdma_prompt = getattr(self.csdma_evaluator, "last_user_prompt", None)
-        dsdma_prompt = getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None
+        # Run IDMA sequentially after initial 3 DMAs (needs their results as input)
+        # IDMA is INFORMATIONAL, not a gate - failures don't block the thought
+        # A nascent agent will have low k_eff, that's expected, not an error
+        idma_result: Optional[IDMAResult] = None
+        idma_prompt: Optional[str] = None
+        try:
+            idma_result, idma_prompt = await self._run_idma_evaluation(thought_item, processing_context, dma_results)
+        except Exception as e:
+            # Log but don't fail - IDMA is informational
+            logger.warning(f"IDMA evaluation unavailable (non-blocking): {e}")
+            # idma_result stays None - thought continues without epistemic metadata
 
-        # Create InitialDMAResults with all 3 required fields and prompts
+        # Capture prompts from evaluators (set during evaluation)
         return InitialDMAResults(
             ethical_pdma=dma_results["ethical_pdma"],
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
-            ethical_pdma_prompt=ethical_pdma_prompt,
-            csdma_prompt=csdma_prompt,
-            dsdma_prompt=dsdma_prompt,
+            idma=idma_result,
+            ethical_pdma_prompt=getattr(self.ethical_pdma_evaluator, "last_user_prompt", None),
+            csdma_prompt=getattr(self.csdma_evaluator, "last_user_prompt", None),
+            dsdma_prompt=getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None,
+            idma_prompt=idma_prompt,
         )
 
     async def run_dmas(
@@ -259,6 +320,7 @@ class DMAOrchestrator:
             ethical_pdma_result=dma_results.ethical_pdma,
             csdma_result=dma_results.csdma,
             dsdma_result=dma_results.dsdma,
+            idma_result=dma_results.idma,  # Pass IDMA result for information diversity context
             current_thought_depth=getattr(actual_thought, "thought_depth", 0),
             max_rounds=5,  # Default max rounds
             faculty_enhanced=False,

@@ -81,6 +81,24 @@ Available modules:
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
     )
 
+    # Live LLM configuration (uses real API instead of mock)
+    parser.add_argument(
+        "--live", action="store_true",
+        help="Use real LLM API instead of mock. Reads key from --live-key-file"
+    )
+    parser.add_argument(
+        "--live-key-file", default="~/.groq_key",
+        help="Path to file containing API key (default: ~/.groq_key)"
+    )
+    parser.add_argument(
+        "--live-model", default="meta-llama/llama-4-maverick-17b-128e-instruct",
+        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)"
+    )
+    parser.add_argument(
+        "--live-base-url", default="https://api.groq.com/openai/v1",
+        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)"
+    )
+
     # Database backend configuration
     parser.add_argument(
         "--database-backends",
@@ -143,7 +161,35 @@ def main():
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
 
+    # Handle --live mode: read API key and configure live LLM
+    live_api_key = None
+    live_model = None
+    live_base_url = None
+    if args.live:
+        key_path = Path(args.live_key_file).expanduser()
+        if not key_path.exists():
+            print(f"❌ Live mode requires API key file: {key_path}")
+            print(f"   Create the file with your API key or use --live-key-file to specify path")
+            sys.exit(1)
+        try:
+            live_api_key = key_path.read_text().strip()
+            if not live_api_key:
+                print(f"❌ API key file is empty: {key_path}")
+                sys.exit(1)
+            live_model = args.live_model
+            live_base_url = args.live_base_url
+            print(f"🔑 Live mode enabled:")
+            print(f"   Key: {live_api_key[:10]}...{live_api_key[-4:]}")
+            print(f"   Model: {live_model}")
+            print(f"   Base URL: {live_base_url}")
+        except Exception as e:
+            print(f"❌ Failed to read API key: {e}")
+            sys.exit(1)
+
     # Create configuration
+    # --live implies --no-mock-llm
+    use_mock_llm = not args.no_mock_llm and not args.live
+
     config = QAConfig(
         base_url=args.url,
         api_port=args.port,
@@ -158,12 +204,16 @@ def main():
         html_report=args.html,
         report_dir=Path(args.report_dir),
         auto_start_server=not args.no_auto_start,
-        mock_llm=not args.no_mock_llm,
+        mock_llm=use_mock_llm,
         adapter=args.adapter,
         database_backends=args.database_backends,
         postgres_url=args.postgres_url,
         postgres_port=args.postgres_port,
         parallel_backends=args.parallel_backends,
+        # Live LLM configuration
+        live_api_key=live_api_key,
+        live_model=live_model,
+        live_base_url=live_base_url,
     )
 
     # Create and run runner

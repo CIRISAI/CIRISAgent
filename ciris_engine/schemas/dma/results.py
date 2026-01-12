@@ -25,6 +25,53 @@ from ..actions.parameters import (
 from ..runtime.enums import HandlerActionType
 
 
+class IDMAResult(BaseModel):
+    """Result from Intuition Decision Making Algorithm (IDMA).
+
+    IDMA is a semantic implementation of the CCA (Coherent Collective Action)
+    intuition faculties. It evaluates source independence, correlation risk,
+    and epistemic phase to detect fragile reasoning without hardware dependencies.
+
+    k_eff formula: k_eff = k / (1 + ρ(k-1))
+    - k = number of nominal sources/perspectives
+    - ρ = average correlation between sources
+    - k_eff < 2 = FRAGILE (single source dependence)
+    - k_eff ≥ 2 = healthy (multiple independent sources)
+    - As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
+    """
+
+    k_eff: float = Field(
+        ...,
+        ge=0.0,
+        description="Effective independent source count. Need k_eff >= 2 for healthy reasoning. k_eff < 2 = fragile.",
+    )
+    correlation_risk: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Estimated correlation between sources (0=independent, 1=fully correlated)",
+    )
+    phase: str = Field(
+        ...,
+        description="Epistemic phase: 'chaos' (contradictory), 'healthy' (diverse synthesis), or 'rigidity' (echo chamber)",
+    )
+    fragility_flag: bool = Field(
+        ...,
+        description="True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation",
+    )
+    sources_identified: List[str] = Field(
+        default_factory=list,
+        description="List of distinct sources/perspectives identified in the reasoning",
+    )
+    correlation_factors: List[str] = Field(
+        default_factory=list,
+        description="Factors contributing to source correlation (e.g., 'same research group', 'derived from single paper')",
+    )
+    reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
 
@@ -100,4 +147,4 @@ class ActionSelectionDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-__all__ = ["EthicalDMAResult", "CSDMAResult", "DSDMAResult", "ActionSelectionDMAResult"]
+__all__ = ["IDMAResult", "EthicalDMAResult", "CSDMAResult", "DSDMAResult", "ActionSelectionDMAResult"]

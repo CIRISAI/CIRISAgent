@@ -99,6 +99,10 @@ class QARunner:
                 database_backends=None,  # Don't pass this recursively
                 postgres_url=self.config.postgres_url,
                 postgres_port=self.config.postgres_port,
+                # Live LLM configuration
+                live_api_key=self.config.live_api_key,
+                live_model=self.config.live_model,
+                live_base_url=self.config.live_base_url,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -244,6 +248,8 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
+            QAModule.COVENANT_METRICS,
+            QAModule.SYSTEM_MESSAGES,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -853,8 +859,10 @@ class QARunner:
         from .modules.mcp_tests import MCPTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
+        from .modules.covenant_metrics_tests import CovenantMetricsTests
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.vision_tests import VisionTests
+        from .modules.system_messages_tests import SystemMessagesTests
 
         all_passed = True
 
@@ -877,6 +885,8 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
+            QAModule.COVENANT_METRICS: CovenantMetricsTests,
+            QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

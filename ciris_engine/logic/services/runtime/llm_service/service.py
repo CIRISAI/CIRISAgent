@@ -48,6 +48,11 @@ class OpenAIConfig(BaseModel):
 
 logger = logging.getLogger(__name__)
 
+# Error pattern constants (DRY principle)
+ERROR_PATTERN_RATE_LIMIT = "rate limit"
+ERROR_PATTERN_RATE_LIMIT_UNDERSCORE = "rate_limit"
+ERROR_PATTERN_429 = "429"
+
 # Type for structured call functions that can be retried
 StructuredCallFunc = Callable[
     [List[MessageDict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]
@@ -468,6 +473,28 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                     extra_kwargs["extra_body"] = {"metadata": metadata}
 
+                # OpenRouter provider routing preferences
+                # Set via environment variables:
+                #   OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers (e.g., "together,groq,sambanova")
+                #   OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip (e.g., "friendli,google-vertex")
+                elif "openrouter.ai" in base_url:
+                    provider_config: Dict[str, Any] = {}
+
+                    # Parse provider order preference
+                    provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
+                    if provider_order:
+                        provider_config["order"] = [p.strip() for p in provider_order.split(",") if p.strip()]
+
+                    # Parse providers to ignore
+                    ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
+                    if ignore_providers:
+                        provider_config["ignore"] = [p.strip() for p in ignore_providers.split(",") if p.strip()]
+
+                    # Only add extra_body if we have provider preferences
+                    if provider_config:
+                        extra_kwargs["extra_body"] = {"provider": provider_config}
+                        logger.info(f"[OPENROUTER] Using provider config: {provider_config}")
+
                 # DEBUG: Log multimodal content details for proxy team diagnostics
                 image_count = 0
                 total_image_bytes = 0
@@ -504,6 +531,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"[VISION_DEBUG] Proxy response: requested={self.model_name}, "
                         f"actual_model={actual_model}, thought_id={thought_id}"
                     )
+
+                # Log OpenRouter provider if present
+                provider_name = getattr(completion, "provider", None)
+                base_url = self.openai_config.base_url or ""
+                if provider_name and "openrouter.ai" in base_url:
+                    logger.info(f"[OPENROUTER] SUCCESS - Provider: {provider_name}, Model: {self.model_name}")
 
                 # Extract usage data from completion
                 usage = completion.usage
@@ -565,8 +598,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 raise
 
             except (APIConnectionError, RateLimitError, InternalServerError) as e:
-                # Record failure with circuit breaker
-                self.circuit_breaker.record_failure()
                 # Track error in base service
                 self._track_error(e)
                 # Track LLM-specific error
@@ -582,10 +613,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 }
 
                 if isinstance(e, RateLimitError):
-                    logger.error(
-                        f"LLM RATE LIMIT ERROR - Provider: {error_details['base_url']}, "
-                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
-                        f"Error: {e}"
+                    # DON'T record circuit breaker failure for rate limits!
+                    # Rate limits are transient and will be retried by the LLM bus
+                    logger.warning(
+                        f"LLM RATE LIMIT (429) - NOT counting as CB failure. Provider: {error_details['base_url']}, "
+                        f"Model: {error_details['model']}. Will be retried by LLM bus. Error: {e}"
                     )
                 elif isinstance(e, InternalServerError):
                     error_str = str(e).lower()
@@ -626,8 +658,18 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # Check if this is an instructor retry exception (includes timeouts, 503 errors, rate limits, etc.)
                 if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
                     if isinstance(e, instructor.exceptions.InstructorRetryException):
-                        # Record failure for circuit breaker regardless of specific error type
-                        self.circuit_breaker.record_failure()
+                        # Check error type FIRST before recording failures
+                        error_str = str(e).lower()
+                        full_error = str(e)
+
+                        # Check for rate limit / 429 errors - DON'T record as circuit breaker failure
+                        # Rate limits are transient and will be retried by the LLM bus
+                        is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
+
+                        # Only record circuit breaker failure for non-rate-limit errors
+                        if not is_rate_limit:
+                            self.circuit_breaker.record_failure()
+
                         self._track_error(e)
                         # Track LLM-specific error
                         self._total_errors += 1
@@ -640,10 +682,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                             "circuit_breaker_state": self.circuit_breaker.state.value,
                             "consecutive_failures": self.circuit_breaker.consecutive_failures,
                         }
-
-                        # Provide specific error messages for different failure types
-                        error_str = str(e).lower()
-                        full_error = str(e)
 
                         # Check for schema validation errors
                         if "validation" in error_str or "validationerror" in error_str:
@@ -691,18 +729,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                                 "LLM service unavailable (503) - circuit breaker activated for failover"
                             ) from e
 
-                        # Check for rate limit / 429 errors
-                        elif "rate limit" in error_str or "429" in error_str:
-                            logger.error(
-                                f"LLM RATE LIMIT (429) - Provider quota exceeded.\n"
+                        # Check for rate limit / 429 errors - NOT counted as circuit breaker failure
+                        # Rate limits are transient and will be retried by the LLM bus
+                        elif ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
+                            logger.warning(
+                                f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
                                 f"  Model: {error_context['model']}\n"
                                 f"  Provider: {error_context['provider']}\n"
                                 f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
+                                f"(not incrementing - rate limits are transient)\n"
                                 f"  Error: {full_error[:300]}"
                             )
                             raise RuntimeError(
-                                "LLM rate limit exceeded (429) - circuit breaker activated for failover"
+                                "LLM rate limit exceeded (429) - will be retried by LLM bus"
                             ) from e
 
                         # Check for context length / token limit exceeded errors (400)
@@ -754,8 +793,34 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                                 f"  Error: {full_error[:500]}"
                             )
                             raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e
-                # Re-raise other exceptions
-                raise
+                # Wrap all other exceptions with context to avoid empty error messages
+                # Check for rate limits in the catch-all too (in case instructor module structure changed)
+                error_str_lower = str(e).lower()
+                is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str_lower or ERROR_PATTERN_429 in error_str_lower or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
+
+                if not is_rate_limit:
+                    self.circuit_breaker.record_failure()
+
+                self._track_error(e)
+                self._total_errors += 1
+                error_msg = str(e).strip() if str(e).strip() else f"<{type(e).__name__} with no message>"
+
+                if is_rate_limit:
+                    logger.warning(
+                        f"LLM RATE LIMIT (429) - NOT counting as CB failure.\n"
+                        f"  Model: {self.model_name}\n"
+                        f"  Provider: {self.openai_config.base_url or 'default'}\n"
+                        f"  Will be retried by LLM bus. Error: {error_msg[:300]}"
+                    )
+                else:
+                    logger.error(
+                        f"LLM UNEXPECTED ERROR - {type(e).__name__}.\n"
+                        f"  Model: {self.model_name}\n"
+                        f"  Provider: {self.openai_config.base_url or 'default'}\n"
+                        f"  Expected Schema: {resp_model.__name__}\n"
+                        f"  Error: {error_msg[:500]}"
+                    )
+                raise RuntimeError(f"LLM call failed ({type(e).__name__}): {error_msg[:300]}") from e
 
         # Implement retry logic with OpenAI-specific error handling
         try:
@@ -878,7 +943,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             return "CONNECTION_ERROR"
 
         # Check for rate limit
-        if isinstance(error, RateLimitError) or "rate limit" in error_str or "429" in error_str:
+        if isinstance(error, RateLimitError) or ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
             return "RATE_LIMIT"
 
         # Check for context length exceeded

@@ -576,11 +576,11 @@ class StreamingVerificationModule:
                                         elif field == "epistemic_data" and field_type == dict and not event[field]:
                                             errors.append(f"🐛 BUG 2: conscience_result.epistemic_data is empty dict")
 
-                                    # Check for updated_status_available field (from UpdatedStatusConscience check)
-                                    if "updated_status_available" not in event:
-                                        event_detail["issues"].append("Missing updated_status_available field")
+                                    # Check for updated_status_detected field (from UpdatedStatusConscience check)
+                                    if "updated_status_detected" not in event:
+                                        event_detail["issues"].append("Missing updated_status_detected field")
                                         errors.append(
-                                            f"🐛 BUG 2: conscience_result missing updated_status_available flag"
+                                            f"🐛 BUG 2: conscience_result missing updated_status_detected flag"
                                         )
 
                                     # Optional recursive flag
@@ -695,9 +695,11 @@ class StreamingVerificationModule:
                                         "csdma",
                                         "dsdma",
                                         "pdma",
+                                        "idma",  # IDMA: Intuition DMA (CCA epistemic diversity) - optional
                                         "csdma_prompt",
                                         "dsdma_prompt",
                                         "pdma_prompt",
+                                        "idma_prompt",  # Optional IDMA prompt
                                     },  # DMA results + optional prompt fields
                                     "aspdma_result": {
                                         "selected_action",
@@ -712,11 +714,42 @@ class StreamingVerificationModule:
                                         "is_recursive",
                                         "conscience_override_reason",
                                         "action_was_overridden",
-                                        "updated_status_available",
                                         "conscience_prompt",
+                                        # Exempt actions flag
+                                        "ethical_faculties_skipped",
+                                        # === BYPASS GUARDRAIL 1: Updated Status ===
+                                        "updated_status_detected",
+                                        "updated_status_content",
+                                        # === BYPASS GUARDRAIL 2: Thought Depth ===
+                                        "thought_depth_triggered",
+                                        "thought_depth_current",
+                                        "thought_depth_max",
+                                        # === ETHICAL FACULTY 1: Entropy ===
+                                        "entropy_passed",
+                                        "entropy_score",
+                                        "entropy_threshold",
+                                        "entropy_reason",
+                                        # === ETHICAL FACULTY 2: Coherence ===
+                                        "coherence_passed",
+                                        "coherence_score",
+                                        "coherence_threshold",
+                                        "coherence_reason",
+                                        # === ETHICAL FACULTY 3: Optimization Veto ===
+                                        "optimization_veto_passed",
+                                        "optimization_veto_decision",
+                                        "optimization_veto_justification",
+                                        "optimization_veto_entropy_ratio",
+                                        "optimization_veto_affected_values",
+                                        # === ETHICAL FACULTY 4: Epistemic Humility ===
+                                        "epistemic_humility_passed",
+                                        "epistemic_humility_certainty",
+                                        "epistemic_humility_uncertainties",
+                                        "epistemic_humility_justification",
+                                        "epistemic_humility_recommendation",
                                     },
                                     "action_result": {
                                         "action_executed",
+                                        "action_parameters",  # Action params (content for SPEAK, etc.)
                                         "execution_success",
                                         "execution_time_ms",
                                         "follow_up_thought_id",

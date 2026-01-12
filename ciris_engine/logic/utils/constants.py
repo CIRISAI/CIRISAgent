@@ -60,12 +60,12 @@ try:
         # Python 3.9+ - preferred method
         from importlib.resources import files
 
-        covenant_content = files("ciris_engine.data").joinpath("covenant_1.0b.txt").read_text(encoding="utf-8")
+        covenant_content = files("ciris_engine.data").joinpath("covenant_1.2b.txt").read_text(encoding="utf-8")
     except ImportError:
         # Python 3.7-3.8 fallback
         from importlib.resources import read_text
 
-        covenant_content = read_text("ciris_engine.data", "covenant_1.0b.txt", encoding="utf-8")
+        covenant_content = read_text("ciris_engine.data", "covenant_1.2b.txt", encoding="utf-8")
 
     # Try to append platform-appropriate comprehensive guide
     _GUIDE_BASE_PATH = Path(__file__).resolve().parents[3]

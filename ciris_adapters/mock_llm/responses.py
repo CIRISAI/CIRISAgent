@@ -4,7 +4,7 @@ import re
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 
 logger = logging.getLogger(__name__)
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
@@ -456,6 +456,61 @@ def ds_dma_llm_output(context: Optional[List[str]] = None) -> BaseDSDMA.LLMOutpu
     return result
 
 
+def idma(context: Optional[List[str]] = None) -> IDMAResult:
+    """Generate mock IDMA (Intuition DMA) result using CCA principles.
+
+    IDMA evaluates epistemic diversity using the CCA formula:
+    k_eff = k / (1 + ρ(k-1))
+
+    For mock purposes, nascent agents have low k_eff (~1.0) since they
+    only have training data as a source. k_eff >= 2 indicates healthy
+    epistemic grounding with multiple independent sources.
+    """
+    context = context or []
+
+    # Check if this appears to be a user interaction (potential second source)
+    has_user_input = any("user_input:" in item or "echo_user_speech:" in item for item in context)
+
+    # Nascent agent: primarily single source (training data)
+    # k=1 means k_eff=1 regardless of ρ
+    # With user input, we have k=2 but high correlation initially
+    if has_user_input:
+        # k=2 sources (training + user), but high correlation for nascent agent
+        k = 2
+        rho = 0.7  # High correlation - user input not yet mature as independent source
+        k_eff = k / (1 + rho * (k - 1))  # k_eff ≈ 1.18
+        phase = "healthy"  # Trending toward healthy
+        sources = ["training_data", "user_input"]
+    else:
+        # k=1 source (training only)
+        k = 1
+        rho = 0.0  # ρ irrelevant when k=1
+        k_eff = 1.0  # Single source = fragile
+        phase = "rigidity"  # Echo chamber risk
+        sources = ["training_data"]
+
+    # k_eff < 2 means fragile epistemic grounding
+    fragility_flag = k_eff < 2.0 or phase == "rigidity" or rho > 0.7
+
+    reasoning = (
+        f"[MOCK LLM] CCA epistemic analysis: k={k} sources, ρ={rho:.2f} correlation. "
+        f"k_eff = {k}/{1 + rho * (k - 1):.2f} = {k_eff:.2f}. "
+        f"{'FRAGILE' if fragility_flag else 'HEALTHY'}: "
+        f"{'k_eff < 2 indicates single-source dependence' if k_eff < 2 else 'Multiple independent sources detected'}. "
+        f"Sources: {', '.join(sources)}."
+    )
+
+    result = IDMAResult(
+        k_eff=round(k_eff, 2),
+        correlation_risk=rho,
+        phase=phase,
+        fragility_flag=fragility_flag,
+        sources_identified=sources,
+        reasoning=reasoning,
+    )
+    return result
+
+
 from typing import List, Optional
 
 from .responses_action_selection import action_selection
@@ -466,6 +521,7 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     EthicalDMAResult: ethical_dma,
     CSDMAResult: cs_dma,
     DSDMAResult: ds_dma,
+    IDMAResult: idma,
     BaseDSDMA.LLMOutputForDSDMA: ds_dma_llm_output,
     OptimizationVetoResult: optimization_veto,
     EpistemicHumilityResult: epistemic_humility,

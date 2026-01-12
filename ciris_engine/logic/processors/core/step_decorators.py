@@ -771,37 +771,121 @@ def _create_recursive_conscience_data(base_data: BaseStepData, result: Any) -> R
     )
 
 
-def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> FinalizeActionStepData:
-    """Create FINALIZE_ACTION specific typed data with rich conscience information."""
+def _extract_entropy_check(result: Any) -> Dict[str, Any]:
+    """Extract entropy check data from result."""
+    check = getattr(result, "entropy_check", None)
+    if not check:
+        return {"passed": None, "score": None, "threshold": None, "reason": None}
+    return {
+        "passed": check.passed,
+        "score": check.entropy_score,
+        "threshold": check.threshold,
+        "reason": check.message,
+    }
+
+
+def _extract_coherence_check(result: Any) -> Dict[str, Any]:
+    """Extract coherence check data from result."""
+    check = getattr(result, "coherence_check", None)
+    if not check:
+        return {"passed": None, "score": None, "threshold": None, "reason": None}
+    return {
+        "passed": check.passed,
+        "score": check.coherence_score,
+        "threshold": check.threshold,
+        "reason": check.message,
+    }
+
+
+def _extract_optimization_veto_check(result: Any) -> Dict[str, Any]:
+    """Extract optimization veto check data from result."""
+    check = getattr(result, "optimization_veto_check", None)
+    if not check:
+        return {"passed": None, "decision": None, "justification": None, "entropy_ratio": None, "affected_values": None}
+    return {
+        "passed": check.decision == "proceed",
+        "decision": check.decision,
+        "justification": check.justification,
+        "entropy_ratio": check.entropy_reduction_ratio,
+        "affected_values": check.affected_values,
+    }
+
+
+def _extract_epistemic_humility_check(result: Any) -> Dict[str, Any]:
+    """Extract epistemic humility check data from result."""
+    check = getattr(result, "epistemic_humility_check", None)
+    if not check:
+        return {"passed": None, "certainty": None, "uncertainties": None, "justification": None, "recommendation": None}
+    return {
+        "passed": check.recommended_action == "proceed",
+        "certainty": check.epistemic_certainty,
+        "uncertainties": check.identified_uncertainties,
+        "justification": check.reflective_justification,
+        "recommendation": check.recommended_action,
+    }
+
+
+def _validate_finalize_action_result(result: Any) -> Any:
+    """Validate and return the final action from result."""
     if not result:
         raise ValueError("FINALIZE_ACTION result is None - this indicates a serious pipeline issue")
 
-    # Result should be ConscienceApplicationResult
     if not hasattr(result, "final_action"):
         raise AttributeError(
             f"FINALIZE_ACTION result missing 'final_action' attribute. Expected ConscienceApplicationResult, got {type(result)}, attributes: {dir(result)}"
         )
 
-    # Extract the final action
     final_action = result.final_action
     if not hasattr(final_action, "selected_action"):
         raise AttributeError(
             f"FINALIZE_ACTION final_action missing 'selected_action' attribute. Type: {type(final_action)}, attributes: {dir(final_action)}"
         )
 
-    # Extract conscience data (epistemic_data is now REQUIRED in ConscienceApplicationResult)
-    conscience_passed = not result.overridden
-    override_reason = result.override_reason if result.overridden else None
-    epistemic_data = result.epistemic_data  # REQUIRED field
-    updated_status_detected = getattr(result, "updated_status_detected", None)
+    return final_action
+
+
+def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> FinalizeActionStepData:
+    """Create FINALIZE_ACTION specific typed data with all 6 conscience results."""
+    final_action = _validate_finalize_action_result(result)
+
+    # Extract ethical faculty data
+    entropy = _extract_entropy_check(result)
+    coherence = _extract_coherence_check(result)
+    opt_veto = _extract_optimization_veto_check(result)
+    epi_humility = _extract_epistemic_humility_check(result)
 
     return FinalizeActionStepData(
         **_base_data_dict(base_data),
         selected_action=str(final_action.selected_action),
-        conscience_passed=conscience_passed,
-        conscience_override_reason=override_reason,
-        epistemic_data=epistemic_data,
-        updated_status_detected=updated_status_detected,
+        conscience_passed=not result.overridden,
+        conscience_override_reason=result.override_reason if result.overridden else None,
+        epistemic_data=result.epistemic_data,
+        # Bypass guardrails
+        ethical_faculties_skipped=getattr(result, "ethical_faculties_skipped", None),
+        updated_status_detected=getattr(result, "updated_status_detected", None),
+        updated_status_content=getattr(result, "updated_status_content", None),
+        thought_depth_triggered=getattr(result, "thought_depth_triggered", None),
+        thought_depth_current=getattr(result, "thought_depth_current", None),
+        thought_depth_max=getattr(result, "thought_depth_max", None),
+        # Ethical faculties
+        entropy_passed=entropy["passed"],
+        entropy_score=entropy["score"],
+        entropy_threshold=entropy["threshold"],
+        entropy_reason=entropy["reason"],
+        coherence_passed=coherence["passed"],
+        coherence_score=coherence["score"],
+        coherence_threshold=coherence["threshold"],
+        coherence_reason=coherence["reason"],
+        optimization_veto_passed=opt_veto["passed"],
+        optimization_veto_decision=opt_veto["decision"],
+        optimization_veto_justification=opt_veto["justification"],
+        optimization_veto_entropy_ratio=opt_veto["entropy_ratio"],
+        optimization_veto_affected_values=opt_veto["affected_values"],
+        epistemic_humility_passed=epi_humility["passed"],
+        epistemic_humility_certainty=epi_humility["certainty"],
+        epistemic_humility_uncertainties=epi_humility["uncertainties"],
+        epistemic_humility_justification=epi_humility["justification"],
+        epistemic_humility_recommendation=epi_humility["recommendation"],
     )
 
 
@@ -859,9 +943,21 @@ def _create_action_complete_data(
     kwargs_dict = kwargs or {}
     resource_data = get_dict(kwargs_dict, "_resource_usage", {})
 
+    # Extract action_parameters from result (captures content for SPEAK, tool params, etc.)
+    action_params = result.action_parameters if hasattr(result, "action_parameters") else {}
+    if not isinstance(action_params, dict):
+        # Convert Pydantic models to dict
+        if hasattr(action_params, "model_dump"):
+            action_params = action_params.model_dump()
+        elif hasattr(action_params, "dict"):
+            action_params = action_params.dict()
+        else:
+            action_params = {}
+
     return ActionCompleteStepData(
         **_base_data_dict(base_data),
         action_executed=result.action_type,
+        action_parameters=action_params,
         dispatch_success=result.success,
         handler_completed=result.handler != "Unknown",
         follow_up_processing_pending=bool(result.follow_up_thought_id),
@@ -1034,13 +1130,8 @@ async def _broadcast_reasoning_event(
 
         # Broadcast the event if we created one
         if event:
-            logger.debug(
-                f" Broadcasting reasoning event - type={event.event_type}, task_id={step_data.task_id}, thought_id={step_data.thought_id}"
-            )
             await reasoning_event_stream.broadcast_reasoning_event(event)
-            logger.debug(f" Broadcast complete - type={event.event_type}, task_id={step_data.task_id}")
-        else:
-            logger.debug(f" No event created for step {step.value}, task_id={step_data.task_id}")
+            logger.debug(f"Broadcast {event.event_type} to {len(reasoning_event_stream._subscribers)} subscribers")
 
     except Exception as e:
         logger.warning(f"Error broadcasting reasoning event for {step.value}: {e}")
@@ -1347,6 +1438,7 @@ def _create_dma_results_event(
     csdma_prompt = getattr(dma_results, "csdma_prompt", None)
     dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
     pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
+    idma_prompt = getattr(dma_results, "idma_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
@@ -1356,9 +1448,11 @@ def _create_dma_results_event(
         csdma=dma_results.csdma,  # Pass CSDMAResult object directly
         dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
         pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
+        idma=getattr(dma_results, "idma", None),  # Pass IDMAResult object (optional, CCA diversity check)
         csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
+        idma_prompt=idma_prompt,  # User prompt passed to IDMA
     )
 
 
@@ -1384,7 +1478,12 @@ def _create_aspdma_result_event(
 
 
 def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create CONSCIENCE_RESULT reasoning event."""
+    """Create CONSCIENCE_RESULT reasoning event with all 6 conscience check results.
+
+    Extracts from FinalizeActionStepData:
+    - Bypass Guardrails: UpdatedStatus, ThoughtDepth
+    - Ethical Faculties: Entropy, Coherence, OptimizationVeto, EpistemicHumility
+    """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     return create_reasoning_event(
@@ -1393,12 +1492,43 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
         task_id=step_data.task_id,
         timestamp=timestamp,
         is_recursive=False,  # FINALIZE_ACTION is never recursive
+        # Overall conscience evaluation
         conscience_passed=getattr(step_data, "conscience_passed", True),
         conscience_override_reason=getattr(step_data, "conscience_override_reason", None),
         epistemic_data=getattr(step_data, "epistemic_data", {}),
         final_action=getattr(step_data, "selected_action", ""),
         action_was_overridden=not getattr(step_data, "conscience_passed", True),
-        updated_status_available=getattr(step_data, "updated_status_detected", None),
+        # Exempt actions flag
+        ethical_faculties_skipped=getattr(step_data, "ethical_faculties_skipped", None),
+        # === BYPASS GUARDRAIL 1: Updated Status ===
+        updated_status_detected=getattr(step_data, "updated_status_detected", None),
+        updated_status_content=getattr(step_data, "updated_status_content", None),
+        # === BYPASS GUARDRAIL 2: Thought Depth ===
+        thought_depth_triggered=getattr(step_data, "thought_depth_triggered", None),
+        thought_depth_current=getattr(step_data, "thought_depth_current", None),
+        thought_depth_max=getattr(step_data, "thought_depth_max", None),
+        # === ETHICAL FACULTY 1: Entropy ===
+        entropy_passed=getattr(step_data, "entropy_passed", None),
+        entropy_score=getattr(step_data, "entropy_score", None),
+        entropy_threshold=getattr(step_data, "entropy_threshold", None),
+        entropy_reason=getattr(step_data, "entropy_reason", None),
+        # === ETHICAL FACULTY 2: Coherence ===
+        coherence_passed=getattr(step_data, "coherence_passed", None),
+        coherence_score=getattr(step_data, "coherence_score", None),
+        coherence_threshold=getattr(step_data, "coherence_threshold", None),
+        coherence_reason=getattr(step_data, "coherence_reason", None),
+        # === ETHICAL FACULTY 3: Optimization Veto ===
+        optimization_veto_passed=getattr(step_data, "optimization_veto_passed", None),
+        optimization_veto_decision=getattr(step_data, "optimization_veto_decision", None),
+        optimization_veto_justification=getattr(step_data, "optimization_veto_justification", None),
+        optimization_veto_entropy_ratio=getattr(step_data, "optimization_veto_entropy_ratio", None),
+        optimization_veto_affected_values=getattr(step_data, "optimization_veto_affected_values", None),
+        # === ETHICAL FACULTY 4: Epistemic Humility ===
+        epistemic_humility_passed=getattr(step_data, "epistemic_humility_passed", None),
+        epistemic_humility_certainty=getattr(step_data, "epistemic_humility_certainty", None),
+        epistemic_humility_uncertainties=getattr(step_data, "epistemic_humility_uncertainties", None),
+        epistemic_humility_justification=getattr(step_data, "epistemic_humility_justification", None),
+        epistemic_humility_recommendation=getattr(step_data, "epistemic_humility_recommendation", None),
     )
 
 
@@ -1415,6 +1545,7 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         task_id=step_data.task_id,
         timestamp=timestamp,
         action_executed=getattr(step_data, "action_executed", ""),
+        action_parameters=getattr(step_data, "action_parameters", {}),
         execution_success=getattr(step_data, "dispatch_success", True),
         execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
         follow_up_thought_id=follow_up_thought_id,

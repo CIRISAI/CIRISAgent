@@ -4,9 +4,12 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 
 import asyncio
 import logging
+import random
+import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
+from ciris_engine.logic.utils import error_emitter
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -117,6 +120,14 @@ class LLMBus(BaseBus[LLMService]):
         # Track services that have had full error logs to reduce log verbosity
         self._services_with_full_error_logged: set[str] = set()
 
+        # Background tasks set to prevent garbage collection (SonarCloud fix)
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+
+        # Global rate limit cooldown per provider (timestamp when provider can be used again)
+        # This prevents hammering a rate-limited provider with immediate retries
+        self._rate_limited_until: dict[str, float] = {}
+        self._rate_limit_cooldown_seconds = 60.0  # Default cooldown when rate limit exhausted
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
@@ -150,70 +161,148 @@ class LLMBus(BaseBus[LLMService]):
                 normalized_messages.append(msg_copy)
         return normalized_messages
 
-    async def call_llm_structured(
+    def _extract_full_error_from_cause_chain(self, e: Exception) -> str:
+        """Extract full error message from exception cause chain."""
+        full_error = str(e)
+        cause = getattr(e, '__cause__', None)
+
+        while cause:
+            cause_str = str(cause)
+            if "try again in" in cause_str.lower():
+                return cause_str
+
+            if hasattr(cause, 'last_attempt'):
+                try:
+                    nested_exc = cause.last_attempt.exception()
+                    if nested_exc:
+                        return str(nested_exc)
+                except Exception:
+                    pass
+
+            cause = getattr(cause, '__cause__', None)
+
+        return full_error
+
+    def _extract_retry_after_time(self, full_error: str) -> float:
+        """Extract retry-after time from error message. Returns wait time in seconds."""
+        wait_time = 5.0  # Default wait
+        match_ms = re.search(r'try again in (\d+\.?\d*)ms', full_error, re.IGNORECASE)
+        match_s = re.search(r'try again in (\d+\.?\d*)s(?![\w])', full_error, re.IGNORECASE)
+
+        if match_ms:
+            wait_time = float(match_ms.group(1)) / 1000.0 + 0.5
+        elif match_s:
+            wait_time = float(match_s.group(1)) + 0.5
+
+        # Add jitter to spread out concurrent retry storms
+        return wait_time + random.uniform(0, 2.0)
+
+    def _is_rate_limit_error(self, error_str: str, full_error: str) -> bool:
+        """Check if error is a rate limit error."""
+        return "429" in full_error or "rate_limit" in error_str or "rate limit" in error_str
+
+    def _is_schema_validation_error(self, error_str: str) -> bool:
+        """Check if error is a schema validation error."""
+        return "validation error" in error_str or "model_type" in error_str or "instructor" in error_str
+
+    async def _handle_rate_limit_retry(
         self,
-        messages: Union[List[JSONDict], List["LLMMessage"]],
+        service_name: str,
+        full_error: str,
+        rate_limit_retry_count: int,
+        max_rate_limit_retries: int,
+        rate_limit_start_time: Optional[float],
+        max_rate_limit_total_time: float,
+    ) -> tuple[bool, float, Optional[float]]:
+        """Handle rate limit retry logic. Returns (should_continue, wait_time, updated_start_time)."""
+        # Track when rate limit retries started
+        if rate_limit_start_time is None:
+            rate_limit_start_time = self._time_service.timestamp()
+
+        elapsed = self._time_service.timestamp() - rate_limit_start_time
+        remaining = max_rate_limit_total_time - elapsed
+
+        # Check if we've exceeded limits
+        if elapsed >= max_rate_limit_total_time:
+            logger.warning(f"Rate limit total time ({elapsed:.1f}s) exceeded {max_rate_limit_total_time}s on {service_name}")
+            return False, 0, rate_limit_start_time
+
+        if rate_limit_retry_count >= max_rate_limit_retries:
+            logger.warning(f"Exhausted {max_rate_limit_retries} rate limit retries on {service_name}")
+            return False, 0, rate_limit_start_time
+
+        # Calculate wait time
+        wait_time = self._extract_retry_after_time(full_error)
+        if wait_time > remaining:
+            wait_time = max(remaining, 0.5)
+
+        logger.warning(f"Rate limited on {service_name}, waiting {wait_time:.1f}s before retry ({rate_limit_retry_count}/{max_rate_limit_retries}, {remaining:.1f}s budget)")
+
+        # Emit error to UI
+        task = asyncio.create_task(error_emitter.emit_rate_limit_error(provider=service_name, wait_time=wait_time))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+        await asyncio.sleep(wait_time)
+        return True, wait_time, rate_limit_start_time
+
+    def _record_service_failure(
+        self,
+        service_name: str,
+        service_last_error: Exception,
+        last_was_rate_limit: bool,
+        max_retries: int,
+    ) -> None:
+        """Record service failure and log appropriately."""
+        if last_was_rate_limit:
+            logger.warning(f"LLM service {service_name} exhausted rate limit retries (NOT counting as CB failure)")
+            # Set global cooldown so subsequent requests don't immediately hit rate limit again
+            # Use minimum 30s cooldown when retries exhausted - provider's retry_after is often too short
+            # because per-minute rate limits don't reset as fast as the suggested retry time
+            retry_after = self._extract_retry_after_time(str(service_last_error))
+            min_exhausted_cooldown = 30.0  # Minimum cooldown when retries exhausted
+            effective_cooldown = max(retry_after, min_exhausted_cooldown) if retry_after > 0 else None
+            self._set_rate_limit_cooldown(service_name, effective_cooldown)
+            return
+
+        self._record_failure(service_name)
+
+        if service_name not in self._services_with_full_error_logged:
+            logger.error(f"LLM service {service_name} failed after {max_retries} retries: {service_last_error}", exc_info=True)
+            self._services_with_full_error_logged.add(service_name)
+        else:
+            logger.warning(f"LLM service {service_name} failed (repeated): {service_last_error}")
+
+    async def _try_service(
+        self,
+        selected_service: Any,  # LLMService but typed as Any to allow duck typing
+        service_name: str,
+        normalized_messages: List[JSONDict],
         response_model: Type[BaseModel],
-        max_tokens: int = 4096,
-        temperature: float = 0.0,
-        handler_name: str = "default",
-        domain: Optional[str] = None,  # NEW: Domain-aware routing
-        thought_id: Optional[str] = None,  # NEW: For resource tracking per thought
-        task_id: Optional[str] = None,  # For ciris.ai billing - all calls with same task_id share 1 credit
-    ) -> Tuple[BaseModel, ResourceUsage]:
-        """
-        Generate structured output using LLM with optional domain routing.
+        max_tokens: int,
+        temperature: float,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        handler_name: str,
+        start_time: float,
+        max_retries: int,
+    ) -> Tuple[Optional[BaseModel], Optional[ResourceUsage], Optional[Exception], bool]:
+        """Try a single service with retries. Returns (result, usage, last_error, was_rate_limit)."""
+        from ciris_engine.logic.adapters.base_observer import BillingServiceError
 
-        This method handles:
-        - Domain-aware service filtering (e.g., medical, legal, financial)
-        - Service discovery by priority
-        - Distribution based on strategy
-        - Circuit breaker checks
-        - Automatic failover
-        - Metrics collection
+        max_rate_limit_retries = 10
+        max_rate_limit_total_time = 25.0
+        retry_count = 0
+        rate_limit_retry_count = 0
+        rate_limit_start_time: Optional[float] = None
+        service_last_error: Optional[Exception] = None
+        last_was_rate_limit = False
 
-        Args:
-            messages: List of message dictionaries or LLMMessage objects
-            response_model: Pydantic model for structured response
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            handler_name: Handler identifier for metrics
-            domain: Optional domain for routing to specialized LLMs
-        """
-        # Normalize messages to dicts
-        normalized_messages = self._normalize_messages(messages)
-        start_time = self._time_service.timestamp()
-
-        # Get all available LLM services, filtered by domain if specified
-        services = await self._get_prioritized_services(handler_name, domain=domain)
-
-        if not services:
-            raise RuntimeError(f"No LLM services available for {handler_name}")
-
-        # Group services by priority
-        priority_groups = self._group_by_priority(services)
-
-        # Try each priority group in order
-        last_error = None
-        for priority, service_group in sorted(priority_groups.items()):
-            # Select service from this priority group based on strategy
-            selected_service = await self._select_service(service_group, priority, handler_name)
-
-            if not selected_service:
-                continue
-
-            service_name = f"{type(selected_service).__name__}_{id(selected_service)}"
-
-            # Check circuit breaker
-            if not self._check_circuit_breaker(service_name):
-                logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
-                continue
-
+        while retry_count < max_retries:
             try:
-                # Make the LLM call
-                logger.debug(f"Calling LLM service {service_name} for {handler_name}")
+                logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
 
-                result, usage = await selected_service.call_llm_structured(  # type: ignore[attr-defined]
+                result, usage = await selected_service.call_llm_structured(
                     messages=normalized_messages,
                     response_model=response_model,
                     max_tokens=max_tokens,
@@ -222,48 +311,117 @@ class LLMBus(BaseBus[LLMService]):
                     task_id=task_id,
                 )
 
-                # Record success
                 latency_ms = (self._time_service.timestamp() - start_time) * 1000
                 self._record_success(service_name, latency_ms)
+                await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
+                logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
 
-                # Record telemetry for resource usage
-                await self._record_resource_telemetry(
-                    service_name=service_name,
-                    handler_name=handler_name,
-                    usage=usage,
-                    latency_ms=latency_ms,
-                    thought_id=thought_id,
-                )
+                return result, usage, None, False
 
-                logger.debug(f"LLM call successful via {service_name} " f"(latency: {latency_ms:.2f}ms)")
-
-                return result, usage
+            except BillingServiceError:
+                logger.error(f"LLM billing error (not retrying): {service_last_error}")
+                raise
 
             except Exception as e:
-                # Check for billing errors - these should not be retried
-                from ciris_engine.logic.adapters.base_observer import BillingServiceError
+                service_last_error = e
+                error_str = str(e).lower()
+                retry_count += 1
+                full_error = self._extract_full_error_from_cause_chain(e)
 
-                if isinstance(e, BillingServiceError):
-                    logger.error(f"LLM billing error (not retrying): {e}")
-                    raise  # Don't retry billing errors - surface to user immediately
+                if self._is_rate_limit_error(error_str, full_error):
+                    last_was_rate_limit = True
+                    rate_limit_retry_count += 1
 
-                # Record failure
-                self._record_failure(service_name)
-                last_error = e
+                    should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
+                        service_name, full_error, rate_limit_retry_count, max_rate_limit_retries,
+                        rate_limit_start_time, max_rate_limit_total_time
+                    )
 
-                # Log full stack trace only once per service to reduce log verbosity
-                # Subsequent failures for the same service will be logged as warnings
-                if service_name not in self._services_with_full_error_logged:
-                    logger.error(f"LLM service {service_name} failed: {e}", exc_info=True)
-                    self._services_with_full_error_logged.add(service_name)
-                else:
-                    logger.warning(f"LLM service {service_name} failed (repeated): {e}")
+                    if not should_continue:
+                        break
 
-                # Continue to next service
+                    retry_count -= 1  # Don't count rate limit as regular retry
+                    continue
+
+                if self._is_schema_validation_error(error_str):
+                    last_was_rate_limit = False
+                    if retry_count < max_retries:
+                        logger.warning(f"Schema validation failed on {service_name}, retrying ({retry_count}/{max_retries})")
+                        continue
+
+                if retry_count >= max_retries:
+                    logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+                    break
+
+                last_was_rate_limit = False
+                logger.warning(f"LLM error on {service_name} (attempt {retry_count}): {type(e).__name__}")
+
+        return None, None, service_last_error, last_was_rate_limit
+
+    async def call_llm_structured(
+        self,
+        messages: Union[List[JSONDict], List["LLMMessage"]],
+        response_model: Type[BaseModel],
+        max_tokens: int = 4096,
+        temperature: float = 0.0,
+        handler_name: str = "default",
+        domain: Optional[str] = None,
+        thought_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> Tuple[BaseModel, ResourceUsage]:
+        """Generate structured output using LLM with optional domain routing."""
+        normalized_messages = self._normalize_messages(messages)
+        start_time = self._time_service.timestamp()
+        services = await self._get_prioritized_services(handler_name, domain=domain)
+
+        if not services:
+            raise RuntimeError(f"No LLM services available for {handler_name}")
+
+        priority_groups = self._group_by_priority(services)
+        last_error: Optional[Exception] = None
+        max_retries_per_service = 3
+
+        for priority, service_group in sorted(priority_groups.items()):
+            selected_service = await self._select_service(service_group, priority, handler_name)
+            if not selected_service:
                 continue
 
+            service_name = f"{type(selected_service).__name__}_{id(selected_service)}"
+
+            if not self._check_circuit_breaker(service_name):
+                logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
+                continue
+
+            # Check global rate limit cooldown
+            if self._is_rate_limited(service_name):
+                logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
+                continue
+
+            result = await self._try_service(
+                selected_service, service_name, normalized_messages, response_model,
+                max_tokens, temperature, thought_id, task_id, handler_name,
+                start_time, max_retries_per_service,
+            )
+
+            if result[0] is not None and result[1] is not None:  # Success
+                return result[0], result[1]
+
+            # Service failed
+            if result[2] is not None:
+                last_error = result[2]
+                self._record_service_failure(service_name, result[2], result[3], max_retries_per_service)
+
         # All services failed
-        raise RuntimeError(f"All LLM services failed for {handler_name}. " f"Last error: {last_error}")
+        task = asyncio.create_task(
+            error_emitter.emit_llm_failure(
+                error_summary=str(last_error)[:100] if last_error else "Unknown error",
+                retry_count=max_retries_per_service,
+                max_retries=max_retries_per_service,
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {last_error}")
 
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
@@ -438,6 +596,36 @@ class LLMBus(BaseBus[LLMService]):
 
         return self.circuit_breakers[service_name].is_available()
 
+    def _is_rate_limited(self, service_name: str) -> bool:
+        """Check if service is in rate limit cooldown."""
+        cooldown_until = self._rate_limited_until.get(service_name)
+        if cooldown_until is None:
+            return False
+
+        current_time = self._time_service.timestamp()
+        if current_time >= cooldown_until:
+            # Cooldown expired, clear it
+            del self._rate_limited_until[service_name]
+            logger.info(f"Rate limit cooldown expired for {service_name}")
+            return False
+
+        remaining = cooldown_until - current_time
+        logger.debug(f"Service {service_name} in rate limit cooldown ({remaining:.1f}s remaining)")
+        return True
+
+    def _set_rate_limit_cooldown(self, service_name: str, retry_after: Optional[float] = None) -> None:
+        """Set rate limit cooldown for a service.
+
+        Args:
+            service_name: The service to cooldown
+            retry_after: Optional seconds to wait (from Retry-After header). If not provided,
+                        uses default cooldown.
+        """
+        cooldown = retry_after if retry_after and retry_after > 0 else self._rate_limit_cooldown_seconds
+        cooldown_until = self._time_service.timestamp() + cooldown
+        self._rate_limited_until[service_name] = cooldown_until
+        logger.warning(f"Rate limit cooldown set for {service_name}: {cooldown:.1f}s")
+
     def _record_success(self, service_name: str, latency_ms: float) -> None:
         """Record successful call metrics"""
         metrics = self.service_metrics[service_name]
@@ -448,6 +636,11 @@ class LLMBus(BaseBus[LLMService]):
 
         if service_name in self.circuit_breakers:
             self.circuit_breakers[service_name].record_success()
+
+        # Clear rate limit cooldown on success
+        if service_name in self._rate_limited_until:
+            del self._rate_limited_until[service_name]
+            logger.info(f"Rate limit cooldown cleared for {service_name} after successful call")
 
     def _record_failure(self, service_name: str) -> None:
         """Record failed call metrics"""

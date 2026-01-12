@@ -64,6 +64,26 @@ class ActionSelectionDMAProtocol(BaseDMAProtocol):
     # - reliability: Reliability score for the selection
 
 
+class IDMAProtocol(BaseDMAProtocol):
+    """Intuition Decision Making Algorithm - applies CCA principles.
+
+    IDMA is a semantic implementation of Coherence Collapse Analysis (CCA)
+    for evaluating the agent's reasoning quality. It applies the k_eff formula
+    and phase classification to detect fragile reasoning patterns.
+
+    Implementation returns IDMAResult which contains:
+    - k_eff: Effective independence score (number of independent sources)
+    - correlation_risk: How correlated sources are (0-1)
+    - phase: Epistemic phase (chaos/healthy/rigidity)
+    - fragility_flag: True if k_eff < 2 OR phase = rigidity
+    - sources_identified: List of sources/perspectives identified
+    - correlation_factors: Factors causing source correlation
+    - reasoning: Analysis of information diversity
+    """
+
+    # The evaluate method from BaseDMAProtocol is sufficient
+
+
 # ============================================================================
 # SPECIALIZED DMA PROTOCOLS (Future Extensions)
 # ============================================================================

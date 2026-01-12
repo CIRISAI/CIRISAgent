@@ -203,6 +203,8 @@ class TestThoughtProcessor:
         # Create mock conscience that returns epistemic data
         mock_conscience = Mock()
         mock_conscience_check_result = Mock()
+        mock_conscience_check_result.passed = True  # Required for EntropyCheckResult creation
+        mock_conscience_check_result.reason = "Conscience check passed"  # Required string for message
         mock_conscience_check_result.entropy_score = 0.1
         mock_conscience_check_result.coherence_score = 0.9
         mock_conscience_check_result.uncertainty_acknowledged = True
@@ -210,6 +212,16 @@ class TestThoughtProcessor:
         mock_conscience_check_result.override = None  # No override
         mock_conscience_check_result.thought_depth_triggered = False
         mock_conscience_check_result.updated_status_detected = False
+        # v1.8.0 conscience check fields - set to None to avoid Mock validation errors
+        mock_conscience_check_result.entropy_check = None
+        mock_conscience_check_result.coherence_check = None
+        mock_conscience_check_result.optimization_veto_check = None
+        mock_conscience_check_result.epistemic_humility_check = None
+        mock_conscience_check_result.ethical_faculties_skipped = None
+        mock_conscience_check_result.updated_status_content = None
+        mock_conscience_check_result.thought_depth_current = None
+        mock_conscience_check_result.thought_depth_max = None
+        mock_conscience_check_result.CIRIS_OBSERVATION_UPDATED_STATUS = None  # Used by conscience_execution.py
         mock_conscience.check = AsyncMock(return_value=mock_conscience_check_result)
 
         # Mock conscience registry entry

@@ -59,8 +59,9 @@ class CIRISBillingProvider(CreditGateProtocol):
             fail_open: If True, allow requests when billing backend is unavailable
             transport: Optional custom HTTP transport for testing
         """
-        self._api_key = api_key
-        self._google_id_token = google_id_token
+        # Read from env as fallback if not passed directly
+        self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
+        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
         self._base_url = (base_url or get_billing_url()).rstrip("/")
@@ -71,8 +72,8 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._transport = transport
         self._using_fallback = False
 
-        # Determine auth mode
-        self._use_jwt_auth = bool(google_id_token)
+        # Determine auth mode based on resolved token (including env fallback)
+        self._use_jwt_auth = bool(self._google_id_token)
 
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()
@@ -94,9 +95,9 @@ class CIRISBillingProvider(CreditGateProtocol):
             try:
                 new_token = self._token_refresh_callback()
                 if new_token and new_token != self._google_id_token:
-                    old_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
-                    new_preview = new_token[:20] + "..."
-                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %s -> %s", old_preview, new_preview)
+                    old_len = len(self._google_id_token) if self._google_id_token else 0
+                    new_len = len(new_token)
+                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %d chars -> %d chars", old_len, new_len)
                     self._google_id_token = new_token
                     return self._google_id_token
             except Exception as exc:
@@ -105,9 +106,9 @@ class CIRISBillingProvider(CreditGateProtocol):
         # Check environment for updated token (set by ResourceMonitor after .env reload)
         env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
-            old_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
-            new_preview = env_token[:20] + "..."
-            logger.info("[BILLING_TOKEN] Token updated from environment: %s -> %s", old_preview, new_preview)
+            old_len = len(self._google_id_token) if self._google_id_token else 0
+            new_len = len(env_token)
+            logger.info("[BILLING_TOKEN] Token updated from environment: %d chars -> %d chars", old_len, new_len)
             self._google_id_token = env_token
 
         return self._google_id_token
@@ -150,20 +151,21 @@ class CIRISBillingProvider(CreditGateProtocol):
                 transport=self._transport,
             )
             auth_mode = "JWT (Google ID token)" if self._use_jwt_auth else "API Key"
-            token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
+            if self._use_jwt_auth:
+                token_length = len(self._google_id_token) if self._google_id_token else 0
+            else:
+                token_length = len(self._api_key) if self._api_key else 0
             logger.info(
                 "[BILLING_PROVIDER] Started:\n"
                 "  base_url: %s\n"
                 "  auth_mode: %s\n"
-                "  token_preview: %s\n"
-                "  token_length: %d\n"
+                "  token_length: %d chars\n"
                 "  has_refresh_callback: %s\n"
                 "  cache_ttl: %ds\n"
                 "  fail_open: %s",
                 self._base_url,
                 auth_mode,
-                token_preview,
-                len(self._google_id_token) if self._google_id_token else 0,
+                token_length,
                 self._token_refresh_callback is not None,
                 self._cache_ttl,
                 self._fail_open,
@@ -385,17 +387,16 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_unauthorized(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle 401 Unauthorized response."""
         reason = self._extract_reason(response)
-        token_preview = self._google_id_token[:20] + "..." if self._google_id_token else "None"
+        token_length = len(self._google_id_token) if self._google_id_token else 0
         logger.error(
             "[CREDIT_CHECK] ✗ AUTH_EXPIRED for %s:\n"
             "  HTTP Status: 401 Unauthorized\n"
             "  Reason: %s\n"
-            "  Token: %s (%d chars)\n"
+            "  Token length: %d chars\n"
             "  Action: Writing .token_refresh_needed signal",
             cache_key,
             reason,
-            token_preview,
-            len(self._google_id_token) if self._google_id_token else 0,
+            token_length,
         )
         self._signal_token_refresh_needed()
         return self._handle_failure("AUTH_EXPIRED", reason)

@@ -224,7 +224,7 @@ class TestLLMBusBasics:
         )
 
         assert result.message == "Response from HealthyLLM"
-        assert failing_service.call_count == 1  # High priority was tried first
+        assert failing_service.call_count == 3  # High priority was tried 3 times (retry logic)
         assert healthy_service.call_count == 1  # Normal priority succeeded
 
 
@@ -467,7 +467,7 @@ class TestPriorityFailover:
         )
 
         assert result.message == "Response from NormalPriority"
-        assert high_priority.call_count == 1  # Tried but failed
+        assert high_priority.call_count == 3  # Tried 3 times (retry logic) but failed
         assert normal_priority.call_count == 1  # Succeeded
         assert low_priority.call_count == 0  # Not needed
 
@@ -495,9 +495,9 @@ class TestPriorityFailover:
                 messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
 
-        # Count ERROR level logs from first attempt (one per service)
+        # Count ERROR level logs from first attempt (one per service after retries)
         first_error_count = sum(1 for record in caplog.records if record.levelname == "ERROR")
-        assert first_error_count == 3, "Should have 3 ERROR logs (one per failing service)"
+        assert first_error_count == 3, "Should have 3 ERROR logs (one per failing service after retries)"
 
         # Clear log capture
         caplog.clear()
@@ -508,12 +508,13 @@ class TestPriorityFailover:
                 messages=[{"role": "user", "content": "Test"}], response_model=MockResponseModel
             )
 
-        # Second attempt should have 0 ERROR logs (all converted to WARNING)
+        # Second attempt should have 0 ERROR logs (all converted to WARNING due to log dedup)
         second_error_count = sum(1 for record in caplog.records if record.levelname == "ERROR")
         second_warning_count = sum(1 for record in caplog.records if record.levelname == "WARNING")
 
         assert second_error_count == 0, "Should have 0 ERROR logs on repeated failures"
-        assert second_warning_count == 3, "Should have 3 WARNING logs for repeated failures"
+        # With retry logic: 3 services × (2 retry warnings + 1 exhausted warning + 1 repeated warning) = 12
+        assert second_warning_count == 12, "Should have 12 WARNING logs (4 per service with retries)"
 
 
 class TestConcurrentAccess:
@@ -902,7 +903,7 @@ class TestServiceUnavailableFailover:
 
         # Should get response from secondary service
         assert result.message == "Response from Lambda.AI"
-        assert primary_service.call_count == 1  # Primary was tried first
+        assert primary_service.call_count == 3  # Primary was tried 3 times (retry logic)
         assert secondary_service.call_count == 1  # Secondary provided the response
 
         # Trigger enough failures to open circuit breaker (default threshold is 5)
@@ -972,9 +973,9 @@ class TestServiceUnavailableFailover:
         # Should indicate all services failed
         assert "All LLM services failed" in str(exc_info.value)
 
-        # Both services should have been tried
-        assert primary_service.call_count == 1
-        assert secondary_service.call_count == 1
+        # Both services should have been tried (3 retries each)
+        assert primary_service.call_count == 3
+        assert secondary_service.call_count == 3
 
     @pytest.mark.asyncio
     async def test_primary_recovery_after_503_failover(self, llm_bus, service_registry, time_service):

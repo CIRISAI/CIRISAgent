@@ -124,7 +124,7 @@ async def test_llm_service_max_retries_exceeded(llm_service):
         class TestResponse(BaseModel):
             test: str
 
-        with pytest.raises(ConnectionError) as exc_info:
+        with pytest.raises(RuntimeError) as exc_info:
             await llm_service.call_llm_structured(
                 messages=[{"role": "user", "content": "Test"}],
                 response_model=TestResponse,
@@ -132,7 +132,8 @@ async def test_llm_service_max_retries_exceeded(llm_service):
                 temperature=0.0,
             )
 
-        # Check the error was raised after retries
+        # Check the wrapped error contains the original message
+        assert "ConnectionError" in str(exc_info.value)
         assert "Max retries exceeded" in str(exc_info.value)
 
 
@@ -297,13 +298,16 @@ async def test_llm_service_error_handling(llm_service):
         AsyncMock(side_effect=ConnectionError("Network error")),
     ):
 
-        with pytest.raises(ConnectionError):
+        with pytest.raises(RuntimeError) as exc_info:
             await llm_service.call_llm_structured(
                 messages=[{"role": "user", "content": "Test"}],
                 response_model=TestResponse,
                 max_tokens=1024,
                 temperature=0.0,
             )
+        # Check wrapped error contains original info
+        assert "ConnectionError" in str(exc_info.value)
+        assert "Network error" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

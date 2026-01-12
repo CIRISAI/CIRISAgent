@@ -4,6 +4,11 @@
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 
+[![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
+[![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
+[![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet_(CCA)-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
+[![Covenant](https://img.shields.io/badge/Covenant-v1.2--Beta-purple)](https://ciris.ai/ciris_covenant.pdf)
+
 # CIRIS Engine
 
 **Copyright © 2025 Eric Moore and CIRIS L3C** | **Apache 2.0 License**
@@ -12,17 +17,15 @@
 
 **A type-safe, auditable AI agent framework with built-in ethical reasoning**
 
-**BETA RELEASE 1.7.9-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
-
-Academic paper https://zenodo.org/records/17195221
-Philosophical foundation https://ciris.ai/ciris_covenant.pdf
+**BETA RELEASE 1.8.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 
 ## What It Actually Does
 
 CIRIS wraps LLM calls with:
-- **Multiple evaluation passes** - Every decision gets ethical, common-sense, and domain checks
+- **Multiple evaluation passes** - Every decision gets ethical, common-sense, domain, and epistemic diversity checks
+- **Intuition DMA (IDMA)** - Coherence Collapse Analysis for detecting fragile reasoning (k_eff < 2 = single-source dependence)
 - **Human escalation** - Uncertain decisions defer to designated "Wise Authorities"
 - **Complete audit trails** - Every decision is logged with reasoning
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths

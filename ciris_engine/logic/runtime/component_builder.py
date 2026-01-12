@@ -20,6 +20,7 @@ from ciris_engine.logic.context.builder import ContextBuilder
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.factory import create_dsdma_from_identity
+from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.infrastructure.handlers.handler_registry import build_action_dispatcher
@@ -126,6 +127,14 @@ class ComponentBuilder:
             sink=self.runtime.bus_manager,
         )
 
+        # Create IDMA evaluator for epistemic diversity monitoring (CCA implementation)
+        idma = IDMAEvaluator(
+            service_registry=self.runtime.service_registry,
+            model_name=self.runtime.llm_service.model_name,
+            max_retries=config.services.llm_max_retries,
+            sink=self.runtime.bus_manager,
+        )
+
         # Get time service directly from service_initializer (not from registry)
         time_service = getattr(self.runtime.service_initializer, "time_service", None)
         if not time_service:
@@ -215,6 +224,7 @@ class ComponentBuilder:
             app_config=self.runtime.essential_config,
             llm_service=self.runtime.llm_service,
             memory_service=self.runtime.memory_service,
+            idma_evaluator=idma,  # CCA epistemic diversity monitoring
         )
 
         context_builder = ContextBuilder(

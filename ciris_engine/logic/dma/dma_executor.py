@@ -41,7 +41,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
@@ -58,6 +58,7 @@ from .action_selection_pdma import ActionSelectionPDMAEvaluator
 from .csdma import CSDMAEvaluator
 from .dsdma_base import BaseDSDMA
 from .exceptions import DMAFailure
+from .idma import IDMAEvaluator
 from .pdma import EthicalPDMAEvaluator
 
 if TYPE_CHECKING:
@@ -95,8 +96,12 @@ async def run_dma_with_retries(
             attempt += 1
             # Only log full details on first failure
             if attempt == 1:
+                # Ensure we never log empty error messages
+                error_msg = str(e).replace("\n", " ").strip()
+                if not error_msg:
+                    error_msg = f"<{type(e).__name__} with no message>"
                 logger.warning(
-                    "DMA %s attempt %s failed: %s", run_fn.__name__, attempt, str(e).replace("\n", " ")[:200]
+                    "DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200]
                 )
             elif attempt == retry_limit:
                 logger.warning(
@@ -118,7 +123,11 @@ async def run_dma_with_retries(
     if thought_arg is not None and last_error is not None and time_service is not None:
         escalate_dma_failure(thought_arg, run_fn.__name__, last_error, retry_limit, time_service)
 
-    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error}")
+    # Ensure DMAFailure has meaningful error context
+    last_error_msg = str(last_error).strip() if last_error else "unknown error"
+    if not last_error_msg:
+        last_error_msg = f"<{type(last_error).__name__} with no message>"
+    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error_msg}")
 
 
 async def run_pdma(
@@ -407,6 +416,119 @@ async def run_dsdma(
                 response_data={
                     "success": "true",
                     "result_summary": "DSDMA evaluation completed",
+                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                    "response_timestamp": end_time.isoformat(),
+                },
+                status=ServiceCorrelationStatus.COMPLETED,
+                metric_value=None,
+                tags=None,
+            )
+            persistence.update_correlation(update_req, time_service)
+
+        return result
+
+    except Exception as e:
+        # Update correlation with failure
+        if time_service:
+            end_time = time_service.now()
+            update_req = CorrelationUpdateRequest(
+                correlation_id=correlation.correlation_id,
+                response_data={
+                    "success": "false",
+                    "error_message": str(e),
+                    "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                    "response_timestamp": end_time.isoformat(),
+                },
+                status=ServiceCorrelationStatus.FAILED,
+                metric_value=None,
+                tags=None,
+            )
+            persistence.update_correlation(update_req, time_service)
+        raise
+
+
+async def run_idma(
+    evaluator: IDMAEvaluator,
+    thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+    ethical_result: Optional[EthicalDMAResult] = None,
+    csdma_result: Optional[CSDMAResult] = None,
+    dsdma_result: Optional[DSDMAResult] = None,
+) -> IDMAResult:
+    """Run the Intuition Decision Making Algorithm (IDMA) for the given thought.
+
+    IDMA applies Coherence Collapse Analysis (CCA) principles to evaluate
+    source independence (k_eff), correlation risk (ρ), and epistemic phase
+    to detect fragile reasoning patterns.
+    """
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    # Create trace for IDMA execution
+    trace_id = f"task_{thought.source_task_id or 'unknown'}_{thought.thought_id}"
+    span_id = f"idma_{thought.thought_id}"
+    parent_span_id = f"thought_processor_{thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_idma",
+        span_kind="internal",
+        baggage={"thought_id": thought.thought_id, "task_id": thought.source_task_id or "", "dma_type": "idma"},
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="IDMAEvaluator",
+        action_type="evaluate",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": thought.thought_id,
+            "task_id": thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "idma",
+            "trace_depth": "3",
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    # Add correlation
+    if time_service:
+        persistence.add_correlation(correlation, time_service)
+
+    try:
+        # Pass prior DMA results for context analysis
+        result = await evaluator.evaluate(
+            thought,
+            context=context,
+            ethical_result=ethical_result,
+            csdma_result=csdma_result,
+            dsdma_result=dsdma_result,
+        )
+
+        # Update correlation with success
+        if time_service:
+            end_time = time_service.now()
+            update_req = CorrelationUpdateRequest(
+                correlation_id=correlation.correlation_id,
+                response_data={
+                    "success": "true",
+                    "result_summary": f"IDMA completed: k_eff={result.k_eff:.2f}, phase={result.phase}, fragile={result.fragility_flag}",
                     "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                     "response_timestamp": end_time.isoformat(),
                 },

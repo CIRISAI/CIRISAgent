@@ -1038,6 +1038,8 @@ def _build_channels_to_query(auth: AuthContext, request: Request) -> List[str]:
     channel_id = f"api_{auth.user_id}"
     channels_to_query = [channel_id]
     channels_to_query.extend(_get_admin_channels(auth, request))
+    # Always include "system" channel for system/error messages
+    channels_to_query.append("system")
     # Remove duplicates while preserving order
     seen = set()
     deduped = []
@@ -1191,6 +1193,11 @@ def _convert_service_message_to_conversation(msg: Any) -> ConversationMessage:
     """Convert communication service message to ConversationMessage."""
     is_agent = bool(getattr(msg, "is_agent_message", False) or getattr(msg, "is_bot", False))
     message_type = _determine_message_type(msg, is_agent)
+
+    # System and error messages should have is_agent=True to prevent observation
+    # (agent should not re-observe system notifications)
+    if message_type in ("system", "error"):
+        is_agent = True
 
     return ConversationMessage(
         id=str(msg.message_id or ""),

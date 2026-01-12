@@ -175,8 +175,8 @@ Request body:
 - **Section II, Chapter 5**: Intuition DMA and Coherence Collapse Analysis (CCA)
 
 **Research Papers:**
-- CIRIS Architecture: [DOI 10.5281/zenodo.18142668](https://doi.org/10.5281/zenodo.18142668)
-- Coherence Ratchet Theory: [DOI 10.5281/zenodo.18137161](https://doi.org/10.5281/zenodo.18137161)
+- CIRIS Architecture: [DOI 10.5281/zenodo.18137161](https://doi.org/10.5281/zenodo.18137161)
+- Coherence Ratchet Theory: [DOI 10.5281/zenodo.18142668](https://doi.org/10.5281/zenodo.18142668)
 
 For more information about the CIRIS Covenant, see: https://ciris.ai/covenant
 

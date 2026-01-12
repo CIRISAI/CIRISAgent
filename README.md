@@ -5,8 +5,8 @@
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
-[![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
-[![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet_(CCA)-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
+[![CIRIS Architecture](https://img.shields.io/badge/Paper-CIRIS_Architecture-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18137161)
+[![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet_(CCA)-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
 [![Covenant](https://img.shields.io/badge/Covenant-v1.2--Beta-purple)](https://ciris.ai/ciris_covenant.pdf)
 
 # CIRIS Engine

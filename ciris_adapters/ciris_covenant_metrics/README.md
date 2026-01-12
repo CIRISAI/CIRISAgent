@@ -178,7 +178,7 @@ Request body:
 - CIRIS Architecture: [DOI 10.5281/zenodo.18137161](https://doi.org/10.5281/zenodo.18137161)
 - Coherence Ratchet Theory: [DOI 10.5281/zenodo.18142668](https://doi.org/10.5281/zenodo.18142668)
 
-For more information about the CIRIS Covenant, see: https://ciris.ai/covenant
+For more information about the CIRIS Covenant, see: https://ciris.ai/ciris_covenant.pdf
 
 ## Support
 

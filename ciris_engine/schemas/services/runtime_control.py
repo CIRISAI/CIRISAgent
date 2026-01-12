@@ -60,6 +60,8 @@ DESC_CONSCIENCE_OVERRIDE_REASON = "Reason if conscience overrode action"
 DESC_AUDIT_SEQUENCE = "Sequence number in audit hash chain"
 DESC_AUDIT_HASH = "Hash of audit entry (tamper-evident)"
 DESC_AUDIT_SIGNATURE = "Cryptographic signature of audit entry"
+DESC_THRESHOLD_USED = "Threshold used"
+DESC_ACTION_PARAMETERS = "Action parameters (content for SPEAK, etc.)"
 
 
 class StepPoint(str, Enum):
@@ -801,13 +803,13 @@ class FinalizeActionStepData(BaseStepData):
     # === ETHICAL FACULTY 1: Entropy Conscience ===
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, description="Entropy score (0=ordered, 1=chaotic)")
-    entropy_threshold: Optional[float] = Field(None, description="Threshold used")
+    entropy_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
     entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
     coherence_score: Optional[float] = Field(None, description="Coherence score (0=incoherent, 1=coherent)")
-    coherence_threshold: Optional[float] = Field(None, description="Threshold used")
+    coherence_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
     coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
@@ -837,7 +839,7 @@ class ActionCompleteStepData(BaseStepData):
     """Step data for ACTION_COMPLETE step with audit trail and resource usage information."""
 
     action_executed: str = Field(..., description="Action that was executed")
-    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description=DESC_ACTION_PARAMETERS)
     dispatch_success: bool = Field(..., description="Whether action dispatch succeeded")
     handler_completed: bool = Field(..., description="Whether action handler completed")
     follow_up_processing_pending: bool = Field(False, description="Whether follow-up processing needed")
@@ -868,7 +870,7 @@ class ActionResponse(BaseModel):
     follow_up_thought_id: Optional[str] = Field(None, description="ID of follow-up thought if created")
     execution_time_ms: float = Field(0.0, description="Action execution time in milliseconds")
     # Action parameters (captures content for SPEAK, tool params, etc.)
-    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description=DESC_ACTION_PARAMETERS)
 
     # Audit trail data (REQUIRED) from AuditEntryResult
     audit_data: AuditEntryResult = Field(..., description="Audit entry with hash chain data (REQUIRED)")
@@ -1062,14 +1064,14 @@ class ConscienceResultEvent(BaseModel):
     # Ensures appropriate information uncertainty, prevents overconfident assertions
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Entropy score (0=ordered, 1=chaotic)")
-    entropy_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threshold used")
+    entropy_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
     entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     # Verifies internal consistency with prior commitments
     coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
     coherence_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)")
-    coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threshold used")
+    coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
     coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
@@ -1099,7 +1101,7 @@ class ActionResultEvent(BaseModel):
 
     # Action execution
     action_executed: str = Field(..., description="Action that was executed")
-    action_parameters: Dict[str, Any] = Field(default_factory=dict, description="Action parameters (content for SPEAK, etc.)")
+    action_parameters: Dict[str, Any] = Field(default_factory=dict, description=DESC_ACTION_PARAMETERS)
     execution_success: bool = Field(..., description="Whether execution succeeded")
     execution_time_ms: float = Field(..., description="Execution time in milliseconds")
     follow_up_thought_id: Optional[str] = Field(None, description="Follow-up thought created if any")

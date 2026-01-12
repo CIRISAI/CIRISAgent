@@ -48,6 +48,11 @@ class OpenAIConfig(BaseModel):
 
 logger = logging.getLogger(__name__)
 
+# Error pattern constants (DRY principle)
+ERROR_PATTERN_RATE_LIMIT = "rate limit"
+ERROR_PATTERN_RATE_LIMIT_UNDERSCORE = "rate_limit"
+ERROR_PATTERN_429 = "429"
+
 # Type for structured call functions that can be retried
 StructuredCallFunc = Callable[
     [List[MessageDict], Type[BaseModel], int, float], Awaitable[Tuple[BaseModel, ResourceUsage]]
@@ -659,7 +664,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                         # Check for rate limit / 429 errors - DON'T record as circuit breaker failure
                         # Rate limits are transient and will be retried by the LLM bus
-                        is_rate_limit = "rate limit" in error_str or "429" in error_str or "rate_limit" in error_str
+                        is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
 
                         # Only record circuit breaker failure for non-rate-limit errors
                         if not is_rate_limit:
@@ -726,7 +731,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                         # Check for rate limit / 429 errors - NOT counted as circuit breaker failure
                         # Rate limits are transient and will be retried by the LLM bus
-                        elif "rate limit" in error_str or "429" in error_str:
+                        elif ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
                             logger.warning(
                                 f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
                                 f"  Model: {error_context['model']}\n"
@@ -791,7 +796,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # Wrap all other exceptions with context to avoid empty error messages
                 # Check for rate limits in the catch-all too (in case instructor module structure changed)
                 error_str_lower = str(e).lower()
-                is_rate_limit = "rate limit" in error_str_lower or "429" in error_str_lower or "rate_limit" in error_str_lower
+                is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str_lower or ERROR_PATTERN_429 in error_str_lower or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
 
                 if not is_rate_limit:
                     self.circuit_breaker.record_failure()
@@ -938,7 +943,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             return "CONNECTION_ERROR"
 
         # Check for rate limit
-        if isinstance(error, RateLimitError) or "rate limit" in error_str or "429" in error_str:
+        if isinstance(error, RateLimitError) or ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
             return "RATE_LIMIT"
 
         # Check for context length exceeded

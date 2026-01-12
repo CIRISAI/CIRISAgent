@@ -391,55 +391,58 @@ async def get_coherence_traces(
     )
 
 
-@router.get("/traces/latest", response_model=Optional[CompleteTraceResponse])
-async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
-    """
-    Get the most recently captured reasoning trace.
-
-    Returns the latest complete trace with all 6 components.
-    """
+def _find_covenant_service_from_registry(request: Request) -> Optional[Any]:
+    """Find covenant service from ServiceRegistry."""
     from ciris_engine.schemas.runtime.enums import ServiceType
 
-    # Try to get covenant metrics service from ServiceRegistry
-    # Modular adapters register services there, not in runtime.adapters
-    covenant_service = None
-
     service_registry = getattr(request.app.state, "service_registry", None)
-    if service_registry:
-        # Get WISE_AUTHORITY services with covenant_metrics capability
-        try:
-            providers = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
-            for provider in providers:
-                if hasattr(provider, "get_latest_trace"):
-                    covenant_service = provider
-                    logger.info(f"[TRACE_API] Found covenant service via ServiceRegistry: {provider.__class__.__name__}")
-                    break
-        except Exception as e:
-            logger.warning(f"[TRACE_API] Error querying ServiceRegistry: {e}")
+    if not service_registry:
+        return None
 
-    # Fallback: check runtime.adapters (for core adapters)
-    if not covenant_service:
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime:
-            for adapter in getattr(runtime, "adapters", []):
-                if hasattr(adapter, "metrics_service"):
-                    covenant_service = adapter.metrics_service
-                    logger.info(f"[TRACE_API] Found covenant service via runtime.adapters")
-                    break
+    try:
+        providers = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+        for provider in providers:
+            if hasattr(provider, "get_latest_trace"):
+                logger.info(f"[TRACE_API] Found covenant service via ServiceRegistry: {provider.__class__.__name__}")
+                return provider
+    except Exception as e:
+        logger.warning(f"[TRACE_API] Error querying ServiceRegistry: {e}")
+
+    return None
+
+
+def _find_covenant_service_from_runtime(request: Request) -> Optional[Any]:
+    """Find covenant service from runtime.adapters."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        return None
+
+    for adapter in getattr(runtime, "adapters", []):
+        if hasattr(adapter, "metrics_service"):
+            logger.info("[TRACE_API] Found covenant service via runtime.adapters")
+            return adapter.metrics_service
+
+    return None
+
+
+def _find_covenant_service(request: Request) -> Optional[Any]:
+    """Find covenant service using all available lookup methods."""
+    # Try ServiceRegistry first (modular adapters)
+    service = _find_covenant_service_from_registry(request)
+    if service:
+        return service
+
+    # Fallback: check runtime.adapters (core adapters)
+    service = _find_covenant_service_from_runtime(request)
+    if service:
+        return service
 
     # Final fallback: direct app.state
-    if not covenant_service:
-        covenant_service = getattr(request.app.state, "covenant_metrics_service", None)
+    return getattr(request.app.state, "covenant_metrics_service", None)
 
-    if not covenant_service or not hasattr(covenant_service, "get_latest_trace"):
-        logger.warning(f"[TRACE_API] No covenant service found or no get_latest_trace method")
-        return None
 
-    trace = covenant_service.get_latest_trace()
-    logger.debug(f"[TRACE_API] get_latest_trace returned: {trace is not None}")
-    if not trace:
-        return None
-
+def _trace_to_response(trace: Any) -> CompleteTraceResponse:
+    """Convert a trace object to CompleteTraceResponse."""
     trace_dict = trace.to_dict() if hasattr(trace, "to_dict") else trace
 
     return CompleteTraceResponse(
@@ -461,3 +464,25 @@ async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
         signature=trace_dict.get("signature"),
         signature_key_id=trace_dict.get("signature_key_id"),
     )
+
+
+@router.get("/traces/latest", response_model=Optional[CompleteTraceResponse])
+async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
+    """
+    Get the most recently captured reasoning trace.
+
+    Returns the latest complete trace with all 6 components.
+    """
+    covenant_service = _find_covenant_service(request)
+
+    if not covenant_service or not hasattr(covenant_service, "get_latest_trace"):
+        logger.warning("[TRACE_API] No covenant service found or no get_latest_trace method")
+        return None
+
+    trace = covenant_service.get_latest_trace()
+    logger.debug(f"[TRACE_API] get_latest_trace returned: {trace is not None}")
+
+    if not trace:
+        return None
+
+    return _trace_to_response(trace)

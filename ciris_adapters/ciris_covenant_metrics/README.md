@@ -39,6 +39,43 @@ Per CIRIS Covenant Section II, Chapter 2:
 }
 ```
 
+#### Complete Reasoning Traces (H3ERE Pipeline)
+Full 6-component traces capturing the complete reasoning pipeline:
+```json
+{
+  "trace_id": "trace-thought-123-20260112162156",
+  "thought_id": "thought-123",
+  "task_id": "task-456",
+  "agent_id_hash": "abc123def456...",
+  "components": [
+    {"component_type": "observation", "event_type": "THOUGHT_START", ...},
+    {"component_type": "context", "event_type": "SNAPSHOT_AND_CONTEXT", ...},
+    {"component_type": "dma_results", "data": {
+      "pdma": {...},      // Ethical PDMA evaluation
+      "csdma": {...},     // Common Sense DMA evaluation
+      "dsdma": {...},     // Domain-Specific DMA evaluation
+      "idma": {           // Intuition DMA (CCA epistemic diversity)
+        "k_eff": 2.0,     // Effective independent sources (>= 2 = healthy)
+        "correlation_risk": 0.2,
+        "phase": "healthy",
+        "fragility_flag": false,
+        "sources_identified": ["source1", "source2"],
+        "reasoning": "..."
+      }
+    }},
+    {"component_type": "action", "event_type": "ASPDMA_RESULT", ...},
+    {"component_type": "conscience", "event_type": "CONSCIENCE_RESULT", ...},
+    {"component_type": "outcome", "event_type": "ACTION_RESULT", ...}
+  ]
+}
+```
+
+**IDMA (Intuition DMA)** implements Coherence Collapse Analysis (CCA) to detect fragile reasoning:
+- **k_eff formula**: `k_eff = k / (1 + ρ(k-1))` where k = sources, ρ = correlation
+- **k_eff < 2**: FRAGILE - dangerous single-source dependence
+- **k_eff >= 2**: HEALTHY - multiple truly independent perspectives
+- **Nascent agents**: Expected to have low k_eff initially (~1.0)
+
 ### What is NOT Collected
 
 - User messages or conversation content
@@ -135,6 +172,11 @@ Request body:
 
 - **Section II, Chapter 2**: Principled Decision-Making Algorithm (PDMA)
 - **Section II, Chapter 3**: Wisdom-Based Deferral (WBD)
+- **Section II, Chapter 5**: Intuition DMA and Coherence Collapse Analysis (CCA)
+
+**Research Papers:**
+- CIRIS Architecture: [DOI 10.5281/zenodo.18142668](https://doi.org/10.5281/zenodo.18142668)
+- Coherence Ratchet Theory: [DOI 10.5281/zenodo.18137161](https://doi.org/10.5281/zenodo.18137161)
 
 For more information about the CIRIS Covenant, see: https://ciris.ai/covenant
 

@@ -26,7 +26,8 @@ CIRIS lets you run AI agents that explain their decisions, defer to humans when 
 ## What It Actually Does
 
 CIRIS wraps LLM calls with:
-- **Multiple evaluation passes** - Every decision gets ethical, common-sense, and domain checks
+- **Multiple evaluation passes** - Every decision gets ethical, common-sense, domain, and epistemic diversity checks
+- **Intuition DMA (IDMA)** - Coherence Collapse Analysis for detecting fragile reasoning (k_eff < 2 = single-source dependence)
 - **Human escalation** - Uncertain decisions defer to designated "Wise Authorities"
 - **Complete audit trails** - Every decision is logged with reasoning
 - **Type safety** - Minimal `Dict[str, Any]` usage, none in critical paths

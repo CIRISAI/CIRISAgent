@@ -742,6 +742,7 @@ class CovenantMetricsService:
             csdma = event.get("csdma", {})
             dsdma = event.get("dsdma", {})
             pdma = event.get("pdma", {})
+            idma = event.get("idma", {})
 
             # Handle both dict and Pydantic model objects
             if hasattr(csdma, "model_dump"):
@@ -750,6 +751,8 @@ class CovenantMetricsService:
                 dsdma = dsdma.model_dump()
             if hasattr(pdma, "model_dump"):
                 pdma = pdma.model_dump()
+            if hasattr(idma, "model_dump"):
+                idma = idma.model_dump()
 
             return {
                 # Common Sense DMA - CSDMAResult schema: plausibility_score, flags, reasoning
@@ -775,6 +778,16 @@ class CovenantMetricsService:
                     "alignment_check": pdma.get("alignment_check") if isinstance(pdma, dict) else None,
                     "prompt_used": event.get("pdma_prompt"),
                 },
+                # Intuition DMA - IDMAResult schema: k_eff, phase, fragility_flag, reasoning
+                # Implements CCA (Coherence Collapse Analysis) for epistemic diversity monitoring
+                "idma": {
+                    "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
+                    "phase": idma.get("phase") if isinstance(idma, dict) else None,
+                    "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
+                    "reasoning": idma.get("reasoning") if isinstance(idma, dict) else None,
+                    "source_assessments": idma.get("source_assessments") if isinstance(idma, dict) else None,
+                    "prompt_used": event.get("idma_prompt"),
+                } if idma else None,
                 # Aggregate reasoning
                 "combined_analysis": event.get("combined_analysis"),
             }

@@ -123,6 +123,11 @@ class LLMBus(BaseBus[LLMService]):
         # Background tasks set to prevent garbage collection (SonarCloud fix)
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
+        # Global rate limit cooldown per provider (timestamp when provider can be used again)
+        # This prevents hammering a rate-limited provider with immediate retries
+        self._rate_limited_until: dict[str, float] = {}
+        self._rate_limit_cooldown_seconds = 60.0  # Default cooldown when rate limit exhausted
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
@@ -251,6 +256,13 @@ class LLMBus(BaseBus[LLMService]):
         """Record service failure and log appropriately."""
         if last_was_rate_limit:
             logger.warning(f"LLM service {service_name} exhausted rate limit retries (NOT counting as CB failure)")
+            # Set global cooldown so subsequent requests don't immediately hit rate limit again
+            # Use minimum 30s cooldown when retries exhausted - provider's retry_after is often too short
+            # because per-minute rate limits don't reset as fast as the suggested retry time
+            retry_after = self._extract_retry_after_time(str(service_last_error))
+            min_exhausted_cooldown = 30.0  # Minimum cooldown when retries exhausted
+            effective_cooldown = max(retry_after, min_exhausted_cooldown) if retry_after > 0 else None
+            self._set_rate_limit_cooldown(service_name, effective_cooldown)
             return
 
         self._record_failure(service_name)
@@ -378,6 +390,11 @@ class LLMBus(BaseBus[LLMService]):
 
             if not self._check_circuit_breaker(service_name):
                 logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
+                continue
+
+            # Check global rate limit cooldown
+            if self._is_rate_limited(service_name):
+                logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
                 continue
 
             result = await self._try_service(
@@ -579,6 +596,36 @@ class LLMBus(BaseBus[LLMService]):
 
         return self.circuit_breakers[service_name].is_available()
 
+    def _is_rate_limited(self, service_name: str) -> bool:
+        """Check if service is in rate limit cooldown."""
+        cooldown_until = self._rate_limited_until.get(service_name)
+        if cooldown_until is None:
+            return False
+
+        current_time = self._time_service.timestamp()
+        if current_time >= cooldown_until:
+            # Cooldown expired, clear it
+            del self._rate_limited_until[service_name]
+            logger.info(f"Rate limit cooldown expired for {service_name}")
+            return False
+
+        remaining = cooldown_until - current_time
+        logger.debug(f"Service {service_name} in rate limit cooldown ({remaining:.1f}s remaining)")
+        return True
+
+    def _set_rate_limit_cooldown(self, service_name: str, retry_after: Optional[float] = None) -> None:
+        """Set rate limit cooldown for a service.
+
+        Args:
+            service_name: The service to cooldown
+            retry_after: Optional seconds to wait (from Retry-After header). If not provided,
+                        uses default cooldown.
+        """
+        cooldown = retry_after if retry_after and retry_after > 0 else self._rate_limit_cooldown_seconds
+        cooldown_until = self._time_service.timestamp() + cooldown
+        self._rate_limited_until[service_name] = cooldown_until
+        logger.warning(f"Rate limit cooldown set for {service_name}: {cooldown:.1f}s")
+
     def _record_success(self, service_name: str, latency_ms: float) -> None:
         """Record successful call metrics"""
         metrics = self.service_metrics[service_name]
@@ -589,6 +636,11 @@ class LLMBus(BaseBus[LLMService]):
 
         if service_name in self.circuit_breakers:
             self.circuit_breakers[service_name].record_success()
+
+        # Clear rate limit cooldown on success
+        if service_name in self._rate_limited_until:
+            del self._rate_limited_until[service_name]
+            logger.info(f"Rate limit cooldown cleared for {service_name} after successful call")
 
     def _record_failure(self, service_name: str) -> None:
         """Record failed call metrics"""

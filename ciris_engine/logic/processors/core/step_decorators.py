@@ -1438,6 +1438,7 @@ def _create_dma_results_event(
     csdma_prompt = getattr(dma_results, "csdma_prompt", None)
     dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
     pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
+    idma_prompt = getattr(dma_results, "idma_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
@@ -1447,9 +1448,11 @@ def _create_dma_results_event(
         csdma=dma_results.csdma,  # Pass CSDMAResult object directly
         dsdma=dma_results.dsdma,  # Pass DSDMAResult object directly
         pdma=dma_results.ethical_pdma,  # Pass EthicalDMAResult object directly
+        idma=getattr(dma_results, "idma", None),  # Pass IDMAResult object (optional, CCA diversity check)
         csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
+        idma_prompt=idma_prompt,  # User prompt passed to IDMA
     )
 
 

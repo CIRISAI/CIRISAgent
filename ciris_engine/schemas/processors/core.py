@@ -29,7 +29,7 @@ from ..actions.parameters import (
     TaskCompleteParams,
     ToolParams,
 )
-from ..dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ..dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 
 
 class DMAResults(BaseModel):
@@ -38,6 +38,7 @@ class DMAResults(BaseModel):
     ethical_pdma: Optional[EthicalDMAResult] = Field(None, description="Ethical evaluation")
     csdma: Optional[CSDMAResult] = Field(None, description="Common sense evaluation")
     dsdma: Optional[DSDMAResult] = Field(None, description="Domain-specific evaluation")
+    idma: Optional[IDMAResult] = Field(None, description="Intuition/CCA epistemic diversity evaluation")
     errors: List[str] = Field(default_factory=list, description="Errors during evaluation")
 
     model_config = ConfigDict(extra="forbid")

@@ -585,6 +585,11 @@ class CovenantMetricsService:
                 logger.info(f"Reasoning event processor cancelled (processed {events_processed} events)")
                 break
             except Exception as e:
+                # Check if event loop is gone (e.g., during shutdown/test teardown)
+                err_str = str(e).lower()
+                if "no running event loop" in err_str or "event loop is closed" in err_str:
+                    logger.debug("Event loop closed, stopping reasoning event processor")
+                    break
                 logger.error(f"Error processing reasoning event: {e}")
 
     async def _handle_reasoning_event(self, event_data: Dict[str, Any]) -> None:

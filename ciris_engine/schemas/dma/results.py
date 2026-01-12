@@ -31,18 +31,25 @@ class IDMAResult(BaseModel):
     IDMA is a semantic implementation of the CCA (Coherent Collective Action)
     intuition faculties. It evaluates source independence, correlation risk,
     and epistemic phase to detect fragile reasoning without hardware dependencies.
+
+    k_eff formula: k_eff = k / (1 + ρ(k-1))
+    - k = number of nominal sources/perspectives
+    - ρ = average correlation between sources
+    - k_eff < 2 = FRAGILE (single source dependence)
+    - k_eff ≥ 2 = healthy (multiple independent sources)
+    - As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
     """
 
     k_eff: float = Field(
         ...,
         ge=0.0,
-        description="Effective independence score - how many truly independent sources/perspectives inform this reasoning",
+        description="Effective independent source count. Need k_eff >= 2 for healthy reasoning. k_eff < 2 = fragile.",
     )
     correlation_risk: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="Estimated correlation between sources (0=independent, 1=fully correlated). CCE risk threshold ~0.43",
+        description="Estimated correlation between sources (0=independent, 1=fully correlated)",
     )
     phase: str = Field(
         ...,
@@ -50,7 +57,7 @@ class IDMAResult(BaseModel):
     )
     fragility_flag: bool = Field(
         ...,
-        description="True if k_eff < 2 OR phase = 'rigidity' - indicates reasoning may be brittle",
+        description="True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation",
     )
     sources_identified: List[str] = Field(
         default_factory=list,

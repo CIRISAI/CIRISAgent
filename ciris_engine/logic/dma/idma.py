@@ -244,16 +244,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
 
         except Exception as e:
             logger.error(f"IDMA evaluation failed for thought ID {thought_item.thought_id}: {e}", exc_info=True)
-            # Return a conservative fallback that flags for review
-            return IDMAResult(
-                k_eff=1.0,
-                correlation_risk=0.5,
-                phase="rigidity",
-                fragility_flag=True,
-                sources_identified=["evaluation_failed"],
-                correlation_factors=["LLM_Error"],
-                reasoning=f"IDMA evaluation failed: {str(e)}. Conservatively flagging as fragile.",
-            )
+            # NO FALLBACK - re-raise to trigger proper deferral/ponder behavior
+            # Fallbacks are bypass patterns that violate CIRIS principles
+            raise
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> IDMAResult:  # type: ignore[override]
         """Evaluate thought for information diversity."""

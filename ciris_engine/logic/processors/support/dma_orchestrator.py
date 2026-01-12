@@ -74,7 +74,7 @@ class DMAOrchestrator:
 
     def _set_dma_error(self, errors: DMAErrors, name: str, error: DMAError) -> None:
         """Set a DMA error by name."""
-        error_map = {"ethical_pdma": "ethical_pdma", "csdma": "csdma", "dsdma": "dsdma"}
+        error_map = {"ethical_pdma": "ethical_pdma", "csdma": "csdma", "dsdma": "dsdma", "idma": "idma"}
         if name in error_map:
             setattr(errors, error_map[name], error)
 
@@ -85,12 +85,17 @@ class DMAOrchestrator:
         dma_results: Dict[str, Any],
     ) -> tuple[Optional[IDMAResult], Optional[str]]:
         """Run IDMA evaluation with circuit breaker protection. Returns (result, prompt)."""
+        # If IDMA not configured, return None (optional DMA)
         if not self.idma_evaluator:
             return None, None
 
         cb = self._circuit_breakers.get("idma")
-        if not cb or not cb.is_available():
+        if not cb:
             return None, None
+
+        # Circuit breaker tripped = IDMA has failed too many times, treat as error
+        if not cb.is_available():
+            raise Exception("IDMA circuit breaker open - too many recent failures")
 
         try:
             idma_result = await run_dma_with_retries(
@@ -116,9 +121,11 @@ class DMAOrchestrator:
             return idma_result, idma_prompt
 
         except Exception as e:
-            logger.warning(f"IDMA evaluation failed (non-fatal): {e}")
+            logger.error(f"IDMA evaluation failed: {e}")
             cb.record_failure()
-            return None, None
+            # NO BYPASS - re-raise to trigger proper deferral/ponder behavior
+            # If IDMA runs and fails, the thought should defer, not continue without epistemic grounding
+            raise
 
     def _create_dma_task(
         self,
@@ -175,7 +182,16 @@ class DMAOrchestrator:
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
 
         # Run IDMA sequentially after initial 3 DMAs (needs their results as input)
-        idma_result, idma_prompt = await self._run_idma_evaluation(thought_item, processing_context, dma_results)
+        # IDMA is INFORMATIONAL, not a gate - failures don't block the thought
+        # A nascent agent will have low k_eff, that's expected, not an error
+        idma_result: Optional[IDMAResult] = None
+        idma_prompt: Optional[str] = None
+        try:
+            idma_result, idma_prompt = await self._run_idma_evaluation(thought_item, processing_context, dma_results)
+        except Exception as e:
+            # Log but don't fail - IDMA is informational
+            logger.warning(f"IDMA evaluation unavailable (non-blocking): {e}")
+            # idma_result stays None - thought continues without epistemic metadata
 
         # Capture prompts from evaluators (set during evaluation)
         return InitialDMAResults(

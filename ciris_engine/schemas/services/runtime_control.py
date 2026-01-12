@@ -15,7 +15,7 @@ from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.conscience.results import ConscienceResult
 from ciris_engine.schemas.dma.core import DMAContext
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
@@ -976,22 +976,24 @@ class SnapshotAndContextResult(BaseModel):
 
 
 class DMAResultsEvent(BaseModel):
-    """Event 2: Results from all 3 DMA perspectives (PERFORM_DMAS step)."""
+    """Event 2: Results from all 4 DMA perspectives (PERFORM_DMAS step)."""
 
     event_type: ReasoningEvent = Field(ReasoningEvent.DMA_RESULTS)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
     timestamp: str = Field(..., description=DESC_TIMESTAMP)
 
-    # All 3 DMA results - strongly typed, non-optional
+    # All 4 DMA results - strongly typed
     csdma: CSDMAResult = Field(..., description="Common Sense DMA result")
     dsdma: DSDMAResult = Field(..., description="Domain Specific DMA result")
     pdma: EthicalDMAResult = Field(..., description="Ethical Perspective DMA result (PDMA)")
+    idma: Optional[IDMAResult] = Field(None, description="Intuition DMA result (CCA epistemic diversity)")
 
     # User prompts passed to each DMA (for debugging/transparency)
     csdma_prompt: Optional[str] = Field(None, description="User prompt passed to CSDMA")
     dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
     pdma_prompt: Optional[str] = Field(None, description="User prompt passed to PDMA")
+    idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
 
 
 class ASPDMAResultEvent(BaseModel):

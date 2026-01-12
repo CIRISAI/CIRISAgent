@@ -695,9 +695,11 @@ class StreamingVerificationModule:
                                         "csdma",
                                         "dsdma",
                                         "pdma",
+                                        "idma",  # IDMA: Intuition DMA (CCA epistemic diversity) - optional
                                         "csdma_prompt",
                                         "dsdma_prompt",
                                         "pdma_prompt",
+                                        "idma_prompt",  # Optional IDMA prompt
                                     },  # DMA results + optional prompt fields
                                     "aspdma_result": {
                                         "selected_action",

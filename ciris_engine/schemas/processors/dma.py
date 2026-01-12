@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.types import ConfigDict
 
 
@@ -19,16 +19,18 @@ class DMAMetadata(BaseModel):
 
 
 class InitialDMAResults(BaseModel):
-    """Results from initial DMA runs - all 3 DMA results are required."""
+    """Results from initial DMA runs - all 4 DMA results are required."""
 
     ethical_pdma: EthicalDMAResult = Field(..., description="Ethical PDMA result (required)")
     csdma: CSDMAResult = Field(..., description="CSDMA result (required)")
     dsdma: DSDMAResult = Field(..., description="DSDMA result (required)")
+    idma: Optional[IDMAResult] = Field(None, description="IDMA result (information diversity)")
 
     # User prompts passed to each DMA (for debugging/transparency)
     ethical_pdma_prompt: Optional[str] = Field(None, description="User prompt passed to Ethical PDMA")
     csdma_prompt: Optional[str] = Field(None, description="User prompt passed to CSDMA")
     dsdma_prompt: Optional[str] = Field(None, description="User prompt passed to DSDMA")
+    idma_prompt: Optional[str] = Field(None, description="User prompt passed to IDMA")
 
 
 class DMAError(BaseModel):
@@ -46,10 +48,11 @@ class DMAErrors(BaseModel):
     ethical_pdma: Optional[DMAError] = Field(None, description="Ethical PDMA error")
     csdma: Optional[DMAError] = Field(None, description="CSDMA error")
     dsdma: Optional[DMAError] = Field(None, description="DSDMA error")
+    idma: Optional[DMAError] = Field(None, description="IDMA error")
 
     def has_errors(self) -> bool:
         """Check if any errors occurred."""
-        return any([self.ethical_pdma, self.csdma, self.dsdma])
+        return any([self.ethical_pdma, self.csdma, self.dsdma, self.idma])
 
     def get_error_summary(self) -> str:
         """Get summary of all errors."""
@@ -60,6 +63,8 @@ class DMAErrors(BaseModel):
             errors.append(f"csdma: {self.csdma.error_message}")
         if self.dsdma:
             errors.append(f"dsdma: {self.dsdma.error_message}")
+        if self.idma:
+            errors.append(f"idma: {self.idma.error_message}")
         return "; ".join(errors) if errors else "No errors"
 
 
@@ -72,6 +77,7 @@ class ActionSelectionContext(BaseModel):
     ethical_pdma_result: EthicalDMAResult = Field(..., description="Ethical evaluation")
     csdma_result: CSDMAResult = Field(..., description="Common sense evaluation")
     dsdma_result: Optional[DSDMAResult] = Field(None, description="Domain specific evaluation")
+    idma_result: Optional[IDMAResult] = Field(None, description="Information diversity evaluation")
     metadata: ConfigDict = Field(default_factory=dict, description="Additional context")
 
 

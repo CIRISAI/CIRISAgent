@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.schemas.dma.faculty import ConscienceFailureContext, EnhancedDMAInputs
 from ciris_engine.schemas.dma.prompts import PromptCollection
-from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.types import JSONDict
@@ -104,6 +104,7 @@ class ActionSelectionContextBuilder:
         ethical_pdma_result = triaged_inputs.ethical_pdma_result
         csdma_result = triaged_inputs.csdma_result
         dsdma_result = triaged_inputs.dsdma_result
+        idma_result = getattr(triaged_inputs, "idma_result", None)
         current_thought_depth = triaged_inputs.current_thought_depth
         max_rounds = triaged_inputs.max_rounds
 
@@ -117,6 +118,7 @@ class ActionSelectionContextBuilder:
         _ethical_summary = self._build_ethical_summary(ethical_pdma_result)
         _csdma_summary = self._build_csdma_summary(csdma_result)
         _dsdma_summary_str = self._build_dsdma_summary(dsdma_result)
+        _idma_summary_str = self._build_idma_summary(idma_result)
 
         # Build ponder context
         _ponder_notes_str = self._build_ponder_context(original_thought, current_thought_depth)
@@ -198,6 +200,7 @@ DMA Summaries to consider for your PDMA reasoning:
 Ethical PDMA: {ethical_summary}
 CSDMA: {csdma_summary}
 DSDMA: {dsdma_summary_str}
+{idma_summary_str}
 
 Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
 Adhere strictly to the schema for your JSON output.
@@ -227,6 +230,7 @@ Adhere strictly to the schema for your JSON output.
             ethical_summary=_ethical_summary,
             csdma_summary=_csdma_summary,
             dsdma_summary_str=_dsdma_summary_str,
+            idma_summary_str=_idma_summary_str,
         )
         return formatted_content.strip()
 
@@ -304,6 +308,23 @@ Adhere strictly to the schema for your JSON output.
             f"DSDMA ({dsdma_result.domain}) Output: Domain Alignment {dsdma_result.domain_alignment:.2f}, "
             f"Flags: {', '.join(dsdma_result.flags) if dsdma_result.flags else 'None'}. "
             f"Reasoning: {dsdma_result.reasoning}"
+        )
+
+    def _build_idma_summary(self, idma_result: Optional[IDMAResult]) -> str:
+        """Build IDMA (Intuition DMA / Coherence Collapse Analysis) summary."""
+        if not idma_result:
+            return ""
+
+        fragility_warning = ""
+        if idma_result.fragility_flag:
+            fragility_warning = "⚠️ FRAGILITY DETECTED - Consider seeking additional independent verification. "
+
+        return (
+            f"IDMA (Intuition/CCA) Output: k_eff={idma_result.k_eff:.2f} (effective sources), "
+            f"ρ={idma_result.correlation_risk:.2f}, Phase={idma_result.phase}. "
+            f"{fragility_warning}"
+            f"Sources: {', '.join(idma_result.sources_identified[:3]) if idma_result.sources_identified else 'None'}. "
+            f"Reasoning: {idma_result.reasoning[:150]}..."
         )
 
     def _build_ponder_context(self, original_thought: Thought, current_thought_depth: int) -> str:

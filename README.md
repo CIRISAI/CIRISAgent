@@ -3,6 +3,8 @@
 [![Lines of Code](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=ncloc)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=CIRISAI_CIRISAgent&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=CIRISAI_CIRISAgent)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18142668.svg)](https://doi.org/10.5281/zenodo.18142668)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18137161.svg)](https://doi.org/10.5281/zenodo.18137161)
 
 # CIRIS Engine
 
@@ -14,8 +16,10 @@
 
 **BETA RELEASE 1.8.0-stable** | [Release Notes](CHANGELOG.md) | [Documentation Hub](docs/README.md)
 
-Academic paper https://zenodo.org/records/17195221
-Philosophical foundation https://ciris.ai/ciris_covenant.pdf
+**Research:**
+- CIRIS Architecture Paper: [DOI 10.5281/zenodo.18142668](https://doi.org/10.5281/zenodo.18142668)
+- Coherence Ratchet Theory: [DOI 10.5281/zenodo.18137161](https://doi.org/10.5281/zenodo.18137161)
+- Philosophical Foundation: [CIRIS Covenant v1.2-Beta](https://ciris.ai/ciris_covenant.pdf)
 
 CIRIS lets you run AI agents that explain their decisions, defer to humans when uncertain, and maintain complete audit trails. Currently powering Discord community moderation, designed to scale to healthcare and education.
 

@@ -10,15 +10,17 @@ from ciris_engine.logic.dma.dma_executor import (
     run_csdma,
     run_dma_with_retries,
     run_dsdma,
+    run_idma,
     run_pdma,
 )
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
+from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
 from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.processors.dma import DMAError, DMAErrors, DMAMetadata, InitialDMAResults
 from ciris_engine.schemas.runtime.models import Thought
@@ -40,11 +42,13 @@ class DMAOrchestrator:
         app_config: Optional[Any] = None,
         llm_service: Optional[Any] = None,
         memory_service: Optional[Any] = None,
+        idma_evaluator: Optional[IDMAEvaluator] = None,
     ) -> None:
         self.ethical_pdma_evaluator = ethical_pdma_evaluator
         self.csdma_evaluator = csdma_evaluator
         self.dsdma = dsdma
         self.action_selection_pdma_evaluator = action_selection_pdma_evaluator
+        self.idma_evaluator = idma_evaluator
         self.time_service = time_service
         self.app_config = app_config
         self.llm_service = llm_service
@@ -65,6 +69,8 @@ class DMAOrchestrator:
         }
         if self.dsdma is not None:
             self._circuit_breakers["dsdma"] = CircuitBreaker("dsdma")
+        if self.idma_evaluator is not None:
+            self._circuit_breakers["idma"] = CircuitBreaker("idma")
 
     async def run_initial_dmas(
         self,
@@ -136,19 +142,55 @@ class DMAOrchestrator:
         if errors.has_errors():
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
 
+        # Run IDMA sequentially after initial 3 DMAs (needs their results as input)
+        idma_result: Optional[IDMAResult] = None
+        idma_prompt: Optional[str] = None
+        if self.idma_evaluator:
+            cb = self._circuit_breakers.get("idma")
+            if cb and cb.is_available():
+                try:
+                    idma_result = await run_dma_with_retries(
+                        run_idma,
+                        self.idma_evaluator,
+                        thought_item,
+                        processing_context,
+                        retry_limit=self.retry_limit,
+                        timeout_seconds=self.timeout_seconds,
+                        time_service=self.time_service,
+                        ethical_result=dma_results["ethical_pdma"],
+                        csdma_result=dma_results["csdma"],
+                        dsdma_result=dma_results["dsdma"],
+                    )
+                    idma_prompt = getattr(self.idma_evaluator, "last_user_prompt", None)
+                    if cb:
+                        cb.record_success()
+                    # Log fragility warning if detected
+                    if idma_result and idma_result.fragility_flag:
+                        logger.warning(
+                            f"IDMA fragility detected for thought {thought_item.thought_id}: "
+                            f"k_eff={idma_result.k_eff:.2f}, phase={idma_result.phase}"
+                        )
+                except Exception as e:
+                    logger.warning(f"IDMA evaluation failed (non-fatal): {e}")
+                    if cb:
+                        cb.record_failure()
+                    # IDMA failure is non-fatal - continue with None result
+
         # Capture prompts from evaluators (set during evaluation)
         ethical_pdma_prompt = getattr(self.ethical_pdma_evaluator, "last_user_prompt", None)
         csdma_prompt = getattr(self.csdma_evaluator, "last_user_prompt", None)
         dsdma_prompt = getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None
 
-        # Create InitialDMAResults with all 3 required fields and prompts
+        # Create InitialDMAResults with all DMA results and prompts
         return InitialDMAResults(
             ethical_pdma=dma_results["ethical_pdma"],
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
+            idma=idma_result,
             ethical_pdma_prompt=ethical_pdma_prompt,
             csdma_prompt=csdma_prompt,
             dsdma_prompt=dsdma_prompt,
+            idma_prompt=idma_prompt,
         )
 
     async def run_dmas(
@@ -266,6 +308,7 @@ class DMAOrchestrator:
             ethical_pdma_result=dma_results.ethical_pdma,
             csdma_result=dma_results.csdma,
             dsdma_result=dma_results.dsdma,
+            idma_result=dma_results.idma,  # Pass IDMA result for information diversity context
             current_thought_depth=getattr(actual_thought, "thought_depth", 0),
             max_rounds=5,  # Default max rounds
             faculty_enhanced=False,

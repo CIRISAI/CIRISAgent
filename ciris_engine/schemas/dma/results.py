@@ -25,6 +25,46 @@ from ..actions.parameters import (
 from ..runtime.enums import HandlerActionType
 
 
+class IDMAResult(BaseModel):
+    """Result from Intuition Decision Making Algorithm (IDMA).
+
+    IDMA is a semantic implementation of the CCA (Coherent Collective Action)
+    intuition faculties. It evaluates source independence, correlation risk,
+    and epistemic phase to detect fragile reasoning without hardware dependencies.
+    """
+
+    k_eff: float = Field(
+        ...,
+        ge=0.0,
+        description="Effective independence score - how many truly independent sources/perspectives inform this reasoning",
+    )
+    correlation_risk: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Estimated correlation between sources (0=independent, 1=fully correlated). CCE risk threshold ~0.43",
+    )
+    phase: str = Field(
+        ...,
+        description="Epistemic phase: 'chaos' (contradictory), 'healthy' (diverse synthesis), or 'rigidity' (echo chamber)",
+    )
+    fragility_flag: bool = Field(
+        ...,
+        description="True if k_eff < 2 OR phase = 'rigidity' - indicates reasoning may be brittle",
+    )
+    sources_identified: List[str] = Field(
+        default_factory=list,
+        description="List of distinct sources/perspectives identified in the reasoning",
+    )
+    correlation_factors: List[str] = Field(
+        default_factory=list,
+        description="Factors contributing to source correlation (e.g., 'same research group', 'derived from single paper')",
+    )
+    reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class EthicalDMAResult(BaseModel):
     """Result from Principled Decision Making Algorithm (PDMA).
 
@@ -100,4 +140,4 @@ class ActionSelectionDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-__all__ = ["EthicalDMAResult", "CSDMAResult", "DSDMAResult", "ActionSelectionDMAResult"]
+__all__ = ["IDMAResult", "EthicalDMAResult", "CSDMAResult", "DSDMAResult", "ActionSelectionDMAResult"]

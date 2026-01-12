@@ -747,6 +747,7 @@ class StreamingVerificationModule:
                                     },
                                     "action_result": {
                                         "action_executed",
+                                        "action_parameters",  # Action params (content for SPEAK, etc.)
                                         "execution_success",
                                         "execution_time_ms",
                                         "follow_up_thought_id",

@@ -190,7 +190,7 @@ class TestSunsetTriggers:
 
             # Check Section VIII reference
             assert "Section VIII" in content
-            assert "covenant_1.0b.txt" in content
+            assert "covenant_1.2b.txt" in content
 
     def test_when_we_pause_policy(self):
         """Test when-we-pause policy document."""

@@ -168,6 +168,7 @@ class EnhancedDMAInputs(BaseModel):
     ethical_pdma_result: Any = Field(..., description="Ethical PDMA result")
     csdma_result: Any = Field(..., description="Common sense DMA result")
     dsdma_result: Optional[Any] = Field(None, description="Domain-specific DMA result")
+    idma_result: Optional[Any] = Field(None, description="Information Diversity Meta-Analysis result")
 
     current_thought_depth: int = Field(0, description="Ponder depth")
     max_rounds: int = Field(5, description="Maximum rounds")

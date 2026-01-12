@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Type
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol as ActionSelectionDMAInterface
 from ciris_engine.protocols.dma.base import CSDMAProtocol as CSDMAInterface
+from ciris_engine.protocols.dma.base import IDMAProtocol as IDMAInterface
 from ciris_engine.protocols.dma.base import PDMAProtocol as EthicalDMAInterface
 from ciris_engine.protocols.faculties import EpistemicFaculty
 from ciris_engine.schemas.config.agent import AgentTemplate
@@ -19,6 +20,7 @@ DSDMA_CLASS_REGISTRY: Dict[str, Type[BaseDSDMA]] = {
 
 ETHICAL_DMA_REGISTRY: Dict[str, Type[EthicalDMAInterface]] = {}
 CSDMA_REGISTRY: Dict[str, Type[CSDMAInterface]] = {}
+IDMA_REGISTRY: Dict[str, Type[IDMAInterface]] = {}
 ACTION_SELECTION_DMA_REGISTRY: Dict[str, Type[ActionSelectionDMAInterface]] = {}
 
 try:
@@ -39,6 +41,13 @@ try:
     from .action_selection_pdma import ActionSelectionPDMAEvaluator
 
     ACTION_SELECTION_DMA_REGISTRY["ActionSelectionPDMAEvaluator"] = ActionSelectionPDMAEvaluator
+except ImportError:
+    pass
+
+try:
+    from .idma import IDMAEvaluator
+
+    IDMA_REGISTRY["IDMAEvaluator"] = IDMAEvaluator
 except ImportError:
     pass
 
@@ -70,6 +79,7 @@ def create_dma(
     registries = {
         "ethical": ETHICAL_DMA_REGISTRY,
         "csdma": CSDMA_REGISTRY,
+        "idma": IDMA_REGISTRY,
         "dsdma": DSDMA_CLASS_REGISTRY,
         "action_selection": ACTION_SELECTION_DMA_REGISTRY,
     }

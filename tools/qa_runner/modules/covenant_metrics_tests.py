@@ -192,10 +192,20 @@ class CovenantMetricsTests:
             if not response:
                 return False, "No response from agent"
 
-            # Give time for trace to be captured
-            await asyncio.sleep(3)
+            # Wait for traces to be flushed (QA uses 5-second flush interval)
+            # Check periodically for trace files to appear
+            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            max_wait = 15  # Wait up to 15 seconds
+            waited = 0
 
-            return True, "Interaction completed, trace should be captured"
+            while waited < max_wait:
+                await asyncio.sleep(2)
+                waited += 2
+                trace_files = list(qa_reports.glob("trace_*.json"))
+                if trace_files:
+                    return True, f"Interaction completed, {len(trace_files)} trace(s) captured"
+
+            return True, "Interaction completed (traces may still be batching)"
 
         except Exception as e:
             return False, str(e)

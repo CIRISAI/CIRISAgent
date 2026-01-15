@@ -322,9 +322,13 @@ class CovenantMetricsService:
         else:
             self._batch_size = 10
 
+        # Flush interval - check env var first for QA testing
+        env_interval = os.environ.get("CIRIS_COVENANT_METRICS_FLUSH_INTERVAL")
         raw_interval = self._config.get("flush_interval_seconds")
-        if raw_interval is not None and isinstance(raw_interval, (int, float, str)):
-            self._flush_interval: float = float(raw_interval)
+        if env_interval is not None:
+            self._flush_interval: float = float(env_interval)
+        elif raw_interval is not None and isinstance(raw_interval, (int, float, str)):
+            self._flush_interval = float(raw_interval)
         else:
             self._flush_interval = 60.0
 

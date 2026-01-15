@@ -15,25 +15,44 @@ The adapter supports three privacy levels for trace capture:
 ### What Each Level Captures
 
 **generic** (default) - Minimum data for CIRIS Capacity Score:
-- All numeric scores (plausibility_score, domain_alignment, k_eff, correlation_risk, etc.)
-- Boolean flags (conscience_passed, fragility_flag, etc.)
-- Execution metrics (tokens, cost, timing)
-- Audit chain hashes (for integrity verification)
-- **NO text strings, NO reasoning, NO prompts**
 
-**detailed** - Adds actionable identifiers:
-- Everything in `generic`, plus:
-- `sources_identified`, `correlation_factors` (IDMA)
-- `stakeholders`, `conflicts` (PDMA)
-- `flags` arrays (CSDMA, DSDMA)
-- Action types and follow-up IDs
+| Component | Fields |
+|-----------|--------|
+| THOUGHT_START | round_number, thought_depth, task_priority, updated_info_available, requires_human_input |
+| SNAPSHOT_AND_CONTEXT | cognitive_state |
+| DMA_RESULTS (CSDMA) | plausibility_score |
+| DMA_RESULTS (DSDMA) | domain_alignment |
+| DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag |
+| ASPDMA_RESULT | selected_action, selection_confidence, is_recursive |
+| CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
+| ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash |
 
-**full_traces** - Complete data for Coherence Ratchet corpus:
-- Everything in `detailed`, plus:
-- Full reasoning text from all DMAs
-- Prompts used for each decision
-- Complete context and conversation history
-- Error messages and raw parameters
+**NO text strings, NO reasoning, NO prompts** at this level.
+
+**detailed** - Adds actionable identifiers (everything in generic, plus):
+
+| Component | Additional Fields |
+|-----------|-------------------|
+| THOUGHT_START | thought_type, thought_status, parent_thought_id, channel_id, source_adapter |
+| SNAPSHOT_AND_CONTEXT | active_services, context_sources |
+| DMA_RESULTS (CSDMA) | flags |
+| DMA_RESULTS (DSDMA) | domain, flags |
+| DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |
+| DMA_RESULTS (IDMA) | phase, sources_identified, correlation_factors |
+| ASPDMA_RESULT | alternatives_considered |
+| CONSCIENCE_RESULT | final_action, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
+| ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |
+
+**full_traces** - Complete data for Coherence Ratchet corpus (everything in detailed, plus):
+
+| Component | Additional Fields |
+|-----------|-------------------|
+| THOUGHT_START | task_description, initial_context |
+| SNAPSHOT_AND_CONTEXT | system_snapshot, gathered_context, relevant_memories, conversation_history |
+| DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
+| ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt |
+| CONSCIENCE_RESULT | conscience_override_reason, epistemic_data, updated_status_content, entropy_reason, coherence_reason, optimization_veto_justification, epistemic_humility_justification |
+| ACTION_RESULT | action_parameters, execution_error, audit_signature |
 
 ## Privacy-First Design
 
@@ -73,33 +92,92 @@ Per CIRIS Covenant Section II, Chapter 2:
 ```
 
 #### Complete Reasoning Traces (H3ERE Pipeline)
-Full 6-component traces capturing the complete reasoning pipeline:
+
+Each trace captures the 6-component reasoning pipeline. Fields vary by trace level:
+
+**Generic Level** (default) - numeric scores only:
 ```json
 {
-  "trace_id": "trace-thought-123-20260112162156",
-  "thought_id": "thought-123",
+  "trace_id": "trace-th_seed_abc123-20260115220652",
+  "thought_id": "th_seed_abc123",
   "task_id": "task-456",
-  "agent_id_hash": "abc123def456...",
+  "agent_id_hash": "sha256_hash...",
+  "started_at": "2026-01-15T22:06:52.658Z",
+  "completed_at": "2026-01-15T22:06:53.917Z",
   "components": [
-    {"component_type": "observation", "event_type": "THOUGHT_START", ...},
-    {"component_type": "context", "event_type": "SNAPSHOT_AND_CONTEXT", ...},
-    {"component_type": "dma_results", "data": {
-      "pdma": {...},      // Ethical PDMA evaluation
-      "csdma": {...},     // Common Sense DMA evaluation
-      "dsdma": {...},     // Domain-Specific DMA evaluation
-      "idma": {           // Intuition DMA (CCA epistemic diversity)
-        "k_eff": 2.0,     // Effective independent sources (>= 2 = healthy)
-        "correlation_risk": 0.2,
-        "phase": "healthy",
-        "fragility_flag": false,
-        "sources_identified": ["source1", "source2"],
-        "reasoning": "..."
+    {
+      "component_type": "observation",
+      "event_type": "THOUGHT_START",
+      "data": {"round_number": 0, "thought_depth": 0, "task_priority": 0}
+    },
+    {
+      "component_type": "context",
+      "event_type": "SNAPSHOT_AND_CONTEXT",
+      "data": {"cognitive_state": null}
+    },
+    {
+      "component_type": "rationale",
+      "event_type": "DMA_RESULTS",
+      "data": {
+        "csdma": {"plausibility_score": 0.9},
+        "dsdma": {"domain_alignment": 0.9},
+        "pdma": null,
+        "idma": {"k_eff": 1.0, "correlation_risk": 0.0, "fragility_flag": true}
       }
-    }},
-    {"component_type": "action", "event_type": "ASPDMA_RESULT", ...},
-    {"component_type": "conscience", "event_type": "CONSCIENCE_RESULT", ...},
-    {"component_type": "outcome", "event_type": "ACTION_RESULT", ...}
-  ]
+    },
+    {
+      "component_type": "rationale",
+      "event_type": "ASPDMA_RESULT",
+      "data": {"selected_action": "SPEAK", "selection_confidence": null, "is_recursive": false}
+    },
+    {
+      "component_type": "conscience",
+      "event_type": "CONSCIENCE_RESULT",
+      "data": {
+        "conscience_passed": true,
+        "entropy_passed": true, "entropy_score": 0.1, "entropy_threshold": 0.4,
+        "coherence_passed": true, "coherence_score": 0.9, "coherence_threshold": 0.6,
+        "optimization_veto_passed": true, "epistemic_humility_passed": true
+      }
+    },
+    {
+      "component_type": "action",
+      "event_type": "ACTION_RESULT",
+      "data": {
+        "execution_success": true,
+        "tokens_total": 205771, "cost_cents": 4.21,
+        "audit_sequence_number": 33, "audit_entry_hash": "480f7afb..."
+      }
+    }
+  ],
+  "signature": "base64_ed25519_signature...",
+  "signature_key_id": "wa-2025-06-14-ROOT00"
+}
+```
+
+**Detailed Level** - adds identifiers and lists (IDMA example):
+```json
+"idma": {
+  "k_eff": 2.0,
+  "correlation_risk": 0.2,
+  "fragility_flag": false,
+  "phase": "healthy",
+  "sources_identified": ["source1", "source2"],
+  "correlation_factors": ["shared_training_data"]
+}
+```
+
+**Full Traces Level** - adds reasoning text (IDMA example):
+```json
+"idma": {
+  "k_eff": 2.0,
+  "correlation_risk": 0.2,
+  "fragility_flag": false,
+  "phase": "healthy",
+  "sources_identified": ["source1", "source2"],
+  "correlation_factors": ["shared_training_data"],
+  "reasoning": "Analysis identified 2 independent sources with low correlation...",
+  "prompt_used": "Evaluate epistemic diversity of the following reasoning..."
 }
 ```
 

@@ -5,6 +5,34 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-01-15
+
+### Added
+
+- **Covenant Metrics Trace Detail Levels** - Three privacy levels for trace capture
+  - `generic` (default): Numeric scores only - powers [ciris.ai/ciris-scoring](https://ciris.ai/ciris-scoring)
+  - `detailed`: Adds actionable lists (sources_identified, stakeholders, flags)
+  - `full_traces`: Complete reasoning text for Coherence Ratchet corpus
+  - Configurable via `CIRIS_COVENANT_METRICS_TRACE_LEVEL` env var or `trace_level` config
+
+### Fixed
+
+- **Multi-Occurrence Task Lookup** - Fixed `__shared__` task visibility across occurrences
+  - `gather_context.py` now uses `get_task_by_id_any_occurrence()` to fetch parent tasks
+  - Thoughts can now find their parent tasks regardless of occurrence_id (including `__shared__` tasks)
+  - Fixes "Could not fetch task" errors in multi-occurrence scout deployments
+  - Exported `get_task_by_id_any_occurrence` from persistence module for consistency
+
+- **Covenant Stego Logging** - Reduced noise from stego scanning normal messages
+  - Zero-match results now log at DEBUG level (expected for non-stego messages)
+  - Only partial matches (>0 but <expected) log at WARNING (possible corruption)
+  - Fixes log spam from defensive scanning of user input
+
+- **Covenant Metrics IDMA Field Extraction** - Fixed incorrect field names in trace capture
+  - Changed `source_assessments` to `sources_identified` (matching IDMAResult schema)
+  - Added missing `correlation_risk` and `correlation_factors` fields
+  - Ensures complete IDMA/CCA data is captured for Coherence Ratchet corpus
+
 ## [1.8.0] - 2026-01-02
 
 ### Added

@@ -2,6 +2,39 @@
 
 This adapter provides covenant compliance metrics collection for CIRISLens, reporting WBD (Wisdom-Based Deferral) events and PDMA decision events as specified in the CIRIS Covenant Section II.
 
+## Trace Detail Levels
+
+The adapter supports three privacy levels for trace capture:
+
+| Level | Default | Description | Use Case |
+|-------|---------|-------------|----------|
+| `generic` | ✅ | Numeric scores only | Powers [ciris.ai/ciris-scoring](https://ciris.ai/ciris-scoring) |
+| `detailed` | | Adds lists & identifiers | Debugging without reasoning exposure |
+| `full_traces` | | Complete reasoning text | Research corpus contribution |
+
+### What Each Level Captures
+
+**generic** (default) - Minimum data for CIRIS Capacity Score:
+- All numeric scores (plausibility_score, domain_alignment, k_eff, correlation_risk, etc.)
+- Boolean flags (conscience_passed, fragility_flag, etc.)
+- Execution metrics (tokens, cost, timing)
+- Audit chain hashes (for integrity verification)
+- **NO text strings, NO reasoning, NO prompts**
+
+**detailed** - Adds actionable identifiers:
+- Everything in `generic`, plus:
+- `sources_identified`, `correlation_factors` (IDMA)
+- `stakeholders`, `conflicts` (PDMA)
+- `flags` arrays (CSDMA, DSDMA)
+- Action types and follow-up IDs
+
+**full_traces** - Complete data for Coherence Ratchet corpus:
+- Everything in `detailed`, plus:
+- Full reasoning text from all DMAs
+- Prompts used for each decision
+- Complete context and conversation history
+- Error messages and raw parameters
+
 ## Privacy-First Design
 
 **CRITICAL**: This adapter requires **EXPLICIT opt-in** via the setup wizard. No data is collected or sent without your consent.
@@ -120,11 +153,14 @@ curl http://localhost:8000/v1/system/adapters/ciris_covenant_metrics
 ## Configuration
 
 Environment variables:
-- `CIRIS_LENS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris.ai/v1`)
+- `CIRIS_COVENANT_METRICS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris.ai/v1`)
+- `CIRIS_COVENANT_METRICS_CONSENT`: Set to `true` to enable (for QA testing)
+- `CIRIS_COVENANT_METRICS_TRACE_LEVEL`: One of `generic`, `detailed`, `full_traces` (default: `generic`)
 
-Wizard configuration:
+Wizard/config file settings:
 - `consent_given`: Boolean - must be true to collect data
 - `consent_timestamp`: ISO timestamp when consent was given
+- `trace_level`: One of `generic`, `detailed`, `full_traces` (default: `generic`)
 - `batch_size`: Number of events to batch (1-100, default: 10)
 - `flush_interval_seconds`: Seconds between batch sends (10-300, default: 60)
 

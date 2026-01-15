@@ -199,10 +199,40 @@ Request body:
 ```json
 {
   "events": [...],
-  "batch_timestamp": "2025-12-15T14:00:00Z",
-  "consent_timestamp": "2025-12-15T13:00:00Z"
+  "batch_timestamp": "2026-01-15T14:00:00Z",
+  "consent_timestamp": "2025-12-15T13:00:00Z",
+  "trace_level": "generic",
+  "correlation_metadata": {
+    "deployment_region": "na",
+    "deployment_type": "business",
+    "agent_role": "customer_support",
+    "agent_template": "discord-moderator"
+  }
 }
 ```
+
+### Batch Payload Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `events` | array | Array of trace/event objects |
+| `batch_timestamp` | string | ISO timestamp when batch was sent |
+| `consent_timestamp` | string | ISO timestamp when user gave consent |
+| `trace_level` | string | Detail level: `generic`, `detailed`, or `full_traces` |
+| `correlation_metadata` | object | Optional early warning correlation data (see below) |
+
+### Early Warning Correlation Metadata
+
+These optional fields help power the CIRIS Early Warning System by enabling correlation analysis across the network. All fields are anonymous and optional.
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `deployment_region` | `na`, `eu`, `uk`, `apac`, `latam`, `mena`, `africa`, `oceania` | Geographic region for timezone/regulatory correlation |
+| `deployment_type` | `personal`, `business`, `research`, `nonprofit` | Deployment context for risk pattern analysis |
+| `agent_role` | `assistant`, `customer_support`, `content`, `coding`, `research`, `education`, `moderation`, `automation`, `other` | Primary agent function for role-specific risk detection |
+| `agent_template` | string | CIRIS template name if using a standard template (e.g., `discord-moderator`) |
+
+Only non-empty fields are included in the payload. If no correlation metadata is configured, the `correlation_metadata` object is omitted entirely.
 
 ## Covenant References
 

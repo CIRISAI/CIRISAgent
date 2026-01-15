@@ -345,6 +345,12 @@ class CovenantMetricsService:
 
         logger.info(f"📊 Trace detail level: {self._trace_level.value}")
 
+        # Early warning correlation metadata (optional, anonymous)
+        self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
+        self._deployment_type: str = str(self._config.get("deployment_type", "") or "")
+        self._agent_role: str = str(self._config.get("agent_role", "") or "")
+        self._agent_template: str = str(self._config.get("agent_template", "") or "")
+
         # Event queue and batching
         self._event_queue: List[Dict[str, Any]] = []
         self._queue_lock = asyncio.Lock()
@@ -563,11 +569,26 @@ class CovenantMetricsService:
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
 
-        payload = {
+        # Build early warning correlation metadata (only include non-empty values)
+        correlation_metadata: Dict[str, str] = {}
+        if self._deployment_region:
+            correlation_metadata["deployment_region"] = self._deployment_region
+        if self._deployment_type:
+            correlation_metadata["deployment_type"] = self._deployment_type
+        if self._agent_role:
+            correlation_metadata["agent_role"] = self._agent_role
+        if self._agent_template:
+            correlation_metadata["agent_template"] = self._agent_template
+
+        payload: Dict[str, Any] = {
             "events": events,
             "batch_timestamp": datetime.now(timezone.utc).isoformat(),
             "consent_timestamp": self._consent_timestamp,
+            "trace_level": self._trace_level.value,
         }
+        # Only add correlation metadata if user opted in to any fields
+        if correlation_metadata:
+            payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/covenant/events"
         logger.info(f"📡 POST {url} ({len(events)} events)")

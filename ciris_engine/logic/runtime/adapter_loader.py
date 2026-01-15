@@ -187,9 +187,35 @@ class AdapterLoader:
         return self.loaded_services.get(service_name)
 
     def _should_skip_manifest(self, manifest: Any, config: Any) -> Optional[str]:
-        """Check if manifest should be skipped. Returns skip reason or None."""
+        """Check if manifest should be skipped. Returns skip reason or None.
+
+        Skips adapters that:
+        1. Are mock services in production mode
+        2. Have auto_load=False (require explicit user enablement)
+        3. Have requires_consent=True (require wizard completion)
+        4. Have opt_in_required=True (require explicit opt-in)
+
+        These adapters will be loaded later by AdapterConfigurationService
+        when the user completes the setup wizard and configuration is persisted.
+        """
+        module_name = manifest.module.name
+
+        # Skip mock services in production
         if not getattr(config, "mock_llm", False) and manifest.module.is_mock:
-            return f"Skipping mock service in production: {manifest.module.name}"
+            return f"Skipping mock service in production: {module_name}"
+
+        # Skip adapters that don't auto-load (require explicit enablement)
+        if not manifest.module.auto_load:
+            return f"Skipping adapter with auto_load=False: {module_name} (requires wizard setup)"
+
+        # Skip adapters that require consent (must complete wizard first)
+        if manifest.module.requires_consent:
+            return f"Skipping adapter with requires_consent=True: {module_name} (requires wizard consent)"
+
+        # Skip adapters that require explicit opt-in
+        if manifest.module.opt_in_required:
+            return f"Skipping adapter with opt_in_required=True: {module_name} (requires explicit opt-in)"
+
         return None
 
     def _build_service_config(self, manifest: Any) -> dict[str, Any]:

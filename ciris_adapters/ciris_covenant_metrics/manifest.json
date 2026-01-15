@@ -26,12 +26,13 @@
   "interactive_config": {
     "required": true,
     "workflow_type": "wizard",
+    "configurable_class": "ciris_covenant_metrics.configurable.CovenantMetricsConfigurable",
     "steps": [
       {
         "step_id": "data_disclosure",
         "step_type": "confirm",
         "title": "Data Collection Disclosure",
-        "description": "This adapter will send the following data to CIRIS L3C (CIRISLens):\n\n**WBD (Wisdom-Based Deferral) Events:**\n- Anonymized agent ID (hash)\n- Thought/Task IDs\n- Deferral reason (no message content)\n- Timestamp and priority\n\n**PDMA Decision Events:**\n- Anonymized agent ID (hash)\n- Selected action type (SPEAK, DEFER, etc.)\n- Rationale summary (no user content)\n- Timestamp\n\n**NOT collected:**\n- User messages or content\n- Personal information\n- Chat history\n- Tool call details\n\nData is sent via HTTPS to https://lens.ciris.ai/v1"
+        "description": "This adapter sends covenant compliance metrics to power the CIRIS Capacity Score at ciris.ai/ciris-scoring.\n\n**Default (Generic Level) - NUMERIC SCORES ONLY:**\n- Plausibility scores, domain alignment scores\n- k_eff (epistemic diversity), correlation risk\n- Conscience check pass/fail and numeric thresholds\n- Execution metrics (tokens, timing)\n- Audit chain hashes for integrity verification\n\n**NO text is sent by default:**\n- No reasoning text\n- No prompts\n- No user messages\n- No conversation content\n\n**You can optionally share more** in the following steps to help improve CIRIS research and enable early warning correlation.\n\nData is sent via HTTPS to https://lens.ciris.ai/v1"
       },
       {
         "step_id": "consent",
@@ -58,10 +59,114 @@
         ]
       },
       {
+        "step_id": "trace_level",
+        "step_type": "input",
+        "title": "Data Detail Level",
+        "description": "Choose how much data to share. By default, only numeric scores are sent - no reasoning text, no prompts, no conversation content. This powers the CIRIS Capacity Score at ciris.ai/ciris-scoring.",
+        "fields": [
+          {
+            "name": "trace_level",
+            "type": "select",
+            "label": "Trace Detail Level",
+            "description": "Controls what data is included in traces sent to CIRISLens",
+            "required": false,
+            "default": "generic",
+            "options": [
+              {
+                "value": "generic",
+                "label": "Generic (Recommended)",
+                "description": "Numeric scores only - no text, no reasoning, no prompts. Minimum data for CIRIS scoring."
+              },
+              {
+                "value": "detailed",
+                "label": "Detailed",
+                "description": "Adds source lists, stakeholders, and flags. Good for debugging without exposing reasoning."
+              },
+              {
+                "value": "full_traces",
+                "label": "Full Traces (Research)",
+                "description": "Complete reasoning text and prompts. For Coherence Ratchet research corpus contribution."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "step_id": "early_warning",
+        "step_type": "input",
+        "title": "Early Warning System (Optional)",
+        "description": "Help improve the CIRIS Early Warning System by sharing optional context about your deployment. This enables correlation analysis to detect emerging risks across the CIRIS network. All fields are optional and anonymous.",
+        "optional": true,
+        "fields": [
+          {
+            "name": "deployment_region",
+            "type": "select",
+            "label": "Region",
+            "description": "General geographic region for timezone and regulatory correlation",
+            "required": false,
+            "default": "",
+            "options": [
+              {"value": "", "label": "Prefer not to say"},
+              {"value": "na", "label": "North America"},
+              {"value": "eu", "label": "Europe"},
+              {"value": "uk", "label": "United Kingdom"},
+              {"value": "apac", "label": "Asia-Pacific"},
+              {"value": "latam", "label": "Latin America"},
+              {"value": "mena", "label": "Middle East & North Africa"},
+              {"value": "africa", "label": "Africa"},
+              {"value": "oceania", "label": "Oceania"}
+            ]
+          },
+          {
+            "name": "deployment_type",
+            "type": "select",
+            "label": "Deployment Type",
+            "description": "Personal or business use - helps with risk pattern analysis",
+            "required": false,
+            "default": "",
+            "options": [
+              {"value": "", "label": "Prefer not to say"},
+              {"value": "personal", "label": "Personal Use"},
+              {"value": "business", "label": "Business Use"},
+              {"value": "research", "label": "Research/Academic"},
+              {"value": "nonprofit", "label": "Non-Profit/NGO"}
+            ]
+          },
+          {
+            "name": "agent_role",
+            "type": "select",
+            "label": "Agent Role",
+            "description": "Primary function of this agent - enables role-specific risk detection",
+            "required": false,
+            "default": "",
+            "options": [
+              {"value": "", "label": "Prefer not to say"},
+              {"value": "assistant", "label": "General Assistant"},
+              {"value": "customer_support", "label": "Customer Support"},
+              {"value": "content", "label": "Content Creation"},
+              {"value": "coding", "label": "Coding/Development"},
+              {"value": "research", "label": "Research/Analysis"},
+              {"value": "education", "label": "Education/Tutoring"},
+              {"value": "moderation", "label": "Moderation"},
+              {"value": "automation", "label": "Automation/Workflows"},
+              {"value": "other", "label": "Other"}
+            ]
+          },
+          {
+            "name": "agent_template",
+            "type": "string",
+            "label": "Template Name",
+            "description": "If using a CIRIS template, enter its name (e.g., 'discord-moderator', 'api-assistant')",
+            "required": false,
+            "default": ""
+          }
+        ]
+      },
+      {
         "step_id": "endpoint_config",
         "step_type": "input",
-        "title": "CIRISLens Configuration",
-        "description": "Configure the CIRISLens endpoint for covenant metrics",
+        "title": "Advanced Configuration",
+        "description": "Configure the CIRISLens endpoint and batching behavior (most users can skip this)",
         "optional": true,
         "fields": [
           {
@@ -112,7 +217,8 @@
     ]
   },
   "exports": {
-    "wisdom_service": "ciris_covenant_metrics.services.CovenantMetricsService"
+    "wisdom_service": "ciris_covenant_metrics.services.CovenantMetricsService",
+    "configurable": "ciris_covenant_metrics.configurable.CovenantMetricsConfigurable"
   },
   "configuration": {
     "endpoint_url": {
@@ -130,6 +236,32 @@
       "type": "string",
       "default": null,
       "description": "ISO timestamp when consent was given"
+    },
+    "trace_level": {
+      "type": "string",
+      "env": "CIRIS_COVENANT_METRICS_TRACE_LEVEL",
+      "default": "generic",
+      "description": "Trace detail level: generic (numeric only), detailed (adds lists), full_traces (complete reasoning)"
+    },
+    "deployment_region": {
+      "type": "string",
+      "default": "",
+      "description": "Geographic region for early warning correlation (optional)"
+    },
+    "deployment_type": {
+      "type": "string",
+      "default": "",
+      "description": "Personal, business, research, or nonprofit deployment (optional)"
+    },
+    "agent_role": {
+      "type": "string",
+      "default": "",
+      "description": "Primary agent function for role-specific risk detection (optional)"
+    },
+    "agent_template": {
+      "type": "string",
+      "default": "",
+      "description": "CIRIS template name if applicable (optional)"
     },
     "batch_size": {
       "type": "integer",

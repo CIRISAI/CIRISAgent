@@ -466,10 +466,12 @@ class APIServerManager:
             self.console.print("[yellow]⚠️  Server already running[/yellow]")
             return True
 
-        # For live mode, clear wakeup state and traces for fresh 5-step wakeup
+        # For live mode, clear wakeup state for fresh 5-step wakeup
         if self.config.live_api_key:
             self._clear_wakeup_state()
-            self._clear_trace_files()
+
+        # Always clear trace files to ensure validation reflects current run
+        self._clear_trace_files()
 
         # Ensure minimal .env exists for QA testing (respects mock_llm setting)
         if not _ensure_env_file(self.console, mock_llm=self.config.mock_llm):

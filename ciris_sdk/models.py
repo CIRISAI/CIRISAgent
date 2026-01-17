@@ -16,12 +16,7 @@ from .model_types import (
     ProcessorStateInfo,
 )
 from .model_types import ServiceMetadata as ServiceMetadataTyped
-from .model_types import (
-    SystemConfiguration,
-    TelemetryAttributes,
-    ThoughtContent,
-    VerificationResult,
-)
+from .model_types import SystemConfiguration, TelemetryAttributes, ThoughtContent, VerificationResult
 
 
 class Message(BaseModel):

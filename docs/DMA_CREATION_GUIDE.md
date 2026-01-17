@@ -6,12 +6,13 @@ Decision Making Algorithms (DMAs) are the evaluation modules that help CIRIS mak
 
 DMAs are pluggable evaluation modules that process agent thoughts through different lenses:
 
-1. **Ethical DMAs** - Ensure decisions align with moral principles
+1. **Ethical DMAs (PDMA)** - Ensure decisions align with moral principles
 2. **Common Sense DMAs (CSDMA)** - Check for logical consistency and plausibility
 3. **Domain-Specific DMAs (DSDMA)** - Apply specialized knowledge (medical, legal, educational)
-4. **Action Selection DMAs** - Choose concrete actions from evaluated options
+4. **Intuition DMAs (IDMA)** - Coherence Collapse Analysis for source independence detection
+5. **Action Selection DMAs (ASPDMA)** - Choose concrete actions from evaluated options
 
-Every decision in CIRIS passes through multiple DMAs, creating a comprehensive evaluation framework that can be customized for different deployments.
+Every decision in CIRIS passes through all 4 core DMAs (PDMA, CSDMA, DSDMA, IDMA), then ASPDMA selects the final action, creating a comprehensive evaluation framework that can be customized for different deployments.
 
 ## Why Create Custom DMAs?
 
@@ -27,12 +28,27 @@ Different deployments need different decision criteria:
 
 ```python
 from ciris_engine.protocols.dma_interface import (
-    EthicalDMAInterface,      # For moral/ethical evaluation
+    EthicalDMAInterface,      # For moral/ethical evaluation (PDMA)
     CSDMAInterface,           # For common sense checking
     DSDMAInterface,           # For domain-specific logic
-    ActionSelectionDMAInterface,  # For final action selection
+    IDMAInterface,            # For intuition/coherence analysis
+    ActionSelectionDMAInterface,  # For final action selection (ASPDMA)
 )
 ```
+
+### Understanding IDMA (Intuition DMA)
+
+The IDMA implements Coherence Collapse Analysis (CCA) from the Covenant's Book IX. It evaluates whether information sources are truly independent or correlated (echo chamber detection).
+
+**When to create custom IDMA logic:**
+- Specialized source credibility assessment for your domain
+- Custom correlation detection for domain-specific information patterns
+- Integration with domain-specific fact-checking services
+
+**The k_eff formula:** `k_eff = k / (1 + ρ(k-1))`
+- `k` = number of sources
+- `ρ` = average correlation between sources
+- If `k_eff < 2`, the agent flags fragility (effectively relying on single source)
 
 ### 2. Create Your DMA Class
 

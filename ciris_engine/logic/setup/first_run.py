@@ -34,7 +34,13 @@ def get_config_paths() -> list[Path]:
 
         Note: ~/.ciris/ is for keys/secrets/audit_keys only, NOT config!
     """
-    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_development_mode, is_ios, is_managed
+    from ciris_engine.logic.utils.path_resolution import (
+        get_ciris_home,
+        is_android,
+        is_development_mode,
+        is_ios,
+        is_managed,
+    )
 
     paths = []
 

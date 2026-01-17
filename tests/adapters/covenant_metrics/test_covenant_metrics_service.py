@@ -19,10 +19,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_adapters.ciris_covenant_metrics.services import (
+    CompleteTrace,
     CovenantMetricsService,
     SimpleCapabilities,
     TraceComponent,
-    CompleteTrace,
 )
 from ciris_engine.schemas.services.authority_core import DeferralRequest
 

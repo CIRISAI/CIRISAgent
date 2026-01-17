@@ -35,8 +35,8 @@ def gensalt(rounds: int = 12, prefix: bytes = b"2b") -> bytes:
     salt_bytes = os.urandom(16)
     # Encode in a format that includes the "rounds" for bcrypt compatibility
     # Format: $pbkdf2$<iterations>$<salt_b64>
-    salt_b64 = base64.b64encode(salt_bytes).decode('ascii')
-    return f"$pbkdf2$310000${salt_b64}".encode('utf-8')
+    salt_b64 = base64.b64encode(salt_bytes).decode("ascii")
+    return f"$pbkdf2$310000${salt_b64}".encode("utf-8")
 
 
 def hashpw(password: bytes, salt: bytes) -> bytes:
@@ -49,37 +49,31 @@ def hashpw(password: bytes, salt: bytes) -> bytes:
     Returns:
         Hashed password in bcrypt-compatible format
     """
-    salt_str = salt.decode('utf-8')
+    salt_str = salt.decode("utf-8")
 
-    if salt_str.startswith('$pbkdf2$'):
+    if salt_str.startswith("$pbkdf2$"):
         # Our PBKDF2 format: $pbkdf2$<iterations>$<salt_b64>
-        parts = salt_str.split('$')
+        parts = salt_str.split("$")
         iterations = int(parts[2])
         salt_b64 = parts[3]
         salt_bytes = base64.b64decode(salt_b64)
-    elif salt_str.startswith('$2'):
+    elif salt_str.startswith("$2"):
         # Legacy bcrypt format - convert to PBKDF2
         # Extract what we can and generate new salt
         salt_bytes = os.urandom(16)
         iterations = 310000
-        salt_b64 = base64.b64encode(salt_bytes).decode('ascii')
+        salt_b64 = base64.b64encode(salt_bytes).decode("ascii")
     else:
         raise ValueError(f"Unknown salt format: {salt_str[:20]}")
 
     # Hash using PBKDF2-SHA256
-    dk = hashlib.pbkdf2_hmac(
-        'sha256',
-        password,
-        salt_bytes,
-        iterations,
-        dklen=32
-    )
+    dk = hashlib.pbkdf2_hmac("sha256", password, salt_bytes, iterations, dklen=32)
 
     # Encode the hash
-    hash_b64 = base64.b64encode(dk).decode('ascii')
+    hash_b64 = base64.b64encode(dk).decode("ascii")
 
     # Return in our format: $pbkdf2$<iterations>$<salt_b64>$<hash_b64>
-    return f"$pbkdf2${iterations}${salt_b64}${hash_b64}".encode('utf-8')
+    return f"$pbkdf2${iterations}${salt_b64}${hash_b64}".encode("utf-8")
 
 
 def checkpw(password: bytes, hashed_password: bytes) -> bool:
@@ -92,11 +86,11 @@ def checkpw(password: bytes, hashed_password: bytes) -> bool:
     Returns:
         True if password matches, False otherwise
     """
-    hashed_str = hashed_password.decode('utf-8')
+    hashed_str = hashed_password.decode("utf-8")
 
-    if hashed_str.startswith('$pbkdf2$'):
+    if hashed_str.startswith("$pbkdf2$"):
         # Our PBKDF2 format: $pbkdf2$<iterations>$<salt_b64>$<hash_b64>
-        parts = hashed_str.split('$')
+        parts = hashed_str.split("$")
         iterations = int(parts[2])
         salt_b64 = parts[3]
         stored_hash_b64 = parts[4]
@@ -105,18 +99,12 @@ def checkpw(password: bytes, hashed_password: bytes) -> bool:
         stored_hash = base64.b64decode(stored_hash_b64)
 
         # Compute hash with same parameters
-        dk = hashlib.pbkdf2_hmac(
-            'sha256',
-            password,
-            salt_bytes,
-            iterations,
-            dklen=32
-        )
+        dk = hashlib.pbkdf2_hmac("sha256", password, salt_bytes, iterations, dklen=32)
 
         # Constant-time comparison
         return _constant_time_compare(dk, stored_hash)
 
-    elif hashed_str.startswith('$2'):
+    elif hashed_str.startswith("$2"):
         # This is a legacy bcrypt hash - we can't verify it without native bcrypt
         # In production, you'd want to rehash on next login
         print("[iOS bcrypt] Warning: Cannot verify legacy bcrypt hash, returning False", flush=True)
@@ -137,4 +125,4 @@ def _constant_time_compare(a: bytes, b: bytes) -> bool:
 
 
 # Install this module as 'bcrypt' so imports work
-sys.modules['bcrypt'] = sys.modules[__name__]
+sys.modules["bcrypt"] = sys.modules[__name__]

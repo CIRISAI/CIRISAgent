@@ -13,19 +13,28 @@ The DMA (Decision Making Algorithm) system provides structured, ethical decision
 | **BaseDMA** | Abstract base for all DMAs | `base_dma.py` |
 | **BaseDSDMA** | Base for Decision Support DMAs | `dsdma_base.py` |
 
-### H3ERE DMA Architecture: 3 Core + 1 Recursive = 4 Total DMAs
+### H3ERE DMA Architecture: 4 Core + 1 Recursive = 5 Total DMAs
 
 | DMA Type | Class | Purpose | Protocol |
 |----------|-------|---------|----------|
 | **PDMA** | `EthicalPDMAEvaluator` | Principled ethical evaluation | `PDMAProtocol` |
 | **CSDMA** | `CSDMAEvaluator` | Common-sense validation | `CSDMAProtocol` |
 | **DSDMA** | `BaseDSDMA` | Domain-specific criteria | `DSDMAProtocol` |
+| **IDMA** | `IDMAEvaluator` | Intuition/Coherence Collapse Analysis | `IDMAProtocol` |
 | **ASPDMA** | `ActionSelectionPDMAEvaluator` | **Recursive action selection** | `ActionSelectionDMAProtocol` |
 
 #### DMA Processing Flow
 1. **PDMA, CSDMA, DSDMA** evaluate thoughts against their respective criteria
-2. **ASPDMA** recursively processes the 3 DMA outputs to select final action
-3. Selected action triggers one of the 10 H3ERE handlers
+2. **IDMA** applies Coherence Collapse Analysis (CCA) to detect correlated source fragility
+3. **ASPDMA** recursively processes the 4 DMA outputs to select final action
+4. Selected action triggers one of the 10 H3ERE handlers
+
+#### IDMA: Intuition Decision Making Algorithm
+The IDMA implements the Coherence Ratchet's k_eff formula: `k_eff = k / (1 + ρ(k-1))`
+- Evaluates source independence to detect echo chambers and correlation-driven failures
+- Phase classification: chaos (contradictory) / healthy (diverse) / rigidity (echo chamber)
+- Flags fragility when k_eff < 2 OR phase = "rigidity"
+- Non-fatal: pipeline continues with warning if IDMA fails
 
 ## Key Components
 

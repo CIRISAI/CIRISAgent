@@ -88,7 +88,7 @@ for method in "${runtime_methods[@]}"; do
   else
     echo "✗ $method (expect) - MISSING"
   fi
-  
+
   if grep -q "$method" src/androidMain/kotlin/ai/ciris/mobile/shared/platform/PythonRuntime.android.kt 2>/dev/null; then
     echo "✓ $method (actual)"
   else

@@ -72,8 +72,14 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._transport = transport
         self._using_fallback = False
 
-        # Determine auth mode based on resolved token (including env fallback)
-        self._use_jwt_auth = bool(self._google_id_token)
+        # Determine auth mode: prefer explicit api_key if provided, otherwise use JWT if available
+        # This ensures that explicitly passing api_key takes precedence over env-sourced google_id_token
+        if api_key:
+            # Explicit API key passed - use API key auth
+            self._use_jwt_auth = False
+        else:
+            # No explicit API key - use JWT if we have a google_id_token
+            self._use_jwt_auth = bool(self._google_id_token)
 
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()

@@ -8,8 +8,8 @@ import random
 import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
-from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
 from ciris_engine.logic.utils import error_emitter
+from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -164,14 +164,14 @@ class LLMBus(BaseBus[LLMService]):
     def _extract_full_error_from_cause_chain(self, e: Exception) -> str:
         """Extract full error message from exception cause chain."""
         full_error = str(e)
-        cause = getattr(e, '__cause__', None)
+        cause = getattr(e, "__cause__", None)
 
         while cause:
             cause_str = str(cause)
             if "try again in" in cause_str.lower():
                 return cause_str
 
-            if hasattr(cause, 'last_attempt'):
+            if hasattr(cause, "last_attempt"):
                 try:
                     nested_exc = cause.last_attempt.exception()
                     if nested_exc:
@@ -179,15 +179,15 @@ class LLMBus(BaseBus[LLMService]):
                 except Exception:
                     pass
 
-            cause = getattr(cause, '__cause__', None)
+            cause = getattr(cause, "__cause__", None)
 
         return full_error
 
     def _extract_retry_after_time(self, full_error: str) -> float:
         """Extract retry-after time from error message. Returns wait time in seconds."""
         wait_time = 5.0  # Default wait
-        match_ms = re.search(r'try again in (\d+\.?\d*)ms', full_error, re.IGNORECASE)
-        match_s = re.search(r'try again in (\d+\.?\d*)s(?![\w])', full_error, re.IGNORECASE)
+        match_ms = re.search(r"try again in (\d+\.?\d*)ms", full_error, re.IGNORECASE)
+        match_s = re.search(r"try again in (\d+\.?\d*)s(?![\w])", full_error, re.IGNORECASE)
 
         if match_ms:
             wait_time = float(match_ms.group(1)) / 1000.0 + 0.5
@@ -204,6 +204,55 @@ class LLMBus(BaseBus[LLMService]):
     def _is_schema_validation_error(self, error_str: str) -> bool:
         """Check if error is a schema validation error."""
         return "validation error" in error_str or "model_type" in error_str or "instructor" in error_str
+
+    async def _handle_retry_error(
+        self,
+        e: Exception,
+        service_name: str,
+        retry_count: int,
+        max_retries: int,
+        rate_limit_retry_count: int,
+        max_rate_limit_retries: int,
+        rate_limit_start_time: Optional[float],
+        max_rate_limit_total_time: float,
+    ) -> Tuple[str, bool, int, Optional[float]]:
+        """
+        Handle retry logic for different error types.
+
+        Returns: (action, is_rate_limit, updated_rate_limit_count, updated_start_time)
+        - action: "continue" (retry), "break" (stop retrying), "continue_no_increment" (rate limit retry)
+        """
+        error_str = str(e).lower()
+        full_error = self._extract_full_error_from_cause_chain(e)
+
+        # Handle rate limit errors
+        if self._is_rate_limit_error(error_str, full_error):
+            rate_limit_retry_count += 1
+            should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
+                service_name,
+                full_error,
+                rate_limit_retry_count,
+                max_rate_limit_retries,
+                rate_limit_start_time,
+                max_rate_limit_total_time,
+            )
+            action = "continue_no_increment" if should_continue else "break"
+            return action, True, rate_limit_retry_count, rate_limit_start_time
+
+        # Handle schema validation errors
+        if self._is_schema_validation_error(error_str):
+            if retry_count < max_retries:
+                logger.warning(f"Schema validation failed on {service_name}, retrying ({retry_count}/{max_retries})")
+                return "continue", False, rate_limit_retry_count, rate_limit_start_time
+
+        # Handle exhausted retries
+        if retry_count >= max_retries:
+            logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+            return "break", False, rate_limit_retry_count, rate_limit_start_time
+
+        # General error - log and continue
+        logger.warning(f"LLM error on {service_name} (attempt {retry_count}): {type(e).__name__}")
+        return "continue", False, rate_limit_retry_count, rate_limit_start_time
 
     async def _handle_rate_limit_retry(
         self,
@@ -224,7 +273,9 @@ class LLMBus(BaseBus[LLMService]):
 
         # Check if we've exceeded limits
         if elapsed >= max_rate_limit_total_time:
-            logger.warning(f"Rate limit total time ({elapsed:.1f}s) exceeded {max_rate_limit_total_time}s on {service_name}")
+            logger.warning(
+                f"Rate limit total time ({elapsed:.1f}s) exceeded {max_rate_limit_total_time}s on {service_name}"
+            )
             return False, 0, rate_limit_start_time
 
         if rate_limit_retry_count >= max_rate_limit_retries:
@@ -236,7 +287,9 @@ class LLMBus(BaseBus[LLMService]):
         if wait_time > remaining:
             wait_time = max(remaining, 0.5)
 
-        logger.warning(f"Rate limited on {service_name}, waiting {wait_time:.1f}s before retry ({rate_limit_retry_count}/{max_rate_limit_retries}, {remaining:.1f}s budget)")
+        logger.warning(
+            f"Rate limited on {service_name}, waiting {wait_time:.1f}s before retry ({rate_limit_retry_count}/{max_rate_limit_retries}, {remaining:.1f}s budget)"
+        )
 
         # Emit error to UI
         task = asyncio.create_task(error_emitter.emit_rate_limit_error(provider=service_name, wait_time=wait_time))
@@ -268,7 +321,9 @@ class LLMBus(BaseBus[LLMService]):
         self._record_failure(service_name)
 
         if service_name not in self._services_with_full_error_logged:
-            logger.error(f"LLM service {service_name} failed after {max_retries} retries: {service_last_error}", exc_info=True)
+            logger.error(
+                f"LLM service {service_name} failed after {max_retries} retries: {service_last_error}", exc_info=True
+            )
             self._services_with_full_error_logged.add(service_name)
         else:
             logger.warning(f"LLM service {service_name} failed (repeated): {service_last_error}")
@@ -300,22 +355,19 @@ class LLMBus(BaseBus[LLMService]):
 
         while retry_count < max_retries:
             try:
-                logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
-
-                result, usage = await selected_service.call_llm_structured(
-                    messages=normalized_messages,
-                    response_model=response_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    thought_id=thought_id,
-                    task_id=task_id,
+                result, usage = await self._execute_llm_call(
+                    selected_service,
+                    service_name,
+                    normalized_messages,
+                    response_model,
+                    max_tokens,
+                    temperature,
+                    thought_id,
+                    task_id,
+                    handler_name,
+                    start_time,
+                    retry_count,
                 )
-
-                latency_ms = (self._time_service.timestamp() - start_time) * 1000
-                self._record_success(service_name, latency_ms)
-                await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
-                logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
-
                 return result, usage, None, False
 
             except BillingServiceError:
@@ -324,39 +376,60 @@ class LLMBus(BaseBus[LLMService]):
 
             except Exception as e:
                 service_last_error = e
-                error_str = str(e).lower()
                 retry_count += 1
-                full_error = self._extract_full_error_from_cause_chain(e)
 
-                if self._is_rate_limit_error(error_str, full_error):
-                    last_was_rate_limit = True
-                    rate_limit_retry_count += 1
-
-                    should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
-                        service_name, full_error, rate_limit_retry_count, max_rate_limit_retries,
-                        rate_limit_start_time, max_rate_limit_total_time
+                action, last_was_rate_limit, rate_limit_retry_count, rate_limit_start_time = (
+                    await self._handle_retry_error(
+                        e,
+                        service_name,
+                        retry_count,
+                        max_retries,
+                        rate_limit_retry_count,
+                        max_rate_limit_retries,
+                        rate_limit_start_time,
+                        max_rate_limit_total_time,
                     )
+                )
 
-                    if not should_continue:
-                        break
-
-                    retry_count -= 1  # Don't count rate limit as regular retry
-                    continue
-
-                if self._is_schema_validation_error(error_str):
-                    last_was_rate_limit = False
-                    if retry_count < max_retries:
-                        logger.warning(f"Schema validation failed on {service_name}, retrying ({retry_count}/{max_retries})")
-                        continue
-
-                if retry_count >= max_retries:
-                    logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+                if action == "break":
                     break
-
-                last_was_rate_limit = False
-                logger.warning(f"LLM error on {service_name} (attempt {retry_count}): {type(e).__name__}")
+                if action == "continue_no_increment":
+                    retry_count -= 1  # Don't count rate limit as regular retry
 
         return None, None, service_last_error, last_was_rate_limit
+
+    async def _execute_llm_call(
+        self,
+        selected_service: Any,
+        service_name: str,
+        normalized_messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        handler_name: str,
+        start_time: float,
+        retry_count: int,
+    ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
+        """Execute the actual LLM call and record metrics on success."""
+        logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+
+        result, usage = await selected_service.call_llm_structured(
+            messages=normalized_messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            thought_id=thought_id,
+            task_id=task_id,
+        )
+
+        latency_ms = (self._time_service.timestamp() - start_time) * 1000
+        self._record_success(service_name, latency_ms)
+        await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
+        logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
+
+        return result, usage
 
     async def call_llm_structured(
         self,
@@ -398,9 +471,17 @@ class LLMBus(BaseBus[LLMService]):
                 continue
 
             result = await self._try_service(
-                selected_service, service_name, normalized_messages, response_model,
-                max_tokens, temperature, thought_id, task_id, handler_name,
-                start_time, max_retries_per_service,
+                selected_service,
+                service_name,
+                normalized_messages,
+                response_model,
+                max_tokens,
+                temperature,
+                thought_id,
+                task_id,
+                handler_name,
+                start_time,
+                max_retries_per_service,
             )
 
             if result[0] is not None and result[1] is not None:  # Success

@@ -50,32 +50,38 @@ def analyze_log(log_path: str) -> dict:
             token_match = re.search(r"Limit (\d+), Used (\d+), Requested (\d+)", line)
             retry_match = re.search(r"try again in ([\d.]+)s", line, re.IGNORECASE)
 
-            stats["rate_limits"].append({
-                "timestamp": ts,
-                "line_num": i + 1,
-                "limit": int(token_match.group(1)) if token_match else None,
-                "used": int(token_match.group(2)) if token_match else None,
-                "requested": int(token_match.group(3)) if token_match else None,
-                "retry_after": float(retry_match.group(1)) if retry_match else None,
-            })
+            stats["rate_limits"].append(
+                {
+                    "timestamp": ts,
+                    "line_num": i + 1,
+                    "limit": int(token_match.group(1)) if token_match else None,
+                    "used": int(token_match.group(2)) if token_match else None,
+                    "requested": int(token_match.group(3)) if token_match else None,
+                    "retry_after": float(retry_match.group(1)) if retry_match else None,
+                }
+            )
             stats["errors_by_type"]["rate_limit_429"] += 1
 
         # Circuit breaker events
         if "circuit breaker" in line.lower() or "Circuit breaker" in line:
             if "opened" in line.lower() or "OPEN" in line:
-                stats["circuit_breaker_events"].append({
-                    "timestamp": ts,
-                    "event": "OPENED",
-                    "line_num": i + 1,
-                    "line": line.strip()[:150],
-                })
+                stats["circuit_breaker_events"].append(
+                    {
+                        "timestamp": ts,
+                        "event": "OPENED",
+                        "line_num": i + 1,
+                        "line": line.strip()[:150],
+                    }
+                )
             elif "closed" in line.lower() or "reset" in line.lower():
-                stats["circuit_breaker_events"].append({
-                    "timestamp": ts,
-                    "event": "CLOSED/RESET",
-                    "line_num": i + 1,
-                    "line": line.strip()[:150],
-                })
+                stats["circuit_breaker_events"].append(
+                    {
+                        "timestamp": ts,
+                        "event": "CLOSED/RESET",
+                        "line_num": i + 1,
+                        "line": line.strip()[:150],
+                    }
+                )
             elif "skipping" in line.lower():
                 stats["errors_by_type"]["circuit_breaker_skip"] += 1
 
@@ -83,21 +89,25 @@ def analyze_log(log_path: str) -> dict:
         if "retry" in line.lower() and ("waiting" in line.lower() or "attempt" in line.lower()):
             retry_match = re.search(r"\((\d+)/(\d+)\)", line)
             wait_match = re.search(r"waiting ([\d.]+)s", line, re.IGNORECASE)
-            stats["retries"].append({
-                "timestamp": ts,
-                "attempt": int(retry_match.group(1)) if retry_match else None,
-                "max_attempts": int(retry_match.group(2)) if retry_match else None,
-                "wait_time": float(wait_match.group(1)) if wait_match else None,
-                "line_num": i + 1,
-            })
+            stats["retries"].append(
+                {
+                    "timestamp": ts,
+                    "attempt": int(retry_match.group(1)) if retry_match else None,
+                    "max_attempts": int(retry_match.group(2)) if retry_match else None,
+                    "wait_time": float(wait_match.group(1)) if wait_match else None,
+                    "line_num": i + 1,
+                }
+            )
 
         # LLM call completion
         if "LLM call completed" in line or "call_llm_structured" in line:
-            stats["llm_calls"].append({
-                "timestamp": ts,
-                "line_num": i + 1,
-                "success": "completed" in line.lower() or "success" in line.lower(),
-            })
+            stats["llm_calls"].append(
+                {
+                    "timestamp": ts,
+                    "line_num": i + 1,
+                    "success": "completed" in line.lower() or "success" in line.lower(),
+                }
+            )
 
         # Error type categorization
         if "ERROR" in line:
@@ -143,7 +153,9 @@ def print_report(stats: dict, log_path: str):
             print(f"\nToken Usage at Rate Limit Events:")
             for event in token_events[:10]:  # Show first 10
                 pct = (event["used"] / event["limit"] * 100) if event["limit"] else 0
-                print(f"  {event['timestamp']}: Used {event['used']:,}/{event['limit']:,} ({pct:.1f}%) + Requested {event['requested']:,}")
+                print(
+                    f"  {event['timestamp']}: Used {event['used']:,}/{event['limit']:,} ({pct:.1f}%) + Requested {event['requested']:,}"
+                )
             if len(token_events) > 10:
                 print(f"  ... and {len(token_events) - 10} more")
 
@@ -217,14 +229,16 @@ def print_report(stats: dict, log_path: str):
         print("     - Rate limits are transient; circuit breaker is for persistent failures")
 
     if stats["rate_limits"]:
-        avg_retry = sum(r["retry_after"] or 0 for r in stats["rate_limits"]) / max(1, len([r for r in stats["rate_limits"] if r["retry_after"]]))
+        avg_retry = sum(r["retry_after"] or 0 for r in stats["rate_limits"]) / max(
+            1, len([r for r in stats["rate_limits"] if r["retry_after"]])
+        )
         if avg_retry > 0:
             print(f"  💡 API suggests retry after ~{avg_retry:.1f}s on average")
             print(f"     - Consider setting retry wait to {max(2, avg_retry + 0.5):.1f}s")
 
     token_events = [r for r in stats["rate_limits"] if r["used"] and r["limit"]]
     if token_events:
-        avg_usage_pct = sum(e["used"]/e["limit"]*100 for e in token_events) / len(token_events)
+        avg_usage_pct = sum(e["used"] / e["limit"] * 100 for e in token_events) / len(token_events)
         print(f"  📊 Average token usage at rate limit: {avg_usage_pct:.1f}%")
         if avg_usage_pct > 90:
             print("     - Tokens nearly exhausted before rate limit")

@@ -187,7 +187,10 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                     request_timestamp=start_time,
                 ),
                 response_data=ServiceResponseData(
-                    success=True, result_summary=f"{message_type} message sent", execution_time_ms=0, response_timestamp=start_time
+                    success=True,
+                    result_summary=f"{message_type} message sent",
+                    execution_time_ms=0,
+                    response_timestamp=start_time,
                 ),
                 status=ServiceCorrelationStatus.COMPLETED,
                 created_at=start_time,

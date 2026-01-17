@@ -8,7 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ciris_engine.logic.adapters.api.routes.system import _get_core_adapter_info, _parse_manifest_to_module_info
+from ciris_engine.logic.adapters.api.routes.system.adapters import (
+    _get_core_adapter_info,
+    _parse_manifest_to_module_info,
+)
 from ciris_engine.schemas.runtime.adapter_management import ModuleConfigParameter, ModuleTypeInfo, ModuleTypesResponse
 
 

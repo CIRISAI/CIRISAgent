@@ -199,6 +199,11 @@ async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds
     help="One or more adapters to run. Specify multiple times for multiple adapters (e.g., --adapter cli --adapter api --adapter discord).",
 )
 @click.option("--template", default="default", help="Agent template name (only used for first-time setup)")
+@click.option(
+    "--identity-update/--no-identity-update",
+    default=False,
+    help="Update existing identity from template (admin operation, requires --template)",
+)
 @click.option("--config", "config_file_path", type=click.Path(), help="Path to app config")
 @click.option("--task", multiple=True, help="Task description to add before starting")
 @click.option("--timeout", type=int, help="Maximum runtime duration in seconds")
@@ -223,6 +228,7 @@ async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds
 def main(
     adapter_types_list: tuple[str, ...],
     template: str,
+    identity_update: bool,
     config_file_path: Optional[str],
     task: tuple[str],
     timeout: Optional[int],
@@ -600,6 +606,7 @@ def main(
             port=api_port,
             discord_bot_token=discord_bot_token,
             modules=modules_to_load,  # Pass modules to load
+            identity_update=identity_update,  # Admin flag to refresh identity from template
         )
         await runtime.initialize()
 

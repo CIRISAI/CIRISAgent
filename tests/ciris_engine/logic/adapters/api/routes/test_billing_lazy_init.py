@@ -6,10 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from fastapi import Request
 
-from ciris_engine.logic.adapters.api.routes.billing import (
-    _get_credit_provider,
-    _try_lazy_init_billing_provider,
-)
+from ciris_engine.logic.adapters.api.routes.billing import _get_credit_provider, _try_lazy_init_billing_provider
 
 
 class TestGetCreditProvider:

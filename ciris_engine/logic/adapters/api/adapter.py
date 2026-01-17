@@ -795,9 +795,7 @@ class ApiPlatform(Service):
         # Wire up error emitter to send system/error messages
         from ciris_engine.logic.utils import error_emitter
 
-        async def emit_error_to_communication(
-            channel_id: str, content: str, message_type: str
-        ) -> None:
+        async def emit_error_to_communication(channel_id: str, content: str, message_type: str) -> None:
             """Send error/system messages through the communication service."""
             try:
                 await self.communication.send_system_message(
@@ -894,6 +892,7 @@ class ApiPlatform(Service):
 
         # Show setup wizard message if this is a first run
         from ciris_engine.logic.setup.first_run import is_first_run
+
         if is_first_run():
             # Use print for visibility - this is important user-facing info
             url = f"http://{self.config.host}:{self.config.port}"

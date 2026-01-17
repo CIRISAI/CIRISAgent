@@ -47,8 +47,8 @@ class TestRuntimeInit:
         os.environ["CIRIS_MOCK_LLM"] = "true"
 
         try:
-            # Mock load_adapter to raise exception
-            with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter", side_effect=Exception("Load failed")):
+            # Mock load_adapter to raise exception (imported inside bootstrap_helpers)
+            with patch("ciris_engine.logic.adapters.load_adapter", side_effect=Exception("Load failed")):
                 # Should still create runtime but log error
                 runtime = CIRISRuntime(adapter_types=["fake_adapter"], modules=["mock_llm"])
 

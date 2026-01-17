@@ -2,15 +2,16 @@
 
 ## Overview
 
-CIRIS implements the **H3ERE (Hyper3 Ethical Recursive Engine)** architecture with exactly 10 action handlers organized in a 3×3×3×3 structure. These handlers execute ethically-approved actions determined by the 3 Decision-Making Algorithms (PDMA, CSDMA, DSDMA) operating across 3 Contextual Knowledge Graphs.
+CIRIS implements the **H3ERE (Hyper3 Ethical Recursive Engine)** architecture with exactly 10 action handlers organized in a 3×3×3×3 structure. These handlers execute ethically-approved actions determined by the 4 Decision-Making Algorithms (PDMA, CSDMA, DSDMA, IDMA) operating across 3 Contextual Knowledge Graphs.
 
 ## H3ERE Architecture: 3×3×3×3 Ethical Recursive Engine
 
-### 4 Decision-Making Algorithms (DMAs): 3 Core + 1 Recursive
+### 5 Decision-Making Algorithms (DMAs): 4 Core + 1 Recursive
 - **PDMA** (Principled DMA): Foundational ethical principles
 - **CSDMA** (Common-Sense DMA): Universal common-sense contexts
 - **DSDMA** (Domain-Specific DMA): Specialized task-relevant criteria
-- **ASPDMA** (Action Selection PDMA): Recursive final action selection from 3 DMA outputs
+- **IDMA** (Intuition DMA): Coherence Collapse Analysis for source independence
+- **ASPDMA** (Action Selection PDMA): Recursive final action selection from 4 DMA outputs
 
 ### 3 Contextual Knowledge Graphs
 - **Core Identity Graph**: Ethical identity and system imperatives
@@ -72,7 +73,7 @@ Exempt actions bypass conscience checks as they are passive input operations or 
 The H3ERE engine operates through ethical recursive loops:
 
 1. **Thought Generation**: Initial ethical thoughts trigger DMA evaluation
-2. **DMA Evaluation**: All 3 DMAs (PDMA, CSDMA, DSDMA) assess against 3 knowledge graphs
+2. **DMA Evaluation**: All 4 DMAs (PDMA, CSDMA, DSDMA, IDMA) assess against 3 knowledge graphs
 3. **Handler Selection**: One of the 10 handlers is selected based on ethical assessment
 4. **Action Execution**: Handler executes ethically-approved action
 5. **Recursive Generation**: Actions may generate new ethical thoughts, continuing the cycle

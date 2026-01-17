@@ -339,7 +339,10 @@ class APIRuntimeControlService(Service):
 
             # If config already has adapter_type, use it directly
             # Otherwise, wrap the config in the proper structure
-            if "adapter_type" in config:
+            # Handle case where config is already an AdapterConfig object
+            if isinstance(config, AdapterConfig):
+                adapter_config = config
+            elif "adapter_type" in config:
                 adapter_config = AdapterConfig(**config)
             else:
                 # Wrap the collected config in AdapterConfig structure

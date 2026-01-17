@@ -17,7 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRIS_PROXY_DOMAINS, CIRISRuntime
+from ciris_engine.logic.runtime.billing_helpers import CIRIS_PROXY_DOMAINS
+from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRISRuntime
 
 
 class TestCIRISProxyDomainConstant:
@@ -221,13 +222,13 @@ class TestCreateLLMTokenHandler:
 
     @pytest.mark.asyncio
     async def test_handler_calls_update_llm_services(self, runtime):
-        """Handler calls _update_llm_services_token with new token."""
+        """Handler calls update_llm_services_token with new token."""
         handler = runtime._create_llm_token_handler()
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "new-api-key"}):
-            await handler("token_refreshed", "llm")
-
-        runtime._update_llm_services_token.assert_called_once_with("new-api-key")
+            with patch("ciris_engine.logic.runtime.billing_helpers.update_llm_services_token") as mock_update:
+                await handler("token_refreshed", "llm")
+                mock_update.assert_called_once_with(runtime, "new-api-key")
 
     @pytest.mark.asyncio
     async def test_handler_skips_when_no_token(self, runtime):
@@ -381,12 +382,13 @@ class TestReinitializeBillingProvider:
     @pytest.mark.asyncio
     async def test_returns_early_when_no_resource_monitor(self, runtime):
         """Returns early when resource monitor not available."""
-        runtime._get_resource_monitor_for_billing = Mock(return_value=None)
+        with patch(
+            "ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=None
+        ) as mock_get:
+            await runtime._reinitialize_billing_provider()
 
-        await runtime._reinitialize_billing_provider()
-
-        # Should return without error
-        runtime._get_resource_monitor_for_billing.assert_called_once()
+            # Should return without error
+            mock_get.assert_called_once_with(runtime)
 
     @pytest.mark.asyncio
     async def test_returns_early_when_not_android(self, runtime):
@@ -443,19 +445,28 @@ class TestReinitializeBillingProvider:
 
         mock_provider = Mock()
 
-        runtime._get_resource_monitor_for_billing = Mock(return_value=mock_monitor)
-        runtime._is_using_ciris_proxy = Mock(return_value=True)
-        runtime._create_billing_provider = Mock(return_value=mock_provider)
-        runtime._create_billing_token_handler = Mock(return_value=AsyncMock())
-        runtime._create_llm_token_handler = Mock(return_value=AsyncMock())
-
         env_vars = {
             "ANDROID_DATA": "/data",
             "OPENAI_API_BASE": "https://llm.ciris.ai",
             "CIRIS_BILLING_GOOGLE_ID_TOKEN": "test-token",
         }
         with patch.dict(os.environ, env_vars):
-            await runtime._reinitialize_billing_provider()
+            with patch(
+                "ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=mock_monitor
+            ):
+                with patch("ciris_engine.logic.runtime.billing_helpers.is_using_ciris_proxy", return_value=True):
+                    with patch(
+                        "ciris_engine.logic.runtime.billing_helpers.create_billing_provider", return_value=mock_provider
+                    ):
+                        with patch(
+                            "ciris_engine.logic.runtime.billing_helpers.create_billing_token_handler",
+                            return_value=AsyncMock(),
+                        ):
+                            with patch(
+                                "ciris_engine.logic.runtime.billing_helpers.create_llm_token_handler",
+                                return_value=AsyncMock(),
+                            ):
+                                await runtime._reinitialize_billing_provider()
 
         # Should have configured billing
         assert mock_monitor.credit_provider is mock_provider

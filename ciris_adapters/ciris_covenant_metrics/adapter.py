@@ -75,8 +75,12 @@ class CovenantMetricsAdapter(Service):
         logger.info("=" * 70)
         logger.info("📊 COVENANT METRICS ADAPTER INITIALIZING")
         logger.info(f"   Config consent_given: {adapter_config.get('consent_given', False)}")
-        logger.info(f"   Env CIRIS_COVENANT_METRICS_CONSENT: {os.environ.get('CIRIS_COVENANT_METRICS_CONSENT', 'not set')}")
-        logger.info(f"   Env CIRIS_COVENANT_METRICS_ENDPOINT: {os.environ.get('CIRIS_COVENANT_METRICS_ENDPOINT', 'not set')}")
+        logger.info(
+            f"   Env CIRIS_COVENANT_METRICS_CONSENT: {os.environ.get('CIRIS_COVENANT_METRICS_CONSENT', 'not set')}"
+        )
+        logger.info(
+            f"   Env CIRIS_COVENANT_METRICS_ENDPOINT: {os.environ.get('CIRIS_COVENANT_METRICS_ENDPOINT', 'not set')}"
+        )
 
         if env_consent:
             logger.info("✅ CONSENT ENABLED via environment variable")

@@ -29,5 +29,9 @@ class RuntimeBootstrapConfig(BaseModel):
     startup_channel_id: Optional[str] = Field(None, description="Channel ID for startup messages")
     debug: bool = Field(False, description="Enable debug mode")
     preload_tasks: List[str] = Field(default_factory=list, description="Tasks to preload after WORK state transition")
+    identity_update: bool = Field(
+        False,
+        description="If True, refresh existing identity from template (requires --template). Admin operation.",
+    )
 
     model_config = ConfigDict(extra="forbid")  # No additional parameters allowed - all must be declared explicitly

@@ -4,17 +4,17 @@ CIRIS iOS App - WebView-based GUI with Python Backend
 Displays startup checks during initialization, then loads the CIRIS GUI
 from the local FastAPI server once the backend is ready.
 """
-# Import compatibility shims FIRST before any CIRIS imports
-import ciris_ios.crypto_compat  # noqa: F401 - Provides asymmetric.types for old cryptography
 
 import sys
 import threading
 import time
 from pathlib import Path
 
+# Import compatibility shims FIRST before any CIRIS imports
+import ciris_ios.crypto_compat  # noqa: F401 - Provides asymmetric.types for old cryptography
 import toga
 from toga.style import Pack
-from toga.style.pack import COLUMN, CENTER
+from toga.style.pack import CENTER, COLUMN
 
 # Status tracking
 STARTUP_LOGS = []
@@ -34,6 +34,7 @@ def check_pydantic() -> bool:
     try:
         import pydantic
         from pydantic_core import _pydantic_core
+
         log(f"      Pydantic: {pydantic.VERSION}")
         log(f"      Core: {_pydantic_core.__version__}")
         log("[1/4] OK")
@@ -48,6 +49,7 @@ def check_fastapi() -> bool:
     log("[2/4] Checking FastAPI...")
     try:
         import fastapi
+
         log(f"      FastAPI: {fastapi.__version__}")
         log("[2/4] OK")
         return True
@@ -61,6 +63,7 @@ def check_cryptography() -> bool:
     log("[3/4] Checking cryptography...")
     try:
         import cryptography
+
         log(f"      Cryptography: {cryptography.__version__}")
         log("[3/4] OK")
         return True
@@ -74,6 +77,7 @@ def check_ciris_engine() -> bool:
     log("[4/4] Checking CIRIS engine...")
     try:
         from ciris_engine.schemas.config.essential import EssentialConfig
+
         log("      EssentialConfig: OK")
         log("[4/4] OK")
         return True
@@ -89,22 +93,17 @@ class CirisiOS(toga.App):
 
         # Title
         self.title_label = toga.Label(
-            "CIRIS iOS Runtime",
-            style=Pack(padding=(10, 0), font_size=18, font_weight="bold", text_align=CENTER)
+            "CIRIS iOS Runtime", style=Pack(padding=(10, 0), font_size=18, font_weight="bold", text_align=CENTER)
         )
         self.main_box.add(self.title_label)
 
         # Status label
-        self.status_label = toga.Label(
-            "Starting...",
-            style=Pack(padding=(5, 0), text_align=CENTER)
-        )
+        self.status_label = toga.Label("Starting...", style=Pack(padding=(5, 0), text_align=CENTER))
         self.main_box.add(self.status_label)
 
         # Log display (scrollable text area for startup logs)
         self.log_display = toga.MultilineTextInput(
-            readonly=True,
-            style=Pack(flex=1, padding=10, font_family="monospace")
+            readonly=True, style=Pack(flex=1, padding=10, font_family="monospace")
         )
         self.main_box.add(self.log_display)
 
@@ -203,6 +202,7 @@ class CirisiOS(toga.App):
             self._update_logs()
 
             import httpx
+
             try:
                 response = httpx.get("http://127.0.0.1:8080/v1/system/health", timeout=5.0)
                 if response.status_code == 200:
@@ -243,12 +243,14 @@ class CirisiOS(toga.App):
         except Exception as e:
             log(f"Backend startup error: {e}")
             import traceback
+
             log(traceback.format_exc())
             self._update_logs()
             self._update_status(f"Error: {e}")
 
     def _switch_to_webview(self):
         """Switch the UI to show the WebView."""
+
         def do_switch():
             try:
                 # Create WebView pointing to local server
@@ -274,8 +276,10 @@ class CirisiOS(toga.App):
 
     def _update_status(self, message: str):
         """Update the status label from any thread."""
+
         def do_update():
             self.status_label.text = message
+
         try:
             self.loop.call_soon_threadsafe(do_update)
         except Exception:
@@ -283,8 +287,10 @@ class CirisiOS(toga.App):
 
     def _update_logs(self):
         """Update the log display from any thread."""
+
         def do_update():
             self.log_display.value = "\n".join(STARTUP_LOGS)
+
         try:
             self.loop.call_soon_threadsafe(do_update)
         except Exception:

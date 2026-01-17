@@ -11,24 +11,23 @@ bcrypt requires Rust compilation not available on iOS.
 import sys
 from typing import Union
 
-# =============================================================================
-# BCRYPT STUB - Must be installed before any bcrypt imports
-# =============================================================================
-
 # Import our bcrypt stub which will register itself in sys.modules
 import ciris_ios.bcrypt  # noqa: F401 - Installs as 'bcrypt'
 
 # Import our psutil stub which will register itself in sys.modules
 import ciris_ios.psutil  # noqa: F401 - Installs as 'psutil'
 
+# =============================================================================
+# BCRYPT STUB - Must be installed before any bcrypt imports
+# =============================================================================
+
+
 # Check if we need to provide the types module
 try:
     from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes, PublicKeyTypes
 except ImportError:
     # Create the missing types module for cryptography 3.4.8
-    from cryptography.hazmat.primitives.asymmetric import (
-        rsa, dsa, ec, ed25519, ed448, x25519, x448, dh
-    )
+    from cryptography.hazmat.primitives.asymmetric import dh, dsa, ec, ed448, ed25519, rsa, x448, x25519
 
     # Type aliases matching newer cryptography versions
     PrivateKeyTypes = Union[
@@ -55,13 +54,14 @@ except ImportError:
 
     # Inject the types module into cryptography's namespace
     import types
+
     from cryptography.hazmat.primitives import asymmetric
 
-    types_module = types.ModuleType('cryptography.hazmat.primitives.asymmetric.types')
+    types_module = types.ModuleType("cryptography.hazmat.primitives.asymmetric.types")
     types_module.PrivateKeyTypes = PrivateKeyTypes
     types_module.PublicKeyTypes = PublicKeyTypes
 
     asymmetric.types = types_module
-    sys.modules['cryptography.hazmat.primitives.asymmetric.types'] = types_module
+    sys.modules["cryptography.hazmat.primitives.asymmetric.types"] = types_module
 
     print("[iOS] Installed cryptography.asymmetric.types compatibility shim")

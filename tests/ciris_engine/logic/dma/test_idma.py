@@ -480,9 +480,7 @@ class TestIDMAResultSchema:
     def test_idma_result_keff_non_negative(self):
         """Test k_eff must be non-negative."""
         # Valid at 0
-        result = IDMAResult(
-            k_eff=0.0, correlation_risk=0.0, phase="chaos", fragility_flag=True, reasoning="No sources"
-        )
+        result = IDMAResult(k_eff=0.0, correlation_risk=0.0, phase="chaos", fragility_flag=True, reasoning="No sources")
         assert result.k_eff == 0.0
 
         # Invalid - negative

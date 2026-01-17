@@ -176,9 +176,7 @@ class SpeakHandler(BaseActionHandler):
             try:
                 comm_bus = self.bus_manager.communication
                 if comm_bus:
-                    error_message = (
-                        "Failed to deliver agent response. The message could not be sent to the channel."
-                    )
+                    error_message = "Failed to deliver agent response. The message could not be sent to the channel."
                     # Try to send system error message via the communication bus
                     comm_service = await comm_bus.get_service("speak_handler")
                     if comm_service and hasattr(comm_service, "send_system_message"):

@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: acdeb928961a
-Build Time: 2025-12-15T23:50:41.520195
-Git Commit: bd3a85e9a720d0e25c3245e64f56ed0b53a9941d
-Git Branch: 1.7.6/adapters-web-search
+Code Hash: 0cf646ef99c5
+Build Time: 2026-01-17T14:31:08.788774
+Git Commit: 7e8dad5d6b26b214cd1eff81a9ea17c4bf1605bb
+Git Branch: release/1.8.2
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

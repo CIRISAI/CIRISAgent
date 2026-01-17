@@ -15,7 +15,13 @@ from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.conscience.results import ConscienceResult
 from ciris_engine.schemas.dma.core import DMAContext
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+    IDMAResult,
+)
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
@@ -785,20 +791,14 @@ class FinalizeActionStepData(BaseStepData):
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether UpdatedStatusConscience detected new information during task processing"
     )
-    updated_status_content: Optional[str] = Field(
-        None, description="Content of new observation if detected"
-    )
+    updated_status_content: Optional[str] = Field(None, description="Content of new observation if detected")
 
     # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
     thought_depth_triggered: Optional[bool] = Field(
         None, description="Whether ThoughtDepthGuardrail forced DEFER due to max depth"
     )
-    thought_depth_current: Optional[int] = Field(
-        None, description="Current thought depth when evaluated"
-    )
-    thought_depth_max: Optional[int] = Field(
-        None, description="Maximum allowed thought depth"
-    )
+    thought_depth_current: Optional[int] = Field(None, description="Current thought depth when evaluated")
+    thought_depth_max: Optional[int] = Field(None, description="Maximum allowed thought depth")
 
     # === ETHICAL FACULTY 1: Entropy Conscience ===
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
@@ -1046,21 +1046,15 @@ class ConscienceResultEvent(BaseModel):
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether UpdatedStatusConscience detected new information"
     )
-    updated_status_content: Optional[str] = Field(
-        None, description="Content of new observation if detected"
-    )
+    updated_status_content: Optional[str] = Field(None, description="Content of new observation if detected")
 
     # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
     # Monitors reasoning depth, forces DEFER to prevent infinite loops
     thought_depth_triggered: Optional[bool] = Field(
         None, description="Whether ThoughtDepthGuardrail forced DEFER due to max depth"
     )
-    thought_depth_current: Optional[int] = Field(
-        None, description="Current thought depth when evaluated"
-    )
-    thought_depth_max: Optional[int] = Field(
-        None, description="Maximum allowed thought depth"
-    )
+    thought_depth_current: Optional[int] = Field(None, description="Current thought depth when evaluated")
+    thought_depth_max: Optional[int] = Field(None, description="Maximum allowed thought depth")
 
     # === ETHICAL FACULTY 1: Entropy Conscience ===
     # Ensures appropriate information uncertainty, prevents overconfident assertions
@@ -1072,7 +1066,9 @@ class ConscienceResultEvent(BaseModel):
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     # Verifies internal consistency with prior commitments
     coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
-    coherence_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)")
+    coherence_score: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)"
+    )
     coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
     coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
 

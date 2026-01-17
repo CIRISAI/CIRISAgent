@@ -839,14 +839,21 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Extract tools from adapter tool service."""
         tools: List[ToolInfo] = []
 
-        if not (hasattr(adapter, "tool_service") and adapter.tool_service):
+        # Check for tool_service (public) or _tool_service (private, e.g., MCP adapter)
+        tool_service = None
+        if hasattr(adapter, "tool_service") and adapter.tool_service:
+            tool_service = adapter.tool_service
+        elif hasattr(adapter, "_tool_service") and adapter._tool_service:
+            tool_service = adapter._tool_service
+
+        if not tool_service:
             return tools
 
         try:
-            if hasattr(adapter.tool_service, "list_tools"):
-                tool_names = await adapter.tool_service.list_tools()
+            if hasattr(tool_service, "list_tools"):
+                tool_names = await tool_service.list_tools()
                 for tool_name in tool_names:
-                    tool_info = await self._create_tool_info(adapter.tool_service, tool_name)
+                    tool_info = await self._create_tool_info(tool_service, tool_name)
                     if tool_info:
                         tools.append(tool_info)
         except Exception as e:
@@ -951,6 +958,15 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
         from datetime import datetime
 
+        # Try to extract tools from the actual adapter instance
+        tools: Optional[List[ToolInfo]] = None
+        try:
+            adapter_instance = self.adapter_manager.loaded_adapters.get(adapter_id)
+            if adapter_instance and hasattr(adapter_instance, "adapter"):
+                tools = await self._extract_adapter_tools(adapter_instance.adapter, info.adapter_type)
+        except Exception as e:
+            logger.debug(f"Could not extract tools for adapter {adapter_id}: {e}")
+
         return AdapterInfo(
             adapter_id=info.adapter_id,
             adapter_type=info.adapter_type,
@@ -959,7 +975,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             messages_processed=0,  # Not tracked in adapter_management.AdapterInfo
             error_count=0,  # Not tracked in adapter_management.AdapterInfo
             last_error=None,
-            tools=None,
+            tools=tools,
         )
 
     # Configuration Management Methods

@@ -5,6 +5,36 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-01-17
+
+### Added
+
+- **Identity Update from Template** - Admin operation to refresh identity from template updates
+  - New `--identity-update` CLI flag (requires `--template`)
+  - Uses `update_agent_identity()` for proper version tracking and signing
+  - Preserves creation metadata while updating template fields
+
+### Changed
+
+- **Code Modularization** - Refactored largest files for maintainability
+  - `system.py` (3049 lines) → 10 focused modules in `system/` package
+  - `telemetry_service.py` (2429→1120 lines) → extracted `aggregator.py`, `storage.py`
+  - `TelemetryAggregator` (1221→457 lines) → 5 focused modules
+  - `ciris_runtime.py` (2342→1401 lines) → 7 helper modules
+  - Backward compatibility maintained via `__init__.py` re-exports
+
+- **Reduced Cognitive Complexity** - SonarCloud fixes in system routes and LLM bus
+
+### Fixed
+
+- **Billing Provider** - Explicit `api_key` now takes precedence over env-sourced `google_id_token`
+
+- **MCP Tool Execution** - Fixed Mock LLM handling of MCP tool calls
+
+- **Adapter Status Reporting** - Fixed `AdapterStatus` enum comparison issues
+
+- **Security** - Removed debug logging that could leak sensitive adapter configs
+
 ## [1.8.1] - 2026-01-15
 
 ### Added

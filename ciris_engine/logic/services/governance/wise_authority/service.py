@@ -657,6 +657,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Tasks have a unique index on (agent_occurrence_id, correlation_id)
                 # so reusing the original would cause a constraint violation
                 import uuid
+
                 correlation_id = str(uuid.uuid4())
 
                 # Store original correlation_id in context for linkage/tracing
@@ -674,8 +675,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
                 # Create new task description incorporating WA guidance
                 new_description = (
-                    f"[WA GUIDANCE] Original: {original_description}\n\n"
-                    f"WA Response: {response.reason}"
+                    f"[WA GUIDANCE] Original: {original_description}\n\n" f"WA Response: {response.reason}"
                 )
 
                 # Use factory to create new guidance task
@@ -731,9 +731,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     ),
                 )
 
-                logger.info(
-                    f"Created new guidance task {guidance_task.task_id} for resolved deferral {deferral_id}"
-                )
+                logger.info(f"Created new guidance task {guidance_task.task_id} for resolved deferral {deferral_id}")
 
             conn.commit()
             conn.close()

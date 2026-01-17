@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ciris_engine.logic.utils.error_emitter import (
+    _MIN_EMIT_INTERVAL,
+    _last_emit_times,
     clear_error_callback,
     emit_circuit_breaker_open,
     emit_dma_failure,
@@ -14,8 +16,6 @@ from ciris_engine.logic.utils.error_emitter import (
     emit_llm_failure,
     emit_rate_limit_error,
     set_error_callback,
-    _last_emit_times,
-    _MIN_EMIT_INTERVAL,
 )
 
 
@@ -55,10 +55,7 @@ class TestErrorEmitter:
         set_error_callback(mock_callback)
 
         result = await emit_error(
-            content="Test message",
-            channel_id="my_channel",
-            category="test_cat",
-            message_type="system"
+            content="Test message", channel_id="my_channel", category="test_cat", message_type="system"
         )
 
         assert result is True
@@ -127,10 +124,7 @@ class TestErrorEmitter:
         set_error_callback(mock_callback)
 
         result = await emit_llm_failure(
-            error_summary="Connection timeout",
-            retry_count=2,
-            max_retries=3,
-            channel_id="my_channel"
+            error_summary="Connection timeout", retry_count=2, max_retries=3, channel_id="my_channel"
         )
 
         assert result is True
@@ -161,9 +155,7 @@ class TestErrorEmitter:
         set_error_callback(mock_callback)
 
         result = await emit_dma_failure(
-            dma_name="ActionSelection",
-            error_summary="Model returned invalid JSON",
-            channel_id="system"
+            dma_name="ActionSelection", error_summary="Model returned invalid JSON", channel_id="system"
         )
 
         assert result is True
@@ -179,11 +171,7 @@ class TestErrorEmitter:
         set_error_callback(mock_callback)
 
         long_summary = "A" * 200
-        result = await emit_llm_failure(
-            error_summary=long_summary,
-            retry_count=1,
-            max_retries=3
-        )
+        result = await emit_llm_failure(error_summary=long_summary, retry_count=1, max_retries=3)
 
         assert result is True
         call_args = mock_callback.call_args[0]

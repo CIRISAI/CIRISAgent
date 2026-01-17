@@ -179,7 +179,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Start emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:

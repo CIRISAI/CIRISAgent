@@ -125,7 +125,7 @@ async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
 
     service_registry = request.app.state.service_registry
     try:
-        for service_type in list(ServiceType):
+        for service_type in ServiceType:
             providers = service_registry.get_services_by_type(service_type)
             if providers:
                 healthy_count = 0
@@ -269,6 +269,42 @@ async def execute_pause_action(runtime_control: Any, reason: Optional[str]) -> b
     return success
 
 
+def _get_pipeline_controller(request: Request) -> Optional[Any]:
+    """Get pipeline controller from runtime if available."""
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        return None
+    agent_processor = getattr(runtime, "agent_processor", None)
+    if not agent_processor:
+        return None
+    return getattr(agent_processor, "_pipeline_controller", None)
+
+
+def _extract_step_from_state(pipeline_controller: Any) -> tuple[Optional[str], Optional[JSONDict]]:
+    """Extract current step and pipeline state from controller."""
+    current_step: Optional[str] = None
+    pipeline_state: Optional[JSONDict] = None
+    try:
+        pipeline_state_obj = pipeline_controller.get_current_state()
+        if pipeline_state_obj:
+            current_step = getattr(pipeline_state_obj, "current_step", None)
+            pipeline_state = getattr(pipeline_state_obj, "pipeline_state", None)
+    except Exception as e:
+        logger.debug(f"Could not get current step from pipeline: {e}")
+    return current_step, pipeline_state
+
+
+def _build_step_schema(current_step: str) -> JSONDict:
+    """Build step schema metadata for the current step."""
+    return {
+        "step_point": current_step,
+        "description": f"System paused at step: {current_step}",
+        "timestamp": datetime.now().isoformat(),
+        "can_single_step": True,
+        "next_actions": ["single_step", "resume"],
+    }
+
+
 def extract_pipeline_state_info(
     request: Request,
 ) -> tuple[Optional[str], Optional[JSONDict], Optional[JSONDict]]:
@@ -278,47 +314,18 @@ def extract_pipeline_state_info(
     Returns:
         Tuple of (current_step, current_step_schema, pipeline_state)
     """
-    current_step: Optional[str] = None
-    current_step_schema: Optional[JSONDict] = None
-    pipeline_state: Optional[JSONDict] = None
-
     try:
-        # Try to get current pipeline state from the runtime
-        runtime = getattr(request.app.state, "runtime", None)
-        if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
-            if (
-                hasattr(runtime.agent_processor, "_pipeline_controller")
-                and runtime.agent_processor._pipeline_controller
-            ):
-                pipeline_controller = runtime.agent_processor._pipeline_controller
+        pipeline_controller = _get_pipeline_controller(request)
+        if not pipeline_controller:
+            return None, None, None
 
-                # Get current pipeline state
-                try:
-                    pipeline_state_obj = pipeline_controller.get_current_state()
-                    if pipeline_state_obj and hasattr(pipeline_state_obj, "current_step"):
-                        current_step = pipeline_state_obj.current_step
-                    if pipeline_state_obj and hasattr(pipeline_state_obj, "pipeline_state"):
-                        pipeline_state = pipeline_state_obj.pipeline_state
-                except Exception as e:
-                    logger.debug(f"Could not get current step from pipeline: {e}")
+        current_step, pipeline_state = _extract_step_from_state(pipeline_controller)
+        current_step_schema = _build_step_schema(current_step) if current_step else None
 
-                # Get the full step schema/metadata
-                if current_step:
-                    try:
-                        # Get step schema - this would include all step metadata
-                        current_step_schema = {
-                            "step_point": current_step,
-                            "description": f"System paused at step: {current_step}",
-                            "timestamp": datetime.now().isoformat(),
-                            "can_single_step": True,
-                            "next_actions": ["single_step", "resume"],
-                        }
-                    except Exception as e:
-                        logger.debug(f"Could not get step schema: {e}")
+        return current_step, current_step_schema, pipeline_state
     except Exception as e:
         logger.debug(f"Could not get pipeline information: {e}")
-
-    return current_step, current_step_schema, pipeline_state
+        return None, None, None
 
 
 def create_pause_response(

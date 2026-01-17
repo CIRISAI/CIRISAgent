@@ -263,8 +263,9 @@ async def initialize_identity(runtime: Any) -> None:
 
     # Handle --identity-update flag for admin template refresh
     identity_update = getattr(runtime, "_identity_update", False)
+    template_name = getattr(runtime, "_template_name", None) or getattr(config, "default_template", "default")
+    logger.info(f"[IDENTITY_UPDATE] Checking flag: _identity_update={identity_update}, template_name={template_name}")
     if identity_update:
-        template_name = getattr(config, "default_template", "default")
         logger.info(f"Identity update requested - refreshing from template '{template_name}'")
         success = await runtime.identity_manager.refresh_identity_from_template(
             template_name=template_name,

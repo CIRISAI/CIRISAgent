@@ -722,7 +722,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     def _should_skip_cognitive_migration(self, force_from_template: bool) -> bool:
         """Check if cognitive migration should be skipped."""
-        return should_skip_cognitive_migration(self, force_from_template)
+        return should_skip_cognitive_migration(force_from_template)
 
     async def _check_existing_cognitive_config(self, config_service: Any) -> bool:
         """Check if cognitive config already exists in graph."""

@@ -54,19 +54,19 @@ async def store_telemetry_metrics(
         )
 
 
-def _get_numeric_field(data: dict, key: str) -> Optional[float]:
+def _get_numeric_field(data: dict[str, Any], key: str) -> Optional[float]:
     """Extract numeric field from dict, returning None if not valid."""
     value = data.get(key)
     return value if isinstance(value, (int, float)) else None
 
 
-def _get_string_field(data: dict, key: str) -> Optional[str]:
+def _get_string_field(data: dict[str, Any], key: str) -> Optional[str]:
     """Extract string field from dict, returning None if not valid."""
     value = data.get(key)
     return value if isinstance(value, str) else None
 
 
-def _create_llm_usage_data(llm_dict: dict) -> Any:
+def _create_llm_usage_data(llm_dict: dict[str, Any]) -> Any:
     """Create LLMUsageData from raw dict with type validation."""
     from ciris_engine.schemas.services.graph.telemetry import LLMUsageData
 

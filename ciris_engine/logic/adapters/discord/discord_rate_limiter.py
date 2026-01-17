@@ -136,7 +136,7 @@ class DiscordRateLimiter:
         # Check for rate limit headers
         remaining_str = headers.get("X-RateLimit-Remaining")
         reset_at_str = headers.get("X-RateLimit-Reset")
-        headers.get("X-RateLimit-Bucket")
+        # Note: X-RateLimit-Bucket is available but we use endpoint normalization instead
 
         if remaining_str is not None and reset_at_str is not None:
             try:

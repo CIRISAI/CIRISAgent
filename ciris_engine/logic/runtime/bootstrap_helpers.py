@@ -144,7 +144,8 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
 
             # Create adapter with context
             # Pass the settings as adapter_config so adapters can find them
-            adapter_instance = adapter_class(runtime, context=context, adapter_config=config.settings)
+            # adapter_class is dynamically loaded and has more args than protocol
+            adapter_instance = adapter_class(runtime, context=context, adapter_config=config.settings)  # type: ignore[call-arg]
             runtime.adapters.append(adapter_instance)
             logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
         except Exception as e:

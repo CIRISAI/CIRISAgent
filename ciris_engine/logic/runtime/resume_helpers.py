@@ -185,4 +185,5 @@ def _ensure_config(runtime: Any) -> "EssentialConfig":
     """Ensure essential_config is available, raise if not."""
     if not runtime.essential_config:
         raise RuntimeError("Essential config not initialized")
-    return runtime.essential_config
+    config: "EssentialConfig" = runtime.essential_config
+    return config

@@ -13,7 +13,7 @@ class TestConfigMigration:
 
         runtime = MagicMock()
 
-        with patch("ciris_engine.logic.runtime.config_migration.is_first_run", return_value=True):
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=True):
             result = should_skip_cognitive_migration(runtime, force_from_template=False)
             assert result is True
 
@@ -23,7 +23,7 @@ class TestConfigMigration:
 
         runtime = MagicMock()
 
-        with patch("ciris_engine.logic.runtime.config_migration.is_first_run", return_value=True):
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=True):
             result = should_skip_cognitive_migration(runtime, force_from_template=True)
             assert result is False
 
@@ -33,7 +33,7 @@ class TestConfigMigration:
 
         runtime = MagicMock()
 
-        with patch("ciris_engine.logic.runtime.config_migration.is_first_run", return_value=False):
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
             result = should_skip_cognitive_migration(runtime, force_from_template=False)
             assert result is False
 

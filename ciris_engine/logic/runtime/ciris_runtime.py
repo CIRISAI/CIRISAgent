@@ -816,7 +816,7 @@ class CIRISRuntime(ServicePropertyMixin):
                             continue
 
                         graph_node = config_node.to_graph_node()
-                        await self.config_service.graph.forget(graph_node)
+                        await self.config_service.graph.forget(graph_node)  # type: ignore[attr-defined]
                         deleted_count += 1
                         logger.debug(f"Deleted runtime config node: {key}")
 
@@ -952,7 +952,7 @@ class CIRISRuntime(ServicePropertyMixin):
             logger.info(f"[_build_components] agent_processor created: {self.agent_processor}")
 
             if self.runtime_control_service:
-                self.runtime_control_service.setup_thought_tracking()
+                self.runtime_control_service.setup_thought_tracking()  # type: ignore[attr-defined]
                 logger.debug("Thought tracking callback set up after agent_processor creation")
 
         except Exception as e:

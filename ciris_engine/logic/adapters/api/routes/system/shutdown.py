@@ -7,7 +7,7 @@ Provides graceful shutdown functionality including local shutdown for mobile app
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
@@ -84,7 +84,7 @@ async def shutdown_system(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _check_resume_blocking(runtime: object, state_info: dict) -> Optional[Response]:
+def _check_resume_blocking(runtime: object, state_info: Dict[str, Any]) -> Optional[Response]:
     """Check if resume is in progress and should block shutdown.
 
     Args:
@@ -129,7 +129,7 @@ def _check_resume_blocking(runtime: object, state_info: dict) -> Optional[Respon
     )
 
 
-def _check_shutdown_already_in_progress(runtime: object, state_info: dict) -> Optional[Response]:
+def _check_shutdown_already_in_progress(runtime: object, state_info: Dict[str, Any]) -> Optional[Response]:
     """Check if shutdown is already in progress.
 
     Args:

@@ -5,6 +5,30 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-01-17
+
+### Changed
+
+- **Code Modularization** - Refactored largest files for maintainability
+  - `system.py` (3049 lines) → 10 focused modules in `system/` package
+  - `telemetry_service.py` (2429→1120 lines) → extracted `aggregator.py`, `storage.py`
+  - `ciris_runtime.py` (2342→1401 lines) → 7 helper modules (billing, bootstrap, config, etc.)
+  - All helpers made public for improved testability
+  - Backward compatibility maintained via `__init__.py` re-exports
+
+- **LLM Bus Cognitive Complexity** - Reduced `_try_service` method complexity for maintainability
+
+### Fixed
+
+- **MCP Tool Execution** - Fixed Mock LLM handling of MCP tool calls
+  - Improved thought content extraction for API format messages (`@user (ID: xxx): message`)
+  - Better delimiter detection for said/say/API formats
+  - Removed broken mock MCP client fallback (now fails fast with clear error)
+
+- **Adapter Status Reporting** - Fixed `AdapterStatus` enum comparison issues
+
+- **Security** - Removed debug logging that could leak sensitive adapter configs
+
 ## [1.8.1] - 2026-01-15
 
 ### Added

@@ -169,11 +169,12 @@ class TestStoreSocialContext:
     @pytest.mark.asyncio
     async def test_store_social_context_with_profiles(self, mock_telemetry_service):
         """Test storing social context with user profiles."""
+        from datetime import datetime, timezone
         from ciris_engine.schemas.runtime.system_context import UserProfile
 
         user_profiles = [
-            UserProfile(user_id="user1", display_name="User One"),
-            UserProfile(user_id="user2", display_name="User Two"),
+            UserProfile(user_id="user1", display_name="User One", created_at=datetime.now(timezone.utc)),
+            UserProfile(user_id="user2", display_name="User Two", created_at=datetime.now(timezone.utc)),
         ]
 
         await store_social_context(
@@ -190,12 +191,15 @@ class TestStoreSocialContext:
     @pytest.mark.asyncio
     async def test_store_social_context_with_channel(self, mock_telemetry_service):
         """Test storing social context with channel context."""
+        from datetime import datetime, timezone
         from ciris_engine.schemas.runtime.system_context import ChannelContext, UserProfile
 
-        user_profiles = [UserProfile(user_id="user1", display_name="User One")]
+        user_profiles = [UserProfile(user_id="user1", display_name="User One", created_at=datetime.now(timezone.utc))]
         channel_context = ChannelContext(
             channel_id="channel_123",
             channel_name="general",
+            channel_type="text",
+            created_at=datetime.now(timezone.utc),
         )
 
         await store_social_context(

@@ -92,7 +92,7 @@ class TestRuntimeControlHelpers:
         """Test execute_pause_action with API runtime control service."""
         runtime_control = Mock()
         # Mock signature inspection to return API service (has parameters)
-        with patch("ciris_engine.logic.adapters.api.routes.system.helpers.inspect.signature") as mock_signature:
+        with patch("inspect.signature") as mock_signature:
             mock_signature.return_value.parameters = {"reason": None}  # Has parameters
             runtime_control.pause_processing = AsyncMock(return_value=True)
 
@@ -106,7 +106,7 @@ class TestRuntimeControlHelpers:
         """Test execute_pause_action with main runtime control service."""
         runtime_control = Mock()
         # Mock signature inspection to return main service (no parameters)
-        with patch("ciris_engine.logic.adapters.api.routes.system.helpers.inspect.signature") as mock_signature:
+        with patch("inspect.signature") as mock_signature:
             mock_signature.return_value.parameters = {}  # No parameters
             control_response = Mock()
             control_response.success = True

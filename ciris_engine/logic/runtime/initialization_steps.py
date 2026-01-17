@@ -234,7 +234,8 @@ async def initialize_memory_service(runtime: Any) -> None:
 
 async def verify_memory_service(runtime: Any) -> bool:
     """Verify memory service is operational."""
-    return await runtime.service_initializer.verify_memory_service()
+    result: bool = await runtime.service_initializer.verify_memory_service()
+    return result
 
 
 async def initialize_identity(runtime: Any) -> None:
@@ -276,7 +277,8 @@ async def verify_identity_integrity(runtime: Any) -> bool:
         logger.info("First-run mode: Identity manager created (identity will be seeded after setup)")
         return True
 
-    return await runtime.identity_manager.verify_identity_integrity()
+    result: bool = await runtime.identity_manager.verify_identity_integrity()
+    return result
 
 
 async def initialize_security_services(runtime: Any) -> None:
@@ -287,7 +289,8 @@ async def initialize_security_services(runtime: Any) -> None:
 
 async def verify_security_services(runtime: Any) -> bool:
     """Verify security services are operational."""
-    return await runtime.service_initializer.verify_security_services()
+    result: bool = await runtime.service_initializer.verify_security_services()
+    return result
 
 
 async def initialize_services(runtime: Any) -> None:
@@ -333,7 +336,8 @@ async def verify_core_services(runtime: Any) -> bool:
         logger.info("First-run mode: Core services verification skipped")
         return True
 
-    return runtime.service_initializer.verify_core_services()
+    result: bool = runtime.service_initializer.verify_core_services()
+    return result
 
 
 async def start_adapters(runtime: Any) -> None:
@@ -417,7 +421,8 @@ def _ensure_config(runtime: Any) -> EssentialConfig:
     """Ensure essential_config is available, raise if not."""
     if not runtime.essential_config:
         raise RuntimeError("Essential config not initialized")
-    return runtime.essential_config
+    config: EssentialConfig = runtime.essential_config
+    return config
 
 
 def _set_service_runtime_references(runtime: Any) -> None:

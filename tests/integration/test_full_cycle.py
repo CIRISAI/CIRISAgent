@@ -53,7 +53,7 @@ async def mock_external_dependencies():
         def get_services_to_register(self):
             return []
 
-    with patch("ciris_engine.logic.runtime.ciris_runtime.load_adapter") as mock_load:
+    with patch("ciris_engine.logic.adapters.load_adapter") as mock_load:
         mock_load.return_value = MockAdapter
         mocks["load_adapter"] = mock_load
         yield mocks

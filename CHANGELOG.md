@@ -7,23 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.8.2] - 2026-01-17
 
+### Added
+
+- **Identity Update from Template** - Admin operation to refresh identity from template updates
+  - New `--identity-update` CLI flag (requires `--template`)
+  - Uses `update_agent_identity()` for proper version tracking and signing
+  - Preserves creation metadata while updating template fields
+
 ### Changed
 
 - **Code Modularization** - Refactored largest files for maintainability
   - `system.py` (3049 lines) → 10 focused modules in `system/` package
   - `telemetry_service.py` (2429→1120 lines) → extracted `aggregator.py`, `storage.py`
-  - `ciris_runtime.py` (2342→1401 lines) → 7 helper modules (billing, bootstrap, config, etc.)
-  - All helpers made public for improved testability
+  - `TelemetryAggregator` (1221→457 lines) → 5 focused modules
+  - `ciris_runtime.py` (2342→1401 lines) → 7 helper modules
   - Backward compatibility maintained via `__init__.py` re-exports
 
-- **LLM Bus Cognitive Complexity** - Reduced `_try_service` method complexity for maintainability
+- **Reduced Cognitive Complexity** - SonarCloud fixes in system routes and LLM bus
 
 ### Fixed
 
+- **Billing Provider** - Explicit `api_key` now takes precedence over env-sourced `google_id_token`
+
 - **MCP Tool Execution** - Fixed Mock LLM handling of MCP tool calls
-  - Improved thought content extraction for API format messages (`@user (ID: xxx): message`)
-  - Better delimiter detection for said/say/API formats
-  - Removed broken mock MCP client fallback (now fails fast with clear error)
 
 - **Adapter Status Reporting** - Fixed `AdapterStatus` enum comparison issues
 

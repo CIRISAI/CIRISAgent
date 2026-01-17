@@ -29,6 +29,10 @@ dsdma_kwargs:
     - Fully agentic - handles day-to-day tasks autonomously
     - Runs on modest hardware, works offline
     - Complete privacy - your data never leaves your infrastructure
+    - Install: pip install ciris-agent (Python 3.10+)
+    - Android: play.google.com/store/apps/details?id=ai.ciris.mobile
+    - APK sideload: github.com/CIRISAI/CIRISAgent/releases/latest
+    - Docker: curl -sSL https://ciris.ai/install.sh | bash -s -- --docker
 
     BUSINESS SOLUTIONS:
     - Ally: Personal AI assistant with GDPR/DSAR compliance built-in
@@ -80,6 +84,13 @@ dsdma_kwargs:
         - Appropriate liability insurance (malpractice, E&O)
         - Liability-isolated repositories (not in main CIRISAgent)
         - Domain-specific wisdom authorities for oversight
+    installation_methods:
+      pip: "pip install ciris-agent"
+      docker: "curl -sSL https://ciris.ai/install.sh | bash -s -- --docker"
+      android_play: "play.google.com/store/apps/details?id=ai.ciris.mobile"
+      android_apk: "github.com/CIRISAI/CIRISAgent/releases/latest"
+      source: "github.com/CIRISAI/CIRISAgent"
+      requirements: Python 3.10+ or Docker 20.10+
     pricing_model:
       free_tier: Self-hosted ecosystem, unlimited personal use
       business_tier: Managed hosting, SLA, priority support

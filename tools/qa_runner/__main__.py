@@ -83,20 +83,20 @@ Available modules:
 
     # Live LLM configuration (uses real API instead of mock)
     parser.add_argument(
-        "--live", action="store_true",
-        help="Use real LLM API instead of mock. Reads key from --live-key-file"
+        "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
     )
     parser.add_argument(
-        "--live-key-file", default="~/.groq_key",
-        help="Path to file containing API key (default: ~/.groq_key)"
+        "--live-key-file", default="~/.groq_key", help="Path to file containing API key (default: ~/.groq_key)"
     )
     parser.add_argument(
-        "--live-model", default="meta-llama/llama-4-maverick-17b-128e-instruct",
-        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)"
+        "--live-model",
+        default="meta-llama/llama-4-maverick-17b-128e-instruct",
+        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)",
     )
     parser.add_argument(
-        "--live-base-url", default="https://api.groq.com/openai/v1",
-        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)"
+        "--live-base-url",
+        default="https://api.groq.com/openai/v1",
+        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
     )
 
     # Database backend configuration

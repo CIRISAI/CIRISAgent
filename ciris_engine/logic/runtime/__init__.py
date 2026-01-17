@@ -1,6 +1,3 @@
-from .ciris_runtime import CIRISRuntime
-from .runtime_interface import RuntimeInterface
-
 # Re-export helper modules for backward compatibility
 from .billing_helpers import (
     CIRIS_PROXY_DOMAINS,
@@ -19,6 +16,7 @@ from .bootstrap_helpers import (
     load_adapters_from_bootstrap,
     parse_bootstrap_config,
 )
+from .ciris_runtime import CIRISRuntime
 from .config_migration import (
     check_existing_cognitive_config,
     create_legacy_cognitive_behaviors,
@@ -39,6 +37,7 @@ from .resume_helpers import (
     reload_environment_for_resume,
     set_service_runtime_references,
 )
+from .runtime_interface import RuntimeInterface
 from .service_property_mixin import ServicePropertyMixin
 from .shutdown_continuity import (
     build_shutdown_node_attributes,

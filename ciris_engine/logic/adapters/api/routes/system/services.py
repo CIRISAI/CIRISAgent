@@ -14,11 +14,7 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 
 from ...constants import ERROR_RESOURCE_MONITOR_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_observer
-from .helpers import (
-    create_service_status,
-    get_runtime_control_service,
-    update_service_summary,
-)
+from .helpers import create_service_status, get_runtime_control_service, update_service_summary
 from .schemas import ResourceUsageResponse, ServicesStatusResponse
 
 logger = logging.getLogger(__name__)

@@ -7,14 +7,6 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from fastapi import HTTPException, Request
 
-# Import schemas from the new modular structure
-from ciris_engine.logic.adapters.api.routes.system.schemas import (
-    RuntimeAction,
-    RuntimeControlResponse,
-    ServiceStatus,
-)
-from ciris_engine.schemas.api.telemetry import ServiceMetrics
-
 # Import helper functions from the new modular structure
 from ciris_engine.logic.adapters.api.routes.system.helpers import (
     create_display_name,
@@ -35,6 +27,10 @@ from ciris_engine.logic.adapters.api.routes.system.helpers import (
     update_service_summary,
     validate_runtime_action,
 )
+
+# Import schemas from the new modular structure
+from ciris_engine.logic.adapters.api.routes.system.schemas import RuntimeAction, RuntimeControlResponse, ServiceStatus
+from ciris_engine.schemas.api.telemetry import ServiceMetrics
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 
 

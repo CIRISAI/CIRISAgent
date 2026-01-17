@@ -202,6 +202,174 @@ class IdentityManager:
             ],
         )
 
+    async def refresh_identity_from_template(
+        self,
+        template_name: str,
+        updated_by: str = "admin",
+    ) -> bool:
+        """
+        Refresh existing identity from template (admin operation).
+
+        Used for major template updates. Requires explicit --identity-update flag.
+        Uses update_agent_identity() for proper tracking and signing.
+
+        Args:
+            template_name: Name of the template to load
+            updated_by: ID of the admin/system performing the update
+
+        Returns:
+            True if update successful, False otherwise
+        """
+        from ciris_engine.logic.config import get_sqlite_db_full_path
+        from ciris_engine.logic.persistence.models.identity import update_agent_identity
+        from ciris_engine.logic.utils.path_resolution import find_template_file
+
+        logger.info(f"Refreshing identity from template '{template_name}' (admin: {updated_by})")
+
+        # 1. Get current identity from graph (must exist)
+        current_identity_data = await self._get_identity_from_graph()
+        if not current_identity_data:
+            logger.error("Cannot refresh identity - no existing identity found in graph")
+            return False
+
+        current_identity = AgentIdentityRoot.model_validate(current_identity_data)
+        logger.info(
+            f"Found existing identity: {current_identity.agent_id} (version: {current_identity.identity_metadata.modification_count})"
+        )
+
+        # 2. Load the template
+        template_path = find_template_file(template_name)
+        if not template_path:
+            logger.error(f"Template '{template_name}' not found")
+            return False
+
+        template = await self._load_template(template_path)
+        if not template:
+            logger.error(f"Failed to load template '{template_name}'")
+            return False
+
+        logger.info(f"Loaded template: {template.name}")
+
+        # 3. Create updated identity preserving creation metadata
+        updated_identity = self._create_updated_identity_from_template(template, current_identity)
+
+        # 4. Call update_agent_identity for proper tracking
+        db_path = get_sqlite_db_full_path(self.config)
+        success = update_agent_identity(
+            updated_identity,
+            updated_by=updated_by,
+            time_service=self.time_service,
+            db_path=db_path,
+        )
+
+        if success:
+            self.agent_identity = updated_identity
+            self.agent_template = template  # Store for config migration if needed
+            logger.info(
+                f"Identity refreshed from template '{template_name}' "
+                f"(new version: {updated_identity.identity_metadata.modification_count + 1})"
+            )
+        else:
+            logger.error("Failed to update identity in graph")
+
+        return success
+
+    def _create_updated_identity_from_template(
+        self,
+        template: AgentTemplate,
+        current_identity: AgentIdentityRoot,
+    ) -> AgentIdentityRoot:
+        """Create updated identity from template, preserving creation metadata."""
+        # Generate new identity hash
+        identity_string = f"{template.name}:{template.description}:{template.role_description}"
+        identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
+
+        # Extract DSDMA configuration from template
+        domain_knowledge = {}
+        dsdma_prompt_template = None
+
+        if template.dsdma_kwargs:
+            if template.dsdma_kwargs.domain_specific_knowledge:
+                for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
+                    if isinstance(value, dict):
+                        import json
+
+                        domain_knowledge[key] = json.dumps(value)
+                    else:
+                        domain_knowledge[key] = str(value)
+
+            if template.dsdma_kwargs.prompt_template:
+                dsdma_prompt_template = template.dsdma_kwargs.prompt_template
+
+        # Preserve lineage and add template refresh marker
+        lineage = list(current_identity.identity_metadata.lineage_trace or [])
+        lineage.append(f"template_refresh:{template.name}")
+
+        # Create updated identity
+        return AgentIdentityRoot(
+            agent_id=template.name,
+            identity_hash=identity_hash,
+            core_profile=CoreProfile(
+                description=template.description,
+                role_description=template.role_description,
+                domain_specific_knowledge=domain_knowledge,
+                dsdma_prompt_template=dsdma_prompt_template,
+                csdma_overrides={
+                    k: v
+                    for k, v in (template.csdma_overrides.__dict__ if template.csdma_overrides else {}).items()
+                    if v is not None
+                },
+                action_selection_pdma_overrides={
+                    k: v
+                    for k, v in (
+                        template.action_selection_pdma_overrides.__dict__
+                        if template.action_selection_pdma_overrides
+                        else {}
+                    ).items()
+                    if v is not None
+                },
+                # Preserve last shutdown memory from current identity
+                last_shutdown_memory=current_identity.core_profile.last_shutdown_memory,
+            ),
+            identity_metadata=IdentityMetadata(
+                # Preserve original creation info
+                created_at=current_identity.identity_metadata.created_at,
+                creator_agent_id=current_identity.identity_metadata.creator_agent_id,
+                # Update modification info
+                last_modified=self.time_service.now(),
+                modification_count=current_identity.identity_metadata.modification_count + 1,
+                lineage_trace=lineage,
+                # Preserve approval info from current
+                approval_required=current_identity.identity_metadata.approval_required,
+                approved_by=current_identity.identity_metadata.approved_by,
+                approval_timestamp=current_identity.identity_metadata.approval_timestamp,
+                version=CIRIS_VERSION,
+            ),
+            permitted_actions=[
+                HandlerActionType(action) if isinstance(action, str) else action
+                for action in (
+                    template.permitted_actions
+                    or [
+                        HandlerActionType.OBSERVE,
+                        HandlerActionType.SPEAK,
+                        HandlerActionType.TOOL,
+                        HandlerActionType.MEMORIZE,
+                        HandlerActionType.RECALL,
+                        HandlerActionType.FORGET,
+                        HandlerActionType.DEFER,
+                        HandlerActionType.REJECT,
+                        HandlerActionType.PONDER,
+                        HandlerActionType.TASK_COMPLETE,
+                    ]
+                )
+            ],
+            restricted_capabilities=[
+                "identity_change_without_approval",
+                "profile_switching",
+                "unauthorized_data_access",
+            ],
+        )
+
     async def verify_identity_integrity(self) -> bool:
         """Verify identity has been properly loaded."""
         if not self.agent_identity:

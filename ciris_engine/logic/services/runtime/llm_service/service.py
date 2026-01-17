@@ -664,7 +664,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
                         # Check for rate limit / 429 errors - DON'T record as circuit breaker failure
                         # Rate limits are transient and will be retried by the LLM bus
-                        is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
+                        is_rate_limit = (
+                            ERROR_PATTERN_RATE_LIMIT in error_str
+                            or ERROR_PATTERN_429 in error_str
+                            or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
+                        )
 
                         # Only record circuit breaker failure for non-rate-limit errors
                         if not is_rate_limit:
@@ -740,9 +744,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                                 f"(not incrementing - rate limits are transient)\n"
                                 f"  Error: {full_error[:300]}"
                             )
-                            raise RuntimeError(
-                                "LLM rate limit exceeded (429) - will be retried by LLM bus"
-                            ) from e
+                            raise RuntimeError("LLM rate limit exceeded (429) - will be retried by LLM bus") from e
 
                         # Check for context length / token limit exceeded errors (400)
                         elif (
@@ -796,7 +798,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 # Wrap all other exceptions with context to avoid empty error messages
                 # Check for rate limits in the catch-all too (in case instructor module structure changed)
                 error_str_lower = str(e).lower()
-                is_rate_limit = ERROR_PATTERN_RATE_LIMIT in error_str_lower or ERROR_PATTERN_429 in error_str_lower or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
+                is_rate_limit = (
+                    ERROR_PATTERN_RATE_LIMIT in error_str_lower
+                    or ERROR_PATTERN_429 in error_str_lower
+                    or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
+                )
 
                 if not is_rate_limit:
                     self.circuit_breaker.record_failure()

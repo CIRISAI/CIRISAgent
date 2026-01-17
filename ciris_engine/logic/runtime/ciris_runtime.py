@@ -1121,7 +1121,9 @@ class CIRISRuntime(ServicePropertyMixin):
         log_step(7, total_steps, "Adapter services registered")
 
         # Step 8: Initialize maintenance service
-        log_step(8, total_steps, f"Initializing maintenance... maintenance_service={self.maintenance_service is not None}")
+        log_step(
+            8, total_steps, f"Initializing maintenance... maintenance_service={self.maintenance_service is not None}"
+        )
         if self.maintenance_service:
             await self._perform_startup_maintenance()
             log_step(8, total_steps, "Maintenance service initialized")
@@ -1388,9 +1390,7 @@ class CIRISRuntime(ServicePropertyMixin):
         kwargs: JSONDict,
     ) -> None:
         """Create bootstrap config from legacy parameters."""
-        create_bootstrap_from_legacy(
-            self, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
-        )
+        create_bootstrap_from_legacy(self, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs)
 
     def _check_mock_llm(self) -> None:
         """Check for mock LLM environment variable and add to modules if needed."""

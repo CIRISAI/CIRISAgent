@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ciris_engine.logic.adapters.api.dependencies.auth import AuthContext, UserRole
-from ciris_engine.logic.adapters.api.routes.system.schemas import RuntimeControlResponse
 from ciris_engine.logic.adapters.api.routes.system.runtime import control_runtime
+from ciris_engine.logic.adapters.api.routes.system.schemas import RuntimeControlResponse
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus, RuntimeStatusResponse
 

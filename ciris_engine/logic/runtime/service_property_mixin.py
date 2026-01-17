@@ -20,9 +20,7 @@ if TYPE_CHECKING:
     from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
     from ciris_engine.protocols.services.graph.tsdb_consolidation import TSDBConsolidationServiceProtocol
     from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
-    from ciris_engine.protocols.services.infrastructure.database_maintenance import (
-        DatabaseMaintenanceServiceProtocol,
-    )
+    from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
     from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
     from ciris_engine.protocols.services.lifecycle.initialization import InitializationServiceProtocol
     from ciris_engine.protocols.services.lifecycle.scheduler import TaskSchedulerServiceProtocol

@@ -8,7 +8,7 @@ and appear in the /v1/agent/history endpoint.
 
 import asyncio
 import logging
-from typing import Callable, Optional, Awaitable
+from typing import Awaitable, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,7 @@ _last_emit_times: dict[str, float] = {}
 _MIN_EMIT_INTERVAL = 5.0  # Minimum seconds between same-category messages
 
 
-def set_error_callback(
-    callback: Callable[[str, str, str], Awaitable[None]]
-) -> None:
+def set_error_callback(callback: Callable[[str, str, str], Awaitable[None]]) -> None:
     """
     Set the global error callback.
 
@@ -67,6 +65,7 @@ async def emit_error(
 
     # Rate limiting by category
     import time
+
     now = time.time()
     last_time = _last_emit_times.get(category, 0)
     if now - last_time < _MIN_EMIT_INTERVAL:

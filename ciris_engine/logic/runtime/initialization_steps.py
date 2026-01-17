@@ -244,6 +244,8 @@ async def initialize_identity(runtime: Any) -> None:
     In first-run mode, this only creates the IdentityManager but does NOT seed the graph.
     The actual identity seeding happens in resume_from_first_run() AFTER the user selects
     their template in the setup wizard.
+
+    If --identity-update flag is set, refresh identity from template after normal init.
     """
     from ciris_engine.logic.runtime.identity_manager import IdentityManager
     from ciris_engine.logic.setup.first_run import is_first_run
@@ -258,6 +260,23 @@ async def initialize_identity(runtime: Any) -> None:
         return
 
     runtime.agent_identity = await runtime.identity_manager.initialize_identity()
+
+    # Handle --identity-update flag for admin template refresh
+    identity_update = getattr(runtime, "_identity_update", False)
+    if identity_update:
+        template_name = getattr(config, "default_template", "default")
+        logger.info(f"Identity update requested - refreshing from template '{template_name}'")
+        success = await runtime.identity_manager.refresh_identity_from_template(
+            template_name=template_name,
+            updated_by="admin",
+        )
+        if success:
+            runtime.agent_identity = runtime.identity_manager.agent_identity
+            logger.info("Identity successfully updated from template")
+        else:
+            logger.error("Failed to update identity from template")
+            raise RuntimeError("Identity update failed - cannot proceed")
+
     await runtime._create_startup_node()
 
 

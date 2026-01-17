@@ -13,12 +13,7 @@ from ciris_engine.protocols.services import LLMService
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.models import ImageContent, Task
-from ciris_engine.schemas.services.llm import (
-    ContentBlock,
-    ImageContentBlock,
-    ImageURLDetail,
-    TextContentBlock,
-)
+from ciris_engine.schemas.services.llm import ContentBlock, ImageContentBlock, ImageURLDetail, TextContentBlock
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:

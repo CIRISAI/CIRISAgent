@@ -4,7 +4,13 @@ import re
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+    IDMAResult,
+)
 
 logger = logging.getLogger(__name__)
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA

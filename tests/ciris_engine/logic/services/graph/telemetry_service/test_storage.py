@@ -15,10 +15,7 @@ from ciris_engine.logic.services.graph.telemetry_service.storage import (
     store_social_context,
     store_telemetry_metrics,
 )
-from ciris_engine.schemas.services.graph.telemetry import (
-    BehavioralData,
-    TelemetryData,
-)
+from ciris_engine.schemas.services.graph.telemetry import BehavioralData, TelemetryData
 
 
 class TestStoreTelemetryMetrics:
@@ -170,6 +167,7 @@ class TestStoreSocialContext:
     async def test_store_social_context_with_profiles(self, mock_telemetry_service):
         """Test storing social context with user profiles."""
         from datetime import datetime, timezone
+
         from ciris_engine.schemas.runtime.system_context import UserProfile
 
         user_profiles = [
@@ -192,6 +190,7 @@ class TestStoreSocialContext:
     async def test_store_social_context_with_channel(self, mock_telemetry_service):
         """Test storing social context with channel context."""
         from datetime import datetime, timezone
+
         from ciris_engine.schemas.runtime.system_context import ChannelContext, UserProfile
 
         user_profiles = [UserProfile(user_id="user1", display_name="User One", created_at=datetime.now(timezone.utc))]

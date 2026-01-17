@@ -19,10 +19,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core.runtime import ProcessorStatus
 from ciris_engine.schemas.types import JSONDict
 
-from ...constants import (
-    ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
-    ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE,
-)
+from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE, ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE
 from .schemas import RuntimeControlResponse, ServiceStatus
 
 logger = logging.getLogger(__name__)

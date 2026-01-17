@@ -41,7 +41,13 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+    IDMAResult,
+)
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
@@ -100,9 +106,7 @@ async def run_dma_with_retries(
                 error_msg = str(e).replace("\n", " ").strip()
                 if not error_msg:
                     error_msg = f"<{type(e).__name__} with no message>"
-                logger.warning(
-                    "DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200]
-                )
+                logger.warning("DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200])
             elif attempt == retry_limit:
                 logger.warning(
                     "DMA %s final attempt %s failed (same error repeated %s times)",

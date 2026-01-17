@@ -94,9 +94,7 @@ class FetchedMessage(BaseModel):
     author_name: Optional[str] = None
     timestamp: Optional[str] = None
     is_bot: Optional[bool] = False
-    message_type: Optional[str] = Field(
-        default="user", description="Type of message (user, agent, system, error)"
-    )
+    message_type: Optional[str] = Field(default="user", description="Type of message (user, agent, system, error)")
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 

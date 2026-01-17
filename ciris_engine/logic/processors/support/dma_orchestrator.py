@@ -20,7 +20,13 @@ from ciris_engine.logic.processors.support.processing_queue import ProcessingQue
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
+from ciris_engine.schemas.dma.results import (
+    ActionSelectionDMAResult,
+    CSDMAResult,
+    DSDMAResult,
+    EthicalDMAResult,
+    IDMAResult,
+)
 from ciris_engine.schemas.processors.core import DMAResults
 from ciris_engine.schemas.processors.dma import DMAError, DMAErrors, DMAMetadata, InitialDMAResults
 from ciris_engine.schemas.runtime.models import Thought
@@ -163,7 +169,9 @@ class DMAOrchestrator:
 
         errors = DMAErrors()
         tasks = {
-            "ethical_pdma": self._create_dma_task(run_pdma, self.ethical_pdma_evaluator, thought_item, processing_context),
+            "ethical_pdma": self._create_dma_task(
+                run_pdma, self.ethical_pdma_evaluator, thought_item, processing_context
+            ),
             "csdma": self._create_dma_task(run_csdma, self.csdma_evaluator, thought_item, processing_context),
             "dsdma": self._create_dma_task(run_dsdma, self.dsdma, thought_item, dsdma_context or DMAMetadata()),
         }

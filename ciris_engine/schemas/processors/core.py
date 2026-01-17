@@ -96,9 +96,7 @@ class ConscienceApplicationResult(BaseModel):
     updated_status_detected: Optional[bool] = Field(
         None, description="Whether UpdatedStatusConscience detected new information"
     )
-    updated_status_content: Optional[str] = Field(
-        None, description="Content of new observation if detected"
-    )
+    updated_status_content: Optional[str] = Field(None, description="Content of new observation if detected")
 
     # 2. Thought Depth Conscience
     thought_depth_triggered: Optional[bool] = Field(
@@ -114,14 +112,10 @@ class ConscienceApplicationResult(BaseModel):
     )
 
     # 3. Entropy Conscience
-    entropy_check: Optional[EntropyCheckResult] = Field(
-        None, description="Entropy conscience check result"
-    )
+    entropy_check: Optional[EntropyCheckResult] = Field(None, description="Entropy conscience check result")
 
     # 4. Coherence Conscience
-    coherence_check: Optional[CoherenceCheckResult] = Field(
-        None, description="Coherence conscience check result"
-    )
+    coherence_check: Optional[CoherenceCheckResult] = Field(None, description="Coherence conscience check result")
 
     # 5. Optimization Veto Conscience
     optimization_veto_check: Optional[OptimizationVetoResult] = Field(

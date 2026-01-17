@@ -383,8 +383,7 @@ class Adapter(Service):
             return None
 
         logger.error(
-            f"WebSocket transport not yet implemented. "
-            f"Cannot connect to server '{server_config.server_id}'"
+            f"WebSocket transport not yet implemented. " f"Cannot connect to server '{server_config.server_id}'"
         )
         return None
 

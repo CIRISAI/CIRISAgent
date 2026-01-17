@@ -155,9 +155,7 @@ def collect_from_registry_services(
 
                 if not already_collected:
                     # Generate semantic name for the service
-                    semantic_name = generate_semantic_service_name(
-                        service_type, provider_name, provider_metadata
-                    )
+                    semantic_name = generate_semantic_service_name(service_type, provider_name, provider_metadata)
 
                     # Create a collection task for this dynamic service
                     task = asyncio.create_task(collect_from_registry_provider_coro(service_type, provider_name))

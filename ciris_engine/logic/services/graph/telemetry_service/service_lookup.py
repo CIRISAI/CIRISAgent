@@ -102,9 +102,7 @@ def get_service_from_runtime(runtime: Any, service_name: str) -> Optional[Any]:
     return None
 
 
-def get_service_from_registry(
-    runtime: Optional[Any], service_registry: Any, service_name: str
-) -> Optional[Any]:
+def get_service_from_registry(runtime: Optional[Any], service_registry: Any, service_name: str) -> Optional[Any]:
     """Get service from runtime first, then registry by name."""
     # First try to get service directly from runtime
     if runtime:

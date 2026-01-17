@@ -17,7 +17,6 @@ from ciris_engine.utils.serialization import serialize_timestamp
 
 from ...constants import DESC_CURRENT_COGNITIVE_STATE, DESC_HUMAN_READABLE_STATUS
 
-
 # Health & Time Response Models
 
 

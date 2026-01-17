@@ -31,9 +31,9 @@ from ...dependencies.auth import AuthContext, require_admin, require_observer
 from .helpers import get_adapter_config_service
 from .schemas import (
     AdapterActionRequest,
+    ConfigStepInfo,
     ConfigurableAdapterInfo,
     ConfigurableAdaptersResponse,
-    ConfigStepInfo,
     PersistedConfigsResponse,
     RemovePersistedResponse,
 )

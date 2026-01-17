@@ -15,11 +15,7 @@ This is a semantic/LLM-based implementation - no hardware dependencies.
 import logging
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.formatters import (
-    format_system_prompt_blocks,
-    format_system_snapshot,
-    format_user_profiles,
-)
+from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import COVENANT_TEXT
@@ -156,22 +152,28 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         context_parts = []
 
         if ethical_result:
-            context_parts.append(f"=== Ethical PDMA Analysis ===\n"
-                                 f"Stakeholders: {getattr(ethical_result, 'stakeholders', 'N/A')}\n"
-                                 f"Conflicts: {getattr(ethical_result, 'conflicts', 'N/A')}\n"
-                                 f"Reasoning: {getattr(ethical_result, 'reasoning', 'N/A')}")
+            context_parts.append(
+                f"=== Ethical PDMA Analysis ===\n"
+                f"Stakeholders: {getattr(ethical_result, 'stakeholders', 'N/A')}\n"
+                f"Conflicts: {getattr(ethical_result, 'conflicts', 'N/A')}\n"
+                f"Reasoning: {getattr(ethical_result, 'reasoning', 'N/A')}"
+            )
 
         if csdma_result:
-            context_parts.append(f"=== Common Sense Analysis ===\n"
-                                 f"Plausibility: {getattr(csdma_result, 'plausibility_score', 'N/A')}\n"
-                                 f"Flags: {getattr(csdma_result, 'flags', [])}\n"
-                                 f"Reasoning: {getattr(csdma_result, 'reasoning', 'N/A')}")
+            context_parts.append(
+                f"=== Common Sense Analysis ===\n"
+                f"Plausibility: {getattr(csdma_result, 'plausibility_score', 'N/A')}\n"
+                f"Flags: {getattr(csdma_result, 'flags', [])}\n"
+                f"Reasoning: {getattr(csdma_result, 'reasoning', 'N/A')}"
+            )
 
         if dsdma_result:
-            context_parts.append(f"=== Domain-Specific Analysis ===\n"
-                                 f"Domain: {getattr(dsdma_result, 'domain', 'N/A')}\n"
-                                 f"Alignment: {getattr(dsdma_result, 'domain_alignment', 'N/A')}\n"
-                                 f"Reasoning: {getattr(dsdma_result, 'reasoning', 'N/A')}")
+            context_parts.append(
+                f"=== Domain-Specific Analysis ===\n"
+                f"Domain: {getattr(dsdma_result, 'domain', 'N/A')}\n"
+                f"Alignment: {getattr(dsdma_result, 'domain_alignment', 'N/A')}\n"
+                f"Reasoning: {getattr(dsdma_result, 'reasoning', 'N/A')}"
+            )
 
         return "\n\n".join(context_parts) if context_parts else "No prior DMA context available"
 

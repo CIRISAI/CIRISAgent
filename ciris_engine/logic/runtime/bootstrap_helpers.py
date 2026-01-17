@@ -48,6 +48,7 @@ def parse_bootstrap_config(
         runtime.modules_to_load = bootstrap.modules
         runtime.debug = bootstrap.debug
         runtime._preload_tasks = bootstrap.preload_tasks
+        runtime._identity_update = bootstrap.identity_update
     else:
         create_bootstrap_from_legacy(
             runtime, essential_config, startup_channel_id, adapter_types, adapter_configs, kwargs
@@ -83,6 +84,8 @@ def create_bootstrap_from_legacy(
     debug_raw = kwargs.get("debug", False)
     runtime.debug = debug_raw if isinstance(debug_raw, bool) else False
     runtime._preload_tasks = []
+    identity_update_raw = kwargs.get("identity_update", False)
+    runtime._identity_update = identity_update_raw if isinstance(identity_update_raw, bool) else False
 
     from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
     from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
@@ -97,6 +100,7 @@ def create_bootstrap_from_legacy(
         startup_channel_id=runtime.startup_channel_id,
         debug=runtime.debug,
         preload_tasks=runtime._preload_tasks,
+        identity_update=runtime._identity_update,
     )
 
 

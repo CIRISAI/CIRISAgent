@@ -96,9 +96,7 @@ class CovenantMetricsConfigurable:
         """
         return {}
 
-    async def get_config_options(
-        self, step_id: str, context: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    async def get_config_options(self, step_id: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get dynamic options for configuration steps.
 
         Args:

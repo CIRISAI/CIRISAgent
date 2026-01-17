@@ -11,9 +11,9 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import psutil
 import requests
@@ -21,10 +21,10 @@ from rich.console import Console
 
 from .config import QAConfig
 
-
 # ============================================================================
 # Mock Logshipper Server - Receives covenant traces from agents
 # ============================================================================
+
 
 class MockLogshipperHandler(BaseHTTPRequestHandler):
     """HTTP handler for mock logshipper that receives covenant traces."""
@@ -40,11 +40,11 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         """Handle POST requests to /v1/covenant/events or /covenant/events."""
         if self.path in ("/v1/covenant/events", "/covenant/events"):
-            content_length = int(self.headers.get('Content-Length', 0))
+            content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
             try:
-                payload = json.loads(body.decode('utf-8'))
+                payload = json.loads(body.decode("utf-8"))
                 events = payload.get("events", [])
 
                 for event in events:
@@ -53,7 +53,7 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
                         self._save_trace(trace)
 
                 self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"status": "ok"}')
 
@@ -103,14 +103,16 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
         filename = f"trace_{task_name}_{short_id}.json"
         filepath = self.output_dir / filename
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(trace, f, indent=2, default=str)
 
-        MockLogshipperHandler.received_traces.append({
-            "task_name": task_name,
-            "filepath": str(filepath),
-            "components": len(components),
-        })
+        MockLogshipperHandler.received_traces.append(
+            {
+                "task_name": task_name,
+                "filepath": str(filepath),
+                "components": len(components),
+            }
+        )
 
 
 class MockLogshipperServer:
@@ -136,7 +138,7 @@ class MockLogshipperServer:
     def start(self) -> bool:
         """Start the mock server in a background thread."""
         try:
-            self.server = HTTPServer(('127.0.0.1', self.port), MockLogshipperHandler)
+            self.server = HTTPServer(("127.0.0.1", self.port), MockLogshipperHandler)
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             return True
@@ -158,6 +160,7 @@ class MockLogshipperServer:
         """Get the endpoint URL for configuring the adapter."""
         return f"http://127.0.0.1:{self.port}"
 
+
 # PostgreSQL Docker container name for QA testing
 POSTGRES_CONTAINER_NAME = "ciris-qa-postgres"
 POSTGRES_IMAGE = "postgres:15-alpine"
@@ -167,12 +170,7 @@ POSTGRES_PORT = 5432
 def _is_docker_available() -> bool:
     """Check if Docker is available."""
     try:
-        result = subprocess.run(
-            ["docker", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
+        result = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
         return result.returncode == 0
     except Exception:
         return False
@@ -182,10 +180,7 @@ def _is_postgres_container_running() -> bool:
     """Check if the PostgreSQL container is running."""
     try:
         result = subprocess.run(
-            ["docker", "ps", "-q", "-f", f"name={POSTGRES_CONTAINER_NAME}"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["docker", "ps", "-q", "-f", f"name={POSTGRES_CONTAINER_NAME}"], capture_output=True, text=True, timeout=5
         )
         return bool(result.stdout.strip())
     except Exception:
@@ -207,33 +202,33 @@ def _start_postgres_container(console: Console) -> bool:
     # Check if container exists but is stopped
     try:
         result = subprocess.run(
-            ["docker", "ps", "-aq", "-f", f"name={POSTGRES_CONTAINER_NAME}"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["docker", "ps", "-aq", "-f", f"name={POSTGRES_CONTAINER_NAME}"], capture_output=True, text=True, timeout=5
         )
         if result.stdout.strip():
             # Container exists, just start it
-            subprocess.run(
-                ["docker", "start", POSTGRES_CONTAINER_NAME],
-                capture_output=True,
-                timeout=10
-            )
+            subprocess.run(["docker", "start", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=10)
             console.print("[green]✅ Started existing PostgreSQL container[/green]")
         else:
             # Create and start new container
             subprocess.run(
                 [
-                    "docker", "run", "-d",
-                    "--name", POSTGRES_CONTAINER_NAME,
-                    "-e", "POSTGRES_USER=ciris_test",
-                    "-e", "POSTGRES_PASSWORD=ciris_test_password",
-                    "-e", "POSTGRES_DB=ciris_test_db",
-                    "-p", f"{POSTGRES_PORT}:5432",
-                    POSTGRES_IMAGE
+                    "docker",
+                    "run",
+                    "-d",
+                    "--name",
+                    POSTGRES_CONTAINER_NAME,
+                    "-e",
+                    "POSTGRES_USER=ciris_test",
+                    "-e",
+                    "POSTGRES_PASSWORD=ciris_test_password",
+                    "-e",
+                    "POSTGRES_DB=ciris_test_db",
+                    "-p",
+                    f"{POSTGRES_PORT}:5432",
+                    POSTGRES_IMAGE,
                 ],
                 capture_output=True,
-                timeout=60
+                timeout=60,
             )
             console.print("[green]✅ Created new PostgreSQL container[/green]")
     except Exception as e:
@@ -245,12 +240,9 @@ def _start_postgres_container(console: Console) -> bool:
     for _ in range(30):  # Wait up to 30 seconds
         try:
             result = subprocess.run(
-                [
-                    "docker", "exec", POSTGRES_CONTAINER_NAME,
-                    "pg_isready", "-U", "ciris_test"
-                ],
+                ["docker", "exec", POSTGRES_CONTAINER_NAME, "pg_isready", "-U", "ciris_test"],
                 capture_output=True,
-                timeout=5
+                timeout=5,
             )
             if result.returncode == 0:
                 console.print("[green]✅ PostgreSQL is ready[/green]")
@@ -273,13 +265,20 @@ def _create_derivative_databases(console: Console) -> bool:
         # Create ciris_test_db_secrets
         result = subprocess.run(
             [
-                "docker", "exec", POSTGRES_CONTAINER_NAME,
-                "psql", "-U", "ciris_test", "-d", "postgres", "-c",
-                "CREATE DATABASE ciris_test_db_secrets OWNER ciris_test;"
+                "docker",
+                "exec",
+                POSTGRES_CONTAINER_NAME,
+                "psql",
+                "-U",
+                "ciris_test",
+                "-d",
+                "postgres",
+                "-c",
+                "CREATE DATABASE ciris_test_db_secrets OWNER ciris_test;",
             ],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
         if result.returncode == 0:
             console.print("[green]✅ Created ciris_test_db_secrets[/green]")
@@ -291,13 +290,20 @@ def _create_derivative_databases(console: Console) -> bool:
         # Create ciris_test_db_auth
         result = subprocess.run(
             [
-                "docker", "exec", POSTGRES_CONTAINER_NAME,
-                "psql", "-U", "ciris_test", "-d", "postgres", "-c",
-                "CREATE DATABASE ciris_test_db_auth OWNER ciris_test;"
+                "docker",
+                "exec",
+                POSTGRES_CONTAINER_NAME,
+                "psql",
+                "-U",
+                "ciris_test",
+                "-d",
+                "postgres",
+                "-c",
+                "CREATE DATABASE ciris_test_db_auth OWNER ciris_test;",
             ],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
         if result.returncode == 0:
             console.print("[green]✅ Created ciris_test_db_auth[/green]")
@@ -317,11 +323,7 @@ def _stop_postgres_container(console: Console):
     if _is_postgres_container_running():
         console.print("[cyan]🐘 Stopping PostgreSQL container...[/cyan]")
         try:
-            subprocess.run(
-                ["docker", "stop", POSTGRES_CONTAINER_NAME],
-                capture_output=True,
-                timeout=15
-            )
+            subprocess.run(["docker", "stop", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=15)
             console.print("[green]✅ PostgreSQL container stopped[/green]")
         except Exception as e:
             console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
@@ -411,11 +413,13 @@ class APIServerManager:
 
         try:
             import sqlite3
+
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()
 
             # Delete shared wakeup tasks and individual wakeup step tasks
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM tasks WHERE
                 task_id LIKE '%WAKEUP%' OR
                 task_id LIKE '%VERIFY_IDENTITY%' OR
@@ -423,11 +427,13 @@ class APIServerManager:
                 task_id LIKE '%EVALUATE_RESILIENCE%' OR
                 task_id LIKE '%ACCEPT_INCOMPLETENESS%' OR
                 task_id LIKE '%EXPRESS_GRATITUDE%'
-            """)
+            """
+            )
             tasks_deleted = cursor.rowcount
 
             # Delete related thoughts
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM thoughts WHERE
                 source_task_id LIKE '%WAKEUP%' OR
                 source_task_id LIKE '%VERIFY_IDENTITY%' OR
@@ -435,14 +441,17 @@ class APIServerManager:
                 source_task_id LIKE '%EVALUATE_RESILIENCE%' OR
                 source_task_id LIKE '%ACCEPT_INCOMPLETENESS%' OR
                 source_task_id LIKE '%EXPRESS_GRATITUDE%'
-            """)
+            """
+            )
             thoughts_deleted = cursor.rowcount
 
             conn.commit()
             conn.close()
 
             if tasks_deleted > 0 or thoughts_deleted > 0:
-                self.console.print(f"[cyan]🧹 Cleared wakeup state: {tasks_deleted} tasks, {thoughts_deleted} thoughts[/cyan]")
+                self.console.print(
+                    f"[cyan]🧹 Cleared wakeup state: {tasks_deleted} tasks, {thoughts_deleted} thoughts[/cyan]"
+                )
             return True
         except Exception as e:
             self.console.print(f"[yellow]⚠️  Could not clear wakeup state: {e}[/yellow]")
@@ -745,7 +754,9 @@ class APIServerManager:
             if auth_response.status_code == 200:
                 token = auth_response.json()["access_token"]
             else:
-                self.console.print(f"[yellow]⚠️  Auth failed: {auth_response.status_code} - {auth_response.text[:100]}[/yellow]")
+                self.console.print(
+                    f"[yellow]⚠️  Auth failed: {auth_response.status_code} - {auth_response.text[:100]}[/yellow]"
+                )
         except Exception as e:
             self.console.print(f"[yellow]⚠️  Could not authenticate for state check: {e}[/yellow]")
 

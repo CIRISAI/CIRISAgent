@@ -24,7 +24,7 @@ def cmd_status(bridge: EmulatorBridge, args):
     print("=" * 60)
     print("CIRIS Mobile QA Runner - Status")
     print("=" * 60)
-    
+
     # Check device
     try:
         device = bridge.get_device()
@@ -36,18 +36,18 @@ def cmd_status(bridge: EmulatorBridge, args):
     except Exception as e:
         print(f"\n✗ No device: {e}")
         return False
-    
+
     # Check first-run status
     is_first_run = bridge.check_first_run()
     print(f"\n{'!' if is_first_run else '✓'} First-run: {is_first_run}")
     if is_first_run:
         print("  (No .env file - setup wizard will show)")
-    
+
     # Check server
     print("\n" + "-" * 40)
     print("Starting port forward...")
     bridge.start_port_forward()
-    
+
     status = bridge.check_server_status()
     if status.reachable:
         print("\n✓ Server reachable")
@@ -57,7 +57,7 @@ def cmd_status(bridge: EmulatorBridge, args):
             print("  Mode: First-run (10 services)")
     else:
         print(f"\n✗ Server not reachable: {status.error}")
-    
+
     print("\n" + "=" * 60)
     return status.healthy
 
@@ -73,6 +73,7 @@ def cmd_bridge(bridge: EmulatorBridge, args):
         print("\nPress Ctrl+C to stop...")
         try:
             import time
+
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
@@ -87,19 +88,19 @@ def cmd_setup(bridge: EmulatorBridge, args):
         print("Error: --llm-api-key is required for setup")
         print("Usage: python -m tools.mobile_qa_runner setup --llm-api-key sk-...")
         return False
-    
+
     print("Creating .env file on device...")
     success = bridge.create_env_file(
         llm_api_key=args.llm_api_key,
         llm_provider=args.llm_provider,
         llm_model=args.llm_model,
-        admin_password=args.admin_password
+        admin_password=args.admin_password,
     )
-    
+
     if success:
         print("\n✓ Setup complete. Restart the app to apply:")
         print("  python -m tools.mobile_qa_runner restart")
-    
+
     return success
 
 
@@ -107,11 +108,11 @@ def cmd_reset(bridge: EmulatorBridge, args):
     """Delete .env to reset to first-run state."""
     print("Resetting to first-run state...")
     success = bridge.delete_env_file()
-    
+
     if success:
         print("\n✓ Reset complete. Restart the app to show setup wizard:")
         print("  python -m tools.mobile_qa_runner restart")
-    
+
     return success
 
 
@@ -134,10 +135,10 @@ def cmd_wait(bridge: EmulatorBridge, args):
     """Wait for server to become healthy."""
     print("Waiting for server to be ready...")
     bridge.start_port_forward()
-    
+
     timeout = args.timeout or 120
     status = bridge.wait_for_server(timeout=timeout)
-    
+
     if status.healthy:
         print(f"\n✓ Server ready: {status.services_online}/{status.total_services} services")
         return True
@@ -152,10 +153,10 @@ def cmd_run(bridge: EmulatorBridge, args):
         print("Error: No modules specified")
         print("Usage: python -m tools.mobile_qa_runner run auth telemetry")
         return False
-    
+
     print("Starting port forward...")
     bridge.start_port_forward()
-    
+
     print("Checking server health...")
     status = bridge.check_server_status()
     if not status.healthy:
@@ -163,19 +164,19 @@ def cmd_run(bridge: EmulatorBridge, args):
         if not args.force:
             print("Use --force to run anyway")
             return False
-    
+
     all_success = True
     for module in args.modules:
         print(f"\n{'=' * 60}")
         print(f"Running module: {module}")
         print("=" * 60)
-        
+
         success, message = bridge.run_qa_module(module)
         print(f"\n{module}: {'✓ PASSED' if success else '✗ FAILED'} - {message}")
-        
+
         if not success:
             all_success = False
-    
+
     return all_success
 
 
@@ -210,64 +211,64 @@ Examples:
 
   # Run multiple test modules
   python -m tools.mobile_qa_runner run auth telemetry agent
-"""
+""",
     )
-    
+
     # Global options
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("-s", "--device", dest="device_serial", help="Device serial (default: first emulator)")
     parser.add_argument("--port", type=int, default=8080, help="Local port for bridge (default: 8080)")
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
-    
+
     # Status command
     subparsers.add_parser("status", help="Check device and server status")
-    
+
     # Bridge command
     subparsers.add_parser("bridge", help="Start ADB port forwarding")
-    
+
     # Setup command
     setup_parser = subparsers.add_parser("setup", help="Create .env on device")
     setup_parser.add_argument("--llm-api-key", required=True, help="LLM API key")
     setup_parser.add_argument("--llm-provider", default="openai", help="LLM provider (default: openai)")
     setup_parser.add_argument("--llm-model", default="gpt-4o", help="LLM model (default: gpt-4o)")
     setup_parser.add_argument("--admin-password", help="Admin password (auto-generated if not provided)")
-    
+
     # Reset command
     subparsers.add_parser("reset", help="Delete .env (reset to first-run)")
-    
+
     # Restart command
     subparsers.add_parser("restart", help="Restart the CIRIS app")
-    
+
     # Logs command
     logs_parser = subparsers.add_parser("logs", help="Show recent logcat")
     logs_parser.add_argument("-n", "--lines", type=int, default=100, help="Number of lines")
-    
+
     # Wait command
     wait_parser = subparsers.add_parser("wait", help="Wait for server to be healthy")
     wait_parser.add_argument("-t", "--timeout", type=float, default=120, help="Timeout in seconds")
-    
+
     # Run command
     run_parser = subparsers.add_parser("run", help="Run QA tests via bridge")
     run_parser.add_argument("modules", nargs="+", help="Test modules to run")
     run_parser.add_argument("--force", action="store_true", help="Run even if server not healthy")
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    
+
     # Create config
     config = MobileQAConfig(
         verbose=args.verbose,
         device_serial=args.device_serial,
         local_port=args.port,
     )
-    
+
     # Create bridge
     bridge = EmulatorBridge(config)
-    
+
     # Dispatch command
     commands = {
         "status": cmd_status,
@@ -279,7 +280,7 @@ Examples:
         "wait": cmd_wait,
         "run": cmd_run,
     }
-    
+
     handler = commands.get(args.command)
     if handler:
         success = handler(bridge, args)

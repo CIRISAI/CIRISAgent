@@ -1,7 +1,8 @@
 """Tests for config_migration.py module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestConfigMigration:

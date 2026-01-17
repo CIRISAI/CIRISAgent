@@ -234,7 +234,9 @@ class MCPTests:
         mcp_tools = [t for t in tool_names if t.startswith(f"mcp_{self._mcp_server_id}_")]
 
         if not mcp_tools:
-            raise ValueError(f"No MCP tools discovered with prefix 'mcp_{self._mcp_server_id}_'. Available tools: {tool_names[:10]}")
+            raise ValueError(
+                f"No MCP tools discovered with prefix 'mcp_{self._mcp_server_id}_'. Available tools: {tool_names[:10]}"
+            )
 
         self.console.print(f"     [dim]Found {len(mcp_tools)} MCP tools: {mcp_tools}[/dim]")
 

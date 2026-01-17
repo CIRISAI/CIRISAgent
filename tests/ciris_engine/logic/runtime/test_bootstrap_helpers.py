@@ -1,8 +1,9 @@
 """Tests for bootstrap_helpers.py module."""
 
-import pytest
-from unittest.mock import MagicMock, patch
 import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestBootstrapHelpers:

@@ -23,12 +23,7 @@ from .helpers import (
     get_runtime_control_service,
     validate_runtime_action,
 )
-from .schemas import (
-    RuntimeAction,
-    RuntimeControlResponse,
-    StateTransitionRequest,
-    StateTransitionResponse,
-)
+from .schemas import RuntimeAction, RuntimeControlResponse, StateTransitionRequest, StateTransitionResponse
 
 logger = logging.getLogger(__name__)
 

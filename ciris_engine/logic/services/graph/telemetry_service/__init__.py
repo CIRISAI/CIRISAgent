@@ -16,37 +16,6 @@ The module is organized into the following components:
 - exceptions.py: Custom exceptions for telemetry operations
 """
 
-from .service import GraphTelemetryService
-
-# Re-export TelemetryAggregator and related types for backward compatibility
-from .aggregator import (
-    ConsolidationCandidate,
-    GracePolicy,
-    MemoryType,
-    TelemetryAggregator,
-)
-
-# Re-export helper functions for direct access if needed
-from .registry_collection import (
-    collect_from_registry_provider,
-    collect_from_registry_services,
-    generate_semantic_service_name,
-)
-
-from .service_lookup import (
-    NAME_MAP,
-    RUNTIME_ATTRS,
-    get_service_from_registry,
-    get_service_from_runtime,
-)
-
-from .bus_collection import (
-    BUS_ATTR_MAP,
-    UPTIME_METRIC_MAP,
-    collect_from_bus,
-    collect_from_component,
-)
-
 from .adapter_collection import (
     collect_from_adapter_instances,
     collect_from_adapter_with_metrics,
@@ -61,6 +30,9 @@ from .adapter_collection import (
     is_adapter_running,
 )
 
+# Re-export TelemetryAggregator and related types for backward compatibility
+from .aggregator import ConsolidationCandidate, GracePolicy, MemoryType, TelemetryAggregator
+from .bus_collection import BUS_ATTR_MAP, UPTIME_METRIC_MAP, collect_from_bus, collect_from_component
 from .metrics_helpers import (
     aggregate_service_metrics,
     calculate_aggregates,
@@ -76,6 +48,15 @@ from .metrics_helpers import (
     try_get_metrics_method,
     try_get_status_method,
 )
+
+# Re-export helper functions for direct access if needed
+from .registry_collection import (
+    collect_from_registry_provider,
+    collect_from_registry_services,
+    generate_semantic_service_name,
+)
+from .service import GraphTelemetryService
+from .service_lookup import NAME_MAP, RUNTIME_ATTRS, get_service_from_registry, get_service_from_runtime
 
 __all__ = [
     # Main classes

@@ -141,9 +141,7 @@ def get_fallback_metrics(_service_name: Optional[str] = None, _healthy: bool = F
     """
     # NO FAKE METRICS. Services must implement get_metrics() or they get nothing.
     # Return empty telemetry data instead of empty dict
-    return ServiceTelemetryData(
-        healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-    )
+    return ServiceTelemetryData(healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0)
 
 
 def status_to_telemetry(status: Any) -> JSONDict:
@@ -250,9 +248,7 @@ def compute_covenant_metrics(
         )
         covenant_metrics.update(wa_metrics)
 
-        filter_metrics = extract_governance_metrics(
-            telemetry, "adaptive_filter", {"filter_matches": "filter_actions"}
-        )
+        filter_metrics = extract_governance_metrics(telemetry, "adaptive_filter", {"filter_matches": "filter_actions"})
         covenant_metrics.update(filter_metrics)
 
         so_metrics = extract_governance_metrics(
@@ -273,8 +269,8 @@ def calculate_aggregates(
     from datetime import datetime, timezone
 
     # Get aggregated metrics
-    total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates = (
-        aggregate_service_metrics(telemetry)
+    total_services, healthy_services, total_errors, total_requests, min_uptime, error_rates = aggregate_service_metrics(
+        telemetry
     )
 
     # Calculate overall metrics

@@ -23,7 +23,9 @@ snetio = namedtuple(
     "snetio", ["bytes_sent", "bytes_recv", "packets_sent", "packets_recv", "errin", "errout", "dropin", "dropout"]
 )
 pmem = namedtuple("pmem", ["rss", "vms", "shared", "text", "lib", "data", "dirty"])
-scputimes = namedtuple("scputimes", ["user", "system", "idle", "nice", "iowait", "irq", "softirq", "steal", "guest", "guest_nice"])
+scputimes = namedtuple(
+    "scputimes", ["user", "system", "idle", "nice", "iowait", "irq", "softirq", "steal", "guest", "guest_nice"]
+)
 
 
 def virtual_memory():
@@ -62,7 +64,7 @@ def disk_usage(path="/"):
     except (OSError, AttributeError):
         # Fallback for sandboxed environments
         total = 64 * 1024 * 1024 * 1024  # Assume 64GB
-        used = 32 * 1024 * 1024 * 1024   # Assume 50% used
+        used = 32 * 1024 * 1024 * 1024  # Assume 50% used
         free = total - used
         return sdiskusage(total=total, used=used, free=free, percent=50.0)
 
@@ -194,11 +196,13 @@ CONN_CLOSING = "CLOSING"
 
 class NoSuchProcess(Exception):
     """Exception raised when a process doesn't exist."""
+
     pass
 
 
 class AccessDenied(Exception):
     """Exception raised when access is denied."""
+
     pass
 
 
@@ -207,5 +211,6 @@ class AccessDenied(Exception):
 # =============================================================================
 
 import sys
+
 print("[iOS] Using psutil stub (pure Python)", flush=True)
-sys.modules['psutil'] = sys.modules[__name__]
+sys.modules["psutil"] = sys.modules[__name__]

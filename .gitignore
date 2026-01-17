@@ -113,3 +113,6 @@ ios/CirisiOS/logs/
 ios/wheels/
 ios/build/
 ios/pyo3-ios-config.txt
+
+# Main engine GUI static assets (regenerated from CIRISGUI)
+ciris_engine/gui_static/

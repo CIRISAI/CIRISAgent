@@ -51,12 +51,7 @@ from ciris_engine.schemas.services.operations import MemoryOpStatus
 from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 # Import from modular components
-from .aggregator import (
-    ConsolidationCandidate,
-    GracePolicy,
-    MemoryType,
-    TelemetryAggregator,
-)
+from .aggregator import ConsolidationCandidate, GracePolicy, MemoryType, TelemetryAggregator
 from .storage import (
     store_behavioral_data,
     store_identity_context,

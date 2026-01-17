@@ -142,11 +142,11 @@ async def initialize_core_services_for_resume(
         await runtime.service_initializer.load_modules(runtime.modules_to_load)
 
 
-async def initialize_llm_for_resume(
-    runtime: Any, log_step: Callable[[int, int, str], None], total_steps: int
-) -> None:
+async def initialize_llm_for_resume(runtime: Any, log_step: Callable[[int, int, str], None], total_steps: int) -> None:
     """Initialize LLM service during resume."""
-    log_step(10, total_steps, f"Initializing LLM service... service_initializer={runtime.service_initializer is not None}")
+    log_step(
+        10, total_steps, f"Initializing LLM service... service_initializer={runtime.service_initializer is not None}"
+    )
     if runtime.service_initializer:
         config = _ensure_config(runtime)
         await runtime.service_initializer._initialize_llm_services(config, runtime.modules_to_load)

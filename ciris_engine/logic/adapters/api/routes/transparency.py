@@ -364,25 +364,27 @@ async def get_coherence_traces(
         raw_traces = covenant_service.get_completed_traces()
         for trace in raw_traces[-limit:]:  # Get last N traces
             trace_dict = trace.to_dict() if hasattr(trace, "to_dict") else trace
-            traces.append(CompleteTraceResponse(
-                trace_id=trace_dict.get("trace_id", ""),
-                thought_id=trace_dict.get("thought_id", ""),
-                task_id=trace_dict.get("task_id"),
-                agent_id_hash=trace_dict.get("agent_id_hash", ""),
-                started_at=trace_dict.get("started_at", ""),
-                completed_at=trace_dict.get("completed_at"),
-                components=[
-                    TraceComponent(
-                        component_type=c.get("component_type", ""),
-                        event_type=c.get("event_type", ""),
-                        timestamp=c.get("timestamp", ""),
-                        data=c.get("data", {}),
-                    )
-                    for c in trace_dict.get("components", [])
-                ],
-                signature=trace_dict.get("signature"),
-                signature_key_id=trace_dict.get("signature_key_id"),
-            ))
+            traces.append(
+                CompleteTraceResponse(
+                    trace_id=trace_dict.get("trace_id", ""),
+                    thought_id=trace_dict.get("thought_id", ""),
+                    task_id=trace_dict.get("task_id"),
+                    agent_id_hash=trace_dict.get("agent_id_hash", ""),
+                    started_at=trace_dict.get("started_at", ""),
+                    completed_at=trace_dict.get("completed_at"),
+                    components=[
+                        TraceComponent(
+                            component_type=c.get("component_type", ""),
+                            event_type=c.get("event_type", ""),
+                            timestamp=c.get("timestamp", ""),
+                            data=c.get("data", {}),
+                        )
+                        for c in trace_dict.get("components", [])
+                    ],
+                    signature=trace_dict.get("signature"),
+                    signature_key_id=trace_dict.get("signature_key_id"),
+                )
+            )
 
     return TracesListResponse(
         traces=traces,

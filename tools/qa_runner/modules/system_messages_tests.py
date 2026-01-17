@@ -116,11 +116,7 @@ class SystemMessagesTests:
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        response = requests.get(
-            f"{base_url}/v1/system/runtime/queue",
-            headers=headers,
-            timeout=10
-        )
+        response = requests.get(f"{base_url}/v1/system/runtime/queue", headers=headers, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
@@ -215,11 +211,7 @@ class SystemMessagesTests:
                 passed += 1
             else:
                 failed += 1
-            table.add_row(
-                result["test"],
-                status,
-                (result["error"] or "")[:50]
-            )
+            table.add_row(result["test"], status, (result["error"] or "")[:50])
 
         self.console.print(table)
         self.console.print(f"\n[cyan]Summary: {passed} passed, {failed} failed[/cyan]")

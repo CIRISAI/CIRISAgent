@@ -122,7 +122,9 @@ def action_selection(
         parts = user_input.split(None, 1)
         command_from_context = parts[0].lower()
         command_args_from_context = parts[1] if len(parts) > 1 else ""
-        logger.info(f"[MOCK_LLM] Parsed command: '{command_from_context}' with args: '{command_args_from_context[:50]}...'")
+        logger.info(
+            f"[MOCK_LLM] Parsed command: '{command_from_context}' with args: '{command_args_from_context[:50]}...'"
+        )
     elif user_input:
         logger.info(f"[MOCK_LLM] user_input doesn't start with $: '{user_input[:50]}...'")
 

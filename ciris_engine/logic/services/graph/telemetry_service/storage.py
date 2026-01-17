@@ -10,11 +10,7 @@ from typing import Any, List, Optional
 
 from ciris_engine.schemas.runtime.system_context import ChannelContext as SystemChannelContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot, UserProfile
-from ciris_engine.schemas.services.graph.telemetry import (
-    BehavioralData,
-    ResourceData,
-    TelemetryData,
-)
+from ciris_engine.schemas.services.graph.telemetry import BehavioralData, ResourceData, TelemetryData
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 from .aggregator import MemoryType
@@ -79,9 +75,7 @@ async def store_resource_usage(
         # Convert dict to LLMUsageData first
         llm_data = LLMUsageData(
             tokens_used=(
-                resources.llm.get("tokens_used")
-                if isinstance(resources.llm.get("tokens_used"), (int, float))
-                else None
+                resources.llm.get("tokens_used") if isinstance(resources.llm.get("tokens_used"), (int, float)) else None
             ),
             tokens_input=(
                 resources.llm.get("tokens_input")
@@ -94,9 +88,7 @@ async def store_resource_usage(
                 else None
             ),
             cost_cents=(
-                resources.llm.get("cost_cents")
-                if isinstance(resources.llm.get("cost_cents"), (int, float))
-                else None
+                resources.llm.get("cost_cents") if isinstance(resources.llm.get("cost_cents"), (int, float)) else None
             ),
             carbon_grams=(
                 resources.llm.get("carbon_grams")
@@ -104,13 +96,9 @@ async def store_resource_usage(
                 else None
             ),
             energy_kwh=(
-                resources.llm.get("energy_kwh")
-                if isinstance(resources.llm.get("energy_kwh"), (int, float))
-                else None
+                resources.llm.get("energy_kwh") if isinstance(resources.llm.get("energy_kwh"), (int, float)) else None
             ),
-            model_used=(
-                resources.llm.get("model_used") if isinstance(resources.llm.get("model_used"), str) else None
-            ),
+            model_used=(resources.llm.get("model_used") if isinstance(resources.llm.get("model_used"), str) else None),
         )
 
         # Create ResourceUsage directly with proper types

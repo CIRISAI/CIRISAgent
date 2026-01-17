@@ -1,8 +1,9 @@
 """Tests for shutdown_continuity.py module."""
 
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 class TestShutdownContinuity:

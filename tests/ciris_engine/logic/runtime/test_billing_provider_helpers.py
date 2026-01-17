@@ -381,7 +381,9 @@ class TestReinitializeBillingProvider:
     @pytest.mark.asyncio
     async def test_returns_early_when_no_resource_monitor(self, runtime):
         """Returns early when resource monitor not available."""
-        with patch("ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=None) as mock_get:
+        with patch(
+            "ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=None
+        ) as mock_get:
             await runtime._reinitialize_billing_provider()
 
             # Should return without error
@@ -448,11 +450,21 @@ class TestReinitializeBillingProvider:
             "CIRIS_BILLING_GOOGLE_ID_TOKEN": "test-token",
         }
         with patch.dict(os.environ, env_vars):
-            with patch("ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=mock_monitor):
+            with patch(
+                "ciris_engine.logic.runtime.billing_helpers.get_resource_monitor_for_billing", return_value=mock_monitor
+            ):
                 with patch("ciris_engine.logic.runtime.billing_helpers.is_using_ciris_proxy", return_value=True):
-                    with patch("ciris_engine.logic.runtime.billing_helpers.create_billing_provider", return_value=mock_provider):
-                        with patch("ciris_engine.logic.runtime.billing_helpers.create_billing_token_handler", return_value=AsyncMock()):
-                            with patch("ciris_engine.logic.runtime.billing_helpers.create_llm_token_handler", return_value=AsyncMock()):
+                    with patch(
+                        "ciris_engine.logic.runtime.billing_helpers.create_billing_provider", return_value=mock_provider
+                    ):
+                        with patch(
+                            "ciris_engine.logic.runtime.billing_helpers.create_billing_token_handler",
+                            return_value=AsyncMock(),
+                        ):
+                            with patch(
+                                "ciris_engine.logic.runtime.billing_helpers.create_llm_token_handler",
+                                return_value=AsyncMock(),
+                            ):
                                 await runtime._reinitialize_billing_provider()
 
         # Should have configured billing

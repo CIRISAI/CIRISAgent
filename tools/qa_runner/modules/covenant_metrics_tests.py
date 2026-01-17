@@ -32,10 +32,10 @@ class CovenantMetricsTests:
     # Expected trace components
     EXPECTED_COMPONENTS = [
         "observation",  # THOUGHT_START
-        "context",      # SNAPSHOT_AND_CONTEXT
-        "rationale",    # DMA_RESULTS + ASPDMA_RESULT
-        "conscience",   # CONSCIENCE_RESULT
-        "action",       # ACTION_RESULT
+        "context",  # SNAPSHOT_AND_CONTEXT
+        "rationale",  # DMA_RESULTS + ASPDMA_RESULT
+        "conscience",  # CONSCIENCE_RESULT
+        "action",  # ACTION_RESULT
     ]
 
     # Root public key from seed/root_pub.json
@@ -120,22 +120,26 @@ class CovenantMetricsTests:
                 logger.info(f"Running: {name}")
                 success, message = await test_fn()
                 status = "✅ PASS" if success else "❌ FAIL"
-                self.results.append({
-                    "test": name,
-                    "status": status,
-                    "error": None if success else message,
-                })
+                self.results.append(
+                    {
+                        "test": name,
+                        "status": status,
+                        "error": None if success else message,
+                    }
+                )
                 if success:
                     self.console.print(f"  [green]{status}[/green] {name}")
                 else:
                     self.console.print(f"  [red]{status}[/red] {name}: {message}")
             except Exception as e:
                 logger.error(f"Error in {name}: {e}")
-                self.results.append({
-                    "test": name,
-                    "status": "❌ FAIL",
-                    "error": str(e),
-                })
+                self.results.append(
+                    {
+                        "test": name,
+                        "status": "❌ FAIL",
+                        "error": str(e),
+                    }
+                )
                 self.console.print(f"  [red]❌ FAIL[/red] {name}: {e}")
 
         return self.results
@@ -185,9 +189,7 @@ class CovenantMetricsTests:
         """Test that agent interaction triggers trace capture."""
         try:
             # Send a message that will generate a full reasoning trace
-            response = await self.client.agent.interact(
-                message="What is 2 + 2? Please explain your reasoning."
-            )
+            response = await self.client.agent.interact(message="What is 2 + 2? Please explain your reasoning.")
 
             if not response:
                 return False, "No response from agent"
@@ -256,9 +258,7 @@ class CovenantMetricsTests:
                     total_missing_fields += len(missing_fields)
                     # Only report first few missing fields per trace
                     sample = missing_fields[:5]
-                    validation_errors.append(
-                        f"{trace_file.name}: Missing {len(missing_fields)} fields: {sample}"
-                    )
+                    validation_errors.append(f"{trace_file.name}: Missing {len(missing_fields)} fields: {sample}")
                 else:
                     traces_validated += 1
 

@@ -1,7 +1,8 @@
 """Tests for service_property_mixin.py module."""
 
-import pytest
 from unittest.mock import MagicMock, PropertyMock
+
+import pytest
 
 
 class TestServicePropertyMixin:

@@ -37,12 +37,14 @@ IS_IOS = sys.platform == "ios" or "darwin" in sys.platform
 # STARTUP CHECKS
 # =============================================================================
 
+
 def check_pydantic() -> bool:
     """Verify pydantic loads correctly."""
     print("[1/6] Checking pydantic...")
     try:
         import pydantic
         from pydantic_core import _pydantic_core
+
         print(f"      Pydantic: {pydantic.VERSION}")
         print(f"      pydantic-core: {_pydantic_core.__version__}")
         print("[1/6] OK")
@@ -57,6 +59,7 @@ def check_fastapi() -> bool:
     print("[2/6] Checking FastAPI...")
     try:
         import fastapi
+
         print(f"      FastAPI: {fastapi.__version__}")
         print("[2/6] OK")
         return True
@@ -70,6 +73,7 @@ def check_cryptography() -> bool:
     print("[3/6] Checking cryptography...")
     try:
         import cryptography
+
         print(f"      Cryptography: {cryptography.__version__}")
         print("[3/6] OK")
         return True
@@ -83,6 +87,7 @@ def check_httpx() -> bool:
     print("[4/6] Checking httpx...")
     try:
         import httpx
+
         print(f"      httpx: {httpx.__version__}")
         print("[4/6] OK")
         return True
@@ -96,6 +101,7 @@ def check_aiosqlite() -> bool:
     print("[5/6] Checking aiosqlite...")
     try:
         import aiosqlite
+
         print(f"      aiosqlite: {aiosqlite.__version__}")
         print("[5/6] OK")
         return True
@@ -109,6 +115,7 @@ def check_ciris_engine() -> bool:
     print("[6/6] Checking CIRIS engine...")
     try:
         from ciris_engine.schemas.config.essential import EssentialConfig
+
         print("      EssentialConfig: OK")
         print("[6/6] OK")
         return True
@@ -120,6 +127,7 @@ def check_ciris_engine() -> bool:
 # =============================================================================
 # ENVIRONMENT SETUP
 # =============================================================================
+
 
 def setup_ios_environment() -> Path:
     """Configure environment for iOS on-device operation.
@@ -149,6 +157,7 @@ def setup_ios_environment() -> Path:
     if env_file.exists():
         try:
             from dotenv import load_dotenv
+
             load_dotenv(env_file, override=True)
             logger.info(f"Loaded configuration from {env_file}")
         except ImportError:
@@ -172,6 +181,7 @@ def setup_ios_environment() -> Path:
 # =============================================================================
 # RUNTIME STARTUP
 # =============================================================================
+
 
 def _runtime_log(msg):
     """Log to both stdout and stderr for visibility."""
@@ -211,8 +221,9 @@ async def start_mobile_runtime():
         _runtime_log(f"[CIRIS RUNTIME] !!!!! IMPORT ERROR !!!!!")
         _runtime_log(f"[CIRIS RUNTIME] Error: {e}")
         import traceback
+
         tb = traceback.format_exc()
-        for line in tb.split('\n'):
+        for line in tb.split("\n"):
             _runtime_log(f"[CIRIS RUNTIME] {line}")
         return
 
@@ -287,6 +298,7 @@ async def start_mobile_runtime():
 # STARTUP CHECKS RUNNER
 # =============================================================================
 
+
 def run_startup_checks() -> bool:
     """Run all startup checks and return True if all pass."""
     print("=" * 50)
@@ -330,6 +342,7 @@ def run_startup_checks() -> bool:
 # BACKGROUND THREAD RUNNER
 # =============================================================================
 
+
 def start_runtime_thread():
     """Start the CIRIS runtime in a background thread."""
     import threading
@@ -357,8 +370,9 @@ def start_runtime_thread():
             _log(f"[CIRIS THREAD] !!!!! RUNTIME ERROR !!!!!")
             _log(f"[CIRIS THREAD] Error: {e}")
             import traceback
+
             tb = traceback.format_exc()
-            for line in tb.split('\n'):
+            for line in tb.split("\n"):
                 _log(f"[CIRIS THREAD] {line}")
 
     thread = threading.Thread(target=run_async_runtime, daemon=True, name="CIRIS-Runtime")
@@ -370,6 +384,7 @@ def start_runtime_thread():
 # =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
+
 
 def main():
     """Main entrypoint for iOS app - runs checks and starts runtime."""
@@ -385,6 +400,7 @@ def main():
         except Exception as e:
             print(f"Server error: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 

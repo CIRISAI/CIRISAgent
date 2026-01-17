@@ -12,17 +12,14 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ciris_engine.schemas.services.graph.telemetry import (
-    AggregatedTelemetryResponse,
-    ServiceTelemetryData,
-)
+from ciris_engine.schemas.services.graph.telemetry import AggregatedTelemetryResponse, ServiceTelemetryData
 from ciris_engine.schemas.types import JSONDict
 
 # Import helper modules
+from .adapter_collection import collect_from_adapter_instances as _collect_from_adapter_instances
+from .adapter_collection import collect_from_bootstrap_adapters as _collect_from_bootstrap_adapters
+from .adapter_collection import collect_from_control_service as _collect_from_control_service
 from .adapter_collection import (
-    collect_from_adapter_instances as _collect_from_adapter_instances,
-    collect_from_bootstrap_adapters as _collect_from_bootstrap_adapters,
-    collect_from_control_service as _collect_from_control_service,
     create_empty_telemetry,
     create_running_telemetry,
     create_telemetry_data,
@@ -31,10 +28,8 @@ from .adapter_collection import (
     get_control_service,
     is_adapter_running,
 )
-from .bus_collection import (
-    collect_from_bus as _collect_from_bus,
-    collect_from_component as _collect_from_component,
-)
+from .bus_collection import collect_from_bus as _collect_from_bus
+from .bus_collection import collect_from_component as _collect_from_component
 from .metrics_helpers import (
     aggregate_service_metrics,
     calculate_aggregates,
@@ -50,17 +45,10 @@ from .metrics_helpers import (
     try_get_metrics_method,
     try_get_status_method,
 )
-from .registry_collection import (
-    collect_from_registry_provider as _collect_from_registry_provider,
-    collect_from_registry_services as _collect_from_registry_services,
-    generate_semantic_service_name,
-)
-from .service_lookup import (
-    NAME_MAP,
-    RUNTIME_ATTRS,
-    get_service_from_registry,
-    get_service_from_runtime,
-)
+from .registry_collection import collect_from_registry_provider as _collect_from_registry_provider
+from .registry_collection import collect_from_registry_services as _collect_from_registry_services
+from .registry_collection import generate_semantic_service_name
+from .service_lookup import NAME_MAP, RUNTIME_ATTRS, get_service_from_registry, get_service_from_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -354,9 +342,7 @@ class TelemetryAggregator:
 
     async def collect_from_bus(self, bus_name: str) -> ServiceTelemetryData:
         """Collect telemetry from a message bus."""
-        return await _collect_from_bus(
-            self.runtime, self.service_registry, bus_name, self.get_fallback_metrics
-        )
+        return await _collect_from_bus(self.runtime, self.service_registry, bus_name, self.get_fallback_metrics)
 
     async def collect_from_component(self, component_name: str) -> ServiceTelemetryData:
         """Collect telemetry from runtime components."""

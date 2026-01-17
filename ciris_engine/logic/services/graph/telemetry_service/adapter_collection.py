@@ -197,9 +197,7 @@ async def collect_from_control_service(
         return None
 
 
-async def collect_from_bootstrap_adapters(
-    runtime: Any, adapter_type: str
-) -> Dict[str, ServiceTelemetryData]:
+async def collect_from_bootstrap_adapters(runtime: Any, adapter_type: str) -> Dict[str, ServiceTelemetryData]:
     """Fallback: collect from bootstrap adapters directly."""
     adapter_metrics: Dict[str, ServiceTelemetryData] = {}
 

@@ -86,6 +86,7 @@ def create_bootstrap_from_legacy(
     runtime._preload_tasks = []
     identity_update_raw = kwargs.get("identity_update", False)
     runtime._identity_update = identity_update_raw if isinstance(identity_update_raw, bool) else False
+    logger.info(f"[BOOTSTRAP] identity_update from kwargs: raw={identity_update_raw}, type={type(identity_update_raw)}, final={runtime._identity_update}")
 
     from ciris_engine.schemas.runtime.adapter_management import AdapterLoadRequest
     from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig

@@ -17,7 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
-from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRIS_PROXY_DOMAINS, CIRISRuntime
+from ciris_engine.logic.runtime.billing_helpers import CIRIS_PROXY_DOMAINS
+from ciris_engine.logic.runtime.ciris_runtime import CIRIS_PROXY_DOMAIN, CIRISRuntime
 
 
 class TestCIRISProxyDomainConstant:

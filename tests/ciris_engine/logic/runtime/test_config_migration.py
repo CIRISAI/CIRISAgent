@@ -12,30 +12,24 @@ class TestConfigMigration:
         """Test that cognitive migration is skipped in first-run mode without force."""
         from ciris_engine.logic.runtime.config_migration import should_skip_cognitive_migration
 
-        runtime = MagicMock()
-
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=True):
-            result = should_skip_cognitive_migration(runtime, force_from_template=False)
+            result = should_skip_cognitive_migration(force_from_template=False)
             assert result is True
 
     def test_should_not_skip_cognitive_migration_when_forced(self) -> None:
         """Test that cognitive migration proceeds when forced even in first-run."""
         from ciris_engine.logic.runtime.config_migration import should_skip_cognitive_migration
 
-        runtime = MagicMock()
-
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=True):
-            result = should_skip_cognitive_migration(runtime, force_from_template=True)
+            result = should_skip_cognitive_migration(force_from_template=True)
             assert result is False
 
     def test_should_not_skip_cognitive_migration_not_first_run(self) -> None:
         """Test that cognitive migration proceeds when not in first-run mode."""
         from ciris_engine.logic.runtime.config_migration import should_skip_cognitive_migration
 
-        runtime = MagicMock()
-
         with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
-            result = should_skip_cognitive_migration(runtime, force_from_template=False)
+            result = should_skip_cognitive_migration(force_from_template=False)
             assert result is False
 
     @pytest.mark.asyncio

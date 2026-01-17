@@ -54,63 +54,58 @@ async def store_telemetry_metrics(
         )
 
 
-async def store_resource_usage(
-    telemetry_service: Any,
-    resources: ResourceData,
-    thought_id: str,
-    task_id: Optional[str],
-) -> None:
+def _get_numeric_field(data: dict, key: str) -> Optional[float]:
+    """Extract numeric field from dict, returning None if not valid."""
+    value = data.get(key)
+    return value if isinstance(value, (int, float)) else None
+
+
+def _get_string_field(data: dict, key: str) -> Optional[str]:
+    """Extract string field from dict, returning None if not valid."""
+    value = data.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _create_llm_usage_data(llm_dict: dict) -> Any:
+    """Create LLMUsageData from raw dict with type validation."""
+    from ciris_engine.schemas.services.graph.telemetry import LLMUsageData
+
+    return LLMUsageData(
+        tokens_used=_get_numeric_field(llm_dict, "tokens_used"),
+        tokens_input=_get_numeric_field(llm_dict, "tokens_input"),
+        tokens_output=_get_numeric_field(llm_dict, "tokens_output"),
+        cost_cents=_get_numeric_field(llm_dict, "cost_cents"),
+        carbon_grams=_get_numeric_field(llm_dict, "carbon_grams"),
+        energy_kwh=_get_numeric_field(llm_dict, "energy_kwh"),
+        model_used=_get_string_field(llm_dict, "model_used"),
+    )
+
+
+def _create_resource_usage(llm_data: Any) -> Any:
+    """Create ResourceUsage from LLMUsageData with defaults."""
+    from ciris_engine.schemas.runtime.resources import ResourceUsage
+
+    return ResourceUsage(
+        tokens_used=int(llm_data.tokens_used) if llm_data.tokens_used is not None else 0,
+        tokens_input=int(llm_data.tokens_input) if llm_data.tokens_input is not None else 0,
+        tokens_output=int(llm_data.tokens_output) if llm_data.tokens_output is not None else 0,
+        cost_cents=float(llm_data.cost_cents) if llm_data.cost_cents is not None else 0.0,
+        carbon_grams=float(llm_data.carbon_grams) if llm_data.carbon_grams is not None else 0.0,
+        energy_kwh=float(llm_data.energy_kwh) if llm_data.energy_kwh is not None else 0.0,
+        model_used=llm_data.model_used,
+    )
+
+
+async def store_resource_usage(telemetry_service: Any, resources: ResourceData) -> None:
     """Store resource usage as operational memories.
 
     Args:
         telemetry_service: The telemetry service instance
         resources: ResourceData containing LLM and other resource usage
-        thought_id: Associated thought ID
-        task_id: Associated task ID (optional)
     """
-    from ciris_engine.schemas.runtime.resources import ResourceUsage
-    from ciris_engine.schemas.services.graph.telemetry import LLMUsageData
-
     if resources.llm:
-        # Convert dict to LLMUsageData first
-        llm_data = LLMUsageData(
-            tokens_used=(
-                resources.llm.get("tokens_used") if isinstance(resources.llm.get("tokens_used"), (int, float)) else None
-            ),
-            tokens_input=(
-                resources.llm.get("tokens_input")
-                if isinstance(resources.llm.get("tokens_input"), (int, float))
-                else None
-            ),
-            tokens_output=(
-                resources.llm.get("tokens_output")
-                if isinstance(resources.llm.get("tokens_output"), (int, float))
-                else None
-            ),
-            cost_cents=(
-                resources.llm.get("cost_cents") if isinstance(resources.llm.get("cost_cents"), (int, float)) else None
-            ),
-            carbon_grams=(
-                resources.llm.get("carbon_grams")
-                if isinstance(resources.llm.get("carbon_grams"), (int, float))
-                else None
-            ),
-            energy_kwh=(
-                resources.llm.get("energy_kwh") if isinstance(resources.llm.get("energy_kwh"), (int, float)) else None
-            ),
-            model_used=(resources.llm.get("model_used") if isinstance(resources.llm.get("model_used"), str) else None),
-        )
-
-        # Create ResourceUsage directly with proper types
-        usage = ResourceUsage(
-            tokens_used=int(llm_data.tokens_used) if llm_data.tokens_used is not None else 0,
-            tokens_input=int(llm_data.tokens_input) if llm_data.tokens_input is not None else 0,
-            tokens_output=int(llm_data.tokens_output) if llm_data.tokens_output is not None else 0,
-            cost_cents=float(llm_data.cost_cents) if llm_data.cost_cents is not None else 0.0,
-            carbon_grams=float(llm_data.carbon_grams) if llm_data.carbon_grams is not None else 0.0,
-            energy_kwh=float(llm_data.energy_kwh) if llm_data.energy_kwh is not None else 0.0,
-            model_used=llm_data.model_used if llm_data.model_used is not None else None,
-        )
+        llm_data = _create_llm_usage_data(resources.llm)
+        usage = _create_resource_usage(llm_data)
         await telemetry_service._record_resource_usage("llm_service", usage)
 
 

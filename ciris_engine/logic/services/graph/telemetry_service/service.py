@@ -557,9 +557,9 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         """Store telemetry data as operational memories."""
         await store_telemetry_metrics(self, telemetry, thought_id, task_id)
 
-    async def _store_resource_usage(self, resources: ResourceData, thought_id: str, task_id: Optional[str]) -> None:
+    async def _store_resource_usage(self, resources: ResourceData) -> None:
         """Store resource usage as operational memories."""
-        await store_resource_usage(self, resources, thought_id, task_id)
+        await store_resource_usage(self, resources)
 
     async def _store_behavioral_data(self, data: BehavioralData, data_type: str, thought_id: str) -> None:
         """Store behavioral data (tasks/thoughts) as memories."""

@@ -205,6 +205,51 @@ class LLMBus(BaseBus[LLMService]):
         """Check if error is a schema validation error."""
         return "validation error" in error_str or "model_type" in error_str or "instructor" in error_str
 
+    async def _handle_retry_error(
+        self,
+        e: Exception,
+        service_name: str,
+        retry_count: int,
+        max_retries: int,
+        rate_limit_retry_count: int,
+        max_rate_limit_retries: int,
+        rate_limit_start_time: Optional[float],
+        max_rate_limit_total_time: float,
+    ) -> Tuple[str, bool, int, Optional[float]]:
+        """
+        Handle retry logic for different error types.
+
+        Returns: (action, is_rate_limit, updated_rate_limit_count, updated_start_time)
+        - action: "continue" (retry), "break" (stop retrying), "continue_no_increment" (rate limit retry)
+        """
+        error_str = str(e).lower()
+        full_error = self._extract_full_error_from_cause_chain(e)
+
+        # Handle rate limit errors
+        if self._is_rate_limit_error(error_str, full_error):
+            rate_limit_retry_count += 1
+            should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
+                service_name, full_error, rate_limit_retry_count, max_rate_limit_retries,
+                rate_limit_start_time, max_rate_limit_total_time
+            )
+            action = "continue_no_increment" if should_continue else "break"
+            return action, True, rate_limit_retry_count, rate_limit_start_time
+
+        # Handle schema validation errors
+        if self._is_schema_validation_error(error_str):
+            if retry_count < max_retries:
+                logger.warning(f"Schema validation failed on {service_name}, retrying ({retry_count}/{max_retries})")
+                return "continue", False, rate_limit_retry_count, rate_limit_start_time
+
+        # Handle exhausted retries
+        if retry_count >= max_retries:
+            logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+            return "break", False, rate_limit_retry_count, rate_limit_start_time
+
+        # General error - log and continue
+        logger.warning(f"LLM error on {service_name} (attempt {retry_count}): {type(e).__name__}")
+        return "continue", False, rate_limit_retry_count, rate_limit_start_time
+
     async def _handle_rate_limit_retry(
         self,
         service_name: str,
@@ -300,22 +345,10 @@ class LLMBus(BaseBus[LLMService]):
 
         while retry_count < max_retries:
             try:
-                logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
-
-                result, usage = await selected_service.call_llm_structured(
-                    messages=normalized_messages,
-                    response_model=response_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    thought_id=thought_id,
-                    task_id=task_id,
+                result, usage = await self._execute_llm_call(
+                    selected_service, service_name, normalized_messages, response_model,
+                    max_tokens, temperature, thought_id, task_id, handler_name, start_time, retry_count
                 )
-
-                latency_ms = (self._time_service.timestamp() - start_time) * 1000
-                self._record_success(service_name, latency_ms)
-                await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
-                logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
-
                 return result, usage, None, False
 
             except BillingServiceError:
@@ -324,39 +357,55 @@ class LLMBus(BaseBus[LLMService]):
 
             except Exception as e:
                 service_last_error = e
-                error_str = str(e).lower()
                 retry_count += 1
-                full_error = self._extract_full_error_from_cause_chain(e)
 
-                if self._is_rate_limit_error(error_str, full_error):
-                    last_was_rate_limit = True
-                    rate_limit_retry_count += 1
-
-                    should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
-                        service_name, full_error, rate_limit_retry_count, max_rate_limit_retries,
+                action, last_was_rate_limit, rate_limit_retry_count, rate_limit_start_time = (
+                    await self._handle_retry_error(
+                        e, service_name, retry_count, max_retries,
+                        rate_limit_retry_count, max_rate_limit_retries,
                         rate_limit_start_time, max_rate_limit_total_time
                     )
+                )
 
-                    if not should_continue:
-                        break
-
-                    retry_count -= 1  # Don't count rate limit as regular retry
-                    continue
-
-                if self._is_schema_validation_error(error_str):
-                    last_was_rate_limit = False
-                    if retry_count < max_retries:
-                        logger.warning(f"Schema validation failed on {service_name}, retrying ({retry_count}/{max_retries})")
-                        continue
-
-                if retry_count >= max_retries:
-                    logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+                if action == "break":
                     break
-
-                last_was_rate_limit = False
-                logger.warning(f"LLM error on {service_name} (attempt {retry_count}): {type(e).__name__}")
+                if action == "continue_no_increment":
+                    retry_count -= 1  # Don't count rate limit as regular retry
 
         return None, None, service_last_error, last_was_rate_limit
+
+    async def _execute_llm_call(
+        self,
+        selected_service: Any,
+        service_name: str,
+        normalized_messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        handler_name: str,
+        start_time: float,
+        retry_count: int,
+    ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
+        """Execute the actual LLM call and record metrics on success."""
+        logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+
+        result, usage = await selected_service.call_llm_structured(
+            messages=normalized_messages,
+            response_model=response_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            thought_id=thought_id,
+            task_id=task_id,
+        )
+
+        latency_ms = (self._time_service.timestamp() - start_time) * 1000
+        self._record_success(service_name, latency_ms)
+        await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
+        logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
+
+        return result, usage
 
     async def call_llm_structured(
         self,

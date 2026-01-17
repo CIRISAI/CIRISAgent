@@ -138,12 +138,6 @@ class Adapter(Service):
         Args:
             kwargs: Typed configuration kwargs
         """
-        logger.info(f"[MCP_CONFIG] _initialize_config called with kwargs keys: {list(kwargs.keys())}")
-        logger.info(f"[MCP_CONFIG] adapter_config in kwargs: {'adapter_config' in kwargs}")
-        if "adapter_config" in kwargs:
-            logger.info(f"[MCP_CONFIG] adapter_config type: {type(kwargs.get('adapter_config'))}")
-            logger.info(f"[MCP_CONFIG] adapter_config value: {kwargs.get('adapter_config')}")
-
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             adapter_config = kwargs["adapter_config"]
             if isinstance(adapter_config, MCPAdapterConfig):

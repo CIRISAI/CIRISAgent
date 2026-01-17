@@ -171,7 +171,12 @@ def decode_stego_to_payload(text: str) -> Optional[bytes]:
     # Check we found enough slots
     expected_slots = len(codebook["slots"])
     if len(slots_found) < expected_slots:
-        logger.warning(f"Only found {len(slots_found)}/{expected_slots} slots")
+        # Use debug for 0 matches (expected for non-stego messages)
+        # Use warning for partial matches (possible corrupted stego message)
+        if len(slots_found) == 0:
+            logger.debug(f"No stego slots found (0/{expected_slots}) - normal for non-stego messages")
+        else:
+            logger.warning(f"Partial stego match: {len(slots_found)}/{expected_slots} slots (possible corruption)")
         return None
 
     # Reconstruct bit stream in slot order

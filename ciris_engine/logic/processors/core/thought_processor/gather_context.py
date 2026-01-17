@@ -73,7 +73,9 @@ class ContextGatheringPhase:
 
         if source_task_id:
             logger.info(f"[UNIFIED CONTEXT] Fetching task {source_task_id} for user context")
-            task = persistence.get_task_by_id(source_task_id)
+            # Use get_task_by_id_any_occurrence to handle multi-occurrence scenarios
+            # where task may belong to __shared__ or a different occurrence than the thought
+            task = persistence.get_task_by_id_any_occurrence(source_task_id)
             task_user_id = getattr(task.context, "user_id", None) if task and task.context else None
             log_msg = (
                 f"Fetched task {task.task_id} with context user_id={task_user_id}"

@@ -24,7 +24,7 @@ Example importing for custom usage:
 """
 
 from .adapter import CovenantMetricsAdapter
-from .services import CovenantMetricsService
+from .services import CovenantMetricsService, TraceDetailLevel
 
 # Export as Adapter for load_adapter() compatibility
 Adapter = CovenantMetricsAdapter
@@ -33,4 +33,5 @@ __all__ = [
     "Adapter",  # Primary export for dynamic loading
     "CovenantMetricsAdapter",
     "CovenantMetricsService",
+    "TraceDetailLevel",
 ]

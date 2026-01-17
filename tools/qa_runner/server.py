@@ -466,10 +466,12 @@ class APIServerManager:
             self.console.print("[yellow]⚠️  Server already running[/yellow]")
             return True
 
-        # For live mode, clear wakeup state and traces for fresh 5-step wakeup
+        # For live mode, clear wakeup state for fresh 5-step wakeup
         if self.config.live_api_key:
             self._clear_wakeup_state()
-            self._clear_trace_files()
+
+        # Always clear trace files to ensure validation reflects current run
+        self._clear_trace_files()
 
         # Ensure minimal .env exists for QA testing (respects mock_llm setting)
         if not _ensure_env_file(self.console, mock_llm=self.config.mock_llm):
@@ -583,6 +585,8 @@ class APIServerManager:
             # Enable consent for trace capture
             env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
             env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
+            # Use short flush interval for QA (5 seconds instead of 60)
+            env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
             self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used

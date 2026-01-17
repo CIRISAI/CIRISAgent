@@ -1,12 +1,17 @@
 """
-Covenant Metrics Services - Full trace capture for CIRISLens.
+Covenant Metrics Services - Trace capture for CIRISLens scoring.
 
 This module implements the CovenantMetricsService which:
-1. Subscribes to reasoning_event_stream for FULL trace capture (6 components)
+1. Subscribes to reasoning_event_stream for trace capture (6 components)
 2. Receives WBD (Wisdom-Based Deferral) events via WiseBus broadcast
 3. Batches events and sends them to CIRISLens API
 4. Signs complete traces with Ed25519 for integrity verification
 5. Only operates when explicit consent has been given
+
+Trace Detail Levels:
+- generic (default): Numeric scores only - powers ciris.ai/ciris-scoring
+- detailed: Adds actionable lists (sources, stakeholders, flags)
+- full_traces: Complete reasoning text for research corpus
 
 Trace Components (from coherence-ratchet):
 1. Observation - What triggered processing (THOUGHT_START)
@@ -25,6 +30,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +40,27 @@ from ciris_engine.schemas.services.authority_core import DeferralRequest
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+class TraceDetailLevel(str, Enum):
+    """Trace detail levels for privacy/bandwidth control.
+
+    generic: Numeric scores only - minimum data for CIRIS scoring formula.
+             No text strings, no reasoning, no prompts. Default level.
+             Powers: ciris.ai/ciris-scoring
+
+    detailed: Adds actionable lists and key identifiers.
+              Includes: sources_identified, stakeholders, flags arrays.
+              Good for debugging without full reasoning exposure.
+
+    full_traces: Complete reasoning text for Coherence Ratchet corpus.
+                 Includes all prompts, reasoning text, and full context.
+                 Use only with full research consent.
+    """
+
+    GENERIC = "generic"
+    DETAILED = "detailed"
+    FULL_TRACES = "full_traces"
 
 
 @dataclass
@@ -160,6 +187,9 @@ class Ed25519TraceSigner:
         if not self._private_key and not self._load_private_key_if_available():
             logger.warning("No private key available for trace signing")
             return False
+
+        # At this point _private_key is guaranteed to be set (mypy hint)
+        assert self._private_key is not None
 
         try:
             # Compute trace hash
@@ -292,11 +322,34 @@ class CovenantMetricsService:
         else:
             self._batch_size = 10
 
+        # Flush interval - check env var first for QA testing
+        env_interval = os.environ.get("CIRIS_COVENANT_METRICS_FLUSH_INTERVAL")
         raw_interval = self._config.get("flush_interval_seconds")
-        if raw_interval is not None and isinstance(raw_interval, (int, float, str)):
-            self._flush_interval: float = float(raw_interval)
+        if env_interval is not None:
+            self._flush_interval: float = float(env_interval)
+        elif raw_interval is not None and isinstance(raw_interval, (int, float, str)):
+            self._flush_interval = float(raw_interval)
         else:
             self._flush_interval = 60.0
+
+        # Trace detail level - check env var first for QA testing
+        # Default is GENERIC (numeric scores only) for ciris.ai/ciris-scoring
+        env_level = os.environ.get("CIRIS_COVENANT_METRICS_TRACE_LEVEL", "").lower()
+        config_level = str(self._config.get("trace_level", "")).lower()
+        level_str = env_level or config_level or "generic"
+        try:
+            self._trace_level = TraceDetailLevel(level_str)
+        except ValueError:
+            logger.warning(f"Invalid trace_level '{level_str}', defaulting to 'generic'")
+            self._trace_level = TraceDetailLevel.GENERIC
+
+        logger.info(f"📊 Trace detail level: {self._trace_level.value}")
+
+        # Early warning correlation metadata (optional, anonymous)
+        self._deployment_region: str = str(self._config.get("deployment_region", "") or "")
+        self._deployment_type: str = str(self._config.get("deployment_type", "") or "")
+        self._agent_role: str = str(self._config.get("agent_role", "") or "")
+        self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
         # Event queue and batching
         self._event_queue: List[Dict[str, Any]] = []
@@ -516,11 +569,26 @@ class CovenantMetricsService:
         if not self._session:
             raise RuntimeError("HTTP session not initialized")
 
-        payload = {
+        # Build early warning correlation metadata (only include non-empty values)
+        correlation_metadata: Dict[str, str] = {}
+        if self._deployment_region:
+            correlation_metadata["deployment_region"] = self._deployment_region
+        if self._deployment_type:
+            correlation_metadata["deployment_type"] = self._deployment_type
+        if self._agent_role:
+            correlation_metadata["agent_role"] = self._agent_role
+        if self._agent_template:
+            correlation_metadata["agent_template"] = self._agent_template
+
+        payload: Dict[str, Any] = {
             "events": events,
             "batch_timestamp": datetime.now(timezone.utc).isoformat(),
             "consent_timestamp": self._consent_timestamp,
+            "trace_level": self._trace_level.value,
         }
+        # Only add correlation metadata if user opted in to any fields
+        if correlation_metadata:
+            payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/covenant/events"
         logger.info(f"📡 POST {url} ({len(events)} events)")
@@ -570,6 +638,12 @@ class CovenantMetricsService:
         """Process reasoning events from the stream and build traces."""
         logger.info("🎯 Starting reasoning event processor - listening for H3ERE pipeline events")
         events_processed = 0
+
+        # Ensure queue is initialized (mypy hint)
+        if self._reasoning_queue is None:
+            logger.error("Reasoning queue not initialized")
+            return
+
         while True:
             try:
                 # Wait for next event with timeout to check for cancellation
@@ -670,19 +744,23 @@ class CovenantMetricsService:
             await self._complete_trace(thought_id, timestamp)
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract FULL reasoning data from event for trace component.
+        """Extract reasoning data from event based on configured trace detail level.
 
-        User has opted in to share data for the Coherence Ratchet corpus.
-        We capture complete reasoning content to enable pattern analysis
-        across thousands of agents running different AI models.
+        Trace levels control what data is captured:
+        - GENERIC: Numeric scores only (default) - powers ciris.ai/ciris-scoring
+        - DETAILED: Adds actionable lists (sources, stakeholders, flags)
+        - FULL_TRACES: Complete reasoning text for Coherence Ratchet corpus
 
         Args:
             event_type: Type of reasoning event
             event: Full event data
 
         Returns:
-            Complete component data for corpus analysis
+            Component data filtered by trace detail level
         """
+        level = self._trace_level
+        is_detailed = level in (TraceDetailLevel.DETAILED, TraceDetailLevel.FULL_TRACES)
+        is_full = level == TraceDetailLevel.FULL_TRACES
 
         def _serialize(obj: Any) -> Any:
             """Recursively serialize objects to JSON-safe format."""
@@ -702,48 +780,48 @@ class CovenantMetricsService:
 
         if event_type == "THOUGHT_START":
             # OBSERVATION: What triggered processing
-            # Include full task context for pattern analysis
-            return {
-                # Core thought metadata
-                "thought_type": event.get("thought_type"),
-                "thought_status": event.get("thought_status"),
+            # GENERIC: Core numeric metadata only
+            data: Dict[str, Any] = {
                 "round_number": event.get("round_number"),
                 "thought_depth": event.get("thought_depth"),
-                "parent_thought_id": event.get("parent_thought_id"),
-                # Task details - what was the observation/trigger
                 "task_priority": event.get("task_priority"),
-                "task_description": event.get("task_description"),
-                "initial_context": event.get("initial_context"),
-                "channel_id": event.get("channel_id"),
-                "source_adapter": event.get("source_adapter"),
-                # Flags
                 "updated_info_available": event.get("updated_info_available"),
                 "requires_human_input": event.get("requires_human_input"),
             }
+            # DETAILED: Add type identifiers
+            if is_detailed:
+                data["thought_type"] = event.get("thought_type")
+                data["thought_status"] = event.get("thought_status")
+                data["parent_thought_id"] = event.get("parent_thought_id")
+                data["channel_id"] = event.get("channel_id")
+                data["source_adapter"] = event.get("source_adapter")
+            # FULL: Add description text
+            if is_full:
+                data["task_description"] = event.get("task_description")
+                data["initial_context"] = event.get("initial_context")
+            return data
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":
             # CONTEXT: Environmental state when decision was made
-            # Full snapshot enables understanding decision context
-            snapshot = event.get("system_snapshot", {})
-            snapshot_data = _serialize(snapshot)
-
-            return {
-                # Full system snapshot
-                "system_snapshot": snapshot_data,
-                # Context gathered for this thought
-                "gathered_context": _serialize(event.get("gathered_context")),
-                "context_sources": event.get("context_sources"),
-                # Memory and history context
-                "relevant_memories": _serialize(event.get("relevant_memories")),
-                "conversation_history": _serialize(event.get("conversation_history")),
-                # Active state
-                "active_services": event.get("active_services"),
+            # GENERIC: Minimal - just cognitive state identifier
+            data = {
                 "cognitive_state": event.get("cognitive_state"),
             }
+            # DETAILED: Add service list
+            if is_detailed:
+                data["active_services"] = event.get("active_services")
+                data["context_sources"] = event.get("context_sources")
+            # FULL: Add complete snapshot and context
+            if is_full:
+                snapshot = event.get("system_snapshot", {})
+                data["system_snapshot"] = _serialize(snapshot)
+                data["gathered_context"] = _serialize(event.get("gathered_context"))
+                data["relevant_memories"] = _serialize(event.get("relevant_memories"))
+                data["conversation_history"] = _serialize(event.get("conversation_history"))
+            return data
 
         elif event_type == "DMA_RESULTS":
             # RATIONALE (Part 1): DMA reasoning outputs
-            # Full reasoning text enables pattern comparison
             csdma = event.get("csdma", {})
             dsdma = event.get("dsdma", {})
             pdma = event.get("pdma", {})
@@ -759,128 +837,127 @@ class CovenantMetricsService:
             if hasattr(idma, "model_dump"):
                 idma = idma.model_dump()
 
-            return {
-                # Common Sense DMA - CSDMAResult schema: plausibility_score, flags, reasoning
-                "csdma": {
-                    "plausibility_score": csdma.get("plausibility_score") if isinstance(csdma, dict) else None,
-                    "flags": csdma.get("flags", []) if isinstance(csdma, dict) else [],
-                    "reasoning": csdma.get("reasoning") if isinstance(csdma, dict) else None,
-                    "prompt_used": event.get("csdma_prompt"),
-                },
-                # Domain Specific DMA - DSDMAResult schema: domain, domain_alignment, flags, reasoning
-                "dsdma": {
-                    "domain": dsdma.get("domain") if isinstance(dsdma, dict) else None,
-                    "domain_alignment": dsdma.get("domain_alignment") if isinstance(dsdma, dict) else None,
-                    "flags": dsdma.get("flags", []) if isinstance(dsdma, dict) else [],
-                    "reasoning": dsdma.get("reasoning") if isinstance(dsdma, dict) else None,
-                    "prompt_used": event.get("dsdma_prompt"),
-                },
-                # Principled DMA - EthicalDMAResult schema: stakeholders, conflicts, reasoning, alignment_check
-                "pdma": {
-                    "stakeholders": pdma.get("stakeholders") if isinstance(pdma, dict) else None,
-                    "conflicts": pdma.get("conflicts") if isinstance(pdma, dict) else None,
-                    "reasoning": pdma.get("reasoning") if isinstance(pdma, dict) else None,
-                    "alignment_check": pdma.get("alignment_check") if isinstance(pdma, dict) else None,
-                    "prompt_used": event.get("pdma_prompt"),
-                },
-                # Intuition DMA - IDMAResult schema: k_eff, phase, fragility_flag, reasoning
-                # Implements CCA (Coherence Collapse Analysis) for epistemic diversity monitoring
-                "idma": {
-                    "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
-                    "phase": idma.get("phase") if isinstance(idma, dict) else None,
-                    "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
-                    "reasoning": idma.get("reasoning") if isinstance(idma, dict) else None,
-                    "source_assessments": idma.get("source_assessments") if isinstance(idma, dict) else None,
-                    "prompt_used": event.get("idma_prompt"),
-                } if idma else None,
-                # Aggregate reasoning
-                "combined_analysis": event.get("combined_analysis"),
+            # GENERIC: Numeric scores only - powers CIRIS scoring formula
+            csdma_data: Dict[str, Any] = {
+                "plausibility_score": csdma.get("plausibility_score") if isinstance(csdma, dict) else None,
             }
+            dsdma_data: Dict[str, Any] = {
+                "domain_alignment": dsdma.get("domain_alignment") if isinstance(dsdma, dict) else None,
+            }
+            pdma_data: Dict[str, Any] = {}  # PDMA has no numeric scores in schema
+            idma_data: Optional[Dict[str, Any]] = {
+                "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
+                "correlation_risk": idma.get("correlation_risk") if isinstance(idma, dict) else None,
+                "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
+            } if idma else None
+
+            # DETAILED: Add flags, lists, identifiers
+            if is_detailed:
+                csdma_data["flags"] = csdma.get("flags", []) if isinstance(csdma, dict) else []
+                dsdma_data["domain"] = dsdma.get("domain") if isinstance(dsdma, dict) else None
+                dsdma_data["flags"] = dsdma.get("flags", []) if isinstance(dsdma, dict) else []
+                pdma_data["stakeholders"] = pdma.get("stakeholders") if isinstance(pdma, dict) else None
+                pdma_data["conflicts"] = pdma.get("conflicts") if isinstance(pdma, dict) else None
+                pdma_data["alignment_check"] = pdma.get("alignment_check") if isinstance(pdma, dict) else None
+                if idma_data:
+                    idma_data["phase"] = idma.get("phase") if isinstance(idma, dict) else None
+                    idma_data["sources_identified"] = idma.get("sources_identified") if isinstance(idma, dict) else None
+                    idma_data["correlation_factors"] = idma.get("correlation_factors") if isinstance(idma, dict) else None
+
+            # FULL: Add reasoning text and prompts
+            if is_full:
+                csdma_data["reasoning"] = csdma.get("reasoning") if isinstance(csdma, dict) else None
+                csdma_data["prompt_used"] = event.get("csdma_prompt")
+                dsdma_data["reasoning"] = dsdma.get("reasoning") if isinstance(dsdma, dict) else None
+                dsdma_data["prompt_used"] = event.get("dsdma_prompt")
+                pdma_data["reasoning"] = pdma.get("reasoning") if isinstance(pdma, dict) else None
+                pdma_data["prompt_used"] = event.get("pdma_prompt")
+                if idma_data:
+                    idma_data["reasoning"] = idma.get("reasoning") if isinstance(idma, dict) else None
+                    idma_data["prompt_used"] = event.get("idma_prompt")
+
+            data = {
+                "csdma": csdma_data,
+                "dsdma": dsdma_data,
+                "pdma": pdma_data if pdma_data else None,
+                "idma": idma_data,
+            }
+            if is_full:
+                data["combined_analysis"] = event.get("combined_analysis")
+            return data
 
         elif event_type == "ASPDMA_RESULT":
-            # RATIONALE (Part 2): Action selection reasoning
-            # Full rationale text for action selection
-            return {
-                # Selected action and reasoning
+            # RATIONALE (Part 2): Action selection
+            # GENERIC: Action type and confidence only
+            data = {
                 "selected_action": event.get("selected_action"),
-                "action_rationale": event.get("action_rationale"),  # Full text
-                "reasoning_summary": event.get("reasoning_summary"),
-                # Action parameters
-                "action_parameters": _serialize(event.get("action_parameters")),
-                # Selection process
-                "alternatives_considered": event.get("alternatives_considered"),
                 "selection_confidence": event.get("selection_confidence"),
-                # Recursive flag
                 "is_recursive": event.get("is_recursive", False),
-                # Prompt used for decision
-                "aspdma_prompt": event.get("aspdma_prompt"),
             }
+            # DETAILED: Add alternatives
+            if is_detailed:
+                data["alternatives_considered"] = event.get("alternatives_considered")
+            # FULL: Add reasoning text and parameters
+            if is_full:
+                data["action_rationale"] = event.get("action_rationale")
+                data["reasoning_summary"] = event.get("reasoning_summary")
+                data["action_parameters"] = _serialize(event.get("action_parameters"))
+                data["aspdma_prompt"] = event.get("aspdma_prompt")
+            return data
 
         elif event_type == "CONSCIENCE_RESULT":
-            # CONSCIENCE: Ethical validation details with all 6 conscience check results
-            # Full epistemic and ethical check data for Coherence Ratchet corpus
-            return {
+            # CONSCIENCE: Ethical validation
+            # GENERIC: All boolean flags and numeric scores (core for CIRIS scoring)
+            data = {
                 # Overall result
                 "conscience_passed": event.get("conscience_passed"),
                 "action_was_overridden": event.get("action_was_overridden", False),
-                "final_action": event.get("final_action"),
-                "conscience_override_reason": event.get("conscience_override_reason"),
-                # Epistemic checks - uncertainty/confidence
-                "epistemic_data": _serialize(event.get("epistemic_data")),
-                # Exempt actions flag (RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT skip ethical faculties)
                 "ethical_faculties_skipped": event.get("ethical_faculties_skipped"),
-                # === BYPASS GUARDRAIL 1: Updated Status Conscience ===
+                # Bypass guardrails (boolean)
                 "updated_status_detected": event.get("updated_status_detected"),
-                "updated_status_content": event.get("updated_status_content"),
-                # === BYPASS GUARDRAIL 2: Thought Depth Conscience ===
                 "thought_depth_triggered": event.get("thought_depth_triggered"),
                 "thought_depth_current": event.get("thought_depth_current"),
                 "thought_depth_max": event.get("thought_depth_max"),
-                # === ETHICAL FACULTY 1: Entropy Conscience ===
+                # Entropy conscience (numeric)
                 "entropy_passed": event.get("entropy_passed"),
                 "entropy_score": event.get("entropy_score"),
                 "entropy_threshold": event.get("entropy_threshold"),
-                "entropy_reason": event.get("entropy_reason"),
-                # === ETHICAL FACULTY 2: Coherence Conscience ===
+                # Coherence conscience (numeric)
                 "coherence_passed": event.get("coherence_passed"),
                 "coherence_score": event.get("coherence_score"),
                 "coherence_threshold": event.get("coherence_threshold"),
-                "coherence_reason": event.get("coherence_reason"),
-                # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
+                # Optimization veto (boolean + numeric)
                 "optimization_veto_passed": event.get("optimization_veto_passed"),
-                "optimization_veto_decision": event.get("optimization_veto_decision"),
-                "optimization_veto_justification": event.get("optimization_veto_justification"),
                 "optimization_veto_entropy_ratio": event.get("optimization_veto_entropy_ratio"),
-                "optimization_veto_affected_values": event.get("optimization_veto_affected_values"),
-                # === ETHICAL FACULTY 4: Epistemic Humility Conscience ===
+                # Epistemic humility (boolean + numeric)
                 "epistemic_humility_passed": event.get("epistemic_humility_passed"),
                 "epistemic_humility_certainty": event.get("epistemic_humility_certainty"),
-                "epistemic_humility_uncertainties": event.get("epistemic_humility_uncertainties"),
-                "epistemic_humility_justification": event.get("epistemic_humility_justification"),
-                "epistemic_humility_recommendation": event.get("epistemic_humility_recommendation"),
             }
+            # DETAILED: Add identifiers and lists
+            if is_detailed:
+                data["final_action"] = event.get("final_action")
+                data["optimization_veto_decision"] = event.get("optimization_veto_decision")
+                data["optimization_veto_affected_values"] = event.get("optimization_veto_affected_values")
+                data["epistemic_humility_uncertainties"] = event.get("epistemic_humility_uncertainties")
+                data["epistemic_humility_recommendation"] = event.get("epistemic_humility_recommendation")
+            # FULL: Add all text fields
+            if is_full:
+                data["conscience_override_reason"] = event.get("conscience_override_reason")
+                data["epistemic_data"] = _serialize(event.get("epistemic_data"))
+                data["updated_status_content"] = event.get("updated_status_content")
+                data["entropy_reason"] = event.get("entropy_reason")
+                data["coherence_reason"] = event.get("coherence_reason")
+                data["optimization_veto_justification"] = event.get("optimization_veto_justification")
+                data["epistemic_humility_justification"] = event.get("epistemic_humility_justification")
+            return data
 
         elif event_type == "ACTION_RESULT":
             # ACTION + OUTCOME: What happened and results
-            # Full execution details and audit trail
-            action_params = event.get("action_parameters")
-            return {
-                # Action executed
-                "action_executed": event.get("action_executed"),
-                # Default to {} if action_parameters is None
-                "action_parameters": _serialize(action_params) if action_params is not None else {},
-                # Execution outcome
+            # GENERIC: Execution metrics and audit chain (for integrity scoring)
+            data = {
                 "execution_success": event.get("execution_success"),
-                "execution_error": event.get("error"),  # Field name is 'error' in ActionResultEvent
                 "execution_time_ms": event.get("execution_time_ms"),
-                # Follow-up
-                "follow_up_thought_id": event.get("follow_up_thought_id"),
-                # Full audit trail (OUTCOME) - tamper-evident chain
-                "audit_entry_id": event.get("audit_entry_id"),
-                "audit_sequence_number": event.get("audit_sequence_number"),
-                "audit_entry_hash": event.get("audit_entry_hash"),  # Correct field name
-                "audit_signature": event.get("audit_signature"),
-                # Resource consumption (queried from telemetry by thought_id)
+                # Resource consumption metrics
                 "tokens_input": event.get("tokens_input", 0),
                 "tokens_output": event.get("tokens_output", 0),
                 "tokens_total": event.get("tokens_total", 0),
@@ -888,15 +965,32 @@ class CovenantMetricsService:
                 "carbon_grams": event.get("carbon_grams", 0.0),
                 "energy_mwh": event.get("energy_mwh", 0.0),
                 "llm_calls": event.get("llm_calls", 0),
-                "models_used": event.get("models_used", []),
+                # Audit chain for integrity verification
+                "audit_sequence_number": event.get("audit_sequence_number"),
+                "audit_entry_hash": event.get("audit_entry_hash"),
             }
+            # DETAILED: Add action type and follow-up
+            if is_detailed:
+                data["action_executed"] = event.get("action_executed")
+                data["follow_up_thought_id"] = event.get("follow_up_thought_id")
+                data["audit_entry_id"] = event.get("audit_entry_id")
+                data["models_used"] = event.get("models_used", [])
+            # FULL: Add parameters, error details, signature
+            if is_full:
+                action_params = event.get("action_parameters")
+                data["action_parameters"] = _serialize(action_params) if action_params is not None else {}
+                data["execution_error"] = event.get("error")
+                data["audit_signature"] = event.get("audit_signature")
+            return data
 
         else:
-            # Unknown event type - capture everything we can
-            return {
-                "event_type": event_type,
-                "raw_data": _serialize(event),
-            }
+            # Unknown event type - capture minimal info
+            # GENERIC: Just event type
+            data = {"event_type": event_type}
+            # FULL: Include serialized data
+            if is_full:
+                data["raw_data"] = _serialize(event)
+            return data
 
     async def _complete_trace(self, thought_id: str, completion_time: str) -> None:
         """Complete and sign a trace.
@@ -1094,6 +1188,7 @@ class CovenantMetricsService:
         """
         return {
             "consent_given": self._consent_given,
+            "trace_level": self._trace_level.value,
             "events_received": self._events_received,
             "events_sent": self._events_sent,
             "events_failed": self._events_failed,

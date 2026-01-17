@@ -2,6 +2,58 @@
 
 This adapter provides covenant compliance metrics collection for CIRISLens, reporting WBD (Wisdom-Based Deferral) events and PDMA decision events as specified in the CIRIS Covenant Section II.
 
+## Trace Detail Levels
+
+The adapter supports three privacy levels for trace capture:
+
+| Level | Default | Description | Use Case |
+|-------|---------|-------------|----------|
+| `generic` | ✅ | Numeric scores only | Powers [ciris.ai/ciris-scoring](https://ciris.ai/ciris-scoring) |
+| `detailed` | | Adds lists & identifiers | Debugging without reasoning exposure |
+| `full_traces` | | Complete reasoning text | Research corpus contribution |
+
+### What Each Level Captures
+
+**generic** (default) - Minimum data for CIRIS Capacity Score:
+
+| Component | Fields |
+|-----------|--------|
+| THOUGHT_START | round_number, thought_depth, task_priority, updated_info_available, requires_human_input |
+| SNAPSHOT_AND_CONTEXT | cognitive_state |
+| DMA_RESULTS (CSDMA) | plausibility_score |
+| DMA_RESULTS (DSDMA) | domain_alignment |
+| DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag |
+| ASPDMA_RESULT | selected_action, selection_confidence, is_recursive |
+| CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
+| ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash |
+
+**NO text strings, NO reasoning, NO prompts** at this level.
+
+**detailed** - Adds actionable identifiers (everything in generic, plus):
+
+| Component | Additional Fields |
+|-----------|-------------------|
+| THOUGHT_START | thought_type, thought_status, parent_thought_id, channel_id, source_adapter |
+| SNAPSHOT_AND_CONTEXT | active_services, context_sources |
+| DMA_RESULTS (CSDMA) | flags |
+| DMA_RESULTS (DSDMA) | domain, flags |
+| DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |
+| DMA_RESULTS (IDMA) | phase, sources_identified, correlation_factors |
+| ASPDMA_RESULT | alternatives_considered |
+| CONSCIENCE_RESULT | final_action, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
+| ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |
+
+**full_traces** - Complete data for Coherence Ratchet corpus (everything in detailed, plus):
+
+| Component | Additional Fields |
+|-----------|-------------------|
+| THOUGHT_START | task_description, initial_context |
+| SNAPSHOT_AND_CONTEXT | system_snapshot, gathered_context, relevant_memories, conversation_history |
+| DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
+| ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt |
+| CONSCIENCE_RESULT | conscience_override_reason, epistemic_data, updated_status_content, entropy_reason, coherence_reason, optimization_veto_justification, epistemic_humility_justification |
+| ACTION_RESULT | action_parameters, execution_error, audit_signature |
+
 ## Privacy-First Design
 
 **CRITICAL**: This adapter requires **EXPLICIT opt-in** via the setup wizard. No data is collected or sent without your consent.
@@ -40,33 +92,92 @@ Per CIRIS Covenant Section II, Chapter 2:
 ```
 
 #### Complete Reasoning Traces (H3ERE Pipeline)
-Full 6-component traces capturing the complete reasoning pipeline:
+
+Each trace captures the 6-component reasoning pipeline. Fields vary by trace level:
+
+**Generic Level** (default) - numeric scores only:
 ```json
 {
-  "trace_id": "trace-thought-123-20260112162156",
-  "thought_id": "thought-123",
+  "trace_id": "trace-th_seed_abc123-20260115220652",
+  "thought_id": "th_seed_abc123",
   "task_id": "task-456",
-  "agent_id_hash": "abc123def456...",
+  "agent_id_hash": "sha256_hash...",
+  "started_at": "2026-01-15T22:06:52.658Z",
+  "completed_at": "2026-01-15T22:06:53.917Z",
   "components": [
-    {"component_type": "observation", "event_type": "THOUGHT_START", ...},
-    {"component_type": "context", "event_type": "SNAPSHOT_AND_CONTEXT", ...},
-    {"component_type": "dma_results", "data": {
-      "pdma": {...},      // Ethical PDMA evaluation
-      "csdma": {...},     // Common Sense DMA evaluation
-      "dsdma": {...},     // Domain-Specific DMA evaluation
-      "idma": {           // Intuition DMA (CCA epistemic diversity)
-        "k_eff": 2.0,     // Effective independent sources (>= 2 = healthy)
-        "correlation_risk": 0.2,
-        "phase": "healthy",
-        "fragility_flag": false,
-        "sources_identified": ["source1", "source2"],
-        "reasoning": "..."
+    {
+      "component_type": "observation",
+      "event_type": "THOUGHT_START",
+      "data": {"round_number": 0, "thought_depth": 0, "task_priority": 0}
+    },
+    {
+      "component_type": "context",
+      "event_type": "SNAPSHOT_AND_CONTEXT",
+      "data": {"cognitive_state": null}
+    },
+    {
+      "component_type": "rationale",
+      "event_type": "DMA_RESULTS",
+      "data": {
+        "csdma": {"plausibility_score": 0.9},
+        "dsdma": {"domain_alignment": 0.9},
+        "pdma": null,
+        "idma": {"k_eff": 1.0, "correlation_risk": 0.0, "fragility_flag": true}
       }
-    }},
-    {"component_type": "action", "event_type": "ASPDMA_RESULT", ...},
-    {"component_type": "conscience", "event_type": "CONSCIENCE_RESULT", ...},
-    {"component_type": "outcome", "event_type": "ACTION_RESULT", ...}
-  ]
+    },
+    {
+      "component_type": "rationale",
+      "event_type": "ASPDMA_RESULT",
+      "data": {"selected_action": "SPEAK", "selection_confidence": null, "is_recursive": false}
+    },
+    {
+      "component_type": "conscience",
+      "event_type": "CONSCIENCE_RESULT",
+      "data": {
+        "conscience_passed": true,
+        "entropy_passed": true, "entropy_score": 0.1, "entropy_threshold": 0.4,
+        "coherence_passed": true, "coherence_score": 0.9, "coherence_threshold": 0.6,
+        "optimization_veto_passed": true, "epistemic_humility_passed": true
+      }
+    },
+    {
+      "component_type": "action",
+      "event_type": "ACTION_RESULT",
+      "data": {
+        "execution_success": true,
+        "tokens_total": 205771, "cost_cents": 4.21,
+        "audit_sequence_number": 33, "audit_entry_hash": "480f7afb..."
+      }
+    }
+  ],
+  "signature": "base64_ed25519_signature...",
+  "signature_key_id": "wa-2025-06-14-ROOT00"
+}
+```
+
+**Detailed Level** - adds identifiers and lists (IDMA example):
+```json
+"idma": {
+  "k_eff": 2.0,
+  "correlation_risk": 0.2,
+  "fragility_flag": false,
+  "phase": "healthy",
+  "sources_identified": ["source1", "source2"],
+  "correlation_factors": ["shared_training_data"]
+}
+```
+
+**Full Traces Level** - adds reasoning text (IDMA example):
+```json
+"idma": {
+  "k_eff": 2.0,
+  "correlation_risk": 0.2,
+  "fragility_flag": false,
+  "phase": "healthy",
+  "sources_identified": ["source1", "source2"],
+  "correlation_factors": ["shared_training_data"],
+  "reasoning": "Analysis identified 2 independent sources with low correlation...",
+  "prompt_used": "Evaluate epistemic diversity of the following reasoning..."
 }
 ```
 
@@ -120,11 +231,14 @@ curl http://localhost:8000/v1/system/adapters/ciris_covenant_metrics
 ## Configuration
 
 Environment variables:
-- `CIRIS_LENS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris.ai/v1`)
+- `CIRIS_COVENANT_METRICS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris.ai/v1`)
+- `CIRIS_COVENANT_METRICS_CONSENT`: Set to `true` to enable (for QA testing)
+- `CIRIS_COVENANT_METRICS_TRACE_LEVEL`: One of `generic`, `detailed`, `full_traces` (default: `generic`)
 
-Wizard configuration:
+Wizard/config file settings:
 - `consent_given`: Boolean - must be true to collect data
 - `consent_timestamp`: ISO timestamp when consent was given
+- `trace_level`: One of `generic`, `detailed`, `full_traces` (default: `generic`)
 - `batch_size`: Number of events to batch (1-100, default: 10)
 - `flush_interval_seconds`: Seconds between batch sends (10-300, default: 60)
 
@@ -163,10 +277,40 @@ Request body:
 ```json
 {
   "events": [...],
-  "batch_timestamp": "2025-12-15T14:00:00Z",
-  "consent_timestamp": "2025-12-15T13:00:00Z"
+  "batch_timestamp": "2026-01-15T14:00:00Z",
+  "consent_timestamp": "2025-12-15T13:00:00Z",
+  "trace_level": "generic",
+  "correlation_metadata": {
+    "deployment_region": "na",
+    "deployment_type": "business",
+    "agent_role": "customer_support",
+    "agent_template": "discord-moderator"
+  }
 }
 ```
+
+### Batch Payload Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `events` | array | Array of trace/event objects |
+| `batch_timestamp` | string | ISO timestamp when batch was sent |
+| `consent_timestamp` | string | ISO timestamp when user gave consent |
+| `trace_level` | string | Detail level: `generic`, `detailed`, or `full_traces` |
+| `correlation_metadata` | object | Optional early warning correlation data (see below) |
+
+### Early Warning Correlation Metadata
+
+These optional fields help power the CIRIS Early Warning System by enabling correlation analysis across the network. All fields are anonymous and optional.
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `deployment_region` | `na`, `eu`, `uk`, `apac`, `latam`, `mena`, `africa`, `oceania` | Geographic region for timezone/regulatory correlation |
+| `deployment_type` | `personal`, `business`, `research`, `nonprofit` | Deployment context for risk pattern analysis |
+| `agent_role` | `assistant`, `customer_support`, `content`, `coding`, `research`, `education`, `moderation`, `automation`, `other` | Primary agent function for role-specific risk detection |
+| `agent_template` | string | CIRIS template name if using a standard template (e.g., `discord-moderator`) |
+
+Only non-empty fields are included in the payload. If no correlation metadata is configured, the `correlation_metadata` object is omitted entirely.
 
 ## Covenant References
 

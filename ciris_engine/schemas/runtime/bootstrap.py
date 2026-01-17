@@ -33,5 +33,9 @@ class RuntimeBootstrapConfig(BaseModel):
         False,
         description="If True, refresh existing identity from template (requires --template). Admin operation.",
     )
+    template_name: Optional[str] = Field(
+        None,
+        description="Template name for identity operations. Used with identity_update flag.",
+    )
 
     model_config = ConfigDict(extra="forbid")  # No additional parameters allowed - all must be declared explicitly

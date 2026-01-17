@@ -607,6 +607,7 @@ def main(
             discord_bot_token=discord_bot_token,
             modules=modules_to_load,  # Pass modules to load
             identity_update=identity_update,  # Admin flag to refresh identity from template
+            template_name=template,  # Template name for identity operations
         )
         await runtime.initialize()
 

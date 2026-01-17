@@ -6,12 +6,46 @@ including adapter configs, tickets config, and cognitive state behaviors.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _get_adapter_id(adapter_type: str) -> str:
+    """Determine adapter ID from type (handle instance-specific types like 'api:8081')."""
+    if ":" in adapter_type:
+        base_type, instance_id = adapter_type.split(":", 1)
+        return f"{base_type}_{instance_id}"
+    return f"{adapter_type}_bootstrap"
+
+
+def _get_config_dict(adapter_config: Any) -> Any:
+    """Extract config dict from adapter config object."""
+    return adapter_config.model_dump() if hasattr(adapter_config, "model_dump") else adapter_config
+
+
+async def _migrate_single_adapter_config(
+    config_service: Any, adapter_type: str, adapter_config: Any
+) -> None:
+    """Migrate a single adapter configuration to graph."""
+    adapter_id = _get_adapter_id(adapter_type)
+    config_dict = _get_config_dict(adapter_config)
+
+    # Store the full config object
+    await config_service.set_config(
+        key=f"adapter.{adapter_id}.config",
+        value=config_dict,
+        updated_by="system_bootstrap",
+    )
+
+    # Also store individual config values for easy access
+    if isinstance(config_dict, dict):
+        for key, value in config_dict.items():
+            await config_service.set_config(
+                key=f"adapter.{adapter_id}.{key}", value=value, updated_by="system_bootstrap"
+            )
+
+    logger.info(f"Migrated adapter config for {adapter_id} to graph")
 
 
 async def migrate_adapter_configs_to_graph(runtime: Any) -> None:
@@ -24,30 +58,7 @@ async def migrate_adapter_configs_to_graph(runtime: Any) -> None:
 
     for adapter_type, adapter_config in runtime.adapter_configs.items():
         try:
-            # Determine adapter ID (handle instance-specific types like "api:8081")
-            if ":" in adapter_type:
-                base_type, instance_id = adapter_type.split(":", 1)
-                adapter_id = f"{base_type}_{instance_id}"
-            else:
-                adapter_id = f"{adapter_type}_bootstrap"
-
-            # Store the full config object
-            await config_service.set_config(
-                key=f"adapter.{adapter_id}.config",
-                value=adapter_config.model_dump() if hasattr(adapter_config, "model_dump") else adapter_config,
-                updated_by="system_bootstrap",
-            )
-
-            # Also store individual config values for easy access
-            config_dict = adapter_config.model_dump() if hasattr(adapter_config, "model_dump") else adapter_config
-            if isinstance(config_dict, dict):
-                for key, value in config_dict.items():
-                    await config_service.set_config(
-                        key=f"adapter.{adapter_id}.{key}", value=value, updated_by="system_bootstrap"
-                    )
-
-            logger.info(f"Migrated adapter config for {adapter_id} to graph")
-
+            await _migrate_single_adapter_config(config_service, adapter_type, adapter_config)
         except Exception as e:
             logger.error(f"Failed to migrate adapter config for {adapter_type}: {e}")
 
@@ -110,7 +121,7 @@ async def migrate_tickets_config_to_graph(runtime: Any) -> None:
         logger.error(f"Failed to migrate tickets config to graph: {e}")
 
 
-def should_skip_cognitive_migration(runtime: Any, force_from_template: bool) -> bool:
+def should_skip_cognitive_migration(force_from_template: bool) -> bool:
     """Check if cognitive migration should be skipped (first-run mode without force)."""
     from ciris_engine.logic.setup.first_run import is_first_run
 
@@ -226,7 +237,7 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
         force_from_template: If True, always seed from template (used during resume_from_first_run
             when template is now available). This overwrites any pre-existing config.
     """
-    if should_skip_cognitive_migration(runtime, force_from_template):
+    if should_skip_cognitive_migration(force_from_template):
         return
 
     if not runtime.service_initializer or not runtime.service_initializer.config_service:

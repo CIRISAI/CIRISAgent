@@ -7,12 +7,9 @@ creating shutdown memory nodes for future reactivation.
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ciris_engine.schemas.types import JSONDict
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

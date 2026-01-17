@@ -143,36 +143,67 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
             # For ASPDMA messages, extract the Original Thought content ONLY
             if "Your task is to determine the single most appropriate HANDLER ACTION" in content:
                 logger.info("[MOCK_LLM] Found ASPDMA message")
+                logger.info(f"[MOCK_LLM] ASPDMA content preview (first 500 chars): {content[:500]}")
 
-                # Extract what comes after Original Thought:
+                # Extract what comes after Original Thought: or Thought:
+                # ASPDMA uses 'Thought:' while CSDMA uses 'Original Thought:'
+                thought_marker = None
                 if "Original Thought:" in content:
-                    # Find the Original Thought section and show what comes after it
-                    ot_index = content.find("Original Thought:")
+                    thought_marker = "Original Thought:"
+                elif 'Thought: "' in content:
+                    thought_marker = "Thought:"
+
+                if thought_marker:
+                    logger.info(f"[MOCK_LLM] Found '{thought_marker}' in ASPDMA message")
+                    # Find the Thought section and show what comes after it
+                    ot_index = content.find(thought_marker)
                     sample = content[ot_index : ot_index + 300] if ot_index != -1 else ""
-                    logger.debug(f"[MOCK_LLM] Original Thought section: {sample}")
+                    logger.debug(f"[MOCK_LLM] Thought section: {sample}")
 
                     # Use a more robust regex that handles nested quotes
                     # Match everything up to the LAST quote before a newline (greedy match)
-                    thought_match = re.search(r'Original Thought:\s*"(.*)"(?:\n|$)', content, re.DOTALL)
+                    thought_match = re.search(rf'{thought_marker}\s*"(.*)"(?:\n|$)', content, re.DOTALL)
                     if thought_match:
                         actual_thought_content = thought_match.group(1)
                         logger.debug(f"[MOCK_LLM] Matched thought length: {len(actual_thought_content)}")
                         logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
 
                         # Check if this is a passive observation
-                        # Support both old format "You observed @" and new format "PRIORITY (high): @username ... said:"
+                        # Support formats:
+                        # 1. Old format: "You observed @user say: message"
+                        # 2. Discord format: "PRIORITY (high): @username said: message"
+                        # 3. API format: "@wa-xxx (ID: xxx): message"
                         is_observation = actual_thought_content.startswith("You observed @") or (
                             "@" in actual_thought_content and " said: " in actual_thought_content
                         )
+                        # Check for API format: @username (ID: xxx): message
+                        is_api_format = (
+                            "@" in actual_thought_content
+                            and "(ID:" in actual_thought_content
+                            and "): " in actual_thought_content
+                        )
 
-                        if is_observation:
+                        if is_observation or is_api_format:
                             # Extract the user message from the passive observation
-                            # Try " said: " first (new format), then " say: " (old format)
+                            # Try formats in order of specificity
                             said_index = actual_thought_content.find(" said: ")
                             say_index = actual_thought_content.find(" say: ")
+                            # API format uses "): " after the ID
+                            api_index = actual_thought_content.find("): ")
 
-                            delimiter_index = said_index if said_index != -1 else say_index
-                            delimiter_len = 7 if said_index != -1 else 6  # len(" said: ") vs len(" say: ")
+                            # Choose the best delimiter
+                            if said_index != -1:
+                                delimiter_index = said_index
+                                delimiter_len = 7  # len(" said: ")
+                            elif say_index != -1:
+                                delimiter_index = say_index
+                                delimiter_len = 6  # len(" say: ")
+                            elif api_index != -1:
+                                delimiter_index = api_index
+                                delimiter_len = 3  # len("): ")
+                            else:
+                                delimiter_index = -1
+                                delimiter_len = 0
 
                             if delimiter_index != -1:
                                 remaining_content = actual_thought_content[delimiter_index + delimiter_len :]

@@ -138,6 +138,12 @@ class Adapter(Service):
         Args:
             kwargs: Typed configuration kwargs
         """
+        logger.info(f"[MCP_CONFIG] _initialize_config called with kwargs keys: {list(kwargs.keys())}")
+        logger.info(f"[MCP_CONFIG] adapter_config in kwargs: {'adapter_config' in kwargs}")
+        if "adapter_config" in kwargs:
+            logger.info(f"[MCP_CONFIG] adapter_config type: {type(kwargs.get('adapter_config'))}")
+            logger.info(f"[MCP_CONFIG] adapter_config value: {kwargs.get('adapter_config')}")
+
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             adapter_config = kwargs["adapter_config"]
             if isinstance(adapter_config, MCPAdapterConfig):
@@ -275,10 +281,11 @@ class Adapter(Service):
                 from mcp import ClientSession, StdioServerParameters
                 from mcp.client.stdio import stdio_client
             except ImportError:
-                logger.warning(
-                    "MCP SDK not installed. Install with: pip install mcp" "\nUsing mock client for development."
+                logger.error(
+                    f"MCP SDK not installed. Install with: pip install mcp. "
+                    f"Cannot connect to server '{server_config.server_id}'"
                 )
-                return (self._create_mock_client(server_config), None)
+                return None
 
             # Build environment
             env = dict(server_config.env)
@@ -335,8 +342,11 @@ class Adapter(Service):
             from mcp import ClientSession
             from mcp.client.sse import sse_client
         except ImportError:
-            logger.warning("MCP SDK not installed, using mock client")
-            return (self._create_mock_client(server_config), None)
+            logger.error(
+                f"MCP SDK not installed. Install with: pip install mcp. "
+                f"Cannot connect to SSE server '{server_config.server_id}'"
+            )
+            return None
 
         try:
             # Use AsyncExitStack to keep context managers alive
@@ -378,107 +388,11 @@ class Adapter(Service):
             logger.error(f"No URL specified for WebSocket server '{server_config.server_id}'")
             return None
 
-        logger.warning("WebSocket transport not yet implemented, using mock client")
-        return (self._create_mock_client(server_config), None)
-
-    def _create_mock_client(self, server_config: MCPServerConfig) -> Any:
-        """Create a mock MCP client for development/testing.
-
-        Args:
-            server_config: Server configuration
-
-        Returns:
-            Mock client instance
-        """
-
-        class MockMCPClient:
-            """Mock MCP client for when SDK is not available."""
-
-            def __init__(self, mock_config: MCPServerConfig) -> None:
-                self.config = mock_config
-
-            async def list_tools(self) -> Any:
-                """Return mock tools."""
-                server_name = self.config.name
-
-                class MockTools:
-                    tools = [
-                        {
-                            "name": "mock_tool",
-                            "description": f"Mock tool from {server_name}",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {"input": {"type": "string"}},
-                                "required": ["input"],
-                            },
-                        }
-                    ]
-
-                return MockTools()
-
-            async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
-                """Execute mock tool."""
-
-                class MockResult:
-                    content = [type("Content", (), {"text": f"Mock result for {name}"})()]
-
-                return MockResult()
-
-            async def list_prompts(self) -> Any:
-                """Return mock prompts."""
-
-                class MockPrompts:
-                    prompts = [
-                        {
-                            "name": "mock_guidance",
-                            "description": "Mock guidance prompt",
-                            "arguments": [{"name": "question"}],
-                        }
-                    ]
-
-                return MockPrompts()
-
-            async def get_prompt(self, name: str, arguments: Dict[str, Any]) -> Any:
-                """Get mock prompt response."""
-
-                class MockContent:
-                    text = f"Mock guidance response for: {arguments.get('question', 'unknown')}"
-
-                class MockMessage:
-                    content = MockContent()
-
-                class MockResponse:
-                    messages = [MockMessage()]
-
-                return MockResponse()
-
-            async def list_resources(self) -> Any:
-                """Return mock resources."""
-
-                class MockResources:
-                    resources = [
-                        {
-                            "uri": "mock://resource",
-                            "name": "Mock Resource",
-                            "description": "A mock resource for testing",
-                            "mimeType": "text/plain",
-                        }
-                    ]
-
-                return MockResources()
-
-            async def read_resource(self, uri: str) -> Any:
-                """Read mock resource."""
-
-                class MockContent:
-                    text = f"Mock content from {uri}"
-
-                class MockResponse:
-                    contents = [MockContent()]
-
-                return MockResponse()
-
-        return MockMCPClient(server_config)
+        logger.error(
+            f"WebSocket transport not yet implemented. "
+            f"Cannot connect to server '{server_config.server_id}'"
+        )
+        return None
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get list of services to register with the runtime.

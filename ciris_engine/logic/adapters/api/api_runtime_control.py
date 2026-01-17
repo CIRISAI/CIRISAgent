@@ -337,9 +337,16 @@ class APIRuntimeControlService(Service):
         if config:
             from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 
+            logger.info(f"[LOAD_ADAPTER] config type: {type(config)}")
+            logger.info(f"[LOAD_ADAPTER] config value: {config}")
+
             # If config already has adapter_type, use it directly
             # Otherwise, wrap the config in the proper structure
-            if "adapter_type" in config:
+            # Handle case where config is already an AdapterConfig object
+            if isinstance(config, AdapterConfig):
+                adapter_config = config
+                logger.info(f"[LOAD_ADAPTER] Config is already AdapterConfig, adapter_config field: {config.adapter_config}")
+            elif "adapter_type" in config:
                 adapter_config = AdapterConfig(**config)
             else:
                 # Wrap the collected config in AdapterConfig structure

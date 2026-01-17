@@ -36,7 +36,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
 from ciris_engine.schemas.runtime.adapter_management import RuntimeAdapterStatus as AdapterStatusSchema
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ConfigurationStep
-from ciris_engine.schemas.services.core.runtime import ProcessorStatus
+from ciris_engine.schemas.services.core.runtime import AdapterStatus, ProcessorStatus
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
 from ciris_engine.utils.serialization import serialize_timestamp
@@ -2294,7 +2294,7 @@ async def get_adapter_status(
         status = AdapterStatusSchema(
             adapter_id=adapter_info.adapter_id,
             adapter_type=adapter_info.adapter_type,
-            is_running=adapter_info.status == "RUNNING",
+            is_running=adapter_info.status == AdapterStatus.RUNNING,
             loaded_at=adapter_info.started_at,
             services_registered=[],  # Not exposed via AdapterInfo
             config_params=AdapterConfig(adapter_type=adapter_info.adapter_type, enabled=True, settings={}),

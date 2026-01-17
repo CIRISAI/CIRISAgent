@@ -5,14 +5,17 @@ Tests the complete MCP adapter functionality:
 - Adapter loading via API runtime control
 - Multiple MCP client adapters simultaneously
 - Multiple MCP server adapters simultaneously
-- Tool execution via MCP (using mock LLM $tool commands)
+- Tool execution via MCP through agent interaction ($tool commands)
 - Resource access via MCP
-- Prompt handling via MCP
 - Security validation (rate limiting, poisoning detection)
 - Adapter unloading and cleanup
+
+Uses stdio transport with a local MCP test server for end-to-end testing.
 """
 
 import asyncio
+import os
+import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -38,6 +41,9 @@ class MCPTests:
 
         # Track loaded adapters for cleanup
         self.loaded_adapter_ids: List[str] = []
+
+        # Track MCP server ID for tool name prefixing
+        self._mcp_server_id = "qa-test-server"
 
         # Base URL for direct API calls (some operations need raw requests)
         self._base_url = getattr(client, "_base_url", "http://localhost:8080")
@@ -68,6 +74,22 @@ class MCPTests:
 
         return headers
 
+    def _get_test_server_command(self) -> List[str]:
+        """Get the command to run the MCP test server."""
+        python_path = sys.executable
+        server_script = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "mcp_test_server.py",
+        )
+        return [python_path, server_script]
+
+    def _get_mcp_tool_name(self, tool_name: str) -> str:
+        """Get the full MCP tool name with server prefix.
+
+        MCP tools are registered as mcp_{server_id}_{tool_name}
+        """
+        return f"mcp_{self._mcp_server_id}_{tool_name}"
+
     async def run(self) -> List[Dict[str, Any]]:
         """Run all MCP tests."""
         self.console.print("\n[cyan]🔌 Testing MCP Adapter Loading & Operations[/cyan]")
@@ -76,28 +98,32 @@ class MCPTests:
             # Phase 1: Verify baseline system state
             ("Verify System Health", self.test_system_health),
             ("List Initial Adapters", self.test_list_initial_adapters),
-            # Phase 2: Test MCP client adapter loading
+            # Phase 2: Load MCP client adapter with local test server (stdio)
+            ("Load MCP Client (stdio)", self.test_load_mcp_client_local),
+            ("Verify MCP Client Connected", self.test_verify_client_connected),
+            ("Verify MCP Tools Discovered", self.test_verify_tools_discovered),
+            # Phase 3: Test tool execution via agent interaction
+            ("Test Tool: qa_echo (via interact)", self.test_tool_qa_echo),
+            ("Test Tool: qa_add (via interact)", self.test_tool_qa_add),
+            ("Test Tool: qa_get_time (via interact)", self.test_tool_qa_get_time),
+            # Phase 4: Test MCP client adapter loading (additional)
             ("Load MCP Client Adapter (test-client-1)", self.test_load_mcp_client_1),
             ("Load MCP Client Adapter (test-client-2)", self.test_load_mcp_client_2),
             ("Verify Multiple MCP Clients Loaded", self.test_verify_multiple_clients),
-            # Phase 3: Test MCP server adapter loading
+            # Phase 5: Test MCP server adapter loading
             ("Load MCP Server Adapter (test-server-1)", self.test_load_mcp_server_1),
             ("Load MCP Server Adapter (test-server-2)", self.test_load_mcp_server_2),
             ("Verify Multiple MCP Servers Loaded", self.test_verify_multiple_servers),
-            # Phase 4: Test MCP operations via mock LLM
-            ("Test MCP Tool Execution (via interact)", self.test_mcp_tool_execution),
-            ("Test MCP Resource Access (via interact)", self.test_mcp_resource_access),
-            ("Test MCP Prompt Handling (via interact)", self.test_mcp_prompt_handling),
-            # Phase 5: Test adapter status and metrics
+            # Phase 6: Test adapter status and metrics
             ("Get MCP Client Status", self.test_get_client_status),
             ("Get MCP Server Status", self.test_get_server_status),
-            # Phase 6: Test adapter reload
+            # Phase 7: Test adapter reload
             ("Reload MCP Client Adapter", self.test_reload_mcp_client),
-            # Phase 7: Security & Error Handling Tests
+            # Phase 8: Security & Error Handling Tests
             ("Test Invalid Adapter Config (Error Handling)", self.test_invalid_adapter_config),
             ("Test Capability Discovery", self.test_capability_discovery),
             ("Test Concurrent Adapter Operations", self.test_concurrent_operations),
-            # Phase 8: Cleanup - unload all test adapters
+            # Phase 9: Cleanup - unload all test adapters
             ("Unload Test Adapters", self.test_unload_adapters),
             ("Verify Cleanup Complete", self.test_verify_cleanup),
         ]
@@ -115,6 +141,148 @@ class MCPTests:
 
         self._print_summary()
         return self.results
+
+    async def test_load_mcp_client_local(self) -> None:
+        """Load MCP client adapter with local test server via stdio transport."""
+        # Get the command to run the test server
+        command = self._get_test_server_command()
+
+        adapter_id = "mcp_qa_client"
+        await self._load_adapter(
+            adapter_type="mcp_client",
+            adapter_id=adapter_id,
+            config={
+                "adapter_type": "mcp_client",
+                "enabled": True,
+                "settings": {},
+                "adapter_config": {
+                    "adapter_id": adapter_id,
+                    "servers": [
+                        {
+                            "server_id": self._mcp_server_id,
+                            "name": "QA Test Server",
+                            "description": "Local MCP test server for QA testing",
+                            "transport": "stdio",
+                            "command": command[0],
+                            "args": command[1:],
+                            "enabled": True,
+                            "auto_start": True,
+                            "bus_bindings": [
+                                {"bus_type": "tool", "priority": 10},
+                            ],
+                        }
+                    ],
+                },
+            },
+        )
+        self.loaded_adapter_ids.append(adapter_id)
+
+        # Give the adapter time to connect and discover tools
+        await asyncio.sleep(2.0)
+
+    async def test_verify_client_connected(self) -> None:
+        """Verify MCP client connected to test server."""
+        headers = self._get_auth_headers()
+        response = requests.get(
+            f"{self._base_url}/v1/system/adapters/mcp_qa_client",
+            headers=headers,
+            timeout=30,
+        )
+
+        if response.status_code == 404:
+            raise ValueError("MCP client adapter not found")
+
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get adapter status: HTTP {response.status_code}")
+
+        data = response.json()
+        is_running = data.get("data", {}).get("is_running", False)
+
+        if not is_running:
+            raise ValueError("MCP client adapter loaded but NOT running - stdio connection failed")
+
+        self.console.print("     [dim]MCP client connected via stdio ✓[/dim]")
+
+    async def test_verify_tools_discovered(self) -> None:
+        """Verify MCP tools were discovered and registered."""
+        # Check if tools are available via adapter status endpoint
+        headers = self._get_auth_headers()
+        response = requests.get(
+            f"{self._base_url}/v1/system/adapters/mcp_qa_client",
+            headers=headers,
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            raise ValueError(f"Could not get adapter status: HTTP {response.status_code}")
+
+        data = response.json()
+        tools = data.get("data", {}).get("tools", [])
+
+        if tools is None:
+            tools = []
+
+        # Extract tool names from ToolInfo objects if needed
+        tool_names = []
+        for t in tools:
+            if isinstance(t, dict):
+                tool_names.append(t.get("name", ""))
+            elif isinstance(t, str):
+                tool_names.append(t)
+
+        # Look for MCP tools with our server prefix
+        mcp_tools = [t for t in tool_names if t.startswith(f"mcp_{self._mcp_server_id}_")]
+
+        if not mcp_tools:
+            raise ValueError(f"No MCP tools discovered with prefix 'mcp_{self._mcp_server_id}_'. Available tools: {tool_names[:10]}")
+
+        self.console.print(f"     [dim]Found {len(mcp_tools)} MCP tools: {mcp_tools}[/dim]")
+
+    async def test_tool_qa_echo(self) -> None:
+        """Test qa_echo tool execution via agent interaction."""
+        await self._complete_task()
+
+        # Use mock LLM $tool command to execute the MCP tool
+        tool_name = self._get_mcp_tool_name("qa_echo")
+        message = f'$tool {tool_name} message="Hello from QA!"'
+
+        self.console.print(f"     [dim]Sending: {message}[/dim]")
+        response = await self.client.agent.interact(message)
+        self.console.print(f"     [dim]Response: {response}[/dim]")
+
+        # Verify TOOL action was executed via audit trail
+        await self._verify_audit_entry("tool", max_age_seconds=30)
+        self.console.print("     [dim]qa_echo: TOOL action verified in audit[/dim]")
+
+    async def test_tool_qa_add(self) -> None:
+        """Test qa_add tool execution via agent interaction."""
+        await self._complete_task()
+
+        tool_name = self._get_mcp_tool_name("qa_add")
+        message = f'$tool {tool_name} {{"a": 5, "b": 3}}'
+
+        self.console.print(f"     [dim]Sending: {message}[/dim]")
+        response = await self.client.agent.interact(message)
+        self.console.print(f"     [dim]Response: {response}[/dim]")
+
+        # Verify TOOL action was executed
+        await self._verify_audit_entry("tool", max_age_seconds=30)
+        self.console.print("     [dim]qa_add: TOOL action verified in audit[/dim]")
+
+    async def test_tool_qa_get_time(self) -> None:
+        """Test qa_get_time tool execution via agent interaction."""
+        await self._complete_task()
+
+        tool_name = self._get_mcp_tool_name("qa_get_time")
+        message = f"$tool {tool_name}"
+
+        self.console.print(f"     [dim]Sending: {message}[/dim]")
+        response = await self.client.agent.interact(message)
+        self.console.print(f"     [dim]Response: {response}[/dim]")
+
+        # Verify TOOL action was executed
+        await self._verify_audit_entry("tool", max_age_seconds=30)
+        self.console.print("     [dim]qa_get_time: TOOL action verified in audit[/dim]")
 
     async def test_system_health(self) -> None:
         """Verify system is healthy before running MCP tests."""
@@ -298,53 +466,6 @@ class MCPTests:
         # Verify total MCP adapters
         all_mcp = [a for a in adapters if "mcp" in a.get("adapter_type", "").lower()]
         self.console.print(f"     [dim]Total MCP adapters: {len(all_mcp)}[/dim]")
-
-    async def test_mcp_tool_execution(self) -> None:
-        """Test MCP tool execution via agent interact with mock LLM."""
-        # Complete any previous task
-        await self._complete_task()
-
-        # Use mock LLM $tool command to trigger MCP tool
-        # Note: This tests that MCP tools are registered and callable
-        message = "$tool mcp_list_tools server_id='test-server-1'"
-
-        try:
-            response = await self.client.agent.interact(message)
-            self.console.print(f"     [dim]Tool response received[/dim]")
-
-            # Verify via audit trail
-            await self._verify_audit_entry("mcp", max_age_seconds=30)
-
-        except Exception as e:
-            # MCP tools may not be available if no real MCP server is connected
-            # This is expected in test environment - just verify the adapter is responding
-            self.console.print(f"     [dim]MCP tool test (expected in mock): {str(e)[:50]}[/dim]")
-
-    async def test_mcp_resource_access(self) -> None:
-        """Test MCP resource access via agent interact with mock LLM."""
-        await self._complete_task()
-
-        # Test MCP resource listing
-        message = "$tool mcp_list_resources server_id='test-server-1'"
-
-        try:
-            response = await self.client.agent.interact(message)
-            self.console.print(f"     [dim]Resource response received[/dim]")
-        except Exception as e:
-            self.console.print(f"     [dim]MCP resource test (expected in mock): {str(e)[:50]}[/dim]")
-
-    async def test_mcp_prompt_handling(self) -> None:
-        """Test MCP prompt handling via agent interact with mock LLM."""
-        await self._complete_task()
-
-        # Test MCP prompt listing
-        message = "$tool mcp_list_prompts server_id='test-server-1'"
-
-        try:
-            response = await self.client.agent.interact(message)
-            self.console.print(f"     [dim]Prompt response received[/dim]")
-        except Exception as e:
-            self.console.print(f"     [dim]MCP prompt test (expected in mock): {str(e)[:50]}[/dim]")
 
     async def test_get_client_status(self) -> None:
         """Get status of MCP client adapter."""
@@ -690,10 +811,16 @@ class MCPTests:
         return [item for item in adapters if isinstance(item, dict)]
 
     async def _complete_task(self) -> None:
-        """Complete the current task to prevent task consolidation."""
+        """Complete the current task and wait for agent to be ready.
+
+        This ensures the previous interaction is fully processed before
+        sending a new message, preventing message consolidation issues.
+        """
         try:
+            # Send task complete
             await self.client.agent.interact("$task_complete")
-            await asyncio.sleep(0.5)
+            # Wait for agent to finish processing
+            await asyncio.sleep(3.0)
         except Exception:
             pass
 

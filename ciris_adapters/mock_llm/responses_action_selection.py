@@ -101,7 +101,13 @@ def action_selection(
     for item in context:
         if item.startswith("user_input:") or item.startswith("task:") or item.startswith("content:"):
             user_input = item.split(":", 1)[1].strip()
+            logger.info(f"[MOCK_LLM] Found user_input from context: '{user_input[:100]}...' (len={len(user_input)})")
             break
+
+    if not user_input:
+        logger.warning("[MOCK_LLM] No user_input found in context! Checking all context items...")
+        for i, item in enumerate(context[:10]):
+            logger.info(f"[MOCK_LLM] context[{i}]: {item[:100] if len(item) > 100 else item}")
 
     # Extract user speech (non-command input)
     user_speech = ""
@@ -116,6 +122,9 @@ def action_selection(
         parts = user_input.split(None, 1)
         command_from_context = parts[0].lower()
         command_args_from_context = parts[1] if len(parts) > 1 else ""
+        logger.info(f"[MOCK_LLM] Parsed command: '{command_from_context}' with args: '{command_args_from_context[:50]}...'")
+    elif user_input:
+        logger.info(f"[MOCK_LLM] user_input doesn't start with $: '{user_input[:50]}...'")
 
     # Check for forced actions (testing)
     forced_action = None

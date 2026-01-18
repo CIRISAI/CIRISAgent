@@ -8,7 +8,7 @@ with the InitializationService for phased startup.
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.config.essential import EssentialConfig
@@ -96,6 +96,13 @@ def register_all_initialization_steps(
         name="Register Adapter Services",
         handler=lambda: register_adapter_services(runtime),
         critical=True,
+    )
+
+    init_manager.register_step(
+        phase=InitializationPhase.SERVICES,
+        name="Load Saved Adapters",
+        handler=lambda: load_saved_adapters_from_graph(runtime),
+        critical=False,  # Non-critical - system can run without saved adapters
     )
 
     init_manager.register_step(
@@ -373,6 +380,167 @@ async def register_adapter_services(runtime: Any) -> None:
     In first-run mode, skip registration since services aren't initialized.
     """
     await runtime._register_adapter_services()
+
+
+def _extract_config_value(config_node: Any) -> Any:
+    """Extract the actual value from a ConfigNode.
+
+    ConfigNode.value is a ConfigValue wrapper with a .value property.
+    This helper safely extracts the underlying value.
+    """
+    if config_node is None:
+        return None
+
+    # If it's already a primitive type, return as-is
+    if isinstance(config_node, (str, int, float, bool, list, dict)):
+        return config_node
+
+    # ConfigNode has .value which is ConfigValue, which has .value property
+    if hasattr(config_node, "value"):
+        config_value = config_node.value
+        # ConfigValue has a .value property that returns the actual value
+        if hasattr(config_value, "value"):
+            return config_value.value
+        # Or it might be the value directly
+        return config_value
+
+    return config_node
+
+
+def _get_runtime_service(runtime: Any, service_name: str) -> Any:
+    """Get a service from runtime's service_initializer."""
+    if not hasattr(runtime, "service_initializer") or not runtime.service_initializer:
+        return None
+    return getattr(runtime.service_initializer, service_name, None)
+
+
+def _extract_adapter_ids_from_configs(all_configs: Dict[str, Any]) -> Set[str]:
+    """Extract unique adapter IDs from config keys."""
+    adapter_ids: Set[str] = set()
+    for key in all_configs.keys():
+        parts = key.split(".")
+        if len(parts) >= 2 and parts[0] == "adapter":
+            adapter_ids.add(parts[1])
+    return adapter_ids
+
+
+def _get_bootstrap_adapter_ids(runtime: Any) -> Set[str]:
+    """Get adapter IDs already loaded from bootstrap."""
+    bootstrap_ids: Set[str] = set()
+    for adapter in runtime.adapters:
+        adapter_id = getattr(adapter, "adapter_id", None)
+        if adapter_id:
+            bootstrap_ids.add(adapter_id)
+    return bootstrap_ids
+
+
+def _build_adapter_config_from_data(adapter_type: str, adapter_config_data: Any) -> Optional[Any]:
+    """Build AdapterConfig from saved config data."""
+    if not adapter_config_data:
+        return None
+
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    if isinstance(adapter_config_data, AdapterConfig):
+        return adapter_config_data
+
+    if isinstance(adapter_config_data, dict):
+        return AdapterConfig(
+            adapter_type=adapter_type,
+            enabled=adapter_config_data.get("enabled", True),
+            settings=adapter_config_data.get("settings", {}),
+            adapter_config=adapter_config_data.get("adapter_config"),
+        )
+
+    return None
+
+
+async def _load_single_saved_adapter(
+    adapter_id: str,
+    config_service: Any,
+    adapter_manager: Any,
+    bootstrap_ids: Set[str],
+) -> bool:
+    """Load a single saved adapter from graph config. Returns True if loaded."""
+    # Skip if already loaded
+    if adapter_id in bootstrap_ids:
+        logger.debug(f"Adapter {adapter_id} already loaded from bootstrap, skipping")
+        return False
+
+    if adapter_id in adapter_manager.loaded_adapters:
+        logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
+        return False
+
+    # Get adapter type and config
+    adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
+    adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
+
+    adapter_type = _extract_config_value(adapter_type_node)
+    adapter_config_data = _extract_config_value(adapter_config_node)
+
+    if not adapter_type or not isinstance(adapter_type, str):
+        logger.warning(f"No valid adapter type found for saved adapter {adapter_id}, skipping")
+        return False
+
+    adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
+    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type})")
+
+    result = await adapter_manager.load_adapter(
+        adapter_type=adapter_type,
+        adapter_id=adapter_id,
+        config_params=adapter_config,
+    )
+
+    if result.success:
+        logger.info(f"Successfully loaded saved adapter: {adapter_id}")
+        return True
+
+    logger.warning(f"Failed to load saved adapter {adapter_id}: {result.message}")
+    return False
+
+
+async def load_saved_adapters_from_graph(runtime: Any) -> None:
+    """Load adapters that were saved to the graph config service.
+
+    This restores dynamically loaded adapters (added via API) after restart.
+    Skipped in first-run mode since config service isn't available.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    if is_first_run():
+        logger.info("First-run mode: Skipping saved adapter loading")
+        return
+
+    config_service = _get_runtime_service(runtime, "config_service")
+    if not config_service:
+        logger.debug("Config service not available - skipping saved adapter loading")
+        return
+
+    adapter_manager = _get_runtime_service(runtime, "adapter_manager")
+    if not adapter_manager:
+        logger.debug("Adapter manager not available - skipping saved adapter loading")
+        return
+
+    try:
+        all_configs = await config_service.list_configs(prefix="adapter.")
+        adapter_ids = _extract_adapter_ids_from_configs(all_configs)
+        logger.info(f"Found {len(adapter_ids)} saved adapter configs in graph")
+
+        bootstrap_ids = _get_bootstrap_adapter_ids(runtime)
+        loaded_count = 0
+
+        for adapter_id in adapter_ids:
+            loaded = await _load_single_saved_adapter(
+                adapter_id, config_service, adapter_manager, bootstrap_ids
+            )
+            if loaded:
+                loaded_count += 1
+
+        if loaded_count > 0:
+            logger.info(f"Loaded {loaded_count} saved adapters from graph")
+
+    except Exception as e:
+        logger.error(f"Error loading saved adapters from graph: {e}", exc_info=True)
 
 
 async def initialize_maintenance_service(runtime: Any) -> None:

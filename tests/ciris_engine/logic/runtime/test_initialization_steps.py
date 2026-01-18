@@ -175,6 +175,109 @@ class TestInitializeIdentity:
             await initialize_identity(runtime)
 
 
+class TestLoadSavedAdaptersFromGraph:
+    """Tests for the load_saved_adapters_from_graph function."""
+
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_skips_in_first_run_mode(self) -> None:
+        """Test that saved adapter loading is skipped in first-run mode."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=True,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Should not try to access services
+            runtime.service_initializer.config_service.list_configs.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_skips_without_config_service(self) -> None:
+        """Test that saved adapter loading is skipped without config service."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+        runtime.service_initializer.config_service = None
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=False,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Should not fail - just skip
+
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_loads_from_graph(self) -> None:
+        """Test that saved adapters are loaded from graph config."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+        runtime.adapters = []
+
+        mock_config_service = MagicMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter.covenant_metrics.type": "ciris_covenant_metrics",
+            "adapter.covenant_metrics.config": {},
+        })
+        mock_config_service.get_config = AsyncMock(side_effect=lambda key: {
+            "adapter.covenant_metrics.type": "ciris_covenant_metrics",
+            "adapter.covenant_metrics.config": {"enabled": True, "settings": {}},
+        }.get(key))
+
+        mock_adapter_manager = MagicMock()
+        mock_adapter_manager.loaded_adapters = {}
+        mock_adapter_manager.load_adapter = AsyncMock(return_value=MagicMock(success=True))
+
+        runtime.service_initializer.config_service = mock_config_service
+        runtime.service_initializer.adapter_manager = mock_adapter_manager
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=False,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Should have called load_adapter
+            mock_adapter_manager.load_adapter.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_skips_already_loaded(self) -> None:
+        """Test that already-loaded adapters are skipped."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+
+        # Mock an adapter that's already loaded
+        mock_adapter = MagicMock()
+        mock_adapter.adapter_id = "api"
+        runtime.adapters = [mock_adapter]
+
+        mock_config_service = MagicMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter.api.type": "api",
+        })
+
+        mock_adapter_manager = MagicMock()
+        mock_adapter_manager.loaded_adapters = {}
+        mock_adapter_manager.load_adapter = AsyncMock()
+
+        runtime.service_initializer.config_service = mock_config_service
+        runtime.service_initializer.adapter_manager = mock_adapter_manager
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=False,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Should NOT call load_adapter since adapter is already loaded
+            mock_adapter_manager.load_adapter.assert_not_called()
+
+
 class TestVerifyIdentityIntegrity:
     """Tests for the verify_identity_integrity function."""
 

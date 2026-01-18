@@ -37,6 +37,8 @@ class QAModule(Enum):
     COGNITIVE_STATE_API = "cognitive_state"  # Cognitive state transition API testing
     MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
     ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
+    ADAPTER_AUTOLOAD = "adapter_autoload"  # Adapter persistence and auto-load on restart testing
+    IDENTITY_UPDATE = "identity_update"  # Identity update from template testing (--identity-update flag)
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
@@ -216,6 +218,12 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.ADAPTER_CONFIG:
             # Adapter configuration tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.ADAPTER_AUTOLOAD:
+            # Adapter auto-load tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.IDENTITY_UPDATE:
+            # Identity update tests use SDK client
             return []  # Will be handled separately by runner
         elif module == QAModule.VISION:
             # Vision tests use direct API calls

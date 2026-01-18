@@ -2,6 +2,7 @@
 QA test modules for different components.
 """
 
+from .adapter_autoload_tests import AdapterAutoloadTests
 from .adapter_config_tests import AdapterConfigTests
 from .air_tests import AIRTests
 from .api_tests import APITestModule
@@ -16,6 +17,7 @@ from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
 from .filter_tests import FilterTestModule
 from .handler_tests import HandlerTestModule
+from .identity_update_tests import IdentityUpdateTests
 from .mcp_tests import MCPTests
 from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
@@ -26,6 +28,7 @@ from .state_transition_tests import StateTransitionTests
 from .vision_tests import VisionTests
 
 __all__ = [
+    "AdapterAutoloadTests",
     "AdapterConfigTests",
     "AIRTests",
     "APITestModule",
@@ -34,6 +37,7 @@ __all__ = [
     "CovenantMetricsTests",
     "CovenantTestModule",
     "HandlerTestModule",
+    "IdentityUpdateTests",
     "SDKTestModule",
     "ConsentTests",
     "DSARTests",

@@ -245,6 +245,8 @@ class QARunner:
             QAModule.COGNITIVE_STATE_API,
             QAModule.MCP,
             QAModule.ADAPTER_CONFIG,
+            QAModule.ADAPTER_AUTOLOAD,
+            QAModule.IDENTITY_UPDATE,
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
@@ -850,6 +852,7 @@ class QARunner:
             MessageIDDebugTests,
             PartnershipTests,
         )
+        from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
@@ -857,6 +860,7 @@ class QARunner:
         from .modules.covenant_metrics_tests import CovenantMetricsTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.mcp_tests import MCPTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
@@ -882,6 +886,8 @@ class QARunner:
             QAModule.COGNITIVE_STATE_API: CognitiveStateAPITests,
             QAModule.MCP: MCPTests,
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
+            QAModule.ADAPTER_AUTOLOAD: AdapterAutoloadTests,
+            QAModule.IDENTITY_UPDATE: IdentityUpdateTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,

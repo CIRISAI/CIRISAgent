@@ -102,3 +102,118 @@ class TestBootstrapHelpers:
         # Bootstrap should be created
         assert runtime.bootstrap is not None
         assert len(runtime.bootstrap.adapters) == 2
+
+    def test_parse_bootstrap_config_with_identity_update(self) -> None:
+        """Test parsing bootstrap config with identity_update flag."""
+        from ciris_engine.logic.runtime.bootstrap_helpers import parse_bootstrap_config
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
+        runtime = MagicMock()
+        bootstrap = RuntimeBootstrapConfig(
+            adapters=[],
+            identity_update=True,
+            template_name="custom_template",
+        )
+
+        parse_bootstrap_config(
+            runtime=runtime,
+            bootstrap=bootstrap,
+            essential_config=None,
+            startup_channel_id=None,
+            adapter_types=[],
+            adapter_configs=None,
+            kwargs={},
+        )
+
+        assert runtime._identity_update is True
+        assert runtime._template_name == "custom_template"
+
+    def test_parse_bootstrap_config_without_identity_update(self) -> None:
+        """Test parsing bootstrap config without identity_update flag."""
+        from ciris_engine.logic.runtime.bootstrap_helpers import parse_bootstrap_config
+        from ciris_engine.schemas.runtime.bootstrap import RuntimeBootstrapConfig
+
+        runtime = MagicMock()
+        bootstrap = RuntimeBootstrapConfig(
+            adapters=[],
+            identity_update=False,
+            template_name=None,
+        )
+
+        parse_bootstrap_config(
+            runtime=runtime,
+            bootstrap=bootstrap,
+            essential_config=None,
+            startup_channel_id=None,
+            adapter_types=[],
+            adapter_configs=None,
+            kwargs={},
+        )
+
+        assert runtime._identity_update is False
+        assert runtime._template_name is None
+
+    def test_create_bootstrap_from_legacy_with_identity_update(self) -> None:
+        """Test creating bootstrap from legacy params with identity_update."""
+        from ciris_engine.logic.runtime.bootstrap_helpers import create_bootstrap_from_legacy
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        runtime = MagicMock()
+        essential_config = EssentialConfig()
+
+        create_bootstrap_from_legacy(
+            runtime=runtime,
+            essential_config=essential_config,
+            startup_channel_id="channel",
+            adapter_types=["api"],
+            adapter_configs=None,
+            kwargs={"identity_update": True, "template_name": "scout"},
+        )
+
+        assert runtime._identity_update is True
+        assert runtime._template_name == "scout"
+        assert runtime.bootstrap.identity_update is True
+        assert runtime.bootstrap.template_name == "scout"
+
+    def test_create_bootstrap_from_legacy_without_identity_update(self) -> None:
+        """Test creating bootstrap from legacy params without identity_update."""
+        from ciris_engine.logic.runtime.bootstrap_helpers import create_bootstrap_from_legacy
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        runtime = MagicMock()
+        essential_config = EssentialConfig()
+
+        create_bootstrap_from_legacy(
+            runtime=runtime,
+            essential_config=essential_config,
+            startup_channel_id="channel",
+            adapter_types=["api"],
+            adapter_configs=None,
+            kwargs={},
+        )
+
+        assert runtime._identity_update is False
+        assert runtime._template_name is None
+        assert runtime.bootstrap.identity_update is False
+        assert runtime.bootstrap.template_name is None
+
+    def test_create_bootstrap_from_legacy_template_name_type_validation(self) -> None:
+        """Test that template_name must be a string or None."""
+        from ciris_engine.logic.runtime.bootstrap_helpers import create_bootstrap_from_legacy
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        runtime = MagicMock()
+        essential_config = EssentialConfig()
+
+        # Pass invalid type for template_name
+        create_bootstrap_from_legacy(
+            runtime=runtime,
+            essential_config=essential_config,
+            startup_channel_id="channel",
+            adapter_types=["api"],
+            adapter_configs=None,
+            kwargs={"template_name": 123},  # Invalid type
+        )
+
+        # Should be None since 123 is not a string
+        assert runtime._template_name is None

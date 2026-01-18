@@ -8,7 +8,7 @@ with the InitializationService for phased startup.
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.config.essential import EssentialConfig
@@ -414,9 +414,9 @@ def _get_runtime_service(runtime: Any, service_name: str) -> Any:
     return getattr(runtime.service_initializer, service_name, None)
 
 
-def _extract_adapter_ids_from_configs(all_configs: dict) -> set:
+def _extract_adapter_ids_from_configs(all_configs: Dict[str, Any]) -> Set[str]:
     """Extract unique adapter IDs from config keys."""
-    adapter_ids = set()
+    adapter_ids: Set[str] = set()
     for key in all_configs.keys():
         parts = key.split(".")
         if len(parts) >= 2 and parts[0] == "adapter":
@@ -424,9 +424,9 @@ def _extract_adapter_ids_from_configs(all_configs: dict) -> set:
     return adapter_ids
 
 
-def _get_bootstrap_adapter_ids(runtime: Any) -> set:
+def _get_bootstrap_adapter_ids(runtime: Any) -> Set[str]:
     """Get adapter IDs already loaded from bootstrap."""
-    bootstrap_ids = set()
+    bootstrap_ids: Set[str] = set()
     for adapter in runtime.adapters:
         adapter_id = getattr(adapter, "adapter_id", None)
         if adapter_id:
@@ -459,7 +459,7 @@ async def _load_single_saved_adapter(
     adapter_id: str,
     config_service: Any,
     adapter_manager: Any,
-    bootstrap_ids: set,
+    bootstrap_ids: Set[str],
 ) -> bool:
     """Load a single saved adapter from graph config. Returns True if loaded."""
     # Skip if already loaded

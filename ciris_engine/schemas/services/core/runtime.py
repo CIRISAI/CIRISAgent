@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
+from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepResultData
 from ciris_engine.schemas.types import ConfigDict, JSONDict
 
@@ -75,6 +76,7 @@ class AdapterInfo(BaseModel):
     error_count: int = Field(0, description="Total errors")
     last_error: Optional[str] = Field(None, description="Last error message")
     tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
+    config_params: Optional[AdapterConfig] = Field(None, description="Adapter configuration")
 
 
 class AdapterOperationResult(BaseModel):

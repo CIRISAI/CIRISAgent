@@ -918,6 +918,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Convert adapter manager status to AdapterInfo."""
         status = AdapterStatus.RUNNING if adapter_status.is_running else AdapterStatus.STOPPED
 
+        # Get config_params if available
+        config_params = None
+        if hasattr(adapter_status, "config_params"):
+            config_params = adapter_status.config_params
+
         return AdapterInfo(
             adapter_id=adapter_status.adapter_id,
             adapter_type=adapter_status.adapter_type,
@@ -927,6 +932,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error_count=self._safe_get_metric(adapter_status, "errors_count", 0),
             last_error=self._safe_get_metric(adapter_status, "last_error", None),
             tools=adapter_status.tools if hasattr(adapter_status, "tools") else None,
+            config_params=config_params,
         )
 
     def _safe_get_metric(self, adapter_status: Any, metric_name: str, default: Any) -> Any:
@@ -958,14 +964,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
         from datetime import datetime
 
-        # Try to extract tools from the actual adapter instance
+        # Try to extract tools and config from the actual adapter instance
         tools: Optional[List[ToolInfo]] = None
+        config_params = None
         try:
             adapter_instance = self.adapter_manager.loaded_adapters.get(adapter_id)
-            if adapter_instance and hasattr(adapter_instance, "adapter"):
-                tools = await self._extract_adapter_tools(adapter_instance.adapter, info.adapter_type)
+            if adapter_instance:
+                if hasattr(adapter_instance, "adapter"):
+                    tools = await self._extract_adapter_tools(adapter_instance.adapter, info.adapter_type)
+                if hasattr(adapter_instance, "config_params"):
+                    config_params = adapter_instance.config_params
         except Exception as e:
-            logger.debug(f"Could not extract tools for adapter {adapter_id}: {e}")
+            logger.debug(f"Could not extract tools/config for adapter {adapter_id}: {e}")
 
         return AdapterInfo(
             adapter_id=info.adapter_id,
@@ -976,6 +986,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error_count=0,  # Not tracked in adapter_management.AdapterInfo
             last_error=None,
             tools=tools,
+            config_params=config_params,
         )
 
     # Configuration Management Methods

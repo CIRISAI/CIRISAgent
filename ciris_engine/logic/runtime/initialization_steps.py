@@ -382,6 +382,31 @@ async def register_adapter_services(runtime: Any) -> None:
     await runtime._register_adapter_services()
 
 
+def _extract_config_value(config_node: Any) -> Any:
+    """Extract the actual value from a ConfigNode.
+
+    ConfigNode.value is a ConfigValue wrapper with a .value property.
+    This helper safely extracts the underlying value.
+    """
+    if config_node is None:
+        return None
+
+    # If it's already a primitive type, return as-is
+    if isinstance(config_node, (str, int, float, bool, list, dict)):
+        return config_node
+
+    # ConfigNode has .value which is ConfigValue, which has .value property
+    if hasattr(config_node, "value"):
+        config_value = config_node.value
+        # ConfigValue has a .value property that returns the actual value
+        if hasattr(config_value, "value"):
+            return config_value.value
+        # Or it might be the value directly
+        return config_value
+
+    return config_node
+
+
 async def load_saved_adapters_from_graph(runtime: Any) -> None:
     """Load adapters that were saved to the graph config service.
 
@@ -444,12 +469,16 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
                 logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
                 continue
 
-            # Get adapter type and config
-            adapter_type = await config_service.get_config(f"adapter.{adapter_id}.type")
-            adapter_config_data = await config_service.get_config(f"adapter.{adapter_id}.config")
+            # Get adapter type and config - extract values from ConfigNode
+            adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
+            adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
 
-            if not adapter_type:
-                logger.warning(f"No adapter type found for saved adapter {adapter_id}, skipping")
+            # Extract actual values from ConfigNode wrappers
+            adapter_type = _extract_config_value(adapter_type_node)
+            adapter_config_data = _extract_config_value(adapter_config_node)
+
+            if not adapter_type or not isinstance(adapter_type, str):
+                logger.warning(f"No valid adapter type found for saved adapter {adapter_id}, skipping")
                 continue
 
             # Build AdapterConfig from saved data

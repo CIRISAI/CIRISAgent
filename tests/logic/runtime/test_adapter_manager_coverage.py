@@ -10,7 +10,15 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.logic.runtime.adapter_manager import AdapterInstance, RuntimeAdapterManager
+from ciris_engine.logic.runtime.adapter_manager import (
+    AdapterInstance,
+    RuntimeAdapterManager,
+    _sanitize_dict,
+    _should_mask_field,
+    DEFAULT_SENSITIVE_PATTERNS,
+    MASKED_VALUE,
+    SENSITIVE_FIELDS_BY_ADAPTER_TYPE,
+)
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.runtime.adapter_management import (
@@ -1188,3 +1196,257 @@ class TestRuntimeAdapterManager:
         metrics = adapter_manager._create_adapter_metrics(instance, "error")
 
         assert metrics is None  # No metrics for unhealthy adapters
+
+
+class TestConfigSanitizationHelpers:
+    """Test suite for config sanitization helper functions."""
+
+    # Tests for _should_mask_field
+
+    def test_should_mask_field_exact_match(self):
+        """Test masking when pattern matches exactly."""
+        patterns = ["token", "password", "secret"]
+        assert _should_mask_field("token", patterns) is True
+        assert _should_mask_field("password", patterns) is True
+        assert _should_mask_field("secret", patterns) is True
+
+    def test_should_mask_field_substring_match(self):
+        """Test masking when pattern is a substring."""
+        patterns = ["token", "password", "secret"]
+        assert _should_mask_field("bot_token", patterns) is True
+        assert _should_mask_field("auth_token", patterns) is True
+        assert _should_mask_field("user_password", patterns) is True
+        assert _should_mask_field("secret_key", patterns) is True
+
+    def test_should_mask_field_case_insensitive(self):
+        """Test that pattern matching is case-insensitive."""
+        patterns = ["token", "password"]
+        assert _should_mask_field("TOKEN", patterns) is True
+        assert _should_mask_field("Token", patterns) is True
+        assert _should_mask_field("PASSWORD", patterns) is True
+        assert _should_mask_field("PaSsWoRd", patterns) is True
+
+    def test_should_mask_field_no_match(self):
+        """Test non-sensitive fields are not masked."""
+        patterns = ["token", "password", "secret"]
+        assert _should_mask_field("username", patterns) is False
+        assert _should_mask_field("port", patterns) is False
+        assert _should_mask_field("host", patterns) is False
+        assert _should_mask_field("test_setting", patterns) is False
+
+    def test_should_mask_field_empty_patterns(self):
+        """Test with empty patterns list."""
+        assert _should_mask_field("token", []) is False
+        assert _should_mask_field("password", []) is False
+
+    # Tests for _sanitize_dict
+
+    def test_sanitize_dict_masks_sensitive_fields(self):
+        """Test that sensitive fields are masked."""
+        data = {
+            "bot_token": "secret123",
+            "api_key": "key456",
+            "username": "admin",
+        }
+        patterns = ["token", "api_key"]
+
+        result = _sanitize_dict(data, patterns)
+
+        assert result["bot_token"] == MASKED_VALUE
+        assert result["api_key"] == MASKED_VALUE
+        assert result["username"] == "admin"
+
+    def test_sanitize_dict_preserves_non_sensitive(self):
+        """Test that non-sensitive fields are preserved."""
+        data = {
+            "host": "localhost",
+            "port": 8080,
+            "enabled": True,
+            "tags": ["a", "b"],
+        }
+        patterns = ["token", "password"]
+
+        result = _sanitize_dict(data, patterns)
+
+        assert result["host"] == "localhost"
+        assert result["port"] == 8080
+        assert result["enabled"] is True
+        assert result["tags"] == ["a", "b"]
+
+    def test_sanitize_dict_null_sensitive_value(self):
+        """Test that null sensitive values become None."""
+        data = {
+            "token": None,
+            "password": "",
+            "api_key": 0,
+        }
+        patterns = ["token", "password", "api_key"]
+
+        result = _sanitize_dict(data, patterns)
+
+        assert result["token"] is None
+        assert result["password"] is None
+        # Falsy but not None/empty - still masked
+        assert result["api_key"] is None
+
+    def test_sanitize_dict_empty_dict(self):
+        """Test sanitizing an empty dictionary."""
+        result = _sanitize_dict({}, ["token", "password"])
+        assert result == {}
+
+    def test_sanitize_dict_returns_new_dict(self):
+        """Test that sanitization returns a new dict, not mutating original."""
+        original = {"token": "secret", "host": "localhost"}
+        patterns = ["token"]
+
+        result = _sanitize_dict(original, patterns)
+
+        # Original unchanged
+        assert original["token"] == "secret"
+        # Result is masked
+        assert result["token"] == MASKED_VALUE
+        # They're different objects
+        assert result is not original
+
+    # Tests for constants
+
+    def test_sensitive_fields_by_adapter_type_discord(self):
+        """Test Discord adapter has expected sensitive patterns."""
+        patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE["discord"]
+        assert "bot_token" in patterns
+        assert "token" in patterns
+        assert "api_key" in patterns
+        assert "secret" in patterns
+
+    def test_sensitive_fields_by_adapter_type_api(self):
+        """Test API adapter has expected sensitive patterns."""
+        patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE["api"]
+        assert "api_key" in patterns
+        assert "secret_key" in patterns
+        assert "auth_token" in patterns
+        assert "password" in patterns
+
+    def test_sensitive_fields_by_adapter_type_cli(self):
+        """Test CLI adapter has expected sensitive patterns."""
+        patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE["cli"]
+        assert "password" in patterns
+        assert "secret" in patterns
+
+    def test_default_sensitive_patterns(self):
+        """Test default patterns are comprehensive."""
+        assert "token" in DEFAULT_SENSITIVE_PATTERNS
+        assert "password" in DEFAULT_SENSITIVE_PATTERNS
+        assert "secret" in DEFAULT_SENSITIVE_PATTERNS
+        assert "api_key" in DEFAULT_SENSITIVE_PATTERNS
+
+    def test_masked_value_constant(self):
+        """Test masked value is the expected string."""
+        assert MASKED_VALUE == "***MASKED***"
+
+
+class TestSanitizeConfigParamsRefactored:
+    """Test the refactored _sanitize_config_params method."""
+
+    @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        mock = Mock(spec=TimeServiceProtocol)
+        mock.now.return_value = datetime.now(timezone.utc)
+        return mock
+
+    @pytest.fixture
+    def mock_runtime(self):
+        """Create a mock runtime."""
+        from ciris_engine.schemas.config.essential import EssentialConfig
+
+        mock = Mock()
+        mock.service_registry = Mock()
+        mock.config_service = None
+        mock.adapters = []
+        mock.essential_config = EssentialConfig()
+        mock.modules_to_load = []
+        mock.startup_channel_id = "test_channel"
+        mock.debug = False
+        mock.bus_manager = None
+        mock.agent_name = "test"
+        mock.agent_version = "1.0.0"
+        return mock
+
+    @pytest.fixture
+    def adapter_manager(self, mock_runtime, mock_time_service):
+        """Create an adapter manager instance."""
+        return RuntimeAdapterManager(mock_runtime, mock_time_service)
+
+    def test_sanitize_config_params_none_config(self, adapter_manager):
+        """Test sanitization with None config returns default."""
+        result = adapter_manager._sanitize_config_params("discord", None)
+
+        assert result.adapter_type == "discord"
+        assert result.enabled is False
+
+    def test_sanitize_config_params_settings_masked(self, adapter_manager):
+        """Test that settings are properly sanitized."""
+        config = AdapterConfig(
+            adapter_type="discord",
+            enabled=True,
+            settings={"bot_token": "secret123", "prefix": "!"},
+        )
+
+        result = adapter_manager._sanitize_config_params("discord", config)
+
+        assert result.settings["bot_token"] == MASKED_VALUE
+        assert result.settings["prefix"] == "!"
+
+    def test_sanitize_config_params_adapter_config_masked(self, adapter_manager):
+        """Test that adapter_config is properly sanitized."""
+        config = AdapterConfig(
+            adapter_type="api",
+            enabled=True,
+            settings={},
+            adapter_config={"api_key": "secret", "endpoint": "https://api.example.com"},
+        )
+
+        result = adapter_manager._sanitize_config_params("api", config)
+
+        assert result.adapter_config is not None
+        assert result.adapter_config["api_key"] == MASKED_VALUE
+        assert result.adapter_config["endpoint"] == "https://api.example.com"
+
+    def test_sanitize_config_params_uses_default_patterns(self, adapter_manager):
+        """Test unknown adapter types use default patterns."""
+        config = AdapterConfig(
+            adapter_type="unknown_adapter",
+            enabled=True,
+            settings={"token": "secret", "setting": "value"},
+        )
+
+        result = adapter_manager._sanitize_config_params("unknown_adapter", config)
+
+        # "token" is in default patterns
+        assert result.settings["token"] == MASKED_VALUE
+        assert result.settings["setting"] == "value"
+
+    def test_sanitize_config_params_preserves_enabled_state(self, adapter_manager):
+        """Test that enabled state is preserved."""
+        config_enabled = AdapterConfig(adapter_type="cli", enabled=True, settings={})
+        config_disabled = AdapterConfig(adapter_type="cli", enabled=False, settings={})
+
+        result_enabled = adapter_manager._sanitize_config_params("cli", config_enabled)
+        result_disabled = adapter_manager._sanitize_config_params("cli", config_disabled)
+
+        assert result_enabled.enabled is True
+        assert result_disabled.enabled is False
+
+    def test_sanitize_config_params_no_adapter_config(self, adapter_manager):
+        """Test sanitization when adapter_config is None."""
+        config = AdapterConfig(
+            adapter_type="cli",
+            enabled=True,
+            settings={"password": "secret"},
+            adapter_config=None,
+        )
+
+        result = adapter_manager._sanitize_config_params("cli", config)
+
+        assert result.adapter_config is None
+        assert result.settings["password"] == MASKED_VALUE

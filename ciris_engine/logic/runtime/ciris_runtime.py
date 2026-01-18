@@ -356,7 +356,10 @@ class CIRISRuntime(ServicePropertyMixin):
             raise
 
     async def _initialize_identity(self) -> None:
-        """Initialize agent identity."""
+        """Initialize agent identity.
+
+        If --identity-update flag is set, refresh identity from template after normal init.
+        """
         from ciris_engine.logic.setup.first_run import is_first_run
 
         config = self._ensure_config()
@@ -369,6 +372,25 @@ class CIRISRuntime(ServicePropertyMixin):
             return
 
         self.agent_identity = await self.identity_manager.initialize_identity()
+
+        # Handle --identity-update flag for admin template refresh
+        identity_update = getattr(self, "_identity_update", False)
+        template_name = getattr(self, "_template_name", None) or getattr(config, "default_template", "default")
+        logger.info(f"[IDENTITY_UPDATE] Checking flag: _identity_update={identity_update}, template_name={template_name}")
+
+        if identity_update:
+            logger.info(f"Identity update requested - refreshing from template '{template_name}'")
+            success = await self.identity_manager.refresh_identity_from_template(
+                template_name=template_name,
+                updated_by="admin",
+            )
+            if success:
+                self.agent_identity = self.identity_manager.agent_identity
+                logger.info("Identity successfully updated from template")
+            else:
+                logger.error("Failed to update identity from template")
+                raise RuntimeError("Identity update failed - cannot proceed")
+
         await self._create_startup_node()
 
     def _register_initialization_steps(self, init_manager: Any) -> None:

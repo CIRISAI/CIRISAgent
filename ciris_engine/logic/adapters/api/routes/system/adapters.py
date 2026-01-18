@@ -446,7 +446,10 @@ async def list_adapters(
             # Convert AdapterInfo to AdapterStatusSchema
             is_running = adapter.status == AdapterStatus.RUNNING or str(adapter.status).lower() == "running"
 
-            config = AdapterConfig(adapter_type=adapter.adapter_type, enabled=is_running, settings={})
+            # Use actual config from adapter if available
+            config = adapter.config_params or AdapterConfig(
+                adapter_type=adapter.adapter_type, enabled=is_running, settings={}
+            )
 
             metrics = None
             if adapter.messages_processed > 0 or adapter.error_count > 0:
@@ -716,13 +719,18 @@ async def get_adapter_status(
             )
             metrics_dict = metrics.__dict__
 
+        # Use actual config from adapter if available, otherwise create minimal default
+        config_params = adapter_info.config_params or AdapterConfig(
+            adapter_type=adapter_info.adapter_type, enabled=True, settings={}
+        )
+
         status = AdapterStatusSchema(
             adapter_id=adapter_info.adapter_id,
             adapter_type=adapter_info.adapter_type,
             is_running=adapter_info.status == AdapterStatus.RUNNING,
             loaded_at=adapter_info.started_at,
             services_registered=[],
-            config_params=AdapterConfig(adapter_type=adapter_info.adapter_type, enabled=True, settings={}),
+            config_params=config_params,
             metrics=metrics_dict,
             last_activity=None,
             tools=adapter_info.tools,

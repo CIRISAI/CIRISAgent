@@ -39,6 +39,54 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 
 logger = logging.getLogger(__name__)
 
+# Sensitive field patterns per adapter type for config sanitization
+SENSITIVE_FIELDS_BY_ADAPTER_TYPE: Dict[str, List[str]] = {
+    "discord": ["bot_token", "token", "api_key", "secret"],
+    "api": ["api_key", "secret_key", "auth_token", "password"],
+    "cli": ["password", "secret"],
+}
+
+# Default patterns when adapter type is not in the mapping
+DEFAULT_SENSITIVE_PATTERNS: List[str] = ["token", "password", "secret", "api_key"]
+
+# Mask value for sensitive fields
+MASKED_VALUE = "***MASKED***"
+
+
+def _should_mask_field(key: str, sensitive_patterns: List[str]) -> bool:
+    """Check if a field key should be masked based on sensitive patterns.
+
+    Args:
+        key: The field key to check
+        sensitive_patterns: List of substrings that indicate a sensitive field
+
+    Returns:
+        True if the key contains any sensitive pattern (case-insensitive)
+    """
+    key_lower = key.lower()
+    return any(pattern in key_lower for pattern in sensitive_patterns)
+
+
+def _sanitize_dict(
+    data: Dict[str, Any], sensitive_patterns: List[str]
+) -> Dict[str, Any]:
+    """Sanitize a dictionary by masking sensitive fields.
+
+    Args:
+        data: Dictionary to sanitize
+        sensitive_patterns: List of substrings that indicate a sensitive field
+
+    Returns:
+        New dictionary with sensitive values masked
+    """
+    sanitized: Dict[str, Any] = {}
+    for key, value in data.items():
+        if _should_mask_field(key, sensitive_patterns):
+            sanitized[key] = MASKED_VALUE if value else None
+        else:
+            sanitized[key] = value
+    return sanitized
+
 
 @dataclass
 class AdapterInstance:
@@ -125,7 +173,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     details={},
                 )
 
-            logger.info(f"Loading adapter: type={adapter_type}, id={adapter_id}, params={config_params}")
+            logger.info(f"Loading adapter: type={adapter_type}, id={adapter_id}")
 
             adapter_class = load_adapter(adapter_type)
 
@@ -676,34 +724,24 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         if not config_params:
             return AdapterConfig(adapter_type=adapter_type, enabled=False)
 
-        # Define sensitive fields per adapter type
-        sensitive_fields = {
-            "discord": ["bot_token", "token", "api_key", "secret"],
-            "api": ["api_key", "secret_key", "auth_token", "password"],
-            "cli": ["password", "secret"],
-            # Add more adapter types and their sensitive fields as needed
-        }
+        # Get sensitive patterns for this adapter type
+        sensitive_patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE.get(
+            adapter_type, DEFAULT_SENSITIVE_PATTERNS
+        )
 
-        # Get sensitive fields for this adapter type
-        fields_to_mask = sensitive_fields.get(adapter_type, ["token", "password", "secret", "api_key"])
+        # Sanitize settings dict
+        sanitized_settings = _sanitize_dict(config_params.settings, sensitive_patterns)
 
-        # Create a sanitized copy of the settings
-        sanitized_settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = {}
-        for key, value in config_params.settings.items():
-            # Check if this field should be masked
-            if any(sensitive in key.lower() for sensitive in fields_to_mask):
-                # Mask the value but show it exists
-                if value:
-                    sanitized_settings[key] = "***MASKED***"
-                else:
-                    sanitized_settings[key] = None
-            else:
-                # Keep non-sensitive values as-is
-                sanitized_settings[key] = value
+        # Sanitize adapter_config if present
+        sanitized_adapter_config = None
+        if config_params.adapter_config:
+            sanitized_adapter_config = _sanitize_dict(config_params.adapter_config, sensitive_patterns)
 
-        # Return a new AdapterConfig with sanitized settings
         return AdapterConfig(
-            adapter_type=config_params.adapter_type, enabled=config_params.enabled, settings=sanitized_settings
+            adapter_type=config_params.adapter_type,
+            enabled=config_params.enabled,
+            settings=sanitized_settings,
+            adapter_config=sanitized_adapter_config,
         )
 
     async def load_adapter_from_template(

@@ -195,6 +195,11 @@ class TestRuntimeControlServiceCoverage:
         manager.list_adapters = AsyncMock(return_value=[])
         manager.loaded_adapters = {}
         manager.active_adapters = []  # Add this for metrics
+        # Mock _sanitize_config_params to return the config as-is (pass-through for tests)
+        manager._sanitize_config_params = Mock(
+            side_effect=lambda adapter_type, config: config
+            or AdapterConfig(adapter_type=adapter_type, enabled=True)
+        )
         return manager
 
     @pytest.fixture

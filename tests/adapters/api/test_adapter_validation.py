@@ -73,6 +73,7 @@ class TestAdapterValidation:
         mock_adapter_info.messages_processed = 50
         mock_adapter_info.error_count = 2
         mock_adapter_info.last_error = "Test error"
+        mock_adapter_info.config_params = None  # Explicitly set to None for the test
         # Create proper ToolInfo objects instead of strings
         tool1 = ToolInfo(
             name="tool1",

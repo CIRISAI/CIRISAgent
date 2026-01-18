@@ -48,6 +48,9 @@ class AdapterAutoloadTests:
         # Store loaded adapters for cleanup
         self.loaded_adapter_ids: List[str] = []
 
+        # Test config to verify persistence
+        self.test_config: Dict[str, Any] = {}
+
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get authentication headers from client."""
         headers = {"Content-Type": "application/json"}
@@ -79,10 +82,11 @@ class AdapterAutoloadTests:
             ("Verify System Health", self.test_system_health),
             ("List Loaded Adapters", self.test_list_loaded_adapters),
             ("List Available Adapter Types", self.test_list_available_adapter_types),
-            # Phase 2: Adapter loading
-            ("Load Test Adapter", self.test_load_adapter),
+            # Phase 2: Adapter loading with config
+            ("Load Test Adapter with Config", self.test_load_adapter),
             ("Verify Adapter Loaded", self.test_verify_adapter_loaded),
             ("Get Adapter Status", self.test_get_adapter_status),
+            ("Verify Config Persistence", self.test_verify_config_persistence),
             # Phase 3: Persistence
             ("List Persisted Configs", self.test_list_persisted_configs),
             ("Verify Config in Graph", self.test_verify_config_in_graph),
@@ -164,15 +168,23 @@ class AdapterAutoloadTests:
             self.console.print(f"     [dim]  - {at}[/dim]")
 
     async def test_load_adapter(self) -> None:
-        """Load a test adapter via API."""
+        """Load a test adapter via API with config values."""
         headers = self._get_auth_headers()
+
+        # Test config values that should be persisted and returned
+        # Note: avoid field names containing "key", "token", "secret", "password" as they get masked
+        self.test_config = {
+            "test_setting": "test_value_123",
+            "test_number": 42,
+            "test_bool": True,
+        }
 
         # Load the adapter - endpoint requires AdapterActionRequest body
         response = requests.post(
             f"{self._base_url}/v1/system/adapters/{self.test_adapter_type}",
             headers=headers,
             params={"adapter_id": self.test_adapter_id},
-            json={"config": {}, "auto_start": True, "force": False},
+            json={"config": self.test_config, "auto_start": True, "force": False},
             timeout=30,
         )
 
@@ -197,6 +209,7 @@ class AdapterAutoloadTests:
         if success:
             self.loaded_adapter_ids.append(adapter_id)
             self.console.print(f"     [dim]Loaded adapter: {adapter_id}[/dim]")
+            self.console.print(f"     [dim]Config passed: {self.test_config}[/dim]")
         else:
             message = result.get("message", "Unknown error")
             raise ValueError(f"Adapter load failed: {message}")
@@ -228,7 +241,7 @@ class AdapterAutoloadTests:
         self.console.print(f"     [dim]Verified: {self.test_adapter_id} is loaded[/dim]")
 
     async def test_get_adapter_status(self) -> None:
-        """Get status of the loaded test adapter."""
+        """Get status of the loaded test adapter and verify config is returned."""
         if not self.loaded_adapter_ids:
             self.console.print("     [dim]Skipped - no adapter loaded[/dim]")
             return
@@ -251,7 +264,80 @@ class AdapterAutoloadTests:
         data = response.json()
         status = data.get("data", {})
 
-        self.console.print(f"     [dim]Adapter status: {status.get('status', 'unknown')}[/dim]")
+        self.console.print(f"     [dim]Adapter running: {status.get('is_running', 'unknown')}[/dim]")
+
+        # Verify config_params contains our test config
+        config_params = status.get("config_params", {})
+        adapter_config = config_params.get("adapter_config") or config_params.get("settings", {})
+
+        self.console.print(f"     [dim]Config params: {config_params}[/dim]")
+
+        # Check if our test config values are present
+        if hasattr(self, "test_config") and self.test_config:
+            config_found = False
+            if adapter_config:
+                # Check adapter_config for our test values
+                if adapter_config.get("test_setting") == "test_value_123":
+                    config_found = True
+                    self.console.print("     [green]Config values verified in adapter_config![/green]")
+            if config_params.get("settings"):
+                settings = config_params.get("settings", {})
+                if settings.get("test_setting") == "test_value_123":
+                    config_found = True
+                    self.console.print("     [green]Config values verified in settings![/green]")
+
+            if not config_found:
+                self.console.print("     [yellow]Warning: Test config values not found in response[/yellow]")
+                self.console.print(f"     [dim]Expected test_setting='test_value_123' in config[/dim]")
+
+    async def test_verify_config_persistence(self) -> None:
+        """Verify that config values passed during load are persisted and returned."""
+        if not self.loaded_adapter_ids:
+            self.console.print("     [dim]Skipped - no adapter loaded[/dim]")
+            return
+
+        if not self.test_config:
+            self.console.print("     [dim]Skipped - no test config to verify[/dim]")
+            return
+
+        headers = self._get_auth_headers()
+        response = requests.get(
+            f"{self._base_url}/v1/system/adapters/{self.test_adapter_id}",
+            headers=headers,
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get adapter status: HTTP {response.status_code}")
+
+        data = response.json()
+        status = data.get("data", {})
+        config_params = status.get("config_params", {})
+
+        # The config should be in adapter_config (for complex configs) or settings (for simple values)
+        adapter_config = config_params.get("adapter_config", {})
+        settings = config_params.get("settings", {})
+
+        # Check adapter_config first (where _convert_to_adapter_config puts it)
+        if adapter_config and adapter_config.get("test_setting") == "test_value_123":
+            self.console.print("     [green]Config persisted correctly in adapter_config![/green]")
+            self.console.print(f"     [dim]adapter_config: {adapter_config}[/dim]")
+            return
+
+        # Check settings as fallback
+        if settings and settings.get("test_setting") == "test_value_123":
+            self.console.print("     [green]Config persisted correctly in settings![/green]")
+            self.console.print(f"     [dim]settings: {settings}[/dim]")
+            return
+
+        # Config not found - this is a bug
+        self.console.print(f"     [red]Config NOT persisted![/red]")
+        self.console.print(f"     [dim]Expected: test_setting='test_value_123'[/dim]")
+        self.console.print(f"     [dim]Got config_params: {config_params}[/dim]")
+        raise ValueError(
+            f"Config not persisted: expected test_setting='test_value_123' in config_params, "
+            f"got adapter_config={adapter_config}, settings={settings}"
+        )
 
     async def test_list_persisted_configs(self) -> None:
         """List persisted adapter configurations."""

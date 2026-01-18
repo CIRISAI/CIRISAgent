@@ -696,6 +696,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         if "adapter_type" in config:
             return AdapterConfig(**config)
 
+        # Config goes into adapter_config field, NOT settings
         return AdapterConfig(
             adapter_type=adapter_type,
             enabled=True,
@@ -973,7 +974,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 if hasattr(adapter_instance, "adapter"):
                     tools = await self._extract_adapter_tools(adapter_instance.adapter, info.adapter_type)
                 if hasattr(adapter_instance, "config_params"):
-                    config_params = adapter_instance.config_params
+                    # Sanitize config to mask sensitive fields before exposing to observers
+                    config_params = self.adapter_manager._sanitize_config_params(
+                        info.adapter_type, adapter_instance.config_params
+                    )
         except Exception as e:
             logger.debug(f"Could not extract tools/config for adapter {adapter_id}: {e}")
 

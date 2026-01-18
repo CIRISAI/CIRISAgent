@@ -125,7 +125,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     details={},
                 )
 
-            logger.info(f"Loading adapter: type={adapter_type}, id={adapter_id}, params={config_params}")
+            logger.info(f"Loading adapter: type={adapter_type}, id={adapter_id}")
 
             adapter_class = load_adapter(adapter_type)
 
@@ -687,11 +687,15 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         # Get sensitive fields for this adapter type
         fields_to_mask = sensitive_fields.get(adapter_type, ["token", "password", "secret", "api_key"])
 
+        def should_mask(key: str) -> bool:
+            """Check if a key should be masked based on sensitive field patterns."""
+            return any(sensitive in key.lower() for sensitive in fields_to_mask)
+
         # Create a sanitized copy of the settings
         sanitized_settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = {}
         for key, value in config_params.settings.items():
             # Check if this field should be masked
-            if any(sensitive in key.lower() for sensitive in fields_to_mask):
+            if should_mask(key):
                 # Mask the value but show it exists
                 if value:
                     sanitized_settings[key] = "***MASKED***"
@@ -701,9 +705,22 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 # Keep non-sensitive values as-is
                 sanitized_settings[key] = value
 
-        # Return a new AdapterConfig with sanitized settings
+        # Also sanitize adapter_config if present
+        sanitized_adapter_config: Optional[Dict[str, Any]] = None
+        if config_params.adapter_config:
+            sanitized_adapter_config = {}
+            for key, value in config_params.adapter_config.items():
+                if should_mask(key):
+                    sanitized_adapter_config[key] = "***MASKED***" if value else None
+                else:
+                    sanitized_adapter_config[key] = value
+
+        # Return a new AdapterConfig with sanitized settings and adapter_config
         return AdapterConfig(
-            adapter_type=config_params.adapter_type, enabled=config_params.enabled, settings=sanitized_settings
+            adapter_type=config_params.adapter_type,
+            enabled=config_params.enabled,
+            settings=sanitized_settings,
+            adapter_config=sanitized_adapter_config,
         )
 
     async def load_adapter_from_template(

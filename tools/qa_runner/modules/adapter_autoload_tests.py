@@ -172,8 +172,9 @@ class AdapterAutoloadTests:
         headers = self._get_auth_headers()
 
         # Test config values that should be persisted and returned
+        # Note: avoid field names containing "key", "token", "secret", "password" as they get masked
         self.test_config = {
-            "test_key": "test_value_123",
+            "test_setting": "test_value_123",
             "test_number": 42,
             "test_bool": True,
         }
@@ -276,18 +277,18 @@ class AdapterAutoloadTests:
             config_found = False
             if adapter_config:
                 # Check adapter_config for our test values
-                if adapter_config.get("test_key") == "test_value_123":
+                if adapter_config.get("test_setting") == "test_value_123":
                     config_found = True
                     self.console.print("     [green]Config values verified in adapter_config![/green]")
             if config_params.get("settings"):
                 settings = config_params.get("settings", {})
-                if settings.get("test_key") == "test_value_123":
+                if settings.get("test_setting") == "test_value_123":
                     config_found = True
                     self.console.print("     [green]Config values verified in settings![/green]")
 
             if not config_found:
                 self.console.print("     [yellow]Warning: Test config values not found in response[/yellow]")
-                self.console.print(f"     [dim]Expected test_key='test_value_123' in config[/dim]")
+                self.console.print(f"     [dim]Expected test_setting='test_value_123' in config[/dim]")
 
     async def test_verify_config_persistence(self) -> None:
         """Verify that config values passed during load are persisted and returned."""
@@ -318,23 +319,23 @@ class AdapterAutoloadTests:
         settings = config_params.get("settings", {})
 
         # Check adapter_config first (where _convert_to_adapter_config puts it)
-        if adapter_config and adapter_config.get("test_key") == "test_value_123":
+        if adapter_config and adapter_config.get("test_setting") == "test_value_123":
             self.console.print("     [green]Config persisted correctly in adapter_config![/green]")
             self.console.print(f"     [dim]adapter_config: {adapter_config}[/dim]")
             return
 
         # Check settings as fallback
-        if settings and settings.get("test_key") == "test_value_123":
+        if settings and settings.get("test_setting") == "test_value_123":
             self.console.print("     [green]Config persisted correctly in settings![/green]")
             self.console.print(f"     [dim]settings: {settings}[/dim]")
             return
 
         # Config not found - this is a bug
         self.console.print(f"     [red]Config NOT persisted![/red]")
-        self.console.print(f"     [dim]Expected: test_key='test_value_123'[/dim]")
+        self.console.print(f"     [dim]Expected: test_setting='test_value_123'[/dim]")
         self.console.print(f"     [dim]Got config_params: {config_params}[/dim]")
         raise ValueError(
-            f"Config not persisted: expected test_key='test_value_123' in config_params, "
+            f"Config not persisted: expected test_setting='test_value_123' in config_params, "
             f"got adapter_config={adapter_config}, settings={settings}"
         )
 

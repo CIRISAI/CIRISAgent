@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On startup, only loads adapters matching current occurrence
   - Prevents duplicate adapter loading in multi-occurrence deployments
 
+- **Covenant Metrics Connectivity Events** - Adapter notifies CIRISLens on startup/shutdown
+  - Sends `startup` event to `/covenant/connected` when service starts
+  - Sends `shutdown` event before HTTP session closes
+  - Includes agent hash, trace level, version, and correlation metadata
+  - Enables monitoring agent connectivity without waiting for interactions
+
 ### Fixed
 
 - **services_registered API Response** - Adapter status now shows registered services

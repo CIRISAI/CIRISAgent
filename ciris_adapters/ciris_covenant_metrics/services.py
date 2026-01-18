@@ -466,6 +466,9 @@ class CovenantMetricsService:
         logger.info(f"   Flush interval: {self._flush_interval}s")
         logger.info("=" * 70)
 
+        # Send connected event to server
+        await self._send_connected_event("startup")
+
     async def stop(self) -> None:
         """Stop the service and flush remaining events."""
         logger.info("=" * 70)
@@ -503,6 +506,10 @@ class CovenantMetricsService:
         # Flush remaining events
         logger.info("   Performing final flush...")
         await self._flush_events()
+
+        # Send disconnect event before closing session
+        if self._session:
+            await self._send_connected_event("shutdown")
 
         # Close HTTP session
         if self._session:
@@ -598,6 +605,67 @@ class CovenantMetricsService:
                 error_text = await response.text()
                 raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
             logger.info(f"✅ POST success: {response.status}")
+
+    async def _send_connected_event(self, event_type: str = "connected") -> None:
+        """Send a connected/heartbeat event to CIRISLens to signal agent is online.
+
+        Args:
+            event_type: Type of connection event (startup, heartbeat, reconnect)
+        """
+        if not self._session:
+            logger.warning("Cannot send connected event - HTTP session not initialized")
+            return
+
+        # Build correlation metadata
+        correlation_metadata: Dict[str, str] = {}
+        if self._deployment_region:
+            correlation_metadata["deployment_region"] = self._deployment_region
+        if self._deployment_type:
+            correlation_metadata["deployment_type"] = self._deployment_type
+        if self._agent_role:
+            correlation_metadata["agent_role"] = self._agent_role
+        if self._agent_template:
+            correlation_metadata["agent_template"] = self._agent_template
+
+        payload: Dict[str, Any] = {
+            "event_type": event_type,
+            "agent_id_hash": self._agent_id_hash,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "consent_timestamp": self._consent_timestamp,
+            "trace_level": self._trace_level.value,
+            "version": "1.8.5",  # Include agent version for tracking
+        }
+        if correlation_metadata:
+            payload["correlation_metadata"] = correlation_metadata
+
+        url = f"{self._endpoint_url}/covenant/connected"
+
+        try:
+            logger.info("=" * 70)
+            logger.info(f"📡 SENDING CONNECTED EVENT to {url}")
+            logger.info(f"   Event type: {event_type}")
+            logger.info(f"   Agent hash: {self._agent_id_hash}")
+
+            async with self._session.post(url, json=payload) as response:
+                if response.status == 200:
+                    logger.info(f"✅ CONNECTED EVENT SUCCESS - Server acknowledged agent online")
+                    logger.info("=" * 70)
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ CONNECTED EVENT FAILED - Status {response.status}: {error_text}")
+                    logger.error("=" * 70)
+
+        except aiohttp.ClientConnectorError as e:
+            logger.error("=" * 70)
+            logger.error(f"❌ CONNECTED EVENT FAILED - Cannot reach server: {e}")
+            logger.error(f"   Endpoint: {url}")
+            logger.error("   Check network connectivity and endpoint URL")
+            logger.error("=" * 70)
+
+        except Exception as e:
+            logger.error("=" * 70)
+            logger.error(f"❌ CONNECTED EVENT FAILED - Unexpected error: {e}")
+            logger.error("=" * 70)
 
     async def _queue_event(self, event: Dict[str, Any]) -> None:
         """Add event to queue and flush if batch is full.

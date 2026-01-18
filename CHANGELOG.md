@@ -5,6 +5,48 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-01-18
+
+### Fixed
+
+- **P1 Security: Adapter Config Sanitization** - Fixed `_sanitize_config_params` dropping `adapter_config` field
+  - Both `settings` and `adapter_config` fields now properly sanitized before exposing to observers
+  - Sensitive fields masked with `***MASKED***` pattern
+
+- **Adapter Config Persistence** - Config passed during adapter load now returned in `get_adapter_info` API
+  - Added `config_params` field to `AdapterInfo` schema
+  - Config properly propagated through RuntimeControlService to API endpoints
+
+- **Scout Template Validation** - Fixed schema compliance in scout.yaml
+  - Converted nested lists to semicolon-delimited strings for `high_stakes_architecture` fields
+
+### Changed
+
+- **Reduced Cognitive Complexity** - Refactored `_sanitize_config_params` from complexity 20 to ~8
+  - Extracted module-level constants: `SENSITIVE_FIELDS_BY_ADAPTER_TYPE`, `DEFAULT_SENSITIVE_PATTERNS`, `MASKED_VALUE`
+  - Extracted helper functions: `_should_mask_field()`, `_sanitize_dict()`
+  - Added 21 unit tests for extracted functions
+
+## [1.8.3] - 2026-01-17
+
+### Added
+
+- **QA Test Modules** - New comprehensive API test modules
+  - `adapter_autoload_tests.py` - Tests adapter persistence and auto-load functionality
+  - `identity_update_tests.py` - Tests identity refresh from template
+
+- **Adapter Auto-Load** - Saved adapters now auto-load from graph on startup
+  - Adapter configs persisted to graph during load
+  - Configs retrieved and adapters reloaded on runtime initialization
+
+### Fixed
+
+- **ConfigNode Value Extraction (P1)** - Fixed adapter loading from persisted configs
+  - `ConfigNode` values now properly extracted before passing to adapter loader
+  - Prevents validation errors when loading adapters from graph storage
+
+- **Type Annotations** - Added proper type annotations for mypy strict mode compliance
+
 ## [1.8.2] - 2026-01-17
 
 ### Added

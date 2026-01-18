@@ -106,37 +106,38 @@ def update_agent_identity(
         True if successful, False otherwise
     """
     try:
-        # Get current node to preserve version
+        # Import IdentityNode
+        from ciris_engine.schemas.services.nodes import IdentityNode
+
+        # Get current node to preserve version info
         current_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
 
         version = 1
         if current_node:
             version = current_node.version + 1
 
-        # Create updated node
-        # Create proper GraphNodeAttributes
+        # Convert AgentIdentityRoot to IdentityNode (properly serializes all identity data)
+        identity_node = IdentityNode.from_agent_identity_root(identity, time_service)
+
+        # Convert to GraphNode for storage
+        graph_node = identity_node.to_graph_node()
+
+        # Update version and updated_by fields
+        graph_node.version = version
+        graph_node.updated_by = updated_by
+        graph_node.updated_at = time_service.now()
+
+        # Update attributes with updated_by info
         from ciris_engine.schemas.services.graph_core import GraphNodeAttributes
 
-        attributes = GraphNodeAttributes(
-            created_at=time_service.now(),
-            updated_at=time_service.now(),
-            created_by=updated_by,
-            tags=[f"identity:{identity.agent_id}", f"version:{version}"],
-        )
-
-        identity_node = GraphNode(
-            id="agent/identity",
-            type=NodeType.AGENT,
-            scope=GraphScope.IDENTITY,
-            attributes=attributes,
-            version=version,
-            updated_by=updated_by,
-            updated_at=time_service.now(),
-        )
+        if graph_node.attributes and isinstance(graph_node.attributes, GraphNodeAttributes):
+            graph_node.attributes.tags = list(graph_node.attributes.tags or [])
+            graph_node.attributes.tags.append(f"updated_by:{updated_by}")
+            graph_node.attributes.tags.append(f"version:{version}")
 
         # Store updated identity
-        add_graph_node(identity_node, time_service, db_path=db_path)
-        logger.info(f"Updated identity for agent {identity.agent_id} by {updated_by}")
+        add_graph_node(graph_node, time_service, db_path=db_path)
+        logger.info(f"Updated identity for agent {identity.agent_id} by {updated_by} (version {version})")
         return True
 
     except Exception as e:

@@ -77,6 +77,7 @@ class AdapterInfo(BaseModel):
     last_error: Optional[str] = Field(None, description="Last error message")
     tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
     config_params: Optional[AdapterConfig] = Field(None, description="Adapter configuration")
+    services_registered: List[str] = Field(default_factory=list, description="Services registered by adapter")
 
 
 class AdapterOperationResult(BaseModel):

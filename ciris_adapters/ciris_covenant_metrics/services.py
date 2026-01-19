@@ -344,13 +344,23 @@ class CovenantMetricsService:
         "ReasoningEvent.ACTION_RESULT": "action",
     }
 
-    def __init__(self, config: Optional[JSONDict] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[JSONDict] = None,
+        agent_id: Optional[str] = None,
+        **kwargs: Any,  # Accept extra params from service_initializer (bus_manager, etc.)
+    ) -> None:
         """Initialize CovenantMetricsService.
 
         Args:
             config: Configuration dict with consent settings
+            agent_id: Agent identifier (will be hashed for privacy)
+            **kwargs: Additional params from service_initializer (ignored)
         """
         self._config = config or {}
+
+        # Set agent_id if provided during construction
+        self._initial_agent_id = agent_id
 
         # Consent state - check env var first for QA testing
         env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
@@ -478,6 +488,12 @@ class CovenantMetricsService:
         logger.info("🚀 COVENANT METRICS SERVICE STARTING")
         logger.info(f"   Consent given: {self._consent_given}")
         logger.info(f"   Endpoint: {self._endpoint_url}")
+
+        # Set agent_id from constructor if provided and not already set
+        if self._initial_agent_id and not self._agent_id_hash:
+            self.set_agent_id(self._initial_agent_id)
+            logger.info(f"   Agent ID set from constructor: {self._initial_agent_id}")
+
         logger.info("=" * 70)
 
         # Subscribe to reasoning_event_stream for trace capture
@@ -969,17 +985,23 @@ class CovenantMetricsService:
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":
             # CONTEXT: Environmental state when decision was made
+            # Extract system_snapshot which contains the context data
+            snapshot = event.get("system_snapshot", {})
+            if hasattr(snapshot, "model_dump"):
+                snapshot = snapshot.model_dump()
+
             # GENERIC: Minimal - just cognitive state identifier
-            data = {
-                "cognitive_state": event.get("cognitive_state"),
+            # cognitive_state might be at top level or in snapshot
+            cognitive_state = event.get("cognitive_state") or snapshot.get("cognitive_state")
+            data: Dict[str, Any] = {
+                "cognitive_state": cognitive_state,
             }
             # DETAILED: Add service list
             if is_detailed:
-                data["active_services"] = event.get("active_services")
-                data["context_sources"] = event.get("context_sources")
+                data["active_services"] = event.get("active_services") or snapshot.get("active_services")
+                data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
             # FULL: Add complete snapshot and context
             if is_full:
-                snapshot = event.get("system_snapshot", {})
                 data["system_snapshot"] = _serialize(snapshot)
                 data["gathered_context"] = _serialize(event.get("gathered_context"))
                 data["relevant_memories"] = _serialize(event.get("relevant_memories"))

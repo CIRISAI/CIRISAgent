@@ -492,6 +492,15 @@ async def build_system_snapshot_with_batch(
         "pending_thoughts": queue_status.pending_thoughts + queue_status.processing_thoughts,
     }
 
+    # Get cognitive state from runtime agent processor
+    cognitive_state = None
+    if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+        # Use proper accessor method instead of private attribute
+        if hasattr(runtime.agent_processor, "get_current_state"):
+            cognitive_state = runtime.agent_processor.get_current_state()
+        elif hasattr(runtime.agent_processor, "state_manager"):
+            cognitive_state = runtime.agent_processor.state_manager.get_state().value
+
     # Get version information
     from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
 
@@ -533,7 +542,8 @@ async def build_system_snapshot_with_batch(
         service_health=batch_data.service_health,
         circuit_breaker_status=batch_data.circuit_breaker_status,
         resource_alerts=batch_data.resource_alerts,
-        # Other fields
+        # Runtime context
+        cognitive_state=cognitive_state,
         shutdown_context=batch_data.shutdown_context,
         telemetry_summary=batch_data.telemetry_summary,
         continuity_summary=batch_data.continuity_summary,

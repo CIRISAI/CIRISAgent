@@ -1405,10 +1405,22 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     # Cast to Any for duck-typed optional runtime dependency injection
                     from typing import Any, cast
 
+                    # Get agent_id from persistence (identity is stored in graph)
+                    runtime_agent_id = None
+                    try:
+                        from ciris_engine.logic.persistence.models import retrieve_agent_identity
+
+                        agent_identity = retrieve_agent_identity()
+                        if agent_identity:
+                            runtime_agent_id = agent_identity.agent_id
+                            logger.debug(f"Got agent_id from persistence: {runtime_agent_id}")
+                    except Exception as e:
+                        logger.debug(f"Could not retrieve agent_id from persistence: {e}")
+
                     service_instance = cast(Any, service_class)(
                         bus_manager=self.bus_manager,
                         memory_service=self.memory_service,
-                        agent_id=None,  # Will be set by observer from identity service
+                        agent_id=runtime_agent_id,  # Pass agent_id from persistence identity
                         filter_service=self.adaptive_filter_service,
                         secrets_service=self.secrets_service,
                         time_service=self.time_service,

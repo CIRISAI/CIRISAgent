@@ -5,6 +5,20 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] - 2026-01-19
+
+### Fixed
+
+- **Covenant Metrics agent_id_hash** - Traces now include proper agent ID hash instead of "unknown"
+  - Service now receives agent_id from persistence during adapter loading
+  - Agent identity retrieved from graph when initializing modular adapters
+  - Fixes lens team reported issue with traces showing `agent_id_hash: "unknown"`
+
+- **Covenant Metrics cognitive_state** - Traces now include cognitive state in SNAPSHOT_AND_CONTEXT
+  - Added `cognitive_state` field to SystemSnapshot schema
+  - Populated from `agent_processor.get_current_state()` during context building
+  - Fixes lens team reported issue with `cognitive_state: null` in traces
+
 ## [1.8.5] - 2026-01-18
 
 ### Added

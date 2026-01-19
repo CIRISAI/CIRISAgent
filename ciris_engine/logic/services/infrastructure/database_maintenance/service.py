@@ -762,3 +762,54 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         )
 
         return metrics
+
+    async def migrate_audit_key_to_ed25519(self, backup: bool = True) -> Dict[str, Any]:
+        """Migrate audit signing key from RSA-2048 to Ed25519.
+
+        This is a one-time migration operation that:
+        1. Creates a backup of the current state
+        2. Generates or uses unified Ed25519 key
+        3. Re-signs the entire audit chain
+        4. Verifies chain integrity
+        5. Archives the old RSA key
+
+        Args:
+            backup: Create backup before migration (recommended)
+
+        Returns:
+            Dict with migration result details
+        """
+        from ciris_engine.logic.audit import migrate_audit_key_to_ed25519
+
+        logger.info("=" * 70)
+        logger.info("🔐 AUDIT KEY MIGRATION REQUESTED")
+        logger.info("=" * 70)
+
+        # Determine key path (default is audit_keys/)
+        key_path = "audit_keys"
+        if hasattr(self, "key_path"):
+            key_path = str(self.key_path)
+
+        # Get database path
+        db_path = self.db_path
+        if not db_path:
+            from ciris_engine.logic.persistence import get_sqlite_db_full_path
+
+            db_path = get_sqlite_db_full_path()
+
+        result = await migrate_audit_key_to_ed25519(
+            db_path=str(db_path),
+            key_path=key_path,
+            time_service=self.time_service,
+            backup=backup,
+        )
+
+        return {
+            "success": result.success,
+            "message": result.message,
+            "entries_migrated": result.entries_migrated,
+            "old_key_id": result.old_key_id,
+            "new_key_id": result.new_key_id,
+            "backup_path": result.backup_path,
+            "errors": result.errors,
+        }

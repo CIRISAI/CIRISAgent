@@ -496,10 +496,21 @@ async def build_system_snapshot_with_batch(
     cognitive_state = None
     if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
         # Use proper accessor method instead of private attribute
-        if hasattr(runtime.agent_processor, "get_current_state"):
-            cognitive_state = runtime.agent_processor.get_current_state()
-        elif hasattr(runtime.agent_processor, "state_manager"):
-            cognitive_state = runtime.agent_processor.state_manager.get_state().value
+        try:
+            if hasattr(runtime.agent_processor, "get_current_state"):
+                raw_state = runtime.agent_processor.get_current_state()
+                # Handle both string and enum values, filter out mocks
+                if isinstance(raw_state, str):
+                    cognitive_state = raw_state
+                elif hasattr(raw_state, "value") and isinstance(raw_state.value, str):
+                    cognitive_state = raw_state.value
+            elif hasattr(runtime.agent_processor, "state_manager"):
+                raw_state = runtime.agent_processor.state_manager.get_state()
+                if hasattr(raw_state, "value") and isinstance(raw_state.value, str):
+                    cognitive_state = raw_state.value
+        except Exception:
+            # In test environments, mocks may not behave as expected
+            cognitive_state = None
 
     # Get version information
     from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION

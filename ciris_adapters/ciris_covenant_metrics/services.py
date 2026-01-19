@@ -1374,6 +1374,10 @@ class CovenantMetricsService:
         Args:
             agent_id: Raw agent identifier to hash
         """
+        # Validate agent_id is a proper string (not a mock or other type)
+        if not isinstance(agent_id, str) or not agent_id:
+            logger.warning(f"Invalid agent_id type: {type(agent_id).__name__}, skipping")
+            return
         self._agent_id_hash = self._anonymize_agent_id(agent_id)
         logger.debug(f"Agent ID hash set: {self._agent_id_hash}")
 

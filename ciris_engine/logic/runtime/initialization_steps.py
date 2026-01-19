@@ -486,11 +486,11 @@ async def _load_single_saved_adapter(
     saved_occurrence_id = _extract_config_value(occurrence_id_node)
 
     # Check occurrence_id - only load if matches current occurrence
-    # Adapters without occurrence_id are treated as belonging to "default" occurrence
-    effective_saved_occurrence = saved_occurrence_id or "default"
-    if effective_saved_occurrence != current_occurrence_id:
+    # Adapters WITHOUT occurrence_id are legacy adapters - load them on any occurrence
+    # (they will be stamped with current occurrence_id when next saved)
+    if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
         logger.debug(
-            f"Adapter {adapter_id} belongs to occurrence {effective_saved_occurrence}, "
+            f"Adapter {adapter_id} belongs to occurrence {saved_occurrence_id}, "
             f"current is {current_occurrence_id}, skipping"
         )
         return False
@@ -500,7 +500,7 @@ async def _load_single_saved_adapter(
         return False
 
     adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
-    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {effective_saved_occurrence})")
+    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})")
 
     result = await adapter_manager.load_adapter(
         adapter_type=adapter_type,

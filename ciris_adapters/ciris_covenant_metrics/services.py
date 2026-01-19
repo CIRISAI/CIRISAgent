@@ -568,8 +568,8 @@ class CovenantMetricsService:
         logger.info("   Performing final flush...")
         await self._flush_events()
 
-        # Send disconnect event before closing session
-        if self._session:
+        # Send disconnect event before closing session (only if consent still given)
+        if self._session and self._consent_given:
             await self._send_connected_event("shutdown")
 
         # Close HTTP session

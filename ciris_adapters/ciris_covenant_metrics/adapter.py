@@ -102,9 +102,12 @@ class CovenantMetricsAdapter(Service):
         self.metrics_service = CovenantMetricsService(config=adapter_config)
 
         # Set agent ID if available from runtime
-        # Runtime has agent_identity.agent_id, not a direct agent_id attribute
+        # Try agent_identity first (new pattern), then fall back to direct agent_id (legacy/mocks)
         if runtime and hasattr(runtime, "agent_identity") and runtime.agent_identity:
             self.metrics_service.set_agent_id(runtime.agent_identity.agent_id)
+        elif runtime and hasattr(runtime, "agent_id") and runtime.agent_id:
+            # Legacy fallback for mocks and lightweight runtimes
+            self.metrics_service.set_agent_id(runtime.agent_id)
         elif context and hasattr(context, "agent_id") and context.agent_id:
             self.metrics_service.set_agent_id(context.agent_id)
 
@@ -162,6 +165,10 @@ class CovenantMetricsAdapter(Service):
         if self.runtime and hasattr(self.runtime, "agent_identity") and self.runtime.agent_identity:
             self.metrics_service.set_agent_id(self.runtime.agent_identity.agent_id)
             logger.info(f"   Agent ID set from identity: {self.runtime.agent_identity.agent_id}")
+        elif self.runtime and hasattr(self.runtime, "agent_id") and self.runtime.agent_id:
+            # Legacy fallback for mocks and lightweight runtimes
+            self.metrics_service.set_agent_id(self.runtime.agent_id)
+            logger.info(f"   Agent ID set from legacy runtime.agent_id: {self.runtime.agent_id}")
         else:
             logger.warning("   Agent identity not available - agent_id_hash will be 'unknown'")
 

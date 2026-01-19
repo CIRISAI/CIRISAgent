@@ -7,11 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.8.6] - 2026-01-19
 
+### Added
+
+- **Unified Ed25519 Signing Key** - Single signing key shared between audit and covenant metrics
+  - New `signing_protocol.py` with algorithm-agnostic signing protocol
+  - `UnifiedSigningKey` singleton at `data/agent_signing.key` (32 bytes Ed25519)
+  - Key ID format: `agent-{sha256(pubkey)[:12]}`
+  - PQC-ready design with migration path to ML-DSA/SLH-DSA
+
+- **RSA to Ed25519 Migration Utility** - Migrate existing audit chains
+  - `AuditKeyMigration` class for atomic chain migration with rollback
+  - Re-signs entire audit chain preserving original timestamps
+  - `database_maintenance.migrate_audit_key_to_ed25519()` method for admin access
+  - RSA-2048 verification maintained for backward compatibility
+
+- **CIRISLens Public Key Registration** - Automatic key registration on startup
+  - Covenant metrics adapter registers public key before sending connect event
+  - Enables CIRISLens to verify trace signatures
+
+### Changed
+
+- **AuditSignatureManager now uses Ed25519** - No longer generates RSA-2048 keys
+  - New installations automatically use unified Ed25519 key
+  - Legacy RSA verification maintained for existing audit chains
+  - Key rotation deprecated in favor of unified key management
+
 ### Fixed
 
 - **Covenant Metrics agent_id_hash** - Traces now include proper agent ID hash instead of "unknown"
   - Service now receives agent_id from persistence during adapter loading
   - Agent identity retrieved from graph when initializing modular adapters
+  - Preserved legacy `runtime.agent_id` fallback for mocks and lightweight runtimes
   - Fixes lens team reported issue with traces showing `agent_id_hash: "unknown"`
 
 - **Covenant Metrics cognitive_state** - Traces now include cognitive state in SNAPSHOT_AND_CONTEXT

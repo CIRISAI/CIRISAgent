@@ -20,6 +20,9 @@ from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
+# Error message constants
+SIGNER_NOT_INITIALIZED = "Signer not initialized"
+
 
 class SigningAlgorithm(str, Enum):
     """Supported signing algorithms with migration path to PQC."""
@@ -91,7 +94,7 @@ class BaseSigner(ABC):
     @property
     def key_id(self) -> str:
         if not self._key_id:
-            raise RuntimeError("Signer not initialized")
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
         return self._key_id
 
     @property
@@ -160,7 +163,7 @@ class Ed25519Signer(BaseSigner):
     @property
     def public_key_bytes(self) -> bytes:
         if not self._public_key:
-            raise RuntimeError("Signer not initialized")
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
         from cryptography.hazmat.primitives import serialization
 
         result: bytes = self._public_key.public_bytes(
@@ -171,13 +174,13 @@ class Ed25519Signer(BaseSigner):
 
     def sign(self, data: bytes) -> bytes:
         if not self._private_key:
-            raise RuntimeError("Signer not initialized")
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
         result: bytes = self._private_key.sign(data)
         return result
 
     def verify(self, data: bytes, signature: bytes) -> bool:
         if not self._public_key:
-            raise RuntimeError("Signer not initialized")
+            raise RuntimeError(SIGNER_NOT_INITIALIZED)
         try:
             self._public_key.verify(signature, data)
             return True

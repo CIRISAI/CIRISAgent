@@ -1359,6 +1359,23 @@ This directory contains critical cryptographic keys for the CIRIS system.
             capabilities=service_def.capabilities,
         )
 
+    def _get_runtime_agent_id(self) -> Optional[str]:
+        """Get agent_id from persistence storage.
+
+        Returns:
+            The agent_id if found in persistence, None otherwise.
+        """
+        try:
+            from ciris_engine.logic.persistence.models import retrieve_agent_identity
+
+            agent_identity = retrieve_agent_identity()
+            if agent_identity:
+                logger.debug(f"Got agent_id from persistence: {agent_identity.agent_id}")
+                return agent_identity.agent_id
+        except Exception as e:
+            logger.debug(f"Could not retrieve agent_id from persistence: {e}")
+        return None
+
     def _register_adapter(self, service_instance: Any, manifest: Any, service_def: Any) -> None:
         """Register a adapter with the appropriate bus/registry based on type."""
         if service_def.type == ServiceType.TOOL:
@@ -1406,16 +1423,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     from typing import Any, cast
 
                     # Get agent_id from persistence (identity is stored in graph)
-                    runtime_agent_id = None
-                    try:
-                        from ciris_engine.logic.persistence.models import retrieve_agent_identity
-
-                        agent_identity = retrieve_agent_identity()
-                        if agent_identity:
-                            runtime_agent_id = agent_identity.agent_id
-                            logger.debug(f"Got agent_id from persistence: {runtime_agent_id}")
-                    except Exception as e:
-                        logger.debug(f"Could not retrieve agent_id from persistence: {e}")
+                    runtime_agent_id = self._get_runtime_agent_id()
 
                     service_instance = cast(Any, service_class)(
                         bus_manager=self.bus_manager,

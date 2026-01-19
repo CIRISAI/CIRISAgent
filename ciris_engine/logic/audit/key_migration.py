@@ -166,7 +166,7 @@ class AuditKeyMigration:
             logger.info(f"Re-signed {len(migrated_entries)} entries")
 
             # Step 6: Update database atomically
-            self._update_database(migrated_entries, unified_key)
+            self._update_database(migrated_entries)
             logger.info("Database updated with new signatures")
 
             # Step 7: Verify chain integrity
@@ -338,7 +338,7 @@ class AuditKeyMigration:
 
         return migrated
 
-    def _update_database(self, entries: List[AuditEntry], unified_key: Any) -> None:
+    def _update_database(self, entries: List[AuditEntry]) -> None:
         """Update database with re-signed entries atomically."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()

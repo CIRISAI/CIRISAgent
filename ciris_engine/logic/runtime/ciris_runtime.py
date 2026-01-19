@@ -377,7 +377,9 @@ class CIRISRuntime(ServicePropertyMixin):
         identity_update = getattr(self, "_identity_update", False)
         template_name_raw = getattr(self, "_template_name", None) or getattr(config, "default_template", "default")
         template_name: str = str(template_name_raw) if template_name_raw else "default"
-        logger.info(f"[IDENTITY_UPDATE] Checking flag: _identity_update={identity_update}, template_name={template_name}")
+        logger.info(
+            f"[IDENTITY_UPDATE] Checking flag: _identity_update={identity_update}, template_name={template_name}"
+        )
 
         if identity_update:
             logger.info(f"Identity update requested - refreshing from template '{template_name}'")

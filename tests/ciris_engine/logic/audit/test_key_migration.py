@@ -69,7 +69,8 @@ def temp_db():
     cursor = conn.cursor()
 
     # Create audit_entries table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE audit_entries (
             sequence_number INTEGER PRIMARY KEY,
             entry_hash TEXT NOT NULL,
@@ -80,10 +81,12 @@ def temp_db():
             event_type TEXT NOT NULL,
             event_data TEXT
         )
-    """)
+    """
+    )
 
     # Create audit_signing_keys table
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE audit_signing_keys (
             key_id TEXT PRIMARY KEY,
             public_key TEXT NOT NULL,
@@ -92,7 +95,8 @@ def temp_db():
             created_at TEXT NOT NULL,
             revoked_at TEXT
         )
-    """)
+    """
+    )
 
     conn.commit()
     conn.close()
@@ -115,29 +119,34 @@ def populated_db(temp_db):
     cursor = conn.cursor()
 
     # Add RSA signing key
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO audit_signing_keys (key_id, public_key, algorithm, key_size, created_at)
         VALUES ('rsa-oldkey123', 'old_public_key', 'rsa_2048', 2048, '2024-01-01T00:00:00Z')
-    """)
+    """
+    )
 
     # Add audit entries
     previous_hash = "GENESIS"
     for i in range(1, 6):
         entry_hash = f"hash_{i}"
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO audit_entries
             (sequence_number, entry_hash, previous_hash, signature, key_id, timestamp, event_type, event_data)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            i,
-            entry_hash,
-            previous_hash,
-            f"signature_{i}",
-            "rsa-oldkey123",
-            f"2024-01-0{i}T12:00:00Z",
-            "test_event",
-            f'{{"action": "test_{i}"}}',
-        ))
+        """,
+            (
+                i,
+                entry_hash,
+                previous_hash,
+                f"signature_{i}",
+                "rsa-oldkey123",
+                f"2024-01-0{i}T12:00:00Z",
+                "test_event",
+                f'{{"action": "test_{i}"}}',
+            ),
+        )
         previous_hash = entry_hash
 
     conn.commit()
@@ -269,7 +278,7 @@ class TestAuditKeyMigration:
         # Hash chain should be maintained
         assert migrated[0].previous_hash == "GENESIS"
         for i in range(1, len(migrated)):
-            assert migrated[i].previous_hash == migrated[i-1].entry_hash
+            assert migrated[i].previous_hash == migrated[i - 1].entry_hash
 
     def test_update_database(self, populated_db, temp_key_dir, mock_time_service):
         """Test updating database with migrated entries."""
@@ -300,8 +309,7 @@ class TestAuditKeyMigration:
         # Verify key was registered
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("SELECT algorithm, key_size FROM audit_signing_keys WHERE key_id = ?",
-                       (mock_key.key_id,))
+        cursor.execute("SELECT algorithm, key_size FROM audit_signing_keys WHERE key_id = ?", (mock_key.key_id,))
         result = cursor.fetchone()
         conn.close()
 
@@ -321,8 +329,7 @@ class TestAuditKeyMigration:
         # Verify only one entry
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM audit_signing_keys WHERE key_id = ?",
-                       (mock_key.key_id,))
+        cursor.execute("SELECT COUNT(*) FROM audit_signing_keys WHERE key_id = ?", (mock_key.key_id,))
         count = cursor.fetchone()[0]
         conn.close()
 
@@ -337,8 +344,7 @@ class TestAuditKeyMigration:
         # Verify key was marked as revoked/migrated
         conn = sqlite3.connect(populated_db)
         cursor = conn.cursor()
-        cursor.execute("SELECT revoked_at FROM audit_signing_keys WHERE key_id = ?",
-                       ("rsa-oldkey123",))
+        cursor.execute("SELECT revoked_at FROM audit_signing_keys WHERE key_id = ?", ("rsa-oldkey123",))
         result = cursor.fetchone()
         conn.close()
 
@@ -359,6 +365,7 @@ class TestAuditKeyMigration:
 
         # Cleanup
         import shutil
+
         shutil.rmtree(backup_path)
 
     def test_verify_chain_integrity_valid(self, populated_db, temp_key_dir, mock_time_service):
@@ -392,10 +399,12 @@ class TestMigrateToEd25519:
         # Add Ed25519 key
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO audit_signing_keys (key_id, public_key, algorithm, key_size, created_at)
             VALUES ('agent-ed25519key', 'pubkey', 'ed25519', 256, '2024-01-01T00:00:00Z')
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
@@ -412,19 +421,18 @@ class TestMigrateToEd25519:
         # Add RSA key but no entries
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO audit_signing_keys (key_id, public_key, algorithm, key_size, created_at)
             VALUES ('rsa-key', 'pubkey', 'rsa_2048', 2048, '2024-01-01T00:00:00Z')
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
         migration = AuditKeyMigration(temp_db, str(temp_key_dir), mock_time_service)
 
-        with patch(
-            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
-            return_value=MockUnifiedKey()
-        ):
+        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key", return_value=MockUnifiedKey()):
             result = await migration.migrate_to_ed25519(backup=False)
 
         assert result.success is True
@@ -437,10 +445,7 @@ class TestMigrateToEd25519:
         migration = AuditKeyMigration(populated_db, str(temp_key_dir), mock_time_service)
         mock_key = MockUnifiedKey()
 
-        with patch(
-            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
-            return_value=mock_key
-        ):
+        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key", return_value=mock_key):
             result = await migration.migrate_to_ed25519(backup=False, verify_after=False)
 
         assert result.success is True
@@ -458,19 +463,16 @@ class TestConvenienceFunction:
         # Add RSA key
         conn = sqlite3.connect(temp_db)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO audit_signing_keys (key_id, public_key, algorithm, key_size, created_at)
             VALUES ('rsa-key', 'pubkey', 'rsa_2048', 2048, '2024-01-01T00:00:00Z')
-        """)
+        """
+        )
         conn.commit()
         conn.close()
 
-        with patch(
-            "ciris_engine.logic.audit.signing_protocol.get_unified_signing_key",
-            return_value=MockUnifiedKey()
-        ):
-            result = await migrate_audit_key_to_ed25519(
-                temp_db, str(temp_key_dir), mock_time_service, backup=False
-            )
+        with patch("ciris_engine.logic.audit.signing_protocol.get_unified_signing_key", return_value=MockUnifiedKey()):
+            result = await migrate_audit_key_to_ed25519(temp_db, str(temp_key_dir), mock_time_service, backup=False)
 
         assert isinstance(result, MigrationResult)

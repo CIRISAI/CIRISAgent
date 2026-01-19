@@ -24,9 +24,7 @@ def _get_config_dict(adapter_config: Any) -> Any:
     return adapter_config.model_dump() if hasattr(adapter_config, "model_dump") else adapter_config
 
 
-async def _migrate_single_adapter_config(
-    config_service: Any, adapter_type: str, adapter_config: Any
-) -> None:
+async def _migrate_single_adapter_config(config_service: Any, adapter_type: str, adapter_config: Any) -> None:
     """Migrate a single adapter configuration to graph."""
     adapter_id = _get_adapter_id(adapter_type)
     config_dict = _get_config_dict(adapter_config)

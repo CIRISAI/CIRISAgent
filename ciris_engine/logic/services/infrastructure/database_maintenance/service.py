@@ -306,52 +306,93 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.error(f"Failed to clean up invalid thoughts: {e}", exc_info=True)
 
+    # Config patterns that should be cleaned up on startup (unless preserved)
+    _RUNTIME_CONFIG_PATTERNS = ("adapter.", "runtime.", "session.", "temp.")
+
+    def _should_preserve_config(self, key: str, config_node: Any) -> tuple[bool, str]:
+        """Check if a config should be preserved during cleanup.
+
+        Args:
+            key: The config key
+            config_node: The config node object with updated_by attribute
+
+        Returns:
+            Tuple of (should_preserve, reason) where reason is logged if preserved
+        """
+        # Preserve configs created by system_bootstrap (essential configs)
+        if config_node.updated_by == "system_bootstrap":
+            return True, f"Preserving bootstrap config: {key}"
+
+        # Preserve adapter configs persisted for auto-restore on restart
+        # Two persistence mechanisms exist:
+        # 1. adapter.startup.* - explicit persist=True from API
+        # 2. adapter.{id}.* - dynamic loads from RuntimeAdapterManager
+        if key.startswith("adapter.startup."):
+            return True, f"Preserving explicitly persisted adapter config: {key}"
+
+        if key.startswith("adapter.") and config_node.updated_by == "runtime_adapter_manager":
+            return True, f"Preserving runtime adapter config for auto-restore: {key}"
+
+        return False, ""
+
     async def _cleanup_runtime_config(self) -> None:
         """Clean up runtime-specific configuration from previous runs."""
+        if not self.config_service:
+            logger.warning("Cannot clean up runtime config - config service not available")
+            return
+
         try:
-            # Use injected config service
-            if not self.config_service:
-                logger.warning("Cannot clean up runtime config - config service not available")
-                return
-
-            # Get all config entries
             all_configs = await self.config_service.list_configs()
-
-            runtime_config_patterns = [
-                "adapter.",  # Adapter configurations
-                "runtime.",  # Runtime-specific settings
-                "session.",  # Session-specific data
-                "temp.",  # Temporary configurations
-            ]
-
-            deleted_count = 0
-
-            for key, value in all_configs.items():
-                # Check if this is a runtime-specific config
-                is_runtime_config = any(key.startswith(pattern) for pattern in runtime_config_patterns)
-
-                if is_runtime_config:
-                    # Get the actual config node to check if it should be deleted
-                    config_node = await self.config_service.get_config(key)
-                    if config_node:
-                        # Skip configs created by system_bootstrap (essential configs)
-                        if config_node.updated_by == "system_bootstrap":
-                            logger.debug(f"Preserving bootstrap config: {key}")
-                            continue
-
-                        # Convert to GraphNode and use memory service to forget it
-                        graph_node = config_node.to_graph_node()
-                        await self.config_service.graph.forget(graph_node)
-                        deleted_count += 1
-                        logger.debug(f"Deleted runtime config node: {key}")
-
-            if deleted_count > 0:
-                logger.info(f"Cleaned up {deleted_count} runtime-specific configuration entries from previous runs")
-            else:
-                logger.info("No runtime-specific configuration entries to clean up")
-
+            deleted_count = await self._delete_ephemeral_configs(all_configs)
+            self._log_cleanup_result(deleted_count)
         except Exception as e:
             logger.error(f"Failed to clean up runtime config: {e}", exc_info=True)
+
+    async def _delete_ephemeral_configs(self, all_configs: Dict[str, Any]) -> int:
+        """Delete ephemeral configs that should not persist across restarts.
+
+        Args:
+            all_configs: Dictionary of all config entries
+
+        Returns:
+            Count of deleted configs
+
+        Note: Caller must ensure config_service is not None before calling.
+        """
+        assert self.config_service is not None  # Guaranteed by caller
+        deleted_count = 0
+
+        for key in all_configs:
+            if not self._is_runtime_config(key):
+                continue
+
+            config_node = await self.config_service.get_config(key)
+            if not config_node:
+                continue
+
+            should_preserve, reason = self._should_preserve_config(key, config_node)
+            if should_preserve:
+                logger.debug(reason)
+                continue
+
+            # Delete the ephemeral config
+            graph_node = config_node.to_graph_node()
+            await self.config_service.graph.forget(graph_node)
+            deleted_count += 1
+            logger.debug(f"Deleted runtime config node: {key}")
+
+        return deleted_count
+
+    def _is_runtime_config(self, key: str) -> bool:
+        """Check if a config key matches runtime config patterns."""
+        return any(key.startswith(pattern) for pattern in self._RUNTIME_CONFIG_PATTERNS)
+
+    def _log_cleanup_result(self, deleted_count: int) -> None:
+        """Log the result of config cleanup."""
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} runtime-specific configuration entries from previous runs")
+        else:
+            logger.info("No runtime-specific configuration entries to clean up")
 
     async def _cleanup_old_active_tasks(self) -> None:
         """Mark old active tasks from previous runs as completed."""

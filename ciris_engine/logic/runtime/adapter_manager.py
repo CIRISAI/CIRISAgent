@@ -67,9 +67,7 @@ def _should_mask_field(key: str, sensitive_patterns: List[str]) -> bool:
     return any(pattern in key_lower for pattern in sensitive_patterns)
 
 
-def _sanitize_dict(
-    data: Dict[str, Any], sensitive_patterns: List[str]
-) -> Dict[str, Any]:
+def _sanitize_dict(data: Dict[str, Any], sensitive_patterns: List[str]) -> Dict[str, Any]:
     """Sanitize a dictionary by masking sensitive fields.
 
     Args:
@@ -725,9 +723,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             return AdapterConfig(adapter_type=adapter_type, enabled=False)
 
         # Get sensitive patterns for this adapter type
-        sensitive_patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE.get(
-            adapter_type, DEFAULT_SENSITIVE_PATTERNS
-        )
+        sensitive_patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE.get(adapter_type, DEFAULT_SENSITIVE_PATTERNS)
 
         # Sanitize settings dict
         sanitized_settings = _sanitize_dict(config_params.settings, sensitive_patterns)

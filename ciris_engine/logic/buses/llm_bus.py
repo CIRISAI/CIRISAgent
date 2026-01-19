@@ -430,9 +430,7 @@ class LLMBus(BaseBus[LLMService]):
         api_base = None
         if hasattr(selected_service, "openai_config") and selected_service.openai_config:
             api_base = getattr(selected_service.openai_config, "base_url", None)
-        await self._record_resource_telemetry(
-            service_name, handler_name, usage, latency_ms, thought_id, api_base
-        )
+        await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id, api_base)
         logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
 
         return result, usage

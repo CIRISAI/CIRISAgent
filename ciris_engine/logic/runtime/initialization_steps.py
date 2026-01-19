@@ -500,7 +500,9 @@ async def _load_single_saved_adapter(
         return False
 
     adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
-    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})")
+    logger.info(
+        f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})"
+    )
 
     result = await adapter_manager.load_adapter(
         adapter_type=adapter_type,

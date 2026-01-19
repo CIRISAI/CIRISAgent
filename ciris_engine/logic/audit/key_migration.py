@@ -215,12 +215,14 @@ class AuditKeyMigration:
             cursor = conn.cursor()
 
             # Get the most recent non-revoked key
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT key_id, algorithm FROM audit_signing_keys
                 WHERE revoked_at IS NULL
                 ORDER BY created_at DESC
                 LIMIT 1
-            """)
+            """
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -272,25 +274,29 @@ class AuditKeyMigration:
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT sequence_number, entry_hash, previous_hash, signature,
                    key_id, timestamp, event_type, event_data
             FROM audit_entries
             ORDER BY sequence_number ASC
-        """)
+        """
+        )
 
         entries = []
         for row in cursor.fetchall():
-            entries.append(AuditEntry(
-                sequence_number=row[0],
-                entry_hash=row[1],
-                previous_hash=row[2],
-                signature=row[3],
-                key_id=row[4],
-                timestamp=row[5],
-                event_type=row[6],
-                event_data=row[7],
-            ))
+            entries.append(
+                AuditEntry(
+                    sequence_number=row[0],
+                    entry_hash=row[1],
+                    previous_hash=row[2],
+                    signature=row[3],
+                    key_id=row[4],
+                    timestamp=row[5],
+                    event_type=row[6],
+                    event_data=row[7],
+                )
+            )
 
         conn.close()
         return entries
@@ -346,20 +352,23 @@ class AuditKeyMigration:
         try:
             # Update each entry
             for entry in entries:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     UPDATE audit_entries
                     SET entry_hash = ?,
                         previous_hash = ?,
                         signature = ?,
                         key_id = ?
                     WHERE sequence_number = ?
-                """, (
-                    entry.entry_hash,
-                    entry.previous_hash,
-                    entry.signature,
-                    entry.key_id,
-                    entry.sequence_number,
-                ))
+                """,
+                    (
+                        entry.entry_hash,
+                        entry.previous_hash,
+                        entry.signature,
+                        entry.key_id,
+                        entry.sequence_number,
+                    ),
+                )
 
             conn.commit()
 
@@ -377,10 +386,7 @@ class AuditKeyMigration:
 
         try:
             # Check if key already exists
-            cursor.execute(
-                "SELECT key_id FROM audit_signing_keys WHERE key_id = ?",
-                (unified_key.key_id,)
-            )
+            cursor.execute("SELECT key_id FROM audit_signing_keys WHERE key_id = ?", (unified_key.key_id,))
 
             if cursor.fetchone():
                 logger.debug(f"Key {unified_key.key_id} already registered")
@@ -388,17 +394,20 @@ class AuditKeyMigration:
                 return
 
             # Insert new key
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO audit_signing_keys
                 (key_id, public_key, algorithm, key_size, created_at)
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                unified_key.key_id,
-                unified_key.public_key_base64,
-                "ed25519",
-                256,  # Ed25519 uses 256-bit keys
-                self.time_service.now_iso(),
-            ))
+            """,
+                (
+                    unified_key.key_id,
+                    unified_key.public_key_base64,
+                    "ed25519",
+                    256,  # Ed25519 uses 256-bit keys
+                    self.time_service.now_iso(),
+                ),
+            )
 
             conn.commit()
             logger.info(f"Registered Ed25519 key: {unified_key.key_id}")
@@ -417,14 +426,17 @@ class AuditKeyMigration:
 
         try:
             # Add a note to the key record
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE audit_signing_keys
                 SET revoked_at = ?
                 WHERE key_id = ?
-            """, (
-                f"MIGRATED_TO_ED25519_{self.time_service.now_iso()}",
-                old_key_id,
-            ))
+            """,
+                (
+                    f"MIGRATED_TO_ED25519_{self.time_service.now_iso()}",
+                    old_key_id,
+                ),
+            )
 
             conn.commit()
 

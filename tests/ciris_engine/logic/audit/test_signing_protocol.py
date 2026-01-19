@@ -381,9 +381,7 @@ class TestGlobalSigningKey:
             # Patch default paths to use temp directory
             with patch.object(
                 UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(
-                UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"
-            ):
+            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
                 key = get_unified_signing_key()
 
                 assert key is not None
@@ -395,9 +393,7 @@ class TestGlobalSigningKey:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.object(
                 UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(
-                UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"
-            ):
+            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
                 key1 = get_unified_signing_key()
                 key2 = get_unified_signing_key()
 
@@ -408,9 +404,7 @@ class TestGlobalSigningKey:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.object(
                 UnifiedSigningKey, "DEFAULT_KEY_PATH", Path(temp_dir) / "agent_signing.key"
-            ), patch.object(
-                UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"
-            ):
+            ), patch.object(UnifiedSigningKey, "DOCKER_KEY_PATH", Path(temp_dir) / "docker_signing.key"):
                 key1 = get_unified_signing_key()
                 key1_id = key1.key_id
 

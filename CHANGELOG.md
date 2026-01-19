@@ -5,6 +5,25 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.7] - 2026-01-19
+
+### Fixed
+
+- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts
+  - Database maintenance cleanup no longer deletes persisted adapter configs
+  - Preserves `adapter.startup.*` configs (explicit `persist=True` from API)
+  - Preserves `adapter.{id}.*` configs created by `runtime_adapter_manager` (dynamic loads)
+  - Root cause: cleanup was deleting all `adapter.*` configs regardless of persistence intent
+
+### Changed
+
+- **Database Maintenance Cleanup Logic** - More selective config cleanup
+  - Added protection for adapter configs marked for auto-restore
+  - Updated README with accurate preservation rules
+  - Refactored `_cleanup_runtime_config` to reduce cognitive complexity (23 → ~10)
+  - Extracted helper methods: `_should_preserve_config`, `_is_runtime_config`, `_delete_ephemeral_configs`
+  - Added 12 unit tests for config preservation logic
+
 ## [1.8.6] - 2026-01-19
 
 ### Added

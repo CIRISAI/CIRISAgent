@@ -887,3 +887,108 @@ class TestDialectAdapterInitialization:
 
             assert edge_counts.get("TEMPORAL_NEXT") == 1, "Should have exactly 1 TEMPORAL_NEXT edge (newest)"
             assert edge_counts.get("TEMPORAL_PREV") == 1, "Should have exactly 1 TEMPORAL_PREV edge (newest)"
+
+
+class TestConfigPreservationLogic:
+    """Test the config preservation helper methods for runtime config cleanup."""
+
+    def test_is_runtime_config_matches_adapter_pattern(self, database_maintenance_service):
+        """Test that adapter.* patterns are recognized as runtime configs."""
+        assert database_maintenance_service._is_runtime_config("adapter.my_adapter.config") is True
+        assert database_maintenance_service._is_runtime_config("adapter.startup.covenant") is True
+
+    def test_is_runtime_config_matches_runtime_pattern(self, database_maintenance_service):
+        """Test that runtime.* patterns are recognized as runtime configs."""
+        assert database_maintenance_service._is_runtime_config("runtime.state") is True
+        assert database_maintenance_service._is_runtime_config("runtime.settings.foo") is True
+
+    def test_is_runtime_config_matches_session_pattern(self, database_maintenance_service):
+        """Test that session.* patterns are recognized as runtime configs."""
+        assert database_maintenance_service._is_runtime_config("session.user_123") is True
+
+    def test_is_runtime_config_matches_temp_pattern(self, database_maintenance_service):
+        """Test that temp.* patterns are recognized as runtime configs."""
+        assert database_maintenance_service._is_runtime_config("temp.cache") is True
+
+    def test_is_runtime_config_rejects_other_patterns(self, database_maintenance_service):
+        """Test that non-runtime config patterns are rejected."""
+        assert database_maintenance_service._is_runtime_config("system.settings") is False
+        assert database_maintenance_service._is_runtime_config("agent.identity") is False
+        assert database_maintenance_service._is_runtime_config("essential.config") is False
+
+    def test_should_preserve_config_preserves_system_bootstrap(self, database_maintenance_service):
+        """Test that configs created by system_bootstrap are preserved."""
+
+        class MockConfigNode:
+            updated_by = "system_bootstrap"
+
+        should_preserve, reason = database_maintenance_service._should_preserve_config(
+            "adapter.bootstrap.config", MockConfigNode()
+        )
+        assert should_preserve is True
+        assert "bootstrap config" in reason.lower()
+
+    def test_should_preserve_config_preserves_explicit_startup_adapters(self, database_maintenance_service):
+        """Test that adapter.startup.* configs (persist=True from API) are preserved."""
+
+        class MockConfigNode:
+            updated_by = "adapter_configuration_service"
+
+        should_preserve, reason = database_maintenance_service._should_preserve_config(
+            "adapter.startup.covenant_metrics", MockConfigNode()
+        )
+        assert should_preserve is True
+        assert "explicitly persisted" in reason.lower()
+
+    def test_should_preserve_config_preserves_runtime_adapter_manager_configs(self, database_maintenance_service):
+        """Test that adapter configs from runtime_adapter_manager are preserved."""
+
+        class MockConfigNode:
+            updated_by = "runtime_adapter_manager"
+
+        should_preserve, reason = database_maintenance_service._should_preserve_config(
+            "adapter.covenant_metrics_abc123.config", MockConfigNode()
+        )
+        assert should_preserve is True
+        assert "auto-restore" in reason.lower()
+
+    def test_should_preserve_config_deletes_other_adapter_configs(self, database_maintenance_service):
+        """Test that adapter configs from other sources are NOT preserved."""
+
+        class MockConfigNode:
+            updated_by = "some_other_service"
+
+        should_preserve, reason = database_maintenance_service._should_preserve_config(
+            "adapter.temp_adapter.config", MockConfigNode()
+        )
+        assert should_preserve is False
+        assert reason == ""
+
+    def test_should_preserve_config_deletes_session_configs(self, database_maintenance_service):
+        """Test that session configs are NOT preserved."""
+
+        class MockConfigNode:
+            updated_by = "user_session"
+
+        should_preserve, reason = database_maintenance_service._should_preserve_config(
+            "session.user_123", MockConfigNode()
+        )
+        assert should_preserve is False
+
+    def test_log_cleanup_result_with_deletions(self, database_maintenance_service, caplog):
+        """Test that cleanup result logging works with deletions."""
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            database_maintenance_service._log_cleanup_result(5)
+
+        assert "Cleaned up 5 runtime-specific configuration entries" in caplog.text
+
+    def test_log_cleanup_result_with_no_deletions(self, database_maintenance_service, caplog):
+        """Test that cleanup result logging works with no deletions."""
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            database_maintenance_service._log_cleanup_result(0)
+
+        assert "No runtime-specific configuration entries to clean up" in caplog.text

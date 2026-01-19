@@ -938,7 +938,13 @@ class RuntimeAdapterManager(AdapterManagerInterface):
     async def _save_adapter_config_to_graph(
         self, adapter_id: str, adapter_type: str, config_params: AdapterConfig
     ) -> None:
-        """Save adapter configuration to graph config service."""
+        """Save adapter configuration to graph config service.
+
+        In multi-occurrence deployments, the occurrence_id is saved alongside the config
+        so each occurrence can identify which adapters it loaded.
+        """
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
         try:
             # Get config service from runtime
             config_service = None
@@ -948,6 +954,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             if not config_service:
                 logger.warning(f"Cannot save adapter config for {adapter_id} - GraphConfigService not available")
                 return
+
+            # Get current occurrence ID for multi-occurrence support
+            occurrence_id = get_current_occurrence_id()
 
             # Store the full config object
             await config_service.set_config(
@@ -959,6 +968,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 key=f"adapter.{adapter_id}.type", value=adapter_type, updated_by="runtime_adapter_manager"
             )
 
+            # Store occurrence_id to track which occurrence loaded this adapter
+            await config_service.set_config(
+                key=f"adapter.{adapter_id}.occurrence_id", value=occurrence_id, updated_by="runtime_adapter_manager"
+            )
+
             # Also store individual config values for easy access
             if isinstance(config_params, dict):
                 for key, value in config_params.items():
@@ -968,7 +982,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                             key=f"adapter.{adapter_id}.{key}", value=value, updated_by="runtime_adapter_manager"
                         )
 
-            logger.info(f"Saved adapter config for {adapter_id} to graph")
+            logger.info(f"Saved adapter config for {adapter_id} to graph (occurrence={occurrence_id})")
 
         except Exception as e:
             logger.error(f"Failed to save adapter config for {adapter_id}: {e}")

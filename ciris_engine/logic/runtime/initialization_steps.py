@@ -460,8 +460,13 @@ async def _load_single_saved_adapter(
     config_service: Any,
     adapter_manager: Any,
     bootstrap_ids: Set[str],
+    current_occurrence_id: str,
 ) -> bool:
-    """Load a single saved adapter from graph config. Returns True if loaded."""
+    """Load a single saved adapter from graph config. Returns True if loaded.
+
+    In multi-occurrence deployments, only loads adapters that were saved by this occurrence
+    or adapters without an occurrence_id (legacy/shared adapters).
+    """
     # Skip if already loaded
     if adapter_id in bootstrap_ids:
         logger.debug(f"Adapter {adapter_id} already loaded from bootstrap, skipping")
@@ -471,19 +476,31 @@ async def _load_single_saved_adapter(
         logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
         return False
 
-    # Get adapter type and config
+    # Get adapter type, config, and occurrence_id
     adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
     adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
+    occurrence_id_node = await config_service.get_config(f"adapter.{adapter_id}.occurrence_id")
 
     adapter_type = _extract_config_value(adapter_type_node)
     adapter_config_data = _extract_config_value(adapter_config_node)
+    saved_occurrence_id = _extract_config_value(occurrence_id_node)
+
+    # Check occurrence_id - only load if matches current occurrence
+    # Adapters WITHOUT occurrence_id are legacy adapters - load them on any occurrence
+    # (they will be stamped with current occurrence_id when next saved)
+    if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+        logger.debug(
+            f"Adapter {adapter_id} belongs to occurrence {saved_occurrence_id}, "
+            f"current is {current_occurrence_id}, skipping"
+        )
+        return False
 
     if not adapter_type or not isinstance(adapter_type, str):
         logger.warning(f"No valid adapter type found for saved adapter {adapter_id}, skipping")
         return False
 
     adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
-    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type})")
+    logger.info(f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})")
 
     result = await adapter_manager.load_adapter(
         adapter_type=adapter_type,
@@ -504,8 +521,11 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
 
     This restores dynamically loaded adapters (added via API) after restart.
     Skipped in first-run mode since config service isn't available.
+
+    In multi-occurrence deployments, only loads adapters saved by this occurrence.
     """
     from ciris_engine.logic.setup.first_run import is_first_run
+    from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
 
     if is_first_run():
         logger.info("First-run mode: Skipping saved adapter loading")
@@ -522,22 +542,25 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
         return
 
     try:
+        # Get current occurrence ID for filtering
+        current_occurrence_id = get_current_occurrence_id()
+
         all_configs = await config_service.list_configs(prefix="adapter.")
         adapter_ids = _extract_adapter_ids_from_configs(all_configs)
-        logger.info(f"Found {len(adapter_ids)} saved adapter configs in graph")
+        logger.info(f"Found {len(adapter_ids)} saved adapter configs in graph (occurrence={current_occurrence_id})")
 
         bootstrap_ids = _get_bootstrap_adapter_ids(runtime)
         loaded_count = 0
 
         for adapter_id in adapter_ids:
             loaded = await _load_single_saved_adapter(
-                adapter_id, config_service, adapter_manager, bootstrap_ids
+                adapter_id, config_service, adapter_manager, bootstrap_ids, current_occurrence_id
             )
             if loaded:
                 loaded_count += 1
 
         if loaded_count > 0:
-            logger.info(f"Loaded {loaded_count} saved adapters from graph")
+            logger.info(f"Loaded {loaded_count} saved adapters from graph for occurrence {current_occurrence_id}")
 
     except Exception as e:
         logger.error(f"Error loading saved adapters from graph: {e}", exc_info=True)

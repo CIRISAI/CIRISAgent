@@ -5,6 +5,34 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.5] - 2026-01-18
+
+### Added
+
+- **Multi-Occurrence Adapter Support** - Adapters now track which occurrence loaded them
+  - `occurrence_id` saved with adapter config in graph
+  - On startup, only loads adapters matching current occurrence
+  - Prevents duplicate adapter loading in multi-occurrence deployments
+
+- **Covenant Metrics Connectivity Events** - Adapter notifies CIRISLens on startup/shutdown
+  - Sends `startup` event to `/covenant/connected` when service starts
+  - Sends `shutdown` event before HTTP session closes
+  - Includes agent hash, trace level, version, and correlation metadata
+  - Enables monitoring agent connectivity without waiting for interactions
+
+### Fixed
+
+- **services_registered API Response** - Adapter status now shows registered services
+  - Added `services_registered` field to `AdapterInfo` schema
+  - API endpoints now return actual registered services instead of empty array
+  - Fixes visibility into which services each adapter provides
+
+### Changed
+
+- **Adapter Loading Behavior** - Adapters without occurrence_id treated as "default" occurrence
+  - Legacy adapters seamlessly work with single-occurrence deployments
+  - Multi-occurrence deployments require explicit occurrence matching
+
 ## [1.8.4] - 2026-01-18
 
 ### Fixed

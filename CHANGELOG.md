@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Database Maintenance Cleanup Logic** - More selective config cleanup
   - Added protection for adapter configs marked for auto-restore
   - Updated README with accurate preservation rules
+  - Refactored `_cleanup_runtime_config` to reduce cognitive complexity (23 → ~10)
+  - Extracted helper methods: `_should_preserve_config`, `_is_runtime_config`, `_delete_ephemeral_configs`
+  - Added 12 unit tests for config preservation logic
 
 ## [1.8.6] - 2026-01-19
 

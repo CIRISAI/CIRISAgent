@@ -57,7 +57,7 @@ ServiceType.MAINTENANCE  # Registered as infrastructure service
 
 **Operations**:
 - **Invalid Thoughts Cleanup**: Removes thoughts with malformed context JSON
-- **Runtime Config Cleanup**: Removes adapter/session-specific configurations from previous runs
+- **Runtime Config Cleanup**: Removes ephemeral session/runtime configs (preserves persisted adapter configs for auto-restore)
 - **Stale Wakeup Tasks**: Cleans up interrupted startup sequences (WAKEUP_, VERIFY_IDENTITY_, etc.)
 - **Orphan Detection**: Removes active tasks whose parent tasks are missing or inactive
 - **Thought Orphan Cleanup**: Removes pending/processing thoughts for inactive tasks
@@ -107,12 +107,15 @@ DatabaseMaintenanceService(
 ### Runtime Configuration Patterns
 
 The service identifies and removes these runtime-specific configurations:
-- `adapter.*` - Adapter configurations
+- `adapter.*` - Adapter configurations (except persisted configs for auto-restore)
 - `runtime.*` - Runtime-specific settings
 - `session.*` - Session-specific data
 - `temp.*` - Temporary configurations
 
-**Protection**: Preserves configurations created by `system_bootstrap`
+**Protection**: Preserves configurations:
+- Created by `system_bootstrap`
+- `adapter.startup.*` (explicit persist=True from API)
+- `adapter.{id}.*` created by `runtime_adapter_manager` (dynamic loads)
 
 ## Telemetry & Metrics
 

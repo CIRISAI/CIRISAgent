@@ -218,8 +218,9 @@ class Ed25519Signer(BaseSigner):
         if not self._private_key:
             raise RuntimeError("No keypair to save")
 
-        from cryptography.hazmat.primitives import serialization
         import os
+
+        from cryptography.hazmat.primitives import serialization
 
         # Ensure parent directory exists
         key_path.parent.mkdir(parents=True, exist_ok=True)
@@ -295,10 +296,12 @@ class UnifiedSigningKey:
         key_locations = []
         if self._key_path:
             key_locations.append(self._key_path)
-        key_locations.extend([
-            self.DEFAULT_KEY_PATH,
-            self.DOCKER_KEY_PATH,
-        ])
+        key_locations.extend(
+            [
+                self.DEFAULT_KEY_PATH,
+                self.DOCKER_KEY_PATH,
+            ]
+        )
 
         for key_path in key_locations:
             if self._signer._load_keypair(key_path):

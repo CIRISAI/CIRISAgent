@@ -219,14 +219,18 @@ class TestLoadSavedAdaptersFromGraph:
         runtime.adapters = []
 
         mock_config_service = MagicMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter.covenant_metrics.type": "ciris_covenant_metrics",
-            "adapter.covenant_metrics.config": {},
-        })
-        mock_config_service.get_config = AsyncMock(side_effect=lambda key: {
-            "adapter.covenant_metrics.type": "ciris_covenant_metrics",
-            "adapter.covenant_metrics.config": {"enabled": True, "settings": {}},
-        }.get(key))
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter.covenant_metrics.type": "ciris_covenant_metrics",
+                "adapter.covenant_metrics.config": {},
+            }
+        )
+        mock_config_service.get_config = AsyncMock(
+            side_effect=lambda key: {
+                "adapter.covenant_metrics.type": "ciris_covenant_metrics",
+                "adapter.covenant_metrics.config": {"enabled": True, "settings": {}},
+            }.get(key)
+        )
 
         mock_adapter_manager = MagicMock()
         mock_adapter_manager.loaded_adapters = {}
@@ -257,9 +261,11 @@ class TestLoadSavedAdaptersFromGraph:
         runtime.adapters = [mock_adapter]
 
         mock_config_service = MagicMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter.api.type": "api",
-        })
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter.api.type": "api",
+            }
+        )
 
         mock_adapter_manager = MagicMock()
         mock_adapter_manager.loaded_adapters = {}

@@ -339,6 +339,17 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             logger.debug(f"Preserving bootstrap config: {key}")
                             continue
 
+                        # Skip adapter configs persisted for auto-restore on restart
+                        # Two persistence mechanisms exist:
+                        # 1. adapter.startup.* - explicit persist=True from API (adapter_configuration_service)
+                        # 2. adapter.{id}.* - dynamic loads from RuntimeAdapterManager
+                        if key.startswith("adapter.startup."):
+                            logger.debug(f"Preserving explicitly persisted adapter config: {key}")
+                            continue
+                        if key.startswith("adapter.") and config_node.updated_by == "runtime_adapter_manager":
+                            logger.debug(f"Preserving runtime adapter config for auto-restore: {key}")
+                            continue
+
                         # Convert to GraphNode and use memory service to forget it
                         graph_node = config_node.to_graph_node()
                         await self.config_service.graph.forget(graph_node)

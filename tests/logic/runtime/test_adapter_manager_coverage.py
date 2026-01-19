@@ -11,13 +11,13 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from ciris_engine.logic.runtime.adapter_manager import (
+    DEFAULT_SENSITIVE_PATTERNS,
+    MASKED_VALUE,
+    SENSITIVE_FIELDS_BY_ADAPTER_TYPE,
     AdapterInstance,
     RuntimeAdapterManager,
     _sanitize_dict,
     _should_mask_field,
-    DEFAULT_SENSITIVE_PATTERNS,
-    MASKED_VALUE,
-    SENSITIVE_FIELDS_BY_ADAPTER_TYPE,
 )
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema

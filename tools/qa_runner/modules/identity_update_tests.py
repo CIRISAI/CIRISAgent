@@ -69,7 +69,9 @@ class IdentityUpdateTests:
         self.updated_identity: Optional[Dict[str, Any]] = None
 
         # Test modification values
-        self._test_description = "TEST_IDENTITY_UPDATE: This description was set by the identity update integration test."
+        self._test_description = (
+            "TEST_IDENTITY_UPDATE: This description was set by the identity update integration test."
+        )
         self._test_name = "DatumTestUpdate"
 
         # Server process (managed externally by qa_runner, but we track for restart)
@@ -272,11 +274,15 @@ class IdentityUpdateTests:
         """Start server with --template and --identity-update flags."""
         # Start the server with identity update flags
         cmd = [
-            "python3", "main.py",
-            "--adapter", "api",
+            "python3",
+            "main.py",
+            "--adapter",
+            "api",
             "--mock-llm",
-            "--port", str(self._port),
-            "--template", self._template_name,
+            "--port",
+            str(self._port),
+            "--template",
+            self._template_name,
             "--identity-update",
         ]
 

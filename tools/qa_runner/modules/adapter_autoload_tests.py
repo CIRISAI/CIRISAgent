@@ -73,9 +73,7 @@ class AdapterAutoloadTests:
     async def run(self) -> List[Dict[str, Any]]:
         """Run all adapter auto-load tests."""
         self.console.print("\n[cyan]Adapter Auto-Load Tests[/cyan]")
-        self.console.print(
-            "[dim]Note: Full auto-load testing requires server restart to verify persistence[/dim]"
-        )
+        self.console.print("[dim]Note: Full auto-load testing requires server restart to verify persistence[/dim]")
 
         tests = [
             # Phase 1: System verification

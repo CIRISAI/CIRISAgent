@@ -1172,6 +1172,7 @@ class CovenantMetricsService:
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
+                data["api_bases_used"] = event.get("api_bases_used", [])
             # FULL: Add parameters, error details, signature
             if is_full:
                 action_params = event.get("action_parameters")

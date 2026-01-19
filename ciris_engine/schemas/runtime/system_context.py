@@ -107,6 +107,9 @@ class SystemSnapshot(BaseModel):
     )
 
     # Runtime context
+    cognitive_state: Optional[str] = Field(
+        None, description="Current cognitive state (WAKEUP, WORK, PLAY, SOLITUDE, DREAM, SHUTDOWN)"
+    )
     shutdown_context: Optional[ShutdownContext] = Field(None, description="Shutdown context if system is shutting down")
     current_time_utc: str = Field(default="", description="Current system time in UTC ISO format from time service")
     current_time_london: str = Field(default="", description="Current time in London timezone (Europe/London)")

@@ -859,6 +859,7 @@ class ActionCompleteStepData(BaseStepData):
     energy_mwh: float = Field(0.0, description="Energy in milliwatt-hours (query telemetry by thought_id)")
     llm_calls: int = Field(0, description="Number of LLM calls (query telemetry by thought_id)")
     models_used: List[str] = Field(default_factory=list, description="Models used (query telemetry by thought_id)")
+    api_bases_used: List[str] = Field(default_factory=list, description="API base URLs used (query telemetry by thought_id)")
 
 
 class ActionResponse(BaseModel):
@@ -1120,3 +1121,4 @@ class ActionResultEvent(BaseModel):
     energy_mwh: float = Field(0.0, description="Energy used in milliwatt-hours for this thought")
     llm_calls: int = Field(0, description="Number of LLM calls for this thought")
     models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")
+    api_bases_used: List[str] = Field(default_factory=list, description="Unique API base URLs used for this thought")

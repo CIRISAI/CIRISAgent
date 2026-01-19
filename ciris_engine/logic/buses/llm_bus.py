@@ -426,7 +426,13 @@ class LLMBus(BaseBus[LLMService]):
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000
         self._record_success(service_name, latency_ms)
-        await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id)
+        # Extract api_base from service config if available
+        api_base = None
+        if hasattr(selected_service, "openai_config") and selected_service.openai_config:
+            api_base = getattr(selected_service.openai_config, "base_url", None)
+        await self._record_resource_telemetry(
+            service_name, handler_name, usage, latency_ms, thought_id, api_base
+        )
         logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
 
         return result, usage
@@ -741,6 +747,7 @@ class LLMBus(BaseBus[LLMService]):
         usage: ResourceUsage,
         latency_ms: float,
         thought_id: Optional[str] = None,
+        api_base: Optional[str] = None,
     ) -> None:
         """Record detailed telemetry for resource usage"""
         if not self.telemetry_service:
@@ -752,6 +759,7 @@ class LLMBus(BaseBus[LLMService]):
                 "service": service_name,
                 "model": usage.model_used or "unknown",
                 "handler": handler_name,
+                "api_base": api_base or "default",
             }
             # Add thought_id if provided for per-thought resource tracking
             if thought_id:

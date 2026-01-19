@@ -37,8 +37,10 @@ def make_deferral_request(
 
 @pytest.fixture
 def mock_runtime():
-    """Create a mock runtime with agent_id."""
+    """Create a mock runtime with agent_id (legacy pattern)."""
     runtime = MagicMock()
+    # Set agent_identity to None to trigger legacy fallback to agent_id
+    runtime.agent_identity = None
     runtime.agent_id = "test-agent-123"
     return runtime
 
@@ -46,7 +48,9 @@ def mock_runtime():
 @pytest.fixture
 def mock_runtime_no_agent_id():
     """Create a mock runtime without agent_id attribute."""
-    return MagicMock(spec=[])
+    runtime = MagicMock(spec=[])
+    runtime.agent_identity = None
+    return runtime
 
 
 @pytest.fixture

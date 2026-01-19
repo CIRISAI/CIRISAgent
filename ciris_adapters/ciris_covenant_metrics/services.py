@@ -142,16 +142,21 @@ class CompleteTrace:
 
 
 class Ed25519TraceSigner:
-    """Sign traces using Ed25519 keys (compatible with root WA keys)."""
+    """Sign traces using the unified Ed25519 signing key.
+
+    This class wraps the unified signing key from ciris_engine.logic.audit.signing_protocol,
+    ensuring the same key is used for both audit trail signing and covenant metrics traces.
+
+    The unified key is stored at data/agent_signing.key and is shared with the audit service.
+    """
 
     def __init__(self, seed_dir: Optional[Path] = None):
         """Initialize signer with optional seed directory for root public key."""
-        self._private_key: Optional[Any] = None
-        self._public_key: Optional[Any] = None
-        self._key_id: Optional[str] = None
+        self._unified_key: Optional[Any] = None
         self._root_pubkey: Optional[str] = None
+        self._key_id: Optional[str] = None
 
-        # Load root public key from seed directory
+        # Load root public key from seed directory (for verification only)
         if seed_dir is None:
             seed_dir = Path(__file__).parent.parent.parent / "seed"
 
@@ -160,110 +165,42 @@ class Ed25519TraceSigner:
             with open(root_pub_file) as f:
                 root_data = json.load(f)
                 self._root_pubkey = root_data.get("pubkey")
-                self._key_id = root_data.get("wa_id", "wa-unknown")
-                logger.info(f"Loaded root public key: {self._key_id}")
+                logger.info(f"Loaded root public key: {root_data.get('wa_id', 'wa-unknown')}")
 
-    def _load_private_key_if_available(self) -> bool:
-        """Try to load or generate private key for trace signing.
-
-        Checks multiple locations in order:
-        1. ~/.ciris/wa_keys/root_wa.key (root WA key if available)
-        2. data/trace_signing.key (agent-generated key, persisted)
-
-        If no key exists, generates one and saves to data/trace_signing.key.
-        """
-        try:
-            from cryptography.hazmat.primitives.asymmetric import ed25519
-            from cryptography.hazmat.primitives import serialization
-
-            # Locations to check for existing keys
-            key_locations = [
-                Path.home() / ".ciris" / "wa_keys" / "root_wa.key",
-                Path("data") / "trace_signing.key",
-                Path("/app/data") / "trace_signing.key",  # Docker path
-            ]
-
-            # Try to load from existing locations
-            for key_file in key_locations:
-                if key_file.exists():
-                    try:
-                        private_bytes = key_file.read_bytes()
-                        self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
-                        self._public_key = self._private_key.public_key()
-                        # Generate key ID from public key hash
-                        pub_bytes = self._public_key.public_bytes(
-                            encoding=serialization.Encoding.Raw,
-                            format=serialization.PublicFormat.Raw
-                        )
-                        self._key_id = f"agent-{hashlib.sha256(pub_bytes).hexdigest()[:12]}"
-                        logger.info(f"Loaded Ed25519 trace signing key from {key_file} (key_id={self._key_id})")
-                        return True
-                    except Exception as e:
-                        logger.debug(f"Could not load key from {key_file}: {e}")
-                        continue
-
-            # No existing key found - generate one
-            logger.info("No trace signing key found, generating new Ed25519 keypair...")
-            self._private_key = ed25519.Ed25519PrivateKey.generate()
-            self._public_key = self._private_key.public_key()
-
-            # Generate key ID from public key hash
-            pub_bytes = self._public_key.public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw
-            )
-            self._key_id = f"agent-{hashlib.sha256(pub_bytes).hexdigest()[:12]}"
-
-            # Save to persistent location
-            save_locations = [Path("/app/data") / "trace_signing.key", Path("data") / "trace_signing.key"]
-            for save_path in save_locations:
-                try:
-                    save_path.parent.mkdir(parents=True, exist_ok=True)
-                    private_bytes = self._private_key.private_bytes(
-                        encoding=serialization.Encoding.Raw,
-                        format=serialization.PrivateFormat.Raw,
-                        encryption_algorithm=serialization.NoEncryption()
-                    )
-                    save_path.write_bytes(private_bytes)
-                    save_path.chmod(0o600)  # Restrict permissions
-                    logger.info(f"Generated and saved trace signing key to {save_path} (key_id={self._key_id})")
-                    return True
-                except Exception as e:
-                    logger.debug(f"Could not save key to {save_path}: {e}")
-                    continue
-
-            # Key generated but couldn't save - still usable for this session
-            logger.warning(f"Generated trace signing key (key_id={self._key_id}) but could not persist it")
+    def _ensure_unified_key(self) -> bool:
+        """Ensure the unified signing key is loaded."""
+        if self._unified_key is not None:
             return True
 
+        try:
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            self._unified_key = get_unified_signing_key()
+            self._key_id = self._unified_key.key_id
+            logger.info(f"Using unified signing key: {self._key_id}")
+            return True
         except Exception as e:
-            logger.debug(f"Could not load/generate private key: {e}")
-        return False
-
-    def sign_trace(self, trace: CompleteTrace) -> bool:
-        """Sign a trace with Ed25519 private key.
-
-        Returns True if signing succeeded, False if private key not available.
-        """
-        if not self._private_key and not self._load_private_key_if_available():
-            logger.warning("No private key available for trace signing")
+            logger.warning(f"Could not load unified signing key: {e}")
             return False
 
-        # At this point _private_key is guaranteed to be set (mypy hint)
-        assert self._private_key is not None
+    def sign_trace(self, trace: CompleteTrace) -> bool:
+        """Sign a trace with Ed25519 unified signing key.
+
+        Returns True if signing succeeded, False if key not available.
+        """
+        if not self._ensure_unified_key() or self._unified_key is None:
+            logger.warning("No unified signing key available for trace signing")
+            return False
 
         try:
             # Compute trace hash
             trace_hash = trace.compute_hash()
 
-            # Sign the hash
-            signature_bytes = self._private_key.sign(trace_hash.encode())
-
-            # URL-safe base64 encode
-            trace.signature = base64.urlsafe_b64encode(signature_bytes).decode().rstrip("=")
+            # Sign using unified key's sign_base64 method
+            trace.signature = self._unified_key.sign_base64(trace_hash.encode())
             trace.signature_key_id = self._key_id
 
-            logger.debug(f"Signed trace {trace.trace_id} with key {self._key_id}")
+            logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
             return True
 
         except Exception as e:
@@ -298,11 +235,15 @@ class Ed25519TraceSigner:
 
     @property
     def key_id(self) -> Optional[str]:
+        """Get the key ID, loading unified key if needed."""
+        if self._key_id is None:
+            self._ensure_unified_key()
         return self._key_id
 
     @property
     def has_signing_key(self) -> bool:
-        return self._private_key is not None or self._load_private_key_if_available()
+        """Check if a signing key is available."""
+        return self._ensure_unified_key()
 
 
 class CovenantMetricsService:
@@ -344,13 +285,23 @@ class CovenantMetricsService:
         "ReasoningEvent.ACTION_RESULT": "action",
     }
 
-    def __init__(self, config: Optional[JSONDict] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[JSONDict] = None,
+        agent_id: Optional[str] = None,
+        **kwargs: Any,  # Accept extra params from service_initializer (bus_manager, etc.)
+    ) -> None:
         """Initialize CovenantMetricsService.
 
         Args:
             config: Configuration dict with consent settings
+            agent_id: Agent identifier (will be hashed for privacy)
+            **kwargs: Additional params from service_initializer (ignored)
         """
         self._config = config or {}
+
+        # Set agent_id if provided during construction
+        self._initial_agent_id = agent_id
 
         # Consent state - check env var first for QA testing
         env_consent = os.environ.get("CIRIS_COVENANT_METRICS_CONSENT", "").lower() == "true"
@@ -478,6 +429,12 @@ class CovenantMetricsService:
         logger.info("🚀 COVENANT METRICS SERVICE STARTING")
         logger.info(f"   Consent given: {self._consent_given}")
         logger.info(f"   Endpoint: {self._endpoint_url}")
+
+        # Set agent_id from constructor if provided and not already set
+        if self._initial_agent_id and not self._agent_id_hash:
+            self.set_agent_id(self._initial_agent_id)
+            logger.info(f"   Agent ID set from constructor: {self._initial_agent_id}")
+
         logger.info("=" * 70)
 
         # Subscribe to reasoning_event_stream for trace capture
@@ -526,6 +483,9 @@ class CovenantMetricsService:
         logger.info(f"   Batch size: {self._batch_size}")
         logger.info(f"   Flush interval: {self._flush_interval}s")
         logger.info("=" * 70)
+
+        # Register public key with CIRISLens (before connect event)
+        await self._register_public_key()
 
         # Send connected event to server
         await self._send_connected_event("startup")
@@ -666,6 +626,65 @@ class CovenantMetricsService:
                 error_text = await response.text()
                 raise RuntimeError(f"CIRISLens API error {response.status}: {error_text}")
             logger.info(f"✅ POST success: {response.status}")
+
+    async def _register_public_key(self) -> None:
+        """Register agent public key with CIRISLens for signature verification.
+
+        This should be called during startup, before sending any signed traces.
+        CIRISLens will use this key to verify all traces from this agent.
+        """
+        if not self._session:
+            logger.warning("Cannot register public key - HTTP session not initialized")
+            return
+
+        # Ensure signing key is initialized
+        if not self._signer.has_signing_key:
+            logger.warning("Cannot register public key - no signing key available")
+            return
+
+        try:
+            # Get registration payload from unified signing key
+            from ciris_engine.logic.audit.signing_protocol import get_unified_signing_key
+
+            unified_key = get_unified_signing_key()
+            description = f"Agent key for covenant metrics traces"
+            if self._agent_template:
+                description = f"Agent key ({self._agent_template})"
+
+            payload = unified_key.get_registration_payload(description)
+
+            url = f"{self._endpoint_url}/covenant/public-keys"
+
+            logger.info("=" * 70)
+            logger.info(f"🔑 REGISTERING PUBLIC KEY with CIRISLens")
+            logger.info(f"   URL: {url}")
+            logger.info(f"   Key ID: {payload['key_id']}")
+            logger.info(f"   Algorithm: {payload['algorithm']}")
+
+            async with self._session.post(url, json=payload) as response:
+                if response.status == 200:
+                    logger.info(f"✅ PUBLIC KEY REGISTERED SUCCESSFULLY")
+                    logger.info("=" * 70)
+                elif response.status == 409:
+                    # Key already registered (conflict) - this is fine
+                    logger.info(f"✅ PUBLIC KEY ALREADY REGISTERED (409 Conflict)")
+                    logger.info("=" * 70)
+                else:
+                    error_text = await response.text()
+                    logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Status {response.status}: {error_text}")
+                    logger.warning("   Traces will still be signed, but verification may fail")
+                    logger.warning("=" * 70)
+
+        except aiohttp.ClientConnectorError as e:
+            logger.warning("=" * 70)
+            logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Cannot reach server: {e}")
+            logger.warning("   Will retry on next startup")
+            logger.warning("=" * 70)
+
+        except Exception as e:
+            logger.warning("=" * 70)
+            logger.warning(f"⚠️ PUBLIC KEY REGISTRATION FAILED - Unexpected error: {e}")
+            logger.warning("=" * 70)
 
     async def _send_connected_event(self, event_type: str = "connected") -> None:
         """Send a connected/heartbeat event to CIRISLens to signal agent is online.
@@ -969,17 +988,23 @@ class CovenantMetricsService:
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":
             # CONTEXT: Environmental state when decision was made
+            # Extract system_snapshot which contains the context data
+            snapshot = event.get("system_snapshot", {})
+            if hasattr(snapshot, "model_dump"):
+                snapshot = snapshot.model_dump()
+
             # GENERIC: Minimal - just cognitive state identifier
+            # cognitive_state might be at top level or in snapshot
+            cognitive_state = event.get("cognitive_state") or snapshot.get("cognitive_state")
             data = {
-                "cognitive_state": event.get("cognitive_state"),
+                "cognitive_state": cognitive_state,
             }
             # DETAILED: Add service list
             if is_detailed:
-                data["active_services"] = event.get("active_services")
-                data["context_sources"] = event.get("context_sources")
+                data["active_services"] = event.get("active_services") or snapshot.get("active_services")
+                data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
             # FULL: Add complete snapshot and context
             if is_full:
-                snapshot = event.get("system_snapshot", {})
                 data["system_snapshot"] = _serialize(snapshot)
                 data["gathered_context"] = _serialize(event.get("gathered_context"))
                 data["relevant_memories"] = _serialize(event.get("relevant_memories"))
@@ -1147,6 +1172,7 @@ class CovenantMetricsService:
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
+                data["api_bases_used"] = event.get("api_bases_used", [])
             # FULL: Add parameters, error details, signature
             if is_full:
                 action_params = event.get("action_parameters")
@@ -1349,6 +1375,10 @@ class CovenantMetricsService:
         Args:
             agent_id: Raw agent identifier to hash
         """
+        # Validate agent_id is a proper string (not a mock or other type)
+        if not isinstance(agent_id, str) or not agent_id:
+            logger.warning(f"Invalid agent_id type: {type(agent_id).__name__}, skipping")
+            return
         self._agent_id_hash = self._anonymize_agent_id(agent_id)
         logger.debug(f"Agent ID hash set: {self._agent_id_hash}")
 

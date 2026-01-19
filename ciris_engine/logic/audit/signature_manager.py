@@ -1,8 +1,13 @@
 """
 Signature manager for signed audit trail system.
 
-Manages RSA keys and digital signatures for audit entry non-repudiation.
-Designed for resource-constrained deployments with minimal overhead.
+Now uses Ed25519 via the unified signing key (shared with covenant metrics).
+Legacy RSA-2048 verification is maintained for backward compatibility.
+
+Migration path:
+- New installations use Ed25519 automatically
+- Existing RSA installations can migrate via database_maintenance.migrate_audit_key_to_ed25519()
+- RSA signatures can still be verified for historical entries
 """
 
 import base64
@@ -11,12 +16,12 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes, PublicKeyTypes
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.types import JSONDict
@@ -25,113 +30,63 @@ logger = logging.getLogger(__name__)
 
 
 class AuditSignatureManager:
-    """Manages signing keys and signatures for audit entries"""
+    """Manages signing keys and signatures for audit entries.
+
+    Now uses the unified Ed25519 signing key by default.
+    RSA-2048 verification is maintained for backward compatibility with existing audit chains.
+    """
 
     def __init__(self, key_path: str, db_path: str, time_service: TimeServiceProtocol) -> None:
         self.key_path = Path(key_path)
         self.db_path = db_path
         self._time_service = time_service
-        self._private_key: Optional[PrivateKeyTypes] = None
-        self._public_key: Optional[PublicKeyTypes] = None
+
+        # Unified Ed25519 signing key (new default)
+        self._unified_key: Optional[Any] = None
         self._key_id: Optional[str] = None
+        self._using_ed25519 = False
+
+        # Legacy RSA key (for verification only)
+        self._legacy_rsa_public_key: Optional[PublicKeyTypes] = None
 
         # Ensure key directory exists
         self.key_path.mkdir(parents=True, exist_ok=True)
 
     def initialize(self) -> None:
-        """Initialize the signature manager by loading or generating keys"""
+        """Initialize the signature manager using unified Ed25519 key."""
         if self.key_path == Path("/") or not os.access(self.key_path, os.W_OK):
             raise PermissionError(f"Key path {self.key_path} is not writable")
         try:
-            self._load_or_generate_keys()
+            self._load_unified_key()
             self._register_public_key()
-            logger.info(f"Signature manager initialized with key ID: {self._key_id}")
+            logger.info(f"Signature manager initialized with Ed25519 key ID: {self._key_id}")
         except Exception as e:
             logger.error(f"Failed to initialize signature manager: {e}")
             raise
 
-    def _load_or_generate_keys(self) -> None:
-        """Load existing keys or generate new ones"""
-        private_key_path = self.key_path / "audit_signing_private.pem"
-        public_key_path = self.key_path / "audit_signing_public.pem"
+    def _load_unified_key(self) -> None:
+        """Load the unified Ed25519 signing key."""
+        from .signing_protocol import get_unified_signing_key
 
-        try:
-            # Try to load existing keys
-            if private_key_path.exists() and public_key_path.exists():
-                logger.info("Loading existing audit signing keys")
+        self._unified_key = get_unified_signing_key()
+        self._key_id = self._unified_key.key_id
+        self._using_ed25519 = True
 
-                with open(private_key_path, "rb") as f:
-                    self._private_key = serialization.load_pem_private_key(f.read(), password=None)
+        # Check for legacy RSA keys (for verification only)
+        rsa_private_path = self.key_path / "audit_signing_private.pem"
+        rsa_public_path = self.key_path / "audit_signing_public.pem"
 
-                with open(public_key_path, "rb") as f:
-                    self._public_key = serialization.load_pem_public_key(f.read())
-
-            else:
-                # Generate new key pair
-                logger.info("Generating new audit signing keys")
-                self._generate_new_keypair()
-
-        except Exception as e:
-            logger.warning(f"Failed to load keys, generating new ones: {e}")
-            self._generate_new_keypair()
-
-        # Compute key ID from public key
-        self._key_id = self._compute_key_id()
-
-    def _generate_new_keypair(self) -> None:
-        """Generate a new RSA key pair"""
-        self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-        self._public_key = self._private_key.public_key()
-
-        self._save_keys()
-
-    def _save_keys(self) -> None:
-        """Save the key pair to disk"""
-        if not self._private_key or not self._public_key:
-            raise RuntimeError("Keys not initialized")
-
-        private_key_path = self.key_path / "audit_signing_private.pem"
-        public_key_path = self.key_path / "audit_signing_public.pem"
-
-        # Save private key
-        private_pem = self._private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-
-        with open(private_key_path, "wb") as f:
-            f.write(private_pem)
-
-        # Set restrictive permissions on private key
-        os.chmod(private_key_path, 0o600)
-
-        # Save public key
-        public_pem = self._public_key.public_bytes(
-            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-
-        with open(public_key_path, "wb") as f:
-            f.write(public_pem)
-
-        logger.info("Audit signing keys saved to disk")
-
-    def _compute_key_id(self) -> str:
-        """Compute a unique identifier for the public key"""
-        if not self._public_key:
-            raise RuntimeError("Public key not initialized")
-
-        public_pem = self._public_key.public_bytes(
-            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-
-        hash_bytes = hashlib.sha256(public_pem).digest()
-        return base64.b64encode(hash_bytes[:16]).decode("ascii")
+        if rsa_private_path.exists() and rsa_public_path.exists():
+            logger.info("Legacy RSA keys found - will be used for verification of old signatures only")
+            try:
+                with open(rsa_public_path, "rb") as f:
+                    self._legacy_rsa_public_key = serialization.load_pem_public_key(f.read())
+            except Exception as e:
+                logger.warning(f"Could not load legacy RSA public key: {e}")
 
     def _register_public_key(self) -> None:
-        """Register the public key in the database"""
-        if not self._public_key or not self._key_id:
+        """Register the Ed25519 public key in the database."""
+        if not self._unified_key or not self._key_id:
             raise RuntimeError("Keys not initialized for registration")
 
         try:
@@ -146,81 +101,78 @@ class AuditSignatureManager:
                 conn.close()
                 return
 
-            # Insert new key
-            public_pem = self._public_key.public_bytes(
-                encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
-            ).decode("ascii")
-
+            # Insert new Ed25519 key
             cursor.execute(
                 """
                 INSERT INTO audit_signing_keys
                 (key_id, public_key, algorithm, key_size, created_at)
                 VALUES (?, ?, ?, ?, ?)
             """,
-                (self._key_id, public_pem, "rsa-pss", 2048, self._time_service.now_iso()),
+                (
+                    self._key_id,
+                    self._unified_key.public_key_base64,
+                    "ed25519",
+                    256,  # Ed25519 uses 256-bit keys
+                    self._time_service.now_iso(),
+                ),
             )
 
             conn.commit()
             conn.close()
 
-            logger.info(f"Registered public key in database: {self._key_id}")
+            logger.info(f"Registered Ed25519 public key in database: {self._key_id}")
 
         except sqlite3.Error as e:
             logger.error(f"Failed to register public key: {e}")
 
     def sign_entry(self, entry_hash: str) -> str:
-        """Sign an entry hash and return base64 encoded signature"""
-        if not self._private_key:
+        """Sign an entry hash and return base64 encoded signature."""
+        if not self._unified_key:
             raise RuntimeError("Signature manager not initialized")
 
-        # Ensure we have an RSA key for signing
-        if not isinstance(self._private_key, rsa.RSAPrivateKey):
-            raise RuntimeError("Only RSA keys are supported for signing")
-
         try:
-            # Sign the hash using RSA-PSS
-            signature = self._private_key.sign(
-                entry_hash.encode("utf-8"),
-                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-                hashes.SHA256(),
-            )
-
-            # Return base64 encoded signature
-            return base64.b64encode(signature).decode("ascii")
+            # Sign using Ed25519 unified key
+            signature_bytes = self._unified_key.sign(entry_hash.encode("utf-8"))
+            return base64.b64encode(signature_bytes).decode("ascii")
 
         except Exception as e:
             logger.error(f"Failed to sign entry: {e}")
             raise
 
     def verify_signature(self, entry_hash: str, signature: str, key_id: Optional[str] = None) -> bool:
-        """Verify a signature against an entry hash"""
+        """Verify a signature against an entry hash.
+
+        Supports both Ed25519 (current) and RSA-2048 (legacy) signatures.
+        """
         try:
-            if key_id is None or key_id == self._key_id:
-                public_key = self._public_key
-            else:
-                public_key = self._load_public_key(key_id)
-                if not public_key:
-                    logger.error(f"Public key not found: {key_id}")
-                    return False
-
-            if not public_key:
-                logger.error("No public key available for verification")
-                return False
-
-            if not isinstance(public_key, rsa.RSAPublicKey):
-                logger.error("Only RSA keys are supported for verification")
-                return False
-
             signature_bytes = base64.b64decode(signature.encode("ascii"))
 
-            public_key.verify(
-                signature_bytes,
-                entry_hash.encode("utf-8"),
-                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-                hashes.SHA256(),
-            )
+            # If verifying with current key (Ed25519)
+            if key_id is None or key_id == self._key_id:
+                if self._unified_key:
+                    result: bool = self._unified_key.verify(entry_hash.encode("utf-8"), signature_bytes)
+                    return result
 
-            return True
+            # Try to load key info from database to determine algorithm
+            key_info = self._load_key_info(key_id or self._key_id or "")
+            if not key_info:
+                logger.error(f"Key not found: {key_id}")
+                return False
+
+            algorithm = str(key_info.get("algorithm", ""))
+            public_key_data = str(key_info.get("public_key", ""))
+
+            # Ed25519 verification
+            if algorithm == "ed25519":
+                return self._verify_ed25519(entry_hash, signature_bytes, public_key_data)
+
+            # RSA-PSS verification (legacy)
+            elif algorithm in ("rsa-pss", "rsa_2048_pss"):
+                return self._verify_rsa(entry_hash, signature_bytes, public_key_data)
+
+            else:
+                logger.error(f"Unknown algorithm: {algorithm}")
+                return False
 
         except InvalidSignature:
             logger.warning(f"Invalid signature for entry hash: {entry_hash[:16]}...")
@@ -229,13 +181,51 @@ class AuditSignatureManager:
             logger.error(f"Signature verification error: {e}")
             return False
 
-    def _load_public_key(self, key_id: str) -> Optional[PublicKeyTypes]:
-        """Load a public key from the database by key ID"""
+    def _verify_ed25519(self, entry_hash: str, signature_bytes: bytes, public_key_b64: str) -> bool:
+        """Verify an Ed25519 signature."""
+        try:
+            from cryptography.hazmat.primitives.asymmetric import ed25519
+
+            # Decode base64 public key
+            public_key_bytes = base64.b64decode(public_key_b64)
+            public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
+
+            public_key.verify(signature_bytes, entry_hash.encode("utf-8"))
+            return True
+        except Exception as e:
+            logger.debug(f"Ed25519 verification failed: {e}")
+            return False
+
+    def _verify_rsa(self, entry_hash: str, signature_bytes: bytes, public_key_pem: str) -> bool:
+        """Verify an RSA-PSS signature (legacy)."""
+        try:
+            public_key = serialization.load_pem_public_key(public_key_pem.encode("ascii"))
+
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                logger.error("Expected RSA public key")
+                return False
+
+            public_key.verify(
+                signature_bytes,
+                entry_hash.encode("utf-8"),
+                padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                hashes.SHA256(),
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"RSA verification failed: {e}")
+            return False
+
+    def _load_key_info(self, key_id: str) -> Optional[JSONDict]:
+        """Load key info from the database by key ID."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("SELECT public_key FROM audit_signing_keys WHERE key_id = ?", (key_id,))
+            cursor.execute(
+                "SELECT public_key, algorithm FROM audit_signing_keys WHERE key_id = ?",
+                (key_id,),
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -243,30 +233,23 @@ class AuditSignatureManager:
             if not row:
                 return None
 
-            # Load public key from PEM
-            return serialization.load_pem_public_key(row[0].encode("ascii"))
+            return {"public_key": row[0], "algorithm": row[1]}
 
         except Exception as e:
-            logger.error(f"Failed to load public key {key_id}: {e}")
+            logger.error(f"Failed to load key info {key_id}: {e}")
             return None
 
     def rotate_keys(self) -> str:
-        """Rotate to a new key pair and return the new key ID"""
-        logger.info("Rotating audit signing keys")
+        """Rotate signing keys is not supported with unified key management.
 
-        if self._key_id:
-            self._revoke_key(self._key_id)
-
-        self._generate_new_keypair()
-        self._key_id = self._compute_key_id()
-
-        self._register_public_key()
-
-        logger.info(f"Key rotation complete, new key ID: {self._key_id}")
-        return self._key_id
+        Use database_maintenance.migrate_audit_key_to_ed25519() for migration.
+        """
+        logger.warning("Key rotation is deprecated - unified key is managed centrally")
+        # Just return the current key ID
+        return self._key_id or ""
 
     def _revoke_key(self, key_id: str) -> None:
-        """Mark a key as revoked in the database"""
+        """Mark a key as revoked in the database."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -321,6 +304,7 @@ class AuditSignatureManager:
                     "created_at": row[3],
                     "revoked_at": row[4],
                     "active": row[4] is None,
+                    "using_unified_key": self._using_ed25519,
                 }
             else:
                 return {"error": "Key not found in database"}
@@ -330,18 +314,18 @@ class AuditSignatureManager:
 
     @property
     def key_id(self) -> Optional[str]:
-        """Get the current key ID"""
+        """Get the current key ID."""
         return self._key_id
 
     def test_signing(self) -> bool:
-        """Test that signing and verification work correctly"""
+        """Test that signing and verification work correctly."""
         try:
             test_data = "test_entry_hash_12345"
             signature = self.sign_entry(test_data)
             verified = self.verify_signature(test_data, signature)
 
             if verified:
-                logger.debug("Signature test passed")
+                logger.debug("Signature test passed (Ed25519)")
                 return True
             else:
                 logger.error("Signature test failed - verification failed")

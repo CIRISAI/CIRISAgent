@@ -492,6 +492,26 @@ async def build_system_snapshot_with_batch(
         "pending_thoughts": queue_status.pending_thoughts + queue_status.processing_thoughts,
     }
 
+    # Get cognitive state from runtime agent processor
+    cognitive_state = None
+    if runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor:
+        # Use proper accessor method instead of private attribute
+        try:
+            if hasattr(runtime.agent_processor, "get_current_state"):
+                raw_state = runtime.agent_processor.get_current_state()
+                # Handle both string and enum values, filter out mocks
+                if isinstance(raw_state, str):
+                    cognitive_state = raw_state
+                elif hasattr(raw_state, "value") and isinstance(raw_state.value, str):
+                    cognitive_state = raw_state.value
+            elif hasattr(runtime.agent_processor, "state_manager"):
+                raw_state = runtime.agent_processor.state_manager.get_state()
+                if hasattr(raw_state, "value") and isinstance(raw_state.value, str):
+                    cognitive_state = raw_state.value
+        except Exception:
+            # In test environments, mocks may not behave as expected
+            cognitive_state = None
+
     # Get version information
     from ciris_engine.constants import CIRIS_CODENAME, CIRIS_VERSION
 
@@ -533,7 +553,8 @@ async def build_system_snapshot_with_batch(
         service_health=batch_data.service_health,
         circuit_breaker_status=batch_data.circuit_breaker_status,
         resource_alerts=batch_data.resource_alerts,
-        # Other fields
+        # Runtime context
+        cognitive_state=cognitive_state,
         shutdown_context=batch_data.shutdown_context,
         telemetry_summary=batch_data.telemetry_summary,
         continuity_summary=batch_data.continuity_summary,

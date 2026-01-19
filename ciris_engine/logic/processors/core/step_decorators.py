@@ -82,6 +82,7 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         - energy_mwh: Total energy in milliwatt-hours
         - llm_calls: Number of LLM calls
         - models_used: List of unique models used
+        - api_bases_used: List of unique API base URLs used
     """
     if not telemetry_service:
         logger.debug(f"No telemetry service available to query resources for thought {thought_id}")
@@ -94,6 +95,7 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
             "energy_mwh": 0.0,
             "llm_calls": 0,
             "models_used": [],
+            "api_bases_used": [],
         }
 
     try:
@@ -129,8 +131,9 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
         energy_mwh = energy_kwh * 1_000_000
         llm_calls = len(tokens_total_data)  # Each LLM call creates one tokens.total metric
 
-        # Extract unique models from tags
+        # Extract unique models and api_bases from tags
         models_used = list({m.tags.get("model", "unknown") for m in tokens_total_data if hasattr(m, "tags")})
+        api_bases_used = list({m.tags.get("api_base", "default") for m in tokens_total_data if hasattr(m, "tags")})
 
         logger.debug(
             f"Aggregated resources for thought {thought_id}: "
@@ -146,6 +149,7 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
             "energy_mwh": float(energy_mwh),
             "llm_calls": llm_calls,
             "models_used": models_used,
+            "api_bases_used": api_bases_used,
         }
 
     except Exception as e:
@@ -160,6 +164,7 @@ async def _query_thought_resources(telemetry_service: Any, thought_id: str, time
             "energy_mwh": 0.0,
             "llm_calls": 0,
             "models_used": [],
+            "api_bases_used": [],
         }
 
 
@@ -977,6 +982,7 @@ def _create_action_complete_data(
         energy_mwh=get_float(resource_data, "energy_mwh", 0.0),
         llm_calls=get_int(resource_data, "llm_calls", 0),
         models_used=get_list(resource_data, "models_used", []),
+        api_bases_used=get_list(resource_data, "api_bases_used", []),
     )
 
 
@@ -1563,6 +1569,7 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         energy_mwh=getattr(step_data, "energy_mwh", 0.0),
         llm_calls=getattr(step_data, "llm_calls", 0),
         models_used=getattr(step_data, "models_used", []),
+        api_bases_used=getattr(step_data, "api_bases_used", []),
     )
 
 

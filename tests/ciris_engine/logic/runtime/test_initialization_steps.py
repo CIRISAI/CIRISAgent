@@ -237,7 +237,10 @@ class TestLoadSavedAdaptersFromGraph:
         mock_adapter_manager.load_adapter = AsyncMock(return_value=MagicMock(success=True))
 
         runtime.service_initializer.config_service = mock_config_service
-        runtime.service_initializer.adapter_manager = mock_adapter_manager
+        # adapter_manager is accessed via runtime_control_service
+        mock_runtime_control_service = MagicMock()
+        mock_runtime_control_service.adapter_manager = mock_adapter_manager
+        runtime.service_initializer.runtime_control_service = mock_runtime_control_service
 
         with patch(
             "ciris_engine.logic.setup.first_run.is_first_run",
@@ -272,7 +275,10 @@ class TestLoadSavedAdaptersFromGraph:
         mock_adapter_manager.load_adapter = AsyncMock()
 
         runtime.service_initializer.config_service = mock_config_service
-        runtime.service_initializer.adapter_manager = mock_adapter_manager
+        # adapter_manager is accessed via runtime_control_service
+        mock_runtime_control_service = MagicMock()
+        mock_runtime_control_service.adapter_manager = mock_adapter_manager
+        runtime.service_initializer.runtime_control_service = mock_runtime_control_service
 
         with patch(
             "ciris_engine.logic.setup.first_run.is_first_run",

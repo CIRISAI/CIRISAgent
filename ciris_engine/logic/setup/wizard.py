@@ -16,6 +16,57 @@ from ciris_engine.constants import CIRIS_VERSION
 logger = logging.getLogger(__name__)
 
 
+def _validate_save_path(save_path: Path) -> Path:
+    """Validate and sanitize a save path to prevent path traversal attacks.
+
+    Args:
+        save_path: The path to validate
+
+    Returns:
+        Resolved absolute path if valid
+
+    Raises:
+        ValueError: If path is outside allowed directories or contains traversal
+    """
+    # Resolve to absolute path (this resolves .. and symlinks)
+    resolved = save_path.resolve()
+
+    # Define allowed base directories
+    home_dir = Path.home().resolve()
+    cwd = Path.cwd().resolve()
+
+    # Check if resolved path is within allowed directories
+    allowed_bases = [home_dir, cwd]
+
+    # Also allow /tmp for testing scenarios
+    tmp_dir = Path("/tmp").resolve()
+    if tmp_dir.exists():
+        allowed_bases.append(tmp_dir)
+
+    is_allowed = any(
+        resolved == base or base in resolved.parents
+        for base in allowed_bases
+    )
+
+    if not is_allowed:
+        raise ValueError(
+            f"Path '{save_path}' resolves to '{resolved}' which is outside "
+            f"allowed directories (home, cwd, /tmp)"
+        )
+
+    # Ensure we're not writing to sensitive locations even within home
+    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/systemd"]
+    for pattern in sensitive_patterns:
+        if pattern in str(resolved):
+            raise ValueError(f"Cannot write to sensitive location containing '{pattern}'")
+
+    # Ensure the filename looks like a config file
+    if resolved.suffix not in ("", ".env", ".conf", ".cfg", ".ini", ".yaml", ".yml", ".json"):
+        logger.warning(f"Unusual file extension for config file: {resolved.suffix}")
+
+    return resolved
+
+
 def generate_encryption_key() -> str:
     """Generate a secure 32-byte base64-encoded encryption key.
 
@@ -251,9 +302,12 @@ CIRIS_CONFIGURED="true"
 # CIRISNODE_AGENT_SECRET_JWT="your_jwt_token"
 """
 
+    # Validate path to prevent path traversal attacks
+    validated_path = _validate_save_path(save_path)
+
     # Write file
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    save_path.write_text(content, encoding="utf-8")
+    validated_path.parent.mkdir(parents=True, exist_ok=True)
+    validated_path.write_text(content, encoding="utf-8")
 
 
 def run_setup_wizard(save_path: Optional[Path] = None) -> Path:

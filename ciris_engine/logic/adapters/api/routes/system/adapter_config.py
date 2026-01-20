@@ -85,19 +85,6 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
         return f" - adapter load failed: {load_result.error}"
 
 
-async def _persist_config_if_requested(
-    body: ConfigurationCompleteRequest, session: Any, adapter_config_service: Any, request: Request
-) -> tuple[bool, str]:
-    """DEPRECATED: Persistence is now handled by RuntimeAdapterManager via persist flag in AdapterConfig.
-
-    This function is kept for backwards compatibility but does nothing.
-    Use persist=True in AdapterConfig when loading an adapter instead.
-    """
-    # Persistence is now handled by RuntimeAdapterManager when persist=True is set in config
-    # This function is deprecated and will be removed in a future release
-    return False, ""
-
-
 # ============================================================================
 # Endpoints
 # ============================================================================

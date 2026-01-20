@@ -96,6 +96,51 @@ Modular services are loaded at runtime when:
 3. Dependencies are satisfied
 4. No conflicts with core services
 
+## Adapter Persistence
+
+Adapters can be configured to automatically restore on agent restart using the `persist=True` flag.
+
+### Loading with Persistence
+
+**Via API:**
+```bash
+curl -X POST http://localhost:8000/v1/system/adapters/your_adapter/load \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"config": {...}, "persist": true}'
+```
+
+**Via RuntimeControlService:**
+```python
+await runtime_control.load_adapter(
+    adapter_type="your_adapter",
+    adapter_id="your_adapter_instance",
+    config={"persist": True, "setting1": "value1"}
+)
+```
+
+### How Persistence Works
+
+When `persist=True`:
+1. Adapter config is saved to the graph as `adapter.{adapter_id}.*` nodes
+2. On agent restart, the "Load Saved Adapters" initialization step restores them
+3. Only adapters with `persist=True` flag are restored
+
+**Graph nodes created:**
+- `adapter.{adapter_id}.config` - Configuration data
+- `adapter.{adapter_id}.type` - Adapter type
+- `adapter.{adapter_id}.occurrence_id` - Which occurrence saved it
+- `adapter.{adapter_id}.persist` - Must be `True` for auto-restore
+
+### Multi-Occurrence Support
+
+In multi-occurrence deployments, each occurrence only loads adapters saved with its occurrence_id:
+```bash
+export AGENT_OCCURRENCE_ID="occurrence-1"
+```
+
+Adapters are de-duplicated by (adapter_type, occurrence_id, config_hash) - same config on different occurrences is valid.
+
 ## Guidelines
 
 - **Test services**: Set `"test_only": true` in manifest

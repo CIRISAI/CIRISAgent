@@ -91,11 +91,31 @@ result = await runtime_control.load_adapter(
     adapter_id="discord_admin",
     config={
         "token": "admin_bot_token",
-        "home_channel": "admin-alerts"
-    },
-    auto_start=True
+        "home_channel": "admin-alerts",
+        "persist": True  # Auto-restore on restart
+    }
 )
 ```
+
+### Adapter Persistence
+Adapters with `persist=True` in config are automatically restored on agent restart:
+
+```python
+# Load adapter with persistence
+await runtime_control.load_adapter(
+    adapter_type="covenant_metrics",
+    adapter_id="covenant_metrics_prod",
+    config={"persist": True, "endpoint": "https://metrics.example.com"}
+)
+# Config saved to graph as adapter.covenant_metrics_prod.* nodes
+# On restart, "Load Saved Adapters" step restores it
+```
+
+**Graph storage pattern:**
+- `adapter.{adapter_id}.config` - Configuration data
+- `adapter.{adapter_id}.type` - Adapter type
+- `adapter.{adapter_id}.occurrence_id` - Which occurrence saved it
+- `adapter.{adapter_id}.persist` - Must be `True` for auto-restore
 
 ### 3. Configuration Scopes
 Three configuration scopes for different persistence levels:

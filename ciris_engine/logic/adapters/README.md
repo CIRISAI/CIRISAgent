@@ -107,6 +107,42 @@ Adapters are configured through:
 - Configuration files (agent templates, settings)
 - Runtime parameters (guild IDs, endpoints, etc.)
 
+## Adapter Persistence (Auto-Restore)
+
+Adapters can be configured to automatically restore on agent restart using the `persist=True` flag.
+
+### Loading with Persistence
+
+```python
+# Via RuntimeControlService
+await runtime_control.load_adapter(
+    adapter_type="discord",
+    adapter_id="discord_prod",
+    config={"token": "...", "home_channel": "general", "persist": True}
+)
+```
+
+```bash
+# Via API
+curl -X POST http://localhost:8000/v1/system/adapters/discord/load \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"config": {"token": "...", "persist": true}}'
+```
+
+### How It Works
+
+When `persist=True`:
+1. Config saved to graph as `adapter.{adapter_id}.*` nodes
+2. On restart, "Load Saved Adapters" initialization step restores it
+3. Only adapters with `persist=True` are auto-restored
+
+### Multi-Occurrence Support
+
+In clustered deployments, adapters are scoped to their occurrence:
+- Each occurrence only loads adapters it saved
+- Duplicate configs (same type + occurrence + config) are de-duplicated
+- Same adapter config on different occurrences is valid
+
 ## Testing
 
 Each adapter includes:

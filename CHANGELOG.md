@@ -5,6 +5,19 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.11] - 2026-01-20
+
+### Fixed
+
+- **LLM Failover Timeout Bug** - DMA was timing out before LLMBus could failover to secondary provider
+  - Root cause: DMA timeout (30s) < LLM timeout (60s), so failover never had a chance to occur
+  - DMA timeout increased from 30s to 90s (configurable via `CIRIS_DMA_TIMEOUT` env var)
+  - LLM Bus retries per service reduced from 3 to 1 for fast failover between providers
+  - LLM service timeout reduced from 60s to 20s (configurable via `CIRIS_LLM_TIMEOUT` env var)
+  - LLM max_retries reduced from 3 to 2 to fit within DMA timeout budget
+  - New timeout budget: 90s DMA > (20s LLM × 2 retries × 2 providers = 80s)
+  - Fixes: Echo Core deferrals when Together AI was down but Groq was available
+
 ## [1.8.10] - 2026-01-20
 
 ### Fixed

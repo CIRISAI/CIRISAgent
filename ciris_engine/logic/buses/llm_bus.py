@@ -456,7 +456,9 @@ class LLMBus(BaseBus[LLMService]):
 
         priority_groups = self._group_by_priority(services)
         last_error: Optional[Exception] = None
-        max_retries_per_service = 3
+        # Reduced from 3 to 1 to enable fast failover to secondary provider
+        # Each service still has internal retries, but bus moves to next priority quickly
+        max_retries_per_service = 1
 
         for priority, service_group in sorted(priority_groups.items()):
             selected_service = await self._select_service(service_group, priority, handler_name)

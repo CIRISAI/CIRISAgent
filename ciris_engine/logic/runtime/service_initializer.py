@@ -948,10 +948,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
             config, "llm_model", "gpt-4o-mini"
         )
 
-        # LLM timeout can be overridden via environment variable for slow providers
-        # Together.ai with Llama 4 can take 30-60+ seconds for large prompts
+        # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
+        # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s
+        # Can be overridden via CIRIS_LLM_TIMEOUT for slow providers
         llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 60
+            config, "llm_timeout", 20
         )
 
         llm_config = OpenAIConfig(
@@ -960,7 +961,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
             timeout_seconds=llm_timeout,
-            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
+            # Reduced from 3 to 2 to fit within DMA timeout budget
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
         )
 
         # Create and start service
@@ -1023,9 +1025,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
-        # Use same timeout override as primary LLM
+        # Use same timeout as primary LLM (20s default for failover budget)
         llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 60
+            config, "llm_timeout", 20
         )
 
         # Create config
@@ -1035,7 +1037,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
             timeout_seconds=llm_timeout,
-            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 3),
+            # Reduced from 3 to 2 to fit within DMA timeout budget
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
         )
 
         # Create and start service

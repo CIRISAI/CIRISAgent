@@ -895,7 +895,7 @@ class TestConfigPreservationLogic:
     def test_is_runtime_config_matches_adapter_pattern(self, database_maintenance_service):
         """Test that adapter.* patterns are recognized as runtime configs."""
         assert database_maintenance_service._is_runtime_config("adapter.my_adapter.config") is True
-        assert database_maintenance_service._is_runtime_config("adapter.startup.covenant") is True
+        assert database_maintenance_service._is_runtime_config("adapter.covenant_abc123.type") is True
 
     def test_is_runtime_config_matches_runtime_pattern(self, database_maintenance_service):
         """Test that runtime.* patterns are recognized as runtime configs."""
@@ -928,20 +928,8 @@ class TestConfigPreservationLogic:
         assert should_preserve is True
         assert "bootstrap config" in reason.lower()
 
-    def test_should_preserve_config_preserves_explicit_startup_adapters(self, database_maintenance_service):
-        """Test that adapter.startup.* configs (persist=True from API) are preserved."""
-
-        class MockConfigNode:
-            updated_by = "adapter_configuration_service"
-
-        should_preserve, reason = database_maintenance_service._should_preserve_config(
-            "adapter.startup.covenant_metrics", MockConfigNode()
-        )
-        assert should_preserve is True
-        assert "explicitly persisted" in reason.lower()
-
     def test_should_preserve_config_preserves_runtime_adapter_manager_configs(self, database_maintenance_service):
-        """Test that adapter configs from runtime_adapter_manager are preserved."""
+        """Test that adapter configs from runtime_adapter_manager are preserved for persist check."""
 
         class MockConfigNode:
             updated_by = "runtime_adapter_manager"
@@ -950,7 +938,7 @@ class TestConfigPreservationLogic:
             "adapter.covenant_metrics_abc123.config", MockConfigNode()
         )
         assert should_preserve is True
-        assert "auto-restore" in reason.lower()
+        assert "persist check" in reason.lower()
 
     def test_should_preserve_config_deletes_other_adapter_configs(self, database_maintenance_service):
         """Test that adapter configs from other sources are NOT preserved."""
@@ -992,3 +980,336 @@ class TestConfigPreservationLogic:
             database_maintenance_service._log_cleanup_result(0)
 
         assert "No runtime-specific configuration entries to clean up" in caplog.text
+
+
+class TestAdapterConfigHelpers:
+    """Test the adapter config helper methods for deduplication and persistence."""
+
+    def test_find_adapter_ids_from_configs_extracts_ids(self, database_maintenance_service):
+        """Test that adapter IDs are correctly extracted from config keys."""
+        all_configs = {
+            "adapter.discord_abc123.type": "discord",
+            "adapter.discord_abc123.config": {"token": "xxx"},
+            "adapter.ha_def456.type": "home_assistant",
+            "adapter.ha_def456.config": {"url": "http://localhost"},
+            "other.config.key": "value",
+        }
+        result = database_maintenance_service._find_adapter_ids_from_configs(all_configs)
+        assert "discord_abc123" in result
+        assert "ha_def456" in result
+        assert len(result) == 2
+        # Each entry should have type_key
+        assert result["discord_abc123"]["type_key"] == "adapter.discord_abc123.type"
+        assert result["ha_def456"]["type_key"] == "adapter.ha_def456.type"
+
+    def test_find_adapter_ids_from_configs_ignores_non_type_keys(self, database_maintenance_service):
+        """Test that non-.type adapter keys are ignored."""
+        all_configs = {
+            "adapter.discord_abc123.config": {"token": "xxx"},
+            "adapter.discord_abc123.persist": True,
+        }
+        result = database_maintenance_service._find_adapter_ids_from_configs(all_configs)
+        assert len(result) == 0
+
+    def test_find_adapter_ids_from_configs_ignores_malformed_keys(self, database_maintenance_service):
+        """Test that malformed keys with wrong number of parts are ignored."""
+        all_configs = {
+            "adapter.type": "bad",  # Only 2 parts
+            "adapter.a.b.c.type": "bad",  # More than 3 parts
+        }
+        result = database_maintenance_service._find_adapter_ids_from_configs(all_configs)
+        assert len(result) == 0
+
+    def test_group_adapters_by_signature(self, database_maintenance_service):
+        """Test that adapters are correctly grouped by (type, occurrence_id, config_hash)."""
+        adapter_instances = {
+            "discord_1": {"adapter_type": "discord", "occurrence_id": "node1", "config_hash": "abc123"},
+            "discord_2": {"adapter_type": "discord", "occurrence_id": "node1", "config_hash": "abc123"},  # Duplicate
+            "discord_3": {"adapter_type": "discord", "occurrence_id": "node2", "config_hash": "abc123"},  # Different occurrence
+            "ha_1": {"adapter_type": "home_assistant", "occurrence_id": "node1", "config_hash": "def456"},
+        }
+        result = database_maintenance_service._group_adapters_by_signature(adapter_instances)
+
+        # Should have 3 groups
+        assert len(result) == 3
+
+        # discord + node1 + abc123 should have 2 adapters
+        discord_node1_group = result[("discord", "node1", "abc123")]
+        assert len(discord_node1_group) == 2
+        assert "discord_1" in discord_node1_group
+        assert "discord_2" in discord_node1_group
+
+        # discord + node2 + abc123 should have 1 adapter
+        discord_node2_group = result[("discord", "node2", "abc123")]
+        assert len(discord_node2_group) == 1
+        assert "discord_3" in discord_node2_group
+
+        # home_assistant + node1 + def456 should have 1 adapter
+        ha_group = result[("home_assistant", "node1", "def456")]
+        assert len(ha_group) == 1
+        assert "ha_1" in ha_group
+
+    def test_group_adapters_by_signature_skips_entries_without_type(self, database_maintenance_service):
+        """Test that adapters without adapter_type are skipped during grouping."""
+        adapter_instances = {
+            "good_adapter": {"adapter_type": "discord", "occurrence_id": "node1", "config_hash": "abc123"},
+            "bad_adapter": {"occurrence_id": "node1", "config_hash": "def456"},  # No adapter_type
+        }
+        result = database_maintenance_service._group_adapters_by_signature(adapter_instances)
+        assert len(result) == 1
+        assert ("discord", "node1", "abc123") in result
+
+    def test_extract_config_value_handles_none(self, database_maintenance_service):
+        """Test that _extract_config_value handles None gracefully."""
+        assert database_maintenance_service._extract_config_value(None) is None
+
+    def test_extract_config_value_extracts_string_value(self, database_maintenance_service):
+        """Test that _extract_config_value extracts string values."""
+
+        class MockConfigValue:
+            string_value = "test_string"
+            dict_value = None
+            int_value = None
+            bool_value = None
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        result = database_maintenance_service._extract_config_value(MockConfigNode())
+        assert result == "test_string"
+
+    def test_extract_config_value_extracts_dict_value(self, database_maintenance_service):
+        """Test that _extract_config_value extracts dict values."""
+
+        class MockConfigValue:
+            string_value = None
+            dict_value = {"key": "value"}
+            int_value = None
+            bool_value = None
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        result = database_maintenance_service._extract_config_value(MockConfigNode())
+        assert result == {"key": "value"}
+
+    def test_extract_config_value_extracts_bool_value(self, database_maintenance_service):
+        """Test that _extract_config_value extracts bool values."""
+
+        class MockConfigValue:
+            string_value = None
+            dict_value = None
+            int_value = None
+            bool_value = True
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        result = database_maintenance_service._extract_config_value(MockConfigNode())
+        assert result is True
+
+    def test_extract_config_value_returns_raw_value(self, database_maintenance_service):
+        """Test that _extract_config_value returns raw value when no typed value."""
+
+        class MockConfigNode:
+            value = "raw_value"
+
+        result = database_maintenance_service._extract_config_value(MockConfigNode())
+        assert result == "raw_value"
+
+
+class TestAdapterDeduplication:
+    """Test adapter deduplication with mock config service."""
+
+    @pytest.fixture
+    def mock_config_service(self):
+        """Create a mock config service for testing."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock = MagicMock()
+        mock.list_configs = AsyncMock()
+        mock.get_config = AsyncMock()
+        mock.graph = MagicMock()
+        mock.graph.forget = AsyncMock()
+        return mock
+
+    async def test_dedupe_adapter_configs_skips_when_no_config_service(
+        self, database_maintenance_service, caplog
+    ):
+        """Test that dedupe is skipped when config_service is not available."""
+        import logging
+
+        database_maintenance_service.config_service = None
+        with caplog.at_level(logging.DEBUG):
+            await database_maintenance_service._dedupe_adapter_configs()
+
+        assert "Cannot dedupe adapter configs - config service not available" in caplog.text
+
+    async def test_dedupe_adapter_configs_skips_empty_configs(
+        self, database_maintenance_service, mock_config_service
+    ):
+        """Test that dedupe completes early when no configs exist."""
+        database_maintenance_service.config_service = mock_config_service
+        mock_config_service.list_configs.return_value = {}
+
+        await database_maintenance_service._dedupe_adapter_configs()
+
+        # Should not try to get any config details
+        mock_config_service.get_config.assert_not_called()
+
+    async def test_delete_duplicate_adapters_in_group_keeps_newest(self, database_maintenance_service, mock_config_service):
+        """Test that only the newest adapter is kept when deduplicating."""
+        from datetime import datetime, timezone
+
+        database_maintenance_service.config_service = mock_config_service
+
+        adapter_instances = {
+            "old_adapter": {"created_at": datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            "newer_adapter": {"created_at": datetime(2024, 6, 1, tzinfo=timezone.utc)},
+            "newest_adapter": {"created_at": datetime(2025, 1, 1, tzinfo=timezone.utc)},
+        }
+
+        group_key = ("discord", "node1", "abc123")
+        adapter_ids = ["old_adapter", "newer_adapter", "newest_adapter"]
+
+        deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
+            group_key, adapter_ids, adapter_instances
+        )
+
+        # Should delete 2 (keep newest_adapter)
+        assert deleted_count == 2
+
+    async def test_delete_duplicate_adapters_in_group_noop_for_single_adapter(
+        self, database_maintenance_service, mock_config_service
+    ):
+        """Test that single adapter in group doesn't trigger deletion."""
+        database_maintenance_service.config_service = mock_config_service
+
+        adapter_instances = {
+            "only_adapter": {"created_at": "2024-01-01T00:00:00Z"},
+        }
+
+        group_key = ("discord", "node1", "abc123")
+        adapter_ids = ["only_adapter"]
+
+        deleted_count = await database_maintenance_service._delete_duplicate_adapters_in_group(
+            group_key, adapter_ids, adapter_instances
+        )
+
+        assert deleted_count == 0
+
+
+class TestAdapterPersistence:
+    """Test adapter persistence helper methods."""
+
+    @pytest.fixture
+    def mock_config_service(self):
+        """Create a mock config service for testing."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock = MagicMock()
+        mock.list_configs = AsyncMock()
+        mock.get_config = AsyncMock()
+        mock.graph = MagicMock()
+        mock.graph.forget = AsyncMock()
+        return mock
+
+    async def test_is_adapter_persistent_returns_true_for_persist_true(
+        self, database_maintenance_service, mock_config_service
+    ):
+        """Test that _is_adapter_persistent returns True when persist=True."""
+        database_maintenance_service.config_service = mock_config_service
+
+        class MockConfigValue:
+            string_value = None
+            dict_value = None
+            int_value = None
+            bool_value = True
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        mock_config_service.get_config.return_value = MockConfigNode()
+
+        result = await database_maintenance_service._is_adapter_persistent("test_adapter")
+        assert result is True
+
+    async def test_is_adapter_persistent_returns_false_for_persist_false(
+        self, database_maintenance_service, mock_config_service
+    ):
+        """Test that _is_adapter_persistent returns False when persist=False."""
+        database_maintenance_service.config_service = mock_config_service
+
+        class MockConfigValue:
+            string_value = None
+            dict_value = None
+            int_value = None
+            bool_value = False
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        mock_config_service.get_config.return_value = MockConfigNode()
+
+        result = await database_maintenance_service._is_adapter_persistent("test_adapter")
+        assert result is False
+
+    async def test_is_adapter_persistent_returns_false_for_missing_persist(
+        self, database_maintenance_service, mock_config_service
+    ):
+        """Test that _is_adapter_persistent returns False when persist is missing."""
+        database_maintenance_service.config_service = mock_config_service
+        mock_config_service.get_config.return_value = None
+
+        result = await database_maintenance_service._is_adapter_persistent("test_adapter")
+        assert result is False
+
+    async def test_cleanup_non_persistent_adapters_skips_when_no_config_service(
+        self, database_maintenance_service, caplog
+    ):
+        """Test that cleanup is skipped when config_service is not available."""
+        import logging
+
+        database_maintenance_service.config_service = None
+        with caplog.at_level(logging.DEBUG):
+            await database_maintenance_service._cleanup_non_persistent_adapters()
+
+        assert "Cannot cleanup non-persistent adapters - config service not available" in caplog.text
+
+    async def test_delete_non_persistent_adapters_keeps_persistent_ones(
+        self, database_maintenance_service, mock_config_service, caplog
+    ):
+        """Test that adapters with persist=True are kept."""
+        import logging
+
+        database_maintenance_service.config_service = mock_config_service
+
+        class MockConfigValue:
+            string_value = None
+            dict_value = None
+            int_value = None
+            bool_value = True
+            list_value = None
+            float_value = None
+
+        class MockConfigNode:
+            value = MockConfigValue()
+
+        mock_config_service.get_config.return_value = MockConfigNode()
+        mock_config_service.list_configs.return_value = {}
+
+        with caplog.at_level(logging.DEBUG):
+            deleted = await database_maintenance_service._delete_non_persistent_adapters({"test_adapter"})
+
+        assert deleted == 0
+        assert "marked for persistence, keeping" in caplog.text

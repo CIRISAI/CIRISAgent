@@ -218,17 +218,24 @@ class TestLoadSavedAdaptersFromGraph:
         runtime = MagicMock()
         runtime.adapters = []
 
+        # Create mock config nodes with value attribute
+        class MockConfigNode:
+            def __init__(self, value: str | bool | dict) -> None:
+                self.value = value
+
         mock_config_service = MagicMock()
         mock_config_service.list_configs = AsyncMock(
             return_value={
                 "adapter.covenant_metrics.type": "ciris_covenant_metrics",
                 "adapter.covenant_metrics.config": {},
+                "adapter.covenant_metrics.persist": True,
             }
         )
         mock_config_service.get_config = AsyncMock(
             side_effect=lambda key: {
-                "adapter.covenant_metrics.type": "ciris_covenant_metrics",
-                "adapter.covenant_metrics.config": {"enabled": True, "settings": {}},
+                "adapter.covenant_metrics.type": MockConfigNode("ciris_covenant_metrics"),
+                "adapter.covenant_metrics.config": MockConfigNode({"enabled": True, "settings": {}}),
+                "adapter.covenant_metrics.persist": MockConfigNode(True),
             }.get(key)
         )
 
@@ -287,6 +294,53 @@ class TestLoadSavedAdaptersFromGraph:
             await load_saved_adapters_from_graph(runtime)
 
             # Should NOT call load_adapter since adapter is already loaded
+            mock_adapter_manager.load_adapter.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_load_saved_adapters_skips_non_persistent(self) -> None:
+        """Test that adapters without persist=True are skipped."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+        runtime.adapters = []
+
+        # Create mock config nodes with value attribute
+        class MockConfigNode:
+            def __init__(self, value: str | bool | dict | None) -> None:
+                self.value = value
+
+        mock_config_service = MagicMock()
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter.test_adapter.type": "test_type",
+                "adapter.test_adapter.config": {},
+                # No persist=True flag
+            }
+        )
+        mock_config_service.get_config = AsyncMock(
+            side_effect=lambda key: {
+                "adapter.test_adapter.type": MockConfigNode("test_type"),
+                "adapter.test_adapter.config": MockConfigNode({"enabled": True}),
+                "adapter.test_adapter.persist": None,  # Not persisted
+            }.get(key)
+        )
+
+        mock_adapter_manager = MagicMock()
+        mock_adapter_manager.loaded_adapters = {}
+        mock_adapter_manager.load_adapter = AsyncMock(return_value=MagicMock(success=True))
+
+        runtime.service_initializer.config_service = mock_config_service
+        mock_runtime_control_service = MagicMock()
+        mock_runtime_control_service.adapter_manager = mock_adapter_manager
+        runtime.service_initializer.runtime_control_service = mock_runtime_control_service
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.is_first_run",
+            return_value=False,
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+            # Should NOT call load_adapter since persist=False
             mock_adapter_manager.load_adapter.assert_not_called()
 
 

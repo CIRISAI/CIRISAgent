@@ -645,29 +645,17 @@ class ApiPlatform(Service):
         return result
 
     async def _restore_persisted_adapter_configs(self) -> None:
-        """Restore adapter configurations that were persisted for load-on-startup.
+        """DEPRECATED: Adapter restoration is now handled by CIRISRuntime initialization steps.
 
-        This is called during API adapter startup to restore adapters that were
-        previously configured and marked for automatic loading.
+        The new unified pattern uses `adapter.{adapter_id}.*` with explicit `persist=True` flag,
+        and restoration is handled by the "Load Saved Adapters" initialization step in CIRISRuntime.
+
+        This method is kept for backward compatibility but does nothing.
         """
-        # Get config service from runtime
-        config_service = getattr(self.runtime, "config_service", None)
-        if not config_service:
-            logger.debug("No config_service available - skipping persisted adapter restoration")
-            return
-
-        # Get runtime control service for loading adapters
-        runtime_control_service = self.runtime_control
-
-        try:
-            restored_count = await self.adapter_configuration_service.restore_persisted_adapters(
-                config_service=config_service,
-                runtime_control_service=runtime_control_service,
-            )
-            if restored_count > 0:
-                logger.info(f"Restored {restored_count} persisted adapter configuration(s)")
-        except Exception as e:
-            logger.warning(f"Failed to restore persisted adapter configurations: {e}")
+        # Adapter restoration is now handled by CIRISRuntime's "Load Saved Adapters" initialization step
+        # using the new unified adapter.{adapter_id}.* pattern with persist=True flag.
+        # See: ciris_engine/logic/runtime/initialization_steps.py::load_saved_adapters_from_graph()
+        logger.debug("Skipping legacy adapter restoration - handled by CIRISRuntime initialization")
 
     def _is_android_platform(self) -> bool:
         """Check if running on Android platform."""

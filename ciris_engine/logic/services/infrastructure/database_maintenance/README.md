@@ -107,15 +107,14 @@ DatabaseMaintenanceService(
 ### Runtime Configuration Patterns
 
 The service identifies and removes these runtime-specific configurations:
-- `adapter.*` - Adapter configurations (except persisted configs for auto-restore)
+- `adapter.*` - Adapter configurations (non-persistent adapters cleaned up)
 - `runtime.*` - Runtime-specific settings
 - `session.*` - Session-specific data
 - `temp.*` - Temporary configurations
 
 **Protection**: Preserves configurations:
 - Created by `system_bootstrap`
-- `adapter.startup.*` (explicit persist=True from API)
-- `adapter.{id}.*` created by `runtime_adapter_manager` (dynamic loads)
+- `adapter.{id}.*` configs with `persist=True` flag (auto-restored on startup)
 
 ## Telemetry & Metrics
 

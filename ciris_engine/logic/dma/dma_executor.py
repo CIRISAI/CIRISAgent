@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, Union
@@ -73,13 +74,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DMA_RETRY_LIMIT = 3
+# DMA timeout must be long enough to allow LLM failover between providers
+# With 20s LLM timeout × 2 retries × 2 providers = 80s, so 90s gives buffer
+DMA_TIMEOUT_SECONDS = float(os.environ.get("CIRIS_DMA_TIMEOUT", "90.0"))
 
 
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
     retry_limit: int = DMA_RETRY_LIMIT,
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float = DMA_TIMEOUT_SECONDS,
     time_service: Optional["TimeServiceProtocol"] = None,
     **kwargs: Any,
 ) -> Any:

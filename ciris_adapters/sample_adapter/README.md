@@ -393,6 +393,31 @@ python main.py --adapter api --port 8000
 curl -X POST http://localhost:8000/v1/system/adapters/your_adapter_name/configure/start
 ```
 
+### Load with Persistence (Auto-Restore on Restart)
+
+To have an adapter automatically restore after agent restart, use `persist=true`:
+
+```bash
+# Load adapter with persistence
+curl -X POST http://localhost:8000/v1/system/adapters/your_adapter_name/load \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"api_url": "http://localhost:8080"}, "persist": true}'
+```
+
+When `persist=true`:
+- Config is saved to graph as `adapter.{adapter_id}.*` nodes
+- On restart, the "Load Saved Adapters" initialization step restores it
+- Only adapters with `persist=true` are auto-restored
+
+For interactive configuration workflows, pass `persist=true` when completing:
+```bash
+curl -X POST http://localhost:8000/v1/system/adapters/your_adapter_name/configure/{session_id}/complete \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"persist": true}'
+```
+
 ### Write QA Tests
 
 See `/home/emoore/CIRISAgent/tools/qa_runner/modules/adapter_config.py` for examples.

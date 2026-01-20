@@ -30,6 +30,11 @@ class AdapterConfig(BaseModel):
 
     adapter_type: str = Field(..., description="Type of adapter (cli, api, discord, etc.)")
     enabled: bool = Field(True, description="Whether adapter is enabled")
+    persist: bool = Field(
+        False,
+        description="Whether to persist this adapter config for auto-load on restart. "
+        "When True, the adapter will be automatically restored after agent restart.",
+    )
     settings: Dict[str, Optional[Union[str, int, float, bool, List[str]]]] = Field(
         default_factory=dict,
         description="Simple adapter settings (flat primitives only). "

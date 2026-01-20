@@ -170,8 +170,12 @@ class AdapterActionRequest(BaseModel):
     """Request for adapter operations."""
 
     config: Optional[Any] = Field(None, description="Adapter configuration")
-    auto_start: bool = Field(True, description="Whether to auto-start the adapter")
     force: bool = Field(False, description="Force the operation")
+    persist: bool = Field(
+        False,
+        description="Whether to persist this adapter config for auto-load on restart. "
+        "When True, the adapter will be automatically restored after agent restart.",
+    )
 
 
 # Adapter Configuration Workflow Models

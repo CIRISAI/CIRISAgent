@@ -949,47 +949,58 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return adapter_status.metrics.get(metric_name, default)
         return default
 
-    async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
-        """Get detailed information about a specific adapter."""
-        # Lazy initialization of adapter_manager if needed
-        if not self.adapter_manager and self.runtime:
-            if self._time_service is None:
-                from ciris_engine.logic.services.lifecycle.time import TimeService
+    async def _extract_adapter_instance_data(
+        self,
+        adapter_id: str,
+        adapter_type: str,
+    ) -> tuple[Optional[List[ToolInfo]], Optional[AdapterConfig], List[str]]:
+        """Extract tools, config, and services from adapter instance.
 
-                self._time_service = TimeService()
-            from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
-
-            self.adapter_manager = RuntimeAdapterManager(cast(CIRISRuntime, self.runtime), self._time_service)
-            logger.info("Lazy-initialized adapter_manager in get_adapter_info")
+        Returns:
+            Tuple of (tools, config_params, services_registered)
+        """
+        tools: Optional[List[ToolInfo]] = None
+        config_params: Optional[AdapterConfig] = None
+        services_registered: List[str] = []
 
         if not self.adapter_manager:
+            return tools, config_params, services_registered
+
+        adapter_instance = self.adapter_manager.loaded_adapters.get(adapter_id)
+        if not adapter_instance:
+            return tools, config_params, services_registered
+
+        if hasattr(adapter_instance, "adapter"):
+            tools = await self._extract_adapter_tools(adapter_instance.adapter, adapter_type)
+        if hasattr(adapter_instance, "config_params"):
+            config_params = self.adapter_manager._sanitize_config_params(
+                adapter_type, adapter_instance.config_params
+            )
+        if hasattr(adapter_instance, "services_registered"):
+            services_registered = adapter_instance.services_registered
+
+        return tools, config_params, services_registered
+
+    async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
+        """Get detailed information about a specific adapter."""
+        if not self._ensure_adapter_manager():
             return None
 
-        info = self.adapter_manager.get_adapter_info(adapter_id)
+        info = self.adapter_manager.get_adapter_info(adapter_id)  # type: ignore[union-attr]
         if info is None:
             return None
 
         # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
         from datetime import datetime
 
-        # Try to extract tools, config, and services_registered from the actual adapter instance
-        tools: Optional[List[ToolInfo]] = None
-        config_params = None
-        services_registered: List[str] = []
+        # Extract tools, config, and services_registered from the actual adapter instance
         try:
-            adapter_instance = self.adapter_manager.loaded_adapters.get(adapter_id)
-            if adapter_instance:
-                if hasattr(adapter_instance, "adapter"):
-                    tools = await self._extract_adapter_tools(adapter_instance.adapter, info.adapter_type)
-                if hasattr(adapter_instance, "config_params"):
-                    # Sanitize config to mask sensitive fields before exposing to observers
-                    config_params = self.adapter_manager._sanitize_config_params(
-                        info.adapter_type, adapter_instance.config_params
-                    )
-                if hasattr(adapter_instance, "services_registered"):
-                    services_registered = adapter_instance.services_registered
+            tools, config_params, services_registered = await self._extract_adapter_instance_data(
+                adapter_id, info.adapter_type
+            )
         except Exception as e:
             logger.debug(f"Could not extract tools/config for adapter {adapter_id}: {e}")
+            tools, config_params, services_registered = None, None, []
 
         return AdapterInfo(
             adapter_id=info.adapter_id,
@@ -1001,7 +1012,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             last_error=None,
             tools=tools,
             config_params=config_params,
-            services_registered=services_registered,
+            services_registered=services_registered if services_registered else [],
         )
 
     # Configuration Management Methods

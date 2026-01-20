@@ -101,7 +101,9 @@ class DMAOrchestrator:
 
         # Circuit breaker tripped = IDMA has failed too many times, treat as error
         if not cb.is_available():
-            raise Exception("IDMA circuit breaker open - too many recent failures")
+            from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
+
+            raise CircuitBreakerError("IDMA circuit breaker open - too many recent failures")
 
         try:
             idma_result = await run_dma_with_retries(

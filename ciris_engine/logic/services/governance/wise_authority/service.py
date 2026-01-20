@@ -674,9 +674,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 )
 
                 # Create new task description incorporating WA guidance
-                new_description = (
-                    f"[WA GUIDANCE] Original: {original_description}\n\n" f"WA Response: {response.reason}"
-                )
+                new_description = f"[WA GUIDANCE] Original: {original_description}\n\nWA Response: {response.reason}"
 
                 # Use factory to create new guidance task
                 guidance_task = create_task(

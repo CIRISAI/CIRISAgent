@@ -274,6 +274,46 @@ class IdentityManager:
 
         return success
 
+    def _extract_dsdma_config(self, template: AgentTemplate) -> tuple[Dict[str, str], Optional[str]]:
+        """Extract DSDMA configuration from template."""
+        import json
+
+        domain_knowledge: Dict[str, str] = {}
+        dsdma_prompt_template = None
+
+        if not template.dsdma_kwargs:
+            return domain_knowledge, dsdma_prompt_template
+
+        if template.dsdma_kwargs.domain_specific_knowledge:
+            for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
+                domain_knowledge[key] = json.dumps(value) if isinstance(value, dict) else str(value)
+
+        if template.dsdma_kwargs.prompt_template:
+            dsdma_prompt_template = template.dsdma_kwargs.prompt_template
+
+        return domain_knowledge, dsdma_prompt_template
+
+    def _build_overrides_dict(self, overrides: Optional[Any]) -> Dict[str, Any]:
+        """Build filtered overrides dict from optional overrides object."""
+        if not overrides:
+            return {}
+        return {k: v for k, v in overrides.__dict__.items() if v is not None}
+
+    def _get_default_permitted_actions(self) -> list[HandlerActionType]:
+        """Return default permitted actions for an agent."""
+        return [
+            HandlerActionType.OBSERVE,
+            HandlerActionType.SPEAK,
+            HandlerActionType.TOOL,
+            HandlerActionType.MEMORIZE,
+            HandlerActionType.RECALL,
+            HandlerActionType.FORGET,
+            HandlerActionType.DEFER,
+            HandlerActionType.REJECT,
+            HandlerActionType.PONDER,
+            HandlerActionType.TASK_COMPLETE,
+        ]
+
     def _create_updated_identity_from_template(
         self,
         template: AgentTemplate,
@@ -285,25 +325,22 @@ class IdentityManager:
         identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
 
         # Extract DSDMA configuration from template
-        domain_knowledge = {}
-        dsdma_prompt_template = None
-
-        if template.dsdma_kwargs:
-            if template.dsdma_kwargs.domain_specific_knowledge:
-                for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
-                    if isinstance(value, dict):
-                        import json
-
-                        domain_knowledge[key] = json.dumps(value)
-                    else:
-                        domain_knowledge[key] = str(value)
-
-            if template.dsdma_kwargs.prompt_template:
-                dsdma_prompt_template = template.dsdma_kwargs.prompt_template
+        domain_knowledge, dsdma_prompt_template = self._extract_dsdma_config(template)
 
         # Preserve lineage and add template refresh marker
         lineage = list(current_identity.identity_metadata.lineage_trace or [])
         lineage.append(f"template_refresh:{template.name}")
+
+        # Build overrides using helper
+        csdma_overrides = self._build_overrides_dict(template.csdma_overrides)
+        action_pdma_overrides = self._build_overrides_dict(template.action_selection_pdma_overrides)
+
+        # Build permitted actions list
+        actions_source = template.permitted_actions or self._get_default_permitted_actions()
+        permitted_actions = [
+            HandlerActionType(action) if isinstance(action, str) else action
+            for action in actions_source
+        ]
 
         # Create updated identity
         return AgentIdentityRoot(
@@ -314,55 +351,22 @@ class IdentityManager:
                 role_description=template.role_description,
                 domain_specific_knowledge=domain_knowledge,
                 dsdma_prompt_template=dsdma_prompt_template,
-                csdma_overrides={
-                    k: v
-                    for k, v in (template.csdma_overrides.__dict__ if template.csdma_overrides else {}).items()
-                    if v is not None
-                },
-                action_selection_pdma_overrides={
-                    k: v
-                    for k, v in (
-                        template.action_selection_pdma_overrides.__dict__
-                        if template.action_selection_pdma_overrides
-                        else {}
-                    ).items()
-                    if v is not None
-                },
-                # Preserve last shutdown memory from current identity
+                csdma_overrides=csdma_overrides,
+                action_selection_pdma_overrides=action_pdma_overrides,
                 last_shutdown_memory=current_identity.core_profile.last_shutdown_memory,
             ),
             identity_metadata=IdentityMetadata(
-                # Preserve original creation info
                 created_at=current_identity.identity_metadata.created_at,
                 creator_agent_id=current_identity.identity_metadata.creator_agent_id,
-                # Update modification info
                 last_modified=self.time_service.now(),
                 modification_count=current_identity.identity_metadata.modification_count + 1,
                 lineage_trace=lineage,
-                # Preserve approval info from current
                 approval_required=current_identity.identity_metadata.approval_required,
                 approved_by=current_identity.identity_metadata.approved_by,
                 approval_timestamp=current_identity.identity_metadata.approval_timestamp,
                 version=CIRIS_VERSION,
             ),
-            permitted_actions=[
-                HandlerActionType(action) if isinstance(action, str) else action
-                for action in (
-                    template.permitted_actions
-                    or [
-                        HandlerActionType.OBSERVE,
-                        HandlerActionType.SPEAK,
-                        HandlerActionType.TOOL,
-                        HandlerActionType.MEMORIZE,
-                        HandlerActionType.RECALL,
-                        HandlerActionType.FORGET,
-                        HandlerActionType.DEFER,
-                        HandlerActionType.REJECT,
-                        HandlerActionType.PONDER,
-                        HandlerActionType.TASK_COMPLETE,
-                    ]
-                )
-            ],
+            permitted_actions=permitted_actions,
             restricted_capabilities=[
                 "identity_change_without_approval",
                 "profile_switching",

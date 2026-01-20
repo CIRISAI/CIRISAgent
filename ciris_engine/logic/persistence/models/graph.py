@@ -236,6 +236,26 @@ def delete_graph_edge(edge_id: str, db_path: Optional[str] = None) -> int:
         return 0
 
 
+def delete_edges_for_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> int:
+    """Delete all edges where this node is source or target.
+
+    This should be called before deleting a node to avoid foreign key violations
+    on PostgreSQL. SQLite doesn't enforce FK constraints by default, but PostgreSQL does.
+    """
+    sql = "DELETE FROM graph_edges WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)"
+    try:
+        with get_db_connection(db_path=db_path) as conn:
+            cursor = conn.execute(sql, (scope.value, node_id, node_id))
+            conn.commit()
+            count = cursor.rowcount
+            if count > 0:
+                logger.debug("Deleted %d edges for node %s", count, node_id)
+            return count
+    except Exception as e:
+        logger.exception("Failed to delete edges for node %s: %s", node_id, e)
+        return 0
+
+
 def get_edges_for_node(node_id: str, scope: GraphScope, db_path: Optional[str] = None) -> List[GraphEdge]:
     sql = "SELECT * FROM graph_edges WHERE scope = ? AND (source_node_id = ? OR target_node_id = ?)"
     edges: List[GraphEdge] = []

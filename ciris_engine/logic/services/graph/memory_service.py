@@ -199,6 +199,8 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             from ciris_engine.logic.persistence.models import graph as persistence
 
+            # Delete edges first to avoid FK violations on PostgreSQL
+            persistence.delete_edges_for_node(node.id, node.scope, db_path=self.db_path)
             persistence.delete_graph_node(node.id, node.scope, db_path=self.db_path)
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=node)
         except Exception as e:

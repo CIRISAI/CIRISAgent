@@ -5,24 +5,33 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.9] - 2026-01-19
+
+### Fixed
+
+- **Adapter Auto-Restore on Restart (Actually Complete This Time)** - The fix was missing from 1.8.7 and 1.8.8
+  - Added missing "Load Saved Adapters" initialization step registration in `CIRISRuntime`
+  - Root cause: fix commit was pushed to release/1.8.7 AFTER PR was merged
+  - Cherry-picked commit `8d54e51e` which contains the actual code change
+
 ## [1.8.8] - 2026-01-19
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart (Complete Fix)** - Adapters now properly restore after restart
-  - Added missing "Load Saved Adapters" initialization step registration in `CIRISRuntime`
-  - Root cause: step was defined in `initialization_steps.py` but never registered in `_register_initialization_steps()`
-  - This is the actual fix; 1.8.7 only preserved configs but never loaded them
+- **Adapter Auto-Restore on Restart (Incomplete)** - Changelog-only release, code fix was missing
+  - This release only updated changelog and version, not the actual code
 
 ## [1.8.7] - 2026-01-19
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts
+- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts and auto-load
   - Database maintenance cleanup no longer deletes persisted adapter configs
   - Preserves `adapter.startup.*` configs (explicit `persist=True` from API)
   - Preserves `adapter.{id}.*` configs created by `runtime_adapter_manager` (dynamic loads)
-  - Root cause: cleanup was deleting all `adapter.*` configs regardless of persistence intent
+  - **Critical fix**: Added missing "Load Saved Adapters" initialization step to `CIRISRuntime`
+  - Root cause 1: cleanup was deleting all `adapter.*` configs regardless of persistence intent
+  - Root cause 2: `_register_initialization_steps` in ciris_runtime.py was missing the restore step
 
 ### Changed
 

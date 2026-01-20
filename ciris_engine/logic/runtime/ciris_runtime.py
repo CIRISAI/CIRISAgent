@@ -470,6 +470,13 @@ class CIRISRuntime(ServicePropertyMixin):
 
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
+            name="Load Saved Adapters",
+            handler=self._load_saved_adapters,
+            critical=False,  # Non-critical - system can run without saved adapters
+        )
+
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
             name="Initialize Maintenance Service",
             handler=self._initialize_maintenance_service,
             critical=True,
@@ -944,6 +951,15 @@ class CIRISRuntime(ServicePropertyMixin):
                     self._register_adapter_service(reg, adapter)
             except Exception as e:
                 logger.error(f"Error registering services for adapter {adapter.__class__.__name__}: {e}", exc_info=True)
+
+    async def _load_saved_adapters(self) -> None:
+        """Load adapters that were saved to the graph config service.
+
+        This restores dynamically loaded adapters (added via API) after restart.
+        """
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        await load_saved_adapters_from_graph(self)
 
     async def _build_components(self) -> None:
         """Build all processing components."""

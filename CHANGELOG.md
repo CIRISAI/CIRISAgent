@@ -18,11 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts
+- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts and auto-load
   - Database maintenance cleanup no longer deletes persisted adapter configs
   - Preserves `adapter.startup.*` configs (explicit `persist=True` from API)
   - Preserves `adapter.{id}.*` configs created by `runtime_adapter_manager` (dynamic loads)
-  - Root cause: cleanup was deleting all `adapter.*` configs regardless of persistence intent
+  - **Critical fix**: Added missing "Load Saved Adapters" initialization step to `CIRISRuntime`
+  - Root cause 1: cleanup was deleting all `adapter.*` configs regardless of persistence intent
+  - Root cause 2: `_register_initialization_steps` in ciris_runtime.py was missing the restore step
 
 ### Changed
 

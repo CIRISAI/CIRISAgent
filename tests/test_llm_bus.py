@@ -224,7 +224,7 @@ class TestLLMBusBasics:
         )
 
         assert result.message == "Response from HealthyLLM"
-        assert failing_service.call_count == 3  # High priority was tried 3 times (retry logic)
+        assert failing_service.call_count == 1  # High priority tried once per retry config (1 retry)
         assert healthy_service.call_count == 1  # Normal priority succeeded
 
 
@@ -467,7 +467,7 @@ class TestPriorityFailover:
         )
 
         assert result.message == "Response from NormalPriority"
-        assert high_priority.call_count == 3  # Tried 3 times (retry logic) but failed
+        assert high_priority.call_count == 1  # Tried once per retry config (1 retry)
         assert normal_priority.call_count == 1  # Succeeded
         assert low_priority.call_count == 0  # Not needed
 
@@ -513,8 +513,8 @@ class TestPriorityFailover:
         second_warning_count = sum(1 for record in caplog.records if record.levelname == "WARNING")
 
         assert second_error_count == 0, "Should have 0 ERROR logs on repeated failures"
-        # With retry logic: 3 services × (2 retry warnings + 1 exhausted warning + 1 repeated warning) = 12
-        assert second_warning_count == 12, "Should have 12 WARNING logs (4 per service with retries)"
+        # With 1 retry: 3 services × (1 exhausted warning + 1 repeated warning) = 6
+        assert second_warning_count == 6, "Should have 6 WARNING logs (2 per service with 1 retry)"
 
 
 class TestConcurrentAccess:
@@ -903,7 +903,7 @@ class TestServiceUnavailableFailover:
 
         # Should get response from secondary service
         assert result.message == "Response from Lambda.AI"
-        assert primary_service.call_count == 3  # Primary was tried 3 times (retry logic)
+        assert primary_service.call_count == 1  # Primary tried once per retry config (1 retry)
         assert secondary_service.call_count == 1  # Secondary provided the response
 
         # Trigger enough failures to open circuit breaker (default threshold is 5)
@@ -973,9 +973,9 @@ class TestServiceUnavailableFailover:
         # Should indicate all services failed
         assert "All LLM services failed" in str(exc_info.value)
 
-        # Both services should have been tried (3 retries each)
-        assert primary_service.call_count == 3
-        assert secondary_service.call_count == 3
+        # Both services should have been tried (1 retry each per config)
+        assert primary_service.call_count == 1
+        assert secondary_service.call_count == 1
 
     @pytest.mark.asyncio
     async def test_primary_recovery_after_503_failover(self, llm_bus, service_registry, time_service):

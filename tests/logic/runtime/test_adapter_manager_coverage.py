@@ -544,9 +544,9 @@ class TestRuntimeAdapterManager:
         mock_initializer.config_service = mock_config
         mock_runtime.service_initializer = mock_initializer
 
-        config = AdapterConfig(adapter_type="cli", settings={"test": "value"})
+        config = AdapterConfig(adapter_type="cli", settings={"test": "value"}, persist=True)
 
-        # Test save
+        # Test save (only saves if persist=True)
         await adapter_manager._save_adapter_config_to_graph("test_id", "cli", config)
         mock_config.set_config.assert_called()
 

@@ -52,8 +52,14 @@ async def _get_runtime_control_service_for_adapter_load(request: Request) -> Any
     return None
 
 
-async def _load_adapter_after_config(request: Request, session: Any) -> str:
-    """Load adapter after configuration and return status message."""
+async def _load_adapter_after_config(request: Request, session: Any, persist: bool = False) -> str:
+    """Load adapter after configuration and return status message.
+
+    Args:
+        request: FastAPI request object
+        session: Configuration session with collected_config
+        persist: Whether to persist the adapter config for auto-load on restart
+    """
     runtime_control_service = await _get_runtime_control_service_for_adapter_load(request)
     if not runtime_control_service:
         logger.warning("[COMPLETE_CONFIG] RuntimeControlService not available, adapter not loaded")
@@ -61,6 +67,8 @@ async def _load_adapter_after_config(request: Request, session: Any) -> str:
 
     logger.info("[COMPLETE_CONFIG] Loading adapter via RuntimeControlService.load_adapter")
     adapter_config = dict(session.collected_config)
+    # Include persist flag in config so RuntimeAdapterManager handles persistence
+    adapter_config["persist"] = persist
     adapter_id = f"{session.adapter_type}_{uuid.uuid4().hex[:8]}"
 
     load_result = await runtime_control_service.load_adapter(
@@ -80,17 +88,14 @@ async def _load_adapter_after_config(request: Request, session: Any) -> str:
 async def _persist_config_if_requested(
     body: ConfigurationCompleteRequest, session: Any, adapter_config_service: Any, request: Request
 ) -> tuple[bool, str]:
-    """Persist configuration if requested. Returns (persisted, message_suffix)."""
-    if not body.persist:
-        return False, ""
+    """DEPRECATED: Persistence is now handled by RuntimeAdapterManager via persist flag in AdapterConfig.
 
-    graph_config_service = getattr(request.app.state, "config_service", None)
-    persisted = await adapter_config_service.persist_adapter_config(
-        adapter_type=session.adapter_type,
-        config=session.collected_config,
-        config_service=graph_config_service,
-    )
-    return persisted, " and persisted for startup" if persisted else " (persistence failed)"
+    This function is kept for backwards compatibility but does nothing.
+    Use persist=True in AdapterConfig when loading an adapter instead.
+    """
+    # Persistence is now handled by RuntimeAdapterManager when persist=True is set in config
+    # This function is deprecated and will be removed in a future release
+    return False, ""
 
 
 # ============================================================================
@@ -473,13 +478,14 @@ async def complete_configuration(
             logger.info(f"[COMPLETE_CONFIG] Config applied, attempting to start adapter for {session.adapter_type}")
 
             try:
-                message += await _load_adapter_after_config(request, session)
+                # Pass persist flag so RuntimeAdapterManager handles persistence
+                message += await _load_adapter_after_config(request, session, persist=body.persist)
+                persisted = body.persist  # Persistence is handled by RuntimeAdapterManager
+                if persisted:
+                    message += " and persisted for startup"
             except Exception as e:
                 logger.error(f"Error loading adapter after config: {e}", exc_info=True)
                 message += f" - adapter load error: {e}"
-
-            persisted, persist_msg = await _persist_config_if_requested(body, session, adapter_config_service, request)
-            message += persist_msg
         else:
             message = f"Configuration validation or application failed for {session.adapter_type}"
 

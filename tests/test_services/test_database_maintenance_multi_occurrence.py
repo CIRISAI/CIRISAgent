@@ -895,7 +895,7 @@ class TestConfigPreservationLogic:
     def test_is_runtime_config_matches_adapter_pattern(self, database_maintenance_service):
         """Test that adapter.* patterns are recognized as runtime configs."""
         assert database_maintenance_service._is_runtime_config("adapter.my_adapter.config") is True
-        assert database_maintenance_service._is_runtime_config("adapter.startup.covenant") is True
+        assert database_maintenance_service._is_runtime_config("adapter.covenant_abc123.type") is True
 
     def test_is_runtime_config_matches_runtime_pattern(self, database_maintenance_service):
         """Test that runtime.* patterns are recognized as runtime configs."""
@@ -928,20 +928,8 @@ class TestConfigPreservationLogic:
         assert should_preserve is True
         assert "bootstrap config" in reason.lower()
 
-    def test_should_preserve_config_preserves_explicit_startup_adapters(self, database_maintenance_service):
-        """Test that adapter.startup.* configs (persist=True from API) are preserved."""
-
-        class MockConfigNode:
-            updated_by = "adapter_configuration_service"
-
-        should_preserve, reason = database_maintenance_service._should_preserve_config(
-            "adapter.startup.covenant_metrics", MockConfigNode()
-        )
-        assert should_preserve is True
-        assert "explicitly persisted" in reason.lower()
-
     def test_should_preserve_config_preserves_runtime_adapter_manager_configs(self, database_maintenance_service):
-        """Test that adapter configs from runtime_adapter_manager are preserved."""
+        """Test that adapter configs from runtime_adapter_manager are preserved for persist check."""
 
         class MockConfigNode:
             updated_by = "runtime_adapter_manager"
@@ -950,7 +938,7 @@ class TestConfigPreservationLogic:
             "adapter.covenant_metrics_abc123.config", MockConfigNode()
         )
         assert should_preserve is True
-        assert "auto-restore" in reason.lower()
+        assert "persist check" in reason.lower()
 
     def test_should_preserve_config_deletes_other_adapter_configs(self, database_maintenance_service):
         """Test that adapter configs from other sources are NOT preserved."""

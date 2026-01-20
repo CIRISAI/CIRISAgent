@@ -488,8 +488,8 @@ class TestDomainAwareLLMRouting:
             domain="medical",
         )
 
-        # Should try primary first (higher priority), fail after 3 retries, then use backup
-        assert medical_primary.call_llm_structured.call_count == 3  # 3 retries before failover
+        # Should try primary first (higher priority), fail after 1 retry, then use backup
+        assert medical_primary.call_llm_structured.call_count == 1  # 1 retry per config before failover
         assert medical_backup.call_count == 1
         assert usage.model_used == "biogpt"
 

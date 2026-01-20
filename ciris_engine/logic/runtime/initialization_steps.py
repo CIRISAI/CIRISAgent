@@ -476,14 +476,21 @@ async def _load_single_saved_adapter(
         logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
         return False
 
-    # Get adapter type, config, and occurrence_id
+    # Get adapter type, config, occurrence_id, and persist flag
     adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
     adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
     occurrence_id_node = await config_service.get_config(f"adapter.{adapter_id}.occurrence_id")
+    persist_node = await config_service.get_config(f"adapter.{adapter_id}.persist")
 
     adapter_type = _extract_config_value(adapter_type_node)
     adapter_config_data = _extract_config_value(adapter_config_node)
     saved_occurrence_id = _extract_config_value(occurrence_id_node)
+    persist_flag = _extract_config_value(persist_node)
+
+    # Check persist flag - only load if explicitly marked for persistence
+    if not persist_flag:
+        logger.debug(f"Adapter {adapter_id} not marked for persistence (persist={persist_flag}), skipping")
+        return False
 
     # Check occurrence_id - only load if matches current occurrence
     # Adapters WITHOUT occurrence_id are legacy adapters - load them on any occurrence

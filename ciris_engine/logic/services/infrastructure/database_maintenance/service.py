@@ -125,6 +125,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # --- Clean up runtime-specific configuration from previous runs ---
         await self._cleanup_runtime_config()
 
+        # --- Dedupe adapter configs with identical settings ---
+        await self._dedupe_adapter_configs()
+
+        # --- Clean up adapter configs without persist=True ---
+        await self._cleanup_non_persistent_adapters()
+
         # --- Clean up stale wakeup tasks from interrupted startups ---
         await self._cleanup_stale_wakeup_tasks()
 
@@ -323,15 +329,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         if config_node.updated_by == "system_bootstrap":
             return True, f"Preserving bootstrap config: {key}"
 
-        # Preserve adapter configs persisted for auto-restore on restart
-        # Two persistence mechanisms exist:
-        # 1. adapter.startup.* - explicit persist=True from API
-        # 2. adapter.{id}.* - dynamic loads from RuntimeAdapterManager
-        if key.startswith("adapter.startup."):
-            return True, f"Preserving explicitly persisted adapter config: {key}"
-
+        # Adapter configs are handled separately by _cleanup_non_persistent_adapters
+        # This method doesn't need to check them - they're deleted based on persist flag
         if key.startswith("adapter.") and config_node.updated_by == "runtime_adapter_manager":
-            return True, f"Preserving runtime adapter config for auto-restore: {key}"
+            # Don't delete here - let _cleanup_non_persistent_adapters handle it
+            return True, f"Adapter config handled by persist check: {key}"
 
         return False, ""
 
@@ -393,6 +395,193 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             logger.info(f"Cleaned up {deleted_count} runtime-specific configuration entries from previous runs")
         else:
             logger.info("No runtime-specific configuration entries to clean up")
+
+    async def _dedupe_adapter_configs(self) -> None:
+        """Remove duplicate adapter configs with identical settings.
+
+        When the same adapter type is loaded multiple times with the same config,
+        this creates duplicate entries (adapter.{id1}.*, adapter.{id2}.*, etc.).
+        This method keeps only the newest entry per (adapter_type, occurrence_id, config_hash).
+
+        Adapters with DIFFERENT configs are preserved (valid multi-instance use case).
+        """
+        import hashlib
+        import json
+
+        if not self.config_service:
+            logger.debug("Cannot dedupe adapter configs - config service not available")
+            return
+
+        try:
+            all_configs = await self.config_service.list_configs(prefix="adapter.")
+            if not all_configs:
+                return
+
+            # Find all adapter.*.type entries to identify adapter instances
+            adapter_instances: Dict[str, Dict[str, Any]] = {}
+            for key in all_configs:
+                if key.endswith(".type") and key.startswith("adapter."):
+                    # Extract adapter_id from "adapter.{adapter_id}.type"
+                    parts = key.split(".")
+                    if len(parts) == 3:
+                        adapter_id = parts[1]
+                        adapter_instances[adapter_id] = {"type_key": key}
+
+            if not adapter_instances:
+                return
+
+            # Fetch full details for each adapter instance
+            for adapter_id, info in adapter_instances.items():
+                type_node = await self.config_service.get_config(f"adapter.{adapter_id}.type")
+                config_node = await self.config_service.get_config(f"adapter.{adapter_id}.config")
+                occurrence_node = await self.config_service.get_config(f"adapter.{adapter_id}.occurrence_id")
+
+                info["adapter_type"] = self._extract_config_value(type_node)
+                info["config"] = self._extract_config_value(config_node)
+                info["occurrence_id"] = self._extract_config_value(occurrence_node) or "default"
+                info["created_at"] = getattr(type_node, "created_at", None) if type_node else None
+
+                # Hash the config for comparison
+                config_str = json.dumps(info["config"], sort_keys=True) if info["config"] else ""
+                info["config_hash"] = hashlib.sha256(config_str.encode()).hexdigest()[:16]
+
+            # Group by (adapter_type, occurrence_id, config_hash)
+            # Same config on different occurrences is valid (not a duplicate)
+            # Duplicates are: same type + same occurrence + same config (different adapter_id with UUID)
+            groups: Dict[tuple[str, str, str], List[str]] = {}
+            for adapter_id, info in adapter_instances.items():
+                if not info.get("adapter_type"):
+                    continue
+                group_key = (info["adapter_type"], info["occurrence_id"], info["config_hash"])
+                if group_key not in groups:
+                    groups[group_key] = []
+                groups[group_key].append(adapter_id)
+
+            # For each group with duplicates, keep newest, delete rest
+            deleted_count = 0
+            for group_key, adapter_ids in groups.items():
+                if len(adapter_ids) <= 1:
+                    continue
+
+                # Sort by created_at descending (newest first)
+                adapter_ids_sorted = sorted(
+                    adapter_ids,
+                    key=lambda aid: adapter_instances[aid].get("created_at") or "",
+                    reverse=True,
+                )
+
+                # Keep the first (newest), delete the rest
+                to_delete = adapter_ids_sorted[1:]
+                adapter_type, occurrence_id, _ = group_key
+
+                for adapter_id in to_delete:
+                    await self._delete_adapter_config_entries(adapter_id)
+                    deleted_count += 1
+                    logger.info(
+                        f"Deleted duplicate adapter config: {adapter_id} "
+                        f"(type={adapter_type}, occurrence={occurrence_id})"
+                    )
+
+            if deleted_count > 0:
+                logger.info(f"Deduped {deleted_count} duplicate adapter config(s)")
+
+        except Exception as e:
+            logger.error(f"Error deduping adapter configs: {e}", exc_info=True)
+
+    async def _cleanup_non_persistent_adapters(self) -> None:
+        """Remove adapter configs that don't have persist=True.
+
+        On startup, delete adapter configs that were not marked for persistence.
+        Only adapters with adapter.{adapter_id}.persist = True survive restart.
+        """
+        if not self.config_service:
+            logger.debug("Cannot cleanup non-persistent adapters - config service not available")
+            return
+
+        try:
+            all_configs = await self.config_service.list_configs(prefix="adapter.")
+            if not all_configs:
+                return
+
+            # Find all adapter.*.type entries to identify adapter instances
+            adapter_ids: set[str] = set()
+            for key in all_configs:
+                if key.endswith(".type") and key.startswith("adapter."):
+                    parts = key.split(".")
+                    if len(parts) == 3:
+                        adapter_ids.add(parts[1])
+
+            if not adapter_ids:
+                return
+
+            deleted_count = 0
+            for adapter_id in adapter_ids:
+                # Check if this adapter has persist=True
+                persist_node = await self.config_service.get_config(f"adapter.{adapter_id}.persist")
+                persist_value = self._extract_config_value(persist_node)
+
+                if persist_value is True:
+                    logger.debug(f"Adapter {adapter_id} marked for persistence, keeping")
+                    continue
+
+                # Not marked for persistence - delete all config entries for this adapter
+                logger.info(f"Deleting non-persistent adapter config: {adapter_id}")
+                await self._delete_adapter_config_entries(adapter_id)
+                deleted_count += 1
+
+            if deleted_count > 0:
+                logger.info(f"Cleaned up {deleted_count} non-persistent adapter config(s)")
+
+        except Exception as e:
+            logger.error(f"Error cleaning up non-persistent adapters: {e}", exc_info=True)
+
+    def _extract_config_value(self, config_node: Any) -> Any:
+        """Extract the actual value from a ConfigNode."""
+        if config_node is None:
+            return None
+        if hasattr(config_node, "value"):
+            val = config_node.value
+            # Handle ConfigValue typed structure
+            if hasattr(val, "string_value") and val.string_value is not None:
+                return val.string_value
+            if hasattr(val, "dict_value") and val.dict_value is not None:
+                return val.dict_value
+            if hasattr(val, "int_value") and val.int_value is not None:
+                return val.int_value
+            if hasattr(val, "bool_value") and val.bool_value is not None:
+                return val.bool_value
+            if hasattr(val, "list_value") and val.list_value is not None:
+                return val.list_value
+            if hasattr(val, "float_value") and val.float_value is not None:
+                return val.float_value
+            return val
+        return config_node
+
+    async def _delete_adapter_config_entries(self, adapter_id: str) -> None:
+        """Delete all config entries for an adapter instance."""
+        if not self.config_service:
+            return
+
+        keys_to_delete = [
+            f"adapter.{adapter_id}.type",
+            f"adapter.{adapter_id}.config",
+            f"adapter.{adapter_id}.occurrence_id",
+        ]
+
+        # Also find any additional keys like adapter.{id}.{setting}
+        all_configs = await self.config_service.list_configs(prefix=f"adapter.{adapter_id}.")
+        for key in all_configs:
+            if key not in keys_to_delete:
+                keys_to_delete.append(key)
+
+        for key in keys_to_delete:
+            try:
+                config_node = await self.config_service.get_config(key)
+                if config_node:
+                    graph_node = config_node.to_graph_node()
+                    await self.config_service.graph.forget(graph_node)
+            except Exception as e:
+                logger.debug(f"Could not delete config {key}: {e}")
 
     async def _cleanup_old_active_tasks(self) -> None:
         """Mark old active tasks from previous runs as completed."""

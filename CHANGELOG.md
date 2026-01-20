@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New timeout budget: 90s DMA > (20s LLM × 2 retries × 2 providers = 80s)
   - Fixes: Echo Core deferrals when Together AI was down but Groq was available
 
+- **Unified Adapter Persistence Model** - Single consistent pattern for adapter auto-restore
+  - Unified to single pattern: `adapter.{adapter_id}.*` with explicit `persist=True` flag
+  - Removed deprecated `adapter.startup.*` pattern and related methods
+  - Adapters with `persist=True` in config are auto-restored on startup
+  - Added adapter config de-duplication (same type, occurrence_id, and config hash)
+  - Database maintenance cleans up non-persistent adapter configs on startup
+  - Fixed occurrence_id mismatch issue (configs saved with wrong occurrence_id)
+  - Removed redundant `auto_start` field in favor of `persist`
+  - CIRISRuntime initialization step now handles all adapter restoration
+
 ## [1.8.10] - 2026-01-20
 
 ### Fixed
@@ -48,13 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart** - Persisted adapter configs now survive restarts and auto-load
+- **Adapter Auto-Restore on Restart** - Initial implementation (superseded by 1.8.11)
   - Database maintenance cleanup no longer deletes persisted adapter configs
-  - Preserves `adapter.startup.*` configs (explicit `persist=True` from API)
-  - Preserves `adapter.{id}.*` configs created by `runtime_adapter_manager` (dynamic loads)
-  - **Critical fix**: Added missing "Load Saved Adapters" initialization step to `CIRISRuntime`
-  - Root cause 1: cleanup was deleting all `adapter.*` configs regardless of persistence intent
-  - Root cause 2: `_register_initialization_steps` in ciris_runtime.py was missing the restore step
+  - Added "Load Saved Adapters" initialization step to `CIRISRuntime`
+  - Note: The `adapter.startup.*` pattern from this version was deprecated in 1.8.11
+  - See 1.8.11 for the unified persistence model using `adapter.{adapter_id}.persist=True`
 
 ### Changed
 

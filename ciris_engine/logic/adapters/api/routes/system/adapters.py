@@ -772,11 +772,17 @@ async def load_adapter(
         if not adapter_id:
             adapter_id = f"{adapter_type}_{uuid.uuid4().hex[:8]}"
 
-        logger.info(f"[LOAD_ADAPTER] Loading adapter: type={adapter_type}, id={adapter_id}")
-        logger.debug(f"[LOAD_ADAPTER] Config: {body.config}, auto_start={body.auto_start}")
+        logger.info(f"[LOAD_ADAPTER] Loading adapter: type={adapter_type}, id={adapter_id}, persist={body.persist}")
+
+        # Merge persist flag into config for RuntimeAdapterManager
+        config = body.config or {}
+        if isinstance(config, dict):
+            config["persist"] = body.persist
+
+        logger.debug(f"[LOAD_ADAPTER] Config: {config}")
 
         result = await runtime_control.load_adapter(
-            adapter_type=adapter_type, adapter_id=adapter_id, config=body.config, auto_start=body.auto_start
+            adapter_type=adapter_type, adapter_id=adapter_id, config=config
         )
 
         logger.info(
@@ -869,11 +875,15 @@ async def reload_adapter(
             raise HTTPException(status_code=400, detail=f"Failed to unload adapter: {unload_result.error}")
 
         # Then reload with new config
+        # Merge persist flag into config for RuntimeAdapterManager
+        config = body.config or {}
+        if isinstance(config, dict):
+            config["persist"] = body.persist
+
         load_result = await runtime_control.load_adapter(
             adapter_type=adapter_info.adapter_type,
             adapter_id=adapter_id,
-            config=body.config,
-            auto_start=body.auto_start,
+            config=config,
         )
 
         # Convert response

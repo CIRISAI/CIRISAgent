@@ -5,14 +5,21 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.9] - 2026-01-19
+
+### Fixed
+
+- **Adapter Auto-Restore on Restart (Actually Complete This Time)** - The fix was missing from 1.8.7 and 1.8.8
+  - Added missing "Load Saved Adapters" initialization step registration in `CIRISRuntime`
+  - Root cause: fix commit was pushed to release/1.8.7 AFTER PR was merged
+  - Cherry-picked commit `8d54e51e` which contains the actual code change
+
 ## [1.8.8] - 2026-01-19
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart (Complete Fix)** - Adapters now properly restore after restart
-  - Added missing "Load Saved Adapters" initialization step registration in `CIRISRuntime`
-  - Root cause: step was defined in `initialization_steps.py` but never registered in `_register_initialization_steps()`
-  - This is the actual fix; 1.8.7 only preserved configs but never loaded them
+- **Adapter Auto-Restore on Restart (Incomplete)** - Changelog-only release, code fix was missing
+  - This release only updated changelog and version, not the actual code
 
 ## [1.8.7] - 2026-01-19
 

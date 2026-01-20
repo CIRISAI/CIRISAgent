@@ -538,9 +538,15 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
         logger.debug("Config service not available - skipping saved adapter loading")
         return
 
-    adapter_manager = _get_runtime_service(runtime, "adapter_manager")
+    # Get adapter_manager from runtime_control_service (not directly from service_initializer)
+    runtime_control_service = _get_runtime_service(runtime, "runtime_control_service")
+    if not runtime_control_service:
+        logger.debug("Runtime control service not available - skipping saved adapter loading")
+        return
+
+    adapter_manager = getattr(runtime_control_service, "adapter_manager", None)
     if not adapter_manager:
-        logger.debug("Adapter manager not available - skipping saved adapter loading")
+        logger.debug("Adapter manager not available on runtime_control_service - skipping saved adapter loading")
         return
 
     try:

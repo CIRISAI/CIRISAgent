@@ -5,11 +5,21 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.10] - 2026-01-20
+
+### Fixed
+
+- **Adapter Auto-Restore: Fix adapter_manager Resolution** - The loader was looking in the wrong place
+  - `load_saved_adapters_from_graph()` was calling `_get_runtime_service(runtime, "adapter_manager")`
+  - But `ServiceInitializer` doesn't have `adapter_manager` - it's on `RuntimeControlService`
+  - Now correctly gets adapter_manager via `runtime_control_service.adapter_manager`
+  - This was the final missing piece - 1.8.9 registered the step but it always returned early
+
 ## [1.8.9] - 2026-01-19
 
 ### Fixed
 
-- **Adapter Auto-Restore on Restart (Actually Complete This Time)** - The fix was missing from 1.8.7 and 1.8.8
+- **Adapter Auto-Restore on Restart (Step Registration)** - The fix was missing from 1.8.7 and 1.8.8
   - Added missing "Load Saved Adapters" initialization step registration in `CIRISRuntime`
   - Root cause: fix commit was pushed to release/1.8.7 AFTER PR was merged
   - Cherry-picked commit `8d54e51e` which contains the actual code change

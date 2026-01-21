@@ -603,6 +603,10 @@ class TestSetupHelperFunctions:
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
 
         config_path = tmp_path / ".env"
+        # Mock create_env_file to return test path and create the file
+        mock_create_env.return_value = config_path
+        config_path.write_text("")  # Create empty file for appending
+
         setup = SetupCompleteRequest(
             llm_provider="openai",
             llm_api_key="sk-test123",
@@ -616,11 +620,10 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        _save_setup_config(setup, config_path)
+        result_path = _save_setup_config(setup)
 
-        # Verify create_env_file was called with correct params
+        # Verify create_env_file was called with correct params (no save_path)
         mock_create_env.assert_called_once_with(
-            save_path=config_path,
             llm_provider="openai",
             llm_api_key="sk-test123",
             llm_base_url="",
@@ -629,6 +632,7 @@ class TestSetupHelperFunctions:
         )
 
         # Verify template and adapters were appended
+        assert result_path == config_path
         assert config_path.exists()
         content = config_path.read_text()
         assert "CIRIS_TEMPLATE=general" in content
@@ -640,6 +644,10 @@ class TestSetupHelperFunctions:
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
 
         config_path = tmp_path / ".env"
+        # Mock create_env_file to return test path and create the file
+        mock_create_env.return_value = config_path
+        config_path.write_text("")  # Create empty file for appending
+
         setup = SetupCompleteRequest(
             llm_provider="local",
             llm_api_key="local",
@@ -653,9 +661,10 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        _save_setup_config(setup, config_path)
+        result_path = _save_setup_config(setup)
 
         # Verify adapter config was written
+        assert result_path == config_path
         content = config_path.read_text()
         assert "DISCORD_BOT_TOKEN=test-token" in content
         assert "DISCORD_CHANNEL_ID=123456" in content

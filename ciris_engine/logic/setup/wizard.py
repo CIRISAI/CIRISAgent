@@ -16,57 +16,6 @@ from ciris_engine.constants import CIRIS_VERSION
 logger = logging.getLogger(__name__)
 
 
-def _validate_save_path(save_path: Path) -> Path:
-    """Validate and sanitize a save path to prevent path traversal attacks.
-
-    Args:
-        save_path: The path to validate
-
-    Returns:
-        Resolved absolute path if valid
-
-    Raises:
-        ValueError: If path is outside allowed directories or contains traversal
-    """
-    # Resolve to absolute path (this resolves .. and symlinks)
-    resolved = save_path.resolve()
-
-    # Define allowed base directories
-    home_dir = Path.home().resolve()
-    cwd = Path.cwd().resolve()
-
-    # Check if resolved path is within allowed directories
-    allowed_bases = [home_dir, cwd]
-
-    # Also allow /tmp for testing scenarios
-    tmp_dir = Path("/tmp").resolve()
-    if tmp_dir.exists():
-        allowed_bases.append(tmp_dir)
-
-    is_allowed = any(
-        resolved == base or base in resolved.parents
-        for base in allowed_bases
-    )
-
-    if not is_allowed:
-        raise ValueError(
-            f"Path '{save_path}' resolves to '{resolved}' which is outside "
-            f"allowed directories (home, cwd, /tmp)"
-        )
-
-    # Ensure we're not writing to sensitive locations even within home
-    sensitive_patterns = [".ssh", ".gnupg", ".aws", ".config/systemd"]
-    for pattern in sensitive_patterns:
-        if pattern in str(resolved):
-            raise ValueError(f"Cannot write to sensitive location containing '{pattern}'")
-
-    # Ensure the filename looks like a config file
-    if resolved.suffix not in ("", ".env", ".conf", ".cfg", ".ini", ".yaml", ".yml", ".json"):
-        logger.warning(f"Unusual file extension for config file: {resolved.suffix}")
-
-    return resolved
-
-
 def generate_encryption_key() -> str:
     """Generate a secure 32-byte base64-encoded encryption key.
 
@@ -163,23 +112,33 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
 
 
 def create_env_file(
-    save_path: Path,
     llm_provider: str,
     llm_api_key: str,
     llm_base_url: str,
     llm_model: str,
     agent_port: int = 8080,
-) -> None:
-    """Create .env configuration file.
+) -> Path:
+    """Create .env configuration file at the default config location.
+
+    Uses get_default_config_path() to determine save location based on
+    environment (development, production, Android, etc.). This ensures
+    paths are constructed from known-safe bases, not user input.
 
     Args:
-        save_path: Where to save the .env file
         llm_provider: LLM provider type (openai, local, other)
         llm_api_key: API key for LLM
         llm_base_url: Base URL for OpenAI-compatible endpoint
         llm_model: Model name
         agent_port: Port for agent API (default: 8080)
+
+    Returns:
+        Path where the .env file was saved
     """
+    from ciris_engine.logic.setup.first_run import get_default_config_path
+
+    # Get safe path from environment-aware path resolution (not user input)
+    save_path = get_default_config_path()
+
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")
 
@@ -302,29 +261,25 @@ CIRIS_CONFIGURED="true"
 # CIRISNODE_AGENT_SECRET_JWT="your_jwt_token"
 """
 
-    # Validate path to prevent path traversal attacks
-    validated_path = _validate_save_path(save_path)
-
     # Write file with restricted permissions (owner read/write only)
-    # Note: .env files containing secrets is standard practice - file permissions provide protection
-    validated_path.parent.mkdir(parents=True, exist_ok=True)
-    validated_path.write_text(content, encoding="utf-8")
-    validated_path.chmod(0o600)  # rw------- (owner only)
+    # Path is from get_default_config_path() - constructed from known-safe bases
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_path.write_text(content, encoding="utf-8")
+    save_path.chmod(0o600)  # rw------- (owner only)
+
+    return save_path
 
 
-def run_setup_wizard(save_path: Optional[Path] = None) -> Path:
+def run_setup_wizard() -> Path:
     """Run the interactive setup wizard.
-
-    Args:
-        save_path: Where to save .env file (None = auto-detect)
 
     Returns:
         Path where .env was saved
     """
     from ciris_engine.logic.setup.first_run import get_default_config_path
 
-    if save_path is None:
-        save_path = get_default_config_path()
+    # Get the default config path (constructed from known-safe bases)
+    config_path = get_default_config_path()
 
     print()
     print("=" * 70)
@@ -335,21 +290,20 @@ def run_setup_wizard(save_path: Optional[Path] = None) -> Path:
     print()
 
     # Check if config already exists
-    if save_path.exists():
-        print(f"⚠️  Configuration already exists at: {save_path}")
+    if config_path.exists():
+        print(f"⚠️  Configuration already exists at: {config_path}")
         overwrite = input("Overwrite? [y/N] ").strip().lower()
         if overwrite not in ("y", "yes"):
             print("Setup cancelled. Using existing configuration.")
-            return save_path
+            return config_path
 
     # Get LLM configuration
     llm_provider, llm_api_key, llm_base_url, llm_model = prompt_llm_configuration()
 
-    # Create .env file
+    # Create .env file (uses get_default_config_path() internally)
     print()
-    print(f"Creating configuration at: {save_path}")
-    create_env_file(
-        save_path=save_path,
+    print(f"Creating configuration at: {config_path}")
+    save_path = create_env_file(
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,

@@ -311,20 +311,27 @@ class TestSetupWizard:
         decoded = base64.b64decode(key1)
         assert len(decoded) == 32
 
-    def test_create_env_file_openai(self, tmp_path):
+    def test_create_env_file_openai(self, tmp_path, mocker):
         """Test .env file creation for OpenAI provider."""
         from ciris_engine.logic.setup.wizard import create_env_file
 
         env_file = tmp_path / ".env"
 
-        create_env_file(
-            save_path=env_file,
+        # Mock get_default_config_path to return our test path
+        # Must patch at import location (first_run) since wizard imports locally
+        mocker.patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=env_file,
+        )
+
+        result_path = create_env_file(
             llm_provider="openai",
             llm_api_key="sk-test123",
             llm_base_url="",
             llm_model="",
         )
 
+        assert result_path == env_file
         assert env_file.exists()
         content = env_file.read_text()
         assert 'OPENAI_API_KEY="sk-test123"' in content
@@ -338,14 +345,19 @@ class TestSetupWizard:
         telemetry_key = [l for l in lines if l.startswith("TELEMETRY_ENCRYPTION_KEY=")][0]
         assert secrets_key != telemetry_key
 
-    def test_create_env_file_local_llm(self, tmp_path):
+    def test_create_env_file_local_llm(self, tmp_path, mocker):
         """Test .env file creation for local LLM provider."""
         from ciris_engine.logic.setup.wizard import create_env_file
 
         env_file = tmp_path / ".env"
 
+        # Mock get_default_config_path to return our test path
+        mocker.patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=env_file,
+        )
+
         create_env_file(
-            save_path=env_file,
             llm_provider="local",
             llm_api_key="local",
             llm_base_url="http://localhost:11434",
@@ -357,14 +369,19 @@ class TestSetupWizard:
         assert 'OPENAI_MODEL="llama3"' in content
         assert 'OPENAI_API_KEY="local"' in content
 
-    def test_create_env_file_creates_parent_dir(self, tmp_path):
+    def test_create_env_file_creates_parent_dir(self, tmp_path, mocker):
         """Test .env file creation creates parent directory if needed."""
         from ciris_engine.logic.setup.wizard import create_env_file
 
         env_file = tmp_path / "nested" / "dir" / ".env"
 
+        # Mock get_default_config_path to return our test path
+        mocker.patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=env_file,
+        )
+
         create_env_file(
-            save_path=env_file,
             llm_provider="openai",
             llm_api_key="test",
             llm_base_url="",
@@ -390,12 +407,18 @@ class TestSetupWizard:
         env_file = tmp_path / ".env"
         env_file.write_text("EXISTING_CONFIG=true")
 
+        # Mock get_default_config_path to return our test path
+        mocker.patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=env_file,
+        )
+
         # Mock input to decline overwrite
         mocker.patch("builtins.input", return_value="n")
 
         from ciris_engine.logic.setup.wizard import run_setup_wizard
 
-        result = run_setup_wizard(save_path=env_file)
+        result = run_setup_wizard()
 
         # Should return existing path without modification
         assert result == env_file
@@ -406,13 +429,20 @@ class TestSetupWizard:
         env_file = tmp_path / ".env"
         env_file.write_text("EXISTING_CONFIG=true")
 
+        # Mock get_default_config_path to return our test path
+        # Both wizard and first_run use this, so mock at the source
+        mocker.patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=env_file,
+        )
+
         # Mock inputs: yes to overwrite, option 1 (OpenAI), skip API key
         inputs = iter(["y", "1", ""])
         mocker.patch("builtins.input", side_effect=inputs)
 
         from ciris_engine.logic.setup.wizard import run_setup_wizard
 
-        result = run_setup_wizard(save_path=env_file)
+        result = run_setup_wizard()
 
         # Should overwrite with new config
         assert result == env_file

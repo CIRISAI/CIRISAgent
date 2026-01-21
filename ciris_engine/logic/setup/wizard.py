@@ -305,9 +305,11 @@ CIRIS_CONFIGURED="true"
     # Validate path to prevent path traversal attacks
     validated_path = _validate_save_path(save_path)
 
-    # Write file
+    # Write file with restricted permissions (owner read/write only)
+    # Note: .env files containing secrets is standard practice - file permissions provide protection
     validated_path.parent.mkdir(parents=True, exist_ok=True)
     validated_path.write_text(content, encoding="utf-8")
+    validated_path.chmod(0o600)  # rw------- (owner only)
 
 
 def run_setup_wizard(save_path: Optional[Path] = None) -> Path:

@@ -152,17 +152,17 @@ class TestInitializeTaskSummary:
         summary = _initialize_task_summary("task-123", None)
         assert summary["handlers_selected"] == []
 
-    def test_creates_empty_trace_ids_set(self):
-        """Should initialize empty trace_ids set."""
+    def test_creates_empty_trace_ids_list(self):
+        """Should initialize empty trace_ids list (JSON-compatible)."""
         summary = _initialize_task_summary("task-123", None)
-        assert summary["trace_ids"] == set()
+        assert summary["trace_ids"] == []
 
     def test_sets_timestamps_from_parameter(self):
-        """Should set start_time and end_time from timestamp parameter."""
+        """Should set start_time and end_time as ISO format strings."""
         timestamp = datetime(2023, 10, 1, 12, 0, tzinfo=timezone.utc)
         summary = _initialize_task_summary("task-123", timestamp)
-        assert summary["start_time"] == timestamp
-        assert summary["end_time"] == timestamp
+        assert summary["start_time"] == timestamp.isoformat()
+        assert summary["end_time"] == timestamp.isoformat()
 
     def test_handles_none_timestamp(self):
         """Should handle None timestamp."""
@@ -174,11 +174,11 @@ class TestInitializeTaskSummary:
 class TestUpdateTaskTraceId:
     """Tests for _update_task_trace_id function."""
 
-    def test_adds_trace_id_to_set(self):
-        """Should add trace_id to trace_ids set."""
+    def test_adds_trace_id_to_list(self):
+        """Should add trace_id to trace_ids list."""
         task_summaries = {
             "task-123": {
-                "trace_ids": set(),
+                "trace_ids": [],
                 "end_time": None,
             }
         }
@@ -189,18 +189,18 @@ class TestUpdateTaskTraceId:
         assert "trace-abc" in task_summaries["task-123"]["trace_ids"]
 
     def test_updates_end_time(self):
-        """Should update end_time."""
+        """Should update end_time as ISO format string."""
         timestamp = datetime(2023, 10, 1, 12, 0, tzinfo=timezone.utc)
         task_summaries = {
             "task-123": {
-                "trace_ids": set(),
+                "trace_ids": [],
                 "end_time": None,
             }
         }
 
         _update_task_trace_id(task_summaries, "task-123", "trace-abc", timestamp)
 
-        assert task_summaries["task-123"]["end_time"] == timestamp
+        assert task_summaries["task-123"]["end_time"] == timestamp.isoformat()
 
     def test_does_nothing_when_task_not_found(self):
         """Should do nothing when task_id not in task_summaries."""

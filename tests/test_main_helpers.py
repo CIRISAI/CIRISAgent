@@ -779,11 +779,12 @@ class TestHandleFinalExit:
         original_argv = sys.argv
         try:
             sys.argv = ["main.py", "--adapter", "api", "--timeout", "10"]
-            # os._exit raises SystemExit when mocked, so we need to simulate its terminating behavior
-            with patch("os._exit", side_effect=SystemExit(0)) as mock_exit:
-                with pytest.raises(SystemExit):
-                    _handle_final_exit()
-                mock_exit.assert_called_once_with(0)
+            # Mock both os._exit and sys.exit to avoid I/O issues in parallel tests
+            # When os._exit is mocked, function continues to sys.exit - mock both
+            with patch("os._exit") as mock_os_exit, patch("sys.exit") as mock_sys_exit:
+                _handle_final_exit()
+                # Verify os._exit was called for API+timeout mode (before sys.exit fallback)
+                mock_os_exit.assert_called_once_with(0)
         finally:
             sys.argv = original_argv
 
@@ -794,11 +795,12 @@ class TestHandleFinalExit:
         original_argv = sys.argv
         try:
             sys.argv = ["main.py", "--adapter", "cli"]
-            # os._exit raises SystemExit when mocked, so we need to simulate its terminating behavior
-            with patch("os._exit", side_effect=SystemExit(0)) as mock_exit:
-                with pytest.raises(SystemExit):
-                    _handle_final_exit()
-                mock_exit.assert_called_once_with(0)
+            # Mock both os._exit and sys.exit to avoid I/O issues in parallel tests
+            # When os._exit is mocked, function continues to sys.exit - mock both
+            with patch("os._exit") as mock_os_exit, patch("sys.exit") as mock_sys_exit:
+                _handle_final_exit()
+                # Verify os._exit was called for CLI mode (before sys.exit fallback)
+                mock_os_exit.assert_called_once_with(0)
         finally:
             sys.argv = original_argv
 

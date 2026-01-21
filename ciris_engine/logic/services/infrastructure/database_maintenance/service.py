@@ -557,27 +557,43 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.error(f"Error cleaning up non-persistent adapters: {e}", exc_info=True)
 
+    # Ordered list of ConfigValue typed field names to check
+    _CONFIG_VALUE_FIELDS: tuple[str, ...] = (
+        "string_value",
+        "dict_value",
+        "int_value",
+        "bool_value",
+        "list_value",
+        "float_value",
+    )
+
+    def _extract_typed_value(self, val: Any) -> tuple[bool, Any]:
+        """Extract typed value from a ConfigValue structure.
+
+        Args:
+            val: A ConfigValue object with typed value fields
+
+        Returns:
+            Tuple of (found, value) where found is True if a typed value was extracted
+        """
+        for field_name in self._CONFIG_VALUE_FIELDS:
+            if hasattr(val, field_name):
+                field_value = getattr(val, field_name)
+                if field_value is not None:
+                    return True, field_value
+        return False, None
+
     def _extract_config_value(self, config_node: Any) -> Any:
         """Extract the actual value from a ConfigNode."""
         if config_node is None:
             return None
-        if hasattr(config_node, "value"):
-            val = config_node.value
-            # Handle ConfigValue typed structure
-            if hasattr(val, "string_value") and val.string_value is not None:
-                return val.string_value
-            if hasattr(val, "dict_value") and val.dict_value is not None:
-                return val.dict_value
-            if hasattr(val, "int_value") and val.int_value is not None:
-                return val.int_value
-            if hasattr(val, "bool_value") and val.bool_value is not None:
-                return val.bool_value
-            if hasattr(val, "list_value") and val.list_value is not None:
-                return val.list_value
-            if hasattr(val, "float_value") and val.float_value is not None:
-                return val.float_value
-            return val
-        return config_node
+
+        if not hasattr(config_node, "value"):
+            return config_node
+
+        val = config_node.value
+        found, typed_value = self._extract_typed_value(val)
+        return typed_value if found else val
 
     async def _delete_adapter_config_entries(self, adapter_id: str) -> None:
         """Delete all config entries for an adapter instance."""

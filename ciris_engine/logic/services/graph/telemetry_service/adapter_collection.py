@@ -58,6 +58,23 @@ async def get_adapter_metrics(adapter_instance: Any) -> Optional[JSONDict]:
     return None
 
 
+def _filter_valid_metric_values(metrics_dict: JSONDict) -> JSONDict:
+    """Filter dictionary to only include valid metric values (int, float, str, non-None)."""
+    return {k: v for k, v in metrics_dict.items() if v is not None and isinstance(v, (int, float, str))}
+
+
+def _extract_adapter_info_metrics(adapter_info: Any) -> JSONDict:
+    """Extract custom metrics from adapter_info object."""
+    custom_metrics: JSONDict = {}
+    adapter_type_value: Any = getattr(adapter_info, "adapter_type", None)
+    if adapter_type_value is not None:
+        custom_metrics["adapter_type"] = adapter_type_value
+    started_at = getattr(adapter_info, "started_at", None)
+    if started_at:
+        custom_metrics["start_time"] = started_at.isoformat()
+    return custom_metrics
+
+
 def create_telemetry_data(
     metrics: JSONDict,
     adapter_info: Optional[Any] = None,
@@ -77,23 +94,15 @@ def create_telemetry_data(
 
     custom_metrics: JSONDict = {"adapter_id": adapter_id} if adapter_id else {}
     if adapter_info:
-        adapter_type_value: Any = adapter_info.adapter_type if hasattr(adapter_info, "adapter_type") else None
-        if adapter_type_value is not None:  # Only add if not None
-            custom_metrics["adapter_type"] = adapter_type_value
-        if hasattr(adapter_info, "started_at") and adapter_info.started_at:
-            custom_metrics["start_time"] = adapter_info.started_at.isoformat()
+        custom_metrics.update(_extract_adapter_info_metrics(adapter_info))
 
     # Update with custom_metrics from metrics, filtering out None values
     raw_custom_metrics = get_dict(metrics, "custom_metrics", {})
     if isinstance(raw_custom_metrics, dict):
-        custom_metrics.update(
-            {k: v for k, v in raw_custom_metrics.items() if v is not None and isinstance(v, (int, float, str))}
-        )
+        custom_metrics.update(_filter_valid_metric_values(raw_custom_metrics))
 
-    # Final filter to ensure all values are valid types (int, float, str) and not None
-    filtered_custom_metrics = {
-        k: v for k, v in custom_metrics.items() if v is not None and isinstance(v, (int, float, str))
-    }
+    # Final filter to ensure all values are valid types
+    filtered_custom_metrics = _filter_valid_metric_values(custom_metrics)
 
     return ServiceTelemetryData(
         healthy=healthy,

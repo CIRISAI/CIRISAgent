@@ -102,34 +102,47 @@ def get_service_from_runtime(runtime: Any, service_name: str) -> Optional[Any]:
     return None
 
 
+def _find_service_in_registry(all_services: List[Any], service_name: str) -> Optional[Any]:
+    """Find a service in the registry by matching class name variants."""
+    expected_variants = NAME_MAP.get(service_name)
+    if not expected_variants:
+        logger.debug(f"Service {service_name} not in name_map")
+        return None
+
+    for service in all_services:
+        class_name = service.__class__.__name__.lower()
+        if class_name in expected_variants:
+            logger.debug(f"Found service {service_name} as {service.__class__.__name__}")
+            return service
+
+    return None
+
+
+def _try_runtime_lookup(runtime: Optional[Any], service_name: str) -> Optional[Any]:
+    """Try to get service directly from runtime."""
+    if not runtime:
+        return None
+
+    runtime_service = get_service_from_runtime(runtime, service_name)
+    if runtime_service:
+        logger.debug(
+            f"Found {service_name} directly from runtime: {runtime_service.__class__.__name__}"
+        )
+    return runtime_service
+
+
 def get_service_from_registry(runtime: Optional[Any], service_registry: Any, service_name: str) -> Optional[Any]:
     """Get service from runtime first, then registry by name."""
     # First try to get service directly from runtime
-    if runtime:
-        runtime_service = get_service_from_runtime(runtime, service_name)
-        if runtime_service:
-            logger.debug(
-                f"Found {service_name} directly from runtime: {runtime_service.__class__.__name__ if runtime_service else 'None'}"
-            )
-            return runtime_service
+    runtime_service = _try_runtime_lookup(runtime, service_name)
+    if runtime_service:
+        return runtime_service
 
     # Fall back to registry lookup
     all_services: List[Any] = service_registry.get_all_services() if service_registry else []
     logger.debug(f"[TELEMETRY] Looking for {service_name} in {len(all_services)} registered services")
 
-    if service_name not in NAME_MAP:
-        logger.debug(f"Service {service_name} not in name_map")
-        return None
-
-    # Check each service in registry
-    for service in all_services:
-        if hasattr(service, "__class__"):
-            class_name = service.__class__.__name__.lower()
-            # Check if class name matches any expected variant
-            for variant in NAME_MAP[service_name]:
-                if class_name == variant:
-                    logger.debug(f"Found service {service_name} as {service.__class__.__name__}")
-                    return service
-
-    logger.debug(f"Service {service_name} not found in {len(all_services)} services")
-    return None
+    result = _find_service_in_registry(all_services, service_name)
+    if not result:
+        logger.debug(f"Service {service_name} not found in {len(all_services)} services")
+    return result

@@ -908,19 +908,10 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     logger.info(f"[Setup Complete]   is_development_mode(): {is_development_mode()}")
     logger.info(f"[Setup Complete]   get_ciris_home(): {get_ciris_home()}")
 
-    config_path = get_default_config_path()
-    config_dir = config_path.parent
-    logger.info(f"[Setup Complete]   config_path: {config_path}")
-    logger.info(f"[Setup Complete]   config_dir: {config_dir}")
-
-    # Ensure directory exists
-    config_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"[Setup Complete] Directory ensured: {config_dir}")
-
-    # Save configuration
-    logger.info(f"[Setup Complete] Saving configuration to: {config_path}")
-    _save_setup_config(setup, config_path)
-    logger.info("[Setup Complete] Configuration saved successfully!")
+    # Save configuration (path determined internally by get_default_config_path)
+    logger.info("[Setup Complete] Saving configuration...")
+    config_path = _save_setup_config(setup)
+    logger.info(f"[Setup Complete] Configuration saved to: {config_path}")
 
     # Verify the file was written
     if config_path.exists():
@@ -942,12 +933,14 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     return config_path
 
 
-def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
+def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     """Save setup configuration to .env file.
 
     Args:
         setup: Setup configuration
-        config_path: Path to save .env file
+
+    Returns:
+        Path where config was saved
     """
     # Determine LLM provider type for env file generation
     llm_provider = setup.llm_provider
@@ -956,8 +949,8 @@ def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
     llm_model = setup.llm_model or ""
 
     # Create .env file using existing wizard logic
-    create_env_file(
-        save_path=config_path,
+    # Path is determined internally by get_default_config_path()
+    config_path = create_env_file(
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
@@ -990,6 +983,8 @@ def _save_setup_config(setup: SetupCompleteRequest, config_path: Path) -> None:
                 f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
             if setup.backup_llm_model:
                 f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
+
+    return config_path
 
 
 # ============================================================================
@@ -1355,11 +1350,8 @@ async def update_config(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     try:
-        # Get config path
-        config_path = get_default_config_path()
-
-        # Save updated configuration
-        _save_setup_config(setup, config_path)
+        # Save updated configuration (path determined internally)
+        config_path = _save_setup_config(setup)
 
         return SuccessResponse(
             data={

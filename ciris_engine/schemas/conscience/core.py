@@ -47,11 +47,15 @@ class OptimizationVetoResult(BaseModel):
     """Result of optimization veto check"""
 
     decision: str = Field(description="Decision: proceed, abort, or defer")
-    justification: str = Field(description="Justification for the decision")
-    entropy_reduction_ratio: float = Field(ge=0.0, description="Estimated entropy reduction ratio")
+    justification: str = Field(default="", description="Justification for the decision")
+    entropy_reduction_ratio: float = Field(
+        ge=0.0,
+        description="Estimated entropy reduction ratio",
+        validation_alias="entropy_reduction",  # Accept common LLM variation
+    )
     affected_values: List[str] = Field(default_factory=list, description="Values that would be affected")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class EpistemicHumilityResult(BaseModel):

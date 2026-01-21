@@ -871,9 +871,8 @@ VALID_METRIC_DATA_TYPES = frozenset(["gauge", "sum", "histogram", "exponentialHi
 
 def _validate_resource_attributes(resource: Any) -> bool:
     """Validate resource attributes structure."""
-    if "attributes" in resource:
-        if not isinstance(resource["attributes"], list):
-            return False
+    if "attributes" in resource and not isinstance(resource["attributes"], list):
+        return False
     return True
 
 

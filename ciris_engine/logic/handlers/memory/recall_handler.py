@@ -135,9 +135,8 @@ class RecallHandler(BaseActionHandler):
     def _build_query_description(self, params: RecallParams) -> str:
         """Build a descriptive query string."""
         query_desc = params.node_id or params.query or "recall request"
-        if params.node_type and params.query:
-            query_desc = f"{params.node_type} {query_desc}"
-        elif params.node_type and not params.query and not params.node_id:
+        # Prepend node_type if set and either query exists or neither query nor node_id exist
+        if params.node_type and (params.query or not params.node_id):
             query_desc = f"{params.node_type} {query_desc}"
         return query_desc
 

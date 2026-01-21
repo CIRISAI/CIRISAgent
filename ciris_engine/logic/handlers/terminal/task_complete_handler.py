@@ -26,7 +26,7 @@ class TaskCompleteHandler(BaseActionHandler):
 
         # Validate wakeup task completion (must have SPEAK action first)
         if parent_task_id:
-            blocked = await self._validate_wakeup_completion(parent_task_id, thought_id, result)
+            blocked = await self._validate_wakeup_completion(parent_task_id, thought_id)
             if blocked:
                 return None
 
@@ -48,9 +48,7 @@ class TaskCompleteHandler(BaseActionHandler):
 
         return None
 
-    async def _validate_wakeup_completion(
-        self, task_id: str, thought_id: str, result: ActionSelectionDMAResult
-    ) -> bool:
+    async def _validate_wakeup_completion(self, task_id: str, thought_id: str) -> bool:
         """Validate wakeup task has SPEAK before completion. Returns True if blocked."""
         if not await self._is_wakeup_task(task_id):
             return False

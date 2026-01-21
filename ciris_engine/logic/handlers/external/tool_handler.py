@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any, Dict, Optional, Tuple, Union, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
@@ -21,8 +21,6 @@ class ToolHandler(BaseActionHandler):
     async def handle(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
-        thought_id = thought.thought_id
-
         # Validate parameters
         params_or_error = await self._validate_tool_params(result, thought, dispatch_context)
         if isinstance(params_or_error, str):
@@ -37,7 +35,7 @@ class ToolHandler(BaseActionHandler):
 
     async def _validate_tool_params(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
-    ) -> Union[ToolParams, str]:
+    ) -> ToolParams | str:
         """Validate and convert tool parameters. Returns ToolParams on success, follow_up_id on failure."""
         thought_id = thought.thought_id
 

@@ -314,7 +314,8 @@ async def handle_user_consent(
 
         # Check if TEMPORARY consent has expired
         if consent_status.stream == ConsentStream.TEMPORARY:
-            if consent_status.expires_at and datetime.now(timezone.utc) > consent_status.expires_at:
+            now = time_service.now()
+            if consent_status.expires_at and now > consent_status.expires_at:
                 await consent_service.revoke_consent(user_id, "TEMPORARY consent expired (14 days)")
                 return (
                     f"MEMORIZE BLOCKED: User consent expired. "
@@ -330,7 +331,7 @@ async def handle_user_consent(
     except ConsentNotFoundError:
         # No consent exists - try to create default TEMPORARY consent
         try:
-            now = datetime.now(timezone.utc)
+            now = time_service.now()
             consent_request = ConsentRequest(
                 user_id=user_id,
                 stream=ConsentStream.TEMPORARY,

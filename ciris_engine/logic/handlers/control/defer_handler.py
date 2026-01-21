@@ -196,9 +196,12 @@ class DeferHandler(BaseActionHandler):
             # Use event loop to schedule the notification
             import asyncio
 
-            asyncio.create_task(
+            # Store task reference to prevent garbage collection before completion
+            notification_task = asyncio.create_task(
                 self._send_notification(
                     task.channel_id,
                     "The agent chose to defer, check the wise authority panel if you are the setup user",
                 )
             )
+            # Add done callback to handle any exceptions
+            notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)

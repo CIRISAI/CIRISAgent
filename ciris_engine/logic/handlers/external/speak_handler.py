@@ -1,7 +1,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
@@ -76,7 +76,6 @@ class SpeakHandler(BaseActionHandler):
         thought: Thought,
         dispatch_context: DispatchContext,
     ) -> Optional[str]:
-        thought_id = thought.thought_id
         start_time = self.time_service.now()
 
         self._create_trace_correlation(dispatch_context, HandlerActionType.SPEAK)
@@ -106,7 +105,7 @@ class SpeakHandler(BaseActionHandler):
 
     async def _validate_speak_params(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
-    ) -> Union[SpeakParams, str]:
+    ) -> SpeakParams | str:
         """Validate and parse speak parameters. Returns SpeakParams on success, follow_up_id on failure."""
         thought_id = thought.thought_id
 

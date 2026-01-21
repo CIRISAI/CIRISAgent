@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Set, Union
+from typing import List, Optional, Set
 
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
@@ -52,7 +52,7 @@ class ObserveHandler(BaseActionHandler):
 
     async def _validate_observe_params(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
-    ) -> Union[ObserveParams, str]:
+    ) -> ObserveParams | str:
         """Validate and convert observe parameters. Returns ObserveParams on success, follow_up_id on failure."""
         try:
             params = self._validate_and_convert_params(result.action_parameters, ObserveParams)

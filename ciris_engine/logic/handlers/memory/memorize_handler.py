@@ -3,7 +3,7 @@ Memorize handler - clean implementation using BusManager
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
@@ -213,22 +213,21 @@ class MemorizeHandler(BaseActionHandler):
         if not hasattr(node, "attributes") or not node.attributes:
             return ""
 
-        # Try known attribute names for preview
-        preview_attrs = ["content", "name", "value"]
-
-        if isinstance(node.attributes, dict):
-            for attr in preview_attrs:
-                if attr in node.attributes:
-                    val = node.attributes[attr]
-                    if val is not None:
-                        val_str = str(val)
-                        return f": {val_str[:100]}" if attr == "content" else f": {val_str}"
-        else:
-            for attr in preview_attrs:
-                if hasattr(node.attributes, attr):
-                    val = getattr(node.attributes, attr)
-                    if val is not None:
-                        val_str = str(val)
-                        return f": {val_str[:100]}" if attr == "content" else f": {val_str}"
+        for attr in ("content", "name", "value"):
+            val = self._get_node_attr_value(node.attributes, attr)
+            if val is not None:
+                return self._format_preview_value(attr, str(val))
 
         return ""
+
+    def _get_node_attr_value(self, attributes: Any, attr_name: str) -> Any:
+        """Get attribute value from dict or object attributes."""
+        if isinstance(attributes, dict):
+            return attributes.get(attr_name)
+        return getattr(attributes, attr_name, None)
+
+    def _format_preview_value(self, attr_name: str, val_str: str) -> str:
+        """Format preview value, truncating content attributes."""
+        if attr_name == "content":
+            return f": {val_str[:100]}"
+        return f": {val_str}"

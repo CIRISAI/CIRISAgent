@@ -408,7 +408,9 @@ def validate_config_node(node: GraphNode) -> Tuple[str, Optional[Any], Optional[
             "For boolean values:\n"
             "  $memorize filter/enabled CONFIG LOCAL value=true\n\n"
             "For string values:\n"
-            "  $memorize filter/mode CONFIG LOCAL value=strict"
+            "  $memorize filter/mode CONFIG LOCAL value=strict\n\n"
+            "For list values:\n"
+            '  $memorize filter/patterns CONFIG LOCAL value=["pattern1", "pattern2"]'
         )
         return config_key, None, error_msg
 

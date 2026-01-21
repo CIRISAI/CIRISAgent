@@ -63,9 +63,10 @@ def get_config_paths() -> list[Path]:
         logger.info(f"iOS mode: checking {ciris_home / '.env'}")
         return paths
 
-    # Development mode: check current directory first
+    # Development mode: check ./ciris/.env first, then cwd for backwards compat
     if is_development_mode():
-        paths.append(Path.cwd() / ".env")
+        paths.append(Path.cwd() / "ciris" / ".env")
+        paths.append(Path.cwd() / ".env")  # Backwards compatibility
 
     # User config directory (both modes) - ~/ciris/ NOT ~/.ciris/
     # ~/.ciris/ is for secrets/keys only
@@ -259,9 +260,11 @@ def get_default_config_path() -> Path:
         logger.info(f"iOS mode: config path is {ciris_home / '.env'}")
         return ciris_home / ".env"
 
-    # Development mode - save in current directory
+    # Development mode - save in ./ciris/.env for consistency with production
     if is_development_mode():
-        return Path.cwd() / ".env"
+        dev_ciris_dir = Path.cwd() / "ciris"
+        dev_ciris_dir.mkdir(parents=True, exist_ok=True)
+        return dev_ciris_dir / ".env"
 
     # Production/user install - save in ~/ciris/ (NOT ~/.ciris/)
     # ~/.ciris/ is for secrets/keys only

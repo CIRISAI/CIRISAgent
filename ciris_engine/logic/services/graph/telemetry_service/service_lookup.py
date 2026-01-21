@@ -125,9 +125,7 @@ def _try_runtime_lookup(runtime: Optional[Any], service_name: str) -> Optional[A
 
     runtime_service = get_service_from_runtime(runtime, service_name)
     if runtime_service:
-        logger.debug(
-            f"Found {service_name} directly from runtime: {runtime_service.__class__.__name__}"
-        )
+        logger.debug(f"Found {service_name} directly from runtime: {runtime_service.__class__.__name__}")
     return runtime_service
 
 

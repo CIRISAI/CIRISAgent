@@ -89,7 +89,9 @@ def _build_telemetry_from_metrics(metrics: Dict[str, Any], bus_name: str, is_hea
         healthy=is_healthy,
         uptime_seconds=metrics.get(uptime_metric, metrics.get("uptime_seconds", 0.0)),
         error_count=metrics.get("error_count", 0) or metrics.get("errors_last_hour", 0),
-        requests_handled=metrics.get("request_count") or metrics.get("requests_handled", 0) or metrics.get("messages_sent", 0),
+        requests_handled=metrics.get("request_count")
+        or metrics.get("requests_handled", 0)
+        or metrics.get("messages_sent", 0),
         error_rate=metrics.get("error_rate", 0.0),
         memory_mb=metrics.get("memory_mb"),
         custom_metrics=filtered_metrics,

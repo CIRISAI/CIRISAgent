@@ -1025,7 +1025,11 @@ class TestAdapterConfigHelpers:
         adapter_instances = {
             "discord_1": {"adapter_type": "discord", "occurrence_id": "node1", "config_hash": "abc123"},
             "discord_2": {"adapter_type": "discord", "occurrence_id": "node1", "config_hash": "abc123"},  # Duplicate
-            "discord_3": {"adapter_type": "discord", "occurrence_id": "node2", "config_hash": "abc123"},  # Different occurrence
+            "discord_3": {
+                "adapter_type": "discord",
+                "occurrence_id": "node2",
+                "config_hash": "abc123",
+            },  # Different occurrence
             "ha_1": {"adapter_type": "home_assistant", "occurrence_id": "node1", "config_hash": "def456"},
         }
         result = database_maintenance_service._group_adapters_by_signature(adapter_instances)
@@ -1139,9 +1143,7 @@ class TestAdapterDeduplication:
         mock.graph.forget = AsyncMock()
         return mock
 
-    async def test_dedupe_adapter_configs_skips_when_no_config_service(
-        self, database_maintenance_service, caplog
-    ):
+    async def test_dedupe_adapter_configs_skips_when_no_config_service(self, database_maintenance_service, caplog):
         """Test that dedupe is skipped when config_service is not available."""
         import logging
 
@@ -1151,9 +1153,7 @@ class TestAdapterDeduplication:
 
         assert "Cannot dedupe adapter configs - config service not available" in caplog.text
 
-    async def test_dedupe_adapter_configs_skips_empty_configs(
-        self, database_maintenance_service, mock_config_service
-    ):
+    async def test_dedupe_adapter_configs_skips_empty_configs(self, database_maintenance_service, mock_config_service):
         """Test that dedupe completes early when no configs exist."""
         database_maintenance_service.config_service = mock_config_service
         mock_config_service.list_configs.return_value = {}
@@ -1163,7 +1163,9 @@ class TestAdapterDeduplication:
         # Should not try to get any config details
         mock_config_service.get_config.assert_not_called()
 
-    async def test_delete_duplicate_adapters_in_group_keeps_newest(self, database_maintenance_service, mock_config_service):
+    async def test_delete_duplicate_adapters_in_group_keeps_newest(
+        self, database_maintenance_service, mock_config_service
+    ):
         """Test that only the newest adapter is kept when deduplicating."""
         from datetime import datetime, timezone
 

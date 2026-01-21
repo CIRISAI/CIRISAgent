@@ -781,9 +781,7 @@ async def load_adapter(
 
         logger.debug(f"[LOAD_ADAPTER] Config: {config}")
 
-        result = await runtime_control.load_adapter(
-            adapter_type=adapter_type, adapter_id=adapter_id, config=config
-        )
+        result = await runtime_control.load_adapter(adapter_type=adapter_type, adapter_id=adapter_id, config=config)
 
         logger.info(
             f"[LOAD_ADAPTER] Result: success={result.success}, adapter_id={result.adapter_id}, error={result.error}"

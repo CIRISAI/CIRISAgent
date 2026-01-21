@@ -338,8 +338,7 @@ class IdentityManager:
         # Build permitted actions list
         actions_source = template.permitted_actions or self._get_default_permitted_actions()
         permitted_actions = [
-            HandlerActionType(action) if isinstance(action, str) else action
-            for action in actions_source
+            HandlerActionType(action) if isinstance(action, str) else action for action in actions_source
         ]
 
         # Create updated identity

@@ -5,6 +5,40 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.13] - 2026-01-21
+
+### Fixed
+
+- **Adapter Persist Flag Not Extracted** - Adapters loaded via API with `persist=True` were not being persisted
+  - Root cause: `_convert_to_adapter_config()` nested `persist` inside `adapter_config` dict
+  - But `_save_adapter_config_to_graph()` checked top-level `AdapterConfig.persist` (default `False`)
+  - Fix: Extract `persist` flag from config dict and set on `AdapterConfig` directly
+  - Affects: Covenant metrics adapter and any adapter loaded via API with persistence
+
+- **Rate Limit Retry Timeout Too Short** - Increased from 25s to 90s
+  - Multi-agent deployments hitting Groq simultaneously exhaust rate limits
+  - 25s wasn't enough time for Groq to recover between retries
+  - Now allows up to 90s of rate limit retries before giving up
+
+## [1.8.12] - 2026-01-20
+
+### Fixed
+
+- **Path Traversal Security Fix (SonarCloud S2083)** - Removed user-controlled path construction
+  - `create_env_file()` and `_save_setup_config()` no longer accept `save_path` parameter
+  - Functions now call `get_default_config_path()` internally (whitelist approach)
+  - Path is constructed from known-safe bases, not user input
+  - Eliminated potential path injection attack vector
+
+- **Clear-text Storage Hardening (CodeQL)** - Added restrictive file permissions
+  - `.env` files now created with `chmod 0o600` (owner read/write only)
+  - Prevents other users on system from reading sensitive configuration
+
+- **Dev Mode Config Path** - Changed from `./.env` to `./ciris/.env`
+  - Development mode now uses `./ciris/.env` for consistency with production
+  - Backwards compatibility: still checks `./.env` as fallback
+  - `get_config_paths()` updated to check `./ciris/.env` first in dev mode
+
 ## [1.8.11] - 2026-01-20
 
 ### Fixed

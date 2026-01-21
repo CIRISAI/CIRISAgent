@@ -91,7 +91,7 @@ class ApiPlatform(Service):
             if hasattr(kwargs["adapter_config"], "host"):
                 logger.debug(f"[DEBUG] adapter_config.host: {kwargs['adapter_config'].host}")
 
-        logger.info(f"API adapter initialized - host: {self.config.host}, " f"port: {self.config.port}")
+        logger.info(f"API adapter initialized - host: {self.config.host}, port: {self.config.port}")
 
     def _load_config(self, kwargs: dict[str, Any]) -> APIAdapterConfig:
         """Load and merge configuration from various sources.
@@ -865,10 +865,10 @@ class ApiPlatform(Service):
             try:
                 await self._server.serve()  # type: ignore[union-attr]
             except SystemExit as e:
-                # uvicorn calls sys.exit(1) on startup failures - catch it!
+                # uvicorn calls sys.exit(1) on startup failures - log and reraise
                 logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")
                 self._startup_error = f"Server startup failed: {e}"
-                raise RuntimeError(self._startup_error) from e
+                raise
             except Exception as e:
                 logger.error(f"[API_ADAPTER] Server error: {e}", exc_info=True)
                 self._startup_error = str(e)
@@ -887,7 +887,7 @@ class ApiPlatform(Service):
             print("\n" + "=" * 60)
             print("  CIRIS Setup Required")
             print("=" * 60)
-            print(f"\n  Open your browser to complete setup:\n")
+            print("\n  Open your browser to complete setup:\n")
             print(f"    {url}")
             print("\n" + "=" * 60 + "\n")
 

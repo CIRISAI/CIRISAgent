@@ -142,7 +142,7 @@ def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key
     return context
 
 
-async def get_auth_context(  # NOSONAR: FastAPI requires async for dependency injection
+async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency injection
     request: Request,
     authorization: Optional[str] = Header(None),
     auth_service: APIAuthService = Depends(get_auth_service),
@@ -224,7 +224,7 @@ def check_permissions(permissions: list[str]) -> Callable[..., Any]:
         Dependency function that validates permissions
     """
 
-    async def check(  # NOSONAR: FastAPI requires async for dependency injection
+    async def check(  # NOSONAR - FastAPI requires async for dependency injection
         auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
     ) -> None:
         """Validate user has required permissions."""

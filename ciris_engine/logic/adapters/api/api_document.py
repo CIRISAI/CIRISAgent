@@ -236,7 +236,7 @@ class APIDocumentHelper:
     async def process_document_payload(
         self,
         document_data: str,
-        media_type: str = "application/pdf",
+        media_type: str = DEFAULT_PDF_MEDIA_TYPE,
         filename: Optional[str] = None,
     ) -> Optional[str]:
         """Process a document payload from the API (auto-detect base64 vs URL).
@@ -296,7 +296,7 @@ class APIDocumentHelper:
                 logger.warning("Document entry missing 'data' field")
                 continue
 
-            media_type = doc.get("media_type", "application/pdf")
+            media_type = doc.get("media_type", DEFAULT_PDF_MEDIA_TYPE)
             filename = doc.get("filename")
 
             text = await self.process_document_payload(data, media_type, filename)

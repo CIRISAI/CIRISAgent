@@ -40,6 +40,31 @@ from tests.conftest_config_mock import mock_db_path  # noqa: F401
 # For now, these tests use mocked persistence
 
 
+class MockPersistencePair:
+    """Container for both persistence mocks."""
+
+    def __init__(self, handler_mock: Mock, base_mock: Mock) -> None:
+        self.handler = handler_mock
+        self.base = base_mock
+
+    # Forward common calls to handler mock for backwards compatibility
+    @property
+    def get_task_by_id(self) -> Mock:
+        return self.handler.get_task_by_id
+
+    @property
+    def add_thought(self) -> Mock:
+        return self.handler.add_thought
+
+    @property
+    def update_thought_status(self) -> Mock:
+        return self.handler.update_thought_status
+
+    @property
+    def add_correlation(self) -> Mock:
+        return self.handler.add_correlation
+
+
 @contextmanager
 def patch_persistence_properly(test_task: Optional[Task] = None) -> Any:
     """Properly patch persistence in both handler and base handler."""
@@ -57,7 +82,7 @@ def patch_persistence_properly(test_task: Optional[Task] = None) -> Any:
         mock_base_p.update_thought_status = Mock(return_value=True)
         mock_base_p.add_correlation = Mock()
 
-        yield mock_p
+        yield MockPersistencePair(mock_p, mock_base_p)
 
 
 # Test fixtures
@@ -444,15 +469,17 @@ class TestSpeakHandler:
                 # Execute handler - should handle validation error
                 follow_up_id = await speak_handler.handle(result, test_thought, dispatch_context)
 
-                # Verify thought was marked as failed
-                mock_persistence.update_thought_status.assert_called_with(
-                    thought_id="thought_123", status=ThoughtStatus.FAILED, final_action=result
-                )
+                # Verify thought was marked as failed (via base_handler's complete_thought_and_create_followup)
+                mock_persistence.base.update_thought_status.assert_called_once()
+                call_kwargs = mock_persistence.base.update_thought_status.call_args[1]
+                assert call_kwargs["thought_id"] == "thought_123"
+                assert call_kwargs["status"] == ThoughtStatus.FAILED
+                assert call_kwargs["final_action"] == result
 
                 # Verify error follow-up was created
                 assert follow_up_id is not None
                 # Check the follow-up thought contains error message
-                follow_up_call = mock_persistence.add_thought.call_args[0][0]
+                follow_up_call = mock_persistence.base.add_thought.call_args[0][0]
                 assert "SPEAK action failed" in follow_up_call.content
 
     @pytest.mark.asyncio

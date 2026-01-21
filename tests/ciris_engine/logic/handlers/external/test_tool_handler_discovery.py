@@ -165,11 +165,10 @@ def create_mock_tool_execution_result(
 @pytest.fixture
 def mock_dependencies_with_tools(monkeypatch):
     """Create mock dependencies with tool discovery capabilities."""
-    # Mock persistence
+    # Mock persistence (only in base_handler - tool_handler uses complete_thought_and_create_followup)
     mock_persistence = Mock()
     mock_persistence.add_thought = Mock()
-    mock_persistence.update_thought_status = Mock()
-    monkeypatch.setattr("ciris_engine.logic.handlers.external.tool_handler.persistence", mock_persistence)
+    mock_persistence.update_thought_status = Mock(return_value=True)
     monkeypatch.setattr("ciris_engine.logic.infrastructure.handlers.base_handler.persistence", mock_persistence)
 
     # Mock the models ThoughtContext to avoid validation issues
@@ -254,7 +253,7 @@ async def test_tool_parameter_validation_strict(mock_dependencies_with_tools):
 
     # Verify validation occurred
     update_call = persistence.update_thought_status.call_args
-    assert update_call[0][1] == ThoughtStatus.FAILED  # Second positional argument is status
+    assert update_call.kwargs["status"] == ThoughtStatus.FAILED
 
     follow_up = persistence.add_thought.call_args[0][0]
     assert "failed" in follow_up.content.lower()
@@ -603,7 +602,7 @@ async def test_tool_not_found_handling(mock_dependencies_with_tools):
 
     # Should fail gracefully
     update_call = persistence.update_thought_status.call_args
-    assert update_call[0][1] == ThoughtStatus.FAILED  # Second positional argument is status
+    assert update_call.kwargs["status"] == ThoughtStatus.FAILED
 
     follow_up = persistence.add_thought.call_args[0][0]
     assert "not found" in follow_up.content.lower()

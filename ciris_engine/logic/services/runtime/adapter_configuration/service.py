@@ -461,4 +461,3 @@ class AdapterConfigurationService:
         for sid in expired:
             del self._sessions[sid]
         return len(expired)
-

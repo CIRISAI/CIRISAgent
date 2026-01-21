@@ -407,9 +407,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                     adapter_instances[parts[1]] = {"type_key": key}
         return adapter_instances
 
-    async def _fetch_adapter_details(
-        self, adapter_id: str, info: Dict[str, Any]
-    ) -> None:
+    async def _fetch_adapter_details(self, adapter_id: str, info: Dict[str, Any]) -> None:
         """Fetch and populate adapter details including config hash.
 
         Note: Caller must ensure config_service is not None before calling.
@@ -420,7 +418,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         assert self.config_service is not None  # Guaranteed by caller
         type_node = await self.config_service.get_config(f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.type")
         config_node = await self.config_service.get_config(f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.config")
-        occurrence_node = await self.config_service.get_config(f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.occurrence_id")
+        occurrence_node = await self.config_service.get_config(
+            f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.occurrence_id"
+        )
 
         info["adapter_type"] = self._extract_config_value(type_node)
         info["config"] = self._extract_config_value(config_node)
@@ -459,7 +459,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         for adapter_id in to_delete:
             await self._delete_adapter_config_entries(adapter_id)
-            logger.info(f"Deleted duplicate adapter config: {adapter_id} (type={adapter_type}, occurrence={occurrence_id})")
+            logger.info(
+                f"Deleted duplicate adapter config: {adapter_id} (type={adapter_type}, occurrence={occurrence_id})"
+            )
 
         return len(to_delete)
 
@@ -489,7 +491,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
             deleted_count = 0
             for group_key, adapter_ids in groups.items():
-                deleted_count += await self._delete_duplicate_adapters_in_group(group_key, adapter_ids, adapter_instances)
+                deleted_count += await self._delete_duplicate_adapters_in_group(
+                    group_key, adapter_ids, adapter_instances
+                )
 
             if deleted_count > 0:
                 logger.info(f"Deduped {deleted_count} duplicate adapter config(s)")
@@ -503,9 +507,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         Note: Caller must ensure config_service is not None before calling.
         """
         assert self.config_service is not None  # Guaranteed by caller
-        persist_node = await self.config_service.get_config(
-            f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.persist"
-        )
+        persist_node = await self.config_service.get_config(f"{self._ADAPTER_CONFIG_PREFIX}{adapter_id}.persist")
         persist_value = self._extract_config_value(persist_node)
         return persist_value is True
 

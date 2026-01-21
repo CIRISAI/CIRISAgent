@@ -155,9 +155,7 @@ def _is_in_categories(provider_class_name: str, categories: Dict[str, List[str]]
     return False
 
 
-def _check_already_collected(
-    provider_name: str, provider_class_name: str, categories: Dict[str, List[str]]
-) -> bool:
+def _check_already_collected(provider_name: str, provider_class_name: str, categories: Dict[str, List[str]]) -> bool:
     """Check if provider is already collected via CATEGORIES or core service mappings."""
     is_core, category_name = _is_core_service(provider_class_name)
     if is_core:
@@ -237,14 +235,10 @@ def collect_from_registry_services(
 
 def _create_unhealthy_telemetry() -> ServiceTelemetryData:
     """Create telemetry data for unhealthy/not-found provider."""
-    return ServiceTelemetryData(
-        healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0
-    )
+    return ServiceTelemetryData(healthy=False, uptime_seconds=0.0, error_count=0, requests_handled=0, error_rate=0.0)
 
 
-def _find_target_provider(
-    service_registry: Any, service_type: str, provider_name: str
-) -> Optional[Any]:
+def _find_target_provider(service_registry: Any, service_type: str, provider_name: str) -> Optional[Any]:
     """Find the exact provider instance by matching the full provider_name."""
     provider_info = service_registry.get_provider_info()
     service_providers_list = provider_info.get("services", {}).get(service_type, [])
@@ -276,17 +270,13 @@ def _convert_dict_to_telemetry(metrics: Dict[str, Any]) -> ServiceTelemetryData:
     )
 
 
-async def _get_metrics_from_provider(
-    provider: Any, provider_name: str
-) -> Optional[ServiceTelemetryData]:
+async def _get_metrics_from_provider(provider: Any, provider_name: str) -> Optional[ServiceTelemetryData]:
     """Try to get metrics from provider's get_metrics method."""
     if not hasattr(provider, "get_metrics"):
         return None
 
     metrics = (
-        await provider.get_metrics()
-        if asyncio.iscoroutinefunction(provider.get_metrics)
-        else provider.get_metrics()
+        await provider.get_metrics() if asyncio.iscoroutinefunction(provider.get_metrics) else provider.get_metrics()
     )
 
     if isinstance(metrics, ServiceTelemetryData):
@@ -304,9 +294,7 @@ async def _get_health_from_provider(provider: Any) -> Optional[ServiceTelemetryD
         return None
 
     is_healthy = (
-        await provider.is_healthy()
-        if asyncio.iscoroutinefunction(provider.is_healthy)
-        else provider.is_healthy()
+        await provider.is_healthy() if asyncio.iscoroutinefunction(provider.is_healthy) else provider.is_healthy()
     )
     return ServiceTelemetryData(
         healthy=is_healthy,

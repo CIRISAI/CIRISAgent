@@ -41,7 +41,6 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -284,9 +283,7 @@ class TestNodeTypeHelpers:
 
     def test_is_user_node_by_type(self):
         """Test is_user_node detects USER node type."""
-        node = GraphNode(
-            id="some_id", type=NodeType.USER, scope=GraphScope.ENVIRONMENT, attributes={}
-        )
+        node = GraphNode(id="some_id", type=NodeType.USER, scope=GraphScope.ENVIRONMENT, attributes={})
         assert is_user_node(node) is True
 
     def test_is_user_node_by_user_slash_prefix(self, user_node):
@@ -295,9 +292,7 @@ class TestNodeTypeHelpers:
 
     def test_is_user_node_by_user_underscore_prefix(self):
         """Test is_user_node detects user_ prefix."""
-        node = GraphNode(
-            id="user_123", type=NodeType.CONCEPT, scope=GraphScope.ENVIRONMENT, attributes={}
-        )
+        node = GraphNode(id="user_123", type=NodeType.CONCEPT, scope=GraphScope.ENVIRONMENT, attributes={})
         assert is_user_node(node) is True
 
     def test_is_user_node_false_for_generic(self, generic_node):
@@ -306,9 +301,7 @@ class TestNodeTypeHelpers:
 
     def test_is_identity_node_by_scope(self):
         """Test is_identity_node detects IDENTITY scope."""
-        node = GraphNode(
-            id="some_id", type=NodeType.CONCEPT, scope=GraphScope.IDENTITY, attributes={}
-        )
+        node = GraphNode(id="some_id", type=NodeType.CONCEPT, scope=GraphScope.IDENTITY, attributes={})
         assert is_identity_node(node) is True
 
     def test_is_identity_node_by_id_prefix(self, identity_node):
@@ -317,9 +310,7 @@ class TestNodeTypeHelpers:
 
     def test_is_identity_node_by_agent_type(self):
         """Test is_identity_node detects AGENT node type."""
-        node = GraphNode(
-            id="other_agent", type=NodeType.AGENT, scope=GraphScope.LOCAL, attributes={}
-        )
+        node = GraphNode(id="other_agent", type=NodeType.AGENT, scope=GraphScope.LOCAL, attributes={})
         assert is_identity_node(node) is True
 
     def test_is_identity_node_false_for_user(self, user_node):
@@ -332,16 +323,12 @@ class TestNodeTypeHelpers:
 
     def test_is_config_node_wrong_scope(self):
         """Test is_config_node returns False for non-LOCAL scope."""
-        node = GraphNode(
-            id="config/setting", type=NodeType.CONFIG, scope=GraphScope.ENVIRONMENT, attributes={}
-        )
+        node = GraphNode(id="config/setting", type=NodeType.CONFIG, scope=GraphScope.ENVIRONMENT, attributes={})
         assert is_config_node(node) is False
 
     def test_is_config_node_wrong_type(self):
         """Test is_config_node returns False for non-CONFIG type."""
-        node = GraphNode(
-            id="config/setting", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={}
-        )
+        node = GraphNode(id="config/setting", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={})
         assert is_config_node(node) is False
 
     def test_extract_user_id_from_node_slash_format(self, user_node):
@@ -351,9 +338,7 @@ class TestNodeTypeHelpers:
 
     def test_extract_user_id_from_node_underscore_format(self):
         """Test extract_user_id_from_node with user_ format."""
-        node = GraphNode(
-            id="user_abc123", type=NodeType.USER, scope=GraphScope.ENVIRONMENT, attributes={}
-        )
+        node = GraphNode(id="user_abc123", type=NodeType.USER, scope=GraphScope.ENVIRONMENT, attributes={})
         result = extract_user_id_from_node(node)
         assert result == "abc123"
 
@@ -486,9 +471,7 @@ class TestConsentHelpers:
         mock_consent_service.get_consent.assert_called_once_with("test_user")
 
     @pytest.mark.asyncio
-    async def test_handle_user_consent_expired_temporary(
-        self, user_node, mock_consent_service, mock_time_service
-    ):
+    async def test_handle_user_consent_expired_temporary(self, user_node, mock_consent_service, mock_time_service):
         """Test handle_user_consent blocks expired TEMPORARY consent."""
         from ciris_engine.schemas.consent.core import ConsentStream
 
@@ -705,9 +688,7 @@ class TestAuditParameterHelpers:
 
     def test_extract_audit_parameters_with_follow_up_id(self):
         """Test extract_audit_parameters includes follow_up_id."""
-        result = extract_audit_parameters(
-            HandlerActionType.SPEAK, None, follow_up_id="thought_123"
-        )
+        result = extract_audit_parameters(HandlerActionType.SPEAK, None, follow_up_id="thought_123")
 
         assert result["follow_up_thought_id"] == "thought_123"
 

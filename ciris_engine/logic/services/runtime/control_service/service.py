@@ -976,9 +976,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         if hasattr(adapter_instance, "adapter"):
             tools = await self._extract_adapter_tools(adapter_instance.adapter, adapter_type)
         if hasattr(adapter_instance, "config_params"):
-            config_params = self.adapter_manager._sanitize_config_params(
-                adapter_type, adapter_instance.config_params
-            )
+            config_params = self.adapter_manager._sanitize_config_params(adapter_type, adapter_instance.config_params)
         if hasattr(adapter_instance, "services_registered"):
             services_registered = adapter_instance.services_registered
 

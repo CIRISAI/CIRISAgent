@@ -23,8 +23,12 @@ from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_i
 from ciris_engine.schemas.types import JSONDict
 
 # OTLP attribute key constants
+SERVICE_NAME_KEY = "service.name"
 SERVICE_NAMESPACE_KEY = "service.namespace"
 DEPLOYMENT_ENVIRONMENT_KEY = "deployment.environment"
+
+# OTLP schema URL
+OTLP_SCHEMA_URL = "https://opentelemetry.io/schemas/1.7.0"
 
 
 def safe_telemetry_get(data: JSONDict, key: str, default: Any = None) -> Any:
@@ -35,7 +39,7 @@ def safe_telemetry_get(data: JSONDict, key: str, default: Any = None) -> Any:
 def create_resource_attributes(service_name: str, service_version: str, telemetry_data: JSONDict) -> List[Any]:
     """Create standard resource attributes for OTLP format."""
     attributes: List[Any] = [
-        {"key": "service.name", "value": {"stringValue": service_name}},
+        {"key": SERVICE_NAME_KEY, "value": {"stringValue": service_name}},
         {"key": "service.version", "value": {"stringValue": service_version}},
         {"key": SERVICE_NAMESPACE_KEY, "value": {"stringValue": "ciris"}},
         {"key": "telemetry.sdk.name", "value": {"stringValue": "ciris-telemetry"}},
@@ -407,10 +411,10 @@ def convert_to_otlp_json(
                     {
                         "scope": {"name": scope_name, "version": scope_version, "attributes": []},
                         "metrics": metrics,
-                        "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                        "schemaUrl": OTLP_SCHEMA_URL,
                     }
                 ],
-                "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                "schemaUrl": OTLP_SCHEMA_URL,
             }
         ]
     }
@@ -498,6 +502,209 @@ def _create_histogram_metric(
     }
 
 
+# Span kind mapping for OTLP
+SPAN_KIND_MAP = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
+
+
+def _normalize_trace_id(trace_id_raw: Optional[str], trace: JSONDict) -> str:
+    """Normalize a trace ID to 32-char hex OTLP format."""
+    if trace_id_raw:
+        return trace_id_raw.replace("-", "")[:32].upper().ljust(32, "0")
+    return hashlib.sha256(f"{trace.get('trace_id', '')}_{trace.get('timestamp', '')}".encode()).hexdigest()[:32].upper()
+
+
+def _normalize_span_id(span_id_raw: Optional[str], trace_id: str, operation: str) -> str:
+    """Normalize a span ID to 16-char hex OTLP format."""
+    if span_id_raw:
+        return span_id_raw.replace("-", "")[:16].upper().ljust(16, "0")
+    return hashlib.sha256(f"{trace_id}_{operation}".encode()).hexdigest()[:16].upper()
+
+
+def _parse_timestamp_to_ns(timestamp_str: Optional[str]) -> int:
+    """Parse timestamp string to nanoseconds, defaulting to current time."""
+    if timestamp_str:
+        try:
+            ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            return int(ts.timestamp() * 1e9)
+        except ValueError:
+            pass
+    return int(time.time() * 1e9)
+
+
+def _build_span_attributes(trace: JSONDict) -> List[Any]:
+    """Build span attributes from trace data."""
+    span_attrs: List[Any] = []
+
+    # Add trace attributes
+    if "operation" in trace:
+        span_attrs.append({"key": "operation.name", "value": {"stringValue": str(trace["operation"])}})
+
+    if "service" in trace:
+        span_attrs.append({"key": SERVICE_NAME_KEY, "value": {"stringValue": str(trace["service"])}})
+
+    if "handler" in trace:
+        span_attrs.append({"key": "handler.name", "value": {"stringValue": str(trace["handler"])}})
+
+    if "status" in trace:
+        span_attrs.append({"key": "span.status", "value": {"stringValue": str(trace["status"])}})
+
+    # Add task/thought linkage - CRITICAL for CIRIS tracing
+    if "task_id" in trace and trace["task_id"]:
+        span_attrs.append({"key": "ciris.task_id", "value": {"stringValue": str(trace["task_id"])}})
+
+    if "thought_id" in trace and trace["thought_id"]:
+        span_attrs.append({"key": "ciris.thought_id", "value": {"stringValue": str(trace["thought_id"])}})
+
+    # Add success/error information
+    if "success" in trace:
+        span_attrs.append({"key": "span.success", "value": {"boolValue": bool(trace["success"])}})
+
+    if "error" in trace and trace["error"]:
+        span_attrs.append({"key": "error.message", "value": {"stringValue": str(trace["error"])}})
+
+    # Enhanced: Use rich span attributes if available from step streaming
+    if "span_attributes" in trace and isinstance(trace["span_attributes"], list):
+        span_attrs.extend(trace["span_attributes"])
+
+    return span_attrs
+
+
+def _get_span_kind(trace: JSONDict, trace_context: JSONDict) -> int:
+    """Determine span kind from trace or context."""
+    span_kind_str = get_str_optional(trace, "span_kind")
+    if span_kind_str:
+        return SPAN_KIND_MAP.get(span_kind_str, 2)  # Default to SERVER
+
+    span_kind_ctx_str = get_str_optional(trace_context, "span_kind")
+    if span_kind_ctx_str:
+        return SPAN_KIND_MAP.get(span_kind_ctx_str, 1)  # Default to internal for H3ERE steps
+
+    return 2  # SERVER by default
+
+
+def _build_thought_events(thoughts: List[Any], time_ns: int) -> List[JSONDict]:
+    """Build OTLP events from thought list."""
+    events: List[JSONDict] = []
+    for idx, thought in enumerate(thoughts):
+        if isinstance(thought, dict):
+            content = get_str(thought, "content", "")
+        else:
+            content = ""
+        events.append(
+            {
+                "name": f"thought.step.{idx}",
+                "timeUnixNano": str(time_ns + idx * 1000000),  # 1ms between thoughts
+                "attributes": [{"key": "thought.content", "value": {"stringValue": content}}],
+            }
+        )
+    return events
+
+
+def _build_span_status(trace: JSONDict) -> Optional[JSONDict]:
+    """Build span status from trace error/success info."""
+    error_value = trace.get("error")
+    if error_value and isinstance(error_value, str):
+        return {"code": 2, "message": error_value}  # ERROR
+    if trace.get("success") is False:
+        return {"code": 2, "message": "Operation failed"}  # ERROR
+    return None
+
+
+class _SpanContext:
+    """Mutable container for span context during conversion."""
+
+    def __init__(
+        self, trace_id: str, span_id: str, parent_span_id: Optional[str], span_name: str, time_ns: int, end_time_ns: int
+    ) -> None:
+        self.trace_id = trace_id
+        self.span_id = span_id
+        self.parent_span_id = parent_span_id
+        self.span_name = span_name
+        self.time_ns = time_ns
+        self.end_time_ns = end_time_ns
+
+
+def _apply_trace_context_overrides(ctx: _SpanContext, trace_context: JSONDict) -> None:
+    """Apply trace context overrides from step streaming."""
+    trace_id_ctx = get_str_optional(trace_context, "trace_id")
+    if trace_id_ctx:
+        ctx.trace_id = trace_id_ctx
+    span_id_ctx = get_str_optional(trace_context, "span_id")
+    if span_id_ctx:
+        ctx.span_id = span_id_ctx
+    parent_span_id_ctx = get_str_optional(trace_context, "parent_span_id")
+    if parent_span_id_ctx:
+        ctx.parent_span_id = parent_span_id_ctx
+    span_name_ctx = get_str_optional(trace_context, "span_name")
+    if span_name_ctx:
+        ctx.span_name = span_name_ctx
+    start_time_ns_ctx = get_int(trace_context, "start_time_ns", 0)
+    if start_time_ns_ctx:
+        ctx.time_ns = start_time_ns_ctx
+    end_time_ns_ctx = get_int(trace_context, "end_time_ns", 0)
+    if end_time_ns_ctx:
+        ctx.end_time_ns = end_time_ns_ctx
+
+
+def _convert_single_trace_to_span(trace: JSONDict) -> JSONDict:
+    """Convert a single trace entry to an OTLP span."""
+    # Normalize IDs
+    trace_id = _normalize_trace_id(get_str_optional(trace, "trace_id"), trace)
+    span_id = _normalize_span_id(get_str_optional(trace, "span_id"), trace_id, trace.get("operation", "unknown"))
+
+    # Handle parent span ID
+    parent_span_id = None
+    parent_span_id_raw = get_str_optional(trace, "parent_span_id")
+    if parent_span_id_raw:
+        parent_span_id = parent_span_id_raw.replace("-", "")[:16].upper().ljust(16, "0")
+
+    # Parse timestamp and calculate end time
+    time_ns = _parse_timestamp_to_ns(get_str_optional(trace, "timestamp"))
+    duration_ms = get_float(trace, "duration_ms", 1.0)
+    end_time_ns = time_ns + int(duration_ms * 1e6)
+
+    # Get span name
+    span_name_opt = get_str_optional(trace, "span_name") or get_str_optional(trace, "operation")
+    span_name = span_name_opt if span_name_opt else "unknown_operation"
+
+    # Create mutable context and apply trace context overrides
+    ctx = _SpanContext(trace_id, span_id, parent_span_id, span_name, time_ns, end_time_ns)
+    trace_context = get_dict(trace, "trace_context", {})
+    if trace_context:
+        _apply_trace_context_overrides(ctx, trace_context)
+
+    # Build span attributes and kind
+    span_attrs = _build_span_attributes(trace)
+    span_kind = _get_span_kind(trace, trace_context)
+
+    # Build the span
+    span: JSONDict = {
+        "traceId": ctx.trace_id,
+        "spanId": ctx.span_id,
+        "name": ctx.span_name,
+        "startTimeUnixNano": str(ctx.time_ns),
+        "endTimeUnixNano": str(ctx.end_time_ns),
+        "kind": span_kind,
+        "attributes": span_attrs,
+    }
+
+    # Add parent span ID if available
+    if ctx.parent_span_id:
+        span["parentSpanId"] = ctx.parent_span_id
+
+    # Add thoughts as events if present
+    thoughts_value = trace.get("thoughts")
+    if thoughts_value and isinstance(thoughts_value, list):
+        span["events"] = _build_thought_events(thoughts_value, ctx.time_ns)
+
+    # Add status if there was an error
+    status = _build_span_status(trace)
+    if status:
+        span["status"] = status
+
+    return span
+
+
 def convert_traces_to_otlp_json(
     traces_data: List[JSONDict],
     service_name: str = "ciris",
@@ -518,171 +725,14 @@ def convert_traces_to_otlp_json(
     Returns:
         OTLP JSON formatted trace data
     """
-    # Build resource attributes using helper (without environment since not used for traces)
+    # Build resource attributes (without namespace/environment for traces)
     base_resource_attrs = create_resource_attributes(service_name, service_version, {})
-    # Remove service.namespace and deployment.environment attributes for traces
     resource_attributes = [
         attr for attr in base_resource_attrs if attr["key"] not in [SERVICE_NAMESPACE_KEY, DEPLOYMENT_ENVIRONMENT_KEY]
     ]
 
-    spans = []
-
-    for trace in traces_data:
-        # Use provided trace_id or generate one
-        trace_id_raw = get_str_optional(trace, "trace_id")
-        if trace_id_raw:
-            # Convert to 32-char hex format for OTLP
-            trace_id = trace_id_raw.replace("-", "")[:32].upper().ljust(32, "0")
-        else:
-            trace_id = (
-                hashlib.sha256(f"{trace.get('trace_id', '')}_{trace.get('timestamp', '')}".encode())
-                .hexdigest()[:32]
-                .upper()
-            )
-
-        # Use provided span_id or generate one
-        span_id_raw = get_str_optional(trace, "span_id")
-        if span_id_raw:
-            span_id = span_id_raw.replace("-", "")[:16].upper().ljust(16, "0")
-        else:
-            span_id = (
-                hashlib.sha256(f"{trace_id}_{trace.get('operation', 'unknown')}".encode()).hexdigest()[:16].upper()
-            )
-
-        # Handle parent span ID
-        parent_span_id = None
-        parent_span_id_raw = get_str_optional(trace, "parent_span_id")
-        if parent_span_id_raw:
-            parent_span_id = parent_span_id_raw.replace("-", "")[:16].upper().ljust(16, "0")
-
-        # Convert timestamp
-        timestamp_str = get_str_optional(trace, "timestamp")
-        if timestamp_str:
-            try:
-                ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-                time_ns = int(ts.timestamp() * 1e9)
-            except:
-                time_ns = int(time.time() * 1e9)
-        else:
-            time_ns = int(time.time() * 1e9)
-
-        # Calculate end time based on duration if available
-        duration_ms = get_float(trace, "duration_ms", 1.0)
-        end_time_ns = time_ns + int(duration_ms * 1e6)
-
-        # Build span attributes
-        span_attrs = []
-
-        # Add trace attributes
-        if "operation" in trace:
-            span_attrs.append({"key": "operation.name", "value": {"stringValue": str(trace["operation"])}})
-
-        if "service" in trace:
-            span_attrs.append({"key": "service.name", "value": {"stringValue": str(trace["service"])}})
-
-        if "handler" in trace:
-            span_attrs.append({"key": "handler.name", "value": {"stringValue": str(trace["handler"])}})
-
-        if "status" in trace:
-            span_attrs.append({"key": "span.status", "value": {"stringValue": str(trace["status"])}})
-
-        # Add task/thought linkage - CRITICAL for CIRIS tracing
-        if "task_id" in trace and trace["task_id"]:
-            span_attrs.append({"key": "ciris.task_id", "value": {"stringValue": str(trace["task_id"])}})
-
-        if "thought_id" in trace and trace["thought_id"]:
-            span_attrs.append({"key": "ciris.thought_id", "value": {"stringValue": str(trace["thought_id"])}})
-
-        # Add success/error information
-        if "success" in trace:
-            span_attrs.append({"key": "span.success", "value": {"boolValue": bool(trace["success"])}})
-
-        if "error" in trace and trace["error"]:
-            span_attrs.append({"key": "error.message", "value": {"stringValue": str(trace["error"])}})
-
-        # Enhanced: Use rich span attributes if available from step streaming
-        if "span_attributes" in trace and isinstance(trace["span_attributes"], list):
-            # Add the rich attributes from step streaming (already in OTLP format)
-            span_attrs.extend(trace["span_attributes"])
-
-        # Enhanced: Use trace context if available from step streaming
-        trace_context = get_dict(trace, "trace_context", {})
-        span_name_opt = get_str_optional(trace, "span_name") or get_str_optional(trace, "operation")
-        span_name = span_name_opt if span_name_opt else "unknown_operation"
-
-        if trace_context:
-            # Override IDs with those from step streaming for consistency
-            trace_id_ctx = get_str_optional(trace_context, "trace_id")
-            if trace_id_ctx:
-                trace_id = trace_id_ctx
-            span_id_ctx = get_str_optional(trace_context, "span_id")
-            if span_id_ctx:
-                span_id = span_id_ctx
-            parent_span_id_ctx = get_str_optional(trace_context, "parent_span_id")
-            if parent_span_id_ctx:
-                parent_span_id = parent_span_id_ctx
-            span_name_ctx = get_str_optional(trace_context, "span_name")
-            if span_name_ctx:
-                span_name = span_name_ctx
-            start_time_ns_ctx = get_int(trace_context, "start_time_ns", 0)
-            if start_time_ns_ctx:
-                time_ns = start_time_ns_ctx
-            end_time_ns_ctx = get_int(trace_context, "end_time_ns", 0)
-            if end_time_ns_ctx:
-                end_time_ns = end_time_ns_ctx
-
-        # Determine span kind
-        span_kind = 2  # SERVER by default
-        span_kind_str = get_str_optional(trace, "span_kind")
-        if span_kind_str:
-            kind_map = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
-            span_kind = kind_map.get(span_kind_str, 2)
-        else:
-            span_kind_ctx_str = get_str_optional(trace_context, "span_kind")
-            if span_kind_ctx_str:
-                kind_map = {"internal": 1, "server": 2, "client": 3, "producer": 4, "consumer": 5}
-                span_kind = kind_map.get(span_kind_ctx_str, 1)  # Default to internal for H3ERE steps
-
-        # Build the span
-        span = {
-            "traceId": trace_id,
-            "spanId": span_id,
-            "name": span_name,
-            "startTimeUnixNano": str(time_ns),
-            "endTimeUnixNano": str(end_time_ns),
-            "kind": span_kind,
-            "attributes": span_attrs,
-        }
-
-        # Add parent span ID if available
-        if parent_span_id:
-            span["parentSpanId"] = parent_span_id
-
-        # Add thoughts as events if present
-        thoughts_value = trace.get("thoughts")
-        if thoughts_value and isinstance(thoughts_value, list):
-            events = []
-            for idx, thought in enumerate(thoughts_value):
-                if isinstance(thought, dict):
-                    content = get_str(thought, "content", "")
-                else:
-                    content = ""
-                event = {
-                    "name": f"thought.step.{idx}",
-                    "timeUnixNano": str(time_ns + idx * 1000000),  # 1ms between thoughts
-                    "attributes": [{"key": "thought.content", "value": {"stringValue": content}}],
-                }
-                events.append(event)
-            span["events"] = events
-
-        # Add status if there was an error
-        error_value = trace.get("error")
-        if error_value and isinstance(error_value, str):
-            span["status"] = {"code": 2, "message": error_value}  # ERROR
-        elif trace.get("success") is False:
-            span["status"] = {"code": 2, "message": "Operation failed"}  # ERROR
-
-        spans.append(span)
+    # Convert each trace to a span using the helper function
+    spans = [_convert_single_trace_to_span(trace) for trace in traces_data]
 
     return {
         "resourceSpans": [
@@ -690,18 +740,80 @@ def convert_traces_to_otlp_json(
                 "resource": {"attributes": resource_attributes},
                 "scopeSpans": [
                     {
-                        "scope": {
-                            "name": scope_name,
-                            "version": scope_version,
-                        },
+                        "scope": {"name": scope_name, "version": scope_version},
                         "spans": spans,
-                        "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                        "schemaUrl": OTLP_SCHEMA_URL,
                     }
                 ],
-                "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                "schemaUrl": OTLP_SCHEMA_URL,
             }
         ]
     }
+
+
+# Severity level mapping for OTLP logs
+SEVERITY_MAP = {
+    "DEBUG": 5,
+    "INFO": 9,
+    "INFORMATION": 9,
+    "WARNING": 13,
+    "WARN": 13,
+    "ERROR": 17,
+    "CRITICAL": 21,
+    "FATAL": 21,
+}
+
+
+def _build_log_attributes(log: JSONDict) -> List[Any]:
+    """Build OTLP log attributes from log entry."""
+    log_attrs: List[Any] = []
+
+    if "service" in log:
+        log_attrs.append({"key": SERVICE_NAME_KEY, "value": {"stringValue": str(log["service"])}})
+
+    if "component" in log:
+        log_attrs.append({"key": "component", "value": {"stringValue": str(log["component"])}})
+
+    if "action" in log:
+        log_attrs.append({"key": "action", "value": {"stringValue": str(log["action"])}})
+
+    if "user_id" in log:
+        log_attrs.append({"key": "user.id", "value": {"stringValue": str(log["user_id"])}})
+
+    if "correlation_id" in log:
+        log_attrs.append({"key": "correlation.id", "value": {"stringValue": str(log["correlation_id"])}})
+
+    return log_attrs
+
+
+def _convert_single_log_to_record(log: JSONDict) -> JSONDict:
+    """Convert a single log entry to an OTLP log record."""
+    # Parse timestamp
+    time_ns = _parse_timestamp_to_ns(get_str_optional(log, "timestamp"))
+
+    # Get severity
+    level_str = get_str(log, "level", "INFO")
+    severity_text = level_str.upper()
+    severity_number = SEVERITY_MAP.get(severity_text, 9)
+
+    # Build log record
+    log_record: JSONDict = {
+        "timeUnixNano": str(time_ns),
+        "observedTimeUnixNano": str(time_ns),
+        "severityNumber": severity_number,
+        "severityText": severity_text,
+        "body": {"stringValue": log.get("message", "") or log.get("description", "")},
+        "attributes": _build_log_attributes(log),
+    }
+
+    # Add trace context if available
+    if "trace_id" in log:
+        log_record["traceId"] = hashlib.sha256(str(log["trace_id"]).encode()).hexdigest()[:32].upper()
+
+    if "span_id" in log:
+        log_record["spanId"] = hashlib.sha256(str(log["span_id"]).encode()).hexdigest()[:16].upper()
+
+    return log_record
 
 
 def convert_logs_to_otlp_json(
@@ -724,81 +836,14 @@ def convert_logs_to_otlp_json(
     Returns:
         OTLP JSON formatted log data
     """
-    # Build resource attributes using helper (without environment since not used for logs)
+    # Build resource attributes (without namespace/environment for logs)
     base_resource_attrs = create_resource_attributes(service_name, service_version, {})
-    # Remove service.namespace and deployment.environment attributes for logs
     resource_attributes = [
         attr for attr in base_resource_attrs if attr["key"] not in [SERVICE_NAMESPACE_KEY, DEPLOYMENT_ENVIRONMENT_KEY]
     ]
 
-    log_records = []
-
-    for log in logs_data:
-        # Convert timestamp
-        log_timestamp_str = get_str_optional(log, "timestamp")
-        if log_timestamp_str:
-            try:
-                ts = datetime.fromisoformat(log_timestamp_str.replace("Z", "+00:00"))
-                time_ns = int(ts.timestamp() * 1e9)
-            except:
-                time_ns = int(time.time() * 1e9)
-        else:
-            time_ns = int(time.time() * 1e9)
-
-        # Map severity levels
-        severity_map = {
-            "DEBUG": 5,
-            "INFO": 9,
-            "INFORMATION": 9,
-            "WARNING": 13,
-            "WARN": 13,
-            "ERROR": 17,
-            "CRITICAL": 21,
-            "FATAL": 21,
-        }
-
-        level_str = get_str(log, "level", "INFO")
-        severity_text = level_str.upper()
-        severity_number = severity_map.get(severity_text, 9)
-
-        # Build log attributes
-        log_attrs = []
-
-        if "service" in log:
-            log_attrs.append({"key": "service.name", "value": {"stringValue": str(log["service"])}})
-
-        if "component" in log:
-            log_attrs.append({"key": "component", "value": {"stringValue": str(log["component"])}})
-
-        if "action" in log:
-            log_attrs.append({"key": "action", "value": {"stringValue": str(log["action"])}})
-
-        if "user_id" in log:
-            log_attrs.append({"key": "user.id", "value": {"stringValue": str(log["user_id"])}})
-
-        if "correlation_id" in log:
-            log_attrs.append({"key": "correlation.id", "value": {"stringValue": str(log["correlation_id"])}})
-
-        # Create log record
-        log_record = {
-            "timeUnixNano": str(time_ns),
-            "observedTimeUnixNano": str(time_ns),
-            "severityNumber": severity_number,
-            "severityText": severity_text,
-            "body": {"stringValue": log.get("message", "") or log.get("description", "")},
-            "attributes": log_attrs,
-        }
-
-        # Add trace context if available
-        if "trace_id" in log:
-            trace_id = hashlib.sha256(str(log["trace_id"]).encode()).hexdigest()[:32].upper()
-            log_record["traceId"] = trace_id
-
-        if "span_id" in log:
-            span_id = hashlib.sha256(str(log["span_id"]).encode()).hexdigest()[:16].upper()
-            log_record["spanId"] = span_id
-
-        log_records.append(log_record)
+    # Convert each log to a record using the helper function
+    log_records = [_convert_single_log_to_record(log) for log in logs_data]
 
     return {
         "resourceLogs": [
@@ -811,13 +856,57 @@ def convert_logs_to_otlp_json(
                             "version": scope_version,
                         },
                         "logRecords": log_records,
-                        "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                        "schemaUrl": OTLP_SCHEMA_URL,
                     }
                 ],
-                "schemaUrl": "https://opentelemetry.io/schemas/1.7.0",
+                "schemaUrl": OTLP_SCHEMA_URL,
             }
         ]
     }
+
+
+# Valid metric data type keys for OTLP
+VALID_METRIC_DATA_TYPES = frozenset(["gauge", "sum", "histogram", "exponentialHistogram", "summary"])
+
+
+def _validate_resource_attributes(resource: Any) -> bool:
+    """Validate resource attributes structure."""
+    if "attributes" in resource:
+        if not isinstance(resource["attributes"], list):
+            return False
+    return True
+
+
+def _validate_metric(metric: Any) -> bool:
+    """Validate a single OTLP metric has required fields."""
+    if "name" not in metric:
+        return False
+    return any(key in metric for key in VALID_METRIC_DATA_TYPES)
+
+
+def _validate_scope_metric(scope_metric: Any) -> bool:
+    """Validate a scope metric structure and its metrics."""
+    if "metrics" not in scope_metric:
+        return False
+    if not isinstance(scope_metric["metrics"], list):
+        return False
+    return all(_validate_metric(metric) for metric in scope_metric["metrics"])
+
+
+def _validate_resource_metric(resource_metric: Any) -> bool:
+    """Validate a resource metric structure."""
+    # Check resource attributes if present
+    if "resource" in resource_metric:
+        if not _validate_resource_attributes(resource_metric["resource"]):
+            return False
+
+    # Check scope metrics
+    if "scopeMetrics" not in resource_metric:
+        return False
+    if not isinstance(resource_metric["scopeMetrics"], list):
+        return False
+
+    return all(_validate_scope_metric(sm) for sm in resource_metric["scopeMetrics"])
 
 
 def validate_otlp_json(otlp_data: JSONDict) -> bool:
@@ -831,48 +920,10 @@ def validate_otlp_json(otlp_data: JSONDict) -> bool:
         True if valid, False otherwise
     """
     try:
-        # Check top-level structure
         if "resourceMetrics" not in otlp_data:
             return False
-
         if not isinstance(otlp_data["resourceMetrics"], list):
             return False
-
-        for resource_metric in otlp_data["resourceMetrics"]:
-            # Check resource
-            if "resource" in resource_metric:
-                if "attributes" in resource_metric["resource"]:
-                    if not isinstance(resource_metric["resource"]["attributes"], list):
-                        return False
-
-            # Check scope metrics
-            if "scopeMetrics" not in resource_metric:
-                return False
-
-            if not isinstance(resource_metric["scopeMetrics"], list):
-                return False
-
-            for scope_metric in resource_metric["scopeMetrics"]:
-                # Check metrics
-                if "metrics" not in scope_metric:
-                    return False
-
-                if not isinstance(scope_metric["metrics"], list):
-                    return False
-
-                for metric in scope_metric["metrics"]:
-                    # Check metric has name and at least one data type
-                    if "name" not in metric:
-                        return False
-
-                    has_data = any(
-                        key in metric for key in ["gauge", "sum", "histogram", "exponentialHistogram", "summary"]
-                    )
-
-                    if not has_data:
-                        return False
-
-        return True
-
+        return all(_validate_resource_metric(rm) for rm in otlp_data["resourceMetrics"])
     except (KeyError, TypeError, AttributeError):
         return False

@@ -133,6 +133,422 @@ async def _execute_handler(runtime: CIRISRuntime, handler: str, params: Optional
     await handler_instance.handle(result, thought, dispatch_context)
 
 
+def _check_mock_llm_env() -> bool:
+    """Check if mock LLM should be enabled via environment variable."""
+    from ciris_engine.logic.config.env_utils import get_env_var
+
+    mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
+    if mock_llm_env and mock_llm_env.lower() in ("true", "1", "yes", "on"):
+        logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
+        return True
+    return False
+
+
+def _check_python_installation() -> None:
+    """Check macOS Python installation and exit if invalid."""
+    from ciris_engine.logic.setup.first_run import check_macos_python
+
+    python_valid, python_message = check_macos_python()
+    if not python_valid:
+        click.echo("=" * 70, err=True)
+        click.echo("PYTHON INSTALLATION ISSUE", err=True)
+        click.echo("=" * 70, err=True)
+        click.echo(python_message, err=True)
+        click.echo("=" * 70, err=True)
+        sys.exit(1)
+
+
+def _get_adapter_types_from_env() -> list[str]:
+    """Get adapter types from environment variable."""
+    from ciris_engine.logic.config.env_utils import get_env_var
+
+    env_adapter = get_env_var("CIRIS_ADAPTER")
+    if env_adapter:
+        return [a.strip() for a in env_adapter.split(",")]
+    return ["api"]
+
+
+def _show_configuration_required_message() -> None:
+    """Display configuration required message for non-interactive CLI mode."""
+    click.echo("=" * 70, err=True)
+    click.echo("CONFIGURATION REQUIRED", err=True)
+    click.echo("=" * 70, err=True)
+    click.echo("CIRIS is not configured. Please set environment variables:", err=True)
+    click.echo("", err=True)
+    click.echo("Required:", err=True)
+    click.echo("  OPENAI_API_KEY=your_api_key", err=True)
+    click.echo("  CIRIS_ADAPTER=api", err=True)
+    click.echo("", err=True)
+    click.echo("For local LLM (Ollama, LM Studio, etc.):", err=True)
+    click.echo("  OPENAI_API_KEY=local", err=True)
+    click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
+    click.echo("  OPENAI_MODEL=llama3", err=True)
+    click.echo("", err=True)
+    click.echo("Or mount a .env file at:", err=True)
+    click.echo("  ~/.ciris/.env", err=True)
+    click.echo("  ./.env", err=True)
+    click.echo("=" * 70, err=True)
+    sys.exit(1)
+
+
+def _run_cli_setup_wizard() -> None:
+    """Run the CLI setup wizard for first-time interactive setup."""
+    from ciris_engine.logic.setup.wizard import run_setup_wizard
+
+    try:
+        click.echo()
+        click.echo("=" * 70)
+        click.echo("First run detected - running CLI setup wizard...")
+        click.echo("=" * 70)
+        config_path = run_setup_wizard()
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(config_path)
+            click.echo(f"Configuration loaded from: {config_path}")
+        except ImportError:
+            pass
+    except KeyboardInterrupt:
+        click.echo("\nSetup cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"\nSetup failed: {e}", err=True)
+        click.echo("You can configure manually by creating a .env file", err=True)
+        sys.exit(1)
+
+
+def _handle_first_run(
+    first_run: bool, adapter_types_list: tuple[str, ...], is_cli_mode: bool
+) -> None:
+    """Handle first-run setup logic."""
+    from ciris_engine.logic.setup.first_run import is_interactive_environment
+
+    if not first_run or adapter_types_list:
+        return
+
+    if is_cli_mode and not is_interactive_environment():
+        _show_configuration_required_message()
+    elif is_cli_mode and is_interactive_environment():
+        _run_cli_setup_wizard()
+
+
+def _show_api_key_required_message() -> None:
+    """Display API key required message."""
+    click.echo("=" * 70, err=True)
+    click.echo("LLM API KEY REQUIRED", err=True)
+    click.echo("=" * 70, err=True)
+    click.echo("No OPENAI_API_KEY found in environment.", err=True)
+    click.echo("", err=True)
+    click.echo("Options:", err=True)
+    click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
+    click.echo("  2. Add to .env file", err=True)
+    click.echo("  3. Use --mock-llm flag for testing only", err=True)
+    click.echo("", err=True)
+    click.echo("For local LLM:", err=True)
+    click.echo("  export OPENAI_API_KEY=local", err=True)
+    click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
+    click.echo("  export OPENAI_MODEL=llama3", err=True)
+    click.echo("=" * 70, err=True)
+    sys.exit(1)
+
+
+def _validate_discord_adapter(
+    adapter_type: str, discord_bot_token: Optional[str]
+) -> bool:
+    """Validate Discord adapter has required token. Returns True if valid."""
+    from ciris_engine.logic.config.env_utils import get_env_var
+
+    base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
+    token_vars = []
+    if instance_id:
+        token_vars.extend(
+            [f"DISCORD_{instance_id.upper()}_BOT_TOKEN", f"DISCORD_BOT_TOKEN_{instance_id.upper()}"]
+        )
+    token_vars.append("DISCORD_BOT_TOKEN")
+
+    has_token = discord_bot_token or any(get_env_var(var) for var in token_vars)
+    if not has_token:
+        click.echo(
+            f"ERROR: No Discord bot token found for {adapter_type}. Discord adapter cannot start without a bot token.",
+            err=True,
+        )
+        click.echo(
+            "Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
+        )
+    return True  # Always return True to continue (adapter will fail properly)
+
+
+def _validate_adapter_tokens(
+    adapter_types: list[str], discord_bot_token: Optional[str]
+) -> list[str]:
+    """Validate tokens for all adapters that require them."""
+    validated = []
+    for adapter_type in adapter_types:
+        if adapter_type.startswith("discord"):
+            _validate_discord_adapter(adapter_type, discord_bot_token)
+        validated.append(adapter_type)
+    return validated
+
+
+def _check_modular_service_config(manifest: Any) -> list[str]:
+    """Check modular service configuration. Returns list of missing required vars."""
+    from ciris_engine.logic.config.env_utils import get_env_var
+
+    missing_required = []
+    if manifest.configuration:
+        for config_key, config_spec in manifest.configuration.items():
+            env_var = config_spec.env
+            if env_var and not get_env_var(env_var):
+                if config_spec.default is None:
+                    missing_required.append(f"{env_var}")
+    return missing_required
+
+
+def _categorize_adapters(
+    adapter_types: list[str], adapter_map: dict[str, Any]
+) -> tuple[list[str], list[tuple[str, Any]]]:
+    """Categorize adapters into built-in and modular services."""
+    builtin_adapters = ["cli", "api", "discord"]
+    final_adapter_types = []
+    adapters_to_load = []
+
+    for adapter_type in adapter_types:
+        base_type = adapter_type.split(":")[0]
+
+        if any(base_type.startswith(builtin) for builtin in builtin_adapters):
+            final_adapter_types.append(adapter_type)
+        elif base_type.lower() in adapter_map:
+            manifest = adapter_map[base_type.lower()]
+            logger.info(f"Found modular service '{manifest.module.name}' for adapter type '{adapter_type}'")
+
+            missing = _check_modular_service_config(manifest)
+            if missing:
+                click.echo(
+                    f"ERROR: Modular service '{manifest.module.name}' requires configuration:",
+                    err=True,
+                )
+                for var in missing:
+                    click.echo(f"  - {var}", err=True)
+                click.echo(
+                    f"Skipping modular service '{manifest.module.name}' due to missing configuration.",
+                    err=True,
+                )
+                continue
+
+            adapters_to_load.append((adapter_type, manifest))
+            logger.info(f"Modular service '{manifest.module.name}' validated and will be loaded")
+        else:
+            click.echo(
+                f"WARNING: Unknown adapter type '{adapter_type}'. Not a built-in adapter or modular service.",
+                err=True,
+            )
+            final_adapter_types.append(adapter_type)
+
+    return final_adapter_types, adapters_to_load
+
+
+async def _load_app_config(
+    config_file_path: Optional[str], template: str
+) -> Any:
+    """Load application configuration."""
+    if config_file_path and not Path(config_file_path).exists():
+        logger.error(f"Configuration file not found: {config_file_path}")
+        raise SystemExit(1)
+
+    cli_overrides: dict[str, Any] = {}
+    if template and template != "default":
+        cli_overrides["default_template"] = template
+
+    return await load_config(config_file_path, cli_overrides)
+
+
+def _handle_config_load_error(e: Exception) -> None:
+    """Handle configuration load errors."""
+    import time
+
+    error_msg = f"Failed to load config: {e}"
+    logger.error(error_msg)
+    print(error_msg, file=sys.stderr)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    for log_handler in logger.handlers:
+        log_handler.flush()
+    time.sleep(0.1)
+    if sys.gettrace() is not None or "coverage" in sys.modules:
+        logger.debug("EXITING NOW VIA os._exit(1) AT _handle_precommit_wrapper coverage")
+        os._exit(1)
+    else:
+        logger.debug("EXITING NOW VIA sys.exit(1) AT _handle_precommit_wrapper")
+        sys.exit(1)
+
+
+def _configure_api_adapter(
+    adapter_type: str, api_host: Optional[str], api_port: Optional[int]
+) -> tuple[Any, str]:
+    """Configure API adapter. Returns (AdapterConfig, channel_id)."""
+    from ciris_engine.logic.adapters.api.config import APIAdapterConfig
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    api_config = APIAdapterConfig()
+    api_config.load_env_vars()
+    if api_host:
+        api_config.host = api_host
+    if api_port:
+        api_config.port = api_port
+
+    adapter_config = AdapterConfig(
+        adapter_type="api", enabled=True, settings=api_config.model_dump()
+    )
+    channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
+    return adapter_config, channel_id
+
+
+def _configure_discord_adapter(
+    adapter_type: str, discord_bot_token: Optional[str]
+) -> tuple[Any, Optional[str]]:
+    """Configure Discord adapter. Returns (AdapterConfig, channel_id or None)."""
+    from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    discord_config = DiscordAdapterConfig()
+    if discord_bot_token:
+        discord_config.bot_token = discord_bot_token
+    discord_config.load_env_vars()
+
+    adapter_config = AdapterConfig(
+        adapter_type="discord",
+        enabled=True,
+        settings=discord_config.model_dump(),
+    )
+    discord_channel_id = discord_config.get_home_channel_id()
+    formatted_channel_id = discord_config.get_formatted_startup_channel_id() if discord_channel_id else None
+    return adapter_config, formatted_channel_id
+
+
+def _configure_cli_adapter(
+    adapter_type: str, cli_interactive: bool
+) -> tuple[Any, str]:
+    """Configure CLI adapter. Returns (AdapterConfig, channel_id)."""
+    from ciris_engine.logic.adapters.cli.config import CLIAdapterConfig
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    cli_config = CLIAdapterConfig()
+    if not cli_interactive:
+        cli_config.interactive = False
+
+    adapter_config = AdapterConfig(
+        adapter_type="cli", enabled=True, settings=cli_config.model_dump()
+    )
+    channel_id = cli_config.get_home_channel_id()
+    return adapter_config, channel_id
+
+
+def _configure_adapters(
+    adapter_types: list[str],
+    app_config: Any,
+    api_host: Optional[str],
+    api_port: Optional[int],
+    discord_bot_token: Optional[str],
+    cli_interactive: bool,
+) -> tuple[dict[str, Any], Optional[str]]:
+    """Configure all adapters. Returns (adapter_configs, startup_channel_id)."""
+    adapter_configs = {}
+    startup_channel_id = getattr(app_config, "startup_channel_id", None)
+
+    for adapter_type in adapter_types:
+        if adapter_type.startswith("api"):
+            config, channel_id = _configure_api_adapter(adapter_type, api_host, api_port)
+            adapter_configs[adapter_type] = config
+            if not startup_channel_id:
+                startup_channel_id = channel_id
+
+        elif adapter_type.startswith("discord"):
+            config, channel_id = _configure_discord_adapter(adapter_type, discord_bot_token)
+            adapter_configs[adapter_type] = config
+            if channel_id and not startup_channel_id:
+                startup_channel_id = channel_id
+
+        elif adapter_type.startswith("cli"):
+            config, channel_id = _configure_cli_adapter(adapter_type, cli_interactive)
+            adapter_configs[adapter_type] = config
+            if not startup_channel_id:
+                startup_channel_id = channel_id
+
+    return adapter_configs, startup_channel_id
+
+
+async def _flush_all_handlers() -> None:
+    """Flush all output streams and log handlers."""
+
+    async def flush_handler(handler: Any) -> None:
+        try:
+            await asyncio.to_thread(handler.flush)
+        except Exception:
+            pass
+
+    flush_tasks = [
+        asyncio.create_task(asyncio.to_thread(sys.stdout.flush)),
+        asyncio.create_task(asyncio.to_thread(sys.stderr.flush)),
+    ]
+    for log_handler in logging.getLogger().handlers:
+        flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
+
+    await asyncio.gather(*flush_tasks, return_exceptions=True)
+
+
+async def _create_cli_monitor(runtime: CIRISRuntime) -> asyncio.Task[None]:
+    """Create CLI shutdown monitor task."""
+    shutdown_event = asyncio.Event()
+    runtime._shutdown_event = shutdown_event
+
+    async def monitor_shutdown() -> None:
+        await shutdown_event.wait()
+        logger.info("CLI runtime shutdown complete, preparing clean exit")
+        await asyncio.sleep(0.2)
+        await _flush_all_handlers()
+        logger.info("Forcing exit to handle blocking CLI input thread")
+
+    return asyncio.create_task(monitor_shutdown())
+
+
+async def _handle_cli_exit(selected_adapter_types: list[str]) -> None:
+    """Handle CLI adapter exit with proper flushing."""
+    if "cli" not in selected_adapter_types:
+        return
+
+    logger.info("CLI runtime completed, forcing exit")
+    await asyncio.sleep(0.5)
+    await _flush_all_handlers()
+    logger.debug("EXITING NOW VIA os._exit(0) AT CLI runtime completed")
+    os._exit(0)
+
+
+def _handle_final_exit() -> None:
+    """Handle final exit logic for main function."""
+    import time
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    logger.info("CIRIS agent exiting cleanly")
+
+    if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
+        logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
+        os._exit(0)
+
+    if "--adapter" in sys.argv and "cli" in sys.argv:
+        logger.info("CLI mode completed, forcing exit to handle blocking input thread")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        for log_handler in logging.getLogger().handlers:
+            log_handler.flush()
+        time.sleep(0.1)
+        logger.debug("EXITING NOW VIA os._exit(0) AT CLI mode force exit")
+        os._exit(0)
+
+    logger.debug("EXITING NOW VIA sys.exit(0) AT end of main")
+    sys.exit(0)
+
+
 async def _run_runtime(runtime: CIRISRuntime, timeout: Optional[int], num_rounds: Optional[int] = None) -> None:
     """Run the runtime with optional timeout and graceful shutdown."""
     logger.debug(f"[DEBUG] _run_runtime called with timeout={timeout}, num_rounds={num_rounds}")
@@ -253,439 +669,116 @@ def main(
     )
 
     async def _async_main() -> None:
-        nonlocal mock_llm, handler, params, task, num_rounds
+        nonlocal mock_llm
         from ciris_engine.logic.config.env_utils import get_env_var
+        from ciris_engine.logic.setup.first_run import is_first_run
+        from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
 
         # Check for CIRIS_MOCK_LLM environment variable
-        if not mock_llm and get_env_var("CIRIS_MOCK_LLM"):
-            mock_llm_env = get_env_var("CIRIS_MOCK_LLM", "")
-            if mock_llm_env:
-                mock_llm_env = mock_llm_env.lower()
-            if mock_llm_env in ("true", "1", "yes", "on"):
-                logger.info("CIRIS_MOCK_LLM environment variable detected, enabling mock LLM")
-                mock_llm = True
-
-        # Handle first-run setup if needed
-        from ciris_engine.logic.setup.first_run import check_macos_python, is_first_run, is_interactive_environment
-        from ciris_engine.logic.setup.wizard import run_setup_wizard
+        if not mock_llm and _check_mock_llm_env():
+            mock_llm = True
 
         # Check macOS Python installation
-        python_valid, python_message = check_macos_python()
-        if not python_valid:
-            click.echo("=" * 70, err=True)
-            click.echo("❌ PYTHON INSTALLATION ISSUE", err=True)
-            click.echo("=" * 70, err=True)
-            click.echo(python_message, err=True)
-            click.echo("=" * 70, err=True)
-            sys.exit(1)
+        _check_python_installation()
 
+        # Determine first-run status
         first_run = is_first_run()
-        # When running in import/CI mode, bypass interactive first-run gating so
-        # CLI smoke tests can execute without configuration prompts or exits.
         if os.environ.get("CIRIS_IMPORT_MODE") == "true":
             first_run = False
 
-        # Handle adapter selection FIRST (before first-run wizard logic)
-        # This allows us to determine which adapter will handle first-run setup
-        final_adapter_types_list = list(adapter_types_list)
-        if not final_adapter_types_list:
-            # Check CIRIS_ADAPTER environment variable
-            env_adapter = get_env_var("CIRIS_ADAPTER")
-            if env_adapter:
-                # Support comma-separated adapters (e.g., "api,discord")
-                final_adapter_types_list = [a.strip() for a in env_adapter.split(",")]
-            else:
-                # Default to API adapter (GUI setup wizard)
-                final_adapter_types_list = ["api"]
-
-        # Check if we're running in CLI mode explicitly
+        # Handle adapter selection
+        final_adapter_types_list = list(adapter_types_list) if adapter_types_list else _get_adapter_types_from_env()
         is_cli_mode = any(adapter.startswith("cli") for adapter in final_adapter_types_list)
 
-        # First-run handling: only run CLI wizard if explicitly in CLI mode
-        if first_run and not adapter_types_list:
-            # First run detected and no adapter explicitly specified via CLI
+        # Handle first-run setup
+        _handle_first_run(first_run, adapter_types_list, is_cli_mode)
 
-            if is_cli_mode and not is_interactive_environment():
-                # CLI mode but non-interactive environment (Docker, systemd, CI, etc.)
-                # No adapter in CLI or environment - EXIT with instructions
-                click.echo("=" * 70, err=True)
-                click.echo("❌ CONFIGURATION REQUIRED", err=True)
-                click.echo("=" * 70, err=True)
-                click.echo("CIRIS is not configured. Please set environment variables:", err=True)
-                click.echo("", err=True)
-                click.echo("Required:", err=True)
-                click.echo("  OPENAI_API_KEY=your_api_key", err=True)
-                click.echo("  CIRIS_ADAPTER=api", err=True)
-                click.echo("", err=True)
-                click.echo("For local LLM (Ollama, LM Studio, etc.):", err=True)
-                click.echo("  OPENAI_API_KEY=local", err=True)
-                click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
-                click.echo("  OPENAI_MODEL=llama3", err=True)
-                click.echo("", err=True)
-                click.echo("Or mount a .env file at:", err=True)
-                click.echo("  ~/.ciris/.env", err=True)
-                click.echo("  ./.env", err=True)
-                click.echo("=" * 70, err=True)
-                sys.exit(1)
-            elif is_cli_mode and is_interactive_environment():
-                # CLI mode in interactive environment - run CLI setup wizard
-                try:
-                    click.echo()
-                    click.echo("=" * 70)
-                    click.echo("First run detected - running CLI setup wizard...")
-                    click.echo("=" * 70)
-                    config_path = run_setup_wizard()
-                    # Reload environment after setup
-                    try:
-                        from dotenv import load_dotenv
-
-                        load_dotenv(config_path)
-                        click.echo(f"✅ Configuration loaded from: {config_path}")
-                    except ImportError:
-                        pass  # dotenv is optional
-                except KeyboardInterrupt:
-                    click.echo("\nSetup cancelled by user")
-                    sys.exit(1)
-                except Exception as e:
-                    click.echo(f"\n❌ Setup failed: {e}", err=True)
-                    click.echo("You can configure manually by creating a .env file", err=True)
-                    sys.exit(1)
-            # else: API mode (default) - let API adapter handle GUI setup wizard
-
-        # Check for API key - NEVER default to mock LLM in production
-        # Skip this check during first-run (API adapter will handle setup)
+        # Check for API key
         api_key = get_env_var("OPENAI_API_KEY")
         if not mock_llm and not api_key and not first_run:
-            # No API key and not explicitly using mock LLM
-            click.echo("=" * 70, err=True)
-            click.echo("❌ LLM API KEY REQUIRED", err=True)
-            click.echo("=" * 70, err=True)
-            click.echo("No OPENAI_API_KEY found in environment.", err=True)
-            click.echo("", err=True)
-            click.echo("Options:", err=True)
-            click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
-            click.echo("  2. Add to .env file", err=True)
-            click.echo("  3. Use --mock-llm flag for testing only", err=True)
-            click.echo("", err=True)
-            click.echo("For local LLM:", err=True)
-            click.echo("  export OPENAI_API_KEY=local", err=True)
-            click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
-            click.echo("  export OPENAI_MODEL=llama3", err=True)
-            click.echo("=" * 70, err=True)
-            sys.exit(1)
+            _show_api_key_required_message()
 
-        # Support multiple instances of same adapter type like "discord:instance1" or "api:port8081"
-        selected_adapter_types = list(final_adapter_types_list)
+        # Validate adapter tokens
+        selected_adapter_types = _validate_adapter_tokens(list(final_adapter_types_list), discord_bot_token)
 
-        # Validate Discord adapter types have tokens available
-        validated_adapter_types = []
-        for adapter_type in selected_adapter_types:
-            if adapter_type.startswith("discord"):
-                base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
-                # Check for instance-specific token or fallback to general token
-                token_vars = []
-                if instance_id:
-                    token_vars.extend(
-                        [f"DISCORD_{instance_id.upper()}_BOT_TOKEN", f"DISCORD_BOT_TOKEN_{instance_id.upper()}"]
-                    )
-                token_vars.append("DISCORD_BOT_TOKEN")
-
-                has_token = discord_bot_token or any(get_env_var(var) for var in token_vars)
-                if not has_token:
-                    click.echo(
-                        f"ERROR: No Discord bot token found for {adapter_type}. Discord adapter cannot start without a bot token.",
-                        err=True,
-                    )
-                    click.echo(
-                        "Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
-                    )
-                    # Still add Discord to attempt loading - it will fail properly
-                    validated_adapter_types.append(adapter_type)
-                else:
-                    validated_adapter_types.append(adapter_type)
-            else:
-                validated_adapter_types.append(adapter_type)
-
-        selected_adapter_types = validated_adapter_types
-
-        # Check for modular services matching adapter names
-        from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
-
+        # Discover modular services
         adapter_loader = AdapterLoader()
         discovered_services = adapter_loader.discover_services()
         adapter_map = {svc.module.name.lower().replace("_adapter", ""): svc for svc in discovered_services}
 
-        # Separate built-in adapters from potential modular services
-        builtin_adapters = ["cli", "api", "discord"]
-        final_adapter_types = []
-        adapters_to_load = []
-
-        for adapter_type in selected_adapter_types:
-            base_type = adapter_type.split(":")[0]  # Handle instance IDs
-
-            # Check if it's a built-in adapter
-            if any(base_type.startswith(builtin) for builtin in builtin_adapters):
-                final_adapter_types.append(adapter_type)
-            # Check if it matches a modular service
-            elif base_type.lower() in adapter_map:
-                manifest = adapter_map[base_type.lower()]
-                logger.info(f"Found modular service '{manifest.module.name}' for adapter type '{adapter_type}'")
-
-                # Validate required configuration is present
-                if manifest.configuration:
-                    missing_required = []
-                    for config_key, config_spec in manifest.configuration.items():
-                        env_var = config_spec.env
-                        if env_var and not get_env_var(env_var):
-                            # Check if it has a default value
-                            if config_spec.default is None:
-                                missing_required.append(f"{env_var}")
-
-                    if missing_required:
-                        click.echo(
-                            f"ERROR: Modular service '{manifest.module.name}' requires configuration:",
-                            err=True,
-                        )
-                        for var in missing_required:
-                            click.echo(f"  - {var}", err=True)
-                        click.echo(
-                            f"Skipping modular service '{manifest.module.name}' due to missing configuration.",
-                            err=True,
-                        )
-                        continue
-
-                # Add to modular services to load
-                adapters_to_load.append((adapter_type, manifest))
-                logger.info(f"Modular service '{manifest.module.name}' validated and will be loaded")
-            else:
-                # Unknown adapter type
-                click.echo(
-                    f"WARNING: Unknown adapter type '{adapter_type}'. Not a built-in adapter or modular service.",
-                    err=True,
-                )
-                final_adapter_types.append(adapter_type)  # Try to load anyway
-
-        selected_adapter_types = final_adapter_types
+        # Categorize adapters
+        selected_adapter_types, adapters_to_load = _categorize_adapters(selected_adapter_types, adapter_map)
 
         # Load config
         try:
-            # Validate config file exists if provided
-            if config_file_path and not Path(config_file_path).exists():
-                logger.error(f"Configuration file not found: {config_file_path}")
-                raise SystemExit(1)
-
-            # Create CLI overrides including the template parameter
-            cli_overrides: dict[str, Any] = {}
-            if template and template != "default":
-                cli_overrides["default_template"] = template
-
-            app_config = await load_config(config_file_path, cli_overrides)
+            app_config = await _load_app_config(config_file_path, template)
         except SystemExit:
-            raise  # Re-raise SystemExit to exit cleanly
+            raise
         except Exception as e:
-            error_msg = f"Failed to load config: {e}"
-            logger.error(error_msg)
-            # Write directly to stderr to ensure it's captured
-            print(error_msg, file=sys.stderr)
-            # Ensure outputs are flushed before exit
-            sys.stdout.flush()
-            sys.stderr.flush()
-            # Also flush logging handlers
-            for log_handler in logger.handlers:
-                log_handler.flush()
-            # Give a tiny bit of time for output to be written
-            import time
+            _handle_config_load_error(e)
+            return  # Unreachable but makes type checker happy
 
-            time.sleep(0.1)  # NOSONAR - Sync sleep is appropriate here before program exit
-            # Force immediate exit to avoid hanging in subprocess
-            # Use os._exit only when running under coverage
-            if sys.gettrace() is not None or "coverage" in sys.modules:
-                logger.debug("EXITING NOW VIA os._exit(1) AT _handle_precommit_wrapper coverage")
-                os._exit(1)
-            else:
-                logger.debug("EXITING NOW VIA sys.exit(1) AT _handle_precommit_wrapper")
-                sys.exit(1)
-
-        # Handle mock LLM as a module to load
-        modules_to_load = []
+        # Build modules to load
+        modules_to_load = ["mock_llm"] if mock_llm else []
         if mock_llm:
-            modules_to_load.append("mock_llm")
             logger.info("Mock LLM module will be loaded")
-
-        # Add modular services as modules to load
         for adapter_type, manifest in adapters_to_load:
             modules_to_load.append(f"modular:{manifest.module.name}")
             logger.info(f"Modular service '{manifest.module.name}' added to modules to load")
 
-        # Import AdapterConfig for proper type conversion
-        from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
-
-        # Create adapter configurations for each adapter type and determine startup channel
-        adapter_configs = {}
-        startup_channel_id = getattr(app_config, "startup_channel_id", None)
-        # No discord_channel_id in EssentialConfig
-
-        for adapter_type in selected_adapter_types:
-            if adapter_type.startswith("api"):
-                base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
-                from ciris_engine.logic.adapters.api.config import APIAdapterConfig
-
-                api_config = APIAdapterConfig()
-                # Load environment variables first
-                api_config.load_env_vars()
-                # Then override with command line args if provided
-                if api_host:
-                    api_config.host = api_host
-                if api_port:
-                    api_config.port = api_port
-
-                # Convert APIAdapterConfig to generic AdapterConfig
-                adapter_configs[adapter_type] = AdapterConfig(
-                    adapter_type="api", enabled=True, settings=api_config.model_dump()  # Convert all fields to dict
-                )
-                api_channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
-                if not startup_channel_id:
-                    startup_channel_id = api_channel_id
-
-            elif adapter_type.startswith("discord"):
-                base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
-                from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig
-
-                discord_config = DiscordAdapterConfig()
-                if discord_bot_token:
-                    discord_config.bot_token = discord_bot_token
-
-                # Load environment variables into the config
-                discord_config.load_env_vars()
-
-                # Convert DiscordAdapterConfig to generic AdapterConfig
-                adapter_configs[adapter_type] = AdapterConfig(
-                    adapter_type="discord",
-                    enabled=True,
-                    settings=discord_config.model_dump(),  # Convert all fields to dict
-                )
-                discord_channel_id = discord_config.get_home_channel_id()
-                if discord_channel_id and not startup_channel_id:
-                    # For Discord, use formatted channel ID with discord_ prefix
-                    # Guild ID will be added by the adapter when it connects
-                    startup_channel_id = discord_config.get_formatted_startup_channel_id()
-
-            elif adapter_type.startswith("cli"):
-                base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
-                from ciris_engine.logic.adapters.cli.config import CLIAdapterConfig
-
-                cli_config = CLIAdapterConfig()
-
-                # Environment variables are loaded by global configuration bootstrap
-
-                # CLI arguments take precedence over environment variables
-                if not cli_interactive:
-                    cli_config.interactive = False
-
-                # Convert CLIAdapterConfig to generic AdapterConfig
-                adapter_configs[adapter_type] = AdapterConfig(
-                    adapter_type="cli", enabled=True, settings=cli_config.model_dump()  # Convert all fields to dict
-                )
-                cli_channel_id = cli_config.get_home_channel_id()
-                if not startup_channel_id:
-                    startup_channel_id = cli_channel_id
+        # Configure adapters
+        adapter_configs, startup_channel_id = _configure_adapters(
+            selected_adapter_types, app_config, api_host, api_port, discord_bot_token, cli_interactive
+        )
 
         # Setup global exception handling
         setup_global_exception_handler()
 
-        # Template parameter is now passed via cli_overrides to the essential config
-
-        # Create runtime using new CIRISRuntime directly with adapter configs
+        # Create and initialize runtime
         runtime = CIRISRuntime(
             adapter_types=selected_adapter_types,
-            essential_config=app_config,  # app_config is actually EssentialConfig
+            essential_config=app_config,
             startup_channel_id=startup_channel_id,
             adapter_configs=adapter_configs,
             interactive=cli_interactive,
             host=api_host,
             port=api_port,
             discord_bot_token=discord_bot_token,
-            modules=modules_to_load,  # Pass modules to load
-            identity_update=identity_update,  # Admin flag to refresh identity from template
-            template_name=template if template != "default" else None,  # Only pass if explicitly specified
+            modules=modules_to_load,
+            identity_update=identity_update,
+            template_name=template if template != "default" else None,
         )
         await runtime.initialize()
-
-        # Setup signal handlers for graceful shutdown
         setup_signal_handlers(runtime)
 
-        # Store preload tasks to be loaded after WORK state transition
+        # Store preload tasks
         preload_tasks = list(task) if task else []
         runtime.set_preload_tasks(preload_tasks)
 
+        # Handle direct handler execution
         if handler:
             await _execute_handler(runtime, handler, params)
             await runtime.shutdown()
             return
 
-        # Use CLI num_rounds if provided, otherwise fall back to config
+        # Determine effective num_rounds
         effective_num_rounds = num_rounds
-        # Use default num_rounds if not specified
         if effective_num_rounds is None:
             from ciris_engine.logic.utils.constants import DEFAULT_NUM_ROUNDS
-
             effective_num_rounds = DEFAULT_NUM_ROUNDS
 
-        # For CLI adapter, create a monitor task that forces exit when shutdown completes
+        # Create CLI monitor if needed
         monitor_task = None
         if "cli" in selected_adapter_types:
-            # Create an event for signaling shutdown completion
-            shutdown_event = asyncio.Event()
-            # Store the event on the runtime so shutdown() can set it
-            runtime._shutdown_event = shutdown_event
+            monitor_task = await _create_cli_monitor(runtime)
 
-            async def monitor_shutdown() -> None:
-                """Monitor for shutdown completion and force exit for CLI mode."""
-                # Wait for the shutdown event to be set by the shutdown() method
-                await shutdown_event.wait()
-
-                # Shutdown is truly complete, give a moment for final logs
-                logger.info("CLI runtime shutdown complete, preparing clean exit")
-                await asyncio.sleep(0.2)  # Brief pause for final log entries
-
-                # Flush all output in parallel
-                async def flush_handler(handler: Any) -> None:
-                    """Flush a single handler."""
-                    try:
-                        await asyncio.to_thread(handler.flush)
-                    except Exception:
-                        pass  # Ignore flush errors during shutdown
-
-                # Create flush tasks for all operations
-                flush_tasks = [
-                    asyncio.create_task(asyncio.to_thread(sys.stdout.flush)),
-                    asyncio.create_task(asyncio.to_thread(sys.stderr.flush)),
-                ]
-
-                # Add tasks for each log handler
-                for log_handler in logging.getLogger().handlers:
-                    flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
-
-                # Wait for all flush operations to complete
-                await asyncio.gather(*flush_tasks, return_exceptions=True)
-
-                # Force exit to handle the blocking input thread
-                logger.info("Forcing exit to handle blocking CLI input thread")
-                # COMMENTED OUT: This was causing immediate exit before graceful shutdown could complete
-                # import os
-                # logger.info("DEBUG: EXITING NOW VIA os._exit(0) AT monitor_shutdown for CLI adapter")
-                # os._exit(0)
-
-            monitor_task = asyncio.create_task(monitor_shutdown())
-
+        # Run the runtime
         try:
             await _run_runtime(runtime, timeout, effective_num_rounds)
         finally:
-            # For CLI adapter, wait for monitor task to force exit
             if monitor_task and not monitor_task.done():
                 logger.debug("Waiting for CLI monitor task to detect shutdown completion...")
                 try:
-                    # Give the monitor task time to detect shutdown and force exit
                     await asyncio.wait_for(monitor_task, timeout=5.0)
                 except asyncio.TimeoutError:
                     logger.warning("Monitor task did not complete within 5 seconds")
@@ -693,34 +786,8 @@ def main(
                 except Exception as e:
                     logger.error(f"Monitor task error: {e}")
 
-        # If we get here and CLI adapter is used, force exit anyway
-        if "cli" in selected_adapter_types:
-            logger.info("CLI runtime completed, forcing exit")
-            await asyncio.sleep(0.5)  # Give time for final logs to flush
-
-            # Flush all output in parallel
-            async def flush_handler(handler: Any) -> None:
-                """Flush a single handler."""
-                try:
-                    await asyncio.to_thread(handler.flush)
-                except Exception:
-                    pass  # Ignore flush errors during shutdown
-
-            # Create flush tasks for all operations
-            flush_tasks = [
-                asyncio.create_task(asyncio.to_thread(sys.stdout.flush)),
-                asyncio.create_task(asyncio.to_thread(sys.stderr.flush)),
-            ]
-
-            # Add tasks for each log handler
-            for log_handler in logging.getLogger().handlers:
-                flush_tasks.append(asyncio.create_task(flush_handler(log_handler)))
-
-            # Wait for all flush operations to complete
-            await asyncio.gather(*flush_tasks, return_exceptions=True)
-
-            logger.debug("EXITING NOW VIA os._exit(0) AT CLI runtime completed")
-            os._exit(0)
+        # Handle CLI exit
+        await _handle_cli_exit(selected_adapter_types)
 
     try:
         asyncio.run(_async_main())
@@ -735,39 +802,8 @@ def main(
         logger.debug("EXITING NOW VIA sys.exit(1) AT Fatal error in main")
         sys.exit(1)
 
-    # Ensure clean exit after successful run
-    # Force flush all outputs
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-    # asyncio.run() already closes the event loop, so we don't need to do it again
-    # Just exit cleanly
-    logger.info("CIRIS agent exiting cleanly")
-
-    # For API mode subprocess tests, ensure immediate exit
-    if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
-        logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
-        os._exit(0)
-
-    # For CLI mode, force exit to handle blocking input thread
-    # This is necessary because asyncio.to_thread(input) creates a daemon thread
-    # that prevents normal exit even after shutdown completes
-    if "--adapter" in sys.argv and "cli" in sys.argv:
-        logger.info("CLI mode completed, forcing exit to handle blocking input thread")
-        # Ensure the log message is flushed
-        sys.stdout.flush()
-        sys.stderr.flush()
-        for log_handler in logging.getLogger().handlers:
-            log_handler.flush()
-        import time
-
-        time.sleep(0.1)  # Brief pause to ensure logs are written
-
-        logger.debug("EXITING NOW VIA os._exit(0) AT CLI mode force exit")
-        os._exit(0)
-
-    logger.debug("EXITING NOW VIA sys.exit(0) AT end of main")
-    sys.exit(0)
+    # Handle final exit
+    _handle_final_exit()
 
 
 if __name__ == "__main__":

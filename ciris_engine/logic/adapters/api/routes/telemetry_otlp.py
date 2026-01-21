@@ -650,7 +650,7 @@ def _convert_single_trace_to_span(trace: JSONDict) -> JSONDict:
     """Convert a single trace entry to an OTLP span."""
     # Normalize IDs
     trace_id = _normalize_trace_id(get_str_optional(trace, "trace_id"), trace)
-    span_id = _normalize_span_id(get_str_optional(trace, "span_id"), trace_id, trace.get("operation", "unknown"))
+    span_id = _normalize_span_id(get_str_optional(trace, "span_id"), trace_id, get_str(trace, "operation", "unknown"))
 
     # Handle parent span ID
     parent_span_id = None

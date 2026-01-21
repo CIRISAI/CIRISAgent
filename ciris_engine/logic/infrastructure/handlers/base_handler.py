@@ -226,7 +226,7 @@ class BaseActionHandler(ABC):
     ) -> None:
         """Handle and log errors consistently."""
         self.logger.error(
-            f"Error in {self.__class__.__name__} for {action_type.value} " f"on thought {thought_id}: {error}",
+            f"Error in {self.__class__.__name__} for {action_type.value} on thought {thought_id}: {error}",
             exc_info=True,
         )
 
@@ -330,46 +330,65 @@ class BaseActionHandler(ABC):
 
     def _get_channel_id(self, thought: Thought, dispatch_context: DispatchContext) -> Optional[str]:
         """Extract channel ID from dispatch context or thought context."""
-        # First try dispatch context
-        channel_id = extract_channel_id(dispatch_context.channel_context)
+        # Try sources in priority order
+        return (
+            extract_channel_id(dispatch_context.channel_context)
+            or self._get_channel_from_thought(thought)
+            or self._get_channel_from_thought_context(thought)
+            or self._get_channel_from_task(thought)
+        )
 
-        # Try thought's direct channel_id field
-        if not channel_id and hasattr(thought, "channel_id") and thought.channel_id:
-            channel_id = thought.channel_id
-            self.logger.debug(f"Found channel_id in thought.channel_id: {channel_id}")
+    def _get_channel_from_thought(self, thought: Thought) -> Optional[str]:
+        """Extract channel ID directly from thought."""
+        if hasattr(thought, "channel_id") and thought.channel_id:
+            self.logger.debug(f"Found channel_id in thought.channel_id: {thought.channel_id}")
+            return thought.channel_id
+        return None
+
+    def _get_channel_from_thought_context(self, thought: Thought) -> Optional[str]:
+        """Extract channel ID from thought context."""
+        if not hasattr(thought, "context") or not thought.context:
+            return None
 
         # Try thought.context.channel_id
-        if not channel_id and hasattr(thought, "context") and thought.context:
-            if hasattr(thought.context, "channel_id") and thought.context.channel_id:
-                channel_id = thought.context.channel_id
-                self.logger.debug(f"Found channel_id in thought.context.channel_id: {channel_id}")
+        if hasattr(thought.context, "channel_id") and thought.context.channel_id:
+            self.logger.debug(f"Found channel_id in thought.context.channel_id: {thought.context.channel_id}")
+            return thought.context.channel_id
 
-        # Fallback to thought context if needed
-        if not channel_id and hasattr(thought, "context") and thought.context:
-            # Try initial_task_context first
-            if hasattr(thought.context, "initial_task_context"):
-                initial_task_context = thought.context.initial_task_context
-                if initial_task_context and hasattr(initial_task_context, "channel_context"):
-                    channel_id = extract_channel_id(initial_task_context.channel_context)
+        # Try initial_task_context
+        if hasattr(thought.context, "initial_task_context"):
+            itc = thought.context.initial_task_context
+            if itc and hasattr(itc, "channel_context"):
+                channel_id = extract_channel_id(itc.channel_context)
+                if channel_id:
+                    return channel_id
 
-            # Then try system_snapshot as fallback
-            if not channel_id and hasattr(thought.context, "system_snapshot"):
-                system_snapshot = thought.context.system_snapshot
-                if system_snapshot and hasattr(system_snapshot, "channel_context"):
-                    channel_id = extract_channel_id(system_snapshot.channel_context)
+        # Try system_snapshot
+        if hasattr(thought.context, "system_snapshot"):
+            ss = thought.context.system_snapshot
+            if ss and hasattr(ss, "channel_context"):
+                return extract_channel_id(ss.channel_context)
 
-        # If still no channel_id, try to get it from the task
-        if not channel_id and thought.source_task_id:
-            task = persistence.get_task_by_id(thought.source_task_id)
-            if task:
-                if task.channel_id:
-                    channel_id = task.channel_id
-                    self.logger.debug(f"Found channel_id in task.channel_id: {channel_id}")
-                elif task.context and task.context.channel_id:
-                    channel_id = task.context.channel_id
-                    self.logger.debug(f"Found channel_id in task.context.channel_id: {channel_id}")
+        return None
 
-        return channel_id
+    def _get_channel_from_task(self, thought: Thought) -> Optional[str]:
+        """Extract channel ID from the source task."""
+        if not thought.source_task_id:
+            return None
+
+        task = persistence.get_task_by_id(thought.source_task_id)
+        if not task:
+            return None
+
+        if task.channel_id:
+            self.logger.debug(f"Found channel_id in task.channel_id: {task.channel_id}")
+            return task.channel_id
+
+        if task.context and task.context.channel_id:
+            self.logger.debug(f"Found channel_id in task.context.channel_id: {task.context.channel_id}")
+            return task.context.channel_id
+
+        return None
 
     def _create_trace_correlation(self, dispatch_context: DispatchContext, action_type: HandlerActionType) -> None:
         """Create a trace correlation for handler execution."""

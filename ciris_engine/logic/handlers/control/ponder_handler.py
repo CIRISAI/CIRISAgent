@@ -67,10 +67,6 @@ class PonderHandler(BaseActionHandler):
             f"follow_up_depth={new_thought_depth}). Questions: {questions_list}"
         )
 
-        # The thought depth conscience will handle max depth enforcement
-        # We just need to process the ponder normally
-        next_status = ThoughtStatus.COMPLETED
-
         # Get task context for follow-up
         original_task = persistence.get_task_by_id(thought.source_task_id)
         task_context = f"Task ID: {thought.source_task_id}"

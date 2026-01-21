@@ -74,7 +74,7 @@ class RejectHandler(BaseActionHandler):
         return channel_id.startswith("api_") or channel_id.startswith("ws:")
 
     async def _create_adaptive_filter(
-        self, params: RejectParams, thought: Thought, dispatch_context: DispatchContext
+        self, _params: RejectParams, _thought: Thought, _dispatch_context: DispatchContext
     ) -> None:
         """Create an adaptive filter based on the rejected content."""
         # TODO: Implement filter bus when needed

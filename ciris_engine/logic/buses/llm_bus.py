@@ -346,7 +346,7 @@ class LLMBus(BaseBus[LLMService]):
         from ciris_engine.logic.adapters.base_observer import BillingServiceError
 
         max_rate_limit_retries = 10
-        max_rate_limit_total_time = 25.0
+        max_rate_limit_total_time = 90.0  # Extended to handle multi-agent rate limit contention
         retry_count = 0
         rate_limit_retry_count = 0
         rate_limit_start_time: Optional[float] = None

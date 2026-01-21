@@ -84,7 +84,7 @@ class APIAdapterConfig(BaseModel):
                 import json
 
                 self.cors_origins = json.loads(env_cors_origins)
-            except (ValueError, json.JSONDecodeError):
+            except ValueError:  # JSONDecodeError inherits from ValueError
                 pass
 
         # Check for proxy/managed mode configuration

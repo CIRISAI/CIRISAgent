@@ -697,10 +697,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return AdapterConfig(**config)
 
         # Config goes into adapter_config field, NOT settings
+        # Extract persist flag from config dict to set on AdapterConfig directly
+        persist_flag = config.get("persist", False) if isinstance(config, dict) else False
         return AdapterConfig(
             adapter_type=adapter_type,
             enabled=True,
             adapter_config=config,
+            persist=persist_flag,
         )
 
     # Adapter Management Methods

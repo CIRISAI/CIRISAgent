@@ -452,10 +452,11 @@ def _configure_adapters(
     cli_interactive: bool,
 ) -> tuple[dict[str, Any], Optional[str]]:
     """Configure all adapters. Returns (adapter_configs, startup_channel_id)."""
-    adapter_configs = {}
-    startup_channel_id = getattr(app_config, "startup_channel_id", None)
+    adapter_configs: dict[str, Any] = {}
+    startup_channel_id: Optional[str] = getattr(app_config, "startup_channel_id", None)
 
     for adapter_type in adapter_types:
+        channel_id: Optional[str] = None
         if adapter_type.startswith("api"):
             config, channel_id = _configure_api_adapter(adapter_type, api_host, api_port)
             adapter_configs[adapter_type] = config

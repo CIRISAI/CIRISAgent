@@ -57,19 +57,20 @@ def _get_tag_bool(tags: Any, key: str, true_value: str = "true") -> bool:
     """Check if a tag value equals a specific string (default 'true')."""
     if not tags or not hasattr(tags, "additional_tags"):
         return False
-    return tags.additional_tags.get(key) == true_value
+    return bool(tags.additional_tags.get(key) == true_value)
 
 
 def _initialize_task_summary(task_id: str, timestamp: Optional[datetime]) -> JSONDict:
     """Create initial task summary structure."""
+    timestamp_str = timestamp.isoformat() if timestamp else None
     return {
         "task_id": task_id,
         "status": "processing",
         "thoughts": [],
-        "start_time": timestamp,
-        "end_time": timestamp,
+        "start_time": timestamp_str,
+        "end_time": timestamp_str,
         "handlers_selected": [],
-        "trace_ids": set(),
+        "trace_ids": [],  # Use list for JSON compatibility; converted to set during processing
     }
 
 
@@ -80,9 +81,9 @@ def _update_task_trace_id(task_summaries: JSONDict, task_id: str, trace_id: str,
         return
 
     trace_ids = task_summary.get("trace_ids")
-    if isinstance(trace_ids, set):
-        trace_ids.add(trace_id)
-    task_summary["end_time"] = timestamp
+    if isinstance(trace_ids, list) and trace_id not in trace_ids:
+        trace_ids.append(trace_id)
+    task_summary["end_time"] = timestamp.isoformat() if timestamp else None
 
 
 def _process_handler_for_thought(

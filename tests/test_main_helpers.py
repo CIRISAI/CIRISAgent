@@ -795,9 +795,14 @@ class TestHandleFinalExit:
         original_argv = sys.argv
         try:
             sys.argv = ["main.py", "--adapter", "cli"]
-            # Mock both os._exit and sys.exit to avoid I/O issues in parallel tests
-            # When os._exit is mocked, function continues to sys.exit - mock both
-            with patch("os._exit") as mock_os_exit, patch("sys.exit") as mock_sys_exit:
+            # Mock os._exit, sys.exit, and stdout/stderr flush to avoid I/O issues
+            # CLI mode does extra flush operations that can fail on closed file handles in CI
+            with (
+                patch("os._exit") as mock_os_exit,
+                patch("sys.exit") as mock_sys_exit,
+                patch.object(sys.stdout, "flush", return_value=None),
+                patch.object(sys.stderr, "flush", return_value=None),
+            ):
                 _handle_final_exit()
                 # Verify os._exit was called for CLI mode (before sys.exit fallback)
                 mock_os_exit.assert_called_once_with(0)

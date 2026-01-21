@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
@@ -145,7 +145,7 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"WiseAuthorityService deferral failed for thought {thought.thought_id}: {e}")
             return False
 
-    def _build_deferral_metadata(self, thought: Thought, dispatch_context: DispatchContext) -> dict:
+    def _build_deferral_metadata(self, thought: Thought, dispatch_context: DispatchContext) -> Dict[str, str]:
         """Build metadata dict for deferral context."""
         metadata = {
             "attempted_action": getattr(dispatch_context, "attempted_action", "unknown"),

@@ -8,7 +8,7 @@ used across multiple handlers into reusable, testable functions.
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from pydantic import BaseModel
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Known adapter prefixes for channel routing
-KNOWN_ADAPTER_PREFIXES: Set[str] = frozenset({"api_", "discord_", "cli_", "ws:", "reddit_"})
+KNOWN_ADAPTER_PREFIXES: FrozenSet[str] = frozenset({"api_", "discord_", "cli_", "ws:", "reddit_"})
 
 # Managed user attributes that should not be modified by memorize operations
 MANAGED_USER_ATTRIBUTES: Dict[str, str] = {
@@ -145,7 +145,9 @@ def serialize_datetime_value(value: Any) -> JSONValue:
     """
     if isinstance(value, datetime):
         return value.isoformat()
-    return value
+    # Cast to JSONValue - caller is responsible for ensuring value is JSON-serializable
+    result: JSONValue = value
+    return result
 
 
 def serialize_attributes_to_json(attributes: Any) -> JSONDict:

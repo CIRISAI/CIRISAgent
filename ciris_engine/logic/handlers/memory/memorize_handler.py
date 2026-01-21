@@ -81,7 +81,7 @@ class MemorizeHandler(BaseActionHandler):
             node = node_or_error
 
         # Execute memorize operation
-        return await self._execute_memorize(node, thought, result)
+        return await self._execute_memorize(node, thought, result, dispatch_context)
 
     async def _validate_user_node(
         self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult
@@ -129,12 +129,13 @@ class MemorizeHandler(BaseActionHandler):
 
         if error_msg:
             logger.warning(f"CONFIG node missing value: key={config_key}")
-            return self.complete_thought_and_create_followup(
+            follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=error_msg,
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
+            return follow_up_id or ""  # Return empty string if None (should not happen)
 
         try:
             transformed_node = create_config_node(node, config_key, config_value)
@@ -152,15 +153,16 @@ class MemorizeHandler(BaseActionHandler):
                 "Please ensure your value is properly formatted and try again."
             )
             logger.error(f"Failed to create ConfigNode: {e}")
-            return self.complete_thought_and_create_followup(
+            follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=error_msg,
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
+            return follow_up_id or ""  # Return empty string if None (should not happen)
 
     async def _execute_memorize(
-        self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult
+        self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult, dispatch_context: DispatchContext
     ) -> Optional[str]:
         """Execute the memorize operation through the bus."""
         thought_id = thought.thought_id
@@ -190,7 +192,7 @@ class MemorizeHandler(BaseActionHandler):
             )
 
         except Exception as e:
-            await self._handle_error(HandlerActionType.MEMORIZE, None, thought_id, e)
+            await self._handle_error(HandlerActionType.MEMORIZE, dispatch_context, thought_id, e)
 
             persistence.update_thought_status(
                 thought_id=thought_id,

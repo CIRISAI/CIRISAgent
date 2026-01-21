@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Optional, Tuple, Union, cast
+from typing import Any, Dict, Optional, Tuple, Union, cast
 
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
@@ -9,6 +9,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -53,23 +54,25 @@ class ToolHandler(BaseActionHandler):
                 self.logger.error(
                     f"TOOL action params are not ToolParams model. Type: {type(params)}. Thought ID: {thought_id}"
                 )
-                return self.complete_thought_and_create_followup(
+                follow_up_id = self.complete_thought_and_create_followup(
                     thought=thought,
                     follow_up_content=f"TOOL action failed: Invalid parameters type ({type(params)}) for thought {thought_id}.",
                     action_result=result,
                     status=ThoughtStatus.FAILED,
                 )
+                return follow_up_id or ""  # Return empty string if None (should not happen)
 
             return params
 
         except Exception as e:
             await self._handle_error(HandlerActionType.TOOL, dispatch_context, thought_id, e)
-            return self.complete_thought_and_create_followup(
+            follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=f"TOOL action failed: {e}",
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
+            return follow_up_id or ""  # Return empty string if None (should not happen)
 
     async def _execute_tool(
         self, params: ToolParams, thought: Thought, dispatch_context: DispatchContext
@@ -115,7 +118,7 @@ class ToolHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.TOOL, dispatch_context, thought_id, e_tool)
             return False, f"TOOL {params.name} execution failed: {str(e_tool)}"
 
-    def _build_tool_params(self, params: ToolParams, thought: Thought) -> dict:
+    def _build_tool_params(self, params: ToolParams, thought: Thought) -> Dict[str, Any]:
         """Build tool parameters with channel and task context."""
         tool_params = dict(params.parameters)
 
@@ -131,7 +134,7 @@ class ToolHandler(BaseActionHandler):
 
         return tool_params
 
-    def _log_tool_result_data(self, tool_result) -> None:
+    def _log_tool_result_data(self, tool_result: ToolExecutionResult) -> None:
         """Log tool result data for debugging."""
         if not tool_result.data:
             return

@@ -8,7 +8,7 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_api_cha
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.models import Task, Thought
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class TaskCompleteHandler(BaseActionHandler):
             raise RuntimeError(error_msg)
 
     async def _handle_post_completion(
-        self, task, task_id: str, task_occurrence_id: str, result: ActionSelectionDMAResult
+        self, task: Task, task_id: str, task_occurrence_id: str, result: ActionSelectionDMAResult
     ) -> None:
         """Handle post-completion tasks: image purging and notifications."""
         # Purge images unless persist_images is set
@@ -191,7 +191,7 @@ class TaskCompleteHandler(BaseActionHandler):
         if task and task.channel_id:
             await self._handle_completion_notification(task, task_id)
 
-    async def _handle_completion_notification(self, task, task_id: str) -> None:
+    async def _handle_completion_notification(self, task: Task, task_id: str) -> None:
         """Send notification for API channel completions without SPEAK."""
         if not is_api_channel(task.channel_id):
             return

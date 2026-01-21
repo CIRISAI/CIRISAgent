@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional, Set, Union
 
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
@@ -59,12 +59,13 @@ class ObserveHandler(BaseActionHandler):
             return params
         except Exception as e:
             await self._handle_error(HandlerActionType.OBSERVE, dispatch_context, thought.thought_id, e)
-            return self.complete_thought_and_create_followup(
+            follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=f"OBSERVE action failed: {e}",
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
+            return follow_up_id or ""  # Return empty string if None (should not happen)
 
     def _resolve_channel_id(
         self, params: ObserveParams, thought: Thought, dispatch_context: DispatchContext
@@ -134,7 +135,7 @@ class ObserveHandler(BaseActionHandler):
         for rid in recall_ids:
             await self._recall_node(rid)
 
-    def _build_recall_ids(self, channel_id: Optional[str], messages: List[FetchedMessage]) -> set:
+    def _build_recall_ids(self, channel_id: Optional[str], messages: List[FetchedMessage]) -> Set[str]:
         """Build set of node IDs to recall."""
         recall_ids = set()
 

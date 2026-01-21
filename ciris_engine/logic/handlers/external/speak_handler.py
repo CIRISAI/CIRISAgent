@@ -1,9 +1,11 @@
 import logging
 import uuid
+from datetime import datetime
 from typing import Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
+from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import has_valid_adapter_prefix
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
 from ciris_engine.schemas.actions import SpeakParams
@@ -122,12 +124,13 @@ class SpeakHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.SPEAK, dispatch_context, thought_id, e)
             self._update_trace_correlation(False, f"Parameter validation failed: {e}")
 
-            return self.complete_thought_and_create_followup(
+            follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=f"SPEAK action failed for thought {thought_id}. Reason: {e}",
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
+            return follow_up_id or ""  # Return empty string if None (should not happen)
 
     def _resolve_channel_id(self, params: SpeakParams, thought: Thought, dispatch_context: DispatchContext) -> str:
         """Resolve channel ID from params, context, or thought."""
@@ -161,7 +164,8 @@ class SpeakHandler(BaseActionHandler):
     def _extract_content_string(self, params: SpeakParams) -> str:
         """Extract string content from params."""
         if hasattr(params.content, "attributes"):
-            return params.content.attributes.get("text", str(params.content))
+            text = params.content.attributes.get("text", str(params.content))
+            return str(text)  # Ensure we return str
         return str(params.content)
 
     async def _inject_error_message(self, channel_id: str) -> None:
@@ -183,7 +187,7 @@ class SpeakHandler(BaseActionHandler):
             logger.warning(f"Could not inject error message after SPEAK failure: {e}")
 
     def _create_speak_correlation(
-        self, thought: Thought, channel_id: str, content: str, success: bool, start_time
+        self, thought: Thought, channel_id: str, content: str, success: bool, start_time: datetime
     ) -> None:
         """Create service correlation for SPEAK action tracking."""
         now = self.time_service.now()

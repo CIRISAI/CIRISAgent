@@ -2,7 +2,7 @@ import datetime
 import inspect
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
@@ -122,7 +122,7 @@ class ActionDispatcher:
                 action_selection_result,
             )
 
-    def _extract_action_info(self, action_selection_result: ActionSelectionDMAResult) -> tuple:
+    def _extract_action_info(self, action_selection_result: ActionSelectionDMAResult) -> Tuple[ActionSelectionDMAResult, HandlerActionType]:
         """Extract final action result and action type from result."""
         if hasattr(action_selection_result, "final_action"):
             final_action_result = action_selection_result.final_action

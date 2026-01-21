@@ -444,6 +444,8 @@ class TestConsentHelpers:
     def mock_time_service(self):
         """Mock time service."""
         service = MagicMock()
+        # Return a current time that's after any test expiration dates
+        service.now.return_value = datetime(2025, 6, 1, tzinfo=timezone.utc)
         return service
 
     @pytest.fixture

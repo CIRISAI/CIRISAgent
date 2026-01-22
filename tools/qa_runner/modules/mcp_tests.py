@@ -750,7 +750,10 @@ class MCPTests:
         adapter_id: str,
         config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Load an adapter via the API."""
+        """Load an adapter via the API.
+
+        If the adapter already exists, tries to unload it first then reload.
+        """
         headers = self._get_auth_headers()
 
         response = requests.post(
@@ -763,6 +766,33 @@ class MCPTests:
             params={"adapter_id": adapter_id},
             timeout=60,
         )
+
+        # Handle adapter already exists - unload and reload
+        if response.status_code == 409 or "already exists" in response.text.lower():
+            self.console.print(f"     [dim]Adapter {adapter_id} exists, reloading...[/dim]")
+            # Unload the existing adapter
+            unload_response = requests.delete(
+                f"{self._base_url}/v1/system/adapters/{adapter_id}",
+                headers=headers,
+                timeout=30,
+            )
+            if unload_response.status_code not in (200, 404):
+                self.console.print(f"     [yellow]Warning: Failed to unload existing adapter: {unload_response.status_code}[/yellow]")
+
+            # Small delay to allow cleanup
+            await asyncio.sleep(0.5)
+
+            # Retry the load
+            response = requests.post(
+                f"{self._base_url}/v1/system/adapters/{adapter_type}",
+                headers=headers,
+                json={
+                    "config": config,
+                    "auto_start": True,
+                },
+                params={"adapter_id": adapter_id},
+                timeout=60,
+            )
 
         if response.status_code != 200:
             raise ValueError(f"Failed to load adapter: {response.status_code} - {response.text[:200]}")

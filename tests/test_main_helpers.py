@@ -489,7 +489,7 @@ class TestConfigureApiAdapter:
         mock_api_config.get_home_channel_id.return_value = "api:127.0.0.1:8080"
         mock_api_config_class.return_value = mock_api_config
 
-        config, channel_id = _configure_api_adapter("api", None, None)
+        config, channel_id = _configure_api_adapter(None, None)
 
         assert channel_id == "api:127.0.0.1:8080"
         mock_api_config.load_env_vars.assert_called_once()
@@ -504,7 +504,7 @@ class TestConfigureApiAdapter:
         mock_api_config.get_home_channel_id.return_value = "api:0.0.0.0:9000"
         mock_api_config_class.return_value = mock_api_config
 
-        _configure_api_adapter("api", "0.0.0.0", 9000)
+        _configure_api_adapter("0.0.0.0", 9000)
 
         assert mock_api_config.host == "0.0.0.0"
         assert mock_api_config.port == 9000
@@ -524,7 +524,7 @@ class TestConfigureDiscordAdapter:
         mock_discord_config.get_formatted_startup_channel_id.return_value = "discord:123456"
         mock_discord_config_class.return_value = mock_discord_config
 
-        config, channel_id = _configure_discord_adapter("discord", "my-token")
+        config, channel_id = _configure_discord_adapter("my-token")
 
         assert channel_id == "discord:123456"
         assert mock_discord_config.bot_token == "my-token"
@@ -539,7 +539,7 @@ class TestConfigureDiscordAdapter:
         mock_discord_config.get_home_channel_id.return_value = None
         mock_discord_config_class.return_value = mock_discord_config
 
-        config, channel_id = _configure_discord_adapter("discord", None)
+        config, channel_id = _configure_discord_adapter(None)
 
         assert channel_id is None
 
@@ -557,7 +557,7 @@ class TestConfigureCliAdapter:
         mock_cli_config.get_home_channel_id.return_value = "cli:local"
         mock_cli_config_class.return_value = mock_cli_config
 
-        config, channel_id = _configure_cli_adapter("cli", True)
+        config, channel_id = _configure_cli_adapter(True)
 
         assert channel_id == "cli:local"
 
@@ -571,7 +571,7 @@ class TestConfigureCliAdapter:
         mock_cli_config.get_home_channel_id.return_value = "cli:local"
         mock_cli_config_class.return_value = mock_cli_config
 
-        _configure_cli_adapter("cli", False)
+        _configure_cli_adapter(False)
 
         assert mock_cli_config.interactive is False
 

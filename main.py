@@ -383,7 +383,7 @@ def _handle_config_load_error(e: Exception) -> None:
 
 
 def _configure_api_adapter(
-    adapter_type: str, api_host: Optional[str], api_port: Optional[int]
+    api_host: Optional[str], api_port: Optional[int]
 ) -> tuple[Any, str]:
     """Configure API adapter. Returns (AdapterConfig, channel_id)."""
     from ciris_engine.logic.adapters.api.config import APIAdapterConfig
@@ -404,7 +404,7 @@ def _configure_api_adapter(
 
 
 def _configure_discord_adapter(
-    adapter_type: str, discord_bot_token: Optional[str]
+    discord_bot_token: Optional[str],
 ) -> tuple[Any, Optional[str]]:
     """Configure Discord adapter. Returns (AdapterConfig, channel_id or None)."""
     from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig
@@ -426,7 +426,7 @@ def _configure_discord_adapter(
 
 
 def _configure_cli_adapter(
-    adapter_type: str, cli_interactive: bool
+    cli_interactive: bool,
 ) -> tuple[Any, str]:
     """Configure CLI adapter. Returns (AdapterConfig, channel_id)."""
     from ciris_engine.logic.adapters.cli.config import CLIAdapterConfig
@@ -458,19 +458,19 @@ def _configure_adapters(
     for adapter_type in adapter_types:
         channel_id: Optional[str] = None
         if adapter_type.startswith("api"):
-            config, channel_id = _configure_api_adapter(adapter_type, api_host, api_port)
+            config, channel_id = _configure_api_adapter(api_host, api_port)
             adapter_configs[adapter_type] = config
             if not startup_channel_id:
                 startup_channel_id = channel_id
 
         elif adapter_type.startswith("discord"):
-            config, channel_id = _configure_discord_adapter(adapter_type, discord_bot_token)
+            config, channel_id = _configure_discord_adapter(discord_bot_token)
             adapter_configs[adapter_type] = config
             if channel_id and not startup_channel_id:
                 startup_channel_id = channel_id
 
         elif adapter_type.startswith("cli"):
-            config, channel_id = _configure_cli_adapter(adapter_type, cli_interactive)
+            config, channel_id = _configure_cli_adapter(cli_interactive)
             adapter_configs[adapter_type] = config
             if not startup_channel_id:
                 startup_channel_id = channel_id

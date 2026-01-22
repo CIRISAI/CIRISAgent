@@ -6,6 +6,7 @@ Consolidates TRACE_SPAN correlations into TraceSummaryNode.
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict, Union
 
@@ -43,6 +44,29 @@ class TaskSummaryData(TypedDict, total=False):
     handlers_selected: List[str]
     trace_ids: Set[str]
     duration_ms: float
+
+
+@dataclass
+class TraceSummaryMetrics:
+    """Accumulated metrics for trace summary building (reduces parameter count)."""
+
+    unique_tasks: Set[str] = field(default_factory=set)
+    unique_thoughts: Set[str] = field(default_factory=set)
+    tasks_by_status: Dict[str, int] = field(default_factory=dict)
+    thoughts_by_type: Dict[str, int] = field(default_factory=dict)
+    component_calls: Dict[str, int] = field(default_factory=dict)
+    component_failures: Dict[str, int] = field(default_factory=dict)
+    component_latency_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    handler_actions: Dict[str, int] = field(default_factory=dict)
+    errors_by_component: Dict[str, int] = field(default_factory=dict)
+    total_errors: int = 0
+    guardrail_violations: Dict[str, int] = field(default_factory=dict)
+    dma_decisions: Dict[str, int] = field(default_factory=dict)
+    task_summaries: JSONDict = field(default_factory=dict)
+    task_processing_times: List[float] = field(default_factory=list)
+    max_trace_depth: int = 0
+    avg_trace_depth: float = 0.0
+    source_count: int = 0
 
 
 def _get_tag_value(tags: Any, key: str, default: str = "unknown") -> str:
@@ -356,60 +380,50 @@ class TraceConsolidator:
         period_start: datetime,
         period_end: datetime,
         period_label: str,
-        unique_tasks: Set[str],
-        unique_thoughts: Set[str],
-        tasks_by_status: Dict[str, int],
-        thoughts_by_type: Dict[str, int],
-        component_calls: Dict[str, int],
-        component_failures: Dict[str, int],
-        component_latency_stats: Dict[str, Dict[str, float]],
-        handler_actions: Dict[str, int],
-        errors_by_component: Dict[str, int],
-        total_errors: int,
-        guardrail_violations: Dict[str, int],
-        dma_decisions: Dict[str, int],
-        task_summaries: JSONDict,
-        task_processing_times: List[float],
-        max_trace_depth: int,
-        avg_trace_depth: float,
-        source_count: int,
+        metrics: TraceSummaryMetrics,
     ) -> JSONDict:
         """Build the summary data dictionary."""
-        avg_task_time, p50_task_time, p95_task_time, p99_task_time = _calculate_percentiles(task_processing_times)
+        avg_task_time, p50_task_time, p95_task_time, p99_task_time = _calculate_percentiles(
+            metrics.task_processing_times
+        )
 
-        total_calls = sum(component_calls.values())
-        error_rate = total_errors / total_calls if total_calls > 0 else 0.0
-        avg_thoughts_per_task = len(unique_thoughts) / len(unique_tasks) if unique_tasks else 0.0
+        total_calls = sum(metrics.component_calls.values())
+        error_rate = metrics.total_errors / total_calls if total_calls > 0 else 0.0
+        avg_thoughts_per_task = (
+            len(metrics.unique_thoughts) / len(metrics.unique_tasks) if metrics.unique_tasks else 0.0
+        )
 
         return {
             "id": f"trace_summary_{period_start.strftime('%Y%m%d_%H')}",
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
             "period_label": period_label,
-            "total_tasks_processed": len(unique_tasks),
-            "tasks_by_status": dict(tasks_by_status),
-            "unique_task_ids": list(unique_tasks),
-            "task_summaries": task_summaries,
-            "total_thoughts_processed": len(unique_thoughts),
-            "thoughts_by_type": dict(thoughts_by_type),
+            "total_tasks_processed": len(metrics.unique_tasks),
+            "tasks_by_status": dict(metrics.tasks_by_status),
+            "unique_task_ids": list(metrics.unique_tasks),
+            "task_summaries": metrics.task_summaries,
+            "total_thoughts_processed": len(metrics.unique_thoughts),
+            "thoughts_by_type": dict(metrics.thoughts_by_type),
             "avg_thoughts_per_task": avg_thoughts_per_task,
-            "component_calls": dict(component_calls),
-            "component_failures": dict(component_failures),
-            "component_latency_ms": component_latency_stats,
-            "dma_decisions": dict(dma_decisions),
-            "guardrail_violations": dict(guardrail_violations),
-            "handler_actions": dict(handler_actions),
+            "component_calls": dict(metrics.component_calls),
+            "component_failures": dict(metrics.component_failures),
+            "component_latency_ms": metrics.component_latency_stats,
+            "dma_decisions": dict(metrics.dma_decisions),
+            "guardrail_violations": dict(metrics.guardrail_violations),
+            "handler_actions": dict(metrics.handler_actions),
             "avg_task_processing_time_ms": avg_task_time,
             "p50_task_processing_time_ms": p50_task_time,
             "p95_task_processing_time_ms": p95_task_time,
             "p99_task_processing_time_ms": p99_task_time,
-            "total_processing_time_ms": sum(task_processing_times) if task_processing_times else 0.0,
-            "total_errors": total_errors,
-            "errors_by_component": dict(errors_by_component),
+            "total_processing_time_ms": (
+                sum(metrics.task_processing_times) if metrics.task_processing_times else 0.0
+            ),
+            "total_errors": metrics.total_errors,
+            "errors_by_component": dict(metrics.errors_by_component),
             "error_rate": error_rate,
-            "max_trace_depth": max_trace_depth,
-            "avg_trace_depth": avg_trace_depth,
-            "source_correlation_count": source_count,
+            "max_trace_depth": metrics.max_trace_depth,
+            "avg_trace_depth": metrics.avg_trace_depth,
+            "source_correlation_count": metrics.source_count,
             "created_at": period_end.isoformat(),
             "updated_at": period_end.isoformat(),
         }
@@ -484,28 +498,33 @@ class TraceConsolidator:
         task_processing_times = _finalize_task_summaries(task_summaries)
         max_trace_depth, avg_trace_depth = _calculate_trace_depth_metrics(task_summaries)
 
+        # Build metrics container
+        metrics = TraceSummaryMetrics(
+            unique_tasks=unique_tasks,
+            unique_thoughts=unique_thoughts,
+            tasks_by_status=tasks_by_status,
+            thoughts_by_type=thoughts_by_type,
+            component_calls=component_calls,
+            component_failures=component_failures,
+            component_latency_stats=component_latency_stats,
+            handler_actions=handler_actions,
+            errors_by_component=errors_by_component,
+            total_errors=total_errors,
+            guardrail_violations=guardrail_violations,
+            dma_decisions=dma_decisions,
+            task_summaries=task_summaries,
+            task_processing_times=task_processing_times,
+            max_trace_depth=max_trace_depth,
+            avg_trace_depth=avg_trace_depth,
+            source_count=len(trace_spans),
+        )
+
         # Build summary data
         summary_data = self._build_summary_data(
             period_start,
             period_end,
             period_label,
-            unique_tasks,
-            unique_thoughts,
-            tasks_by_status,
-            thoughts_by_type,
-            component_calls,
-            component_failures,
-            component_latency_stats,
-            handler_actions,
-            errors_by_component,
-            total_errors,
-            guardrail_violations,
-            dma_decisions,
-            task_summaries,
-            task_processing_times,
-            max_trace_depth,
-            avg_trace_depth,
-            len(trace_spans),
+            metrics,
         )
 
         # Create GraphNode

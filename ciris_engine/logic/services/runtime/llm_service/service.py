@@ -191,7 +191,7 @@ def _handle_instructor_retry_exception(
         circuit_breaker.record_failure()
 
     # Schema validation errors
-    if "validation" in error_str or "validationerror" in error_str:
+    if _is_validation_error(error_str):
         _log_instructor_error("SCHEMA VALIDATION", error_context, full_error,
                               extra=f"Expected Schema: {error_context['response_model']}")
         raise RuntimeError(
@@ -200,15 +200,15 @@ def _handle_instructor_retry_exception(
         ) from error
 
     # Timeout errors
-    if "timed out" in error_str or "timeout" in error_str:
+    if _is_timeout_error(error_str):
         _log_instructor_error("TIMEOUT", error_context, full_error,
-                              extra=f"Request exceeded timeout")
+                              extra="Request exceeded timeout")
         raise TimeoutError(
-            f"LLM API timeout - circuit breaker activated"
+            "LLM API timeout - circuit breaker activated"
         ) from error
 
     # Service unavailable / 503 errors
-    if "service unavailable" in error_str or "503" in error_str:
+    if _is_service_unavailable_error(error_str):
         _log_instructor_error("SERVICE UNAVAILABLE (503)", error_context, full_error)
         raise RuntimeError(
             "LLM service unavailable (503) - circuit breaker activated for failover"
@@ -234,7 +234,7 @@ def _handle_instructor_retry_exception(
         ) from error
 
     # Content filtering / guardrail errors
-    if "content_filter" in error_str or "content policy" in error_str or "safety" in error_str:
+    if _is_content_filter_error(error_str):
         _log_instructor_error("CONTENT FILTER / GUARDRAIL", error_context, full_error)
         raise RuntimeError(
             "LLM content filter triggered - circuit breaker activated for failover"
@@ -248,14 +248,34 @@ def _handle_instructor_retry_exception(
 
 def _is_context_length_error(error_str: str) -> bool:
     """Check if error string indicates a context length exceeded error."""
-    return (
-        "context_length" in error_str
-        or "maximum context" in error_str
-        or "context length" in error_str
-        or "token limit" in error_str
-        or "too many tokens" in error_str
-        or ("max_tokens" in error_str and "exceed" in error_str)
-    )
+    context_patterns = [
+        "context_length", "maximum context", "context length",
+        "token limit", "too many tokens"
+    ]
+    if any(pattern in error_str for pattern in context_patterns):
+        return True
+    return "max_tokens" in error_str and "exceed" in error_str
+
+
+def _is_validation_error(error_str: str) -> bool:
+    """Check if error string indicates a validation error."""
+    return "validation" in error_str or "validationerror" in error_str
+
+
+def _is_timeout_error(error_str: str) -> bool:
+    """Check if error string indicates a timeout error."""
+    return "timed out" in error_str or "timeout" in error_str
+
+
+def _is_service_unavailable_error(error_str: str) -> bool:
+    """Check if error string indicates service unavailable (503)."""
+    return "service unavailable" in error_str or "503" in error_str
+
+
+def _is_content_filter_error(error_str: str) -> bool:
+    """Check if error string indicates content filtering triggered."""
+    filter_patterns = ["content_filter", "content policy", "safety"]
+    return any(pattern in error_str for pattern in filter_patterns)
 
 
 def _log_instructor_error(

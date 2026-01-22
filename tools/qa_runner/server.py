@@ -495,7 +495,7 @@ class APIServerManager:
 
         # Start mock logshipper to receive covenant traces (unless using live lens)
         if self.config.live_lens:
-            self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris.ai/v1[/cyan]")
+            self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]")
             self.mock_logshipper = None
         else:
             self.mock_logshipper = MockLogshipperServer(port=18080)

@@ -32,7 +32,7 @@
         "step_id": "data_disclosure",
         "step_type": "confirm",
         "title": "Data Collection Disclosure",
-        "description": "This adapter sends covenant compliance metrics to power the CIRIS Capacity Score at ciris.ai/ciris-scoring.\n\n**Default (Generic Level) - NUMERIC SCORES ONLY:**\n- Plausibility scores, domain alignment scores\n- k_eff (epistemic diversity), correlation risk\n- Conscience check pass/fail and numeric thresholds\n- Execution metrics (tokens, timing)\n- Audit chain hashes for integrity verification\n\n**NO text is sent by default:**\n- No reasoning text\n- No prompts\n- No user messages\n- No conversation content\n\n**You can optionally share more** in the following steps to help improve CIRIS research and enable early warning correlation.\n\nData is sent via HTTPS to https://lens.ciris.ai/v1"
+        "description": "This adapter sends covenant compliance metrics to power the CIRIS Capacity Score at ciris.ai/ciris-scoring.\n\n**Default (Generic Level) - NUMERIC SCORES ONLY:**\n- Plausibility scores, domain alignment scores\n- k_eff (epistemic diversity), correlation risk\n- Conscience check pass/fail and numeric thresholds\n- Execution metrics (tokens, timing)\n- Audit chain hashes for integrity verification\n\n**NO text is sent by default:**\n- No reasoning text\n- No prompts\n- No user messages\n- No conversation content\n\n**You can optionally share more** in the following steps to help improve CIRIS research and enable early warning correlation.\n\nData is sent via HTTPS to https://lens.ciris-services-1.ai/lens-api/api/v1"
       },
       {
         "step_id": "consent",
@@ -175,7 +175,7 @@
             "label": "CIRISLens API Endpoint",
             "description": "The URL where covenant metrics will be sent",
             "required": false,
-            "default": "https://lens.ciris.ai/v1"
+            "default": "https://lens.ciris-services-1.ai/lens-api/api/v1"
           },
           {
             "name": "batch_size",
@@ -224,7 +224,7 @@
     "endpoint_url": {
       "type": "string",
       "env": "CIRIS_LENS_ENDPOINT",
-      "default": "https://lens.ciris.ai/v1",
+      "default": "https://lens.ciris-services-1.ai/lens-api/api/v1",
       "description": "CIRISLens API endpoint URL"
     },
     "consent_given": {

@@ -142,7 +142,7 @@ class CovenantMetricsConfigurable:
             return False, f"Invalid trace_level: {trace_level}. Must be one of: {valid_levels}"
 
         # Validate endpoint_url if present
-        endpoint_url = config.get("endpoint_url", "https://lens.ciris.ai/v1")
+        endpoint_url = config.get("endpoint_url", "https://lens.ciris-services-1.ai/lens-api/api/v1")
         if not endpoint_url.startswith(("http://", "https://")):
             return False, f"Invalid endpoint_url: {endpoint_url} (must start with http:// or https://)"
 

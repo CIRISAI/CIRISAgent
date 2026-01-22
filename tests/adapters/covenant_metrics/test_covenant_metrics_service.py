@@ -72,7 +72,7 @@ class TestCovenantMetricsServiceInit:
 
         assert service._consent_given is False
         assert service._consent_timestamp is None
-        assert service._endpoint_url == "https://lens.ciris.ai/v1"
+        assert service._endpoint_url == "https://lens.ciris-services-1.ai/lens-api/api/v1"
         assert service._batch_size == 10
         assert service._flush_interval == 60.0
         assert service._events_received == 0

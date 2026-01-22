@@ -44,7 +44,7 @@ CIRIS_COVENANT_METRICS_TRACE_LEVEL=full_traces
 | `CIRIS_COVENANT_METRICS_CONSENT` | Yes | `false` | Must be `true` to enable data collection |
 | `CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP` | No | auto-generated | ISO timestamp of consent (for audit) |
 | `CIRIS_COVENANT_METRICS_TRACE_LEVEL` | No | `generic` | Trace detail: `generic`, `detailed`, or `full_traces` |
-| `CIRIS_COVENANT_METRICS_ENDPOINT` | No | `https://lens.ciris.ai/v1` | CIRISLens API endpoint |
+| `CIRIS_COVENANT_METRICS_ENDPOINT` | No | `https://lens.ciris-services-1.ai/lens-api/api/v1` | CIRISLens API endpoint |
 | `CIRIS_COVENANT_METRICS_FLUSH_INTERVAL` | No | `60` | Seconds between batch flushes (10-300) |
 
 ## Trace Levels
@@ -68,7 +68,7 @@ services:
       # Covenant Metrics - Full Traces
       CIRIS_COVENANT_METRICS_CONSENT: "true"
       CIRIS_COVENANT_METRICS_TRACE_LEVEL: "full_traces"
-      CIRIS_COVENANT_METRICS_ENDPOINT: "https://lens.ciris.ai/v1"
+      CIRIS_COVENANT_METRICS_ENDPOINT: "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
       # Other agent config...
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
@@ -114,7 +114,7 @@ data:
   # Covenant Metrics - Full Traces
   CIRIS_COVENANT_METRICS_CONSENT: "true"
   CIRIS_COVENANT_METRICS_TRACE_LEVEL: "full_traces"
-  CIRIS_COVENANT_METRICS_ENDPOINT: "https://lens.ciris.ai/v1"
+  CIRIS_COVENANT_METRICS_ENDPOINT: "https://lens.ciris-services-1.ai/lens-api/api/v1"
 ```
 
 ## Early Warning Correlation (Config File Only)
@@ -134,7 +134,7 @@ After deployment, check the agent logs for:
 📊 COVENANT METRICS ADAPTER INITIALIZING
    Config consent_given: False
    Env CIRIS_COVENANT_METRICS_CONSENT: true
-   Env CIRIS_COVENANT_METRICS_ENDPOINT: https://lens.ciris.ai/v1
+   Env CIRIS_COVENANT_METRICS_ENDPOINT: https://lens.ciris-services-1.ai/lens-api/api/v1
 ✅ CONSENT enabled via environment variable CIRIS_COVENANT_METRICS_CONSENT
 ```
 
@@ -142,5 +142,5 @@ And for successful trace sends:
 
 ```
 ✅ TRACE COMPLETE #1: trace-th_seed_xxx-20260115... [6 components]
-📤 Sending batch of 10 events to https://lens.ciris.ai/v1
+📤 Sending batch of 10 events to https://lens.ciris-services-1.ai/lens-api/api/v1
 ```

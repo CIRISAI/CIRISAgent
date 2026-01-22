@@ -33,6 +33,326 @@ from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionR
 
 from .pricing_calculator import LLMPricingCalculator
 
+# Type alias for error context dict used in error handling
+ErrorContext = Dict[str, Any]
+
+
+def _build_ciris_proxy_metadata(
+    task_id: Optional[str],
+    thought_id: Optional[str],
+    retry_state: Dict[str, Any],
+    resp_model_name: str,
+) -> Dict[str, Any]:
+    """Build metadata dict for CIRIS proxy requests.
+
+    Args:
+        task_id: Task ID for billing (required for CIRIS proxy)
+        thought_id: Optional thought ID for tracing
+        retry_state: Dict tracking retry count/error/request_id
+        resp_model_name: Name of the response model for logging
+
+    Returns:
+        Dict with metadata including interaction_id and retry info
+
+    Raises:
+        RuntimeError: If task_id is None (required for billing)
+    """
+    import hashlib
+    import uuid
+
+    if not task_id:
+        raise RuntimeError(
+            f"BILLING BUG: task_id is required for CIRIS proxy but was None "
+            f"(thought_id={thought_id}, model={resp_model_name})"
+        )
+    interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
+
+    metadata: Dict[str, Any] = {"interaction_id": interaction_id}
+
+    if retry_state["count"] > 0:
+        metadata["retry_count"] = retry_state["count"]
+        if retry_state["previous_error"]:
+            metadata["previous_error"] = retry_state["previous_error"]
+        if retry_state["original_request_id"]:
+            metadata["original_request_id"] = retry_state["original_request_id"]
+        logger.info(
+            f"[LLM_RETRY] attempt={retry_state['count']} "
+            f"prev_error={retry_state['previous_error']} "
+            f"interaction_id={interaction_id}"
+        )
+    else:
+        retry_state["original_request_id"] = uuid.uuid4().hex[:12]
+        metadata["request_id"] = retry_state["original_request_id"]
+        logger.info(
+            f"[LLM_REQUEST] interaction_id={interaction_id} "
+            f"request_id={retry_state['original_request_id']} "
+            f"thought_id={thought_id} model={resp_model_name}"
+        )
+
+    return metadata
+
+
+def _build_openrouter_provider_config() -> Dict[str, Any]:
+    """Build provider config for OpenRouter requests from environment variables.
+
+    Environment variables:
+        OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers
+        OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip
+
+    Returns:
+        Dict with provider ordering/ignore preferences, empty if none configured
+    """
+    provider_config: Dict[str, Any] = {}
+
+    provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
+    if provider_order:
+        provider_config["order"] = [p.strip() for p in provider_order.split(",") if p.strip()]
+
+    ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
+    if ignore_providers:
+        provider_config["ignore"] = [p.strip() for p in ignore_providers.split(",") if p.strip()]
+
+    if provider_config:
+        logger.info(f"[OPENROUTER] Using provider config: {provider_config}")
+
+    return provider_config
+
+
+def _log_multimodal_content(
+    msg_list: List[MessageDict],
+    model_name: str,
+    thought_id: Optional[str],
+    resp_model_name: str,
+) -> int:
+    """Log details about multimodal (vision) content in messages.
+
+    Args:
+        msg_list: List of message dicts
+        model_name: The model being called
+        thought_id: Optional thought ID for tracing
+        resp_model_name: Name of the response model
+
+    Returns:
+        Number of images found in the messages
+    """
+    image_count = 0
+    total_image_bytes = 0
+
+    for msg in msg_list:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "image_url":
+                    image_count += 1
+                    url = block.get("image_url", {}).get("url", "")
+                    if url.startswith("data:image"):
+                        total_image_bytes += len(url)
+
+    if image_count > 0:
+        logger.info(
+            f"[VISION_DEBUG] Sending to proxy: model={model_name}, "
+            f"images={image_count}, image_data_bytes={total_image_bytes}, "
+            f"thought_id={thought_id}, response_model={resp_model_name}"
+        )
+
+    return image_count
+
+
+def _handle_instructor_retry_exception(
+    error: Exception,
+    error_context: ErrorContext,
+    circuit_breaker: "CircuitBreaker",
+) -> None:
+    """Handle InstructorRetryException with detailed error categorization.
+
+    This function categorizes the error, logs appropriate messages, and raises
+    the appropriate exception type. It always raises an exception.
+
+    Args:
+        error: The InstructorRetryException
+        error_context: Dict with model, provider, response_model, etc.
+        circuit_breaker: The circuit breaker instance for recording failures
+
+    Raises:
+        RuntimeError: For most error types
+        TimeoutError: For timeout errors
+    """
+    error_str = str(error).lower()
+    full_error = str(error)
+
+    # Check for rate limit first - DON'T record as circuit breaker failure
+    is_rate_limit = (
+        ERROR_PATTERN_RATE_LIMIT in error_str
+        or ERROR_PATTERN_429 in error_str
+        or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
+    )
+
+    if not is_rate_limit:
+        circuit_breaker.record_failure()
+
+    # Schema validation errors
+    if _is_validation_error(error_str):
+        _log_instructor_error("SCHEMA VALIDATION", error_context, full_error,
+                              extra=f"Expected Schema: {error_context['response_model']}")
+        raise RuntimeError(
+            f"LLM response validation failed for {error_context['response_model']} - "
+            "circuit breaker activated for failover"
+        ) from error
+
+    # Timeout errors
+    if _is_timeout_error(error_str):
+        _log_instructor_error("TIMEOUT", error_context, full_error,
+                              extra="Request exceeded timeout")
+        raise TimeoutError(
+            "LLM API timeout - circuit breaker activated"
+        ) from error
+
+    # Service unavailable / 503 errors
+    if _is_service_unavailable_error(error_str):
+        _log_instructor_error("SERVICE UNAVAILABLE (503)", error_context, full_error)
+        raise RuntimeError(
+            "LLM service unavailable (503) - circuit breaker activated for failover"
+        ) from error
+
+    # Rate limit / 429 errors
+    if is_rate_limit:
+        logger.warning(
+            f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
+            f"  Model: {error_context['model']}\n"
+            f"  Provider: {error_context['provider']}\n"
+            f"  CB State: {error_context['circuit_breaker_state']} "
+            f"(not incrementing - rate limits are transient)\n"
+            f"  Error: {full_error[:300]}"
+        )
+        raise RuntimeError("LLM rate limit exceeded (429) - will be retried by LLM bus") from error
+
+    # Context length / token limit exceeded errors
+    if _is_context_length_error(error_str):
+        _log_instructor_error("CONTEXT_LENGTH_EXCEEDED", error_context, full_error)
+        raise RuntimeError(
+            "CONTEXT_LENGTH_EXCEEDED: Input too long - reduce message history or context"
+        ) from error
+
+    # Content filtering / guardrail errors
+    if _is_content_filter_error(error_str):
+        _log_instructor_error("CONTENT FILTER / GUARDRAIL", error_context, full_error)
+        raise RuntimeError(
+            "LLM content filter triggered - circuit breaker activated for failover"
+        ) from error
+
+    # Generic instructor error
+    _log_instructor_error("INSTRUCTOR ERROR", error_context, full_error,
+                          extra=f"Error Type: {type(error).__name__}")
+    raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from error
+
+
+def _is_context_length_error(error_str: str) -> bool:
+    """Check if error string indicates a context length exceeded error."""
+    context_patterns = [
+        "context_length", "maximum context", "context length",
+        "token limit", "too many tokens"
+    ]
+    if any(pattern in error_str for pattern in context_patterns):
+        return True
+    return "max_tokens" in error_str and "exceed" in error_str
+
+
+def _is_validation_error(error_str: str) -> bool:
+    """Check if error string indicates a validation error."""
+    return "validation" in error_str or "validationerror" in error_str
+
+
+def _is_timeout_error(error_str: str) -> bool:
+    """Check if error string indicates a timeout error."""
+    return "timed out" in error_str or "timeout" in error_str
+
+
+def _is_service_unavailable_error(error_str: str) -> bool:
+    """Check if error string indicates service unavailable (503)."""
+    return "service unavailable" in error_str or "503" in error_str
+
+
+def _is_content_filter_error(error_str: str) -> bool:
+    """Check if error string indicates content filtering triggered."""
+    filter_patterns = ["content_filter", "content policy", "safety"]
+    return any(pattern in error_str for pattern in filter_patterns)
+
+
+def _log_instructor_error(
+    error_type: str,
+    error_context: ErrorContext,
+    full_error: str,
+    extra: Optional[str] = None,
+) -> None:
+    """Log an instructor error with consistent formatting.
+
+    Args:
+        error_type: Type label for the error (e.g., "TIMEOUT", "VALIDATION")
+        error_context: Dict with model, provider, response_model, etc.
+        full_error: Full error message string
+        extra: Optional extra line to include in log
+    """
+    extra_line = f"\n  {extra}" if extra else ""
+    logger.error(
+        f"LLM {error_type} - Error occurred.\n"
+        f"  Model: {error_context['model']}\n"
+        f"  Provider: {error_context['provider']}{extra_line}\n"
+        f"  CB State: {error_context['circuit_breaker_state']} "
+        f"({error_context['consecutive_failures']} consecutive failures)\n"
+        f"  Error: {full_error[:500]}"
+    )
+
+
+def _handle_generic_llm_exception(
+    error: Exception,
+    model_name: str,
+    base_url: str,
+    resp_model_name: str,
+    circuit_breaker: "CircuitBreaker",
+) -> None:
+    """Handle generic exceptions not caught by other handlers.
+
+    This function always raises an exception.
+
+    Args:
+        error: The exception that was raised
+        model_name: The model being called
+        base_url: The provider base URL
+        resp_model_name: Name of the response model
+        circuit_breaker: The circuit breaker instance
+
+    Raises:
+        RuntimeError: Always raises with error context
+    """
+    error_str_lower = str(error).lower()
+    is_rate_limit = (
+        ERROR_PATTERN_RATE_LIMIT in error_str_lower
+        or ERROR_PATTERN_429 in error_str_lower
+        or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
+    )
+
+    if not is_rate_limit:
+        circuit_breaker.record_failure()
+
+    error_msg = str(error).strip() if str(error).strip() else f"<{type(error).__name__} with no message>"
+
+    if is_rate_limit:
+        logger.warning(
+            f"LLM RATE LIMIT (429) - NOT counting as CB failure.\n"
+            f"  Model: {model_name}\n"
+            f"  Provider: {base_url or 'default'}\n"
+            f"  Will be retried by LLM bus. Error: {error_msg[:300]}"
+        )
+    else:
+        logger.error(
+            f"LLM UNEXPECTED ERROR - {type(error).__name__}.\n"
+            f"  Model: {model_name}\n"
+            f"  Provider: {base_url or 'default'}\n"
+            f"  Expected Schema: {resp_model_name}\n"
+            f"  Error: {error_msg[:500]}"
+        )
+    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
+
 
 # Configuration class for OpenAI-compatible LLM services
 class OpenAIConfig(BaseModel):
@@ -403,18 +723,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             thought_id: Optional thought ID for tracing (last 8 chars used)
             task_id: Optional task ID for tracing (last 8 chars used)
         """
-        # Track the request
         self._track_request()
-        # Track LLM-specific request
         self._total_requests += 1
-
-        # No mock service integration - LLMService and MockLLMService are separate
         logger.debug(f"Structured LLM call for {response_model.__name__}")
-
-        # Check circuit breaker before making call
         self.circuit_breaker.check_and_raise()
 
-        # Track retry state for metadata
         retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
 
         async def _make_structured_call(
@@ -423,429 +736,211 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             max_toks: int,
             temp: float,
         ) -> Tuple[BaseModel, ResourceUsage]:
-
             try:
-                # Use instructor but capture the completion for usage data
-                # Note: We cast to Any because instructor expects OpenAI-specific message types
-                # but we use our own MessageDict protocol for type safety at the service boundary
-
-                # Build extra kwargs for CIRIS proxy (requires interaction_id)
-                # NOTE: CIRIS proxy charges per unique interaction_id, so we use task_id only
-                # All thoughts within the same task share one credit
-                extra_kwargs: Dict[str, Any] = {}
-                base_url = self.openai_config.base_url or ""
-                if "ciris.ai" in base_url or "ciris-services" in base_url:
-                    # Hash task_id for billing (irreversible, same task = same hash = 1 credit)
-                    import hashlib
-                    import uuid
-
-                    if not task_id:
-                        raise RuntimeError(
-                            f"BILLING BUG: task_id is required for CIRIS proxy but was None "
-                            f"(thought_id={thought_id}, model={resp_model.__name__})"
-                        )
-                    interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
-
-                    # Build metadata for CIRIS proxy
-                    metadata: Dict[str, Any] = {"interaction_id": interaction_id}
-
-                    # Add retry info if this is a retry attempt
-                    if retry_state["count"] > 0:
-                        metadata["retry_count"] = retry_state["count"]
-                        if retry_state["previous_error"]:
-                            metadata["previous_error"] = retry_state["previous_error"]
-                        if retry_state["original_request_id"]:
-                            metadata["original_request_id"] = retry_state["original_request_id"]
-                        logger.info(
-                            f"[LLM_RETRY] attempt={retry_state['count']} "
-                            f"prev_error={retry_state['previous_error']} "
-                            f"interaction_id={interaction_id}"
-                        )
-                    else:
-                        # First attempt - generate request ID for correlation
-                        retry_state["original_request_id"] = uuid.uuid4().hex[:12]
-                        metadata["request_id"] = retry_state["original_request_id"]
-                        logger.info(
-                            f"[LLM_REQUEST] interaction_id={interaction_id} "
-                            f"request_id={retry_state['original_request_id']} "
-                            f"thought_id={thought_id} model={resp_model.__name__}"
-                        )
-
-                    extra_kwargs["extra_body"] = {"metadata": metadata}
-
-                # OpenRouter provider routing preferences
-                # Set via environment variables:
-                #   OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers (e.g., "together,groq,sambanova")
-                #   OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip (e.g., "friendli,google-vertex")
-                elif "openrouter.ai" in base_url:
-                    provider_config: Dict[str, Any] = {}
-
-                    # Parse provider order preference
-                    provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
-                    if provider_order:
-                        provider_config["order"] = [p.strip() for p in provider_order.split(",") if p.strip()]
-
-                    # Parse providers to ignore
-                    ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
-                    if ignore_providers:
-                        provider_config["ignore"] = [p.strip() for p in ignore_providers.split(",") if p.strip()]
-
-                    # Only add extra_body if we have provider preferences
-                    if provider_config:
-                        extra_kwargs["extra_body"] = {"provider": provider_config}
-                        logger.info(f"[OPENROUTER] Using provider config: {provider_config}")
-
-                # DEBUG: Log multimodal content details for proxy team diagnostics
-                image_count = 0
-                total_image_bytes = 0
-                for msg in msg_list:
-                    content = msg.get("content", "")
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") == "image_url":
-                                image_count += 1
-                                url = block.get("image_url", {}).get("url", "")
-                                if url.startswith("data:image"):
-                                    total_image_bytes += len(url)
-                if image_count > 0:
-                    logger.info(
-                        f"[VISION_DEBUG] Sending to proxy: model={self.model_name}, "
-                        f"images={image_count}, image_data_bytes={total_image_bytes}, "
-                        f"thought_id={thought_id}, response_model={resp_model.__name__}"
-                    )
+                extra_kwargs = self._build_extra_kwargs(task_id, thought_id, resp_model.__name__, retry_state)
+                image_count = _log_multimodal_content(msg_list, self.model_name, thought_id, resp_model.__name__)
 
                 response, completion = await self.instruct_client.chat.completions.create_with_completion(
                     model=self.model_name,
                     messages=cast(Any, msg_list),
                     response_model=resp_model,
-                    max_retries=0,  # Disable instructor retries completely
+                    max_retries=0,
                     max_tokens=max_toks,
                     temperature=temp,
                     **extra_kwargs,
                 )
 
-                # DEBUG: Log proxy response details
-                if image_count > 0:
-                    actual_model = getattr(completion, "model", "unknown")
-                    logger.info(
-                        f"[VISION_DEBUG] Proxy response: requested={self.model_name}, "
-                        f"actual_model={actual_model}, thought_id={thought_id}"
-                    )
-
-                # Log OpenRouter provider if present
-                provider_name = getattr(completion, "provider", None)
-                base_url = self.openai_config.base_url or ""
-                if provider_name and "openrouter.ai" in base_url:
-                    logger.info(f"[OPENROUTER] SUCCESS - Provider: {provider_name}, Model: {self.model_name}")
-
-                # Extract usage data from completion
-                usage = completion.usage
-
-                # Record success with circuit breaker
-                self.circuit_breaker.record_success()
-
-                # Extract token counts
-                prompt_tokens = getattr(usage, "prompt_tokens", 0)
-                completion_tokens = getattr(usage, "completion_tokens", 0)
-
-                # Calculate costs and environmental impact using pricing calculator
-                usage_obj = self.pricing_calculator.calculate_cost_and_impact(
-                    model_name=self.model_name,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    provider_name="openai",  # Since this is OpenAI-compatible client
-                )
-
-                # Track metrics for get_metrics() method
-                self._total_input_tokens += prompt_tokens
-                self._total_output_tokens += completion_tokens
-                self._total_cost_cents += usage_obj.cost_cents
-
-                # Record token usage in telemetry
-                if self.telemetry_service and usage_obj.tokens_used > 0:
-                    await self.telemetry_service.record_metric("llm_tokens_used", usage_obj.tokens_used)
-                    await self.telemetry_service.record_metric("llm_api_call_structured")
-
-                return response, usage_obj
+                self._log_completion_details(completion, image_count, thought_id)
+                return await self._process_successful_response(response, completion)
 
             except AuthenticationError as e:
-                # Handle 401 Unauthorized - likely expired token or billing issue for ciris.ai
-                self._track_error(e)
-                self._total_errors += 1
-
-                base_url = self.openai_config.base_url or ""
-                if "ciris.ai" in base_url:
-                    # Force circuit breaker open immediately (don't wait for failure threshold)
-                    # This prevents burning credits on repeated failures
-                    self.circuit_breaker.force_open(reason="ciris.ai 401 - billing or token error")
-                    # Write signal file for Android to trigger token refresh
-                    logger.error(
-                        f"LLM AUTHENTICATION ERROR (401) - ciris.ai billing or token error.\n"
-                        f"  Model: {self.model_name}\n"
-                        f"  Provider: {base_url}\n"
-                        f"  Circuit breaker forced open immediately.\n"
-                        f"  Writing token refresh signal..."
-                    )
-                    self._signal_token_refresh_needed()
-                else:
-                    self.circuit_breaker.record_failure()
-                    logger.error(
-                        f"LLM AUTHENTICATION ERROR (401) - Invalid API key.\n"
-                        f"  Model: {self.model_name}\n"
-                        f"  Provider: {base_url}\n"
-                        f"  Error: {e}"
-                    )
+                self._handle_auth_error(e)
                 raise
 
             except (APIConnectionError, RateLimitError, InternalServerError) as e:
-                # Track error in base service
-                self._track_error(e)
-                # Track LLM-specific error
-                self._total_errors += 1
-
-                # Enhanced error logging for provider errors
-                error_type = type(e).__name__
-                error_details = {
-                    "error_type": error_type,
-                    "model": self.model_name,
-                    "base_url": self.openai_config.base_url or "default",
-                    "circuit_breaker_state": self.circuit_breaker.state.value,
-                }
-
-                if isinstance(e, RateLimitError):
-                    # DON'T record circuit breaker failure for rate limits!
-                    # Rate limits are transient and will be retried by the LLM bus
-                    logger.warning(
-                        f"LLM RATE LIMIT (429) - NOT counting as CB failure. Provider: {error_details['base_url']}, "
-                        f"Model: {error_details['model']}. Will be retried by LLM bus. Error: {e}"
-                    )
-                elif isinstance(e, InternalServerError):
-                    error_str = str(e).lower()
-                    # Check for billing service errors - should be surfaced to user
-                    if "billing service error" in error_str or "billing error" in error_str:
-                        from ciris_engine.logic.adapters.base_observer import BillingServiceError
-
-                        # Force circuit breaker open - don't retry billing errors
-                        self.circuit_breaker.force_open(reason="Billing service error")
-                        logger.error(
-                            f"LLM BILLING ERROR - Provider: {error_details['base_url']}, "
-                            f"Model: {error_details['model']}. Billing service returned error: {e}"
-                        )
-                        raise BillingServiceError(
-                            message=f"LLM billing service error. Please check your account status or try again later. Details: {e}",
-                            status_code=402,
-                        ) from e
-                    else:
-                        logger.error(
-                            f"LLM PROVIDER ERROR (500) - Provider: {error_details['base_url']}, "
-                            f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
-                            f"Provider returned internal server error: {e}"
-                        )
-                elif isinstance(e, APIConnectionError):
-                    logger.error(
-                        f"LLM CONNECTION ERROR - Provider: {error_details['base_url']}, "
-                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
-                        f"Failed to connect to provider: {e}"
-                    )
-                else:
-                    logger.error(
-                        f"LLM API ERROR ({error_type}) - Provider: {error_details['base_url']}, "
-                        f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
-                        f"Error: {e}"
-                    )
+                self._handle_provider_error(e)
                 raise
+
             except Exception as e:
-                # Check if this is an instructor retry exception (includes timeouts, 503 errors, rate limits, etc.)
-                if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
-                    if isinstance(e, instructor.exceptions.InstructorRetryException):
-                        # Check error type FIRST before recording failures
-                        error_str = str(e).lower()
-                        full_error = str(e)
+                self._handle_general_exception(e, resp_model.__name__)
+                raise  # Should not reach here as _handle_general_exception always raises
 
-                        # Check for rate limit / 429 errors - DON'T record as circuit breaker failure
-                        # Rate limits are transient and will be retried by the LLM bus
-                        is_rate_limit = (
-                            ERROR_PATTERN_RATE_LIMIT in error_str
-                            or ERROR_PATTERN_429 in error_str
-                            or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str
-                        )
-
-                        # Only record circuit breaker failure for non-rate-limit errors
-                        if not is_rate_limit:
-                            self.circuit_breaker.record_failure()
-
-                        self._track_error(e)
-                        # Track LLM-specific error
-                        self._total_errors += 1
-
-                        # Build error context for better debugging
-                        error_context = {
-                            "model": self.model_name,
-                            "provider": self.openai_config.base_url or "default",
-                            "response_model": resp_model.__name__,
-                            "circuit_breaker_state": self.circuit_breaker.state.value,
-                            "consecutive_failures": self.circuit_breaker.consecutive_failures,
-                        }
-
-                        # Check for schema validation errors
-                        if "validation" in error_str or "validationerror" in error_str:
-                            # Extract validation details
-                            logger.error(
-                                f"LLM SCHEMA VALIDATION ERROR - Response did not match expected schema.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  Expected Schema: {error_context['response_model']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Validation Details: {full_error[:500]}"
-                            )
-                            raise RuntimeError(
-                                f"LLM response validation failed for {resp_model.__name__} - "
-                                "circuit breaker activated for failover"
-                            ) from e
-
-                        # Check for timeout errors
-                        elif "timed out" in error_str or "timeout" in error_str:
-                            logger.error(
-                                f"LLM TIMEOUT ERROR - Request exceeded {self.openai_config.timeout_seconds}s timeout.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Error: {full_error[:300]}"
-                            )
-                            raise TimeoutError(
-                                f"LLM API timeout ({self.openai_config.timeout_seconds}s) "
-                                "- circuit breaker activated"
-                            ) from e
-
-                        # Check for service unavailable / 503 errors
-                        elif "service unavailable" in error_str or "503" in error_str:
-                            logger.error(
-                                f"LLM SERVICE UNAVAILABLE (503) - Provider temporarily down.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Error: {full_error[:300]}"
-                            )
-                            raise RuntimeError(
-                                "LLM service unavailable (503) - circuit breaker activated for failover"
-                            ) from e
-
-                        # Check for rate limit / 429 errors - NOT counted as circuit breaker failure
-                        # Rate limits are transient and will be retried by the LLM bus
-                        elif ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
-                            logger.warning(
-                                f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"(not incrementing - rate limits are transient)\n"
-                                f"  Error: {full_error[:300]}"
-                            )
-                            raise RuntimeError("LLM rate limit exceeded (429) - will be retried by LLM bus") from e
-
-                        # Check for context length / token limit exceeded errors (400)
-                        elif (
-                            "context_length" in error_str
-                            or "maximum context" in error_str
-                            or "context length" in error_str
-                            or "token limit" in error_str
-                            or "too many tokens" in error_str
-                            or "max_tokens" in error_str
-                            and "exceed" in error_str
-                        ):
-                            logger.error(
-                                f"LLM CONTEXT_LENGTH_EXCEEDED - Input too long for model.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Error: {full_error[:500]}"
-                            )
-                            raise RuntimeError(
-                                "CONTEXT_LENGTH_EXCEEDED: Input too long - reduce message history or context"
-                            ) from e
-
-                        # Check for content filtering / guardrail errors
-                        elif "content_filter" in error_str or "content policy" in error_str or "safety" in error_str:
-                            logger.error(
-                                f"LLM CONTENT FILTER / GUARDRAIL - Request blocked by provider safety systems.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Error: {full_error[:300]}"
-                            )
-                            raise RuntimeError(
-                                "LLM content filter triggered - circuit breaker activated for failover"
-                            ) from e
-
-                        # Generic instructor error with enhanced logging
-                        else:
-                            logger.error(
-                                f"LLM INSTRUCTOR ERROR - Unspecified failure.\n"
-                                f"  Model: {error_context['model']}\n"
-                                f"  Provider: {error_context['provider']}\n"
-                                f"  Expected Schema: {error_context['response_model']}\n"
-                                f"  CB State: {error_context['circuit_breaker_state']} "
-                                f"({error_context['consecutive_failures']} consecutive failures)\n"
-                                f"  Error Type: {type(e).__name__}\n"
-                                f"  Error: {full_error[:500]}"
-                            )
-                            raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from e
-                # Wrap all other exceptions with context to avoid empty error messages
-                # Check for rate limits in the catch-all too (in case instructor module structure changed)
-                error_str_lower = str(e).lower()
-                is_rate_limit = (
-                    ERROR_PATTERN_RATE_LIMIT in error_str_lower
-                    or ERROR_PATTERN_429 in error_str_lower
-                    or ERROR_PATTERN_RATE_LIMIT_UNDERSCORE in error_str_lower
-                )
-
-                if not is_rate_limit:
-                    self.circuit_breaker.record_failure()
-
-                self._track_error(e)
-                self._total_errors += 1
-                error_msg = str(e).strip() if str(e).strip() else f"<{type(e).__name__} with no message>"
-
-                if is_rate_limit:
-                    logger.warning(
-                        f"LLM RATE LIMIT (429) - NOT counting as CB failure.\n"
-                        f"  Model: {self.model_name}\n"
-                        f"  Provider: {self.openai_config.base_url or 'default'}\n"
-                        f"  Will be retried by LLM bus. Error: {error_msg[:300]}"
-                    )
-                else:
-                    logger.error(
-                        f"LLM UNEXPECTED ERROR - {type(e).__name__}.\n"
-                        f"  Model: {self.model_name}\n"
-                        f"  Provider: {self.openai_config.base_url or 'default'}\n"
-                        f"  Expected Schema: {resp_model.__name__}\n"
-                        f"  Error: {error_msg[:500]}"
-                    )
-                raise RuntimeError(f"LLM call failed ({type(e).__name__}): {error_msg[:300]}") from e
-
-        # Implement retry logic with OpenAI-specific error handling
         try:
             return await self._retry_with_backoff(
-                _make_structured_call,
-                messages,
-                response_model,
-                max_tokens,
-                temperature,
-                retry_state=retry_state,  # Pass retry state for CIRIS proxy metadata
+                _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
             )
         except CircuitBreakerError:
-            # Don't retry if circuit breaker is open
             logger.warning("LLM service circuit breaker is open, failing fast")
             raise
         except TimeoutError:
-            # Don't retry timeout errors to prevent cascades
             logger.warning("LLM structured service timeout, failing fast to prevent retry cascade")
             raise
+
+    def _build_extra_kwargs(
+        self,
+        task_id: Optional[str],
+        thought_id: Optional[str],
+        resp_model_name: str,
+        retry_state: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build extra kwargs for the LLM API call based on provider."""
+        extra_kwargs: Dict[str, Any] = {}
+        base_url = self.openai_config.base_url or ""
+
+        if "ciris.ai" in base_url or "ciris-services" in base_url:
+            metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
+            extra_kwargs["extra_body"] = {"metadata": metadata}
+        elif "openrouter.ai" in base_url:
+            provider_config = _build_openrouter_provider_config()
+            if provider_config:
+                extra_kwargs["extra_body"] = {"provider": provider_config}
+
+        return extra_kwargs
+
+    def _log_completion_details(self, completion: Any, image_count: int, thought_id: Optional[str]) -> None:
+        """Log completion details for debugging."""
+        if image_count > 0:
+            actual_model = getattr(completion, "model", "unknown")
+            logger.info(
+                f"[VISION_DEBUG] Proxy response: requested={self.model_name}, "
+                f"actual_model={actual_model}, thought_id={thought_id}"
+            )
+
+        provider_name = getattr(completion, "provider", None)
+        base_url = self.openai_config.base_url or ""
+        if provider_name and "openrouter.ai" in base_url:
+            logger.info(f"[OPENROUTER] SUCCESS - Provider: {provider_name}, Model: {self.model_name}")
+
+    async def _process_successful_response(
+        self, response: BaseModel, completion: Any
+    ) -> Tuple[BaseModel, ResourceUsage]:
+        """Process a successful LLM response and return usage data."""
+        usage = completion.usage
+        self.circuit_breaker.record_success()
+
+        prompt_tokens = getattr(usage, "prompt_tokens", 0)
+        completion_tokens = getattr(usage, "completion_tokens", 0)
+
+        usage_obj = self.pricing_calculator.calculate_cost_and_impact(
+            model_name=self.model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            provider_name="openai",
+        )
+
+        self._total_input_tokens += prompt_tokens
+        self._total_output_tokens += completion_tokens
+        self._total_cost_cents += usage_obj.cost_cents
+
+        # Record token usage in telemetry
+        if self.telemetry_service and usage_obj.tokens_used > 0:
+            await self.telemetry_service.record_metric("llm_tokens_used", usage_obj.tokens_used)
+            await self.telemetry_service.record_metric("llm_api_call_structured")
+
+        return response, usage_obj
+
+    def _handle_auth_error(self, e: AuthenticationError) -> None:
+        """Handle authentication errors (401)."""
+        self._track_error(e)
+        self._total_errors += 1
+        base_url = self.openai_config.base_url or ""
+
+        if "ciris.ai" in base_url:
+            self.circuit_breaker.force_open(reason="ciris.ai 401 - billing or token error")
+            logger.error(
+                f"LLM AUTHENTICATION ERROR (401) - ciris.ai billing or token error.\n"
+                f"  Model: {self.model_name}\n"
+                f"  Provider: {base_url}\n"
+                f"  Circuit breaker forced open immediately.\n"
+                f"  Writing token refresh signal..."
+            )
+            self._signal_token_refresh_needed()
+        else:
+            self.circuit_breaker.record_failure()
+            logger.error(
+                f"LLM AUTHENTICATION ERROR (401) - Invalid API key.\n"
+                f"  Model: {self.model_name}\n"
+                f"  Provider: {base_url}\n"
+                f"  Error: {e}"
+            )
+
+    def _handle_provider_error(self, e: Exception) -> None:
+        """Handle provider-specific errors (connection, rate limit, internal server)."""
+        self._track_error(e)
+        self._total_errors += 1
+
+        error_details = {
+            "error_type": type(e).__name__,
+            "model": self.model_name,
+            "base_url": self.openai_config.base_url or "default",
+            "circuit_breaker_state": self.circuit_breaker.state.value,
+        }
+
+        if isinstance(e, RateLimitError):
+            logger.warning(
+                f"LLM RATE LIMIT (429) - NOT counting as CB failure. Provider: {error_details['base_url']}, "
+                f"Model: {error_details['model']}. Will be retried by LLM bus. Error: {e}"
+            )
+        elif isinstance(e, InternalServerError):
+            self._handle_internal_server_error(e, error_details)
+        elif isinstance(e, APIConnectionError):
+            logger.error(
+                f"LLM CONNECTION ERROR - Provider: {error_details['base_url']}, "
+                f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                f"Failed to connect to provider: {e}"
+            )
+        else:
+            logger.error(
+                f"LLM API ERROR ({error_details['error_type']}) - Provider: {error_details['base_url']}, "
+                f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                f"Error: {e}"
+            )
+
+    def _handle_internal_server_error(self, e: InternalServerError, error_details: Dict[str, Any]) -> None:
+        """Handle internal server errors, including billing errors."""
+        error_str = str(e).lower()
+
+        if "billing service error" in error_str or "billing error" in error_str:
+            from ciris_engine.logic.adapters.base_observer import BillingServiceError
+
+            self.circuit_breaker.force_open(reason="Billing service error")
+            logger.error(
+                f"LLM BILLING ERROR - Provider: {error_details['base_url']}, "
+                f"Model: {error_details['model']}. Billing service returned error: {e}"
+            )
+            raise BillingServiceError(
+                message=f"LLM billing service error. Please check your account status or try again later. Details: {e}",
+                status_code=402,
+            ) from e
+        else:
+            logger.error(
+                f"LLM PROVIDER ERROR (500) - Provider: {error_details['base_url']}, "
+                f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
+                f"Provider returned internal server error: {e}"
+            )
+
+    def _handle_general_exception(self, e: Exception, resp_model_name: str) -> None:
+        """Handle general exceptions including instructor retry exceptions."""
+        # Check if this is an instructor retry exception
+        if hasattr(instructor, "exceptions") and hasattr(instructor.exceptions, "InstructorRetryException"):
+            if isinstance(e, instructor.exceptions.InstructorRetryException):
+                self._track_error(e)
+                self._total_errors += 1
+                error_context: ErrorContext = {
+                    "model": self.model_name,
+                    "provider": self.openai_config.base_url or "default",
+                    "response_model": resp_model_name,
+                    "circuit_breaker_state": self.circuit_breaker.state.value,
+                    "consecutive_failures": self.circuit_breaker.consecutive_failures,
+                }
+                _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
+
+        # Generic exception handling
+        self._track_error(e)
+        self._total_errors += 1
+        _handle_generic_llm_exception(
+            e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
+        )
 
     def _get_status(self) -> LLMStatus:
         """Get detailed status including circuit breaker metrics (private method)."""

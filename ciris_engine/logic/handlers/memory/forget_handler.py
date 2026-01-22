@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Optional
 
-from pydantic import ValidationError
-
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.services.memory_service import MemoryOpStatus
 from ciris_engine.schemas.actions import ForgetParams
@@ -30,7 +28,7 @@ class ForgetHandler(BaseActionHandler):
                 else:
                     # Should not happen if DMA is working correctly
                     raise ValueError(f"Expected ForgetParams but got {type(params)}")
-            except (ValidationError, ValueError) as e:
+            except ValueError as e:  # ValidationError inherits from ValueError
                 logger.error(f"ForgetHandler: Invalid params dict: {e}")
                 follow_up_content = f"This is a follow-up thought from a FORGET action performed on parent task {thought.source_task_id}. FORGET action failed: Invalid parameters. {e}. If the task is now resolved, the next step may be to mark the parent task complete with COMPLETE_TASK."
 

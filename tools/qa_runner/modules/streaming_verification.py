@@ -767,6 +767,7 @@ class StreamingVerificationModule:
                                         "energy_mwh",
                                         "llm_calls",
                                         "models_used",
+                                        "api_bases_used",  # API endpoint tracking (v1.8.14+)
                                     },
                                 }
 

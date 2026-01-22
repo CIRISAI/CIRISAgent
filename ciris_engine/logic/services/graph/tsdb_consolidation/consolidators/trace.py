@@ -6,6 +6,7 @@ Consolidates TRACE_SPAN correlations into TraceSummaryNode.
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict, Union
 
@@ -45,6 +46,211 @@ class TaskSummaryData(TypedDict, total=False):
     duration_ms: float
 
 
+@dataclass
+class TraceSummaryMetrics:
+    """Accumulated metrics for trace summary building (reduces parameter count)."""
+
+    unique_tasks: Set[str] = field(default_factory=set)
+    unique_thoughts: Set[str] = field(default_factory=set)
+    tasks_by_status: Dict[str, int] = field(default_factory=dict)
+    thoughts_by_type: Dict[str, int] = field(default_factory=dict)
+    component_calls: Dict[str, int] = field(default_factory=dict)
+    component_failures: Dict[str, int] = field(default_factory=dict)
+    component_latency_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    handler_actions: Dict[str, int] = field(default_factory=dict)
+    errors_by_component: Dict[str, int] = field(default_factory=dict)
+    total_errors: int = 0
+    guardrail_violations: Dict[str, int] = field(default_factory=dict)
+    dma_decisions: Dict[str, int] = field(default_factory=dict)
+    task_summaries: JSONDict = field(default_factory=dict)
+    task_processing_times: List[float] = field(default_factory=list)
+    max_trace_depth: int = 0
+    avg_trace_depth: float = 0.0
+    source_count: int = 0
+
+
+def _get_tag_value(tags: Any, key: str, default: str = "unknown") -> str:
+    """Extract a string value from tags.additional_tags safely."""
+    if not tags or not hasattr(tags, "additional_tags"):
+        return default
+    value = tags.additional_tags.get(key, default)
+    return str(value) if value else default
+
+
+def _get_tag_bool(tags: Any, key: str, true_value: str = "true") -> bool:
+    """Check if a tag value equals a specific string (default 'true')."""
+    if not tags or not hasattr(tags, "additional_tags"):
+        return False
+    return bool(tags.additional_tags.get(key) == true_value)
+
+
+def _initialize_task_summary(task_id: str, timestamp: Optional[datetime]) -> JSONDict:
+    """Create initial task summary structure."""
+    timestamp_str = timestamp.isoformat() if timestamp else None
+    return {
+        "task_id": task_id,
+        "status": "processing",
+        "thoughts": [],
+        "start_time": timestamp_str,
+        "end_time": timestamp_str,
+        "handlers_selected": [],
+        "trace_ids": [],  # Use list for JSON compatibility; converted to set during processing
+    }
+
+
+def _update_task_trace_id(task_summaries: JSONDict, task_id: str, trace_id: str, timestamp: Optional[datetime]) -> None:
+    """Update task summary with trace ID and timestamp."""
+    task_summary = task_summaries.get(task_id)
+    if not isinstance(task_summary, dict):
+        return
+
+    trace_ids = task_summary.get("trace_ids")
+    if isinstance(trace_ids, list) and trace_id not in trace_ids:
+        trace_ids.append(trace_id)
+    task_summary["end_time"] = timestamp.isoformat() if timestamp else None
+
+
+def _process_handler_for_thought(
+    task_summaries: JSONDict,
+    task_id: str,
+    thought_id: str,
+    action_type: str,
+    timestamp: Optional[datetime],
+    handler_actions: Dict[str, int],
+) -> None:
+    """Process handler component for a thought."""
+    handler_actions[action_type] += 1
+
+    task_summary = task_summaries.get(task_id)
+    if not isinstance(task_summary, dict):
+        return
+
+    handlers_sel = task_summary.get("handlers_selected")
+    if isinstance(handlers_sel, list):
+        handlers_sel.append(action_type)
+
+    thoughts_list = task_summary.get("thoughts")
+    if isinstance(thoughts_list, list):
+        thoughts_list.append({
+            "thought_id": thought_id,
+            "handler": action_type,
+            "timestamp": timestamp.isoformat() if timestamp else None,
+        })
+
+
+def _update_task_status(task_summaries: JSONDict, task_id: str, status: str, tasks_by_status: Dict[str, int]) -> None:
+    """Update task status tracking."""
+    tasks_by_status[status] += 1
+    task_summary = task_summaries.get(task_id)
+    if isinstance(task_summary, dict):
+        task_summary["status"] = status
+
+
+def _process_span_errors(
+    span: TraceSpanData,
+    component_type: str,
+    component_failures: Dict[str, int],
+    errors_by_component: Dict[str, int],
+) -> int:
+    """Process error information from span. Returns 1 if error found, 0 otherwise."""
+    if not span.error:
+        return 0
+    component_failures[component_type] += 1
+    errors_by_component[component_type] += 1
+    return 1
+
+
+def _process_span_latency(span: TraceSpanData, component_type: str, component_latencies: Dict[str, List[float]]) -> None:
+    """Track latency from span."""
+    if span.latency_ms is not None:
+        component_latencies[component_type].append(span.latency_ms)
+    elif span.duration_ms > 0:
+        component_latencies[component_type].append(span.duration_ms)
+
+
+def _process_guardrail_span(span: TraceSpanData, guardrail_violations: Dict[str, int]) -> None:
+    """Process guardrail component span."""
+    guardrail_type = _get_tag_value(span.tags, "guardrail_type")
+    violation = _get_tag_bool(span.tags, "violation")
+    if violation:
+        guardrail_violations[guardrail_type] += 1
+
+
+def _process_dma_span(span: TraceSpanData, dma_decisions: Dict[str, int]) -> None:
+    """Process DMA component span."""
+    dma_type = _get_tag_value(span.tags, "dma_type")
+    dma_decisions[dma_type] += 1
+
+
+def _calculate_latency_stats(component_latencies: Dict[str, List[float]]) -> Dict[str, Dict[str, float]]:
+    """Calculate latency statistics for each component."""
+    stats = {}
+    for component, latencies in component_latencies.items():
+        if not latencies:
+            continue
+        sorted_latencies = sorted(latencies)
+        n = len(sorted_latencies)
+        stats[component] = {
+            "avg": sum(latencies) / n,
+            "p50": sorted_latencies[n // 2],
+            "p95": sorted_latencies[int(n * 0.95)],
+            "p99": sorted_latencies[int(n * 0.99)],
+        }
+    return stats
+
+
+def _calculate_percentiles(values: List[float]) -> Tuple[float, float, float, float]:
+    """Calculate avg, p50, p95, p99 from a list of values. Returns (0,0,0,0) if empty."""
+    if not values:
+        return 0.0, 0.0, 0.0, 0.0
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    return (
+        sum(values) / n,
+        sorted_vals[n // 2],
+        sorted_vals[int(n * 0.95)],
+        sorted_vals[int(n * 0.99)],
+    )
+
+
+def _finalize_task_summaries(task_summaries: JSONDict) -> List[float]:
+    """Finalize task summaries and return processing times.
+
+    Calculates duration_ms for each task and converts sets to lists.
+    """
+    task_processing_times = []
+    for task_id, summary_val in task_summaries.items():
+        if not isinstance(summary_val, dict):
+            continue
+        summary = summary_val
+
+        start_time = summary.get("start_time")
+        end_time = summary.get("end_time")
+        if isinstance(start_time, datetime) and isinstance(end_time, datetime):
+            duration_ms = (end_time - start_time).total_seconds() * 1000
+            task_processing_times.append(duration_ms)
+            summary["duration_ms"] = duration_ms
+
+        # Convert sets to lists for JSON serialization
+        trace_ids = summary.get("trace_ids")
+        if isinstance(trace_ids, set):
+            summary["trace_ids"] = list(trace_ids)
+
+    return task_processing_times
+
+
+def _calculate_trace_depth_metrics(task_summaries: JSONDict) -> Tuple[int, float]:
+    """Calculate max and average trace depth from task summaries."""
+    trace_depths = []
+    for s in task_summaries.values():
+        if isinstance(s, dict):
+            thoughts = get_list(s, "thoughts", [])
+            trace_depths.append(len(thoughts))
+    max_depth = max(trace_depths) if trace_depths else 0
+    avg_depth = sum(trace_depths) / len(trace_depths) if trace_depths else 0.0
+    return max_depth, avg_depth
+
+
 class TraceConsolidator:
     """Consolidates trace span data into summaries."""
 
@@ -56,6 +262,183 @@ class TraceConsolidator:
             memory_bus: Memory bus for storing results
         """
         self._memory_bus = memory_bus
+
+    def _process_task_id(
+        self,
+        span: TraceSpanData,
+        task_id: str,
+        task_summaries: JSONDict,
+        unique_tasks: Set[str],
+    ) -> None:
+        """Process task ID from span, initializing or updating task summary."""
+        unique_tasks.add(task_id)
+
+        if task_id not in task_summaries:
+            task_summaries[task_id] = _initialize_task_summary(task_id, span.timestamp)
+
+        _update_task_trace_id(task_summaries, task_id, span.trace_id, span.timestamp)
+
+    def _process_thought_id(
+        self,
+        span: TraceSpanData,
+        thought_id: str,
+        task_id: Optional[str],
+        component_type: str,
+        task_summaries: JSONDict,
+        unique_thoughts: Set[str],
+        thoughts_by_type: Dict[str, int],
+        handler_actions: Dict[str, int],
+    ) -> None:
+        """Process thought ID from span."""
+        unique_thoughts.add(thought_id)
+
+        # Track thought type
+        thought_type = _get_tag_value(span.tags, "thought_type")
+        thoughts_by_type[thought_type] += 1
+
+        # Track handler selection
+        if component_type == "handler" and task_id:
+            action_type = _get_tag_value(span.tags, "action_type")
+            _process_handler_for_thought(
+                task_summaries, task_id, thought_id, action_type, span.timestamp, handler_actions
+            )
+
+    def _process_task_completion(
+        self,
+        span: TraceSpanData,
+        task_id: str,
+        task_summaries: JSONDict,
+        tasks_by_status: Dict[str, int],
+    ) -> None:
+        """Check and process task completion status."""
+        tags = span.tags
+        if not tags or not hasattr(tags, "additional_tags"):
+            return
+
+        task_status = tags.additional_tags.get("task_status")
+        if not task_status:
+            return
+
+        status = str(task_status) if isinstance(task_status, (str, int, float)) else "unknown"
+        _update_task_status(task_summaries, task_id, status, tasks_by_status)
+
+    def _process_single_span(
+        self,
+        span: TraceSpanData,
+        task_summaries: JSONDict,
+        unique_tasks: Set[str],
+        unique_thoughts: Set[str],
+        tasks_by_status: Dict[str, int],
+        thoughts_by_type: Dict[str, int],
+        component_calls: Dict[str, int],
+        component_failures: Dict[str, int],
+        component_latencies: Dict[str, List[float]],
+        handler_actions: Dict[str, int],
+        errors_by_component: Dict[str, int],
+        guardrail_violations: Dict[str, int],
+        dma_decisions: Dict[str, int],
+    ) -> int:
+        """Process a single trace span. Returns error count (0 or 1)."""
+        task_id = span.task_id
+        thought_id = span.thought_id
+        component_type = span.component_type or "unknown"
+
+        # Process task ID
+        if task_id:
+            self._process_task_id(span, task_id, task_summaries, unique_tasks)
+
+        # Process thought ID
+        if thought_id:
+            self._process_thought_id(
+                span, thought_id, task_id, component_type,
+                task_summaries, unique_thoughts, thoughts_by_type, handler_actions
+            )
+
+        # Track task completion
+        if task_id:
+            self._process_task_completion(span, task_id, task_summaries, tasks_by_status)
+
+        # Component tracking
+        component_calls[component_type] += 1
+
+        # Process errors
+        error_count = _process_span_errors(span, component_type, component_failures, errors_by_component)
+
+        # Track latency
+        _process_span_latency(span, component_type, component_latencies)
+
+        # Component-specific processing
+        if component_type == "guardrail":
+            _process_guardrail_span(span, guardrail_violations)
+        elif component_type == "dma":
+            _process_dma_span(span, dma_decisions)
+
+        return error_count
+
+    def _build_summary_data(
+        self,
+        period_start: datetime,
+        period_end: datetime,
+        period_label: str,
+        metrics: TraceSummaryMetrics,
+    ) -> JSONDict:
+        """Build the summary data dictionary."""
+        avg_task_time, p50_task_time, p95_task_time, p99_task_time = _calculate_percentiles(
+            metrics.task_processing_times
+        )
+
+        total_calls = sum(metrics.component_calls.values())
+        error_rate = metrics.total_errors / total_calls if total_calls > 0 else 0.0
+        avg_thoughts_per_task = (
+            len(metrics.unique_thoughts) / len(metrics.unique_tasks) if metrics.unique_tasks else 0.0
+        )
+
+        return {
+            "id": f"trace_summary_{period_start.strftime('%Y%m%d_%H')}",
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "period_label": period_label,
+            "total_tasks_processed": len(metrics.unique_tasks),
+            "tasks_by_status": dict(metrics.tasks_by_status),
+            "unique_task_ids": list(metrics.unique_tasks),
+            "task_summaries": metrics.task_summaries,
+            "total_thoughts_processed": len(metrics.unique_thoughts),
+            "thoughts_by_type": dict(metrics.thoughts_by_type),
+            "avg_thoughts_per_task": avg_thoughts_per_task,
+            "component_calls": dict(metrics.component_calls),
+            "component_failures": dict(metrics.component_failures),
+            "component_latency_ms": metrics.component_latency_stats,
+            "dma_decisions": dict(metrics.dma_decisions),
+            "guardrail_violations": dict(metrics.guardrail_violations),
+            "handler_actions": dict(metrics.handler_actions),
+            "avg_task_processing_time_ms": avg_task_time,
+            "p50_task_processing_time_ms": p50_task_time,
+            "p95_task_processing_time_ms": p95_task_time,
+            "p99_task_processing_time_ms": p99_task_time,
+            "total_processing_time_ms": (
+                sum(metrics.task_processing_times) if metrics.task_processing_times else 0.0
+            ),
+            "total_errors": metrics.total_errors,
+            "errors_by_component": dict(metrics.errors_by_component),
+            "error_rate": error_rate,
+            "max_trace_depth": metrics.max_trace_depth,
+            "avg_trace_depth": metrics.avg_trace_depth,
+            "source_correlation_count": metrics.source_count,
+            "created_at": period_end.isoformat(),
+            "updated_at": period_end.isoformat(),
+        }
+
+    async def _store_summary(self, summary_node: GraphNode) -> bool:
+        """Store summary node via memory bus. Returns True on success."""
+        if not self._memory_bus:
+            logger.warning("No memory bus available - summary not stored")
+            return True  # Not a failure, just no storage
+
+        result = await self._memory_bus.memorize(node=summary_node)
+        if result.status != MemoryOpStatus.OK:
+            logger.error(f"Failed to store trace summary: {result.error}")
+            return False
+        return True
 
     async def consolidate(
         self, period_start: datetime, period_end: datetime, period_label: str, trace_spans: List[TraceSpanData]
@@ -78,9 +461,7 @@ class TraceConsolidator:
         logger.info(f"Consolidating {len(trace_spans)} trace spans")
 
         # Initialize tracking structures
-        # Note: Using JSONDict because task_summaries contains datetime and Set objects
-        # that are later serialized to JSON-compatible types before storage
-        task_summaries: JSONDict = {}  # task_id -> summary data
+        task_summaries: JSONDict = {}
         unique_tasks: Set[str] = set()
         unique_thoughts: Set[str] = set()
         tasks_by_status: Dict[str, int] = defaultdict(int)
@@ -94,213 +475,57 @@ class TraceConsolidator:
         guardrail_violations: Dict[str, int] = defaultdict(int)
         dma_decisions: Dict[str, int] = defaultdict(int)
 
+        # Process all spans
         for span in trace_spans:
-            # Extract key identifiers from typed schema
-            trace_id = span.trace_id
-            span_id = span.span_id
-            parent_span_id = span.parent_span_id
-            timestamp = span.timestamp
+            total_errors += self._process_single_span(
+                span,
+                task_summaries,
+                unique_tasks,
+                unique_thoughts,
+                tasks_by_status,
+                thoughts_by_type,
+                component_calls,
+                component_failures,
+                component_latencies,
+                handler_actions,
+                errors_by_component,
+                guardrail_violations,
+                dma_decisions,
+            )
 
-            # Extract from tags
-            tags = span.tags
-            task_id = span.task_id
-            thought_id = span.thought_id
-            component_type = span.component_type or "unknown"
+        # Calculate statistics
+        component_latency_stats = _calculate_latency_stats(component_latencies)
+        task_processing_times = _finalize_task_summaries(task_summaries)
+        max_trace_depth, avg_trace_depth = _calculate_trace_depth_metrics(task_summaries)
 
-            # Track unique entities
-            if task_id:
-                unique_tasks.add(task_id)
+        # Build metrics container
+        metrics = TraceSummaryMetrics(
+            unique_tasks=unique_tasks,
+            unique_thoughts=unique_thoughts,
+            tasks_by_status=tasks_by_status,
+            thoughts_by_type=thoughts_by_type,
+            component_calls=component_calls,
+            component_failures=component_failures,
+            component_latency_stats=component_latency_stats,
+            handler_actions=handler_actions,
+            errors_by_component=errors_by_component,
+            total_errors=total_errors,
+            guardrail_violations=guardrail_violations,
+            dma_decisions=dma_decisions,
+            task_summaries=task_summaries,
+            task_processing_times=task_processing_times,
+            max_trace_depth=max_trace_depth,
+            avg_trace_depth=avg_trace_depth,
+            source_count=len(trace_spans),
+        )
 
-                # Initialize task summary if needed
-                if task_id not in task_summaries:
-                    task_summaries[task_id] = {
-                        "task_id": task_id,
-                        "status": "processing",
-                        "thoughts": [],
-                        "start_time": timestamp,
-                        "end_time": timestamp,
-                        "handlers_selected": [],
-                        "trace_ids": set(),
-                    }
-
-                # Type narrowing for nested access
-                task_summary_val = task_summaries.get(task_id)
-                if isinstance(task_summary_val, dict):
-                    trace_ids_val = task_summary_val.get("trace_ids")
-                    if isinstance(trace_ids_val, set):
-                        trace_ids_val.add(trace_id)
-                    task_summary_val["end_time"] = timestamp
-
-            if thought_id:
-                unique_thoughts.add(thought_id)
-
-                # Track thought type
-                thought_type = "unknown"
-                if tags and hasattr(tags, "additional_tags"):
-                    thought_type_val = tags.additional_tags.get("thought_type", "unknown")
-                    thought_type = str(thought_type_val) if thought_type_val else "unknown"
-                thoughts_by_type[thought_type] += 1
-
-                # Track handler selection
-                if component_type == "handler" and task_id:
-                    action_type = "unknown"
-                    if tags and hasattr(tags, "additional_tags"):
-                        action_type_val = tags.additional_tags.get("action_type", "unknown")
-                        action_type = str(action_type_val) if action_type_val else "unknown"
-                    handler_actions[action_type] += 1
-
-                    task_summary_handler = task_summaries.get(task_id)
-                    if isinstance(task_summary_handler, dict):
-                        handlers_sel = task_summary_handler.get("handlers_selected")
-                        if isinstance(handlers_sel, list):
-                            handlers_sel.append(action_type)
-
-                        thoughts_list = task_summary_handler.get("thoughts")
-                        if isinstance(thoughts_list, list):
-                            thoughts_list.append(
-                                {
-                                    "thought_id": thought_id,
-                                    "handler": action_type,
-                                    "timestamp": timestamp.isoformat() if timestamp else None,
-                                }
-                            )
-
-            # Track task completion
-            if task_id and tags and hasattr(tags, "additional_tags") and tags.additional_tags.get("task_status"):
-                status_val = tags.additional_tags["task_status"]
-                status = str(status_val) if isinstance(status_val, (str, int, float)) else "unknown"
-                tasks_by_status[status] += 1
-                task_summary_status = task_summaries.get(task_id)
-                if isinstance(task_summary_status, dict):
-                    task_summary_status["status"] = status
-
-            # Component tracking
-            component_calls[component_type] += 1
-
-            # Process error information
-            if span.error:
-                component_failures[component_type] += 1
-                errors_by_component[component_type] += 1
-                total_errors += 1
-
-            # Track latency
-            if span.latency_ms is not None:
-                component_latencies[component_type].append(span.latency_ms)
-            elif span.duration_ms > 0:
-                component_latencies[component_type].append(span.duration_ms)
-
-            # Track guardrail violations
-            if component_type == "guardrail":
-                guardrail_type = "unknown"
-                violation = False
-                if tags and hasattr(tags, "additional_tags"):
-                    guardrail_type_val = tags.additional_tags.get("guardrail_type", "unknown")
-                    guardrail_type = str(guardrail_type_val) if guardrail_type_val else "unknown"
-                    violation = tags.additional_tags.get("violation") == "true"
-                if violation:
-                    guardrail_violations[guardrail_type] += 1
-
-            # Track DMA decisions
-            if component_type == "dma":
-                dma_type = "unknown"
-                if tags and hasattr(tags, "additional_tags"):
-                    dma_type_val = tags.additional_tags.get("dma_type", "unknown")
-                    dma_type = str(dma_type_val) if dma_type_val else "unknown"
-                dma_decisions[dma_type] += 1
-
-        # Calculate latency statistics
-        component_latency_stats = {}
-        for component, latencies in component_latencies.items():
-            if latencies:
-                sorted_latencies = sorted(latencies)
-                component_latency_stats[component] = {
-                    "avg": sum(latencies) / len(latencies),
-                    "p50": sorted_latencies[len(sorted_latencies) // 2],
-                    "p95": sorted_latencies[int(len(sorted_latencies) * 0.95)],
-                    "p99": sorted_latencies[int(len(sorted_latencies) * 0.99)],
-                }
-
-        # Calculate task processing times
-        task_processing_times = []
-        for task_id, summary_val in task_summaries.items():
-            if not isinstance(summary_val, dict):
-                continue
-            summary = summary_val
-
-            start_time = summary.get("start_time")
-            end_time = summary.get("end_time")
-            if isinstance(start_time, datetime) and isinstance(end_time, datetime):
-                duration_ms = (end_time - start_time).total_seconds() * 1000
-                task_processing_times.append(duration_ms)
-                summary["duration_ms"] = duration_ms
-
-            # Convert sets to lists for JSON serialization
-            trace_ids = summary.get("trace_ids")
-            if isinstance(trace_ids, set):
-                summary["trace_ids"] = list(trace_ids)
-
-        # Calculate task time percentiles
-        avg_task_time = 0.0
-        p50_task_time = 0.0
-        p95_task_time = 0.0
-        p99_task_time = 0.0
-
-        if task_processing_times:
-            sorted_times = sorted(task_processing_times)
-            avg_task_time = sum(task_processing_times) / len(task_processing_times)
-            p50_task_time = sorted_times[len(sorted_times) // 2]
-            p95_task_time = sorted_times[int(len(sorted_times) * 0.95)]
-            p99_task_time = sorted_times[int(len(sorted_times) * 0.99)]
-
-        # Calculate trace depth metrics
-        trace_depths = []
-        for s in task_summaries.values():
-            if isinstance(s, dict):
-                thoughts = get_list(s, "thoughts", [])
-                trace_depths.append(len(thoughts))
-        max_trace_depth = max(trace_depths) if trace_depths else 0
-        avg_trace_depth = sum(trace_depths) / len(trace_depths) if trace_depths else 0.0
-
-        # Calculate error rate
-        total_calls = sum(component_calls.values())
-        error_rate = total_errors / total_calls if total_calls > 0 else 0.0
-
-        # Calculate avg thoughts per task
-        avg_thoughts_per_task = len(unique_thoughts) / len(unique_tasks) if unique_tasks else 0.0
-
-        # Create summary data
-        summary_data = {
-            "id": f"trace_summary_{period_start.strftime('%Y%m%d_%H')}",
-            "period_start": period_start.isoformat(),
-            "period_end": period_end.isoformat(),
-            "period_label": period_label,
-            "total_tasks_processed": len(unique_tasks),
-            "tasks_by_status": dict(tasks_by_status),
-            "unique_task_ids": list(unique_tasks),
-            "task_summaries": task_summaries,
-            "total_thoughts_processed": len(unique_thoughts),
-            "thoughts_by_type": dict(thoughts_by_type),
-            "avg_thoughts_per_task": avg_thoughts_per_task,
-            "component_calls": dict(component_calls),
-            "component_failures": dict(component_failures),
-            "component_latency_ms": component_latency_stats,
-            "dma_decisions": dict(dma_decisions),
-            "guardrail_violations": dict(guardrail_violations),
-            "handler_actions": dict(handler_actions),
-            "avg_task_processing_time_ms": avg_task_time,
-            "p50_task_processing_time_ms": p50_task_time,
-            "p95_task_processing_time_ms": p95_task_time,
-            "p99_task_processing_time_ms": p99_task_time,
-            "total_processing_time_ms": sum(task_processing_times) if task_processing_times else 0.0,
-            "total_errors": total_errors,
-            "errors_by_component": dict(errors_by_component),
-            "error_rate": error_rate,
-            "max_trace_depth": max_trace_depth,
-            "avg_trace_depth": avg_trace_depth,
-            "source_correlation_count": len(trace_spans),
-            "created_at": period_end.isoformat(),
-            "updated_at": period_end.isoformat(),
-        }
+        # Build summary data
+        summary_data = self._build_summary_data(
+            period_start,
+            period_end,
+            period_label,
+            metrics,
+        )
 
         # Create GraphNode
         summary_node = GraphNode(
@@ -309,17 +534,12 @@ class TraceConsolidator:
             scope=GraphScope.LOCAL,
             attributes=summary_data,
             updated_by="tsdb_consolidation",
-            updated_at=period_end,  # Use period end as timestamp
+            updated_at=period_end,
         )
 
         # Store summary
-        if self._memory_bus:
-            result = await self._memory_bus.memorize(node=summary_node)
-            if result.status != MemoryOpStatus.OK:
-                logger.error(f"Failed to store trace summary: {result.error}")
-                return None
-        else:
-            logger.warning("No memory bus available - summary not stored")
+        if not await self._store_summary(summary_node):
+            return None
 
         return summary_node
 

@@ -148,6 +148,10 @@ class QAConfig:
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
 
+    # Live Lens configuration (--live-lens flag for covenant_metrics tests)
+    # When True, uses https://lens.ciris.ai instead of mock logshipper
+    live_lens: bool = False
+
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule

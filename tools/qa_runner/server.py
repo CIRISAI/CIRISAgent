@@ -493,13 +493,17 @@ class APIServerManager:
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
 
-        # Start mock logshipper to receive covenant traces
-        self.mock_logshipper = MockLogshipperServer(port=18080)
-        if self.mock_logshipper.start():
-            self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
-        else:
-            self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+        # Start mock logshipper to receive covenant traces (unless using live lens)
+        if self.config.live_lens:
+            self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris.ai/v1[/cyan]")
             self.mock_logshipper = None
+        else:
+            self.mock_logshipper = MockLogshipperServer(port=18080)
+            if self.mock_logshipper.start():
+                self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
+            else:
+                self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+                self.mock_logshipper = None
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 

@@ -99,6 +99,13 @@ Available modules:
         help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
     )
 
+    # Live Lens configuration (for covenant_metrics tests)
+    parser.add_argument(
+        "--live-lens",
+        action="store_true",
+        help="Use real Lens server (https://lens.ciris.ai) instead of mock logshipper for covenant_metrics tests",
+    )
+
     # Database backend configuration
     parser.add_argument(
         "--database-backends",
@@ -214,6 +221,8 @@ def main():
         live_api_key=live_api_key,
         live_model=live_model,
         live_base_url=live_base_url,
+        # Live Lens configuration (for covenant_metrics tests)
+        live_lens=args.live_lens,
     )
 
     # Create and run runner

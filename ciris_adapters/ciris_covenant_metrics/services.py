@@ -326,7 +326,7 @@ class CovenantMetricsService:
         elif raw_url:
             self._endpoint_url = str(raw_url)
         else:
-            self._endpoint_url = "https://lens.ciris.ai/v1"
+            self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
@@ -653,13 +653,18 @@ class CovenantMetricsService:
 
             payload = unified_key.get_registration_payload(description)
 
+            # Store registered key ID for comparison during signing
+            self._registered_key_id = payload['key_id']
+
             url = f"{self._endpoint_url}/covenant/public-keys"
 
             logger.info("=" * 70)
             logger.info(f"🔑 REGISTERING PUBLIC KEY with CIRISLens")
             logger.info(f"   URL: {url}")
-            logger.info(f"   Key ID: {payload['key_id']}")
+            logger.info(f"   Key ID (REGISTRATION): {payload['key_id']}")
+            logger.info(f"   Public key (first 20 chars): {payload['public_key_base64'][:20]}...")
             logger.info(f"   Algorithm: {payload['algorithm']}")
+            logger.info(f"   Signer key_id: {self._signer.key_id}")
 
             async with self._session.post(url, json=payload) as response:
                 if response.status == 200:

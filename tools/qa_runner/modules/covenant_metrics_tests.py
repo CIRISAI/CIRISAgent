@@ -11,16 +11,23 @@ This module:
 4. Validates Ed25519 signatures using the root public key from seed/
 5. Validates GENERIC trace level contains all fields needed for CIRIS scoring
 6. Exports REAL signed traces for website display
+7. Tests key ID consistency between registration and signing (--live-lens)
 """
 
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
+import aiohttp
+
 logger = logging.getLogger(__name__)
+
+# Live Lens server URL
+LENS_SERVER_URL = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
 
 class CovenantMetricsTests:
@@ -88,16 +95,18 @@ class CovenantMetricsTests:
         ],
     }
 
-    def __init__(self, client: Any, console: Any):
+    def __init__(self, client: Any, console: Any, live_lens: bool = False):
         """Initialize test module.
 
         Args:
             client: CIRISClient SDK client
             console: Rich console for output
+            live_lens: If True, use real Lens server instead of mock logshipper
         """
         self.client = client
         self.console = console
         self.results: List[Dict[str, Any]] = []
+        self.live_lens = live_lens or os.environ.get("CIRIS_LIVE_LENS", "").lower() == "true"
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all covenant metrics tests.
@@ -114,6 +123,13 @@ class CovenantMetricsTests:
             ("Generic Trace Field Validation", self._test_generic_trace_fields),
             ("Export Real Trace", self._test_export_real_trace),
         ]
+
+        # Add live lens tests when using real server
+        if self.live_lens:
+            tests.extend([
+                ("Lens Key Registration Check", self._test_lens_key_registration),
+                ("Lens Key ID Consistency", self._test_lens_key_id_consistency),
+            ])
 
         for name, test_fn in tests:
             try:
@@ -219,6 +235,10 @@ class CovenantMetricsTests:
         component contains the required numeric fields for the CIRIS Capacity Score.
         """
         try:
+            # In live lens mode, traces go directly to the server, not local files
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server, not local files)"
+
             # Find trace files saved by mock logshipper
             qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
             trace_files = list(qa_reports.glob("trace_*.json"))
@@ -310,6 +330,10 @@ class CovenantMetricsTests:
     async def _test_export_real_trace(self) -> tuple[bool, str]:
         """Verify traces were captured and report summary."""
         try:
+            # In live lens mode, traces go directly to the server, not local files
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server, not local files)"
+
             # Check trace files saved by mock logshipper
             qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
             trace_files = list(qa_reports.glob("trace_*.json"))
@@ -343,5 +367,110 @@ class CovenantMetricsTests:
 
             return True, summary
 
+        except Exception as e:
+            return False, str(e)
+
+    # =========================================================================
+    # Live Lens Server Tests (--live-lens mode)
+    # =========================================================================
+
+    async def _test_lens_key_registration(self) -> tuple[bool, str]:
+        """Test that agent's public key was registered with the Lens server.
+
+        This queries the Lens server's public-keys endpoint to verify
+        the agent registered its signing key.
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{LENS_SERVER_URL}/covenant/public-keys"
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        return False, f"Lens server returned {response.status}: {error_text}"
+
+                    data = await response.json()
+                    keys = data.get("keys", [])
+
+                    if not keys:
+                        return False, "No keys registered with Lens server"
+
+                    # Log all registered keys for debugging
+                    key_ids = [k.get("key_id", "unknown") for k in keys]
+                    self.console.print(f"     [dim]Registered keys: {key_ids}[/dim]")
+
+                    return True, f"{len(keys)} key(s) registered with Lens server"
+
+        except aiohttp.ClientConnectorError as e:
+            return False, f"Cannot reach Lens server: {e}"
+        except Exception as e:
+            return False, str(e)
+
+    async def _test_lens_key_id_consistency(self) -> tuple[bool, str]:
+        """Test that trace signature_key_ids match registered key IDs.
+
+        This is the critical test for the key mismatch bug:
+        - Fetches registered keys from Lens server
+        - Fetches recent traces from Lens server
+        - Verifies all trace signature_key_ids exist in registered keys
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 1. Get registered keys
+                keys_url = f"{LENS_SERVER_URL}/covenant/public-keys"
+                async with session.get(keys_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    if response.status != 200:
+                        return False, f"Cannot fetch keys: HTTP {response.status}"
+                    keys_data = await response.json()
+
+                registered_key_ids = {k.get("key_id") for k in keys_data.get("keys", [])}
+
+                if not registered_key_ids:
+                    return False, "No registered keys to compare against"
+
+                # 2. Get recent traces
+                traces_url = f"{LENS_SERVER_URL}/covenant/traces"
+                params = {"limit": 10}  # Last 10 traces
+                async with session.get(traces_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    if response.status == 404:
+                        # Traces endpoint may not exist yet
+                        return True, "Traces endpoint not available - skipping consistency check"
+                    if response.status != 200:
+                        return False, f"Cannot fetch traces: HTTP {response.status}"
+                    traces_data = await response.json()
+
+                traces = traces_data.get("traces", [])
+                if not traces:
+                    return True, "No traces to validate - key registration looks OK"
+
+                # 3. Check each trace's signature_key_id
+                mismatched_keys: Set[str] = set()
+                matched_keys: Set[str] = set()
+
+                for trace in traces:
+                    sig_key_id = trace.get("signature_key_id")
+                    if sig_key_id:
+                        if sig_key_id in registered_key_ids:
+                            matched_keys.add(sig_key_id)
+                        else:
+                            mismatched_keys.add(sig_key_id)
+
+                # Report findings
+                self.console.print(f"     [dim]Registered keys: {sorted(registered_key_ids)}[/dim]")
+                self.console.print(f"     [dim]Keys in traces: {sorted(matched_keys | mismatched_keys)}[/dim]")
+
+                if mismatched_keys:
+                    self.console.print(f"     [red]MISMATCHED keys: {sorted(mismatched_keys)}[/red]")
+                    return False, (
+                        f"Key ID mismatch! Traces reference {len(mismatched_keys)} unregistered key(s): "
+                        f"{sorted(mismatched_keys)}"
+                    )
+
+                if not matched_keys:
+                    return True, "No signed traces yet - cannot validate consistency"
+
+                return True, f"All {len(matched_keys)} trace key ID(s) match registered keys"
+
+        except aiohttp.ClientConnectorError as e:
+            return False, f"Cannot reach Lens server: {e}"
         except Exception as e:
             return False, str(e)

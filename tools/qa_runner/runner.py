@@ -103,6 +103,8 @@ class QARunner:
                 live_api_key=self.config.live_api_key,
                 live_model=self.config.live_model,
                 live_base_url=self.config.live_base_url,
+                # Live Lens configuration
+                live_lens=self.config.live_lens,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -915,7 +917,11 @@ class QARunner:
                 client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
-                test_instance = test_class(client, self.console)
+                # Special handling for CovenantMetricsTests - pass live_lens config
+                if module == QAModule.COVENANT_METRICS:
+                    test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                else:
+                    test_instance = test_class(client, self.console)
 
                 results = await test_instance.run()
 

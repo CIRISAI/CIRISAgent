@@ -46,6 +46,8 @@ class QAModule(Enum):
     COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
     COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
+    HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
+    UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -247,6 +249,12 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.SYSTEM_MESSAGES:
             # System messages visibility tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.HOSTED_TOOLS:
+            # CIRIS hosted tools tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.UTILITY_ADAPTERS:
+            # Utility adapters (weather, navigation) tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

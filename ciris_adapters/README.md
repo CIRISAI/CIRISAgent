@@ -7,17 +7,17 @@ This directory contains modular services that can be dynamically loaded into CIR
 | Adapter | Version | Description | QA Tests | Live Tested |
 |---------|---------|-------------|----------|-------------|
 | `ciris_covenant_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
-| `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | - | ❌ |
+| `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | `hosted_tools_tests.py` | ⏳ 2026-01-21 (60% - awaiting billing token) |
 | `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ✅ 2026-01-21 (100%) |
 | `home_assistant` | 1.0.0 | Enhanced Home Assistant integration with event detection | - | ❌ |
 | `mcp_client` | 1.0.0 | MCP client - connects CIRIS to external MCP servers | `mcp_tests.py` | ✅ 2026-01-21 (95.5%) |
 | `mcp_common` | 1.0.0 | Shared utilities for MCP client and server adapters | - | N/A (library) |
 | `mcp_server` | 1.0.0 | MCP server - exposes CIRIS capabilities to external AI agents | `mcp_tests.py` | ✅ 2026-01-21 (95.5%) |
 | `mock_llm` | 1.0.0 | Mock LLM service for testing - simulates AI responses | ✅ (built-in) | ✅ (test only) |
-| `navigation` | 1.0.0 | Navigation tool service using OpenStreetMap | - | ❌ |
-| `reddit` | 1.0.0 | Reddit adapter with tool, communication, and observation services | `reddit_tests.py` | ❌ |
+| `navigation` | 1.0.0 | Navigation tool service using OpenStreetMap | `utility_adapters_tests.py` | ✅ 2026-01-21 (100%) |
+| `reddit` | 1.0.0 | Reddit adapter with tool, communication, and observation services | `reddit_tests.py` | ❌ (needs API keys) |
 | `sample_adapter` | 1.0.0 | Reference adapter demonstrating all bus types and interactive config | - | N/A (reference) |
-| `weather` | 1.0.0 | Weather tool service using NOAA National Weather Service API | - | ❌ |
+| `weather` | 1.0.0 | Weather tool service using NOAA National Weather Service API | `utility_adapters_tests.py` | ✅ 2026-01-21 (100%) |
 
 ### Testing Priority
 
@@ -27,13 +27,13 @@ This directory contains modular services that can be dynamically loaded into CIR
    - `external_data_sql` ✅ - Live tested 2026-01-21 (100%)
 
 2. **Medium Priority** (feature expansion):
-   - `ciris_hosted_tools` - Platform tools
-   - `reddit` - Social platform
-   - `home_assistant` - IoT integration
+   - `ciris_hosted_tools` ⏳ - Partial (60%, awaiting billing token)
+   - `reddit` - Needs API keys
+   - `home_assistant` - Needs HA instance
 
 3. **Low Priority** (utility):
-   - `weather` - Example tool
-   - `navigation` - Example tool
+   - `weather` ✅ - Live tested 2026-01-21 (100%)
+   - `navigation` ✅ - Live tested 2026-01-21 (100%)
 
 ## Philosophy
 

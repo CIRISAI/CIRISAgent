@@ -255,6 +255,8 @@ class QARunner:
             QAModule.AIR,
             QAModule.COVENANT_METRICS,
             QAModule.SYSTEM_MESSAGES,
+            QAModule.HOSTED_TOOLS,
+            QAModule.UTILITY_ADAPTERS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -871,6 +873,8 @@ class QARunner:
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.system_messages_tests import SystemMessagesTests
         from .modules.vision_tests import VisionTests
+        from .modules.hosted_tools_tests import HostedToolsTests
+        from .modules.utility_adapters_tests import UtilityAdaptersTests
 
         all_passed = True
 
@@ -898,6 +902,8 @@ class QARunner:
             QAModule.AIR: AIRTests,
             QAModule.COVENANT_METRICS: CovenantMetricsTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
+            QAModule.HOSTED_TOOLS: HostedToolsTests,
+            QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

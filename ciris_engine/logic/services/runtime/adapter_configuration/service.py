@@ -461,3 +461,82 @@ class AdapterConfigurationService:
         for sid in expired:
             del self._sessions[sid]
         return len(expired)
+
+    async def load_persisted_configs(self, config_service: Any) -> Dict[str, Dict[str, Any]]:
+        """Load all persisted adapter configurations from the config service.
+
+        Args:
+            config_service: GraphConfigService instance
+
+        Returns:
+            Dictionary mapping adapter_type to config data
+        """
+        persisted_configs: Dict[str, Dict[str, Any]] = {}
+
+        try:
+            # List all configs with the adapter_config prefix
+            all_configs = await config_service.list_configs(prefix="adapter_config:")
+
+            for key, value in all_configs.items():
+                # Key format: adapter_config:{adapter_type}:{adapter_id}
+                parts = key.split(":")
+                if len(parts) >= 3:
+                    adapter_type = parts[1]
+                    adapter_id = parts[2]
+
+                    if adapter_type not in persisted_configs:
+                        persisted_configs[adapter_type] = {}
+
+                    # Store config by adapter_id
+                    if isinstance(value, dict):
+                        persisted_configs[adapter_type][adapter_id] = value
+                    else:
+                        persisted_configs[adapter_type][adapter_id] = {"value": value}
+
+            logger.info(f"Loaded {len(persisted_configs)} persisted adapter configs")
+            return persisted_configs
+
+        except Exception as e:
+            logger.error(f"Failed to load persisted configs: {e}")
+            return {}
+
+    async def remove_persisted_config(
+        self,
+        adapter_type: str,
+        config_service: Any,
+    ) -> bool:
+        """Remove persisted configuration for an adapter type.
+
+        Args:
+            adapter_type: Type of adapter to remove config for
+            config_service: GraphConfigService instance
+
+        Returns:
+            True if any configs were removed, False otherwise
+        """
+        try:
+            # List all configs with the adapter_config:{adapter_type} prefix
+            prefix = f"adapter_config:{adapter_type}:"
+            all_configs = await config_service.list_configs(prefix=prefix)
+
+            if not all_configs:
+                logger.info(f"No persisted configs found for adapter type: {adapter_type}")
+                return False
+
+            # Remove each config by setting to None (or use delete if available)
+            removed_count = 0
+            for key in all_configs.keys():
+                try:
+                    # Set to None to effectively delete the config
+                    await config_service.set_config(key, None, updated_by="admin")
+                    removed_count += 1
+                    logger.debug(f"Removed persisted config: {key}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove config {key}: {e}")
+
+            logger.info(f"Removed {removed_count} persisted configs for {adapter_type}")
+            return removed_count > 0
+
+        except Exception as e:
+            logger.error(f"Failed to remove persisted config for {adapter_type}: {e}")
+            return False

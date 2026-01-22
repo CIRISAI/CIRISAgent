@@ -468,10 +468,23 @@ class AdapterConfigTests:
             self.console.print("     [dim]Callback endpoint not found[/dim]")
             return
 
+        # OAuth callback returns HTML, not JSON
+        content_type = response.headers.get("content-type", "")
         if response.status_code == 200:
-            data = response.json()
-            success = data.get("data", {}).get("success", False)
-            self.console.print(f"     [dim]Callback handled: {success}[/dim]")
+            if "text/html" in content_type:
+                # Check for success indicators in HTML
+                if "Connected!" in response.text or "OAuth Success" in response.text:
+                    self.console.print("     [dim]Callback handled: success (HTML response)[/dim]")
+                elif "Failed" in response.text or "Error" in response.text:
+                    self.console.print("     [dim]Callback handled: failed (HTML response)[/dim]")
+                else:
+                    self.console.print("     [dim]Callback returned HTML[/dim]")
+            elif "application/json" in content_type:
+                data = response.json()
+                success = data.get("data", {}).get("success", False)
+                self.console.print(f"     [dim]Callback handled: {success}[/dim]")
+            else:
+                self.console.print(f"     [dim]Callback returned: {content_type}[/dim]")
         else:
             # Expected to fail with mock code
             self.console.print(f"     [dim]Callback failed (expected with mock): HTTP {response.status_code}[/dim]")

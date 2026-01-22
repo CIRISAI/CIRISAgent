@@ -493,13 +493,17 @@ class APIServerManager:
                 self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
 
-        # Start mock logshipper to receive covenant traces
-        self.mock_logshipper = MockLogshipperServer(port=18080)
-        if self.mock_logshipper.start():
-            self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
-        else:
-            self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+        # Start mock logshipper to receive covenant traces (unless using live lens)
+        if self.config.live_lens:
+            self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]")
             self.mock_logshipper = None
+        else:
+            self.mock_logshipper = MockLogshipperServer(port=18080)
+            if self.mock_logshipper.start():
+                self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
+            else:
+                self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+                self.mock_logshipper = None
 
         self.console.print("[cyan]🚀 Starting API server...[/cyan]")
 
@@ -586,8 +590,9 @@ class APIServerManager:
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
         # Enable covenant_metrics adapter with consent for trace capture tests
+        # Note: Additional adapters for detailed/full trace levels are loaded via API in the tests
         if any(m == QAModule.COVENANT_METRICS for m in self.modules):
-            # Load the covenant_metrics adapter alongside the main adapter
+            # Load base covenant_metrics adapter alongside the main adapter
             if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
                 env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"

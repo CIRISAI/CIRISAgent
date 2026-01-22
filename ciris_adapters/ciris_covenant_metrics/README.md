@@ -231,7 +231,7 @@ curl http://localhost:8000/v1/system/adapters/ciris_covenant_metrics
 ## Configuration
 
 Environment variables:
-- `CIRIS_COVENANT_METRICS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris.ai/v1`)
+- `CIRIS_COVENANT_METRICS_ENDPOINT`: CIRISLens API URL (default: `https://lens.ciris-services-1.ai/lens-api/api/v1`)
 - `CIRIS_COVENANT_METRICS_CONSENT`: Set to `true` to enable (for QA testing)
 - `CIRIS_COVENANT_METRICS_TRACE_LEVEL`: One of `generic`, `detailed`, `full_traces` (default: `generic`)
 

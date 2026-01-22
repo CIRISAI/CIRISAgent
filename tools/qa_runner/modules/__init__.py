@@ -4,6 +4,7 @@ QA test modules for different components.
 
 from .adapter_autoload_tests import AdapterAutoloadTests
 from .adapter_config_tests import AdapterConfigTests
+from .adapter_manifest_tests import AdapterManifestTests
 from .air_tests import AIRTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
@@ -17,6 +18,7 @@ from .dsar_tests import DSARTests
 from .dsar_ticket_workflow_tests import DSARTicketWorkflowTests
 from .filter_tests import FilterTestModule
 from .handler_tests import HandlerTestModule
+from .hosted_tools_tests import HostedToolsTests
 from .identity_update_tests import IdentityUpdateTests
 from .mcp_tests import MCPTests
 from .message_id_debug_test import MessageIDDebugTests
@@ -25,11 +27,13 @@ from .partnership_tests import PartnershipTests
 from .sdk_tests import SDKTestModule
 from .sql_external_data_tests import SQLExternalDataTests
 from .state_transition_tests import StateTransitionTests
+from .utility_adapters_tests import UtilityAdaptersTests
 from .vision_tests import VisionTests
 
 __all__ = [
     "AdapterAutoloadTests",
     "AdapterConfigTests",
+    "AdapterManifestTests",
     "AIRTests",
     "APITestModule",
     "CognitiveStateAPITests",
@@ -52,4 +56,6 @@ __all__ = [
     "StateTransitionTests",
     "MCPTests",
     "VisionTests",
+    "HostedToolsTests",
+    "UtilityAdaptersTests",
 ]

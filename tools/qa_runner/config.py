@@ -38,6 +38,7 @@ class QAModule(Enum):
     MCP = "mcp"  # MCP (Model Context Protocol) adapter testing
     ADAPTER_CONFIG = "adapter_config"  # Adapter interactive configuration workflow testing
     ADAPTER_AUTOLOAD = "adapter_autoload"  # Adapter persistence and auto-load on restart testing
+    ADAPTER_MANIFEST = "adapter_manifest"  # Adapter manifest validation (all adapters)
     IDENTITY_UPDATE = "identity_update"  # Identity update from template testing (--identity-update flag)
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
@@ -45,6 +46,8 @@ class QAModule(Enum):
     COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
     COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
+    HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
+    UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
 
     # Handler modules
     HANDLERS = "handlers"
@@ -147,6 +150,10 @@ class QAConfig:
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
 
+    # Live Lens configuration (--live-lens flag for covenant_metrics tests)
+    # When True, uses https://lens.ciris.ai instead of mock logshipper
+    live_lens: bool = False
+
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:
         """Get test cases for a specific module."""
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
@@ -222,6 +229,9 @@ class QAConfig:
         elif module == QAModule.ADAPTER_AUTOLOAD:
             # Adapter auto-load tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.ADAPTER_MANIFEST:
+            # Adapter manifest validation tests use SDK client
+            return []  # Will be handled separately by runner
         elif module == QAModule.IDENTITY_UPDATE:
             # Identity update tests use SDK client
             return []  # Will be handled separately by runner
@@ -239,6 +249,12 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.SYSTEM_MESSAGES:
             # System messages visibility tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.HOSTED_TOOLS:
+            # CIRIS hosted tools tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.UTILITY_ADAPTERS:
+            # Utility adapters (weather, navigation) tests use SDK client
             return []  # Will be handled separately by runner
 
         # Handler test modules

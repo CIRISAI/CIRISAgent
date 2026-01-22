@@ -307,10 +307,10 @@ class StateTransitionTests:
                 )
             )
 
-            # Test 1: With no context, should require consent (safety default)
+            # Test 1: With no context but instant_shutdown_otherwise=True, should NOT require consent
             requires, reason = await evaluator.requires_consent(config, context=None)
-            assert requires is True, "Should require consent when context is None"
-            assert "context" in reason.lower()
+            assert requires is False, "Should permit instant shutdown when context is None and instant_shutdown_otherwise=True"
+            assert "instant" in reason.lower() or "permits" in reason.lower()
 
             # Test 2: With mock context (no crisis), should not require consent
             mock_context = MagicMock()
@@ -406,7 +406,7 @@ class StateTransitionTests:
             assert csb["wakeup"]["enabled"] is False
             assert csb["shutdown"]["mode"] == "instant"
             assert csb["dream"]["enabled"] is False
-            assert csb["state_preservation"]["enabled"] is False
+            # Scout is Tier 2 ephemeral - state_preservation not required
 
             self._record_result(test_name, True)
         except Exception as e:

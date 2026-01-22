@@ -121,9 +121,11 @@ class TestChannelHelpers:
 
     def test_build_channels_to_query_for_admin(self):
         """Test building complete channel list for admin user."""
+        from ciris_engine.schemas.api.auth import UserRole
+
         auth = Mock()
         auth.user_id = "admin_user"
-        auth.role = "ADMIN"
+        auth.role = UserRole.ADMIN
         request = Mock()
         request.app.state.api_host = "localhost"
         request.app.state.api_port = "8080"
@@ -132,7 +134,7 @@ class TestChannelHelpers:
 
         assert f"api_{auth.user_id}" in channels
         assert "api_localhost_8080" in channels
-        assert "system" in channels  # System channel for system/error messages
+        assert "system" in channels  # System channel for system/error messages (admin-only)
         # After deduplication: user channel + 3 unique admin channels + system channel
         assert len(channels) == 5
         # Verify no duplicates
@@ -140,17 +142,19 @@ class TestChannelHelpers:
 
     def test_build_channels_to_query_for_observer(self):
         """Test building channel list for observer user."""
+        from ciris_engine.schemas.api.auth import UserRole
+
         auth = Mock()
         auth.user_id = "observer_user"
-        auth.role = "OBSERVER"
+        auth.role = UserRole.OBSERVER
         request = Mock()
 
         channels = _build_channels_to_query(auth, request)
 
-        # Observer gets their channel + system channel for system/error messages
+        # Observer only gets their own channel (no system channel - that's admin-only)
         assert f"api_{auth.user_id}" in channels
-        assert "system" in channels
-        assert len(channels) == 2
+        assert "system" not in channels
+        assert len(channels) == 1
 
 
 class TestTimestampHelpers:

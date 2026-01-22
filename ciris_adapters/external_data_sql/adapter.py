@@ -34,9 +34,36 @@ class ExternalDataSQLAdapter(Service):
         self.runtime = runtime
         self.context = context
 
-        # Create the underlying SQL tool service
-        # It reads config from environment variables set by SQLConfigurableAdapter.apply_config()
-        self.sql_service = SQLToolService()
+        # Extract SQL config from adapter_config if provided
+        adapter_config = kwargs.get("adapter_config", {})
+        sql_config = None
+        privacy_schema_path = None
+
+        if isinstance(adapter_config, dict):
+            # Build SQLConnectorConfig from adapter_config if connection details provided
+            if "connection_string" in adapter_config and "dialect" in adapter_config:
+                from .schemas import SQLConnectorConfig, SQLDialect
+
+                try:
+                    sql_config = SQLConnectorConfig(
+                        connector_id=adapter_config.get("connector_id", "sql"),
+                        connection_string=adapter_config["connection_string"],
+                        dialect=SQLDialect(adapter_config["dialect"]),
+                        connection_timeout=adapter_config.get("connection_timeout", 30),
+                        query_timeout=adapter_config.get("query_timeout", 60),
+                        max_retries=adapter_config.get("max_retries", 3),
+                    )
+                    privacy_schema_path = adapter_config.get("privacy_schema_path")
+                    logger.info(f"SQL config built from adapter_config: connector_id={sql_config.connector_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to build SQL config from adapter_config: {e}")
+
+        # Create the underlying SQL tool service with config if available
+        # Otherwise it reads config from environment variables
+        self.sql_service = SQLToolService(
+            config=sql_config,
+            privacy_schema_path=privacy_schema_path,
+        )
 
         # Track adapter state
         self._running = False

@@ -186,6 +186,10 @@ class Ed25519TraceSigner:
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
+        Signs the JSON array of components (not the full trace object).
+        This matches CIRISLens verification which expects:
+            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True).encode('utf-8')
+
         Returns True if signing succeeded, False if key not available.
         """
         if not self._ensure_unified_key() or self._unified_key is None:
@@ -193,11 +197,22 @@ class Ed25519TraceSigner:
             return False
 
         try:
-            # Compute trace hash
-            trace_hash = trace.compute_hash()
+            # Build the canonical message that CIRISLens will verify against:
+            # JSON array of components, alphabetically sorted keys, no extra whitespace
+            components_list = [
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                }
+                for c in trace.components
+            ]
+            # Must match CIRISLens exactly: sort_keys=True, UTF-8 encoded
+            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
 
-            # Sign using unified key's sign_base64 method
-            trace.signature = self._unified_key.sign_base64(trace_hash.encode())
+            # Sign the raw message bytes (not a hash)
+            trace.signature = self._unified_key.sign_base64(message)
             trace.signature_key_id = self._key_id
 
             logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
@@ -208,7 +223,10 @@ class Ed25519TraceSigner:
             return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
-        """Verify a trace signature using root public key."""
+        """Verify a trace signature using root public key.
+
+        Verifies against the canonical JSON components message.
+        """
         if not trace.signature or not self._root_pubkey:
             return False
 
@@ -222,11 +240,20 @@ class Ed25519TraceSigner:
             # Decode signature
             sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
 
-            # Compute expected hash
-            expected_hash = trace.compute_hash()
+            # Build the canonical message (same as sign_trace)
+            components_list = [
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                }
+                for c in trace.components
+            ]
+            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
 
             # Verify
-            public_key.verify(sig_bytes, expected_hash.encode())
+            public_key.verify(sig_bytes, message)
             return True
 
         except Exception as e:
@@ -326,7 +353,7 @@ class CovenantMetricsService:
         elif raw_url:
             self._endpoint_url = str(raw_url)
         else:
-            self._endpoint_url = "https://lens.ciris.ai/v1"
+            self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):
@@ -653,13 +680,18 @@ class CovenantMetricsService:
 
             payload = unified_key.get_registration_payload(description)
 
+            # Store registered key ID for comparison during signing
+            self._registered_key_id = payload['key_id']
+
             url = f"{self._endpoint_url}/covenant/public-keys"
 
             logger.info("=" * 70)
             logger.info(f"🔑 REGISTERING PUBLIC KEY with CIRISLens")
             logger.info(f"   URL: {url}")
-            logger.info(f"   Key ID: {payload['key_id']}")
+            logger.info(f"   Key ID (REGISTRATION): {payload['key_id']}")
+            logger.info(f"   Public key (first 20 chars): {payload['public_key_base64'][:20]}...")
             logger.info(f"   Algorithm: {payload['algorithm']}")
+            logger.info(f"   Signer key_id: {self._signer.key_id}")
 
             async with self._session.post(url, json=payload) as response:
                 if response.status == 200:

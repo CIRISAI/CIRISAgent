@@ -103,6 +103,8 @@ class QARunner:
                 live_api_key=self.config.live_api_key,
                 live_model=self.config.live_model,
                 live_base_url=self.config.live_base_url,
+                # Live Lens configuration
+                live_lens=self.config.live_lens,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -246,12 +248,15 @@ class QARunner:
             QAModule.MCP,
             QAModule.ADAPTER_CONFIG,
             QAModule.ADAPTER_AUTOLOAD,
+            QAModule.ADAPTER_MANIFEST,
             QAModule.IDENTITY_UPDATE,
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
             QAModule.COVENANT_METRICS,
             QAModule.SYSTEM_MESSAGES,
+            QAModule.HOSTED_TOOLS,
+            QAModule.UTILITY_ADAPTERS,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -854,6 +859,7 @@ class QARunner:
         )
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_config_tests import AdapterConfigTests
+        from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
@@ -867,6 +873,8 @@ class QARunner:
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.system_messages_tests import SystemMessagesTests
         from .modules.vision_tests import VisionTests
+        from .modules.hosted_tools_tests import HostedToolsTests
+        from .modules.utility_adapters_tests import UtilityAdaptersTests
 
         all_passed = True
 
@@ -887,12 +895,15 @@ class QARunner:
             QAModule.MCP: MCPTests,
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
             QAModule.ADAPTER_AUTOLOAD: AdapterAutoloadTests,
+            QAModule.ADAPTER_MANIFEST: AdapterManifestTests,
             QAModule.IDENTITY_UPDATE: IdentityUpdateTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
             QAModule.COVENANT_METRICS: CovenantMetricsTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
+            QAModule.HOSTED_TOOLS: HostedToolsTests,
+            QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
@@ -912,7 +923,11 @@ class QARunner:
                 client._transport.set_api_key(token_to_use, persist=False)
 
                 # Instantiate and run test module
-                test_instance = test_class(client, self.console)
+                # Special handling for CovenantMetricsTests - pass live_lens config
+                if module == QAModule.COVENANT_METRICS:
+                    test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                else:
+                    test_instance = test_class(client, self.console)
 
                 results = await test_instance.run()
 
@@ -1615,7 +1630,10 @@ class QARunner:
             self.console.print("\n[red]Failed Tests:[/red]")
             for key, result in self.results.items():
                 if not result["success"]:
-                    module, test = key.split("::")
+                    # Use maxsplit=1 to handle keys with multiple :: separators
+                    parts = key.split("::", 1)
+                    module = parts[0]
+                    test = parts[1] if len(parts) > 1 else "unknown"
                     error = result.get("error", "Unknown error")[:100]
                     self.console.print(f"  • {module}::{test}: {error}")
 
@@ -1628,7 +1646,10 @@ class QARunner:
         if tests_with_incidents:
             self.console.print("\n[yellow]Tests with Incidents:[/yellow]")
             for key, incidents in tests_with_incidents:
-                module, test = key.split("::")
+                # Use maxsplit=1 to handle keys with multiple :: separators
+                parts = key.split("::", 1)
+                module = parts[0]
+                test = parts[1] if len(parts) > 1 else "unknown"
                 self.console.print(f"  • {module}::{test}:")
                 for incident in incidents[:3]:  # Show max 3 incidents per test
                     self.console.print(f"    - {incident[:150]}")

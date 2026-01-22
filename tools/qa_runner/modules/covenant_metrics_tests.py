@@ -502,9 +502,13 @@ class CovenantMetricsTests:
         The default adapter loaded at startup uses trace_level=generic.
         """
         try:
-            # Get base URL and auth token from client
-            base_url = getattr(self.client, "base_url", "http://localhost:8000")
-            auth_token = getattr(self.client, "_token", None)
+            # Get base URL and auth token from client's transport
+            transport = getattr(self.client, "_transport", None)
+            if not transport:
+                return True, "Skipped (no transport available)"
+
+            base_url = getattr(transport, "base_url", "http://localhost:8000")
+            auth_token = getattr(transport, "api_key", None)
 
             if not auth_token:
                 return True, "Skipped (no auth token available for adapter loading)"
@@ -548,7 +552,7 @@ class CovenantMetricsTests:
                         self.console.print(f"     [yellow]Warning: {adapter_id}: {e}[/yellow]")
 
             if not loaded:
-                return True, "No additional adapters loaded (may already exist or API unavailable)"
+                return False, "Failed to load additional adapters"
 
             return True, f"Loaded {len(loaded)} additional adapter(s): {loaded}"
 

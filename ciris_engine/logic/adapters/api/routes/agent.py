@@ -1033,13 +1033,21 @@ def _get_admin_channels(auth: AuthContext, request: Request) -> List[str]:
     return channels
 
 
+def _is_admin_role(auth: AuthContext) -> bool:
+    """Check if auth context has an admin-level role."""
+    from ciris_engine.schemas.api.auth import UserRole
+    admin_roles = {UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY}
+    return auth.role in admin_roles
+
+
 def _build_channels_to_query(auth: AuthContext, request: Request) -> List[str]:
     """Build list of channels to query for conversation history."""
     channel_id = f"api_{auth.user_id}"
     channels_to_query = [channel_id]
     channels_to_query.extend(_get_admin_channels(auth, request))
-    # Always include "system" channel for system/error messages
-    channels_to_query.append("system")
+    # Only include "system" channel for admin users (system/error messages)
+    if _is_admin_role(auth):
+        channels_to_query.append("system")
     # Remove duplicates while preserving order
     seen = set()
     deduped = []

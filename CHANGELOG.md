@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP Test Reliability** - Handle existing adapters by unloading before reload
   - Pass rate improved from 72.7% to 95.5%
 
+- **SQL External Data Adapter** - Config now passed from adapter_config during load
+  - Adapter builds SQLConnectorConfig from adapter_config parameters
+  - Tests load adapter via API with proper configuration
+  - Pass rate improved from 25% to 100%
+
 - **Adapter Config API** - Added missing `load_persisted_configs()` and `remove_persisted_config()` methods
 
 - **OAuth Callback Test** - Handle HTML response instead of expecting JSON

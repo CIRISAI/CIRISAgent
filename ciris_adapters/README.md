@@ -8,7 +8,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 |---------|---------|-------------|----------|-------------|
 | `ciris_covenant_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
 | `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | - | ❌ |
-| `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ❌ |
+| `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ✅ 2026-01-21 (100%) |
 | `home_assistant` | 1.0.0 | Enhanced Home Assistant integration with event detection | - | ❌ |
 | `mcp_client` | 1.0.0 | MCP client - connects CIRIS to external MCP servers | `mcp_tests.py` | ✅ 2026-01-21 (95.5%) |
 | `mcp_common` | 1.0.0 | Shared utilities for MCP client and server adapters | - | N/A (library) |
@@ -23,8 +23,8 @@ This directory contains modular services that can be dynamically loaded into CIR
 
 1. **High Priority** (production use):
    - `ciris_covenant_metrics` ✅ - Live tested 2026-01-21
-   - `mcp_client` / `mcp_server` - Core integration
-   - `external_data_sql` - DSAR automation
+   - `mcp_client` / `mcp_server` ✅ - Live tested 2026-01-21 (95.5%)
+   - `external_data_sql` ✅ - Live tested 2026-01-21 (100%)
 
 2. **Medium Priority** (feature expansion):
    - `ciris_hosted_tools` - Platform tools

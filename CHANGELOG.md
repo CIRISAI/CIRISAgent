@@ -5,35 +5,45 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.0] - 2026-01-21
+## [1.9.0] - 2026-01-22
 
 ### Added
 
-- **Covenant Metrics Live Testing** - Full integration with CIRISLens server
+- **Covenant Metrics Live Testing** - Full integration with CIRISLens server (100% pass rate)
   - `--live-lens` flag for QA runner to test against real Lens server
   - Multi-level trace adapters (generic, detailed, full_traces) via API loading
   - PDMA field validation tests at detailed/full trace levels
   - Key ID consistency verification between registration and signing
+  - Updated default endpoint to production URL
+
+- **Comprehensive Adapter QA Testing** - All adapters now have QA test coverage
+  - `ciris_covenant_metrics`: 100% - Full CIRISLens integration
+  - `mcp_client/mcp_server`: 95.5% - Handle adapter reload
+  - `external_data_sql`: 100% - Fixed config passing
+  - `weather`: 100% - Free NOAA API
+  - `navigation`: 100% - Free OpenStreetMap API
+  - `ciris_hosted_tools`: 60% - Awaiting billing token
+  - `reddit`, `home_assistant`: Need API credentials
 
 - **Adapter Manifest Validation** - Comprehensive QA module for all adapters
   - Validates manifest.json structure for all modular adapters
   - Tests adapter loading, configuration, and lifecycle
 
-- **Utility Adapters QA Tests** - Weather and navigation adapter testing
-  - Tests adapter loading via API, tool service registration
-  - Uses free public APIs (NOAA, OpenStreetMap)
-
-- **Hosted Tools QA Tests** - CIRIS proxy tools testing (partial)
-  - Tests adapter loading, status, tool discovery
-  - Balance check and web search awaiting billing token
-
 - **Adapter Status Documentation** - Test status table in ciris_adapters/README.md
 
 ### Fixed
 
+- **System Channel Admin-Only** - Non-admin users no longer see system/error messages
+  - Rate limit errors from other sessions no longer appear for new users
+  - System channel now restricted to ADMIN, SYSTEM_ADMIN, AUTHORITY roles
+
 - **Trace Signature Format** - Signatures now match CIRISLens verification format
   - Was: signing SHA-256 hash of entire trace object
   - Now: signing JSON components array with `sort_keys=True`
+
+- **CIRISLens Default URL** - Updated to production endpoint
+  - Was: `https://lens.ciris.ai/v1`
+  - Now: `https://lens.ciris-services-1.ai/lens-api/api/v1`
 
 - **MCP Test Reliability** - Handle existing adapters by unloading before reload
   - Pass rate improved from 72.7% to 95.5%
@@ -44,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Pass rate improved from 25% to 100%
 
 - **Adapter Config API** - Added missing `load_persisted_configs()` and `remove_persisted_config()` methods
+  - Added unit tests for both methods
 
 - **OAuth Callback Test** - Handle HTML response instead of expecting JSON
 

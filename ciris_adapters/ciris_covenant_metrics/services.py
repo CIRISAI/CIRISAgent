@@ -353,7 +353,7 @@ class CovenantMetricsService:
         elif raw_url:
             self._endpoint_url = str(raw_url)
         else:
-            self._endpoint_url = "https://lens.ciris-services-1.ai/lens-api/api/v1"
+            self._endpoint_url = "https://lens.ciris.ai/v1"
 
         raw_batch = self._config.get("batch_size")
         if raw_batch is not None and isinstance(raw_batch, (int, float, str)):

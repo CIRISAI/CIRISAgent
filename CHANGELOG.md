@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Validates manifest.json structure for all modular adapters
   - Tests adapter loading, configuration, and lifecycle
 
+- **Utility Adapters QA Tests** - Weather and navigation adapter testing
+  - Tests adapter loading via API, tool service registration
+  - Uses free public APIs (NOAA, OpenStreetMap)
+
+- **Hosted Tools QA Tests** - CIRIS proxy tools testing (partial)
+  - Tests adapter loading, status, tool discovery
+  - Balance check and web search awaiting billing token
+
 - **Adapter Status Documentation** - Test status table in ciris_adapters/README.md
 
 ### Fixed

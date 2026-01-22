@@ -5,6 +5,37 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-01-21
+
+### Added
+
+- **Covenant Metrics Live Testing** - Full integration with CIRISLens server
+  - `--live-lens` flag for QA runner to test against real Lens server
+  - Multi-level trace adapters (generic, detailed, full_traces) via API loading
+  - PDMA field validation tests at detailed/full trace levels
+  - Key ID consistency verification between registration and signing
+
+- **Adapter Manifest Validation** - Comprehensive QA module for all adapters
+  - Validates manifest.json structure for all modular adapters
+  - Tests adapter loading, configuration, and lifecycle
+
+- **Adapter Status Documentation** - Test status table in ciris_adapters/README.md
+
+### Fixed
+
+- **Trace Signature Format** - Signatures now match CIRISLens verification format
+  - Was: signing SHA-256 hash of entire trace object
+  - Now: signing JSON components array with `sort_keys=True`
+
+- **MCP Test Reliability** - Handle existing adapters by unloading before reload
+  - Pass rate improved from 72.7% to 95.5%
+
+- **Adapter Config API** - Added missing `load_persisted_configs()` and `remove_persisted_config()` methods
+
+- **OAuth Callback Test** - Handle HTML response instead of expecting JSON
+
+- **State Transition Tests** - Updated test expectations for shutdown_evaluator and template_loading
+
 ## [1.8.13] - 2026-01-21
 
 ### Fixed

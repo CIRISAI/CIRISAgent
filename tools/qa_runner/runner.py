@@ -246,6 +246,7 @@ class QARunner:
             QAModule.MCP,
             QAModule.ADAPTER_CONFIG,
             QAModule.ADAPTER_AUTOLOAD,
+            QAModule.ADAPTER_MANIFEST,
             QAModule.IDENTITY_UPDATE,
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
@@ -854,6 +855,7 @@ class QARunner:
         )
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_config_tests import AdapterConfigTests
+        from .modules.adapter_manifest_tests import AdapterManifestTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
@@ -887,6 +889,7 @@ class QARunner:
             QAModule.MCP: MCPTests,
             QAModule.ADAPTER_CONFIG: AdapterConfigTests,
             QAModule.ADAPTER_AUTOLOAD: AdapterAutoloadTests,
+            QAModule.ADAPTER_MANIFEST: AdapterManifestTests,
             QAModule.IDENTITY_UPDATE: IdentityUpdateTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
@@ -1615,7 +1618,10 @@ class QARunner:
             self.console.print("\n[red]Failed Tests:[/red]")
             for key, result in self.results.items():
                 if not result["success"]:
-                    module, test = key.split("::")
+                    # Use maxsplit=1 to handle keys with multiple :: separators
+                    parts = key.split("::", 1)
+                    module = parts[0]
+                    test = parts[1] if len(parts) > 1 else "unknown"
                     error = result.get("error", "Unknown error")[:100]
                     self.console.print(f"  • {module}::{test}: {error}")
 
@@ -1628,7 +1634,10 @@ class QARunner:
         if tests_with_incidents:
             self.console.print("\n[yellow]Tests with Incidents:[/yellow]")
             for key, incidents in tests_with_incidents:
-                module, test = key.split("::")
+                # Use maxsplit=1 to handle keys with multiple :: separators
+                parts = key.split("::", 1)
+                module = parts[0]
+                test = parts[1] if len(parts) > 1 else "unknown"
                 self.console.print(f"  • {module}::{test}:")
                 for incident in incidents[:3]:  # Show max 3 incidents per test
                     self.console.print(f"    - {incident[:150]}")

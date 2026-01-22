@@ -241,6 +241,12 @@ class ServiceManifest(BaseModel):
     interactive_config: Optional[InteractiveConfiguration] = Field(
         None, description="Interactive configuration workflow for adapters"
     )
+    platform_requirements: Optional[List[str]] = Field(
+        None, description="Platform attestation requirements (e.g., 'android_play_integrity', 'google_native_auth')"
+    )
+    platform_requirements_rationale: Optional[str] = Field(
+        None, description="Explanation of why platform requirements are needed"
+    )
 
     model_config = ConfigDict(extra="forbid")
 

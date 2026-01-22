@@ -4,6 +4,7 @@ QA test modules for different components.
 
 from .adapter_autoload_tests import AdapterAutoloadTests
 from .adapter_config_tests import AdapterConfigTests
+from .adapter_manifest_tests import AdapterManifestTests
 from .air_tests import AIRTests
 from .api_tests import APITestModule
 from .billing_tests import BillingTests
@@ -30,6 +31,7 @@ from .vision_tests import VisionTests
 __all__ = [
     "AdapterAutoloadTests",
     "AdapterConfigTests",
+    "AdapterManifestTests",
     "AIRTests",
     "APITestModule",
     "CognitiveStateAPITests",

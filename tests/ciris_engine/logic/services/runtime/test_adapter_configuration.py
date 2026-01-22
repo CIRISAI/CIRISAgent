@@ -957,3 +957,148 @@ class TestConfigurationSessionStatusEndpoint:
 
         # Verify step index is within bounds
         assert session.current_step_index < total_steps
+
+
+class TestPersistedConfigMethods:
+    """Tests for load_persisted_configs and remove_persisted_config methods."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.service = AdapterConfigurationService()
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_empty(self) -> None:
+        """Test load_persisted_configs returns empty dict when no configs exist."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={})
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert result == {}
+        mock_config_service.list_configs.assert_called_once_with(prefix="adapter_config:")
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_single_adapter(self) -> None:
+        """Test load_persisted_configs loads a single adapter config."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:homeassistant:ha_instance_1": {
+                "base_url": "http://localhost:8123",
+                "access_token": "test_token",
+            }
+        })
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert "homeassistant" in result
+        assert "ha_instance_1" in result["homeassistant"]
+        assert result["homeassistant"]["ha_instance_1"]["base_url"] == "http://localhost:8123"
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_multiple_adapters(self) -> None:
+        """Test load_persisted_configs loads multiple adapter types."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+            "adapter_config:weather:weather_1": {"api_key": "test_key"},
+        })
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert len(result) == 2
+        assert "homeassistant" in result
+        assert "weather" in result
+        assert len(result["homeassistant"]) == 2
+        assert len(result["weather"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_non_dict_value(self) -> None:
+        """Test load_persisted_configs handles non-dict values."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:simple:instance_1": "simple_value"
+        })
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert "simple" in result
+        assert result["simple"]["instance_1"] == {"value": "simple_value"}
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_malformed_key(self) -> None:
+        """Test load_persisted_configs ignores malformed keys."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha.local"},
+            "adapter_config:malformed": {"should": "be ignored"},  # Missing adapter_id
+            "other_prefix:something": {"also": "ignored"},  # Wrong prefix
+        })
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert len(result) == 1
+        assert "homeassistant" in result
+        assert "malformed" not in result
+
+    @pytest.mark.asyncio
+    async def test_load_persisted_configs_exception_handling(self) -> None:
+        """Test load_persisted_configs returns empty dict on exception."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(side_effect=Exception("Database error"))
+
+        result = await self.service.load_persisted_configs(mock_config_service)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_remove_persisted_config_success(self) -> None:
+        """Test remove_persisted_config removes configs for adapter type."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+        })
+        mock_config_service.set_config = AsyncMock()
+
+        result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
+
+        assert result is True
+        mock_config_service.list_configs.assert_called_once_with(prefix="adapter_config:homeassistant:")
+        assert mock_config_service.set_config.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_remove_persisted_config_no_configs(self) -> None:
+        """Test remove_persisted_config returns False when no configs exist."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={})
+
+        result = await self.service.remove_persisted_config("nonexistent", mock_config_service)
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_remove_persisted_config_partial_failure(self) -> None:
+        """Test remove_persisted_config handles partial failures."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(return_value={
+            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+        })
+        # First call succeeds, second fails
+        mock_config_service.set_config = AsyncMock(side_effect=[None, Exception("Delete failed")])
+
+        result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
+
+        # Should still return True because at least one was removed
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_remove_persisted_config_exception_handling(self) -> None:
+        """Test remove_persisted_config returns False on exception."""
+        mock_config_service = AsyncMock()
+        mock_config_service.list_configs = AsyncMock(side_effect=Exception("Database error"))
+
+        result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
+
+        assert result is False

@@ -186,6 +186,10 @@ class Ed25519TraceSigner:
     def sign_trace(self, trace: CompleteTrace) -> bool:
         """Sign a trace with Ed25519 unified signing key.
 
+        Signs the JSON array of components (not the full trace object).
+        This matches CIRISLens verification which expects:
+            message = json.dumps([c.model_dump() for c in trace.components], sort_keys=True).encode('utf-8')
+
         Returns True if signing succeeded, False if key not available.
         """
         if not self._ensure_unified_key() or self._unified_key is None:
@@ -193,11 +197,22 @@ class Ed25519TraceSigner:
             return False
 
         try:
-            # Compute trace hash
-            trace_hash = trace.compute_hash()
+            # Build the canonical message that CIRISLens will verify against:
+            # JSON array of components, alphabetically sorted keys, no extra whitespace
+            components_list = [
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                }
+                for c in trace.components
+            ]
+            # Must match CIRISLens exactly: sort_keys=True, UTF-8 encoded
+            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
 
-            # Sign using unified key's sign_base64 method
-            trace.signature = self._unified_key.sign_base64(trace_hash.encode())
+            # Sign the raw message bytes (not a hash)
+            trace.signature = self._unified_key.sign_base64(message)
             trace.signature_key_id = self._key_id
 
             logger.debug(f"Signed trace {trace.trace_id} with unified key {self._key_id}")
@@ -208,7 +223,10 @@ class Ed25519TraceSigner:
             return False
 
     def verify_trace(self, trace: CompleteTrace) -> bool:
-        """Verify a trace signature using root public key."""
+        """Verify a trace signature using root public key.
+
+        Verifies against the canonical JSON components message.
+        """
         if not trace.signature or not self._root_pubkey:
             return False
 
@@ -222,11 +240,20 @@ class Ed25519TraceSigner:
             # Decode signature
             sig_bytes = base64.urlsafe_b64decode(trace.signature + "==")
 
-            # Compute expected hash
-            expected_hash = trace.compute_hash()
+            # Build the canonical message (same as sign_trace)
+            components_list = [
+                {
+                    "component_type": c.component_type,
+                    "data": c.data,
+                    "event_type": c.event_type,
+                    "timestamp": c.timestamp,
+                }
+                for c in trace.components
+            ]
+            message = json.dumps(components_list, sort_keys=True).encode("utf-8")
 
             # Verify
-            public_key.verify(sig_bytes, expected_hash.encode())
+            public_key.verify(sig_bytes, message)
             return True
 
         except Exception as e:

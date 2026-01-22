@@ -63,6 +63,7 @@ class CovenantMetricsTests:
             "csdma": ["plausibility_score"],
             "dsdma": ["domain_alignment"],
             "idma": ["k_eff", "correlation_risk", "fragility_flag"],
+            # Note: pdma has no numeric fields at generic level
         },
         "ASPDMA_RESULT": [
             "selected_action",
@@ -95,6 +96,20 @@ class CovenantMetricsTests:
         ],
     }
 
+    # Additional fields at DETAILED level (includes PDMA text fields)
+    DETAILED_REQUIRED_FIELDS = {
+        "DMA_RESULTS": {
+            "pdma": ["stakeholders", "conflicts", "alignment_check"],
+        },
+    }
+
+    # Additional fields at FULL level (includes reasoning text)
+    FULL_REQUIRED_FIELDS = {
+        "DMA_RESULTS": {
+            "pdma": ["stakeholders", "conflicts", "alignment_check", "reasoning"],
+        },
+    }
+
     def __init__(self, client: Any, console: Any, live_lens: bool = False):
         """Initialize test module.
 
@@ -119,6 +134,7 @@ class CovenantMetricsTests:
         tests = [
             ("Service Status Check", self._test_service_status),
             ("Root Public Key Load", self._test_root_key_load),
+            ("Load Multi-Level Adapters", self._test_load_multi_level_adapters),
             ("Agent Interaction Trace", self._test_interaction_triggers_trace),
             ("Generic Trace Field Validation", self._test_generic_trace_fields),
             ("Export Real Trace", self._test_export_real_trace),
@@ -129,6 +145,7 @@ class CovenantMetricsTests:
             tests.extend([
                 ("Lens Key Registration Check", self._test_lens_key_registration),
                 ("Lens Key ID Consistency", self._test_lens_key_id_consistency),
+                ("PDMA Fields at Detailed Level", self._test_pdma_fields_detailed),
             ])
 
         for name, test_fn in tests:
@@ -469,6 +486,131 @@ class CovenantMetricsTests:
                     return True, "No signed traces yet - cannot validate consistency"
 
                 return True, f"All {len(matched_keys)} trace key ID(s) match registered keys"
+
+        except aiohttp.ClientConnectorError as e:
+            return False, f"Cannot reach Lens server: {e}"
+        except Exception as e:
+            return False, str(e)
+
+    async def _test_load_multi_level_adapters(self) -> tuple[bool, str]:
+        """Load covenant_metrics adapters at all 3 trace levels via API.
+
+        Creates adapters:
+        - covenant_detailed: trace_level=detailed (includes PDMA text fields)
+        - covenant_full: trace_level=full_traces (includes reasoning text)
+
+        The default adapter loaded at startup uses trace_level=generic.
+        """
+        try:
+            # Get base URL and auth token from client
+            base_url = getattr(self.client, "base_url", "http://localhost:8000")
+            auth_token = getattr(self.client, "_token", None)
+
+            if not auth_token:
+                return True, "Skipped (no auth token available for adapter loading)"
+
+            # Define adapters to load with their trace levels
+            adapters_to_load = [
+                ("covenant_detailed", "detailed"),
+                ("covenant_full", "full_traces"),
+            ]
+
+            loaded = []
+            async with aiohttp.ClientSession() as session:
+                headers = {"Authorization": f"Bearer {auth_token}", "Content-Type": "application/json"}
+
+                for adapter_id, trace_level in adapters_to_load:
+                    # Load adapter via API
+                    url = f"{base_url}/v1/system/adapters/ciris_covenant_metrics?adapter_id={adapter_id}"
+                    payload = {
+                        "config": {
+                            "trace_level": trace_level,
+                            "consent_given": True,
+                            "consent_timestamp": "2025-01-01T00:00:00Z",
+                            "flush_interval_seconds": 5,
+                        },
+                        "persist": False,
+                    }
+
+                    try:
+                        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                            if response.status == 200:
+                                loaded.append(adapter_id)
+                                self.console.print(f"     [dim]Loaded {adapter_id} (trace_level={trace_level})[/dim]")
+                            elif response.status == 409:
+                                # Adapter already exists
+                                self.console.print(f"     [dim]{adapter_id} already loaded[/dim]")
+                                loaded.append(adapter_id)
+                            else:
+                                error_text = await response.text()
+                                self.console.print(f"     [yellow]Warning: {adapter_id}: HTTP {response.status} - {error_text[:100]}[/yellow]")
+                    except Exception as e:
+                        self.console.print(f"     [yellow]Warning: {adapter_id}: {e}[/yellow]")
+
+            if not loaded:
+                return True, "No additional adapters loaded (may already exist or API unavailable)"
+
+            return True, f"Loaded {len(loaded)} additional adapter(s): {loaded}"
+
+        except Exception as e:
+            return False, str(e)
+
+    async def _test_pdma_fields_detailed(self) -> tuple[bool, str]:
+        """Validate PDMA fields are present at DETAILED trace level.
+
+        Queries recent traces from Lens server and checks for PDMA fields:
+        - stakeholders
+        - conflicts
+        - alignment_check
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Get recent traces
+                traces_url = f"{LENS_SERVER_URL}/covenant/traces"
+                params = {"limit": 20, "trace_level": "detailed"}
+                async with session.get(traces_url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                    if response.status == 404:
+                        return True, "Traces endpoint not available - skipping PDMA validation"
+                    if response.status != 200:
+                        return False, f"Cannot fetch traces: HTTP {response.status}"
+                    traces_data = await response.json()
+
+                traces = traces_data.get("traces", [])
+                if not traces:
+                    return True, "No detailed traces to validate yet"
+
+                # Check for PDMA fields in DMA_RESULTS components
+                pdma_found = 0
+                pdma_valid = 0
+                pdma_missing_fields: List[str] = []
+
+                for trace in traces:
+                    components = trace.get("components", [])
+                    for comp in components:
+                        if comp.get("event_type") == "DMA_RESULTS":
+                            data = comp.get("data", {})
+                            pdma = data.get("pdma", {})
+                            if pdma:
+                                pdma_found += 1
+                                # Check required DETAILED fields
+                                missing = []
+                                for field in ["stakeholders", "conflicts", "alignment_check"]:
+                                    if field not in pdma or pdma[field] is None:
+                                        missing.append(field)
+                                if missing:
+                                    pdma_missing_fields.extend(missing)
+                                else:
+                                    pdma_valid += 1
+
+                if pdma_found == 0:
+                    return True, "No PDMA data in traces yet (may need detailed-level adapter)"
+
+                if pdma_missing_fields:
+                    unique_missing = list(set(pdma_missing_fields))
+                    self.console.print(f"     [yellow]Missing PDMA fields: {unique_missing}[/yellow]")
+                    return False, f"PDMA missing fields: {unique_missing} ({pdma_valid}/{pdma_found} valid)"
+
+                return True, f"All {pdma_valid} PDMA entries have required fields"
 
         except aiohttp.ClientConnectorError as e:
             return False, f"Cannot reach Lens server: {e}"

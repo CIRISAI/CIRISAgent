@@ -590,8 +590,9 @@ class APIServerManager:
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
         # Enable covenant_metrics adapter with consent for trace capture tests
+        # Note: Additional adapters for detailed/full trace levels are loaded via API in the tests
         if any(m == QAModule.COVENANT_METRICS for m in self.modules):
-            # Load the covenant_metrics adapter alongside the main adapter
+            # Load base covenant_metrics adapter alongside the main adapter
             if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
                 env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"

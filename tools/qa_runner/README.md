@@ -48,6 +48,18 @@ python -m tools.qa_runner all --json --html --report-dir ./qa_reports
 - `tools` - Tool management
 - `tasks` - Task management
 - `guidance` - Guidance system
+- `consent` - Consent management tests
+
+### Adapter Modules
+- `covenant_metrics` - CIRIS Covenant metrics adapter (CIRISLens integration)
+- `hosted_tools` - CIRIS hosted tools adapter (web search, requires billing token)
+- `utility_adapters` - Weather and navigation adapters (free APIs)
+- `mcp` - MCP client/server adapter tests
+- `sql_external_data` - SQL external data adapter tests
+- `reddit` - Reddit adapter tests (requires API keys)
+- `adapter_config` - Adapter configuration and persistence tests
+- `adapter_autoload` - Adapter auto-loading tests
+- `adapter_manifest` - Adapter manifest validation tests
 
 ### Handler Modules
 - `handlers` - Message handlers
@@ -56,9 +68,29 @@ python -m tools.qa_runner all --json --html --report-dir ./qa_reports
 ### Filter Modules
 - `filters` - Adaptive and secrets filter configuration and testing
 
+### Cognitive State Modules
+- `cognitive_state_api` - Cognitive state API tests
+- `state_transition` - State transition workflow tests
+
 ### SDK Modules
 - `sdk` - SDK tests
 - `sdk_comprehensive` - Comprehensive SDK tests
+
+### Integration Modules
+- `streaming` - H3ERE pipeline streaming tests
+- `vision` - Vision/image processing tests
+- `dsar` - DSAR automation tests
+- `dsar_multi_source` - Multi-source DSAR tests
+- `dsar_ticket_workflow` - DSAR ticket workflow tests
+- `billing` - Billing provider tests
+- `billing_integration` - Full billing integration tests
+- `air` - AIR (Accountability, Integrity, Responsibility) tests
+- `context_enrichment` - Context enrichment tests
+- `covenant` - Covenant compliance tests
+- `multi_occurrence` - Multi-occurrence deployment tests
+- `partnership` - Partnership management tests
+- `identity_update` - Identity update workflow tests
+- `system_messages` - System message handling tests
 
 ### Aggregate Modules
 - `api_full` - All API modules
@@ -118,6 +150,25 @@ python -m tools.qa_runner all --url http://localhost:8080 --no-auto-start
 python -m tools.qa_runner api_full --verbose --retry 5
 ```
 
+### Adapter Testing
+
+```bash
+# Test utility adapters (weather, navigation - no API keys needed)
+python -m tools.qa_runner utility_adapters
+
+# Test CIRIS covenant metrics adapter
+python -m tools.qa_runner covenant_metrics
+
+# Test CIRIS hosted tools (requires billing token)
+CIRIS_BILLING_GOOGLE_ID_TOKEN=your_token python -m tools.qa_runner hosted_tools
+
+# Test MCP client/server adapters
+python -m tools.qa_runner mcp
+
+# Test SQL external data adapter
+python -m tools.qa_runner sql_external_data
+```
+
 ### CI/CD Integration
 
 ```bash
@@ -172,16 +223,34 @@ Interactive HTML report with:
 
 ```
 qa_runner/
-├── __init__.py          # Package initialization
-├── __main__.py          # CLI entry point
-├── config.py            # Configuration and test definitions
-├── runner.py            # Main test runner
-├── server.py            # API server management
-├── modules/             # Test modules
-│   ├── api_tests.py     # API endpoint tests
-│   ├── handler_tests.py # Handler tests
-│   └── sdk_tests.py     # SDK tests
-└── README.md            # This file
+├── __init__.py                     # Package initialization
+├── __main__.py                     # CLI entry point
+├── config.py                       # Configuration and test definitions
+├── runner.py                       # Main test runner
+├── server.py                       # API server management
+├── modules/                        # Test modules
+│   ├── api_tests.py                # Core API endpoint tests
+│   ├── handler_tests.py            # Handler tests
+│   ├── sdk_tests.py                # SDK tests
+│   ├── filter_tests.py             # Adaptive filter tests
+│   │
+│   │ # Adapter tests
+│   ├── covenant_metrics_tests.py   # CIRISLens integration
+│   ├── hosted_tools_tests.py       # CIRIS proxy tools
+│   ├── utility_adapters_tests.py   # Weather/navigation
+│   ├── mcp_tests.py                # MCP client/server
+│   ├── sql_external_data_tests.py  # SQL data sources
+│   ├── reddit_tests.py             # Reddit adapter
+│   ├── adapter_config_tests.py     # Config/persistence
+│   ├── adapter_autoload_tests.py   # Auto-loading
+│   ├── adapter_manifest_tests.py   # Manifest validation
+│   │
+│   │ # Integration tests
+│   ├── streaming_verification.py   # H3ERE streaming
+│   ├── cognitive_state_api_tests.py # State API
+│   ├── billing_tests.py            # Billing provider
+│   └── ...                         # Many more modules
+└── README.md                       # This file
 ```
 
 ## Adding New Tests

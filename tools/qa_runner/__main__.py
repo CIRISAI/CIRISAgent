@@ -103,7 +103,7 @@ Available modules:
     parser.add_argument(
         "--live-lens",
         action="store_true",
-        help="Use real Lens server (https://lens.ciris.ai) instead of mock logshipper for covenant_metrics tests",
+        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for covenant_metrics tests",
     )
 
     # Database backend configuration

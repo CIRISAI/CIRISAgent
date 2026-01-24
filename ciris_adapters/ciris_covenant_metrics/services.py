@@ -1203,19 +1203,21 @@ class CovenantMetricsService:
                 "audit_entry_hash": event.get("audit_entry_hash"),
                 # Positive moment indicator (privacy-preserving boolean)
                 "has_positive_moment": positive_moment_text is not None and len(positive_moment_text) > 0,
+                # Execution error indicator (privacy-preserving boolean)
+                "has_execution_error": event.get("error") is not None,
             }
-            # DETAILED: Add action type and follow-up
+            # DETAILED: Add action type, follow-up, error details, and audit signature
             if is_detailed:
                 data["action_executed"] = event.get("action_executed")
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
                 data["api_bases_used"] = event.get("api_bases_used", [])
-            # FULL: Add parameters, error details, signature, and full positive moment text
-            if is_full:
-                data["action_parameters"] = _serialize(action_params) if action_params else {}
                 data["execution_error"] = event.get("error")
                 data["audit_signature"] = event.get("audit_signature")
+            # FULL: Add parameters and full positive moment text
+            if is_full:
+                data["action_parameters"] = _serialize(action_params) if action_params else {}
                 # Include full positive moment text at FULL detail level
                 if positive_moment_text:
                     data["positive_moment"] = positive_moment_text[:500]  # Truncate for safety

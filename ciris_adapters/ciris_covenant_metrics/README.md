@@ -40,7 +40,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (DSDMA) | domain, flags |
 | DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |
 | DMA_RESULTS (IDMA) | sources_identified, correlation_factors |
-| ASPDMA_RESULT | alternatives_considered |
+| ASPDMA_RESULT | alternatives_considered, evaluation_time_ms |
 | CONSCIENCE_RESULT | final_action, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
 | ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |
 
@@ -51,7 +51,7 @@ The adapter supports three privacy levels for trace capture:
 | THOUGHT_START | task_description, initial_context, thought_content (truncated to 500 chars) |
 | SNAPSHOT_AND_CONTEXT | system_snapshot, gathered_context, relevant_memories, conversation_history |
 | DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
-| ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt |
+| ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt, raw_llm_response |
 | CONSCIENCE_RESULT | conscience_override_reason, epistemic_data, updated_status_content, entropy_reason, coherence_reason, optimization_veto_justification, epistemic_humility_justification |
 | ACTION_RESULT | action_parameters, execution_error, audit_signature, positive_moment |
 

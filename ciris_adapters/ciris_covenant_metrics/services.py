@@ -1136,15 +1136,20 @@ class CovenantMetricsService:
                 "selection_confidence": event.get("selection_confidence"),
                 "is_recursive": event.get("is_recursive", False),
             }
-            # DETAILED: Add alternatives
+            # DETAILED: Add alternatives and timing
             if is_detailed:
                 data["alternatives_considered"] = event.get("alternatives_considered")
+                data["evaluation_time_ms"] = event.get("evaluation_time_ms")
             # FULL: Add reasoning text and parameters
             if is_full:
                 data["action_rationale"] = event.get("action_rationale")
                 data["reasoning_summary"] = event.get("reasoning_summary")
                 data["action_parameters"] = _serialize(event.get("action_parameters"))
                 data["aspdma_prompt"] = event.get("aspdma_prompt")
+                # Truncate raw LLM response to 1000 chars for safety
+                raw_response = event.get("raw_llm_response")
+                if raw_response:
+                    data["raw_llm_response"] = str(raw_response)[:1000]
             return data
 
         elif event_type == "CONSCIENCE_RESULT":

@@ -131,6 +131,13 @@ Available modules:
         help="(Deprecated: now automatic) Multiple backends always run in parallel for proper state isolation",
     )
 
+    # Data management
+    parser.add_argument(
+        "--wipe-data",
+        action="store_true",
+        help="Wipe data directory before starting (clears stale state, resets to first-run)"
+    )
+
     # Authentication
     parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
     parser.add_argument(
@@ -155,6 +162,20 @@ Available modules:
 def main():
     """Main entry point."""
     args = parse_args()
+
+    # Handle --wipe-data: Clear data directory to reset state
+    if args.wipe_data:
+        import shutil
+        data_dir = Path("data")
+        if data_dir.exists():
+            print(f"🧹 Wiping data directory: {data_dir}")
+            try:
+                shutil.rmtree(data_dir)
+                print("   ✅ Data directory cleared")
+            except Exception as e:
+                print(f"   ⚠️  Failed to wipe data directory: {e}")
+        else:
+            print(f"   ℹ️  Data directory does not exist: {data_dir}")
 
     # Parse modules (default to "all" if none specified)
     module_names = args.modules if args.modules else ["all"]

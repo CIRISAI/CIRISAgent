@@ -760,10 +760,15 @@ class APIServerManager:
                 token = auth_response.json()["access_token"]
             else:
                 self.console.print(
-                    f"[yellow]⚠️  Auth failed: {auth_response.status_code} - {auth_response.text[:100]}[/yellow]"
+                    f"[red]❌ Authentication failed: {auth_response.status_code} - {auth_response.text[:100]}[/red]"
                 )
+                self.console.print(
+                    "[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]"
+                )
+                return False  # Exit immediately on auth failure
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Could not authenticate for state check: {e}[/yellow]")
+            self.console.print(f"[red]❌ Authentication error: {e}[/red]")
+            return False  # Exit immediately on auth error
 
         while time.time() - start_time < self.config.server_startup_timeout:
             try:

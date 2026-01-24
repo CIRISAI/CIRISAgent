@@ -1155,6 +1155,10 @@ class CovenantMetricsService:
         elif event_type == "CONSCIENCE_RESULT":
             # CONSCIENCE: Ethical validation
             # GENERIC: All boolean flags and numeric scores (core for CIRIS scoring)
+            # Extract entropy_level and coherence_level from epistemic_data - CRITICAL scoring metrics
+            epistemic_data_obj = event.get("epistemic_data", {})
+            if hasattr(epistemic_data_obj, "model_dump"):
+                epistemic_data_obj = epistemic_data_obj.model_dump()
             data = {
                 # Overall result
                 "conscience_passed": event.get("conscience_passed"),
@@ -1165,6 +1169,9 @@ class CovenantMetricsService:
                 "thought_depth_triggered": event.get("thought_depth_triggered"),
                 "thought_depth_current": event.get("thought_depth_current"),
                 "thought_depth_max": event.get("thought_depth_max"),
+                # Core epistemic metrics from epistemic_data (CRITICAL for CIRIS scoring)
+                "entropy_level": epistemic_data_obj.get("entropy_level") if isinstance(epistemic_data_obj, dict) else None,
+                "coherence_level": epistemic_data_obj.get("coherence_level") if isinstance(epistemic_data_obj, dict) else None,
                 # Entropy conscience (numeric)
                 "entropy_passed": event.get("entropy_passed"),
                 "entropy_score": event.get("entropy_score"),
@@ -1180,20 +1187,20 @@ class CovenantMetricsService:
                 "epistemic_humility_passed": event.get("epistemic_humility_passed"),
                 "epistemic_humility_certainty": event.get("epistemic_humility_certainty"),
             }
-            # DETAILED: Add identifiers and lists
+            # DETAILED: Add identifiers, lists, and key reason fields
             if is_detailed:
                 data["final_action"] = event.get("final_action")
+                data["conscience_override_reason"] = event.get("conscience_override_reason")
+                data["entropy_reason"] = event.get("entropy_reason")
+                data["coherence_reason"] = event.get("coherence_reason")
                 data["optimization_veto_decision"] = event.get("optimization_veto_decision")
                 data["optimization_veto_affected_values"] = event.get("optimization_veto_affected_values")
                 data["epistemic_humility_uncertainties"] = event.get("epistemic_humility_uncertainties")
                 data["epistemic_humility_recommendation"] = event.get("epistemic_humility_recommendation")
-            # FULL: Add all text fields
+            # FULL: Add all text fields and complete epistemic_data
             if is_full:
-                data["conscience_override_reason"] = event.get("conscience_override_reason")
                 data["epistemic_data"] = _serialize(event.get("epistemic_data"))
                 data["updated_status_content"] = event.get("updated_status_content")
-                data["entropy_reason"] = event.get("entropy_reason")
-                data["coherence_reason"] = event.get("coherence_reason")
                 data["optimization_veto_justification"] = event.get("optimization_veto_justification")
                 data["epistemic_humility_justification"] = event.get("epistemic_humility_justification")
             return data

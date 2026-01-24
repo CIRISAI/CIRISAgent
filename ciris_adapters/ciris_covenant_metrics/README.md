@@ -34,7 +34,7 @@ The adapter supports three privacy levels for trace capture:
 | Component | Additional Fields |
 |-----------|-------------------|
 | THOUGHT_START | thought_type, thought_status, parent_thought_id, channel_id, source_adapter |
-| SNAPSHOT_AND_CONTEXT | active_services, context_sources |
+| SNAPSHOT_AND_CONTEXT | active_services, context_sources, service_health, agent_version, circuit_breaker_status |
 | DMA_RESULTS (CSDMA) | flags |
 | DMA_RESULTS (DSDMA) | domain, flags |
 | DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |

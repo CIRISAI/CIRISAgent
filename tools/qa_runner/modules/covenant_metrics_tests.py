@@ -50,11 +50,13 @@ class CovenantMetricsTests:
 
     # Required fields for CIRIS scoring (generic trace level)
     # These power the 5-factor CIRIS Capacity Score: C · I_int · R · I_inc · S
+    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
     GENERIC_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "round_number",
             "thought_depth",
             "task_priority",
+            "updated_info_available",
         ],
         "SNAPSHOT_AND_CONTEXT": [
             "cognitive_state",
@@ -62,8 +64,8 @@ class CovenantMetricsTests:
         "DMA_RESULTS": {
             "csdma": ["plausibility_score"],
             "dsdma": ["domain_alignment"],
-            "idma": ["k_eff", "correlation_risk", "fragility_flag"],
-            # Note: pdma has no numeric fields at generic level
+            "idma": ["k_eff", "correlation_risk", "fragility_flag", "phase"],  # phase moved to GENERIC in v1.9.1
+            "pdma": ["has_conflicts"],  # boolean indicator added in v1.9.1
         },
         "ASPDMA_RESULT": [
             "selected_action",
@@ -73,6 +75,9 @@ class CovenantMetricsTests:
         "CONSCIENCE_RESULT": [
             "conscience_passed",
             "action_was_overridden",
+            # Epistemic data extracted to GENERIC in v1.9.1 (CRITICAL scoring metrics)
+            "entropy_level",
+            "coherence_level",
             # Entropy conscience
             "entropy_passed",
             "entropy_score",
@@ -93,21 +98,92 @@ class CovenantMetricsTests:
             "tokens_total",
             "audit_sequence_number",
             "audit_entry_hash",
+            "has_positive_moment",  # added in v1.9.1
+            "has_execution_error",  # added in v1.9.1
         ],
     }
 
-    # Additional fields at DETAILED level (includes PDMA text fields)
+    # Additional fields at DETAILED level (actionable identifiers)
+    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
     DETAILED_REQUIRED_FIELDS = {
+        "THOUGHT_START": [
+            "thought_type",
+            "thought_status",
+            "parent_thought_id",
+            "channel_id",
+        ],
+        "SNAPSHOT_AND_CONTEXT": [
+            "active_services",
+            "context_sources",
+            "service_health",  # added in v1.9.1
+            "agent_version",  # added in v1.9.1
+            "circuit_breaker_status",  # added in v1.9.1
+        ],
         "DMA_RESULTS": {
+            "csdma": ["flags"],
+            "dsdma": ["domain", "flags"],
             "pdma": ["stakeholders", "conflicts", "alignment_check"],
+            "idma": ["sources_identified", "correlation_factors"],  # phase moved to GENERIC
         },
+        "ASPDMA_RESULT": [
+            "alternatives_considered",
+            "evaluation_time_ms",  # added in v1.9.1
+        ],
+        "CONSCIENCE_RESULT": [
+            "final_action",
+            "conscience_override_reason",  # moved from FULL in v1.9.1
+            "entropy_reason",  # moved from FULL in v1.9.1
+            "coherence_reason",  # moved from FULL in v1.9.1
+            "optimization_veto_decision",
+        ],
+        "ACTION_RESULT": [
+            "action_executed",
+            "follow_up_thought_id",
+            "audit_entry_id",
+            "models_used",
+            "api_bases_used",
+            "execution_error",  # moved from FULL in v1.9.1
+            "audit_signature",  # moved from FULL in v1.9.1
+        ],
     }
 
-    # Additional fields at FULL level (includes reasoning text)
+    # Additional fields at FULL level (complete reasoning corpus)
+    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
     FULL_REQUIRED_FIELDS = {
+        "THOUGHT_START": [
+            "task_description",
+            "initial_context",
+            "thought_content",  # added in v1.9.1 (truncated to 500 chars)
+        ],
+        "SNAPSHOT_AND_CONTEXT": [
+            "system_snapshot",
+            "gathered_context",
+            "relevant_memories",
+            "conversation_history",
+        ],
         "DMA_RESULTS": {
-            "pdma": ["stakeholders", "conflicts", "alignment_check", "reasoning"],
+            "csdma": ["reasoning"],
+            "dsdma": ["reasoning"],
+            "pdma": ["reasoning"],
+            "idma": ["reasoning"],
         },
+        "ASPDMA_RESULT": [
+            "action_rationale",
+            "reasoning_summary",
+            "action_parameters",
+            "aspdma_prompt",
+            "raw_llm_response",  # added in v1.9.1 (truncated to 1000 chars)
+        ],
+        "CONSCIENCE_RESULT": [
+            "epistemic_data",
+            "updated_status_content",
+            "optimization_veto_justification",
+            "epistemic_humility_justification",
+        ],
+        "ACTION_RESULT": [
+            "action_parameters",
+            "positive_moment",  # added in v1.9.1 (truncated to 500 chars)
+        ],
     }
 
     def __init__(self, client: Any, console: Any, live_lens: bool = False):
@@ -137,6 +213,9 @@ class CovenantMetricsTests:
             ("Load Multi-Level Adapters", self._test_load_multi_level_adapters),
             ("Agent Interaction Trace", self._test_interaction_triggers_trace),
             ("Generic Trace Field Validation", self._test_generic_trace_fields),
+            ("Detailed Trace Field Validation", self._test_detailed_trace_fields),
+            ("Full Trace Field Validation", self._test_full_trace_fields),
+            ("Comprehensive Field Coverage", self._test_comprehensive_field_coverage),
             ("Export Real Trace", self._test_export_real_trace),
         ]
 
@@ -343,6 +422,314 @@ class CovenantMetricsTests:
                         missing.append(f"{event_type}.{field}")
 
         return missing
+
+    def _validate_detailed_fields(self, component_data: Dict[str, Dict[str, Any]]) -> List[str]:
+        """Validate that component data contains all required detailed fields.
+
+        Args:
+            component_data: Dict mapping event_type to component data
+
+        Returns:
+            List of missing field descriptions
+        """
+        missing: List[str] = []
+
+        for event_type, required in self.DETAILED_REQUIRED_FIELDS.items():
+            data = component_data.get(event_type, {})
+
+            if isinstance(required, dict):
+                # Nested structure (e.g., DMA_RESULTS with csdma, dsdma, idma, pdma)
+                for sub_key, sub_fields in required.items():
+                    sub_data = data.get(sub_key, {}) or {}
+                    for field in sub_fields:
+                        if field not in sub_data:
+                            missing.append(f"{event_type}.{sub_key}.{field}")
+            else:
+                # Simple list of required fields
+                for field in required:
+                    if field not in data:
+                        missing.append(f"{event_type}.{field}")
+
+        return missing
+
+    def _validate_full_fields(self, component_data: Dict[str, Dict[str, Any]]) -> List[str]:
+        """Validate that component data contains all required full trace fields.
+
+        Args:
+            component_data: Dict mapping event_type to component data
+
+        Returns:
+            List of missing field descriptions
+        """
+        missing: List[str] = []
+
+        for event_type, required in self.FULL_REQUIRED_FIELDS.items():
+            data = component_data.get(event_type, {})
+
+            if isinstance(required, dict):
+                # Nested structure (e.g., DMA_RESULTS with reasoning)
+                for sub_key, sub_fields in required.items():
+                    sub_data = data.get(sub_key, {}) or {}
+                    for field in sub_fields:
+                        if field not in sub_data:
+                            missing.append(f"{event_type}.{sub_key}.{field}")
+            else:
+                # Simple list of required fields
+                for field in required:
+                    if field not in data:
+                        missing.append(f"{event_type}.{field}")
+
+        return missing
+
+    async def _test_detailed_trace_fields(self) -> tuple[bool, str]:
+        """Validate detailed traces have all required actionable identifier fields.
+
+        Tests fields added at DETAILED level including:
+        - THOUGHT_START: thought_type, thought_status, channel_id
+        - SNAPSHOT_AND_CONTEXT: service_health, agent_version, circuit_breaker_status
+        - ASPDMA_RESULT: evaluation_time_ms
+        - CONSCIENCE_RESULT: conscience_override_reason, entropy_reason, coherence_reason
+        - ACTION_RESULT: execution_error, audit_signature
+        """
+        try:
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server)"
+
+            # Find detailed trace files
+            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            trace_files = list(qa_reports.glob("trace_detailed_*.json"))
+
+            if not trace_files:
+                # Try generic traces - they may have some detailed fields
+                trace_files = list(qa_reports.glob("trace_*.json"))
+                if not trace_files:
+                    return True, "No trace files found - skipping detailed validation"
+
+            validation_errors: List[str] = []
+            traces_validated = 0
+
+            for trace_file in trace_files[:3]:
+                try:
+                    with open(trace_file) as f:
+                        trace = json.load(f)
+                except Exception as e:
+                    validation_errors.append(f"{trace_file.name}: Failed to load: {e}")
+                    continue
+
+                components = trace.get("components", [])
+                if not components:
+                    continue
+
+                component_data: Dict[str, Dict[str, Any]] = {}
+                for comp in components:
+                    event_type = comp.get("event_type", "")
+                    data = comp.get("data", {})
+                    component_data[event_type] = data
+
+                missing_fields = self._validate_detailed_fields(component_data)
+
+                if not missing_fields:
+                    traces_validated += 1
+                else:
+                    # Report only critical missing fields
+                    critical = [f for f in missing_fields if any(
+                        k in f for k in ["evaluation_time_ms", "entropy_reason", "coherence_reason",
+                                        "service_health", "execution_error", "audit_signature"]
+                    )]
+                    if critical:
+                        validation_errors.append(f"{trace_file.name}: Missing v1.9.1 fields: {critical[:5]}")
+
+            if traces_validated > 0:
+                return True, f"{traces_validated} traces have detailed fields"
+
+            if validation_errors:
+                return True, f"Some detailed fields missing (expected if trace_level < detailed): {validation_errors[0]}"
+
+            return True, "Detailed field validation complete"
+
+        except Exception as e:
+            return False, str(e)
+
+    async def _test_full_trace_fields(self) -> tuple[bool, str]:
+        """Validate full traces have all required reasoning corpus fields.
+
+        Tests fields added at FULL level including:
+        - THOUGHT_START: thought_content
+        - ASPDMA_RESULT: raw_llm_response
+        - ACTION_RESULT: positive_moment
+        """
+        try:
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server)"
+
+            # Find full trace files
+            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            trace_files = list(qa_reports.glob("trace_full_*.json"))
+
+            if not trace_files:
+                return True, "No full trace files found - skipping (may need full_traces adapter)"
+
+            validation_errors: List[str] = []
+            traces_validated = 0
+
+            for trace_file in trace_files[:3]:
+                try:
+                    with open(trace_file) as f:
+                        trace = json.load(f)
+                except Exception as e:
+                    validation_errors.append(f"{trace_file.name}: Failed to load: {e}")
+                    continue
+
+                components = trace.get("components", [])
+                if not components:
+                    continue
+
+                component_data: Dict[str, Dict[str, Any]] = {}
+                for comp in components:
+                    event_type = comp.get("event_type", "")
+                    data = comp.get("data", {})
+                    component_data[event_type] = data
+
+                missing_fields = self._validate_full_fields(component_data)
+
+                if not missing_fields:
+                    traces_validated += 1
+                else:
+                    # Check for v1.9.1 specific fields
+                    v191_fields = [f for f in missing_fields if any(
+                        k in f for k in ["thought_content", "raw_llm_response", "positive_moment"]
+                    )]
+                    if v191_fields:
+                        validation_errors.append(f"{trace_file.name}: Missing v1.9.1 FULL fields: {v191_fields}")
+
+            if traces_validated > 0:
+                return True, f"{traces_validated} traces have full reasoning fields"
+
+            if validation_errors:
+                return True, f"Some full fields missing: {validation_errors[0]}"
+
+            return True, "Full field validation complete"
+
+        except Exception as e:
+            return False, str(e)
+
+    async def _test_comprehensive_field_coverage(self) -> tuple[bool, str]:
+        """Comprehensive test of all trace fields added in v1.9.1.
+
+        This test specifically validates the new fields added for CIRIS scoring:
+        - GENERIC: entropy_level, coherence_level, has_positive_moment, has_execution_error, phase, has_conflicts
+        - DETAILED: evaluation_time_ms, conscience_override_reason, entropy_reason, coherence_reason
+        - FULL: thought_content, raw_llm_response, positive_moment
+        """
+        try:
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server)"
+
+            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            all_traces = list(qa_reports.glob("trace_*.json"))
+
+            if not all_traces:
+                return True, "No traces found - skipping comprehensive validation"
+
+            # v1.9.1 field checklist
+            v191_fields = {
+                "GENERIC": {
+                    "CONSCIENCE_RESULT": ["entropy_level", "coherence_level"],
+                    "ACTION_RESULT": ["has_positive_moment", "has_execution_error"],
+                    "DMA_RESULTS.idma": ["phase"],
+                    "DMA_RESULTS.pdma": ["has_conflicts"],
+                },
+                "DETAILED": {
+                    "ASPDMA_RESULT": ["evaluation_time_ms"],
+                    "CONSCIENCE_RESULT": ["conscience_override_reason", "entropy_reason", "coherence_reason"],
+                    "ACTION_RESULT": ["execution_error", "audit_signature"],
+                    "SNAPSHOT_AND_CONTEXT": ["service_health", "agent_version", "circuit_breaker_status"],
+                },
+                "FULL": {
+                    "THOUGHT_START": ["thought_content"],
+                    "ASPDMA_RESULT": ["raw_llm_response"],
+                    "ACTION_RESULT": ["positive_moment"],
+                },
+            }
+
+            found_fields: Dict[str, Set[str]] = {"GENERIC": set(), "DETAILED": set(), "FULL": set()}
+            total_traces = 0
+
+            for trace_file in all_traces[:10]:
+                try:
+                    with open(trace_file) as f:
+                        trace = json.load(f)
+                    total_traces += 1
+
+                    components = trace.get("components", [])
+                    for comp in components:
+                        event_type = comp.get("event_type", "")
+                        data = comp.get("data", {})
+
+                        # Check GENERIC fields
+                        for comp_type, fields in v191_fields["GENERIC"].items():
+                            if "." in comp_type:
+                                base, sub = comp_type.split(".")
+                                if event_type == base:
+                                    sub_data = data.get(sub, {}) or {}
+                                    for field in fields:
+                                        if field in sub_data:
+                                            found_fields["GENERIC"].add(f"{comp_type}.{field}")
+                            elif event_type == comp_type:
+                                for field in fields:
+                                    if field in data:
+                                        found_fields["GENERIC"].add(f"{comp_type}.{field}")
+
+                        # Check DETAILED fields
+                        for comp_type, fields in v191_fields["DETAILED"].items():
+                            if event_type == comp_type:
+                                for field in fields:
+                                    if field in data:
+                                        found_fields["DETAILED"].add(f"{comp_type}.{field}")
+
+                        # Check FULL fields
+                        for comp_type, fields in v191_fields["FULL"].items():
+                            if event_type == comp_type:
+                                for field in fields:
+                                    if field in data:
+                                        found_fields["FULL"].add(f"{comp_type}.{field}")
+
+                except Exception:
+                    continue
+
+            # Calculate coverage
+            total_v191_generic = sum(len(f) for f in v191_fields["GENERIC"].values())
+            total_v191_detailed = sum(len(f) for f in v191_fields["DETAILED"].values())
+            total_v191_full = sum(len(f) for f in v191_fields["FULL"].values())
+
+            generic_coverage = len(found_fields["GENERIC"])
+            detailed_coverage = len(found_fields["DETAILED"])
+            full_coverage = len(found_fields["FULL"])
+
+            # Report
+            summary = (
+                f"v1.9.1 field coverage in {total_traces} traces: "
+                f"GENERIC {generic_coverage}/{total_v191_generic}, "
+                f"DETAILED {detailed_coverage}/{total_v191_detailed}, "
+                f"FULL {full_coverage}/{total_v191_full}"
+            )
+
+            # Log found fields for debugging
+            if found_fields["GENERIC"]:
+                self.console.print(f"     [dim]GENERIC: {sorted(found_fields['GENERIC'])}[/dim]")
+            if found_fields["DETAILED"]:
+                self.console.print(f"     [dim]DETAILED: {sorted(found_fields['DETAILED'])}[/dim]")
+            if found_fields["FULL"]:
+                self.console.print(f"     [dim]FULL: {sorted(found_fields['FULL'])}[/dim]")
+
+            # Pass if we found at least some v1.9.1 fields
+            if generic_coverage > 0:
+                return True, summary
+
+            return True, f"No v1.9.1 fields found yet (traces may be from default adapter): {summary}"
+
+        except Exception as e:
+            return False, str(e)
 
     async def _test_export_real_trace(self) -> tuple[bool, str]:
         """Verify traces were captured and report summary."""

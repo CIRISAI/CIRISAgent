@@ -22,7 +22,8 @@ The adapter supports three privacy levels for trace capture:
 | SNAPSHOT_AND_CONTEXT | cognitive_state |
 | DMA_RESULTS (CSDMA) | plausibility_score |
 | DMA_RESULTS (DSDMA) | domain_alignment |
-| DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag |
+| DMA_RESULTS (PDMA) | has_conflicts |
+| DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag, phase |
 | ASPDMA_RESULT | selected_action, selection_confidence, is_recursive |
 | CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
 | ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash, has_positive_moment |
@@ -38,7 +39,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (CSDMA) | flags |
 | DMA_RESULTS (DSDMA) | domain, flags |
 | DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |
-| DMA_RESULTS (IDMA) | phase, sources_identified, correlation_factors |
+| DMA_RESULTS (IDMA) | sources_identified, correlation_factors |
 | ASPDMA_RESULT | alternatives_considered |
 | CONSCIENCE_RESULT | final_action, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
 | ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |

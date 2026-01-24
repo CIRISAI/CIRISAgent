@@ -24,7 +24,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (DSDMA) | domain_alignment |
 | DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag |
 | ASPDMA_RESULT | selected_action, selection_confidence, is_recursive |
-| CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
+| CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_level, coherence_level, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
 | ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash, has_positive_moment |
 
 **NO text strings, NO reasoning, NO prompts** at this level.
@@ -40,7 +40,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (PDMA) | stakeholders, conflicts, alignment_check |
 | DMA_RESULTS (IDMA) | phase, sources_identified, correlation_factors |
 | ASPDMA_RESULT | alternatives_considered |
-| CONSCIENCE_RESULT | final_action, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
+| CONSCIENCE_RESULT | final_action, conscience_override_reason, entropy_reason, coherence_reason, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
 | ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |
 
 **full_traces** - Complete data for Coherence Ratchet corpus (everything in detailed, plus):
@@ -51,7 +51,7 @@ The adapter supports three privacy levels for trace capture:
 | SNAPSHOT_AND_CONTEXT | system_snapshot, gathered_context, relevant_memories, conversation_history |
 | DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
 | ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt |
-| CONSCIENCE_RESULT | conscience_override_reason, epistemic_data, updated_status_content, entropy_reason, coherence_reason, optimization_veto_justification, epistemic_humility_justification |
+| CONSCIENCE_RESULT | epistemic_data, updated_status_content, optimization_veto_justification, epistemic_humility_justification |
 | ACTION_RESULT | action_parameters, execution_error, audit_signature, positive_moment |
 
 ## Privacy-First Design

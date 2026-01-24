@@ -1182,6 +1182,10 @@ class CovenantMetricsService:
 
         elif event_type == "ACTION_RESULT":
             # ACTION + OUTCOME: What happened and results
+            # Extract positive_moment from action_parameters (for TASK_COMPLETE actions)
+            action_params = event.get("action_parameters", {})
+            positive_moment_text = action_params.get("positive_moment") if isinstance(action_params, dict) else None
+
             # GENERIC: Execution metrics and audit chain (for integrity scoring)
             data = {
                 "execution_success": event.get("execution_success"),
@@ -1197,6 +1201,8 @@ class CovenantMetricsService:
                 # Audit chain for integrity verification
                 "audit_sequence_number": event.get("audit_sequence_number"),
                 "audit_entry_hash": event.get("audit_entry_hash"),
+                # Positive moment indicator (privacy-preserving boolean)
+                "has_positive_moment": positive_moment_text is not None and len(positive_moment_text) > 0,
             }
             # DETAILED: Add action type and follow-up
             if is_detailed:
@@ -1205,12 +1211,14 @@ class CovenantMetricsService:
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
                 data["api_bases_used"] = event.get("api_bases_used", [])
-            # FULL: Add parameters, error details, signature
+            # FULL: Add parameters, error details, signature, and full positive moment text
             if is_full:
-                action_params = event.get("action_parameters")
-                data["action_parameters"] = _serialize(action_params) if action_params is not None else {}
+                data["action_parameters"] = _serialize(action_params) if action_params else {}
                 data["execution_error"] = event.get("error")
                 data["audit_signature"] = event.get("audit_signature")
+                # Include full positive moment text at FULL detail level
+                if positive_moment_text:
+                    data["positive_moment"] = positive_moment_text[:500]  # Truncate for safety
             return data
 
         else:

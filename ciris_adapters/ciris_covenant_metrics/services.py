@@ -1067,12 +1067,19 @@ class CovenantMetricsService:
             dsdma_data: Dict[str, Any] = {
                 "domain_alignment": dsdma.get("domain_alignment") if isinstance(dsdma, dict) else None,
             }
-            pdma_data: Dict[str, Any] = {}  # PDMA has no numeric scores in schema
+            # PDMA: has_conflicts is True if conflicts field is non-empty and not "none"
+            conflicts_val = pdma.get("conflicts") if isinstance(pdma, dict) else None
+            has_conflicts = bool(
+                conflicts_val and isinstance(conflicts_val, str) and conflicts_val.lower().strip() != "none"
+            )
+            pdma_data: Dict[str, Any] = {"has_conflicts": has_conflicts}
             idma_data: Optional[Dict[str, Any]] = (
                 {
                     "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
                     "correlation_risk": idma.get("correlation_risk") if isinstance(idma, dict) else None,
                     "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
+                    # phase is a key scoring metric: chaos/healthy/rigidity
+                    "phase": idma.get("phase") if isinstance(idma, dict) else None,
                 }
                 if idma
                 else None
@@ -1087,7 +1094,6 @@ class CovenantMetricsService:
                 pdma_data["conflicts"] = pdma.get("conflicts") if isinstance(pdma, dict) else None
                 pdma_data["alignment_check"] = pdma.get("alignment_check") if isinstance(pdma, dict) else None
                 if idma_data:
-                    idma_data["phase"] = idma.get("phase") if isinstance(idma, dict) else None
                     idma_data["sources_identified"] = idma.get("sources_identified") if isinstance(idma, dict) else None
                     idma_data["correlation_factors"] = (
                         idma.get("correlation_factors") if isinstance(idma, dict) else None

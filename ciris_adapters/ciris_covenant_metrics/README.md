@@ -26,7 +26,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (IDMA) | k_eff, correlation_risk, fragility_flag, phase |
 | ASPDMA_RESULT | selected_action, selection_confidence, is_recursive |
 | CONSCIENCE_RESULT | conscience_passed, action_was_overridden, ethical_faculties_skipped, updated_status_detected, thought_depth_triggered/current/max, entropy_level, coherence_level, entropy_passed/score/threshold, coherence_passed/score/threshold, optimization_veto_passed/entropy_ratio, epistemic_humility_passed/certainty |
-| ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash, has_positive_moment |
+| ACTION_RESULT | execution_success, execution_time_ms, tokens_input/output/total, cost_cents, carbon_grams, energy_mwh, llm_calls, audit_sequence_number, audit_entry_hash, has_positive_moment, has_execution_error |
 
 **NO text strings, NO reasoning, NO prompts** at this level.
 
@@ -42,7 +42,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (IDMA) | sources_identified, correlation_factors |
 | ASPDMA_RESULT | alternatives_considered, evaluation_time_ms |
 | CONSCIENCE_RESULT | final_action, conscience_override_reason, entropy_reason, coherence_reason, optimization_veto_decision/affected_values, epistemic_humility_uncertainties/recommendation |
-| ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used |
+| ACTION_RESULT | action_executed, follow_up_thought_id, audit_entry_id, models_used, api_bases_used, execution_error, audit_signature |
 
 **full_traces** - Complete data for Coherence Ratchet corpus (everything in detailed, plus):
 
@@ -53,7 +53,7 @@ The adapter supports three privacy levels for trace capture:
 | DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
 | ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt, raw_llm_response |
 | CONSCIENCE_RESULT | epistemic_data, updated_status_content, optimization_veto_justification, epistemic_humility_justification |
-| ACTION_RESULT | action_parameters, execution_error, audit_signature, positive_moment |
+| ACTION_RESULT | action_parameters, positive_moment |
 
 ## Privacy-First Design
 

@@ -1035,10 +1035,13 @@ class CovenantMetricsService:
             data = {
                 "cognitive_state": cognitive_state,
             }
-            # DETAILED: Add service list
+            # DETAILED: Add service list and system health info
             if is_detailed:
                 data["active_services"] = event.get("active_services") or snapshot.get("active_services")
                 data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
+                data["service_health"] = event.get("service_health") or snapshot.get("service_health")
+                data["agent_version"] = event.get("agent_version") or snapshot.get("agent_version")
+                data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get("circuit_breaker_status")
             # FULL: Add complete snapshot and context
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)

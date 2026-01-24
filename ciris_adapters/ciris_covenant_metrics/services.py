@@ -1012,10 +1012,14 @@ class CovenantMetricsService:
                 data["parent_thought_id"] = event.get("parent_thought_id")
                 data["channel_id"] = event.get("channel_id")
                 data["source_adapter"] = event.get("source_adapter")
-            # FULL: Add description text
+            # FULL: Add description text and thought content
             if is_full:
                 data["task_description"] = event.get("task_description")
                 data["initial_context"] = event.get("initial_context")
+                # Truncate thought_content to 500 chars for privacy/bandwidth
+                thought_content = event.get("thought_content")
+                if thought_content:
+                    data["thought_content"] = thought_content[:500] if len(thought_content) > 500 else thought_content
             return data
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":

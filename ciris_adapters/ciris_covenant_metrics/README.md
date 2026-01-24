@@ -47,7 +47,7 @@ The adapter supports three privacy levels for trace capture:
 
 | Component | Additional Fields |
 |-----------|-------------------|
-| THOUGHT_START | task_description, initial_context |
+| THOUGHT_START | task_description, initial_context, thought_content (truncated to 500 chars) |
 | SNAPSHOT_AND_CONTEXT | system_snapshot, gathered_context, relevant_memories, conversation_history |
 | DMA_RESULTS (all) | reasoning, prompt_used, combined_analysis |
 | ASPDMA_RESULT | action_rationale, reasoning_summary, action_parameters, aspdma_prompt |

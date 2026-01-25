@@ -161,7 +161,7 @@ class ActionSelectionContextBuilder:
 
         # Assemble final content
         main_user_content = """
-Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from three prior DMAs (Ethical PDMA, CSDMA, DSDMA).
+Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from four prior DMAs (PDMA, CSDMA, DSDMA, then IDMA evaluating their reasoning).
 You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
 All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
 Permitted Handler Actions: {action_options_str}{available_tools_str}
@@ -317,7 +317,13 @@ Adhere strictly to the schema for your JSON output.
 
         fragility_warning = ""
         if idma_result.fragility_flag:
-            fragility_warning = "⚠️ FRAGILITY DETECTED - Consider seeking additional independent verification. "
+            fragility_warning = (
+                "⚠️ FRAGILITY DETECTED - Reasoning relies on limited/correlated sources. "
+                "Options: (1) Use web_search tool if available to get independent information, "
+                "(2) Use other tools to gather additional data, "
+                "(3) Ask the user for more information or clarification, "
+                "(4) Acknowledge uncertainty in your response. "
+            )
 
         return (
             f"IDMA (Intuition/CCA) Output: k_eff={idma_result.k_eff:.2f} (effective sources), "

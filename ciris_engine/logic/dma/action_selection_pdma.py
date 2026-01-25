@@ -35,8 +35,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
     """
     Modular Action Selection PDMA Evaluator.
 
-    Takes outputs from Ethical PDMA, CSDMA, and DSDMA and selects a concrete
-    handler action using the Principled Decision-Making Algorithm.
+    Takes outputs from PDMA, CSDMA, DSDMA, and IDMA (which evaluates their reasoning)
+    and selects a concrete handler action using the Principled Decision-Making Algorithm.
 
     Features:
     - Modular component architecture

@@ -16,6 +16,13 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.types import JSONDict
 
+from .constants import (
+    ERROR_DISCORD_CLIENT_NOT_INITIALIZED,
+    ERROR_GUILD_ID_AND_USER_ID_REQUIRED,
+    FIELD_DESC_DISCORD_CHANNEL_ID,
+    FIELD_DESC_DISCORD_GUILD_ID,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +81,7 @@ class DiscordToolService(ToolService):
                 status=ToolExecutionStatus.FAILED,
                 success=False,
                 data=None,
-                error="Discord client not initialized",
+                error=ERROR_DISCORD_CLIENT_NOT_INITIALIZED,
                 correlation_id=correlation_id,
             )
 
@@ -137,7 +144,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             channel = self._client.get_channel(int(channel_id))
             if not channel:
                 channel = await self._client.fetch_channel(int(channel_id))
@@ -176,7 +183,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             channel = self._client.get_channel(int(channel_id))
             if not channel:
                 channel = await self._client.fetch_channel(int(channel_id))
@@ -218,7 +225,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             channel = self._client.get_channel(int(channel_id))
             if not channel:
                 channel = await self._client.fetch_channel(int(channel_id))
@@ -248,7 +255,7 @@ class DiscordToolService(ToolService):
         reason_raw = params.get("reason")
 
         if not guild_id_raw or not user_id_raw:
-            return {"success": False, "error": "guild_id and user_id are required"}
+            return {"success": False, "error": ERROR_GUILD_ID_AND_USER_ID_REQUIRED}
 
         guild_id = str(guild_id_raw)
         user_id = str(user_id_raw)
@@ -257,7 +264,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 return {"success": False, "error": f"Guild {guild_id} not found"}
@@ -289,7 +296,7 @@ class DiscordToolService(ToolService):
         delete_message_days_raw = params.get("delete_message_days", 0)
 
         if not guild_id_raw or not user_id_raw:
-            return {"success": False, "error": "guild_id and user_id are required"}
+            return {"success": False, "error": ERROR_GUILD_ID_AND_USER_ID_REQUIRED}
 
         guild_id = str(guild_id_raw)
         user_id = str(user_id_raw)
@@ -300,13 +307,13 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 return {"success": False, "error": f"Guild {guild_id} not found"}
 
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             user = await self._client.fetch_user(int(user_id))
             await guild.ban(user, reason=reason, delete_message_days=delete_message_days)
 
@@ -321,7 +328,7 @@ class DiscordToolService(ToolService):
         reason_raw = params.get("reason")
 
         if not guild_id_raw or not user_id_raw:
-            return {"success": False, "error": "guild_id and user_id are required"}
+            return {"success": False, "error": ERROR_GUILD_ID_AND_USER_ID_REQUIRED}
 
         guild_id = str(guild_id_raw)
         user_id = str(user_id_raw)
@@ -329,7 +336,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 return {"success": False, "error": f"Guild {guild_id} not found"}
@@ -359,7 +366,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 return {"success": False, "error": f"Guild {guild_id} not found"}
@@ -401,7 +408,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             guild = self._client.get_guild(int(guild_id))
             if not guild:
                 return {"success": False, "error": f"Guild {guild_id} not found"}
@@ -441,7 +448,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             user = await self._client.fetch_user(int(user_id))
 
             data: JSONDict = {
@@ -456,7 +463,7 @@ class DiscordToolService(ToolService):
             # Add guild-specific info if guild_id provided
             if guild_id:
                 if not self._client:
-                    return {"success": False, "error": "Discord client not initialized"}
+                    return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
                 guild = self._client.get_guild(int(guild_id))
                 if guild:
                     member = guild.get_member(int(user_id))
@@ -480,7 +487,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
             channel = self._client.get_channel(int(channel_id))
             if not channel:
                 channel = await self._client.fetch_channel(int(channel_id))
@@ -518,7 +525,7 @@ class DiscordToolService(ToolService):
 
         try:
             if not self._client:
-                return {"success": False, "error": "Discord client not initialized"}
+                return {"success": False, "error": ERROR_DISCORD_CLIENT_NOT_INITIALIZED}
 
             guild = self._client.get_guild(int(guild_id))
             if not guild:
@@ -590,7 +597,7 @@ class DiscordToolService(ToolService):
             "discord_send_message": ToolParameterSchema(
                 type="object",
                 properties={
-                    "channel_id": {"type": "string", "description": "Discord channel ID"},
+                    "channel_id": {"type": "string", "description": FIELD_DESC_DISCORD_CHANNEL_ID},
                     "content": {"type": "string", "description": "Message content to send"},
                 },
                 required=["channel_id", "content"],
@@ -598,7 +605,7 @@ class DiscordToolService(ToolService):
             "discord_send_embed": ToolParameterSchema(
                 type="object",
                 properties={
-                    "channel_id": {"type": "string", "description": "Discord channel ID"},
+                    "channel_id": {"type": "string", "description": FIELD_DESC_DISCORD_CHANNEL_ID},
                     "title": {"type": "string", "description": "Embed title"},
                     "description": {"type": "string", "description": "Embed description"},
                     "color": {"type": "integer", "description": "Embed color (hex)"},
@@ -619,7 +626,7 @@ class DiscordToolService(ToolService):
             "discord_delete_message": ToolParameterSchema(
                 type="object",
                 properties={
-                    "channel_id": {"type": "string", "description": "Discord channel ID"},
+                    "channel_id": {"type": "string", "description": FIELD_DESC_DISCORD_CHANNEL_ID},
                     "message_id": {"type": "string", "description": "Message ID to delete"},
                 },
                 required=["channel_id", "message_id"],
@@ -627,7 +634,7 @@ class DiscordToolService(ToolService):
             "discord_timeout_user": ToolParameterSchema(
                 type="object",
                 properties={
-                    "guild_id": {"type": "string", "description": "Discord guild ID"},
+                    "guild_id": {"type": "string", "description": FIELD_DESC_DISCORD_GUILD_ID},
                     "user_id": {"type": "string", "description": "User ID to timeout"},
                     "duration_seconds": {
                         "type": "integer",
@@ -641,7 +648,7 @@ class DiscordToolService(ToolService):
             "discord_ban_user": ToolParameterSchema(
                 type="object",
                 properties={
-                    "guild_id": {"type": "string", "description": "Discord guild ID"},
+                    "guild_id": {"type": "string", "description": FIELD_DESC_DISCORD_GUILD_ID},
                     "user_id": {"type": "string", "description": "User ID to ban"},
                     "reason": {"type": "string", "description": "Reason for ban"},
                     "delete_message_days": {
@@ -655,7 +662,7 @@ class DiscordToolService(ToolService):
             "discord_kick_user": ToolParameterSchema(
                 type="object",
                 properties={
-                    "guild_id": {"type": "string", "description": "Discord guild ID"},
+                    "guild_id": {"type": "string", "description": FIELD_DESC_DISCORD_GUILD_ID},
                     "user_id": {"type": "string", "description": "User ID to kick"},
                     "reason": {"type": "string", "description": "Reason for kick"},
                 },
@@ -664,7 +671,7 @@ class DiscordToolService(ToolService):
             "discord_add_role": ToolParameterSchema(
                 type="object",
                 properties={
-                    "guild_id": {"type": "string", "description": "Discord guild ID"},
+                    "guild_id": {"type": "string", "description": FIELD_DESC_DISCORD_GUILD_ID},
                     "user_id": {"type": "string", "description": "User ID"},
                     "role_name": {"type": "string", "description": "Name of role to add"},
                 },
@@ -673,7 +680,7 @@ class DiscordToolService(ToolService):
             "discord_remove_role": ToolParameterSchema(
                 type="object",
                 properties={
-                    "guild_id": {"type": "string", "description": "Discord guild ID"},
+                    "guild_id": {"type": "string", "description": FIELD_DESC_DISCORD_GUILD_ID},
                     "user_id": {"type": "string", "description": "User ID"},
                     "role_name": {"type": "string", "description": "Name of role to remove"},
                 },

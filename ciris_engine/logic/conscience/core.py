@@ -42,6 +42,13 @@ class ConscienceConfig(BaseModel):
 
 logger = logging.getLogger(__name__)
 
+# Error/reason message constants
+MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
+MSG_SINK_UNAVAILABLE = "Sink service unavailable"
+MSG_NO_CONTENT = "No content to evaluate"
+MSG_SINK_NO_LLM = "Sink does not have LLM service"
+MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
+
 
 # Simple result models for LLM structured outputs
 class EntropyResult(BaseModel):
@@ -213,11 +220,11 @@ class EntropyConscience(_BaseConscience):
             )
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, "Sink service unavailable, allowing action", start_time)
+            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.WARNING,
                 passed=True,
-                reason="Sink service unavailable",
+                reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
         text = ""
@@ -226,11 +233,11 @@ class EntropyConscience(_BaseConscience):
         if hasattr(params, "content"):
             text = getattr(params, "content", "")
         if not text:
-            self._update_trace_correlation(correlation, True, "No content to evaluate", start_time)
+            self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
-                reason="No content to evaluate",
+                reason=MSG_NO_CONTENT,
                 check_timestamp=ts_datetime,
             )
 
@@ -253,7 +260,7 @@ class EntropyConscience(_BaseConscience):
                     task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
-                raise RuntimeError("Sink does not have LLM service")
+                raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(entropy_eval, EntropyResult):
                 entropy = float(entropy_eval.entropy)
         except Exception as e:
@@ -317,11 +324,11 @@ class CoherenceConscience(_BaseConscience):
             return ConscienceCheckResult(status=ConscienceStatus.PASSED, passed=True, check_timestamp=ts_datetime)
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, "Sink service unavailable, allowing action", start_time)
+            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.WARNING,
                 passed=True,
-                reason="Sink service unavailable",
+                reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
         text = ""
@@ -330,11 +337,11 @@ class CoherenceConscience(_BaseConscience):
         if hasattr(params, "content"):
             text = getattr(params, "content", "")
         if not text:
-            self._update_trace_correlation(correlation, True, "No content to evaluate", start_time)
+            self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
-                reason="No content to evaluate",
+                reason=MSG_NO_CONTENT,
                 check_timestamp=ts_datetime,
             )
 
@@ -357,7 +364,7 @@ class CoherenceConscience(_BaseConscience):
                     task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
-                raise RuntimeError("Sink does not have LLM service")
+                raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(coherence_eval, CoherenceResult):
                 coherence = float(coherence_eval.coherence)
         except Exception as e:
@@ -446,11 +453,11 @@ class OptimizationVetoConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, "Sink service unavailable, allowing action", start_time)
+            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.WARNING,
                 passed=True,
-                reason="Sink service unavailable",
+                reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
 
@@ -474,12 +481,12 @@ class OptimizationVetoConscience(_BaseConscience):
                     task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
-                raise RuntimeError("Sink does not have LLM service")
+                raise RuntimeError(MSG_SINK_NO_LLM)
             if not isinstance(result, OptimizationVetoResult):
                 # Fallback if type is wrong
                 result = OptimizationVetoResult(
                     decision="abort",
-                    justification="Invalid result type from LLM",
+                    justification=MSG_INVALID_LLM_RESULT,
                     entropy_reduction_ratio=0.0,
                     affected_values=[],
                 )
@@ -559,11 +566,11 @@ class EpistemicHumilityConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, "Sink service unavailable, allowing action", start_time)
+            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.WARNING,
                 passed=True,
-                reason="Sink service unavailable",
+                reason=MSG_SINK_UNAVAILABLE,
                 check_timestamp=ts_datetime,
             )
 
@@ -587,7 +594,7 @@ class EpistemicHumilityConscience(_BaseConscience):
                     task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
-                raise RuntimeError("Sink does not have LLM service")
+                raise RuntimeError(MSG_SINK_NO_LLM)
             # Handle string certainty values if needed
             if isinstance(result.epistemic_certainty, str):
                 mapping = {"low": 0.0, "moderate": 0.5, "high": 1.0}
@@ -597,8 +604,8 @@ class EpistemicHumilityConscience(_BaseConscience):
                 # Fallback if type is wrong
                 result = EpistemicHumilityResult(
                     epistemic_certainty=0.0,
-                    identified_uncertainties=["Invalid result type from LLM"],
-                    reflective_justification="Invalid result type from LLM",
+                    identified_uncertainties=[MSG_INVALID_LLM_RESULT],
+                    reflective_justification=MSG_INVALID_LLM_RESULT,
                     recommended_action="abort",
                 )
         except Exception as e:

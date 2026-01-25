@@ -21,6 +21,10 @@ from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
+# File extension constants
+EXT_PDF = ".pdf"
+EXT_DOCX = ".docx"
+
 
 class DocumentParser:
     """Minimal secure document parser for text extraction."""
@@ -32,7 +36,7 @@ class DocumentParser:
     MAX_TEXT_LENGTH = 50000  # 50k characters max output
 
     # Allowed formats (whitelist approach)
-    ALLOWED_EXTENSIONS: Set[str] = {".pdf", ".docx"}
+    ALLOWED_EXTENSIONS: Set[str] = {EXT_PDF, EXT_DOCX}
     ALLOWED_CONTENT_TYPES: Set[str] = {
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -146,9 +150,9 @@ class DocumentParser:
         # Check if we have the right parser available
         if hasattr(attachment, "filename") and attachment.filename:
             file_ext = Path(attachment.filename).suffix.lower()
-            if file_ext == ".pdf" and not self._pdf_available:
+            if file_ext == EXT_PDF and not self._pdf_available:
                 return False
-            if file_ext == ".docx" and not self._docx_available:
+            if file_ext == EXT_DOCX and not self._docx_available:
                 return False
 
         return True
@@ -231,9 +235,9 @@ class DocumentParser:
             Extracted text or error message
         """
         try:
-            if file_ext == ".pdf":
+            if file_ext == EXT_PDF:
                 return self._extract_pdf_text(file_data)
-            elif file_ext == ".docx":
+            elif file_ext == EXT_DOCX:
                 return self._extract_docx_text(file_data)
             else:
                 return f"Unsupported file type: {file_ext}"
@@ -291,7 +295,7 @@ class DocumentParser:
             import docx2txt
 
             # Use temporary file for security (auto-cleaned up)
-            with tempfile.NamedTemporaryFile(suffix=".docx") as temp_file:
+            with tempfile.NamedTemporaryFile(suffix=EXT_DOCX) as temp_file:
                 temp_file.write(file_data)
                 temp_file.flush()
 

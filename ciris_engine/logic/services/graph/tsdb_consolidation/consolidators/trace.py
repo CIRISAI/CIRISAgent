@@ -131,11 +131,13 @@ def _process_handler_for_thought(
 
     thoughts_list = task_summary.get("thoughts")
     if isinstance(thoughts_list, list):
-        thoughts_list.append({
-            "thought_id": thought_id,
-            "handler": action_type,
-            "timestamp": timestamp.isoformat() if timestamp else None,
-        })
+        thoughts_list.append(
+            {
+                "thought_id": thought_id,
+                "handler": action_type,
+                "timestamp": timestamp.isoformat() if timestamp else None,
+            }
+        )
 
 
 def _update_task_status(task_summaries: JSONDict, task_id: str, status: str, tasks_by_status: Dict[str, int]) -> None:
@@ -160,7 +162,9 @@ def _process_span_errors(
     return 1
 
 
-def _process_span_latency(span: TraceSpanData, component_type: str, component_latencies: Dict[str, List[float]]) -> None:
+def _process_span_latency(
+    span: TraceSpanData, component_type: str, component_latencies: Dict[str, List[float]]
+) -> None:
     """Track latency from span."""
     if span.latency_ms is not None:
         component_latencies[component_type].append(span.latency_ms)
@@ -350,8 +354,14 @@ class TraceConsolidator:
         # Process thought ID
         if thought_id:
             self._process_thought_id(
-                span, thought_id, task_id, component_type,
-                task_summaries, unique_thoughts, thoughts_by_type, handler_actions
+                span,
+                thought_id,
+                task_id,
+                component_type,
+                task_summaries,
+                unique_thoughts,
+                thoughts_by_type,
+                handler_actions,
             )
 
         # Track task completion
@@ -415,9 +425,7 @@ class TraceConsolidator:
             "p50_task_processing_time_ms": p50_task_time,
             "p95_task_processing_time_ms": p95_task_time,
             "p99_task_processing_time_ms": p99_task_time,
-            "total_processing_time_ms": (
-                sum(metrics.task_processing_times) if metrics.task_processing_times else 0.0
-            ),
+            "total_processing_time_ms": (sum(metrics.task_processing_times) if metrics.task_processing_times else 0.0),
             "total_errors": metrics.total_errors,
             "errors_by_component": dict(metrics.errors_by_component),
             "error_rate": error_rate,

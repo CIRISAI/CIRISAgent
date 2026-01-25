@@ -590,9 +590,7 @@ class TestConfigureAdapters:
         app_config = MagicMock()
         app_config.startup_channel_id = None
 
-        configs, channel = _configure_adapters(
-            ["api"], app_config, "127.0.0.1", 8080, None, True
-        )
+        configs, channel = _configure_adapters(["api"], app_config, "127.0.0.1", 8080, None, True)
 
         assert "api" in configs
         assert channel == "api:channel"
@@ -608,9 +606,7 @@ class TestConfigureAdapters:
         app_config = MagicMock()
         app_config.startup_channel_id = None
 
-        configs, channel = _configure_adapters(
-            ["discord"], app_config, None, None, "token", True
-        )
+        configs, channel = _configure_adapters(["discord"], app_config, None, None, "token", True)
 
         assert "discord" in configs
         assert channel == "discord:channel"
@@ -626,9 +622,7 @@ class TestConfigureAdapters:
         app_config = MagicMock()
         app_config.startup_channel_id = None
 
-        configs, channel = _configure_adapters(
-            ["cli"], app_config, None, None, None, True
-        )
+        configs, channel = _configure_adapters(["cli"], app_config, None, None, None, True)
 
         assert "cli" in configs
         assert channel == "cli:channel"
@@ -644,9 +638,7 @@ class TestConfigureAdapters:
         app_config = MagicMock()
         app_config.startup_channel_id = "preconfigured:channel"
 
-        configs, channel = _configure_adapters(
-            ["api"], app_config, None, None, None, True
-        )
+        configs, channel = _configure_adapters(["api"], app_config, None, None, None, True)
 
         assert channel == "preconfigured:channel"
 
@@ -659,9 +651,7 @@ class TestFlushAllHandlers:
         """Should flush stdout and stderr."""
         from main import _flush_all_handlers
 
-        with patch.object(sys.stdout, "flush") as mock_stdout, patch.object(
-            sys.stderr, "flush"
-        ) as mock_stderr:
+        with patch.object(sys.stdout, "flush") as mock_stdout, patch.object(sys.stderr, "flush") as mock_stderr:
             await _flush_all_handlers()
 
             # flush is called via asyncio.to_thread, so verify flush methods exist
@@ -813,7 +803,6 @@ class TestHandleFinalExit:
                 mock_os_exit.assert_called_once_with(0)
         finally:
             sys.argv = original_argv
-
 
 
 # NOTE: TestHandleConfigLoadError, TestHandleFirstRun, TestCheckPythonInstallation,

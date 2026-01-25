@@ -16,6 +16,7 @@ ERROR_MEMORY_SERVICE_NOT_AVAILABLE = "Memory service not available"
 ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE = "Shutdown service not available"
 ERROR_TELEMETRY_SERVICE_NOT_AVAILABLE = "Telemetry service not available"
 ERROR_WISE_AUTHORITY_SERVICE_NOT_AVAILABLE = "Wise Authority service not available"
+ERROR_MESSAGE_HANDLER_NOT_CONFIGURED = "Message handler not configured"
 
 # Field Descriptions
 DESC_RESULTS_OFFSET = "Results offset"

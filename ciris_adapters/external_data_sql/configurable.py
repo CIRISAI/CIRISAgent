@@ -13,11 +13,28 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from .schemas import SQLConnectorConfig, SQLDialect
 
 logger = logging.getLogger(__name__)
+
+
+class DialectInfo(TypedDict):
+    """Type for SQL dialect information."""
+
+    label: str
+    description: str
+    default_port: Optional[int]
+    connection_template: str
+
+
+class FeatureInfo(TypedDict):
+    """Type for feature information."""
+
+    label: str
+    description: str
+    default: bool
 
 
 class SQLConfigurableAdapter:
@@ -28,7 +45,7 @@ class SQLConfigurableAdapter:
     """
 
     # Supported SQL dialects
-    SUPPORTED_DIALECTS = {
+    SUPPORTED_DIALECTS: Dict[str, DialectInfo] = {
         "postgres": {
             "label": "PostgreSQL",
             "description": "PostgreSQL database",
@@ -56,7 +73,7 @@ class SQLConfigurableAdapter:
     }
 
     # Available features
-    AVAILABLE_FEATURES = {
+    AVAILABLE_FEATURES: Dict[str, FeatureInfo] = {
         "read_only": {
             "label": "Read-Only Mode",
             "description": "Restrict to SELECT queries only (no modifications)",

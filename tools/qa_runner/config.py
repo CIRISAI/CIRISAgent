@@ -151,7 +151,7 @@ class QAConfig:
     live_base_url: Optional[str] = None
 
     # Live Lens configuration (--live-lens flag for covenant_metrics tests)
-    # When True, uses https://lens.ciris.ai instead of mock logshipper
+    # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
     def get_module_tests(self, module: QAModule) -> List[QATestCase]:

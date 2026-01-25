@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-01-25
+
+### Fixed
+
+- **MCP QA Tests False Positives** - Tests now properly verify tool execution success
+  - Adapter loading tests verify tools are discovered (not just that adapter object exists)
+  - Tool execution tests check `context.metadata.outcome == 'success'` in audit entries
+  - Tests fail correctly when MCP SDK not installed or server connection fails
+  - Pass rate: 100% (22/22 tests) when MCP SDK installed
+
+- **MCP Test Audit Verification** - Fixed audit entry field mapping
+  - Was checking non-existent `action_result.success` and `handler_result.success`
+  - Now correctly checks `context.metadata.outcome` for success/failure
+
+### Added
+
+- **Trace Format v1.9.1 JSON Schema** - Machine-readable schema for CIRISLens
+  - `ciris_adapters/ciris_covenant_metrics/schemas/trace_format_v1_9_1.json`
+  - Full field documentation for all 6 H3ERE components
+  - Includes level annotations (generic, detailed, full_traces)
+
 ## [1.9.0] - 2026-01-22
 
 ### Added

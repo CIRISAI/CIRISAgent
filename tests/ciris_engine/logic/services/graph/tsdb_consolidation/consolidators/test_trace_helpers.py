@@ -239,9 +239,7 @@ class TestProcessHandlerForThought:
             }
         }
 
-        _process_handler_for_thought(
-            task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions
-        )
+        _process_handler_for_thought(task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions)
 
         assert handler_actions["SPEAK"] == 1
 
@@ -255,9 +253,7 @@ class TestProcessHandlerForThought:
             }
         }
 
-        _process_handler_for_thought(
-            task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions
-        )
+        _process_handler_for_thought(task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions)
 
         assert "SPEAK" in task_summaries["task-123"]["handlers_selected"]
 
@@ -272,9 +268,7 @@ class TestProcessHandlerForThought:
             }
         }
 
-        _process_handler_for_thought(
-            task_summaries, "task-123", "thought-1", "SPEAK", timestamp, handler_actions
-        )
+        _process_handler_for_thought(task_summaries, "task-123", "thought-1", "SPEAK", timestamp, handler_actions)
 
         thought = task_summaries["task-123"]["thoughts"][0]
         assert thought["thought_id"] == "thought-1"
@@ -291,9 +285,7 @@ class TestProcessHandlerForThought:
             }
         }
 
-        _process_handler_for_thought(
-            task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions
-        )
+        _process_handler_for_thought(task_summaries, "task-123", "thought-1", "SPEAK", None, handler_actions)
 
         thought = task_summaries["task-123"]["thoughts"][0]
         assert thought["timestamp"] is None
@@ -303,9 +295,7 @@ class TestProcessHandlerForThought:
         handler_actions: Dict[str, int] = defaultdict(int)
         task_summaries = {}
 
-        _process_handler_for_thought(
-            task_summaries, "missing-task", "thought-1", "SPEAK", None, handler_actions
-        )
+        _process_handler_for_thought(task_summaries, "missing-task", "thought-1", "SPEAK", None, handler_actions)
 
         # handler_actions still incremented
         assert handler_actions["SPEAK"] == 1
@@ -817,8 +807,7 @@ class TestTraceConsolidatorProcessThoughtId:
         handler_actions: Dict[str, int] = defaultdict(int)
 
         consolidator._process_thought_id(
-            span, "thought-1", None, "handler", task_summaries,
-            unique_thoughts, thoughts_by_type, handler_actions
+            span, "thought-1", None, "handler", task_summaries, unique_thoughts, thoughts_by_type, handler_actions
         )
 
         assert "thought-1" in unique_thoughts
@@ -840,8 +829,7 @@ class TestTraceConsolidatorProcessThoughtId:
         handler_actions: Dict[str, int] = defaultdict(int)
 
         consolidator._process_thought_id(
-            span, "thought-1", None, "handler", task_summaries,
-            unique_thoughts, thoughts_by_type, handler_actions
+            span, "thought-1", None, "handler", task_summaries, unique_thoughts, thoughts_by_type, handler_actions
         )
 
         assert thoughts_by_type["reflection"] == 1

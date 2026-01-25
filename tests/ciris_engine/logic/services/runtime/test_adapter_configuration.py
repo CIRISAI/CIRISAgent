@@ -981,12 +981,14 @@ class TestPersistedConfigMethods:
     async def test_load_persisted_configs_single_adapter(self) -> None:
         """Test load_persisted_configs loads a single adapter config."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:homeassistant:ha_instance_1": {
-                "base_url": "http://localhost:8123",
-                "access_token": "test_token",
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter_config:homeassistant:ha_instance_1": {
+                    "base_url": "http://localhost:8123",
+                    "access_token": "test_token",
+                }
             }
-        })
+        )
 
         result = await self.service.load_persisted_configs(mock_config_service)
 
@@ -998,11 +1000,13 @@ class TestPersistedConfigMethods:
     async def test_load_persisted_configs_multiple_adapters(self) -> None:
         """Test load_persisted_configs loads multiple adapter types."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
-            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
-            "adapter_config:weather:weather_1": {"api_key": "test_key"},
-        })
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+                "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+                "adapter_config:weather:weather_1": {"api_key": "test_key"},
+            }
+        )
 
         result = await self.service.load_persisted_configs(mock_config_service)
 
@@ -1016,9 +1020,7 @@ class TestPersistedConfigMethods:
     async def test_load_persisted_configs_non_dict_value(self) -> None:
         """Test load_persisted_configs handles non-dict values."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:simple:instance_1": "simple_value"
-        })
+        mock_config_service.list_configs = AsyncMock(return_value={"adapter_config:simple:instance_1": "simple_value"})
 
         result = await self.service.load_persisted_configs(mock_config_service)
 
@@ -1029,11 +1031,13 @@ class TestPersistedConfigMethods:
     async def test_load_persisted_configs_malformed_key(self) -> None:
         """Test load_persisted_configs ignores malformed keys."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha.local"},
-            "adapter_config:malformed": {"should": "be ignored"},  # Missing adapter_id
-            "other_prefix:something": {"also": "ignored"},  # Wrong prefix
-        })
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter_config:homeassistant:ha_1": {"base_url": "http://ha.local"},
+                "adapter_config:malformed": {"should": "be ignored"},  # Missing adapter_id
+                "other_prefix:something": {"also": "ignored"},  # Wrong prefix
+            }
+        )
 
         result = await self.service.load_persisted_configs(mock_config_service)
 
@@ -1055,10 +1059,12 @@ class TestPersistedConfigMethods:
     async def test_remove_persisted_config_success(self) -> None:
         """Test remove_persisted_config removes configs for adapter type."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
-            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
-        })
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+                "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+            }
+        )
         mock_config_service.set_config = AsyncMock()
 
         result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
@@ -1081,10 +1087,12 @@ class TestPersistedConfigMethods:
     async def test_remove_persisted_config_partial_failure(self) -> None:
         """Test remove_persisted_config handles partial failures."""
         mock_config_service = AsyncMock()
-        mock_config_service.list_configs = AsyncMock(return_value={
-            "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
-            "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
-        })
+        mock_config_service.list_configs = AsyncMock(
+            return_value={
+                "adapter_config:homeassistant:ha_1": {"base_url": "http://ha1.local"},
+                "adapter_config:homeassistant:ha_2": {"base_url": "http://ha2.local"},
+            }
+        )
         # First call succeeds, second fails
         mock_config_service.set_config = AsyncMock(side_effect=[None, Exception("Delete failed")])
 

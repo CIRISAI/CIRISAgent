@@ -191,7 +191,9 @@ class UtilityAdaptersTests:
                     "status": "✅ PASS",
                     "details": {
                         "services_registered": services,
-                        "weather_tools_found": weather_tools if weather_tools else "Service registered, tools via ToolBus",
+                        "weather_tools_found": (
+                            weather_tools if weather_tools else "Service registered, tools via ToolBus"
+                        ),
                     },
                 }
             else:
@@ -281,7 +283,9 @@ class UtilityAdaptersTests:
                     tool_names = [t.get("name", "") if isinstance(t, dict) else str(t) for t in tools_list]
 
             # Look for navigation-related tools
-            nav_tools = [t for t in tool_names if "geocode" in t.lower() or "route" in t.lower() or "navigation" in t.lower()]
+            nav_tools = [
+                t for t in tool_names if "geocode" in t.lower() or "route" in t.lower() or "navigation" in t.lower()
+            ]
 
             if has_nav_service:
                 return {

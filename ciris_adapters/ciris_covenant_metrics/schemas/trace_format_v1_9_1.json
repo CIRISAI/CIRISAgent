@@ -1,0 +1,263 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ciris.ai/schemas/trace_format_v1.9.1.json",
+  "title": "CIRIS Reasoning Trace v1.9.1",
+  "description": "Complete reasoning trace from CIRIS H3ERE pipeline with 6 components",
+  "type": "object",
+  "required": ["trace_id", "thought_id", "agent_id_hash", "components", "started_at"],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Unique trace identifier: trace-{thought_id}-{timestamp}",
+      "pattern": "^trace-.*$"
+    },
+    "trace_level": {
+      "type": "string",
+      "enum": ["generic", "detailed", "full_traces"],
+      "default": "generic",
+      "description": "Detail level of captured data"
+    },
+    "thought_id": {
+      "type": "string",
+      "description": "Unique thought identifier"
+    },
+    "task_id": {
+      "type": ["string", "null"],
+      "description": "Parent task identifier"
+    },
+    "agent_id_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of agent identity (anonymized)"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when trace started"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO timestamp when trace completed"
+    },
+    "components": {
+      "type": "array",
+      "description": "Ordered array of 6 reasoning components",
+      "items": {
+        "$ref": "#/definitions/TraceComponent"
+      },
+      "minItems": 1,
+      "maxItems": 6
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Ed25519 signature of trace content (base64)"
+    },
+    "signature_key_id": {
+      "type": ["string", "null"],
+      "description": "Key identifier used for signing"
+    }
+  },
+  "definitions": {
+    "TraceComponent": {
+      "type": "object",
+      "required": ["component_type", "event_type", "timestamp", "data"],
+      "properties": {
+        "component_type": {
+          "type": "string",
+          "enum": ["observation", "context", "rationale", "conscience", "action"],
+          "description": "H3ERE component category"
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "THOUGHT_START",
+            "SNAPSHOT_AND_CONTEXT",
+            "DMA_RESULTS",
+            "ASPDMA_RESULT",
+            "CONSCIENCE_RESULT",
+            "ACTION_RESULT"
+          ],
+          "description": "Specific event type within component"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this component was captured"
+        },
+        "data": {
+          "type": "object",
+          "description": "Component-specific data (see component schemas)"
+        }
+      }
+    },
+    "ThoughtStartData": {
+      "type": "object",
+      "description": "THOUGHT_START component data",
+      "properties": {
+        "thought_id": {"type": "string"},
+        "task_id": {"type": ["string", "null"]},
+        "thought_type": {"type": "string", "enum": ["seed", "follow_up", "retry"]},
+        "thought_status": {"type": "string"},
+        "round_number": {"type": "integer", "minimum": 0},
+        "thought_depth": {"type": "integer", "minimum": 0},
+        "parent_thought_id": {"type": ["string", "null"]},
+        "task_description": {"type": ["string", "null"], "level": "full_traces"},
+        "task_priority": {"type": "integer"},
+        "channel_id": {"type": ["string", "null"], "level": "detailed"},
+        "updated_info_available": {"type": "boolean"},
+        "thought_content": {"type": ["string", "null"], "level": "full_traces", "maxLength": 500}
+      }
+    },
+    "SnapshotContextData": {
+      "type": "object",
+      "description": "SNAPSHOT_AND_CONTEXT component data",
+      "properties": {
+        "agent_name": {"type": ["string", "null"]},
+        "cognitive_state": {"type": ["string", "null"], "enum": ["wakeup", "work", "play", "solitude", "dream", "shutdown", null]},
+        "system_snapshot": {"type": ["object", "null"], "level": "full_traces"}
+      }
+    },
+    "DmaResultsData": {
+      "type": "object",
+      "description": "DMA_RESULTS component data",
+      "properties": {
+        "csdma": {"$ref": "#/definitions/CsdmaResult"},
+        "dsdma": {"$ref": "#/definitions/DsdmaResult"},
+        "pdma": {"$ref": "#/definitions/PdmaResult"},
+        "idma": {"$ref": "#/definitions/IdmaResult"},
+        "combined_analysis": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "CsdmaResult": {
+      "type": ["object", "null"],
+      "description": "Common Sense DMA result",
+      "properties": {
+        "plausibility_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "flags": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "reasoning": {"type": ["string", "null"], "level": "full_traces"},
+        "prompt_used": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "DsdmaResult": {
+      "type": ["object", "null"],
+      "description": "Domain Specific DMA result",
+      "properties": {
+        "domain": {"type": ["string", "null"], "level": "detailed"},
+        "domain_alignment": {"type": "number", "minimum": 0, "maximum": 1},
+        "flags": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "reasoning": {"type": ["string", "null"], "level": "full_traces"},
+        "prompt_used": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "PdmaResult": {
+      "type": ["object", "null"],
+      "description": "Principled DMA (Ethical) result",
+      "properties": {
+        "stakeholders": {"type": ["string", "null"], "level": "detailed"},
+        "conflicts": {"type": ["string", "null"], "level": "detailed"},
+        "alignment_check": {"type": ["string", "null"], "level": "detailed"},
+        "reasoning": {"type": ["string", "null"], "level": "full_traces"},
+        "prompt_used": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "IdmaResult": {
+      "type": ["object", "null"],
+      "description": "Intuition DMA (CCA) result",
+      "properties": {
+        "k_eff": {"type": "number", "description": "Effective independent sources k/(1+ρ(k-1))"},
+        "correlation_risk": {"type": "number", "minimum": 0, "maximum": 1, "description": "Source correlation ρ"},
+        "fragility_flag": {"type": "boolean", "description": "True if k_eff < 2 (fragile)"},
+        "phase": {"type": "string", "enum": ["rigidity", "transition", "healthy", "fragmentation"]},
+        "sources_identified": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "correlation_factors": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "reasoning": {"type": ["string", "null"], "level": "full_traces"},
+        "prompt_used": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "AspdmaResultData": {
+      "type": "object",
+      "description": "ASPDMA_RESULT component data",
+      "properties": {
+        "selected_action": {
+          "type": "string",
+          "enum": ["SPEAK", "TOOL", "MEMORIZE", "FORGET", "RECALL", "OBSERVE", "PONDER", "DEFER", "REJECT", "TASK_COMPLETE"]
+        },
+        "selection_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "is_recursive": {"type": "boolean", "default": false},
+        "alternatives_considered": {"type": ["array", "null"], "items": {"type": "string"}, "level": "detailed"},
+        "evaluation_time_ms": {"type": ["number", "null"], "level": "detailed"},
+        "action_rationale": {"type": ["string", "null"], "level": "full_traces"},
+        "reasoning_summary": {"type": ["string", "null"], "level": "full_traces"},
+        "action_parameters": {"type": ["object", "null"], "level": "full_traces"},
+        "aspdma_prompt": {"type": ["string", "null"], "level": "full_traces"},
+        "raw_llm_response": {"type": ["string", "null"], "maxLength": 1000, "level": "full_traces"}
+      }
+    },
+    "ConscienceResultData": {
+      "type": "object",
+      "description": "CONSCIENCE_RESULT component data",
+      "required": ["conscience_passed"],
+      "properties": {
+        "conscience_passed": {"type": "boolean"},
+        "action_was_overridden": {"type": "boolean", "default": false},
+        "ethical_faculties_skipped": {"type": ["boolean", "null"]},
+        "updated_status_detected": {"type": ["boolean", "null"]},
+        "thought_depth_triggered": {"type": ["boolean", "null"]},
+        "thought_depth_current": {"type": ["integer", "null"]},
+        "thought_depth_max": {"type": ["integer", "null"]},
+        "entropy_level": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "coherence_level": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "entropy_passed": {"type": ["boolean", "null"], "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"},
+        "entropy_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "entropy_threshold": {"type": ["number", "null"]},
+        "coherence_passed": {"type": ["boolean", "null"], "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"},
+        "coherence_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "coherence_threshold": {"type": ["number", "null"]},
+        "optimization_veto_passed": {"type": ["boolean", "null"], "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"},
+        "optimization_veto_entropy_ratio": {"type": ["number", "null"]},
+        "epistemic_humility_passed": {"type": ["boolean", "null"], "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET"},
+        "epistemic_humility_certainty": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "final_action": {"type": ["string", "null"], "level": "detailed"},
+        "conscience_override_reason": {"type": ["string", "null"], "level": "detailed"},
+        "entropy_reason": {"type": ["string", "null"], "level": "detailed"},
+        "coherence_reason": {"type": ["string", "null"], "level": "detailed"},
+        "optimization_veto_decision": {"type": ["string", "null"], "enum": ["proceed", "abort", "defer", null], "level": "detailed"},
+        "optimization_veto_affected_values": {"type": ["array", "null"], "items": {"type": "string"}, "level": "detailed"},
+        "epistemic_humility_uncertainties": {"type": ["array", "null"], "items": {"type": "string"}, "level": "detailed"},
+        "epistemic_humility_recommendation": {"type": ["string", "null"], "enum": ["proceed", "ponder", "defer", null], "level": "detailed"},
+        "epistemic_data": {"type": ["object", "null"], "level": "full_traces"},
+        "updated_status_content": {"type": ["string", "null"], "level": "full_traces"},
+        "optimization_veto_justification": {"type": ["string", "null"], "level": "full_traces"},
+        "epistemic_humility_justification": {"type": ["string", "null"], "level": "full_traces"}
+      }
+    },
+    "ActionResultData": {
+      "type": "object",
+      "description": "ACTION_RESULT component data",
+      "properties": {
+        "execution_success": {"type": "boolean"},
+        "execution_time_ms": {"type": ["number", "null"]},
+        "tokens_input": {"type": "integer", "minimum": 0},
+        "tokens_output": {"type": "integer", "minimum": 0},
+        "tokens_total": {"type": "integer", "minimum": 0},
+        "cost_cents": {"type": "number", "minimum": 0},
+        "carbon_grams": {"type": "number", "minimum": 0},
+        "energy_mwh": {"type": "number", "minimum": 0},
+        "llm_calls": {"type": "integer", "minimum": 0},
+        "audit_sequence_number": {"type": ["integer", "null"]},
+        "audit_entry_hash": {"type": ["string", "null"]},
+        "has_positive_moment": {"type": "boolean", "description": "True if positive moment/gratitude was expressed"},
+        "has_execution_error": {"type": "boolean", "description": "True if execution error occurred"},
+        "action_executed": {"type": ["string", "null"], "level": "detailed"},
+        "follow_up_thought_id": {"type": ["string", "null"], "level": "detailed"},
+        "audit_entry_id": {"type": ["string", "null"], "level": "detailed"},
+        "models_used": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "api_bases_used": {"type": "array", "items": {"type": "string"}, "level": "detailed"},
+        "execution_error": {"type": ["string", "null"], "level": "detailed"},
+        "audit_signature": {"type": ["string", "null"], "level": "detailed"},
+        "action_parameters": {"type": ["object", "null"], "level": "full_traces"},
+        "positive_moment": {"type": ["string", "null"], "maxLength": 500, "level": "full_traces", "description": "Full text of gratitude/positive moment"}
+      }
+    }
+  }
+}

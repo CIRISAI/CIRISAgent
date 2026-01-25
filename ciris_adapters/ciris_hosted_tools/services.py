@@ -328,7 +328,7 @@ class CIRISHostedToolService:
             response = await self._make_request("GET", f"/v1/tools/check/{tool_name}", service="billing")
             if response.status_code == 200:
                 data = response.json()
-                return data.get("has_credit", False)
+                return bool(data.get("has_credit", False))
             return None
         except httpx.RequestError:
             # Try fallback
@@ -338,7 +338,7 @@ class CIRISHostedToolService:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get("has_credit", False)
+                    return bool(data.get("has_credit", False))
             except httpx.RequestError:
                 pass
             return None

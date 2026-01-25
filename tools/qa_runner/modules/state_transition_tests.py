@@ -309,7 +309,9 @@ class StateTransitionTests:
 
             # Test 1: With no context but instant_shutdown_otherwise=True, should NOT require consent
             requires, reason = await evaluator.requires_consent(config, context=None)
-            assert requires is False, "Should permit instant shutdown when context is None and instant_shutdown_otherwise=True"
+            assert (
+                requires is False
+            ), "Should permit instant shutdown when context is None and instant_shutdown_otherwise=True"
             assert "instant" in reason.lower() or "permits" in reason.lower()
 
             # Test 2: With mock context (no crisis), should not require consent

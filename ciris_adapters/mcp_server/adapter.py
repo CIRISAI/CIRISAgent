@@ -1,8 +1,10 @@
 """
 MCP Server Adapter for CIRIS.
 
-Exposes CIRIS as an MCP server, allowing external AI agents
-and applications to interact with CIRIS via the Model Context Protocol.
+Exposes CIRIS as an MCP server with 3 simple tools:
+- status: Get agent status
+- message: Send a message to user's channel
+- history: Get message history
 """
 
 import asyncio
@@ -13,26 +15,21 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict, Union, cast
 
 from ciris_adapters.mcp_common.protocol import (
-    ClientCapabilities,
     InitializeResult,
     MCPErrorCode,
     MCPMessage,
     MCPMessageType,
     ServerCapabilities,
     create_error_response,
-    create_notification,
     create_success_response,
     validate_mcp_message,
 )
 from ciris_engine.logic.adapters.base import Service
-from ciris_engine.logic.registries.base import Priority
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
-from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
 
-from .config import MCPServerAdapterConfig, TransportType
-from .handlers import MCPPromptHandler, MCPResourceHandler, MCPToolHandler
-from .security import AuthResult, ClientSession, MCPServerSecurityManager
+from .config import MCPServerConfig, MCPTransportType
+from .handlers import MCPServerHandler
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +37,19 @@ logger = logging.getLogger(__name__)
 class MCPServerAdapterKwargs(TypedDict, total=False):
     """Type-safe kwargs for MCPServerAdapter initialization."""
 
-    adapter_config: Union[MCPServerAdapterConfig, Dict[str, Any]]
-    config_service: Any
+    adapter_config: Union[MCPServerConfig, Dict[str, Any]]
 
 
 class Adapter(Service):
     """
     MCP Server Adapter for CIRIS.
 
-    Exposes CIRIS capabilities via the Model Context Protocol:
-    - Tools from ToolBus
-    - Resources from agent state/services
-    - Prompts from WiseBus
+    Exposes 3 simple tools via the Model Context Protocol:
+    - status: Get agent status
+    - message: Send message to user's channel
+    - history: Get message history from user's channel
+
+    Authentication uses API key to identify user, which maps to api_{user_id} channel.
     """
 
     def __init__(self, runtime: Any, context: Optional[Any] = None, **kwargs: Any) -> None:
@@ -74,31 +72,22 @@ class Adapter(Service):
         # Initialize configuration
         self._initialize_config(typed_kwargs)
 
-        # Initialize security manager
-        self._security_manager = MCPServerSecurityManager(self.config.security)
+        # Get communication service for messaging
+        communication = None
+        if hasattr(runtime, "communication_bus"):
+            communication = runtime.communication_bus
+        elif hasattr(runtime, "communication_service"):
+            communication = runtime.communication_service
 
-        # Initialize handlers
-        self._tool_handler = MCPToolHandler(
-            exposure_config=self.config.exposure,
-            tool_bus=getattr(runtime, "tool_bus", None),
-        )
-
-        self._resource_handler = MCPResourceHandler(
-            exposure_config=self.config.exposure,
+        # Initialize handler
+        self._handler = MCPServerHandler(
             runtime=runtime,
-        )
-
-        self._prompt_handler = MCPPromptHandler(
-            exposure_config=self.config.exposure,
-            wise_bus=getattr(runtime, "wise_bus", None),
+            communication_service=communication,
         )
 
         # Server state
         self._running = False
         self._start_time: Optional[datetime] = None
-        self._sessions: Dict[str, ClientSession] = {}
-
-        # Transport state
         self._server_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_event = asyncio.Event()
 
@@ -106,25 +95,30 @@ class Adapter(Service):
         self._requests_handled = 0
         self._errors = 0
 
+        # Active sessions (api_key -> user_id)
+        self._authenticated_users: Dict[str, str] = {}
+
     def _initialize_config(self, kwargs: MCPServerAdapterKwargs) -> None:
         """Initialize adapter configuration."""
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             adapter_config = kwargs["adapter_config"]
-            if isinstance(adapter_config, MCPServerAdapterConfig):
-                self.config = adapter_config
+            if isinstance(adapter_config, MCPServerConfig):
+                self._config = adapter_config
             elif isinstance(adapter_config, dict):
-                self.config = MCPServerAdapterConfig(**adapter_config)
+                self._config = MCPServerConfig(**adapter_config)
             else:
-                self.config = MCPServerAdapterConfig()
+                self._config = MCPServerConfig()
         else:
-            self.config = MCPServerAdapterConfig()
+            self._config = MCPServerConfig()
 
-        self.config.load_env_vars()
-        self.adapter_id = f"mcp_server_{self.config.server_id}"
+        self._config.load_env_vars()
+        self.adapter_id = f"mcp_server_{self._config.server_id}"
 
-        logger.info(
-            f"MCP Server configured: id={self.config.server_id}, " f"transport={self.config.transport.type.value}"
-        )
+        logger.info(f"MCP Server configured: id={self._config.server_id}, " f"transport={self._config.transport.value}")
+
+    def _get_request_id(self, message: MCPMessage) -> Union[str, int]:
+        """Get request ID from message, defaulting to 0 if None."""
+        return message.id if message.id is not None else 0
 
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get services to register.
@@ -132,7 +126,6 @@ class Adapter(Service):
         MCP Server doesn't provide services to CIRIS buses,
         it exposes CIRIS services to external clients.
         """
-        # No services to register - we expose, not provide
         return []
 
     async def start(self) -> None:
@@ -142,76 +135,21 @@ class Adapter(Service):
         self._running = True
         self._start_time = datetime.now(timezone.utc)
 
-        # Register default tools for exposure
-        await self._register_default_tools()
-
-        if self.config.auto_start:
+        if self._config.enabled:
             await self._start_server()
 
         logger.info("MCP Server Adapter started")
 
-    async def _register_default_tools(self) -> None:
-        """Register default CIRIS tools for MCP exposure."""
-        # These tools will be available via MCP
-        self._tool_handler.register_tool(
-            name="ciris_search_memory",
-            description="Search CIRIS agent memory for information",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum results",
-                        "default": 10,
-                    },
-                },
-                "required": ["query"],
-            },
-        )
-
-        self._tool_handler.register_tool(
-            name="ciris_get_status",
-            description="Get CIRIS agent status and health information",
-            input_schema={
-                "type": "object",
-                "properties": {},
-            },
-        )
-
-        self._tool_handler.register_tool(
-            name="ciris_submit_task",
-            description="Submit a task for CIRIS agent to process",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "task": {
-                        "type": "string",
-                        "description": "Task description",
-                    },
-                    "priority": {
-                        "type": "string",
-                        "enum": ["low", "normal", "high"],
-                        "default": "normal",
-                    },
-                },
-                "required": ["task"],
-            },
-        )
-
     async def _start_server(self) -> None:
         """Start the MCP server based on transport type."""
-        transport = self.config.transport.type
+        transport = self._config.transport
 
-        if transport == TransportType.STDIO:
+        if transport == MCPTransportType.STDIO:
             self._server_task = asyncio.create_task(
                 self._run_stdio_server(),
                 name="MCPServerStdio",
             )
-        elif transport in (TransportType.SSE, TransportType.STREAMABLE_HTTP):
+        elif transport in (MCPTransportType.SSE, MCPTransportType.HTTP):
             self._server_task = asyncio.create_task(
                 self._run_http_server(),
                 name="MCPServerHTTP",
@@ -226,27 +164,28 @@ class Adapter(Service):
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
 
-        # Get stdin/stdout
         loop = asyncio.get_event_loop()
         await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
         writer_transport, writer_protocol = await loop.connect_write_pipe(asyncio.streams.FlowControlMixin, sys.stdout)
         writer = asyncio.StreamWriter(writer_transport, writer_protocol, reader, loop)
 
+        # For stdio transport, provide a default user_id when auth is not required
+        # This allows message/history tools to work for local stdio clients
+        stdio_user_id: Optional[str] = None
+        if not self._config.require_auth:
+            stdio_user_id = "stdio_user"
+            logger.info("Stdio transport: using default user 'stdio_user' (auth not required)")
+
         try:
             while not self._shutdown_event.is_set():
                 try:
-                    # Read line from stdin
-                    line = await asyncio.wait_for(
-                        reader.readline(),
-                        timeout=1.0,
-                    )
+                    line = await asyncio.wait_for(reader.readline(), timeout=1.0)
 
                     if not line:
                         break
 
-                    # Parse and handle message
-                    response = await self._handle_message(line.decode().strip())
+                    response = await self._handle_message(line.decode().strip(), stdio_user_id)
 
                     if response:
                         writer.write((json.dumps(response.model_dump()) + "\n").encode())
@@ -263,16 +202,14 @@ class Adapter(Service):
             writer.close()
 
     async def _run_http_server(self) -> None:
-        """Run MCP server over HTTP/SSE transport."""
-        logger.info(f"Starting MCP HTTP server on " f"{self.config.transport.host}:{self.config.transport.port}")
+        """Run MCP server over HTTP transport."""
+        logger.info(f"Starting MCP HTTP server on {self._config.host}:{self._config.port}")
 
-        # Simple HTTP server implementation
-        # In production, would use aiohttp or similar
         try:
             server = await asyncio.start_server(
                 self._handle_http_connection,
-                self.config.transport.host,
-                self.config.transport.port,
+                self._config.host,
+                self._config.port,
             )
 
             async with server:
@@ -286,16 +223,11 @@ class Adapter(Service):
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        """Handle an HTTP connection.
-
-        Args:
-            reader: Stream reader
-            writer: Stream writer
-        """
+        """Handle an HTTP connection."""
         try:
             # Read HTTP request
-            request_line = await reader.readline()
-            headers = {}
+            await reader.readline()  # Request line
+            headers: Dict[str, str] = {}
 
             while True:
                 header_line = await reader.readline()
@@ -305,7 +237,14 @@ class Adapter(Service):
                     key, value = header_line.decode().split(":", 1)
                     headers[key.strip().lower()] = value.strip()
 
-            # Read body if present
+            # Extract API key from Authorization header
+            user_id = None
+            auth_header = headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                api_key = auth_header[7:]
+                user_id = self._authenticate(api_key)
+
+            # Read body
             content_length = int(headers.get("content-length", 0))
             body = b""
             if content_length > 0:
@@ -313,9 +252,8 @@ class Adapter(Service):
 
             # Handle MCP message
             if body:
-                response = await self._handle_message(body.decode())
+                response = await self._handle_message(body.decode(), user_id)
 
-                # Send HTTP response
                 response_body = json.dumps(response.model_dump()) if response else "{}"
                 http_response = (
                     "HTTP/1.1 200 OK\r\n"
@@ -333,11 +271,36 @@ class Adapter(Service):
             writer.close()
             await writer.wait_closed()
 
-    async def _handle_message(self, message_str: str) -> Optional[MCPMessage]:
+    def _authenticate(self, api_key: str) -> Optional[str]:
+        """Authenticate using API key.
+
+        Args:
+            api_key: The API key
+
+        Returns:
+            User ID if authenticated, None otherwise
+        """
+        # Check configured API key
+        if self._config.api_key and api_key == self._config.api_key:
+            return "api_user"
+
+        # Could integrate with auth service here
+        # For now, treat api_key as user_id if no configured key
+        if not self._config.require_auth:
+            return api_key or "anonymous"
+
+        return None
+
+    async def _handle_message(
+        self,
+        message_str: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[MCPMessage]:
         """Handle an incoming MCP message.
 
         Args:
             message_str: Raw message string
+            user_id: Authenticated user ID
 
         Returns:
             Response MCPMessage or None
@@ -345,10 +308,8 @@ class Adapter(Service):
         self._requests_handled += 1
 
         try:
-            # Parse message
             data = json.loads(message_str)
 
-            # Validate structure
             is_valid, error = validate_mcp_message(data)
             if not is_valid:
                 self._errors += 1
@@ -360,12 +321,20 @@ class Adapter(Service):
 
             message = MCPMessage(**data)
 
-            # Handle based on method
+            # Handle notification (no response)
             if message.is_notification():
-                await self._handle_notification(message)
-                return None  # Notifications don't get responses
+                return None
 
-            return await self._handle_request(message)
+            # Handle initialize
+            if message.method == MCPMessageType.INITIALIZE.value:
+                return await self._handle_initialize(message)
+
+            # Handle ping
+            if message.method == "ping":
+                return create_success_response(self._get_request_id(message), {})
+
+            # Delegate to handler
+            return await self._handler.handle_request(message, user_id)
 
         except json.JSONDecodeError as e:
             self._errors += 1
@@ -383,152 +352,40 @@ class Adapter(Service):
                 str(e),
             )
 
-    async def _handle_notification(self, message: MCPMessage) -> None:
-        """Handle a notification message.
-
-        Args:
-            message: Notification message
-        """
-        method = message.method
-        logger.debug(f"Received notification: {method}")
-
-        if method == MCPMessageType.NOTIFICATION_CANCELLED.value:
-            # Client cancelled a request
-            pass
-        elif method == MCPMessageType.INITIALIZED.value:
-            # Client acknowledged initialization
-            logger.info("Client initialized")
-
-    async def _handle_request(self, message: MCPMessage) -> MCPMessage:
-        """Handle a request message.
-
-        Args:
-            message: Request message
-
-        Returns:
-            Response message
-        """
-        method = message.method
+    async def _handle_initialize(self, message: MCPMessage) -> MCPMessage:
+        """Handle initialize request."""
         params = message.params or {}
-        request_id = message.id
-
-        logger.debug(f"Handling request: {method}")
-
-        # Route to appropriate handler
-        if method == MCPMessageType.INITIALIZE.value:
-            return await self._handle_initialize(request_id, params)
-
-        elif method == MCPMessageType.PING.value:
-            return create_success_response(request_id, {})
-
-        elif method == MCPMessageType.TOOLS_LIST.value:
-            return await self._tool_handler.handle_list_tools(request_id)
-
-        elif method == MCPMessageType.TOOLS_CALL.value:
-            return await self._tool_handler.handle_call_tool(request_id, params)
-
-        elif method == MCPMessageType.RESOURCES_LIST.value:
-            return await self._resource_handler.handle_list_resources(request_id)
-
-        elif method == MCPMessageType.RESOURCES_READ.value:
-            return await self._resource_handler.handle_read_resource(request_id, params)
-
-        elif method == MCPMessageType.PROMPTS_LIST.value:
-            return await self._prompt_handler.handle_list_prompts(request_id)
-
-        elif method == MCPMessageType.PROMPTS_GET.value:
-            return await self._prompt_handler.handle_get_prompt(request_id, params)
-
-        else:
-            return create_error_response(
-                request_id,
-                MCPErrorCode.METHOD_NOT_FOUND,
-                f"Unknown method: {method}",
-            )
-
-    async def _handle_initialize(self, request_id: Any, params: Dict[str, Any]) -> MCPMessage:
-        """Handle initialize request.
-
-        Args:
-            request_id: Request ID
-            params: Initialize parameters
-
-        Returns:
-            Initialize response
-        """
         client_info = params.get("clientInfo", {})
-        client_caps = params.get("capabilities", {})
         protocol_version = params.get("protocolVersion", "2024-11-05")
 
         logger.info(
             f"Client initializing: {client_info.get('name', 'unknown')} " f"v{client_info.get('version', 'unknown')}"
         )
 
-        # Authenticate client
-        result, session = await self._security_manager.authenticate_client(
-            client_info=client_info,
-        )
-
-        # SECURITY: Enforce authentication result
-        if result != AuthResult.SUCCESS:
-            logger.warning(f"Client authentication failed: {result.value} for " f"{client_info.get('name', 'unknown')}")
-            # Map auth result to appropriate error message
-            error_messages = {
-                AuthResult.FAILED: "Authentication failed",
-                AuthResult.EXPIRED: "Authentication expired",
-                AuthResult.BLOCKED: "Client blocked",
-                AuthResult.RATE_LIMITED: "Rate limit exceeded",
-            }
-            return create_error_response(
-                request_id,
-                MCPErrorCode.UNAUTHORIZED,
-                error_messages.get(result, f"Authentication error: {result.value}"),
-            )
-
-        if session:
-            self._sessions[session.client_id] = session
-
-        # Build server capabilities
         server_caps = ServerCapabilities(
-            tools={"listChanged": True} if self.config.exposure.expose_tools else None,
-            resources=(
-                {
-                    "subscribe": False,
-                    "listChanged": True,
-                }
-                if self.config.exposure.expose_resources
-                else None
-            ),
-            prompts={"listChanged": True} if self.config.exposure.expose_prompts else None,
+            tools={"listChanged": False},
+            resources=None,
+            prompts=None,
         )
 
         response = InitializeResult(
             protocolVersion=protocol_version,
             capabilities=server_caps,
             serverInfo={
-                "name": self.config.server_name,
-                "version": self.config.server_version,
+                "name": self._config.server_name,
+                "version": "1.0.0",
             },
-            instructions=self.config.server_description,
+            instructions="CIRIS Agent MCP Server. Tools: status, message, history",
         )
 
-        return create_success_response(request_id, response.model_dump())
+        return create_success_response(self._get_request_id(message), response.model_dump())
 
     async def run_lifecycle(self, agent_run_task: asyncio.Task[Any]) -> None:
-        """Run the adapter lifecycle.
-
-        Args:
-            agent_run_task: Agent run task
-        """
+        """Run the adapter lifecycle."""
         logger.info("MCP Server Adapter lifecycle running")
 
         try:
-            # Wait for either agent task completion or shutdown
-            done, pending = await asyncio.wait(
-                [agent_run_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
+            await asyncio.wait([agent_run_task], return_when=asyncio.FIRST_COMPLETED)
         except asyncio.CancelledError:
             logger.info("MCP Server Adapter lifecycle cancelled")
             raise
@@ -540,19 +397,12 @@ class Adapter(Service):
         self._running = False
         self._shutdown_event.set()
 
-        # Cancel server task
         if self._server_task and not self._server_task.done():
             self._server_task.cancel()
             try:
                 await self._server_task
             except asyncio.CancelledError:
                 pass
-
-        # End all sessions
-        for client_id in list(self._sessions.keys()):
-            await self._security_manager.authenticator.end_session(client_id)
-
-        self._sessions.clear()
 
         logger.info("MCP Server Adapter stopped")
 
@@ -569,12 +419,10 @@ class Adapter(Service):
         return {
             "adapter_id": self.adapter_id,
             "running": self._running,
-            "transport": self.config.transport.type.value,
+            "transport": self._config.transport.value,
             "requests_handled": self._requests_handled,
             "errors": self._errors,
-            "active_sessions": len(self._sessions),
             "uptime_seconds": uptime_seconds,
-            "security_metrics": self._security_manager.get_metrics(),
         }
 
 

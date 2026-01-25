@@ -29,6 +29,9 @@ from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
 
+# Error message constants
+ERROR_SERVICE_UNAVAILABLE = "Service unavailable"
+
 
 class OperationPriority(str, Enum):
     """Priority levels for runtime operations"""
@@ -124,7 +127,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
                     processor_name=handler_name,
                     operation="shutdown",
                     new_status=ProcessorStatus.ERROR,
-                    error="Service unavailable",
+                    error=ERROR_SERVICE_UNAVAILABLE,
                 )
 
             try:
@@ -236,7 +239,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
                 started_at=self._time_service.now(),
                 messages_processed=0,
                 error_count=0,
-                last_error="Service unavailable",
+                last_error=ERROR_SERVICE_UNAVAILABLE,
                 tools=None,
             )
 
@@ -284,7 +287,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
                 started_at=self._time_service.now(),
                 messages_processed=0,
                 error_count=1,
-                last_error="Service unavailable",
+                last_error=ERROR_SERVICE_UNAVAILABLE,
                 tools=None,
             )
 
@@ -431,7 +434,7 @@ class RuntimeControlBus(BaseBus[RuntimeControlService]):
                 started_at=self._time_service.now(),
                 messages_processed=0,
                 error_count=1,
-                last_error="Service unavailable",
+                last_error=ERROR_SERVICE_UNAVAILABLE,
                 tools=None,
             )
 

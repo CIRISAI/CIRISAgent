@@ -27,6 +27,9 @@ from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
 
+# Error message constants
+ERROR_NO_MEMORY_SERVICE = "No memory service available"
+
 
 @dataclass
 class MemorizeBusMessage(BusMessage):
@@ -100,7 +103,7 @@ class MemoryBus(BaseBus[MemoryService]):
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
             return MemoryOpResult[GraphNode](
                 status=MemoryOpStatus.FAILED,
-                reason="No memory service available",
+                reason=ERROR_NO_MEMORY_SERVICE,
                 data=None,
             )
 
@@ -166,7 +169,7 @@ class MemoryBus(BaseBus[MemoryService]):
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
             return MemoryOpResult[GraphNode](
                 status=MemoryOpStatus.FAILED,
-                reason="No memory service available",
+                reason=ERROR_NO_MEMORY_SERVICE,
                 data=None,
             )
 
@@ -327,7 +330,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason="No memory service available")
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=ERROR_NO_MEMORY_SERVICE)
 
         try:
             result = await service.memorize_metric(metric_name, value, tags, scope)
@@ -357,7 +360,7 @@ class MemoryBus(BaseBus[MemoryService]):
 
         if not service:
             logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
-            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason="No memory service available")
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=ERROR_NO_MEMORY_SERVICE)
 
         try:
             result = await service.memorize_log(log_message, log_level, tags, scope)

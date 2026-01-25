@@ -143,6 +143,7 @@ class AdapterManifestTests:
         test_name = f"{adapter_name}::schema_validation"
         try:
             from ciris_engine.schemas.runtime.manifest import ServiceManifest
+
             ServiceManifest.model_validate(manifest)
             self.results.append({"test": test_name, "status": "PASS", "error": None})
             self.console.print(f"    [green]PASS[/green] Schema validation")

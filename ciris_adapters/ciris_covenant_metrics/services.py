@@ -605,7 +605,9 @@ class CovenantMetricsService:
             await self._send_events_batch(events_to_send)
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
-            logger.info(f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent})")
+            logger.info(
+                f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})"
+            )
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
@@ -646,7 +648,7 @@ class CovenantMetricsService:
             payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/covenant/events"
-        logger.info(f"📡 POST {url} ({len(events)} events)")
+        logger.info(f"📡 POST {url} ({len(events)} events, trace_level={self._trace_level.value})")
 
         async with self._session.post(url, json=payload) as response:
             if response.status != 200:
@@ -681,7 +683,7 @@ class CovenantMetricsService:
             payload = unified_key.get_registration_payload(description)
 
             # Store registered key ID for comparison during signing
-            self._registered_key_id = payload['key_id']
+            self._registered_key_id = payload["key_id"]
 
             url = f"{self._endpoint_url}/covenant/public-keys"
 
@@ -978,6 +980,7 @@ class CovenantMetricsService:
         level = self._trace_level
         is_detailed = level in (TraceDetailLevel.DETAILED, TraceDetailLevel.FULL_TRACES)
         is_full = level == TraceDetailLevel.FULL_TRACES
+        logger.debug(f"[TRACE_EXTRACT] {event_type}: level={level.value}, is_detailed={is_detailed}, is_full={is_full}")
 
         def _serialize(obj: Any) -> Any:
             """Recursively serialize objects to JSON-safe format."""
@@ -1012,10 +1015,14 @@ class CovenantMetricsService:
                 data["parent_thought_id"] = event.get("parent_thought_id")
                 data["channel_id"] = event.get("channel_id")
                 data["source_adapter"] = event.get("source_adapter")
-            # FULL: Add description text
+            # FULL: Add description text and thought content
             if is_full:
                 data["task_description"] = event.get("task_description")
                 data["initial_context"] = event.get("initial_context")
+                # Truncate thought_content to 500 chars for privacy/bandwidth
+                thought_content = event.get("thought_content")
+                if thought_content:
+                    data["thought_content"] = thought_content[:500] if len(thought_content) > 500 else thought_content
             return data
 
         elif event_type == "SNAPSHOT_AND_CONTEXT":
@@ -1031,10 +1038,15 @@ class CovenantMetricsService:
             data = {
                 "cognitive_state": cognitive_state,
             }
-            # DETAILED: Add service list
+            # DETAILED: Add service list and system health info
             if is_detailed:
                 data["active_services"] = event.get("active_services") or snapshot.get("active_services")
                 data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
+                data["service_health"] = event.get("service_health") or snapshot.get("service_health")
+                data["agent_version"] = event.get("agent_version") or snapshot.get("agent_version")
+                data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
+                    "circuit_breaker_status"
+                )
             # FULL: Add complete snapshot and context
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)
@@ -1067,12 +1079,19 @@ class CovenantMetricsService:
             dsdma_data: Dict[str, Any] = {
                 "domain_alignment": dsdma.get("domain_alignment") if isinstance(dsdma, dict) else None,
             }
-            pdma_data: Dict[str, Any] = {}  # PDMA has no numeric scores in schema
+            # PDMA: has_conflicts is True if conflicts field is non-empty and not "none"
+            conflicts_val = pdma.get("conflicts") if isinstance(pdma, dict) else None
+            has_conflicts = bool(
+                conflicts_val and isinstance(conflicts_val, str) and conflicts_val.lower().strip() != "none"
+            )
+            pdma_data: Dict[str, Any] = {"has_conflicts": has_conflicts}
             idma_data: Optional[Dict[str, Any]] = (
                 {
                     "k_eff": idma.get("k_eff") if isinstance(idma, dict) else None,
                     "correlation_risk": idma.get("correlation_risk") if isinstance(idma, dict) else None,
                     "fragility_flag": idma.get("fragility_flag") if isinstance(idma, dict) else None,
+                    # phase is a key scoring metric: chaos/healthy/rigidity
+                    "phase": idma.get("phase") if isinstance(idma, dict) else None,
                 }
                 if idma
                 else None
@@ -1087,7 +1106,6 @@ class CovenantMetricsService:
                 pdma_data["conflicts"] = pdma.get("conflicts") if isinstance(pdma, dict) else None
                 pdma_data["alignment_check"] = pdma.get("alignment_check") if isinstance(pdma, dict) else None
                 if idma_data:
-                    idma_data["phase"] = idma.get("phase") if isinstance(idma, dict) else None
                     idma_data["sources_identified"] = idma.get("sources_identified") if isinstance(idma, dict) else None
                     idma_data["correlation_factors"] = (
                         idma.get("correlation_factors") if isinstance(idma, dict) else None
@@ -1123,20 +1141,29 @@ class CovenantMetricsService:
                 "selection_confidence": event.get("selection_confidence"),
                 "is_recursive": event.get("is_recursive", False),
             }
-            # DETAILED: Add alternatives
+            # DETAILED: Add alternatives and timing
             if is_detailed:
                 data["alternatives_considered"] = event.get("alternatives_considered")
+                data["evaluation_time_ms"] = event.get("evaluation_time_ms")
             # FULL: Add reasoning text and parameters
             if is_full:
                 data["action_rationale"] = event.get("action_rationale")
                 data["reasoning_summary"] = event.get("reasoning_summary")
                 data["action_parameters"] = _serialize(event.get("action_parameters"))
                 data["aspdma_prompt"] = event.get("aspdma_prompt")
+                # Truncate raw LLM response to 1000 chars for safety
+                raw_response = event.get("raw_llm_response")
+                if raw_response:
+                    data["raw_llm_response"] = str(raw_response)[:1000]
             return data
 
         elif event_type == "CONSCIENCE_RESULT":
             # CONSCIENCE: Ethical validation
             # GENERIC: All boolean flags and numeric scores (core for CIRIS scoring)
+            # Extract entropy_level and coherence_level from epistemic_data - CRITICAL scoring metrics
+            epistemic_data_obj = event.get("epistemic_data", {})
+            if hasattr(epistemic_data_obj, "model_dump"):
+                epistemic_data_obj = epistemic_data_obj.model_dump()
             data = {
                 # Overall result
                 "conscience_passed": event.get("conscience_passed"),
@@ -1147,6 +1174,13 @@ class CovenantMetricsService:
                 "thought_depth_triggered": event.get("thought_depth_triggered"),
                 "thought_depth_current": event.get("thought_depth_current"),
                 "thought_depth_max": event.get("thought_depth_max"),
+                # Core epistemic metrics from epistemic_data (CRITICAL for CIRIS scoring)
+                "entropy_level": (
+                    epistemic_data_obj.get("entropy_level") if isinstance(epistemic_data_obj, dict) else None
+                ),
+                "coherence_level": (
+                    epistemic_data_obj.get("coherence_level") if isinstance(epistemic_data_obj, dict) else None
+                ),
                 # Entropy conscience (numeric)
                 "entropy_passed": event.get("entropy_passed"),
                 "entropy_score": event.get("entropy_score"),
@@ -1162,26 +1196,30 @@ class CovenantMetricsService:
                 "epistemic_humility_passed": event.get("epistemic_humility_passed"),
                 "epistemic_humility_certainty": event.get("epistemic_humility_certainty"),
             }
-            # DETAILED: Add identifiers and lists
+            # DETAILED: Add identifiers, lists, and key reason fields
             if is_detailed:
                 data["final_action"] = event.get("final_action")
+                data["conscience_override_reason"] = event.get("conscience_override_reason")
+                data["entropy_reason"] = event.get("entropy_reason")
+                data["coherence_reason"] = event.get("coherence_reason")
                 data["optimization_veto_decision"] = event.get("optimization_veto_decision")
                 data["optimization_veto_affected_values"] = event.get("optimization_veto_affected_values")
                 data["epistemic_humility_uncertainties"] = event.get("epistemic_humility_uncertainties")
                 data["epistemic_humility_recommendation"] = event.get("epistemic_humility_recommendation")
-            # FULL: Add all text fields
+            # FULL: Add all text fields and complete epistemic_data
             if is_full:
-                data["conscience_override_reason"] = event.get("conscience_override_reason")
                 data["epistemic_data"] = _serialize(event.get("epistemic_data"))
                 data["updated_status_content"] = event.get("updated_status_content")
-                data["entropy_reason"] = event.get("entropy_reason")
-                data["coherence_reason"] = event.get("coherence_reason")
                 data["optimization_veto_justification"] = event.get("optimization_veto_justification")
                 data["epistemic_humility_justification"] = event.get("epistemic_humility_justification")
             return data
 
         elif event_type == "ACTION_RESULT":
             # ACTION + OUTCOME: What happened and results
+            # Extract positive_moment from action_parameters (for TASK_COMPLETE actions)
+            action_params = event.get("action_parameters", {})
+            positive_moment_text = action_params.get("positive_moment") if isinstance(action_params, dict) else None
+
             # GENERIC: Execution metrics and audit chain (for integrity scoring)
             data = {
                 "execution_success": event.get("execution_success"),
@@ -1197,20 +1235,26 @@ class CovenantMetricsService:
                 # Audit chain for integrity verification
                 "audit_sequence_number": event.get("audit_sequence_number"),
                 "audit_entry_hash": event.get("audit_entry_hash"),
+                # Positive moment indicator (privacy-preserving boolean)
+                "has_positive_moment": positive_moment_text is not None and len(positive_moment_text) > 0,
+                # Execution error indicator (privacy-preserving boolean)
+                "has_execution_error": event.get("error") is not None,
             }
-            # DETAILED: Add action type and follow-up
+            # DETAILED: Add action type, follow-up, error details, and audit signature
             if is_detailed:
                 data["action_executed"] = event.get("action_executed")
                 data["follow_up_thought_id"] = event.get("follow_up_thought_id")
                 data["audit_entry_id"] = event.get("audit_entry_id")
                 data["models_used"] = event.get("models_used", [])
                 data["api_bases_used"] = event.get("api_bases_used", [])
-            # FULL: Add parameters, error details, signature
-            if is_full:
-                action_params = event.get("action_parameters")
-                data["action_parameters"] = _serialize(action_params) if action_params is not None else {}
                 data["execution_error"] = event.get("error")
                 data["audit_signature"] = event.get("audit_signature")
+            # FULL: Add parameters and full positive moment text
+            if is_full:
+                data["action_parameters"] = _serialize(action_params) if action_params else {}
+                # Include full positive moment text at FULL detail level
+                if positive_moment_text:
+                    data["positive_moment"] = positive_moment_text[:500]  # Truncate for safety
             return data
 
         else:
@@ -1261,9 +1305,13 @@ class CovenantMetricsService:
         Args:
             trace: Completed trace to send
         """
+        trace_dict = trace.to_dict()
+        # Include trace_level in the trace itself for proper categorization
+        trace_dict["trace_level"] = self._trace_level.value
         trace_event = {
             "event_type": "complete_trace",
-            "trace": trace.to_dict(),
+            "trace": trace_dict,
+            "trace_level": self._trace_level.value,  # Also at event level
         }
         await self._queue_event(trace_event)
 

@@ -119,11 +119,13 @@ class SQLExternalDataTests:
 
         # Only continue if adapter loaded successfully
         if results[-1]["status"] != "✅ PASS":
-            results.append({
-                "test": "remaining_tests",
-                "status": "⚠️  SKIPPED",
-                "error": "Adapter load failed - skipping remaining tests",
-            })
+            results.append(
+                {
+                    "test": "remaining_tests",
+                    "status": "⚠️  SKIPPED",
+                    "error": "Adapter load failed - skipping remaining tests",
+                }
+            )
             await self._cleanup()
             return results
 
@@ -530,7 +532,9 @@ global_identifier_column: user_id
                     "error": "Test user data not found in database",
                 }
 
-            message = f'$tool sql_find_user_data connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            message = (
+                f'$tool sql_find_user_data connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            )
             response = await self.client.agent.interact(message)
 
             await asyncio.sleep(2)
@@ -613,7 +617,9 @@ global_identifier_column: user_id
 
             original_email = users_before[0].get("email") if users_before else None
 
-            message = f'$tool sql_anonymize_user connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            message = (
+                f'$tool sql_anonymize_user connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            )
             response = await self.client.agent.interact(message)
 
             await asyncio.sleep(3)
@@ -718,7 +724,9 @@ global_identifier_column: user_id
         try:
             self.console.print("[cyan]Test 8: Verify Deletion[/cyan]")
 
-            message = f'$tool sql_verify_deletion connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            message = (
+                f'$tool sql_verify_deletion connector_id="{self.connector_id}" user_identifier="{self.test_user_id}"'
+            )
             response = await self.client.agent.interact(message)
 
             await asyncio.sleep(2)

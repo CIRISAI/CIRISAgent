@@ -1,13 +1,8 @@
 """
-MCP (Model Context Protocol) Adapter for CIRIS.
+MCP (Model Context Protocol) Client Adapter for CIRIS.
 
-This adapter enables integration with MCP servers, providing:
-- Tool service integration (execute MCP tools) via ToolBus
-- Communication service integration (MCP resources) via CommunicationBus
-- Wise Authority service integration (MCP prompts) via WiseBus
-
-The adapter supports dynamic configuration through the graph config service,
-allowing the agent to self-configure which MCP servers connect to which buses.
+This adapter enables integration with MCP servers as a pure tool service,
+providing tool execution capabilities via ToolBus.
 
 Security features are implemented based on best practices from:
 - https://modelcontextprotocol.io/specification/draft/basic/security_best_practices
@@ -28,9 +23,7 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
 
 from .config import MCPAdapterConfig, MCPBusType, MCPServerConfig, MCPTransportType
-from .mcp_communication_service import MCPCommunicationService
 from .mcp_tool_service import MCPToolService
-from .mcp_wise_service import MCPWiseService
 from .security import MCPSecurityManager
 
 logger = logging.getLogger(__name__)
@@ -72,12 +65,12 @@ class MCPClientContext:
 
 class Adapter(Service):
     """
-    MCP Modular Adapter for CIRIS.
+    MCP Client Adapter for CIRIS - Pure Tool Service.
 
     This adapter:
     1. Loads MCP server configurations from config or graph
     2. Establishes connections to MCP servers
-    3. Registers services with appropriate buses based on configuration
+    3. Registers tool service with ToolBus
     4. Handles security validation for all operations
     5. Supports dynamic reconfiguration through the config service
     """
@@ -103,22 +96,12 @@ class Adapter(Service):
         self._initialize_config(typed_kwargs)
 
         # Initialize security manager with global security config
-        self._security_manager = MCPSecurityManager(self.config.global_security)
+        self._security_manager = MCPSecurityManager(self._config.global_security)
 
-        # Initialize services
+        # Initialize tool service only
         time_service = getattr(runtime, "time_service", None)
 
         self._tool_service = MCPToolService(
-            security_manager=self._security_manager,
-            time_service=time_service,
-        )
-
-        self._wise_service = MCPWiseService(
-            security_manager=self._security_manager,
-            time_service=time_service,
-        )
-
-        self._communication_service = MCPCommunicationService(
             security_manager=self._security_manager,
             time_service=time_service,
         )
@@ -132,6 +115,11 @@ class Adapter(Service):
         # Track running state
         self._running = False
 
+    @property
+    def tool_service(self) -> MCPToolService:
+        """Public accessor for tool service (used by adapter manager for tool discovery)."""
+        return self._tool_service
+
     def _initialize_config(self, kwargs: MCPAdapterKwargs) -> None:
         """Initialize adapter configuration.
 
@@ -141,23 +129,23 @@ class Adapter(Service):
         if "adapter_config" in kwargs and kwargs["adapter_config"] is not None:
             adapter_config = kwargs["adapter_config"]
             if isinstance(adapter_config, MCPAdapterConfig):
-                self.config = adapter_config
+                self._config = adapter_config
             elif isinstance(adapter_config, dict):
-                self.config = MCPAdapterConfig(**adapter_config)
+                self._config = MCPAdapterConfig(**adapter_config)
             else:
                 logger.warning(f"Invalid adapter_config type: {type(adapter_config)}")
-                self.config = MCPAdapterConfig()
+                self._config = MCPAdapterConfig()
         else:
-            self.config = MCPAdapterConfig()
+            self._config = MCPAdapterConfig()
 
         # Load environment variables
-        self.config.load_env_vars()
+        self._config.load_env_vars()
 
         # Update adapter_id
-        self.adapter_id = f"mcp_{self.config.adapter_id}"
+        self.adapter_id = f"mcp_{self._config.adapter_id}"
 
         logger.info(
-            f"MCP Adapter configured with {len(self.config.servers)} server(s), " f"adapter_id={self.adapter_id}"
+            f"MCP Adapter configured with {len(self._config.servers)} server(s), " f"adapter_id={self.adapter_id}"
         )
 
     async def _load_config_from_graph(self) -> None:
@@ -170,7 +158,7 @@ class Adapter(Service):
 
         try:
             # List all MCP configurations
-            configs = await self._config_service.list_configs(prefix=self.config.config_key_prefix)
+            configs = await self._config_service.list_configs(prefix=self._config.config_key_prefix)
 
             for key, value in configs.items():
                 if not isinstance(value, dict):
@@ -182,18 +170,18 @@ class Adapter(Service):
 
                     # Check if this server is already configured
                     existing = next(
-                        (s for s in self.config.servers if s.server_id == server_config.server_id),
+                        (s for s in self._config.servers if s.server_id == server_config.server_id),
                         None,
                     )
 
                     if existing:
                         # Update existing configuration
-                        existing_index = self.config.servers.index(existing)
-                        self.config.servers[existing_index] = server_config
+                        existing_index = self._config.servers.index(existing)
+                        self._config.servers[existing_index] = server_config
                         logger.info(f"Updated MCP server config from graph: {server_config.server_id}")
                     else:
                         # Add new server
-                        self.config.servers.append(server_config)
+                        self._config.servers.append(server_config)
                         logger.info(f"Added MCP server config from graph: {server_config.server_id}")
 
                 except Exception as e:
@@ -212,7 +200,7 @@ class Adapter(Service):
             return
 
         try:
-            key = f"{self.config.config_key_prefix}.{server_config.server_id}"
+            key = f"{self._config.config_key_prefix}.{server_config.server_id}"
             await self._config_service.set_config(
                 key=key,
                 value=server_config.model_dump(),
@@ -390,27 +378,19 @@ class Adapter(Service):
     def get_services_to_register(self) -> List[AdapterServiceRegistration]:
         """Get list of services to register with the runtime.
 
-        Returns services based on bus bindings configured for each server.
+        Returns tool service registration for ToolBus.
         """
         registrations: List[AdapterServiceRegistration] = []
 
-        # Collect which buses need services
+        # Check if any server has tool binding (or no specific binding = default to tool)
         has_tool_binding = any(
-            any(b.bus_type == MCPBusType.TOOL for b in s.bus_bindings) for s in self.config.servers if s.enabled
-        )
-
-        has_wise_binding = any(
-            any(b.bus_type == MCPBusType.WISE for b in s.bus_bindings) for s in self.config.servers if s.enabled
-        )
-
-        has_comm_binding = any(
-            any(b.bus_type == MCPBusType.COMMUNICATION for b in s.bus_bindings)
-            for s in self.config.servers
+            (not s.bus_bindings or any(b.bus_type == MCPBusType.TOOL for b in s.bus_bindings))
+            for s in self._config.servers
             if s.enabled
         )
 
-        # Register tool service if any server has tool binding
-        if has_tool_binding:
+        # Register tool service
+        if has_tool_binding or self._config.servers:
             registrations.append(
                 AdapterServiceRegistration(
                     service_type=ServiceType.TOOL,
@@ -429,32 +409,6 @@ class Adapter(Service):
             )
             logger.info("MCP Adapter registering ToolBus service")
 
-        # Register wise authority service if any server has wise binding
-        if has_wise_binding:
-            registrations.append(
-                AdapterServiceRegistration(
-                    service_type=ServiceType.WISE_AUTHORITY,
-                    provider=self._wise_service,
-                    priority=Priority.LOW,
-                    handlers=["DeferHandler", "SpeakHandler"],
-                    capabilities=["fetch_guidance", "send_deferral", "get_guidance"],
-                )
-            )
-            logger.info("MCP Adapter registering WiseBus service")
-
-        # Register communication service if any server has communication binding
-        if has_comm_binding:
-            registrations.append(
-                AdapterServiceRegistration(
-                    service_type=ServiceType.COMMUNICATION,
-                    provider=self._communication_service,
-                    priority=Priority.LOW,
-                    handlers=["SpeakHandler", "ObserveHandler"],
-                    capabilities=["send_message", "fetch_messages"],
-                )
-            )
-            logger.info("MCP Adapter registering CommunicationBus service")
-
         logger.info(f"MCP Adapter registering {len(registrations)} service(s)")
         return registrations
 
@@ -465,13 +419,11 @@ class Adapter(Service):
         # Load configurations from graph if available
         await self._load_config_from_graph()
 
-        # Start services
+        # Start tool service
         await self._tool_service.start()
-        await self._wise_service.start()
-        await self._communication_service.start()
 
         # Connect to all enabled servers
-        for server_config in self.config.servers:
+        for server_config in self._config.servers:
             if not server_config.enabled:
                 continue
             if not server_config.auto_start:
@@ -492,17 +444,8 @@ class Adapter(Service):
                 exit_stack=exit_stack,
             )
 
-            # Register client with appropriate services based on bus bindings
-            for binding in server_config.bus_bindings:
-                if not binding.enabled:
-                    continue
-
-                if binding.bus_type == MCPBusType.TOOL:
-                    self._tool_service.register_mcp_client(server_config.server_id, client)
-                elif binding.bus_type == MCPBusType.WISE:
-                    self._wise_service.register_mcp_client(server_config.server_id, client)
-                elif binding.bus_type == MCPBusType.COMMUNICATION:
-                    self._communication_service.register_mcp_client(server_config.server_id, client)
+            # Register client with tool service
+            self._tool_service.register_mcp_client(server_config.server_id, client)
 
             logger.info(f"Connected to MCP server '{server_config.server_id}'")
 
@@ -533,10 +476,8 @@ class Adapter(Service):
         # Disconnect all servers
         for server_id, ctx in list(self._client_contexts.items()):
             try:
-                # Unregister from services
+                # Unregister from tool service
                 self._tool_service.unregister_mcp_client(server_id)
-                self._wise_service.unregister_mcp_client(server_id)
-                self._communication_service.unregister_mcp_client(server_id)
 
                 # Close the session and transport via exit stack
                 await ctx.close()
@@ -555,10 +496,8 @@ class Adapter(Service):
 
         self._client_contexts.clear()
 
-        # Stop services
+        # Stop tool service
         await self._tool_service.stop()
-        await self._wise_service.stop()
-        await self._communication_service.stop()
 
         logger.info("MCP Adapter stopped")
 
@@ -567,12 +506,7 @@ class Adapter(Service):
         if not self._running:
             return False
 
-        # Check if at least one service is healthy
-        tool_healthy = await self._tool_service.is_healthy()
-        wise_healthy = await self._wise_service.is_healthy()
-        comm_healthy = await self._communication_service.is_healthy()
-
-        return tool_healthy or wise_healthy or comm_healthy
+        return await self._tool_service.is_healthy()
 
     # Dynamic configuration methods for agent self-configuration
 
@@ -587,7 +521,7 @@ class Adapter(Service):
         """
         # Check if server already exists
         existing = next(
-            (s for s in self.config.servers if s.server_id == server_config.server_id),
+            (s for s in self._config.servers if s.server_id == server_config.server_id),
             None,
         )
         if existing:
@@ -606,7 +540,7 @@ class Adapter(Service):
         client, exit_stack = result
 
         # Add to configuration
-        self.config.servers.append(server_config)
+        self._config.servers.append(server_config)
 
         # Store client context with exit_stack to keep session alive
         self._client_contexts[server_config.server_id] = MCPClientContext(
@@ -615,17 +549,8 @@ class Adapter(Service):
             exit_stack=exit_stack,
         )
 
-        # Register with services
-        for binding in server_config.bus_bindings:
-            if not binding.enabled:
-                continue
-
-            if binding.bus_type == MCPBusType.TOOL:
-                self._tool_service.register_mcp_client(server_config.server_id, client)
-            elif binding.bus_type == MCPBusType.WISE:
-                self._wise_service.register_mcp_client(server_config.server_id, client)
-            elif binding.bus_type == MCPBusType.COMMUNICATION:
-                self._communication_service.register_mcp_client(server_config.server_id, client)
+        # Register with tool service
+        self._tool_service.register_mcp_client(server_config.server_id, client)
 
         # Save to graph for persistence
         await self._save_server_config_to_graph(server_config)
@@ -644,17 +569,15 @@ class Adapter(Service):
         """
         # Find and remove from config
         server_config = next(
-            (s for s in self.config.servers if s.server_id == server_id),
+            (s for s in self._config.servers if s.server_id == server_id),
             None,
         )
         if not server_config:
             logger.warning(f"MCP server '{server_id}' not found")
             return False
 
-        # Unregister from services
+        # Unregister from tool service
         self._tool_service.unregister_mcp_client(server_id)
-        self._wise_service.unregister_mcp_client(server_id)
-        self._communication_service.unregister_mcp_client(server_id)
 
         # Clean up client context
         if server_id in self._client_contexts:
@@ -667,66 +590,9 @@ class Adapter(Service):
             del self._client_contexts[server_id]
 
         # Remove from config
-        self.config.servers.remove(server_config)
+        self._config.servers.remove(server_config)
 
         logger.info(f"Removed MCP server '{server_id}'")
-        return True
-
-    async def update_server_bus_bindings(self, server_id: str, bus_bindings: List[Dict[str, Any]]) -> bool:
-        """Update bus bindings for a server.
-
-        Args:
-            server_id: Server to update
-            bus_bindings: New bus bindings
-
-        Returns:
-            True if updated successfully
-        """
-        from .config import MCPBusBinding
-
-        server_config = next(
-            (s for s in self.config.servers if s.server_id == server_id),
-            None,
-        )
-        if not server_config:
-            logger.warning(f"MCP server '{server_id}' not found")
-            return False
-
-        # Parse new bindings
-        new_bindings = [MCPBusBinding(**b) for b in bus_bindings]
-
-        # Get current client
-        ctx = self._client_contexts.get(server_id)
-        if not ctx:
-            logger.warning(f"MCP server '{server_id}' not connected")
-            return False
-
-        client = ctx.client
-
-        # Unregister from all services first
-        self._tool_service.unregister_mcp_client(server_id)
-        self._wise_service.unregister_mcp_client(server_id)
-        self._communication_service.unregister_mcp_client(server_id)
-
-        # Update bindings
-        server_config.bus_bindings = new_bindings
-
-        # Re-register with new bindings
-        for binding in new_bindings:
-            if not binding.enabled:
-                continue
-
-            if binding.bus_type == MCPBusType.TOOL:
-                self._tool_service.register_mcp_client(server_id, client)
-            elif binding.bus_type == MCPBusType.WISE:
-                self._wise_service.register_mcp_client(server_id, client)
-            elif binding.bus_type == MCPBusType.COMMUNICATION:
-                self._communication_service.register_mcp_client(server_id, client)
-
-        # Save to graph
-        await self._save_server_config_to_graph(server_config)
-
-        logger.info(f"Updated bus bindings for MCP server '{server_id}'")
         return True
 
     def get_security_metrics(self) -> Dict[str, Any]:
@@ -734,19 +600,15 @@ class Adapter(Service):
         return self._security_manager.get_security_metrics()
 
     async def get_telemetry(self) -> JSONDict:
-        """Get combined telemetry from all services."""
+        """Get combined telemetry from tool service."""
         tool_telemetry = await self._tool_service.get_telemetry()
-        wise_telemetry = await self._wise_service.get_telemetry()
-        comm_telemetry = await self._communication_service.get_telemetry()
 
         return {
             "adapter_id": self.adapter_id,
             "running": self._running,
-            "servers_configured": len(self.config.servers),
+            "servers_configured": len(self._config.servers),
             "servers_connected": len(self._client_contexts),
             "tool_service": tool_telemetry,
-            "wise_service": wise_telemetry,
-            "communication_service": comm_telemetry,
             "security_metrics": self.get_security_metrics(),
         }
 

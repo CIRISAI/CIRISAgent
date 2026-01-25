@@ -192,8 +192,9 @@ def _handle_instructor_retry_exception(
 
     # Schema validation errors
     if _is_validation_error(error_str):
-        _log_instructor_error("SCHEMA VALIDATION", error_context, full_error,
-                              extra=f"Expected Schema: {error_context['response_model']}")
+        _log_instructor_error(
+            "SCHEMA VALIDATION", error_context, full_error, extra=f"Expected Schema: {error_context['response_model']}"
+        )
         raise RuntimeError(
             f"LLM response validation failed for {error_context['response_model']} - "
             "circuit breaker activated for failover"
@@ -201,18 +202,13 @@ def _handle_instructor_retry_exception(
 
     # Timeout errors
     if _is_timeout_error(error_str):
-        _log_instructor_error("TIMEOUT", error_context, full_error,
-                              extra="Request exceeded timeout")
-        raise TimeoutError(
-            "LLM API timeout - circuit breaker activated"
-        ) from error
+        _log_instructor_error("TIMEOUT", error_context, full_error, extra="Request exceeded timeout")
+        raise TimeoutError("LLM API timeout - circuit breaker activated") from error
 
     # Service unavailable / 503 errors
     if _is_service_unavailable_error(error_str):
         _log_instructor_error("SERVICE UNAVAILABLE (503)", error_context, full_error)
-        raise RuntimeError(
-            "LLM service unavailable (503) - circuit breaker activated for failover"
-        ) from error
+        raise RuntimeError("LLM service unavailable (503) - circuit breaker activated for failover") from error
 
     # Rate limit / 429 errors
     if is_rate_limit:
@@ -229,29 +225,21 @@ def _handle_instructor_retry_exception(
     # Context length / token limit exceeded errors
     if _is_context_length_error(error_str):
         _log_instructor_error("CONTEXT_LENGTH_EXCEEDED", error_context, full_error)
-        raise RuntimeError(
-            "CONTEXT_LENGTH_EXCEEDED: Input too long - reduce message history or context"
-        ) from error
+        raise RuntimeError("CONTEXT_LENGTH_EXCEEDED: Input too long - reduce message history or context") from error
 
     # Content filtering / guardrail errors
     if _is_content_filter_error(error_str):
         _log_instructor_error("CONTENT FILTER / GUARDRAIL", error_context, full_error)
-        raise RuntimeError(
-            "LLM content filter triggered - circuit breaker activated for failover"
-        ) from error
+        raise RuntimeError("LLM content filter triggered - circuit breaker activated for failover") from error
 
     # Generic instructor error
-    _log_instructor_error("INSTRUCTOR ERROR", error_context, full_error,
-                          extra=f"Error Type: {type(error).__name__}")
+    _log_instructor_error("INSTRUCTOR ERROR", error_context, full_error, extra=f"Error Type: {type(error).__name__}")
     raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from error
 
 
 def _is_context_length_error(error_str: str) -> bool:
     """Check if error string indicates a context length exceeded error."""
-    context_patterns = [
-        "context_length", "maximum context", "context length",
-        "token limit", "too many tokens"
-    ]
+    context_patterns = ["context_length", "maximum context", "context length", "token limit", "too many tokens"]
     if any(pattern in error_str for pattern in context_patterns):
         return True
     return "max_tokens" in error_str and "exceed" in error_str

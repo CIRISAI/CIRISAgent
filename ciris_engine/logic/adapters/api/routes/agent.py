@@ -22,7 +22,7 @@ from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
 
-from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE
+from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE, ERROR_MESSAGE_HANDLER_NOT_CONFIGURED
 from ..dependencies.auth import require_observer
 
 logger = logging.getLogger(__name__)
@@ -548,7 +548,7 @@ async def _handle_paused_message(request: Request, msg: IncomingMessage) -> None
     if hasattr(request.app.state, "on_message"):
         await request.app.state.on_message(msg)
     else:
-        raise HTTPException(status_code=503, detail="Message handler not configured")
+        raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
 
 
 def _get_processor_cognitive_state(processor: Any) -> str:
@@ -694,7 +694,7 @@ async def submit_message(
         if hasattr(request.app.state, "on_message"):
             result = await request.app.state.on_message(msg)
         else:
-            raise HTTPException(status_code=503, detail="Message handler not configured")
+            raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
     except CreditDenied as exc:
         await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
         response = MessageSubmissionResponse(
@@ -795,7 +795,7 @@ async def interact(
         if hasattr(request.app.state, "on_message"):
             await request.app.state.on_message(msg)
         else:
-            raise HTTPException(status_code=503, detail="Message handler not configured")
+            raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
     except CreditDenied as exc:
         await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
         _cleanup_interaction_tracking(message_id)

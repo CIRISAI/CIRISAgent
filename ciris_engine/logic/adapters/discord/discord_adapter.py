@@ -38,7 +38,7 @@ from ciris_engine.schemas.telemetry.core import (
 from ciris_engine.schemas.types import JSONDict
 
 from .config import DiscordAdapterConfig
-from .constants import ACTION_OBSERVE
+from .constants import ACTION_OBSERVE, ERROR_TIME_SERVICE_NOT_INITIALIZED
 from .discord_audit import DiscordAuditLogger
 from .discord_channel_manager import DiscordChannelManager
 from .discord_connection_manager import DiscordConnectionManager
@@ -228,8 +228,8 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         correlation_id = str(uuid.uuid4())
         time_service = self._time_service
         if time_service is None:
-            logger.error("Time service not initialized")
-            raise RuntimeError("Time service not initialized")
+            logger.error(ERROR_TIME_SERVICE_NOT_INITIALIZED)
+            raise RuntimeError(ERROR_TIME_SERVICE_NOT_INITIALIZED)
         start_time = time_service.now()
 
         try:
@@ -404,7 +404,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         time_service = self._time_service
         if time_service is None:
-            logger.error("Time service not initialized")
+            logger.error(ERROR_TIME_SERVICE_NOT_INITIALIZED)
             return None
         start_time = time_service.now()
 
@@ -563,7 +563,7 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
             max_wait = approval_request.timeout_seconds + 5
             time_service = self._time_service
             if time_service is None:
-                logger.error("Time service not initialized")
+                logger.error(ERROR_TIME_SERVICE_NOT_INITIALIZED)
                 return False
             start_time = time_service.now()
 
@@ -927,8 +927,8 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
 
         time_service = self._time_service
         if time_service is None:
-            logger.error("Time service not initialized")
-            raise RuntimeError("Time service not initialized")
+            logger.error(ERROR_TIME_SERVICE_NOT_INITIALIZED)
+            raise RuntimeError(ERROR_TIME_SERVICE_NOT_INITIALIZED)
         start_time = time_service.now()
 
         try:

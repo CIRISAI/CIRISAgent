@@ -689,7 +689,9 @@ class BaseObserver(Generic[MessageT], ABC):
             task_lines.append(f"CIRIS_OBSERVATION_END [Timestamp: {observation_timestamp}]")
 
             task_lines.append(
-                "\n=== EVALUATE THIS MESSAGE AGAINST YOUR IDENTITY/JOB AND ETHICS AND DECIDE IF AND HOW TO ACT ON IT ==="
+                "\n=== NEWEST OBSERVATION (evaluate this message) ===\n"
+                "Consider: Is this a response to your previous message, a reaction to something else in the environment, "
+                "or an unrelated/new topic? Evaluate against your identity/job and ethics, then decide how to act."
             )
 
             # Handle consent-aware content formatting

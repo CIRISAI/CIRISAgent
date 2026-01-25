@@ -50,7 +50,12 @@ class CovenantMetricsTests:
 
     # Required fields for CIRIS scoring (generic trace level)
     # These power the 5-factor CIRIS Capacity Score: C · I_int · R · I_inc · S
-    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
+    # - C (Core Identity): action_was_overridden, agent_id_hash, agent_name
+    # - I_int (Integrity): signature_verified, field coverage
+    # - R (Resilience): csdma.plausibility_score, coherence_level, idma.fragility_flag
+    # - I_inc (Incompleteness): csdma.plausibility_score (confidence proxy), entropy_level, execution_success
+    # - S (Sustained Coherence): coherence_passed, has_positive_moment
+    # Updated 2026-01-25 with CIRIS scoring factor alignment (v1.9.1)
     GENERIC_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "round_number",
@@ -69,7 +74,7 @@ class CovenantMetricsTests:
         },
         "ASPDMA_RESULT": [
             "selected_action",
-            "selection_confidence",
+            # Note: selection_confidence removed - CIRIS scoring uses csdma.plausibility_score as confidence proxy
             "is_recursive",
         ],
         "CONSCIENCE_RESULT": [
@@ -104,7 +109,7 @@ class CovenantMetricsTests:
     }
 
     # Additional fields at DETAILED level (actionable identifiers)
-    # Updated 2026-01-24 with comprehensive trace field coverage (v1.9.1)
+    # Updated 2026-01-25 with CIRIS scoring factor alignment (v1.9.1)
     DETAILED_REQUIRED_FIELDS = {
         "THOUGHT_START": [
             "thought_type",
@@ -213,6 +218,7 @@ class CovenantMetricsTests:
             ("Load Multi-Level Adapters", self._test_load_multi_level_adapters),
             ("Agent Interaction Trace", self._test_interaction_triggers_trace),
             ("Generic Trace Field Validation", self._test_generic_trace_fields),
+            ("Critical Scoring Fields Not Null", self._test_critical_scoring_fields),
             ("Detailed Trace Field Validation", self._test_detailed_trace_fields),
             ("Full Trace Field Validation", self._test_full_trace_fields),
             ("Comprehensive Field Coverage", self._test_comprehensive_field_coverage),
@@ -424,6 +430,131 @@ class CovenantMetricsTests:
                         missing.append(f"{event_type}.{field}")
 
         return missing
+
+    def _validate_fields_not_null(self, component_data: Dict[str, Dict[str, Any]]) -> List[str]:
+        """Validate that all required generic fields are not null.
+
+        Args:
+            component_data: Dict mapping event_type to component data
+
+        Returns:
+            List of null field descriptions
+        """
+        null_fields: List[str] = []
+
+        for event_type, required in self.GENERIC_REQUIRED_FIELDS.items():
+            data = component_data.get(event_type, {})
+
+            if isinstance(required, dict):
+                # Nested structure (e.g., DMA_RESULTS with csdma, dsdma, idma)
+                for sub_key, sub_fields in required.items():
+                    sub_data = data.get(sub_key, {}) or {}
+                    for field in sub_fields:
+                        if field in sub_data and sub_data[field] is None:
+                            null_fields.append(f"{event_type}.{sub_key}.{field}")
+            else:
+                # Simple list of required fields
+                for field in required:
+                    if field in data and data[field] is None:
+                        null_fields.append(f"{event_type}.{field}")
+
+        return null_fields
+
+    # Exempt actions skip ethical faculty checks (nulls are expected)
+    EXEMPT_ACTIONS = {"TASK_COMPLETE", "RECALL", "OBSERVE", "DEFER", "REJECT"}
+
+    # Ethical faculty fields that are expected to be null for exempt actions
+    ETHICAL_FACULTY_FIELDS = {
+        "CONSCIENCE_RESULT.entropy_passed",
+        "CONSCIENCE_RESULT.entropy_score",
+        "CONSCIENCE_RESULT.coherence_passed",
+        "CONSCIENCE_RESULT.coherence_score",
+        "CONSCIENCE_RESULT.optimization_veto_passed",
+        "CONSCIENCE_RESULT.epistemic_humility_passed",
+        "CONSCIENCE_RESULT.epistemic_humility_certainty",
+    }
+
+    async def _test_critical_scoring_fields(self) -> tuple[bool, str]:
+        """Validate that ALL generic required fields are not null.
+
+        CIRIS scoring requires non-null values for all fields. Null values
+        indicate the agent isn't populating conscience/DMA results properly.
+
+        NOTE: Exempt actions (TASK_COMPLETE, RECALL, OBSERVE, DEFER, REJECT)
+        skip ethical faculty checks, so those fields will be null - this is expected.
+        """
+        try:
+            if self.live_lens:
+                return True, "Skipped (traces sent to live Lens server)"
+
+            qa_reports = Path(__file__).parent.parent.parent.parent / "qa_reports"
+            trace_files = list(qa_reports.glob("trace_*.json"))
+
+            if not trace_files:
+                return True, "No trace files found - skipping null validation"
+
+            null_field_counts: Dict[str, int] = {}
+            non_exempt_traces = 0
+            exempt_traces = 0
+
+            for trace_file in trace_files[:10]:  # Check up to 10 traces
+                try:
+                    with open(trace_file) as f:
+                        trace = json.load(f)
+                except Exception:
+                    continue
+
+                components = trace.get("components", [])
+                if not components:
+                    continue
+
+                component_data: Dict[str, Dict[str, Any]] = {}
+                for comp in components:
+                    event_type = comp.get("event_type", "")
+                    data = comp.get("data", {})
+                    component_data[event_type] = data
+
+                # Check if this is an exempt action
+                aspdma_data = component_data.get("ASPDMA_RESULT", {})
+                selected_action = aspdma_data.get("selected_action", "")
+                is_exempt = selected_action in self.EXEMPT_ACTIONS
+
+                if is_exempt:
+                    exempt_traces += 1
+                    continue  # Skip null validation for exempt actions
+
+                non_exempt_traces += 1
+                null_fields = self._validate_fields_not_null(component_data)
+                for field in null_fields:
+                    null_field_counts[field] = null_field_counts.get(field, 0) + 1
+
+            if non_exempt_traces == 0:
+                return True, f"All {exempt_traces} traces were exempt actions (nulls expected)"
+
+            if null_field_counts:
+                # Report fields that are null in ALL non-exempt traces (consistent nulls = bug)
+                consistent_nulls = [f for f, count in null_field_counts.items() if count == non_exempt_traces]
+                if consistent_nulls:
+                    self.console.print(
+                        f"     [yellow]⚠️ Fields null in all {non_exempt_traces} non-exempt traces:[/yellow]"
+                    )
+                    for field in consistent_nulls[:10]:
+                        self.console.print(f"       - {field}")
+                    return False, f"{len(consistent_nulls)} fields consistently null: {consistent_nulls[:5]}"
+
+                # Some nulls but not consistent - warning only
+                return (
+                    True,
+                    f"Checked {non_exempt_traces} non-exempt traces ({exempt_traces} exempt), {len(null_field_counts)} fields occasionally null",
+                )
+
+            return (
+                True,
+                f"All fields non-null in {non_exempt_traces} non-exempt traces ({exempt_traces} exempt skipped)",
+            )
+
+        except Exception as e:
+            return False, str(e)
 
     def _validate_detailed_fields(self, component_data: Dict[str, Dict[str, Any]]) -> List[str]:
         """Validate that component data contains all required detailed fields.

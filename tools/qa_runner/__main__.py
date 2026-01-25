@@ -135,7 +135,7 @@ Available modules:
     parser.add_argument(
         "--wipe-data",
         action="store_true",
-        help="Wipe data directory before starting (clears stale state, resets to first-run)"
+        help="Wipe data directory before starting (clears stale state, resets to first-run)",
     )
 
     # Authentication
@@ -166,6 +166,7 @@ def main():
     # Handle --wipe-data: Clear data directory to reset state
     if args.wipe_data:
         import shutil
+
         data_dir = Path("data")
         if data_dir.exists():
             print(f"🧹 Wiping data directory: {data_dir}")

@@ -537,19 +537,25 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 try:
                     has_tool_service = hasattr(instance.adapter, "tool_service")
                     tool_service_value = getattr(instance.adapter, "tool_service", None) if has_tool_service else None
-                    logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: has_tool_service={has_tool_service}, tool_service={type(tool_service_value).__name__ if tool_service_value else None}")
+                    logger.info(
+                        f"[TOOL_DISCOVERY] Adapter {adapter_id}: has_tool_service={has_tool_service}, tool_service={type(tool_service_value).__name__ if tool_service_value else None}"
+                    )
 
                     if has_tool_service and tool_service_value:
                         tool_service = tool_service_value
                         if hasattr(tool_service, "get_all_tool_info"):
                             logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling get_all_tool_info()")
                             tool_infos = await tool_service.get_all_tool_info()
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_infos) if tool_infos else 0} tools")
+                            logger.info(
+                                f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_infos) if tool_infos else 0} tools"
+                            )
                             tools = tool_infos  # Pass ToolInfo objects directly, not just names
                         elif hasattr(tool_service, "list_tools"):
                             logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling list_tools()")
                             tool_names = await tool_service.list_tools()
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_names) if tool_names else 0} tool names")
+                            logger.info(
+                                f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_names) if tool_names else 0} tool names"
+                            )
                             # Convert string names to ToolInfo objects for schema compliance
                             from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
@@ -562,7 +568,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                                 for name in tool_names
                             ]
                         else:
-                            logger.warning(f"[TOOL_DISCOVERY] Adapter {adapter_id}: tool_service has no get_all_tool_info or list_tools")
+                            logger.warning(
+                                f"[TOOL_DISCOVERY] Adapter {adapter_id}: tool_service has no get_all_tool_info or list_tools"
+                            )
                     else:
                         logger.debug(f"[TOOL_DISCOVERY] Adapter {adapter_id}: no tool_service available")
                 except Exception as e:

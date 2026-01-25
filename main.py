@@ -217,9 +217,7 @@ def _run_cli_setup_wizard() -> None:
         sys.exit(1)
 
 
-def _handle_first_run(
-    first_run: bool, adapter_types_list: tuple[str, ...], is_cli_mode: bool
-) -> None:
+def _handle_first_run(first_run: bool, adapter_types_list: tuple[str, ...], is_cli_mode: bool) -> None:
     """Handle first-run setup logic."""
     from ciris_engine.logic.setup.first_run import is_interactive_environment
 
@@ -252,18 +250,14 @@ def _show_api_key_required_message() -> None:
     sys.exit(1)
 
 
-def _validate_discord_adapter(
-    adapter_type: str, discord_bot_token: Optional[str]
-) -> bool:
+def _validate_discord_adapter(adapter_type: str, discord_bot_token: Optional[str]) -> bool:
     """Validate Discord adapter has required token. Returns True if valid."""
     from ciris_engine.logic.config.env_utils import get_env_var
 
     base_adapter_type, instance_id = (adapter_type.split(":", 1) + [None])[:2]
     token_vars = []
     if instance_id:
-        token_vars.extend(
-            [f"DISCORD_{instance_id.upper()}_BOT_TOKEN", f"DISCORD_BOT_TOKEN_{instance_id.upper()}"]
-        )
+        token_vars.extend([f"DISCORD_{instance_id.upper()}_BOT_TOKEN", f"DISCORD_BOT_TOKEN_{instance_id.upper()}"])
     token_vars.append("DISCORD_BOT_TOKEN")
 
     has_token = discord_bot_token or any(get_env_var(var) for var in token_vars)
@@ -272,15 +266,11 @@ def _validate_discord_adapter(
             f"ERROR: No Discord bot token found for {adapter_type}. Discord adapter cannot start without a bot token.",
             err=True,
         )
-        click.echo(
-            "Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True
-        )
+        click.echo("Please set DISCORD_BOT_TOKEN environment variable or use --discord-bot-token flag.", err=True)
     return True  # Always return True to continue (adapter will fail properly)
 
 
-def _validate_adapter_tokens(
-    adapter_types: list[str], discord_bot_token: Optional[str]
-) -> list[str]:
+def _validate_adapter_tokens(adapter_types: list[str], discord_bot_token: Optional[str]) -> list[str]:
     """Validate tokens for all adapters that require them."""
     validated = []
     for adapter_type in adapter_types:
@@ -347,9 +337,7 @@ def _categorize_adapters(
     return final_adapter_types, adapters_to_load
 
 
-async def _load_app_config(
-    config_file_path: Optional[str], template: str
-) -> Any:
+async def _load_app_config(config_file_path: Optional[str], template: str) -> Any:
     """Load application configuration."""
     if config_file_path and not Path(config_file_path).exists():
         logger.error(f"Configuration file not found: {config_file_path}")
@@ -382,9 +370,7 @@ def _handle_config_load_error(e: Exception) -> None:
         sys.exit(1)
 
 
-def _configure_api_adapter(
-    api_host: Optional[str], api_port: Optional[int]
-) -> tuple[Any, str]:
+def _configure_api_adapter(api_host: Optional[str], api_port: Optional[int]) -> tuple[Any, str]:
     """Configure API adapter. Returns (AdapterConfig, channel_id)."""
     from ciris_engine.logic.adapters.api.config import APIAdapterConfig
     from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
@@ -396,9 +382,7 @@ def _configure_api_adapter(
     if api_port:
         api_config.port = api_port
 
-    adapter_config = AdapterConfig(
-        adapter_type="api", enabled=True, settings=api_config.model_dump()
-    )
+    adapter_config = AdapterConfig(adapter_type="api", enabled=True, settings=api_config.model_dump())
     channel_id = api_config.get_home_channel_id(api_config.host, api_config.port)
     return adapter_config, channel_id
 
@@ -436,9 +420,7 @@ def _configure_cli_adapter(
     if not cli_interactive:
         cli_config.interactive = False
 
-    adapter_config = AdapterConfig(
-        adapter_type="cli", enabled=True, settings=cli_config.model_dump()
-    )
+    adapter_config = AdapterConfig(adapter_type="cli", enabled=True, settings=cli_config.model_dump())
     channel_id = cli_config.get_home_channel_id()
     return adapter_config, channel_id
 
@@ -672,8 +654,8 @@ def main(
     async def _async_main() -> None:
         nonlocal mock_llm
         from ciris_engine.logic.config.env_utils import get_env_var
-        from ciris_engine.logic.setup.first_run import is_first_run
         from ciris_engine.logic.runtime.adapter_loader import AdapterLoader
+        from ciris_engine.logic.setup.first_run import is_first_run
 
         # Check for CIRIS_MOCK_LLM environment variable
         if not mock_llm and _check_mock_llm_env():
@@ -766,6 +748,7 @@ def main(
         effective_num_rounds = num_rounds
         if effective_num_rounds is None:
             from ciris_engine.logic.utils.constants import DEFAULT_NUM_ROUNDS
+
             effective_num_rounds = DEFAULT_NUM_ROUNDS
 
         # Create CLI monitor if needed

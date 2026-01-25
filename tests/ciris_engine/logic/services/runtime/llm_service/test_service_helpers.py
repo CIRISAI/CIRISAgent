@@ -151,10 +151,13 @@ class TestBuildOpenrouterProviderConfig:
 
     def test_parses_both_env_vars(self):
         """Parses both env vars together."""
-        with patch.dict(os.environ, {
-            "OPENROUTER_PROVIDER_ORDER": "together,groq",
-            "OPENROUTER_IGNORE_PROVIDERS": "friendli",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "OPENROUTER_PROVIDER_ORDER": "together,groq",
+                "OPENROUTER_IGNORE_PROVIDERS": "friendli",
+            },
+        ):
             with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
                 config = _build_openrouter_provider_config()
 
@@ -243,25 +246,31 @@ class TestLogMultimodalContent:
 class TestIsContextLengthError:
     """Tests for _is_context_length_error function."""
 
-    @pytest.mark.parametrize("error_str", [
-        "context_length exceeded",
-        "maximum context length",
-        "context length limit",
-        "token limit exceeded",
-        "too many tokens in request",
-        "max_tokens would exceed the limit",
-    ])
+    @pytest.mark.parametrize(
+        "error_str",
+        [
+            "context_length exceeded",
+            "maximum context length",
+            "context length limit",
+            "token limit exceeded",
+            "too many tokens in request",
+            "max_tokens would exceed the limit",
+        ],
+    )
     def test_detects_context_length_errors(self, error_str):
         """Detects various context length error patterns."""
         assert _is_context_length_error(error_str) is True
 
-    @pytest.mark.parametrize("error_str", [
-        "rate limit exceeded",
-        "authentication failed",
-        "internal server error",
-        "validation error",
-        "connection timeout",
-    ])
+    @pytest.mark.parametrize(
+        "error_str",
+        [
+            "rate limit exceeded",
+            "authentication failed",
+            "internal server error",
+            "validation error",
+            "connection timeout",
+        ],
+    )
     def test_rejects_non_context_length_errors(self, error_str):
         """Returns False for non-context-length errors."""
         assert _is_context_length_error(error_str) is False
@@ -418,7 +427,9 @@ class TestHandleGenericLLMException:
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             with pytest.raises(RuntimeError):
-                _handle_generic_llm_exception(error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker)
+                _handle_generic_llm_exception(
+                    error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker
+                )
 
         mock_circuit_breaker.record_failure.assert_called_once()
 
@@ -428,7 +439,9 @@ class TestHandleGenericLLMException:
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             with pytest.raises(RuntimeError):
-                _handle_generic_llm_exception(error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker)
+                _handle_generic_llm_exception(
+                    error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker
+                )
 
         mock_circuit_breaker.record_failure.assert_not_called()
 
@@ -438,7 +451,9 @@ class TestHandleGenericLLMException:
 
         with patch("ciris_engine.logic.services.runtime.llm_service.service.logger"):
             with pytest.raises(RuntimeError) as exc_info:
-                _handle_generic_llm_exception(error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker)
+                _handle_generic_llm_exception(
+                    error, "gpt-4", "https://api.openai.com", "TestModel", mock_circuit_breaker
+                )
 
         assert "ValueError with no message" in str(exc_info.value)
 

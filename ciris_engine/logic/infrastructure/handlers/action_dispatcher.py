@@ -122,7 +122,9 @@ class ActionDispatcher:
                 action_selection_result,
             )
 
-    def _extract_action_info(self, action_selection_result: ActionSelectionDMAResult) -> Tuple[ActionSelectionDMAResult, HandlerActionType]:
+    def _extract_action_info(
+        self, action_selection_result: ActionSelectionDMAResult
+    ) -> Tuple[ActionSelectionDMAResult, HandlerActionType]:
         """Extract final action result and action type from result."""
         if hasattr(action_selection_result, "final_action"):
             final_action_result = action_selection_result.final_action

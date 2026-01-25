@@ -143,7 +143,9 @@ class MCPToolService:
         try:
             # Call MCP list_tools
             has_list_tools = hasattr(client, "list_tools")
-            logger.info(f"[TOOL_DISCOVERY] Server {server_id}: client type={type(client).__name__}, has_list_tools={has_list_tools}")
+            logger.info(
+                f"[TOOL_DISCOVERY] Server {server_id}: client type={type(client).__name__}, has_list_tools={has_list_tools}"
+            )
 
             if has_list_tools:
                 logger.info(f"[TOOL_DISCOVERY] Calling client.list_tools() for server {server_id}")
@@ -245,7 +247,9 @@ class MCPToolService:
 
         # Refresh caches if needed
         for server_id in self._mcp_clients:
-            logger.info(f"[TOOL_DISCOVERY] Checking cache for server {server_id}: in_cache={server_id in self._tools_cache}")
+            logger.info(
+                f"[TOOL_DISCOVERY] Checking cache for server {server_id}: in_cache={server_id in self._tools_cache}"
+            )
             if server_id not in self._tools_cache:
                 logger.info(f"[TOOL_DISCOVERY] Refreshing tools cache for server {server_id}")
                 await self._refresh_tools_cache(server_id)

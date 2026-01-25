@@ -22,7 +22,11 @@ from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
 
-from ..constants import DESC_CURRENT_COGNITIVE_STATE, ERROR_MEMORY_SERVICE_NOT_AVAILABLE, ERROR_MESSAGE_HANDLER_NOT_CONFIGURED
+from ..constants import (
+    DESC_CURRENT_COGNITIVE_STATE,
+    ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
+    ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
+)
 from ..dependencies.auth import require_observer
 
 logger = logging.getLogger(__name__)
@@ -1036,6 +1040,7 @@ def _get_admin_channels(auth: AuthContext, request: Request) -> List[str]:
 def _is_admin_role(auth: AuthContext) -> bool:
     """Check if auth context has an admin-level role."""
     from ciris_engine.schemas.api.auth import UserRole
+
     admin_roles = {UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY}
     return auth.role in admin_roles
 

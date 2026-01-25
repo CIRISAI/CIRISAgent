@@ -221,11 +221,13 @@ class CovenantMetricsTests:
 
         # Add live lens tests when using real server
         if self.live_lens:
-            tests.extend([
-                ("Lens Key Registration Check", self._test_lens_key_registration),
-                ("Lens Key ID Consistency", self._test_lens_key_id_consistency),
-                ("PDMA Fields at Detailed Level", self._test_pdma_fields_detailed),
-            ])
+            tests.extend(
+                [
+                    ("Lens Key Registration Check", self._test_lens_key_registration),
+                    ("Lens Key ID Consistency", self._test_lens_key_id_consistency),
+                    ("PDMA Fields at Detailed Level", self._test_pdma_fields_detailed),
+                ]
+            )
 
         for name, test_fn in tests:
             try:
@@ -532,10 +534,21 @@ class CovenantMetricsTests:
                     traces_validated += 1
                 else:
                     # Report only critical missing fields
-                    critical = [f for f in missing_fields if any(
-                        k in f for k in ["evaluation_time_ms", "entropy_reason", "coherence_reason",
-                                        "service_health", "execution_error", "audit_signature"]
-                    )]
+                    critical = [
+                        f
+                        for f in missing_fields
+                        if any(
+                            k in f
+                            for k in [
+                                "evaluation_time_ms",
+                                "entropy_reason",
+                                "coherence_reason",
+                                "service_health",
+                                "execution_error",
+                                "audit_signature",
+                            ]
+                        )
+                    ]
                     if critical:
                         validation_errors.append(f"{trace_file.name}: Missing v1.9.1 fields: {critical[:5]}")
 
@@ -543,7 +556,10 @@ class CovenantMetricsTests:
                 return True, f"{traces_validated} traces have detailed fields"
 
             if validation_errors:
-                return True, f"Some detailed fields missing (expected if trace_level < detailed): {validation_errors[0]}"
+                return (
+                    True,
+                    f"Some detailed fields missing (expected if trace_level < detailed): {validation_errors[0]}",
+                )
 
             return True, "Detailed field validation complete"
 
@@ -596,9 +612,11 @@ class CovenantMetricsTests:
                     traces_validated += 1
                 else:
                     # Check for v1.9.1 specific fields
-                    v191_fields = [f for f in missing_fields if any(
-                        k in f for k in ["thought_content", "raw_llm_response", "positive_moment"]
-                    )]
+                    v191_fields = [
+                        f
+                        for f in missing_fields
+                        if any(k in f for k in ["thought_content", "raw_llm_response", "positive_moment"])
+                    ]
                     if v191_fields:
                         validation_errors.append(f"{trace_file.name}: Missing v1.9.1 FULL fields: {v191_fields}")
 
@@ -924,7 +942,9 @@ class CovenantMetricsTests:
                     }
 
                     try:
-                        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                        async with session.post(
+                            url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+                        ) as response:
                             if response.status == 200:
                                 loaded.append(adapter_id)
                                 self.console.print(f"     [dim]Loaded {adapter_id} (trace_level={trace_level})[/dim]")
@@ -934,7 +954,9 @@ class CovenantMetricsTests:
                                 loaded.append(adapter_id)
                             else:
                                 error_text = await response.text()
-                                self.console.print(f"     [yellow]Warning: {adapter_id}: HTTP {response.status} - {error_text[:100]}[/yellow]")
+                                self.console.print(
+                                    f"     [yellow]Warning: {adapter_id}: HTTP {response.status} - {error_text[:100]}[/yellow]"
+                                )
                     except Exception as e:
                         self.console.print(f"     [yellow]Warning: {adapter_id}: {e}[/yellow]")
 

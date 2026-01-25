@@ -18,12 +18,7 @@ from ciris_adapters.mcp_common.protocol import (
     create_error_response,
     create_success_response,
 )
-from ciris_adapters.mcp_common.schemas import (
-    MCPListToolsResult,
-    MCPToolCallResult,
-    MCPToolInfo,
-    MCPToolInputSchema,
-)
+from ciris_adapters.mcp_common.schemas import MCPListToolsResult, MCPToolCallResult, MCPToolInfo, MCPToolInputSchema
 
 logger = logging.getLogger(__name__)
 
@@ -291,19 +286,23 @@ class MCPServerHandler:
             if not submitted:
                 # No handler available - message cannot be processed
                 result = MCPToolCallResult(
-                    content=[{
-                        "type": "text",
-                        "text": "Error: No message handler available. The MCP server may not be fully integrated with the runtime.",
-                    }],
+                    content=[
+                        {
+                            "type": "text",
+                            "text": "Error: No message handler available. The MCP server may not be fully integrated with the runtime.",
+                        }
+                    ],
                     isError=True,
                 )
                 return create_success_response(rid, result.model_dump())
 
             result = MCPToolCallResult(
-                content=[{
-                    "type": "text",
-                    "text": f"Message submitted to channel {channel_id}. Message ID: {message_id}",
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": f"Message submitted to channel {channel_id}. Message ID: {message_id}",
+                    }
+                ],
                 isError=False,
             )
             return create_success_response(rid, result.model_dump())
@@ -360,14 +359,18 @@ class MCPServerHandler:
                     formatted.append(str(msg))
 
             result = MCPToolCallResult(
-                content=[{
-                    "type": "text",
-                    "text": str({
-                        "channel_id": channel_id,
-                        "message_count": len(formatted),
-                        "messages": formatted,
-                    }),
-                }],
+                content=[
+                    {
+                        "type": "text",
+                        "text": str(
+                            {
+                                "channel_id": channel_id,
+                                "message_count": len(formatted),
+                                "messages": formatted,
+                            }
+                        ),
+                    }
+                ],
                 isError=False,
             )
             return create_success_response(rid, result.model_dump())

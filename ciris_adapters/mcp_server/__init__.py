@@ -14,7 +14,7 @@ import logging
 
 from .adapter import Adapter
 from .config import MCPServerConfig, MCPTransportType
-from .handlers import MCPServerHandler, TOOLS
+from .handlers import TOOLS, MCPServerHandler
 
 logger = logging.getLogger(__name__)
 

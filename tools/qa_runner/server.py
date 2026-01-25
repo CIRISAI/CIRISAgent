@@ -495,7 +495,9 @@ class APIServerManager:
 
         # Start mock logshipper to receive covenant traces (unless using live lens)
         if self.config.live_lens:
-            self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]")
+            self.console.print(
+                "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"
+            )
             self.console.print("[cyan]📊 Enabling covenant_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
@@ -604,7 +606,9 @@ class APIServerManager:
             env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
             # Set full trace level for comprehensive data capture
             env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "full_traces"
-            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture (full_traces)[/dim]")
+            self.console.print(
+                "[dim]Enabling covenant_metrics adapter with consent for trace capture (full_traces)[/dim]"
+            )
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
@@ -765,9 +769,7 @@ class APIServerManager:
                 self.console.print(
                     f"[red]❌ Authentication failed: {auth_response.status_code} - {auth_response.text[:100]}[/red]"
                 )
-                self.console.print(
-                    "[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]"
-                )
+                self.console.print("[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]")
                 return False  # Exit immediately on auth failure
         except Exception as e:
             self.console.print(f"[red]❌ Authentication error: {e}[/red]")

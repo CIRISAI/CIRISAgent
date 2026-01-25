@@ -605,7 +605,9 @@ class CovenantMetricsService:
             await self._send_events_batch(events_to_send)
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
-            logger.info(f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})")
+            logger.info(
+                f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})"
+            )
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
@@ -681,7 +683,7 @@ class CovenantMetricsService:
             payload = unified_key.get_registration_payload(description)
 
             # Store registered key ID for comparison during signing
-            self._registered_key_id = payload['key_id']
+            self._registered_key_id = payload["key_id"]
 
             url = f"{self._endpoint_url}/covenant/public-keys"
 
@@ -1042,7 +1044,9 @@ class CovenantMetricsService:
                 data["context_sources"] = event.get("context_sources") or snapshot.get("context_sources")
                 data["service_health"] = event.get("service_health") or snapshot.get("service_health")
                 data["agent_version"] = event.get("agent_version") or snapshot.get("agent_version")
-                data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get("circuit_breaker_status")
+                data["circuit_breaker_status"] = event.get("circuit_breaker_status") or snapshot.get(
+                    "circuit_breaker_status"
+                )
             # FULL: Add complete snapshot and context
             if is_full:
                 data["system_snapshot"] = _serialize(snapshot)
@@ -1171,8 +1175,12 @@ class CovenantMetricsService:
                 "thought_depth_current": event.get("thought_depth_current"),
                 "thought_depth_max": event.get("thought_depth_max"),
                 # Core epistemic metrics from epistemic_data (CRITICAL for CIRIS scoring)
-                "entropy_level": epistemic_data_obj.get("entropy_level") if isinstance(epistemic_data_obj, dict) else None,
-                "coherence_level": epistemic_data_obj.get("coherence_level") if isinstance(epistemic_data_obj, dict) else None,
+                "entropy_level": (
+                    epistemic_data_obj.get("entropy_level") if isinstance(epistemic_data_obj, dict) else None
+                ),
+                "coherence_level": (
+                    epistemic_data_obj.get("coherence_level") if isinstance(epistemic_data_obj, dict) else None
+                ),
                 # Entropy conscience (numeric)
                 "entropy_passed": event.get("entropy_passed"),
                 "entropy_score": event.get("entropy_score"),

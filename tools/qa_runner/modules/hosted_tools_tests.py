@@ -29,10 +29,7 @@ class HostedToolsTests:
         self.client = client
         self.console = console
         self.adapter_id = "hosted_tools_qa_test"
-        self.has_token = bool(
-            os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
-            or os.environ.get("GOOGLE_ID_TOKEN")
-        )
+        self.has_token = bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("GOOGLE_ID_TOKEN"))
 
         # Base URL for direct API calls
         self._base_url = getattr(client, "_base_url", "http://localhost:8080")
@@ -73,11 +70,13 @@ class HostedToolsTests:
 
         # Only continue if adapter loaded successfully
         if results[-1]["status"] != "✅ PASS":
-            results.append({
-                "test": "remaining_tests",
-                "status": "⚠️  SKIPPED",
-                "error": "Adapter load failed - skipping remaining tests",
-            })
+            results.append(
+                {
+                    "test": "remaining_tests",
+                    "status": "⚠️  SKIPPED",
+                    "error": "Adapter load failed - skipping remaining tests",
+                }
+            )
             await self._cleanup()
             return results
 
@@ -95,16 +94,20 @@ class HostedToolsTests:
             # Test 5: Web search execution
             results.append(await self._test_web_search())
         else:
-            results.append({
-                "test": "balance_check",
-                "status": "⚠️  SKIPPED",
-                "error": "No auth token - set CIRIS_BILLING_GOOGLE_ID_TOKEN",
-            })
-            results.append({
-                "test": "web_search",
-                "status": "⚠️  SKIPPED",
-                "error": "No auth token - set CIRIS_BILLING_GOOGLE_ID_TOKEN",
-            })
+            results.append(
+                {
+                    "test": "balance_check",
+                    "status": "⚠️  SKIPPED",
+                    "error": "No auth token - set CIRIS_BILLING_GOOGLE_ID_TOKEN",
+                }
+            )
+            results.append(
+                {
+                    "test": "web_search",
+                    "status": "⚠️  SKIPPED",
+                    "error": "No auth token - set CIRIS_BILLING_GOOGLE_ID_TOKEN",
+                }
+            )
 
         # Cleanup
         await self._cleanup()
@@ -319,7 +322,7 @@ class HostedToolsTests:
 
             # Use $tool command to trigger a balance-related check
             # The tool service should check balance internally
-            message = "$tool web_search q=\"test balance check\" count=1"
+            message = '$tool web_search q="test balance check" count=1'
             response = await self.client.agent.interact(message)
 
             await asyncio.sleep(3)

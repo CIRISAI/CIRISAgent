@@ -216,7 +216,7 @@ class MCPTests:
         # Verify tools were discovered (MCP SDK installed and server connected)
         tools = adapter_data.get("tools", [])
         mcp_tools = []
-        for t in (tools or []):
+        for t in tools or []:
             name = t.get("name", "") if isinstance(t, dict) else str(t)
             if name.startswith(f"mcp_{self._mcp_server_id}_"):
                 mcp_tools.append(name)
@@ -337,7 +337,9 @@ class MCPTests:
 
         # Verify TOOL action was executed via audit trail AFTER our interaction
         entry = await self._verify_audit_entry_after("tool", tool_name, before_interaction)
-        self.console.print(f"     [dim]qa_echo: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]")
+        self.console.print(
+            f"     [dim]qa_echo: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]"
+        )
 
     async def test_tool_qa_add(self) -> None:
         """Test qa_add tool execution via agent interaction."""
@@ -355,7 +357,9 @@ class MCPTests:
 
         # Verify TOOL action was executed AFTER our interaction
         entry = await self._verify_audit_entry_after("tool", tool_name, before_interaction)
-        self.console.print(f"     [dim]qa_add: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]")
+        self.console.print(
+            f"     [dim]qa_add: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]"
+        )
 
     async def test_tool_qa_get_time(self) -> None:
         """Test qa_get_time tool execution via agent interaction."""
@@ -373,7 +377,9 @@ class MCPTests:
 
         # Verify TOOL action was executed AFTER our interaction
         entry = await self._verify_audit_entry_after("tool", tool_name, before_interaction)
-        self.console.print(f"     [dim]qa_get_time: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]")
+        self.console.print(
+            f"     [dim]qa_get_time: TOOL action verified in audit (entry_id={entry.get('entry_id', 'unknown')})[/dim]"
+        )
 
     async def test_system_health(self) -> None:
         """Verify system is healthy before running MCP tests."""
@@ -1107,7 +1113,9 @@ class MCPTests:
                 timeout=30,
             )
             if unload_response.status_code not in (200, 404):
-                self.console.print(f"     [yellow]Warning: Failed to unload existing adapter: {unload_response.status_code}[/yellow]")
+                self.console.print(
+                    f"     [yellow]Warning: Failed to unload existing adapter: {unload_response.status_code}[/yellow]"
+                )
 
             # Small delay to allow cleanup
             await asyncio.sleep(0.5)
@@ -1317,9 +1325,7 @@ class MCPTests:
 
         # If we found entries but detected failures, report them
         if failure_errors:
-            raise ValueError(
-                f"Tool '{tool_name}' execution FAILED. Detected errors: {failure_errors[0]}"
-            )
+            raise ValueError(f"Tool '{tool_name}' execution FAILED. Detected errors: {failure_errors[0]}")
 
         # If we found entries but none had explicit success, be strict
         if found_entries:

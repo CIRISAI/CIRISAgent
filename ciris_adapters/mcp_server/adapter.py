@@ -114,10 +114,7 @@ class Adapter(Service):
         self._config.load_env_vars()
         self.adapter_id = f"mcp_server_{self._config.server_id}"
 
-        logger.info(
-            f"MCP Server configured: id={self._config.server_id}, "
-            f"transport={self._config.transport.value}"
-        )
+        logger.info(f"MCP Server configured: id={self._config.server_id}, " f"transport={self._config.transport.value}")
 
     def _get_request_id(self, message: MCPMessage) -> Union[str, int]:
         """Get request ID from message, defaulting to 0 if None."""
@@ -170,9 +167,7 @@ class Adapter(Service):
         loop = asyncio.get_event_loop()
         await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
-        writer_transport, writer_protocol = await loop.connect_write_pipe(
-            asyncio.streams.FlowControlMixin, sys.stdout
-        )
+        writer_transport, writer_protocol = await loop.connect_write_pipe(asyncio.streams.FlowControlMixin, sys.stdout)
         writer = asyncio.StreamWriter(writer_transport, writer_protocol, reader, loop)
 
         # For stdio transport, provide a default user_id when auth is not required
@@ -364,8 +359,7 @@ class Adapter(Service):
         protocol_version = params.get("protocolVersion", "2024-11-05")
 
         logger.info(
-            f"Client initializing: {client_info.get('name', 'unknown')} "
-            f"v{client_info.get('version', 'unknown')}"
+            f"Client initializing: {client_info.get('name', 'unknown')} " f"v{client_info.get('version', 'unknown')}"
         )
 
         server_caps = ServerCapabilities(

@@ -866,15 +866,15 @@ class QARunner:
         from .modules.covenant_metrics_tests import CovenantMetricsTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
         from .modules.mcp_tests import MCPTests
         from .modules.reddit_tests import RedditTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.system_messages_tests import SystemMessagesTests
-        from .modules.vision_tests import VisionTests
-        from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.utility_adapters_tests import UtilityAdaptersTests
+        from .modules.vision_tests import VisionTests
 
         all_passed = True
 

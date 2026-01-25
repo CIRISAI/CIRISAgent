@@ -5,11 +5,11 @@ from typing import Any, Dict, Optional, Tuple, cast
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)

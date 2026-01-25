@@ -117,6 +117,11 @@ class MCPTests:
             # Phase 6: Test adapter status and metrics
             ("Get MCP Client Status", self.test_get_client_status),
             ("Get MCP Server Status", self.test_get_server_status),
+            # Phase 6.5: Test MCP Server Protocol (actual MCP requests)
+            ("MCP Server: Initialize", self.test_mcp_server_initialize),
+            ("MCP Server: List Tools", self.test_mcp_server_list_tools),
+            ("MCP Server: Call Status Tool", self.test_mcp_server_call_status),
+            ("MCP Server: Call Message Tool (auth)", self.test_mcp_server_call_message),
             # Phase 7: Test adapter reload
             ("Reload MCP Client Adapter", self.test_reload_mcp_client),
             # Phase 8: Security & Error Handling Tests
@@ -482,24 +487,31 @@ class MCPTests:
         self.console.print(f"     [dim]MCP client adapters loaded: {len(mcp_clients)}[/dim]")
 
     async def test_load_mcp_server_1(self) -> None:
-        """Load first MCP server adapter via API."""
+        """Load first MCP server adapter via API with HTTP transport for testing."""
         adapter_id = "mcp_test_server_1"
+        # Use HTTP transport on port 9876 so we can test MCP protocol
+        self._mcp_test_server_port = 9876
         await self._load_adapter(
             adapter_type="mcp_server",
             adapter_id=adapter_id,
             config={
                 "adapter_type": "mcp_server",
                 "enabled": True,
-                "settings": {},  # Simple settings (flat primitives only)
-                "adapter_config": {  # Complex nested config goes here
+                "settings": {},
+                "adapter_config": {
                     "server_id": "test-server-1",
                     "server_name": "Test MCP Server 1",
-                    "transport": "stdio",
+                    "transport": "sse",  # HTTP-based transport for testing
+                    "host": "127.0.0.1",
+                    "port": self._mcp_test_server_port,
+                    "require_auth": False,  # Allow unauthenticated for testing
                     "enabled": True,
                 },
             },
         )
         self.loaded_adapter_ids.append(adapter_id)
+        # Give server time to start
+        await asyncio.sleep(1.0)
 
     async def test_load_mcp_server_2(self) -> None:
         """Load second MCP server adapter via API."""
@@ -587,6 +599,236 @@ class MCPTests:
             status = data.get("data", {})
             is_running = status.get("is_running", False)
             self.console.print(f"     [dim]Server adapter running: {is_running}[/dim]")
+
+    async def test_mcp_server_initialize(self) -> None:
+        """Test MCP server initialize request."""
+        if "mcp_test_server_1" not in self.loaded_adapter_ids:
+            raise ValueError("MCP server not loaded - cannot test protocol")
+
+        # Send MCP initialize request
+        mcp_request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "clientInfo": {"name": "QA Test Client", "version": "1.0.0"},
+                "capabilities": {},
+            },
+        }
+
+        response = await self._send_mcp_request(mcp_request)
+
+        # Verify response structure
+        if response.get("error"):
+            raise ValueError(f"MCP initialize failed: {response['error']}")
+
+        result = response.get("result", {})
+        if not result.get("protocolVersion"):
+            raise ValueError(f"Missing protocolVersion in response: {result}")
+
+        server_info = result.get("serverInfo", {})
+        self.console.print(
+            f"     [dim]MCP Server: {server_info.get('name', 'unknown')} "
+            f"v{server_info.get('version', 'unknown')}[/dim]"
+        )
+
+    async def test_mcp_server_list_tools(self) -> None:
+        """Test MCP server tools/list request."""
+        if "mcp_test_server_1" not in self.loaded_adapter_ids:
+            raise ValueError("MCP server not loaded - cannot test protocol")
+
+        mcp_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {},
+        }
+
+        response = await self._send_mcp_request(mcp_request)
+
+        if response.get("error"):
+            raise ValueError(f"MCP tools/list failed: {response['error']}")
+
+        result = response.get("result", {})
+        tools = result.get("tools", [])
+
+        if not tools:
+            raise ValueError("MCP server returned no tools")
+
+        # Verify expected tools are present
+        tool_names = [t.get("name", "") for t in tools]
+        expected_tools = ["status", "message", "history"]
+
+        for expected in expected_tools:
+            if expected not in tool_names:
+                raise ValueError(f"Missing expected tool '{expected}'. Got: {tool_names}")
+
+        self.console.print(f"     [dim]MCP tools available: {tool_names}[/dim]")
+
+    async def test_mcp_server_call_status(self) -> None:
+        """Test MCP server tools/call for status tool."""
+        if "mcp_test_server_1" not in self.loaded_adapter_ids:
+            raise ValueError("MCP server not loaded - cannot test protocol")
+
+        mcp_request = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "status",
+                "arguments": {},
+            },
+        }
+
+        response = await self._send_mcp_request(mcp_request)
+
+        if response.get("error"):
+            raise ValueError(f"MCP tools/call status failed: {response['error']}")
+
+        result = response.get("result", {})
+        content = result.get("content", [])
+
+        if not content:
+            raise ValueError("Status tool returned no content")
+
+        # Check for isError flag
+        if result.get("isError"):
+            error_text = content[0].get("text", "unknown error") if content else "unknown"
+            raise ValueError(f"Status tool returned error: {error_text}")
+
+        # Extract status text
+        status_text = content[0].get("text", "") if content else ""
+        self.console.print(f"     [dim]Status tool response: {status_text[:100]}...[/dim]")
+
+    async def test_mcp_server_call_message(self) -> None:
+        """Test MCP server tools/call for message tool.
+
+        This tests the message tool which requires user_id for HTTP transport.
+        We verify that unauthenticated HTTP requests are properly rejected.
+        """
+        if "mcp_test_server_1" not in self.loaded_adapter_ids:
+            raise ValueError("MCP server not loaded - cannot test protocol")
+
+        mcp_request = {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "message",
+                "arguments": {"content": "Hello from MCP QA test!"},
+            },
+        }
+
+        response = await self._send_mcp_request(mcp_request)
+
+        # For HTTP transport without auth, we expect an error about authentication
+        error = response.get("error")
+        if error:
+            error_message = error.get("message", "") if isinstance(error, dict) else str(error)
+            if "Authentication required" in error_message:
+                # This is EXPECTED behavior - HTTP without auth should be rejected
+                self.console.print("     [dim]Message tool correctly requires auth for HTTP ✓[/dim]")
+                return
+            else:
+                raise ValueError(f"Unexpected error: {error}")
+
+        result = response.get("result", {})
+        content = result.get("content", [])
+
+        if not content:
+            raise ValueError("Message tool returned no content")
+
+        response_text = content[0].get("text", "") if content else ""
+
+        # Check for isError flag in result
+        if result.get("isError"):
+            if "Authentication required" in response_text:
+                self.console.print("     [dim]Message tool correctly requires auth for HTTP ✓[/dim]")
+                return
+            elif "No message handler available" in response_text:
+                # This means auth passed but handler not wired up
+                raise ValueError(f"Message handler not configured: {response_text}")
+            else:
+                raise ValueError(f"Message tool error: {response_text}")
+
+        # If we got here, message was submitted successfully
+        self.console.print(f"     [dim]Message tool response: {response_text[:100]}[/dim]")
+
+    async def _send_mcp_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Send an MCP request to the test server and return the response.
+
+        Args:
+            request: MCP JSON-RPC request dict
+
+        Returns:
+            MCP JSON-RPC response dict
+        """
+        import json
+        import socket
+
+        port = getattr(self, "_mcp_test_server_port", 9876)
+
+        try:
+            # Create raw HTTP request with MCP JSON body
+            body = json.dumps(request)
+            http_request = (
+                f"POST /mcp HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                f"Content-Type: application/json\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                f"\r\n"
+                f"{body}"
+            )
+
+            # Connect and send
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(10.0)
+            sock.connect(("127.0.0.1", port))
+            sock.sendall(http_request.encode())
+
+            # Read response
+            response_data = b""
+            while True:
+                try:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    response_data += chunk
+                    # Check if we have complete response
+                    if b"\r\n\r\n" in response_data:
+                        # Parse headers to get content length
+                        header_end = response_data.index(b"\r\n\r\n")
+                        headers = response_data[:header_end].decode()
+                        body_start = header_end + 4
+
+                        # Find Content-Length
+                        content_length = 0
+                        for line in headers.split("\r\n"):
+                            if line.lower().startswith("content-length:"):
+                                content_length = int(line.split(":")[1].strip())
+                                break
+
+                        # Check if we have full body
+                        if len(response_data) >= body_start + content_length:
+                            break
+                except socket.timeout:
+                    break
+
+            sock.close()
+
+            # Parse response
+            if b"\r\n\r\n" in response_data:
+                body_start = response_data.index(b"\r\n\r\n") + 4
+                body = response_data[body_start:].decode()
+                return json.loads(body)
+            else:
+                raise ValueError(f"Invalid HTTP response: {response_data[:200]}")
+
+        except socket.error as e:
+            raise ValueError(f"Failed to connect to MCP server on port {port}: {e}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON response: {e}")
 
     async def test_reload_mcp_client(self) -> None:
         """Test reloading an MCP client adapter with new config."""

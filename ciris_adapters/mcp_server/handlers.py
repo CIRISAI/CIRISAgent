@@ -230,7 +230,12 @@ class MCPServerHandler:
         user_id: str,
         arguments: Dict[str, Any],
     ) -> MCPMessage:
-        """Execute message tool - send message to user's channel."""
+        """Execute message tool - send message to user's channel.
+
+        This tool allows MCP clients to send messages to the CIRIS agent.
+        The message is submitted through the runtime's message handler if available,
+        or queued for processing.
+        """
         content = arguments.get("content", "")
         if not content:
             result = MCPToolCallResult(
@@ -240,21 +245,16 @@ class MCPServerHandler:
             return create_success_response(rid, result.model_dump())
 
         try:
-            channel_id = self.get_user_channel(user_id)
-
-            if not self._communication:
-                result = MCPToolCallResult(
-                    content=[{"type": "text", "text": "Error: Communication service not available"}],
-                    isError=True,
-                )
-                return create_success_response(rid, result.model_dump())
-
-            # Create and submit the message
-            from ciris_engine.schemas.runtime.messages import IncomingMessage
             import uuid
 
+            channel_id = self.get_user_channel(user_id)
+            message_id = str(uuid.uuid4())
+
+            # Create the incoming message
+            from ciris_engine.schemas.runtime.messages import IncomingMessage
+
             message = IncomingMessage(
-                message_id=str(uuid.uuid4()),
+                message_id=message_id,
                 channel_id=channel_id,
                 author_id=user_id,
                 author_name=user_id,
@@ -263,13 +263,46 @@ class MCPServerHandler:
                 platform="mcp",
             )
 
-            # Submit through communication service
-            await self._communication.observe(message)
+            # Try to submit through various available handlers
+            submitted = False
+
+            # Option 1: Use runtime's message handler (API adapter pattern)
+            if self._runtime and hasattr(self._runtime, "on_message"):
+                await self._runtime.on_message(message)
+                submitted = True
+                logger.info(f"Message {message_id} submitted via runtime.on_message")
+
+            # Option 2: Use runtime's message observer if available
+            elif self._runtime and hasattr(self._runtime, "message_observer"):
+                observer = self._runtime.message_observer
+                if observer and hasattr(observer, "handle_incoming_message"):
+                    await observer.handle_incoming_message(message)
+                    submitted = True
+                    logger.info(f"Message {message_id} submitted via message_observer")
+
+            # Option 3: Use processor's message queue if available
+            elif self._runtime and hasattr(self._runtime, "processor"):
+                processor = self._runtime.processor
+                if processor and hasattr(processor, "submit_message"):
+                    await processor.submit_message(message)
+                    submitted = True
+                    logger.info(f"Message {message_id} submitted via processor")
+
+            if not submitted:
+                # No handler available - message cannot be processed
+                result = MCPToolCallResult(
+                    content=[{
+                        "type": "text",
+                        "text": "Error: No message handler available. The MCP server may not be fully integrated with the runtime.",
+                    }],
+                    isError=True,
+                )
+                return create_success_response(rid, result.model_dump())
 
             result = MCPToolCallResult(
                 content=[{
                     "type": "text",
-                    "text": f"Message submitted to channel {channel_id}. Message ID: {message.message_id}",
+                    "text": f"Message submitted to channel {channel_id}. Message ID: {message_id}",
                 }],
                 isError=False,
             )

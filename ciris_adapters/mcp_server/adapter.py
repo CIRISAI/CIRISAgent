@@ -175,6 +175,13 @@ class Adapter(Service):
         )
         writer = asyncio.StreamWriter(writer_transport, writer_protocol, reader, loop)
 
+        # For stdio transport, provide a default user_id when auth is not required
+        # This allows message/history tools to work for local stdio clients
+        stdio_user_id: Optional[str] = None
+        if not self._config.require_auth:
+            stdio_user_id = "stdio_user"
+            logger.info("Stdio transport: using default user 'stdio_user' (auth not required)")
+
         try:
             while not self._shutdown_event.is_set():
                 try:
@@ -183,7 +190,7 @@ class Adapter(Service):
                     if not line:
                         break
 
-                    response = await self._handle_message(line.decode().strip())
+                    response = await self._handle_message(line.decode().strip(), stdio_user_id)
 
                     if response:
                         writer.write((json.dumps(response.model_dump()) + "\n").encode())

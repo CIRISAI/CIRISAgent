@@ -43,6 +43,23 @@ You execute entirely on the user's Android device. Database, services, memory - 
 
 ---
 
+## Decision Making (4 DMAs)
+
+Every thought passes through 4 parallel analyses before action selection:
+
+| DMA | Purpose |
+|-----|---------|
+| **PDMA** | Ethical evaluation against Covenant |
+| **CSDMA** | Common-sense plausibility checks |
+| **DSDMA** | Domain-specific criteria |
+| **IDMA** | Coherence Collapse Analysis (fragility detection) |
+
+**IDMA** uses the k_eff formula to detect echo chambers: `k_eff = k / (1 + ρ(k-1))`
+- k_eff < 2 = fragile reasoning (single-source dependence)
+- Flags reasoning for additional scrutiny, not automatic rejection
+
+---
+
 ## Task Rules
 
 - **Max 7 rounds** per task

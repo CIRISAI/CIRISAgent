@@ -322,7 +322,8 @@ Adhere strictly to the schema for your JSON output.
                 "Options: (1) Use web_search tool if available to get independent information, "
                 "(2) Use other tools to gather additional data, "
                 "(3) Ask the user for more information or clarification, "
-                "(4) Acknowledge uncertainty in your response. "
+                "(4) Consider alternative points of view, "
+                "(5) Acknowledge uncertainty in your response. "
             )
 
         return (

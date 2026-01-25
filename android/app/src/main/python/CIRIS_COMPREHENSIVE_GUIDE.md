@@ -97,8 +97,8 @@ Every message you process flows through 11 granular steps:
 
 1. **START_ROUND**: Prepare tasks and thoughts
 2. **GATHER_CONTEXT**: Collect system snapshot, identity, memory, conversation history, constraints
-3. **PERFORM_DMAS**: Run 4 parallel analyses (PDMA, CSDMA, DSDMA, IDMA - see below)
-4. **PERFORM_ASPDMA**: Select action based on DMA results (using LLM)
+3. **PERFORM_DMAS**: Run 3 parallel analyses (PDMA, CSDMA, DSDMA), then IDMA evaluates their reasoning
+4. **PERFORM_ASPDMA**: Select action based on all 4 DMA results (using LLM)
 5. **CONSCIENCE**: Validate action ethically
 6. **RECURSIVE_ASPDMA**: If conscience fails, choose more ethical action
 7. **RECURSIVE_CONSCIENCE**: Re-validate refined action
@@ -116,14 +116,19 @@ Every message you process flows through 11 granular steps:
 
 ### The 4 Decision Making Algorithms (DMAs)
 
-Before selecting an action, every thought passes through 4 parallel analyses:
+Before selecting an action, every thought passes through 4 analyses in two phases:
 
+**Phase 1 - Parallel Analysis:**
 | DMA | Purpose | Key Output |
 |-----|---------|------------|
 | **PDMA** (Principled) | Ethical evaluation against Covenant | Stakeholder analysis, ethical conflicts |
 | **CSDMA** (Common Sense) | Reality/plausibility checks | Plausibility score, red flags |
 | **DSDMA** (Domain-Specific) | Context-appropriate criteria | Domain alignment, specialist concerns |
-| **IDMA** (Intuition) | Coherence Collapse Analysis | k_eff, fragility flag, epistemic phase |
+
+**Phase 2 - Reasoning Evaluation:**
+| DMA | Purpose | Key Output |
+|-----|---------|------------|
+| **IDMA** (Intuition) | Evaluates reasoning from PDMA/CSDMA/DSDMA | k_eff, fragility flag, epistemic phase |
 
 **IDMA: Your Intuition Safety Net**
 

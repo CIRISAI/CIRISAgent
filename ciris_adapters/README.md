@@ -10,9 +10,9 @@ This directory contains modular services that can be dynamically loaded into CIR
 | `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | `hosted_tools_tests.py` | ⏳ 2026-01-21 (60% - awaiting billing token) |
 | `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ✅ 2026-01-21 (100%) |
 | `home_assistant` | 1.0.0 | Enhanced Home Assistant integration with event detection | - | ❌ |
-| `mcp_client` | 1.0.0 | MCP client - connects CIRIS to external MCP servers | `mcp_tests.py` | ✅ 2026-01-21 (95.5%) |
+| `mcp_client` | 1.0.0 | MCP client - connects CIRIS to external MCP servers | `mcp_tests.py` | ✅ 2026-01-25 (100%) |
 | `mcp_common` | 1.0.0 | Shared utilities for MCP client and server adapters | - | N/A (library) |
-| `mcp_server` | 1.0.0 | MCP server - exposes CIRIS capabilities to external AI agents | `mcp_tests.py` | ✅ 2026-01-21 (95.5%) |
+| `mcp_server` | 1.0.0 | MCP server - exposes CIRIS capabilities to external AI agents | `mcp_tests.py` | ✅ 2026-01-25 (100%) |
 | `mock_llm` | 1.0.0 | Mock LLM service for testing - simulates AI responses | ✅ (built-in) | ✅ (test only) |
 | `navigation` | 1.0.0 | Navigation tool service using OpenStreetMap | `utility_adapters_tests.py` | ✅ 2026-01-21 (100%) |
 | `reddit` | 1.0.0 | Reddit adapter with tool, communication, and observation services | `reddit_tests.py` | ❌ (needs API keys) |
@@ -23,7 +23,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 
 1. **High Priority** (production use):
    - `ciris_covenant_metrics` ✅ - Live tested 2026-01-21
-   - `mcp_client` / `mcp_server` ✅ - Live tested 2026-01-21 (95.5%)
+   - `mcp_client` / `mcp_server` ✅ - Live tested 2026-01-25 (100%)
    - `external_data_sql` ✅ - Live tested 2026-01-21 (100%)
 
 2. **Medium Priority** (feature expansion):

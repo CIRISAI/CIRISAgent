@@ -605,7 +605,7 @@ class CovenantMetricsService:
             await self._send_events_batch(events_to_send)
             self._events_sent += len(events_to_send)
             self._last_send_time = datetime.now(timezone.utc)
-            logger.info(f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent})")
+            logger.info(f"✅ FLUSH SUCCESS: {len(events_to_send)} events sent (total: {self._events_sent}, level={self._trace_level.value})")
         except Exception as e:
             self._events_failed += len(events_to_send)
             logger.error(f"❌ FLUSH FAILED: {len(events_to_send)} events: {e}")
@@ -646,7 +646,7 @@ class CovenantMetricsService:
             payload["correlation_metadata"] = correlation_metadata
 
         url = f"{self._endpoint_url}/covenant/events"
-        logger.info(f"📡 POST {url} ({len(events)} events)")
+        logger.info(f"📡 POST {url} ({len(events)} events, trace_level={self._trace_level.value})")
 
         async with self._session.post(url, json=payload) as response:
             if response.status != 200:
@@ -978,6 +978,7 @@ class CovenantMetricsService:
         level = self._trace_level
         is_detailed = level in (TraceDetailLevel.DETAILED, TraceDetailLevel.FULL_TRACES)
         is_full = level == TraceDetailLevel.FULL_TRACES
+        logger.debug(f"[TRACE_EXTRACT] {event_type}: level={level.value}, is_detailed={is_detailed}, is_full={is_full}")
 
         def _serialize(obj: Any) -> Any:
             """Recursively serialize objects to JSON-safe format."""
@@ -1296,9 +1297,13 @@ class CovenantMetricsService:
         Args:
             trace: Completed trace to send
         """
+        trace_dict = trace.to_dict()
+        # Include trace_level in the trace itself for proper categorization
+        trace_dict["trace_level"] = self._trace_level.value
         trace_event = {
             "event_type": "complete_trace",
-            "trace": trace.to_dict(),
+            "trace": trace_dict,
+            "trace_level": self._trace_level.value,  # Also at event level
         }
         await self._queue_event(trace_event)
 

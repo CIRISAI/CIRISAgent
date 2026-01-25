@@ -10,7 +10,7 @@ This is the correct pattern - tools and communication are registered separately.
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
@@ -179,7 +179,7 @@ class HomeAssistantAdapter(Service):
             error=None,
         )
 
-    async def get_active_channels(self) -> List[dict]:
+    async def get_active_channels(self) -> List[Dict[str, Any]]:
         """Get active communication channels from HA communication service."""
         channels = []
         if self.communication_service and self._running:

@@ -1,10 +1,8 @@
 """
-MCP (Model Context Protocol) Modular Adapter for CIRIS.
+MCP (Model Context Protocol) Client Adapter for CIRIS.
 
-This adapter enables integration with MCP servers, providing:
-- Tool service integration (execute MCP tools) via ToolBus
-- Communication service integration (MCP resources as messages) via CommunicationBus
-- Wise Authority service integration (MCP prompts for guidance) via WiseBus
+This adapter enables integration with MCP servers as a pure tool service,
+providing tool execution capabilities via ToolBus.
 
 Security features implemented based on:
 - https://modelcontextprotocol.io/specification/draft/basic/security_best_practices
@@ -19,7 +17,6 @@ Features:
 - Rate limiting per server
 - Blocklist/allowlist for tools
 - Graph-based configuration for agent self-configuration
-- Dynamic bus binding reconfiguration
 """
 
 import logging
@@ -35,9 +32,7 @@ from .config import (
     MCPTransportType,
 )
 from .configurable import MCPClientConfigurableAdapter
-from .mcp_communication_service import MCPCommunicationService
 from .mcp_tool_service import MCPToolService
-from .mcp_wise_service import MCPWiseService
 from .schemas import MCPAdapterTelemetry, MCPBusBindingSchema
 from .schemas import MCPBusType as MCPBusTypeSchema
 from .schemas import MCPPermissionLevel as MCPPermissionLevelSchema
@@ -62,8 +57,6 @@ __all__ = [
     "MCPSecurityConfig",
     # Services
     "MCPToolService",
-    "MCPWiseService",
-    "MCPCommunicationService",
     # Security
     "MCPSecurityManager",
     "SecurityViolation",

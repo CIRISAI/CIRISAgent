@@ -106,10 +106,11 @@ class MCPToolService:
 
     def get_capabilities(self) -> Any:
         """Get service capabilities for registration."""
-        from ciris_engine.schemas.services.capabilities import ServiceCapabilities
+        from ciris_engine.schemas.services.core import ServiceCapabilities
 
         return ServiceCapabilities(
-            service_type=ServiceType.TOOL,
+            service_name="mcp_tool_service",
+            version="1.0.0",
             actions=[
                 "execute_tool",
                 "get_available_tools",
@@ -136,13 +137,19 @@ class MCPToolService:
         """
         client = self._mcp_clients.get(server_id)
         if not client:
+            logger.warning(f"[TOOL_DISCOVERY] No client found for server {server_id}")
             return
 
         try:
             # Call MCP list_tools
-            if hasattr(client, "list_tools"):
+            has_list_tools = hasattr(client, "list_tools")
+            logger.info(f"[TOOL_DISCOVERY] Server {server_id}: client type={type(client).__name__}, has_list_tools={has_list_tools}")
+
+            if has_list_tools:
+                logger.info(f"[TOOL_DISCOVERY] Calling client.list_tools() for server {server_id}")
                 response = await client.list_tools()
                 tools = response.tools if hasattr(response, "tools") else []
+                logger.info(f"[TOOL_DISCOVERY] Server {server_id} returned {len(tools)} tools from MCP")
 
                 self._tools_cache[server_id] = {}
 
@@ -234,15 +241,21 @@ class MCPToolService:
 
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get detailed information about all available tools."""
+        logger.info(f"[TOOL_DISCOVERY] get_all_tool_info called, {len(self._mcp_clients)} MCP clients registered")
+
         # Refresh caches if needed
         for server_id in self._mcp_clients:
+            logger.info(f"[TOOL_DISCOVERY] Checking cache for server {server_id}: in_cache={server_id in self._tools_cache}")
             if server_id not in self._tools_cache:
+                logger.info(f"[TOOL_DISCOVERY] Refreshing tools cache for server {server_id}")
                 await self._refresh_tools_cache(server_id)
 
-        all_tools = []
-        for server_tools in self._tools_cache.values():
+        all_tools: List[ToolInfo] = []
+        for server_id, server_tools in self._tools_cache.items():
+            logger.info(f"[TOOL_DISCOVERY] Server {server_id} has {len(server_tools)} cached tools")
             all_tools.extend(server_tools.values())
 
+        logger.info(f"[TOOL_DISCOVERY] Returning {len(all_tools)} total tools")
         return all_tools
 
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:

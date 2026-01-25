@@ -234,7 +234,8 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
         response_model: Type[BaseModel],
         max_tokens: int = 1024,
         temperature: float = 0.0,
-        **kwargs: Any,
+        thought_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Mock implementation of structured LLM call."""
         logger.debug(f"[DEBUG TIMING] MockLLMService.call_llm_structured called with response_model: {response_model}")
@@ -252,7 +253,6 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
                 response_model=response_model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                **kwargs,
             )
         except Exception as e:
             self._total_errors += 1

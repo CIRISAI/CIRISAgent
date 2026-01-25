@@ -496,6 +496,7 @@ class APIServerManager:
         # Start mock logshipper to receive covenant traces (unless using live lens)
         if self.config.live_lens:
             self.console.print("[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]")
+            self.console.print("[cyan]📊 Enabling covenant_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
             self.mock_logshipper = MockLogshipperServer(port=18080)
@@ -590,8 +591,8 @@ class APIServerManager:
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
         # Enable covenant_metrics adapter with consent for trace capture tests
-        # Note: Additional adapters for detailed/full trace levels are loaded via API in the tests
-        if any(m == QAModule.COVENANT_METRICS for m in self.modules):
+        # Also enable when --live-lens is used to send traces to production Lens
+        if any(m == QAModule.COVENANT_METRICS for m in self.modules) or self.config.live_lens:
             # Load base covenant_metrics adapter alongside the main adapter
             if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
@@ -601,7 +602,9 @@ class APIServerManager:
             env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
             env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
-            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture[/dim]")
+            # Set full trace level for comprehensive data capture
+            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "full_traces"
+            self.console.print("[dim]Enabling covenant_metrics adapter with consent for trace capture (full_traces)[/dim]")
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():

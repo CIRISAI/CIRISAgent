@@ -32,15 +32,16 @@ logger = logging.getLogger(__name__)
 
 # Optional mDNS discovery support
 try:
-    from zeroconf import ServiceBrowser, Zeroconf
+    from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
     ZEROCONF_AVAILABLE = True
 except ImportError:
     ZEROCONF_AVAILABLE = False
+    ServiceListener = object  # type: ignore[misc,assignment]
     logger.info("Zeroconf not available - mDNS discovery disabled")
 
 
-class HADiscoveryListener:
+class HADiscoveryListener(ServiceListener):
     """Zeroconf listener for Home Assistant instances."""
 
     def __init__(self) -> None:

@@ -1,15 +1,15 @@
 """
 MCP Server Request Handlers.
 
-Handlers for MCP protocol methods:
-- Tool listing and execution
-- Resource listing and reading
-- Prompt listing and retrieval
+Simple handlers exposing 3 tools:
+- status: Get agent status
+- message: Send a message to user's channel
+- history: Get message history from user's channel
 """
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from ciris_adapters.mcp_common.protocol import (
     MCPErrorCode,
@@ -19,645 +19,333 @@ from ciris_adapters.mcp_common.protocol import (
     create_success_response,
 )
 from ciris_adapters.mcp_common.schemas import (
-    MCPListPromptsResult,
-    MCPListResourcesResult,
     MCPListToolsResult,
-    MCPPromptGetResult,
-    MCPPromptInfo,
-    MCPPromptMessage,
-    MCPResourceContent,
-    MCPResourceInfo,
-    MCPResourceReadResult,
     MCPToolCallResult,
     MCPToolInfo,
     MCPToolInputSchema,
 )
 
-from .config import MCPServerExposureConfig
-
 logger = logging.getLogger(__name__)
 
 
-class MCPToolHandler:
-    """Handler for MCP tool-related requests."""
+# Tool definitions - these are the only 3 tools exposed
+TOOLS: List[MCPToolInfo] = [
+    MCPToolInfo(
+        name="status",
+        description="Get the current status of the CIRIS agent including cognitive state and health",
+        inputSchema=MCPToolInputSchema(
+            type="object",
+            properties={},
+            required=[],
+        ),
+    ),
+    MCPToolInfo(
+        name="message",
+        description="Send a message to the CIRIS agent and receive a response",
+        inputSchema=MCPToolInputSchema(
+            type="object",
+            properties={
+                "content": {
+                    "type": "string",
+                    "description": "The message content to send to the agent",
+                },
+            },
+            required=["content"],
+        ),
+    ),
+    MCPToolInfo(
+        name="history",
+        description="Get recent message history from your conversation with the agent",
+        inputSchema=MCPToolInputSchema(
+            type="object",
+            properties={
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of messages to return (default: 20)",
+                    "default": 20,
+                },
+            },
+            required=[],
+        ),
+    ),
+]
+
+
+class MCPServerHandler:
+    """Handler for MCP server requests.
+
+    Provides 3 simple tools:
+    - status: Agent status check
+    - message: Send message to user's channel
+    - history: Get message history
+    """
 
     def __init__(
         self,
-        exposure_config: MCPServerExposureConfig,
-        tool_bus: Optional[Any] = None,
+        runtime: Any,
+        communication_service: Optional[Any] = None,
     ) -> None:
-        """Initialize tool handler.
+        """Initialize handler.
 
         Args:
-            exposure_config: Exposure configuration
-            tool_bus: CIRIS ToolBus for executing tools
+            runtime: CIRIS runtime instance
+            communication_service: Communication service for messaging
         """
-        self._config = exposure_config
-        self._tool_bus = tool_bus
-        self._tools_cache: Dict[str, MCPToolInfo] = {}
+        self._runtime = runtime
+        self._communication = communication_service
+        self._user_channels: Dict[str, str] = {}  # user_id -> channel_id mapping
 
-    async def refresh_tools(self) -> None:
-        """Refresh available tools from ToolBus."""
-        if not self._tool_bus:
-            return
+    def set_user_channel(self, user_id: str, channel_id: str) -> None:
+        """Set the channel ID for an authenticated user.
 
-        try:
-            # Get tool services from bus
-            services = getattr(self._tool_bus, "service_registry", None)
-            if not services:
-                return
+        Args:
+            user_id: Authenticated user ID
+            channel_id: Channel ID (typically api_{user_id})
+        """
+        self._user_channels[user_id] = channel_id
 
-            # Get all tool info from registered services
-            from ciris_engine.schemas.runtime.enums import ServiceType
+    def get_user_channel(self, user_id: str) -> str:
+        """Get the channel ID for an authenticated user.
 
-            tool_services = services.get_services_by_type(ServiceType.TOOL)
+        Args:
+            user_id: Authenticated user ID
 
-            for service in tool_services:
-                if hasattr(service, "get_all_tool_info"):
-                    tool_infos = await service.get_all_tool_info()
-                    for tool_info in tool_infos:
-                        # Check exposure rules
-                        if not self._should_expose_tool(tool_info.name):
-                            continue
+        Returns:
+            Channel ID (defaults to api_{user_id} if not set)
+        """
+        return self._user_channels.get(user_id, f"api_{user_id}")
 
-                        # Convert to MCP format
-                        mcp_tool = MCPToolInfo(
-                            name=tool_info.name,
-                            description=tool_info.description,
-                            inputSchema=MCPToolInputSchema(
-                                type=tool_info.parameters.type,
-                                properties=tool_info.parameters.properties,
-                                required=tool_info.parameters.required,
-                            ),
-                        )
-                        self._tools_cache[tool_info.name] = mcp_tool
+    def _get_request_id(self, message: MCPMessage) -> Union[str, int]:
+        """Get request ID from message, defaulting to 0 if None."""
+        return message.id if message.id is not None else 0
 
-        except Exception as e:
-            logger.error(f"Failed to refresh tools: {e}")
-
-    def _should_expose_tool(self, tool_name: str) -> bool:
-        """Check if a tool should be exposed."""
-        if not self._config.expose_tools:
-            return False
-
-        # Check blocklist
-        if tool_name in self._config.tool_blocklist:
-            return False
-
-        # Check allowlist (if specified)
-        if self._config.tool_allowlist:
-            return tool_name in self._config.tool_allowlist
-
-        return True
-
-    def register_tool(
+    async def handle_request(
         self,
-        name: str,
-        description: str,
-        input_schema: Dict[str, Any],
-    ) -> None:
-        """Register a tool for exposure.
+        message: MCPMessage,
+        user_id: Optional[str] = None,
+    ) -> MCPMessage:
+        """Handle an incoming MCP request.
 
         Args:
-            name: Tool name
-            description: Tool description
-            input_schema: JSON Schema for input
-        """
-        if not self._should_expose_tool(name):
-            return
-
-        self._tools_cache[name] = MCPToolInfo(
-            name=name,
-            description=description,
-            inputSchema=MCPToolInputSchema(
-                type=input_schema.get("type", "object"),
-                properties=input_schema.get("properties", {}),
-                required=input_schema.get("required", []),
-            ),
-        )
-
-    async def handle_list_tools(self, request_id: Any) -> MCPMessage:
-        """Handle tools/list request.
-
-        Args:
-            request_id: Request ID
+            message: MCP request message
+            user_id: Authenticated user ID (required for message/history)
 
         Returns:
-            MCPMessage response
+            MCP response message
         """
-        await self.refresh_tools()
+        method = message.method
+        rid = self._get_request_id(message)
 
-        tools = list(self._tools_cache.values())
-        result = MCPListToolsResult(tools=tools)
+        if method == "tools/list":
+            return await self._handle_list_tools(message)
+        elif method == "tools/call":
+            return await self._handle_call_tool(message, user_id)
+        elif method == "ping":
+            return create_success_response(rid, {})
+        else:
+            return create_error_response(
+                rid,
+                MCPErrorCode.METHOD_NOT_FOUND,
+                f"Method not supported: {method}",
+            )
 
-        return create_success_response(request_id, result.model_dump())
+    async def _handle_list_tools(self, message: MCPMessage) -> MCPMessage:
+        """Handle tools/list request."""
+        rid = self._get_request_id(message)
+        result = MCPListToolsResult(tools=TOOLS)
+        return create_success_response(rid, result.model_dump())
 
-    async def handle_call_tool(self, request_id: Any, params: Dict[str, Any]) -> MCPMessage:
-        """Handle tools/call request.
-
-        Args:
-            request_id: Request ID
-            params: Call parameters (name, arguments)
-
-        Returns:
-            MCPMessage response
-        """
+    async def _handle_call_tool(
+        self,
+        message: MCPMessage,
+        user_id: Optional[str] = None,
+    ) -> MCPMessage:
+        """Handle tools/call request."""
+        rid = self._get_request_id(message)
+        params = message.params or {}
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
-        if not tool_name:
+        if tool_name == "status":
+            return await self._execute_status(rid)
+        elif tool_name == "message":
+            if not user_id:
+                return create_error_response(
+                    rid,
+                    MCPErrorCode.INVALID_REQUEST,
+                    "Authentication required for message tool",
+                )
+            return await self._execute_message(rid, user_id, arguments)
+        elif tool_name == "history":
+            if not user_id:
+                return create_error_response(
+                    rid,
+                    MCPErrorCode.INVALID_REQUEST,
+                    "Authentication required for history tool",
+                )
+            return await self._execute_history(rid, user_id, arguments)
+        else:
             return create_error_response(
-                request_id,
-                MCPErrorCode.INVALID_PARAMS,
-                "Missing tool name",
+                rid,
+                MCPErrorCode.INVALID_REQUEST,
+                f"Unknown tool: {tool_name}",
             )
 
-        # Check if tool is exposed
-        if tool_name not in self._tools_cache:
-            return create_error_response(
-                request_id,
-                MCPErrorCode.TOOL_NOT_FOUND,
-                f"Tool not found: {tool_name}",
+    async def _execute_status(self, rid: Union[str, int]) -> MCPMessage:
+        """Execute status tool - get agent status."""
+        try:
+            status: Dict[str, Any] = {
+                "healthy": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Get cognitive state if runtime available
+            if self._runtime:
+                if hasattr(self._runtime, "cognitive_state"):
+                    status["cognitive_state"] = str(self._runtime.cognitive_state)
+                if hasattr(self._runtime, "is_running"):
+                    status["is_running"] = self._runtime.is_running
+                if hasattr(self._runtime, "get_status"):
+                    runtime_status = await self._runtime.get_status()
+                    if isinstance(runtime_status, dict):
+                        status.update(runtime_status)
+
+            result = MCPToolCallResult(
+                content=[{"type": "text", "text": str(status)}],
+                isError=False,
             )
+            return create_success_response(rid, result.model_dump())
+
+        except Exception as e:
+            logger.error(f"Error executing status tool: {e}")
+            result = MCPToolCallResult(
+                content=[{"type": "text", "text": f"Error: {e}"}],
+                isError=True,
+            )
+            return create_success_response(rid, result.model_dump())
+
+    async def _execute_message(
+        self,
+        rid: Union[str, int],
+        user_id: str,
+        arguments: Dict[str, Any],
+    ) -> MCPMessage:
+        """Execute message tool - send message to user's channel."""
+        content = arguments.get("content", "")
+        if not content:
+            result = MCPToolCallResult(
+                content=[{"type": "text", "text": "Error: content is required"}],
+                isError=True,
+            )
+            return create_success_response(rid, result.model_dump())
 
         try:
-            # Execute via ToolBus
-            if self._tool_bus:
-                result = await self._tool_bus.execute_tool(
-                    tool_name=tool_name,
-                    parameters=arguments,
-                    handler_name="mcp_server",
-                )
+            channel_id = self.get_user_channel(user_id)
 
-                if result.success:
-                    content = [{"type": "text", "text": str(result.data)}]
-                    return create_success_response(
-                        request_id,
-                        MCPToolCallResult(content=content, isError=False).model_dump(),
-                    )
-                else:
-                    content = [{"type": "text", "text": result.error or "Tool execution failed"}]
-                    return create_success_response(
-                        request_id,
-                        MCPToolCallResult(content=content, isError=True).model_dump(),
-                    )
+            if not self._communication:
+                result = MCPToolCallResult(
+                    content=[{"type": "text", "text": "Error: Communication service not available"}],
+                    isError=True,
+                )
+                return create_success_response(rid, result.model_dump())
+
+            # Create and submit the message
+            from ciris_engine.schemas.runtime.messages import IncomingMessage
+            import uuid
+
+            message = IncomingMessage(
+                message_id=str(uuid.uuid4()),
+                channel_id=channel_id,
+                author_id=user_id,
+                author_name=user_id,
+                content=content,
+                timestamp=datetime.now(timezone.utc),
+                platform="mcp",
+            )
+
+            # Submit through communication service
+            await self._communication.observe(message)
+
+            result = MCPToolCallResult(
+                content=[{
+                    "type": "text",
+                    "text": f"Message submitted to channel {channel_id}. Message ID: {message.message_id}",
+                }],
+                isError=False,
+            )
+            return create_success_response(rid, result.model_dump())
+
+        except Exception as e:
+            logger.error(f"Error executing message tool: {e}")
+            result = MCPToolCallResult(
+                content=[{"type": "text", "text": f"Error: {e}"}],
+                isError=True,
+            )
+            return create_success_response(rid, result.model_dump())
+
+    async def _execute_history(
+        self,
+        rid: Union[str, int],
+        user_id: str,
+        arguments: Dict[str, Any],
+    ) -> MCPMessage:
+        """Execute history tool - get message history from user's channel."""
+        limit = arguments.get("limit", 20)
+
+        try:
+            channel_id = self.get_user_channel(user_id)
+
+            if not self._communication:
+                result = MCPToolCallResult(
+                    content=[{"type": "text", "text": "Error: Communication service not available"}],
+                    isError=True,
+                )
+                return create_success_response(rid, result.model_dump())
+
+            # Get message history
+            if hasattr(self._communication, "get_channel_history"):
+                history = await self._communication.get_channel_history(
+                    channel_id=channel_id,
+                    limit=limit,
+                )
+            elif hasattr(self._communication, "fetch_messages"):
+                history = await self._communication.fetch_messages(
+                    channel_id=channel_id,
+                    limit=limit,
+                )
             else:
-                # No tool bus - return mock response
-                content = [{"type": "text", "text": f"Mock result for {tool_name}"}]
-                return create_success_response(
-                    request_id,
-                    MCPToolCallResult(content=content, isError=False).model_dump(),
-                )
+                history = []
+
+            # Format history for response
+            formatted = []
+            for msg in history:
+                if hasattr(msg, "model_dump"):
+                    formatted.append(msg.model_dump())
+                elif isinstance(msg, dict):
+                    formatted.append(msg)
+                else:
+                    formatted.append(str(msg))
+
+            result = MCPToolCallResult(
+                content=[{
+                    "type": "text",
+                    "text": str({
+                        "channel_id": channel_id,
+                        "message_count": len(formatted),
+                        "messages": formatted,
+                    }),
+                }],
+                isError=False,
+            )
+            return create_success_response(rid, result.model_dump())
 
         except Exception as e:
-            logger.error(f"Tool execution error: {e}")
-            return create_error_response(
-                request_id,
-                MCPErrorCode.INTERNAL_ERROR,
-                str(e),
+            logger.error(f"Error executing history tool: {e}")
+            result = MCPToolCallResult(
+                content=[{"type": "text", "text": f"Error: {e}"}],
+                isError=True,
             )
+            return create_success_response(rid, result.model_dump())
 
 
-class MCPResourceHandler:
-    """Handler for MCP resource-related requests."""
-
-    def __init__(
-        self,
-        exposure_config: MCPServerExposureConfig,
-        runtime: Optional[Any] = None,
-    ) -> None:
-        """Initialize resource handler.
-
-        Args:
-            exposure_config: Exposure configuration
-            runtime: CIRIS runtime for accessing services
-        """
-        self._config = exposure_config
-        self._runtime = runtime
-        self._resources_cache: Dict[str, MCPResourceInfo] = {}
-
-        # Register default resources
-        self._register_default_resources()
-
-    def _register_default_resources(self) -> None:
-        """Register default CIRIS resources."""
-        # Status resource
-        self._resources_cache["ciris://status"] = MCPResourceInfo(
-            uri="ciris://status",
-            name="Agent Status",
-            description="Current CIRIS agent status and health",
-            mimeType="application/json",
-        )
-
-        # Health resource
-        self._resources_cache["ciris://health"] = MCPResourceInfo(
-            uri="ciris://health",
-            name="Health Check",
-            description="Agent health check information",
-            mimeType="application/json",
-        )
-
-        # Telemetry resource
-        self._resources_cache["ciris://telemetry"] = MCPResourceInfo(
-            uri="ciris://telemetry",
-            name="Telemetry",
-            description="Agent telemetry and metrics",
-            mimeType="application/json",
-        )
-
-    def _should_expose_resource(self, uri: str) -> bool:
-        """Check if a resource should be exposed."""
-        if not self._config.expose_resources:
-            return False
-
-        # Check blocklist
-        if uri in self._config.resource_blocklist:
-            return False
-
-        # Check allowlist (if specified)
-        if self._config.resource_allowlist:
-            return uri in self._config.resource_allowlist
-
-        return True
-
-    def register_resource(
-        self,
-        uri: str,
-        name: str,
-        description: str,
-        mime_type: str = "text/plain",
-    ) -> None:
-        """Register a resource for exposure.
-
-        Args:
-            uri: Resource URI
-            name: Resource name
-            description: Resource description
-            mime_type: MIME type
-        """
-        if not self._should_expose_resource(uri):
-            return
-
-        self._resources_cache[uri] = MCPResourceInfo(
-            uri=uri,
-            name=name,
-            description=description,
-            mimeType=mime_type,
-        )
-
-    async def handle_list_resources(self, request_id: Any) -> MCPMessage:
-        """Handle resources/list request.
-
-        Args:
-            request_id: Request ID
-
-        Returns:
-            MCPMessage response
-        """
-        resources = [r for r in self._resources_cache.values() if self._should_expose_resource(r.uri)]
-        result = MCPListResourcesResult(resources=resources)
-
-        return create_success_response(request_id, result.model_dump())
-
-    async def handle_read_resource(self, request_id: Any, params: Dict[str, Any]) -> MCPMessage:
-        """Handle resources/read request.
-
-        Args:
-            request_id: Request ID
-            params: Read parameters (uri)
-
-        Returns:
-            MCPMessage response
-        """
-        uri = params.get("uri")
-
-        if not uri:
-            return create_error_response(
-                request_id,
-                MCPErrorCode.INVALID_PARAMS,
-                "Missing resource URI",
-            )
-
-        if not self._should_expose_resource(uri):
-            return create_error_response(
-                request_id,
-                MCPErrorCode.RESOURCE_NOT_FOUND,
-                f"Resource not found: {uri}",
-            )
-
-        try:
-            content = await self._read_resource(uri)
-            result = MCPResourceReadResult(contents=[content])
-            return create_success_response(request_id, result.model_dump())
-
-        except Exception as e:
-            logger.error(f"Resource read error: {e}")
-            return create_error_response(
-                request_id,
-                MCPErrorCode.INTERNAL_ERROR,
-                str(e),
-            )
-
-    async def _read_resource(self, uri: str) -> MCPResourceContent:
-        """Read resource content.
-
-        Args:
-            uri: Resource URI
-
-        Returns:
-            MCPResourceContent
-        """
-        import json
-
-        if uri == "ciris://status":
-            status = await self._get_agent_status()
-            return MCPResourceContent(
-                uri=uri,
-                mimeType="application/json",
-                text=json.dumps(status, indent=2),
-            )
-
-        elif uri == "ciris://health":
-            health = await self._get_health()
-            return MCPResourceContent(
-                uri=uri,
-                mimeType="application/json",
-                text=json.dumps(health, indent=2),
-            )
-
-        elif uri == "ciris://telemetry":
-            telemetry = await self._get_telemetry()
-            return MCPResourceContent(
-                uri=uri,
-                mimeType="application/json",
-                text=json.dumps(telemetry, indent=2),
-            )
-
-        else:
-            return MCPResourceContent(
-                uri=uri,
-                mimeType="text/plain",
-                text=f"Resource content for {uri}",
-            )
-
-    async def _get_agent_status(self) -> Dict[str, Any]:
-        """Get agent status."""
-        if self._runtime and hasattr(self._runtime, "get_status"):
-            return await self._runtime.get_status()
-        return {
-            "status": "running",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-    async def _get_health(self) -> Dict[str, Any]:
-        """Get health information."""
-        return {
-            "healthy": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-    async def _get_telemetry(self) -> Dict[str, Any]:
-        """Get telemetry data."""
-        return {
-            "uptime_seconds": 0,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-
-class MCPPromptHandler:
-    """Handler for MCP prompt-related requests."""
-
-    def __init__(
-        self,
-        exposure_config: MCPServerExposureConfig,
-        wise_bus: Optional[Any] = None,
-    ) -> None:
-        """Initialize prompt handler.
-
-        Args:
-            exposure_config: Exposure configuration
-            wise_bus: CIRIS WiseBus for guidance
-        """
-        self._config = exposure_config
-        self._wise_bus = wise_bus
-        self._prompts_cache: Dict[str, MCPPromptInfo] = {}
-
-        # Register default prompts
-        self._register_default_prompts()
-
-    def _register_default_prompts(self) -> None:
-        """Register default CIRIS prompts."""
-        from ciris_adapters.mcp_common.schemas import MCPPromptArgument
-
-        # Guidance prompt
-        self._prompts_cache["guidance"] = MCPPromptInfo(
-            name="guidance",
-            description="Get ethical guidance from CIRIS wise authority",
-            arguments=[
-                MCPPromptArgument(
-                    name="question",
-                    description="The question or situation to get guidance on",
-                    required=True,
-                ),
-                MCPPromptArgument(
-                    name="context",
-                    description="Additional context for the guidance request",
-                    required=False,
-                ),
-            ],
-        )
-
-        # Ethical review prompt
-        self._prompts_cache["ethical_review"] = MCPPromptInfo(
-            name="ethical_review",
-            description="Request an ethical review of a proposed action",
-            arguments=[
-                MCPPromptArgument(
-                    name="action",
-                    description="The action to review",
-                    required=True,
-                ),
-                MCPPromptArgument(
-                    name="stakeholders",
-                    description="Affected stakeholders",
-                    required=False,
-                ),
-            ],
-        )
-
-    def _should_expose_prompt(self, name: str) -> bool:
-        """Check if a prompt should be exposed."""
-        if not self._config.expose_prompts:
-            return False
-
-        # Check blocklist
-        if name in self._config.prompt_blocklist:
-            return False
-
-        # Check allowlist (if specified)
-        if self._config.prompt_allowlist:
-            return name in self._config.prompt_allowlist
-
-        return True
-
-    def register_prompt(
-        self,
-        name: str,
-        description: str,
-        arguments: List[Dict[str, Any]],
-    ) -> None:
-        """Register a prompt for exposure.
-
-        Args:
-            name: Prompt name
-            description: Prompt description
-            arguments: Prompt arguments
-        """
-        if not self._should_expose_prompt(name):
-            return
-
-        from ciris_adapters.mcp_common.schemas import MCPPromptArgument
-
-        self._prompts_cache[name] = MCPPromptInfo(
-            name=name,
-            description=description,
-            arguments=[
-                MCPPromptArgument(
-                    name=arg.get("name", ""),
-                    description=arg.get("description"),
-                    required=arg.get("required", False),
-                )
-                for arg in arguments
-            ],
-        )
-
-    async def handle_list_prompts(self, request_id: Any) -> MCPMessage:
-        """Handle prompts/list request.
-
-        Args:
-            request_id: Request ID
-
-        Returns:
-            MCPMessage response
-        """
-        prompts = [p for p in self._prompts_cache.values() if self._should_expose_prompt(p.name)]
-        result = MCPListPromptsResult(prompts=prompts)
-
-        return create_success_response(request_id, result.model_dump())
-
-    async def handle_get_prompt(self, request_id: Any, params: Dict[str, Any]) -> MCPMessage:
-        """Handle prompts/get request.
-
-        Args:
-            request_id: Request ID
-            params: Get parameters (name, arguments)
-
-        Returns:
-            MCPMessage response
-        """
-        prompt_name = params.get("name")
-        arguments = params.get("arguments", {})
-
-        if not prompt_name:
-            return create_error_response(
-                request_id,
-                MCPErrorCode.INVALID_PARAMS,
-                "Missing prompt name",
-            )
-
-        if not self._should_expose_prompt(prompt_name):
-            return create_error_response(
-                request_id,
-                MCPErrorCode.PROMPT_NOT_FOUND,
-                f"Prompt not found: {prompt_name}",
-            )
-
-        try:
-            messages = await self._get_prompt_messages(prompt_name, arguments)
-            result = MCPPromptGetResult(messages=messages)
-            return create_success_response(request_id, result.model_dump())
-
-        except Exception as e:
-            logger.error(f"Prompt get error: {e}")
-            return create_error_response(
-                request_id,
-                MCPErrorCode.INTERNAL_ERROR,
-                str(e),
-            )
-
-    async def _get_prompt_messages(self, name: str, arguments: Dict[str, str]) -> List[MCPPromptMessage]:
-        """Get prompt messages.
-
-        Args:
-            name: Prompt name
-            arguments: Prompt arguments
-
-        Returns:
-            List of MCPPromptMessage
-        """
-        if name == "guidance":
-            question = arguments.get("question", "")
-            context = arguments.get("context", "")
-
-            # Try to get guidance from WiseBus
-            if self._wise_bus:
-                try:
-                    from ciris_engine.schemas.services.context import GuidanceContext
-
-                    guidance_context = GuidanceContext(
-                        thought_id=f"mcp_prompt_{id(arguments)}",
-                        task_id=f"mcp_task_{id(arguments)}",
-                        question=question,
-                        ethical_considerations=[],
-                        domain_context={"context": context} if context else {},
-                    )
-                    guidance = await self._wise_bus.fetch_guidance(guidance_context)
-                    if guidance:
-                        return [
-                            MCPPromptMessage(
-                                role="assistant",
-                                content={"type": "text", "text": guidance},
-                            )
-                        ]
-                except Exception as e:
-                    logger.warning(f"Failed to get guidance from WiseBus: {e}")
-
-            # Default response
-            return [
-                MCPPromptMessage(
-                    role="assistant",
-                    content={
-                        "type": "text",
-                        "text": f"Guidance for: {question}\n\nContext: {context or 'None provided'}",
-                    },
-                )
-            ]
-
-        elif name == "ethical_review":
-            action = arguments.get("action", "")
-            stakeholders = arguments.get("stakeholders", "")
-
-            return [
-                MCPPromptMessage(
-                    role="assistant",
-                    content={
-                        "type": "text",
-                        "text": f"Ethical review of action: {action}\n\nStakeholders: {stakeholders or 'Not specified'}",
-                    },
-                )
-            ]
-
-        else:
-            return [
-                MCPPromptMessage(
-                    role="assistant",
-                    content={"type": "text", "text": f"Response for prompt: {name}"},
-                )
-            ]
-
-
-__all__ = [
-    "MCPToolHandler",
-    "MCPResourceHandler",
-    "MCPPromptHandler",
-]
+__all__ = ["MCPServerHandler", "TOOLS"]

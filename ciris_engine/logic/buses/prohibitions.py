@@ -7,6 +7,11 @@ by their potential for harm and whether they could ever have legitimate
 specialized modules.
 
 NO KINGS: These prohibitions apply universally. No special overrides in main repo.
+
+ARCHITECTURAL INVARIANT: These prohibition sets are CODE-LEVEL constants.
+They cannot be modified by memory, learning, or runtime adaptation.
+Changes require code deployment and are subject to code review.
+This is intentional - ethics must NOT be plastic or learnable.
 """
 
 from enum import Enum

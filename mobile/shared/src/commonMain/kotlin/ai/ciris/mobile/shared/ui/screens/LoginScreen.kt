@@ -74,7 +74,7 @@ fun LoginScreen(
 
                 // Tagline
                 Text(
-                    text = "Your AI companion",
+                    text = "Ethical AI Assistant",
                     color = LoginColors.White.copy(alpha = 0.8f),
                     fontSize = 16.sp,
                     modifier = Modifier.padding(top = 4.dp)

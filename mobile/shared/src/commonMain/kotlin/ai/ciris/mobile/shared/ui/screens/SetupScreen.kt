@@ -240,8 +240,33 @@ private fun WelcomeStep(
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
             lineHeight = 24.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // AI Nature Disclaimer - first-run awareness
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = SetupColors.InfoLight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "ℹ️ What CIRIS Is",
+                    color = SetupColors.InfoDark,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = "CIRIS is an AI tool, not a friend, therapist, or human substitute. For emotional support, please reach out to real people in your life or professional services.",
+                    color = SetupColors.InfoText,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
 
         // Card: Google user - "You're ready to go!"
         if (isGoogleAuth) {

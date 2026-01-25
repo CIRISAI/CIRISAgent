@@ -28,7 +28,7 @@ Welcome! This guide explains CIRIS agents in simple terms for everyone.
 
 ## What is a CIRIS Agent?
 
-Think of a CIRIS agent as a helpful digital assistant with strong ethical principles. Like a thoughtful friend who:
+Think of a CIRIS agent as a helpful digital assistant with strong ethical principles. An AI tool that:
 - Always considers what's right and wrong before acting
 - Asks for help when unsure about important decisions
 - Remembers important things you share (with your permission)
@@ -135,11 +135,11 @@ If you need assistance:
 
 CIRIS agents are tools designed to help while protecting everyone's interests. They're powerful but bounded, helpful but humble, and always ready to defer to human wisdom when needed.
 
-You're always in control of your interactions, and your safety and privacy are paramount.
+You manage your own interactions, and your safety and privacy are paramount.
 
 ---
 
-*"Technology should empower, not overpower. CIRIS agents are designed to be helpful companions on your digital journey, not masters of it."*
+*"Technology should empower, not overpower. CIRIS agents are designed to be useful tools that respect your autonomy, not systems that control you."*
 
 ---
 

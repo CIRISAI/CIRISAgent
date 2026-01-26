@@ -370,6 +370,7 @@ def test_command(args) -> int:
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
+        keep_app_open=args.keep_open,
     )
 
     # Print config summary
@@ -539,6 +540,7 @@ Examples:
     test_parser.add_argument("--no-logcat", action="store_true", help="Don't capture logcat")
     test_parser.add_argument("--build", "-b", action="store_true", help="Build APK before running tests")
     test_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    test_parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
 
     args = parser.parse_args()
 

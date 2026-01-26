@@ -14,18 +14,16 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from .adb_helper import ADBHelper
-from .test_cases import (
+from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     CIRISAppConfig,
     TestReport,
     TestResult,
+    test_all_screens,
     test_app_launch,
     test_chat_interaction,
     test_full_flow,
     test_google_signin,
     test_local_login,
-    test_setup_wizard,
-    # Screen navigation tests (new in 1.9.2)
-    test_all_screens,
     test_screen_audit,
     test_screen_config,
     test_screen_consent,
@@ -34,6 +32,7 @@ from .test_cases import (
     test_screen_runtime,
     test_screen_services,
     test_screen_system,
+    test_setup_wizard,
 )
 from .ui_automator import UIAutomator
 
@@ -64,6 +63,7 @@ class MobileTestConfig:
     # Test settings
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."
     timeout: int = 300  # Total test timeout in seconds
+    keep_app_open: bool = False  # Don't force-stop app after tests
 
     # Output settings
     output_dir: str = "mobile_qa_reports"
@@ -218,9 +218,11 @@ class MobileTestRunner:
             self.logcat_process.terminate()
             self.logcat_process = None
 
-        # Force stop app
-        if self.adb:
+        # Force stop app (unless keep_app_open is set)
+        if self.adb and not self.config.keep_app_open:
             self.adb.force_stop_app(self.config.package_name)
+        elif self.config.keep_app_open:
+            print("      Keeping app open (--keep-open flag set)")
 
     def run_tests(self, tests: Optional[List[str]] = None) -> MobileTestSuite:
         """
@@ -383,6 +385,7 @@ def main():
     )
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
+    parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
 
     # Test account
     parser.add_argument(
@@ -423,6 +426,7 @@ def main():
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
+        keep_app_open=args.keep_open,
     )
 
     # Run tests

@@ -13,22 +13,14 @@ import ai.ciris.mobile.shared.platform.createSecureStorage
 import ai.ciris.mobile.shared.ui.screens.*
 import ai.ciris.mobile.shared.viewmodels.AdaptersViewModel
 import ai.ciris.mobile.shared.viewmodels.BillingViewModel
-import ai.ciris.mobile.shared.viewmodels.ConfigViewModel
-import ai.ciris.mobile.shared.viewmodels.ConsentViewModel
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
-import ai.ciris.mobile.shared.viewmodels.RuntimeViewModel
-import ai.ciris.mobile.shared.viewmodels.ServicesViewModel
 import ai.ciris.mobile.shared.viewmodels.SessionsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
-import ai.ciris.mobile.shared.viewmodels.SystemViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
-import ai.ciris.mobile.shared.viewmodels.AuditViewModel
-import ai.ciris.mobile.shared.viewmodels.LogsViewModel
-import ai.ciris.mobile.shared.viewmodels.MemoryViewModel
 import androidx.compose.foundation.layout.*
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
@@ -37,6 +29,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -263,30 +258,6 @@ fun CIRISApp(
     }
     val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
         WiseAuthorityViewModel(apiClient)
-    }
-    val auditViewModel: AuditViewModel = viewModel {
-        AuditViewModel(apiClient)
-    }
-    val logsViewModel: LogsViewModel = viewModel {
-        LogsViewModel(apiClient)
-    }
-    val memoryViewModel: MemoryViewModel = viewModel {
-        MemoryViewModel(apiClient)
-    }
-    val configViewModel: ConfigViewModel = viewModel {
-        ConfigViewModel(apiClient)
-    }
-    val consentViewModel: ConsentViewModel = viewModel {
-        ConsentViewModel(apiClient)
-    }
-    val systemViewModel: SystemViewModel = viewModel {
-        SystemViewModel(apiClient)
-    }
-    val servicesViewModel: ServicesViewModel = viewModel {
-        ServicesViewModel(apiClient)
-    }
-    val runtimeViewModel: RuntimeViewModel = viewModel {
-        RuntimeViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -580,13 +551,13 @@ fun CIRISApp(
                             onSessionsClick = { currentScreen = Screen.Sessions },
                             onAdaptersClick = { currentScreen = Screen.Adapters },
                             onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
+                            onServicesClick = { currentScreen = Screen.Services },
                             onAuditClick = { currentScreen = Screen.Audit },
                             onLogsClick = { currentScreen = Screen.Logs },
                             onMemoryClick = { currentScreen = Screen.Memory },
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
                             onSystemClick = { currentScreen = Screen.System },
-                            onServicesClick = { currentScreen = Screen.Services },
                             onRuntimeClick = { currentScreen = Screen.Runtime }
                         )
                     }
@@ -840,293 +811,22 @@ fun CIRISApp(
                 )
             }
 
-            Screen.Audit -> {
-                val auditState by auditViewModel.state.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Audit] Rendering audit screen: " +
-                        "entries=${auditState.entries.size}, total=${auditState.totalEntries}, " +
-                        "isLoading=${auditState.isLoading}")
-
-                AuditScreen(
-                    auditState = auditState,
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Audit] User triggered refresh")
-                        auditViewModel.refresh()
-                    },
-                    onLoadMore = {
-                        println("[CIRISApp][INFO][Screen.Audit] Loading more entries")
-                        auditViewModel.loadMore()
-                    },
-                    onFilterChange = { newFilter ->
-                        println("[CIRISApp][INFO][Screen.Audit] Filter changed: severity=${newFilter.severity}, outcome=${newFilter.outcome}")
-                        auditViewModel.updateFilter(newFilter)
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Audit] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
-                )
-            }
-
-            Screen.Logs -> {
-                val logsState by logsViewModel.state.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Logs] Rendering logs screen: " +
-                        "logs=${logsState.logs.size}, isLoading=${logsState.isLoading}, " +
-                        "autoScroll=${logsState.autoScroll}")
-
-                // Stop polling when leaving screen
-                DisposableEffect(Unit) {
-                    onDispose {
-                        println("[CIRISApp][INFO][Screen.Logs] Stopping log polling")
-                        logsViewModel.stopPolling()
-                    }
-                }
-
-                LogsScreen(
-                    logsState = logsState,
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Logs] User triggered refresh")
-                        logsViewModel.refresh()
-                    },
-                    onFilterChange = { newFilter ->
-                        println("[CIRISApp][INFO][Screen.Logs] Filter changed: level=${newFilter.level}, service=${newFilter.service}")
-                        logsViewModel.updateFilter(newFilter)
-                    },
-                    onSearchChange = { query ->
-                        logsViewModel.updateSearch(query)
-                    },
-                    onToggleAutoScroll = {
-                        logsViewModel.toggleAutoScroll()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Logs] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
-                )
-            }
-
-            Screen.Memory -> {
-                val memoryState by memoryViewModel.state.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Memory] Rendering memory screen: " +
-                        "nodes=${memoryState.timelineNodes.size}, results=${memoryState.searchResults.size}, " +
-                        "isLoading=${memoryState.isLoading}")
-
-                MemoryScreen(
-                    memoryState = memoryState,
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Memory] User triggered refresh")
-                        memoryViewModel.refresh()
-                    },
-                    onSearch = { query ->
-                        println("[CIRISApp][INFO][Screen.Memory] Search: $query")
-                        memoryViewModel.search(query)
-                    },
-                    onFilterChange = { newFilter ->
-                        println("[CIRISApp][INFO][Screen.Memory] Filter changed: scope=${newFilter.scope}, type=${newFilter.nodeType}")
-                        memoryViewModel.updateFilter(newFilter)
-                    },
-                    onNodeSelect = { nodeId ->
-                        println("[CIRISApp][INFO][Screen.Memory] Node selected: $nodeId")
-                        memoryViewModel.selectNode(nodeId)
-                    },
-                    onClearSelection = {
-                        memoryViewModel.clearSelection()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Memory] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
-                )
-            }
-
-            Screen.Config -> {
-                val configData by configViewModel.configData.collectAsState()
-                val isConfigLoading by configViewModel.isLoading.collectAsState()
-                val configSearchQuery by configViewModel.searchQuery.collectAsState()
-                val configSelectedCategory by configViewModel.selectedCategory.collectAsState()
-                val configExpandedSections by configViewModel.expandedSections.collectAsState()
-                val configError by configViewModel.error.collectAsState()
-                val configSuccess by configViewModel.successMessage.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Config] Rendering config screen: " +
-                        "sections=${configData.sections.size}, totalConfigs=${configData.totalConfigs}, " +
-                        "isLoading=$isConfigLoading")
-
-                // Log status/error messages
-                LaunchedEffect(configError) {
-                    if (configError != null) {
-                        println("[CIRISApp][WARN][Screen.Config] Error: $configError")
-                    }
-                }
-                LaunchedEffect(configSuccess) {
-                    if (configSuccess != null) {
-                        println("[CIRISApp][INFO][Screen.Config] Success: $configSuccess")
-                        configViewModel.clearSuccess()
-                    }
-                }
-
-                ConfigScreen(
-                    configData = configData,
-                    isLoading = isConfigLoading,
-                    searchQuery = configSearchQuery,
-                    selectedCategory = configSelectedCategory,
-                    expandedSections = configExpandedSections,
-                    onSearchQueryChange = { configViewModel.updateSearchQuery(it) },
-                    onCategorySelect = { configViewModel.selectCategory(it) },
-                    onToggleSection = { configViewModel.toggleSection(it) },
-                    onUpdateConfig = { key, value -> configViewModel.updateConfig(key, value) },
-                    onDeleteConfig = { configViewModel.deleteConfig(it) },
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Config] User triggered refresh")
-                        configViewModel.refresh()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Config] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
-                )
-            }
-
-            Screen.Consent -> {
-                val consentData by consentViewModel.consentData.collectAsState()
-                val isConsentLoading by consentViewModel.isLoading.collectAsState()
-                val consentError by consentViewModel.error.collectAsState()
-                val consentSuccess by consentViewModel.successMessage.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Consent] Rendering consent screen: " +
-                        "hasConsent=${consentData.hasConsent}, stream=${consentData.currentStream}, " +
-                        "isLoading=$isConsentLoading")
-
-                // Log status/error messages
-                LaunchedEffect(consentError) {
-                    if (consentError != null) {
-                        println("[CIRISApp][WARN][Screen.Consent] Error: $consentError")
-                    }
-                }
-                LaunchedEffect(consentSuccess) {
-                    if (consentSuccess != null) {
-                        println("[CIRISApp][INFO][Screen.Consent] Success: $consentSuccess")
-                        consentViewModel.clearSuccess()
-                    }
-                }
-
-                ConsentScreen(
-                    consentData = consentData,
-                    isLoading = isConsentLoading,
-                    onStreamSelect = { stream ->
-                        println("[CIRISApp][INFO][Screen.Consent] Changing stream to: $stream")
-                        consentViewModel.changeStream(stream)
-                    },
-                    onRequestPartnership = {
-                        println("[CIRISApp][INFO][Screen.Consent] Requesting partnership")
-                        consentViewModel.requestPartnership()
-                    },
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Consent] User triggered refresh")
-                        consentViewModel.refresh()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Consent] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
-                )
-            }
-
-            Screen.System -> {
-                val systemData by systemViewModel.systemData.collectAsState()
-                val isSystemLoading by systemViewModel.isLoading.collectAsState()
-                val systemError by systemViewModel.error.collectAsState()
-                val systemSuccess by systemViewModel.successMessage.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.System] Rendering system screen: " +
-                        "health=${systemData.health}, state=${systemData.cognitiveState}, " +
-                        "isLoading=$isSystemLoading")
-
-                // Start polling when screen is visible
-                DisposableEffect(Unit) {
-                    println("[CIRISApp][INFO][Screen.System] Starting system polling")
-                    systemViewModel.startPolling()
-                    onDispose {
-                        println("[CIRISApp][INFO][Screen.System] Stopping system polling")
-                        systemViewModel.stopPolling()
             Screen.Services -> {
-                val servicesData by servicesViewModel.servicesData.collectAsState()
-                val isServicesLoading by servicesViewModel.isLoading.collectAsState()
-                val servicesError by servicesViewModel.error.collectAsState()
-                val servicesStatus by servicesViewModel.statusMessage.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Services] Rendering services screen: " +
-                        "total=${servicesData.totalServices}, healthy=${servicesData.healthyServices}, " +
-                        "isLoading=$isServicesLoading")
-
-                // Start polling when screen is visible
-                DisposableEffect(Unit) {
-                    println("[CIRISApp][INFO][Screen.Services] Starting services polling")
-                    servicesViewModel.startPolling()
-                    onDispose {
-                        println("[CIRISApp][INFO][Screen.Services] Stopping services polling")
-                        servicesViewModel.stopPolling()
-                    }
-                }
-
-                // Log status/error messages
-                LaunchedEffect(systemError) {
-                    if (systemError != null) {
-                        println("[CIRISApp][WARN][Screen.System] Error: $systemError")
-                    }
-                }
-                LaunchedEffect(systemSuccess) {
-                    if (systemSuccess != null) {
-                        println("[CIRISApp][INFO][Screen.System] Success: $systemSuccess")
-                        systemViewModel.clearSuccess()
-                    }
-                }
-
-                SystemScreen(
-                    systemData = systemData,
-                    isLoading = isSystemLoading,
-                    onPauseRuntime = {
-                        println("[CIRISApp][INFO][Screen.System] Pausing runtime")
-                        systemViewModel.pauseRuntime()
-                    },
-                    onResumeRuntime = {
-                        println("[CIRISApp][INFO][Screen.System] Resuming runtime")
-                        systemViewModel.resumeRuntime()
-                    },
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.System] User triggered refresh")
-                        systemViewModel.refresh()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.System] Navigating back to Interact")
-                LaunchedEffect(servicesError) {
-                    if (servicesError != null) {
-                        println("[CIRISApp][WARN][Screen.Services] Error: $servicesError")
-                    }
-                }
-                LaunchedEffect(servicesStatus) {
-                    if (servicesStatus != null) {
-                        println("[CIRISApp][INFO][Screen.Services] Status: $servicesStatus")
-                        servicesViewModel.clearStatus()
-                    }
-                }
+                // TODO: Implement ServicesViewModel for full functionality
+                // For now, show the screen with placeholder data
+                println("[CIRISApp][DEBUG][Screen.Services] Rendering services screen (stub)")
 
                 ServicesScreen(
-                    servicesData = servicesData,
-                    isLoading = isServicesLoading,
+                    servicesData = ServicesData(),
+                    isLoading = false,
                     onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Services] User triggered refresh")
-                        servicesViewModel.refresh()
+                        println("[CIRISApp][INFO][Screen.Services] User triggered refresh (stub)")
                     },
                     onDiagnose = {
-                        println("[CIRISApp][INFO][Screen.Services] Running diagnostics")
-                        servicesViewModel.runDiagnostics()
+                        println("[CIRISApp][INFO][Screen.Services] User triggered diagnose (stub)")
                     },
                     onResetCircuitBreakers = { serviceType ->
-                        println("[CIRISApp][INFO][Screen.Services] Resetting circuit breakers: $serviceType")
-                        servicesViewModel.resetCircuitBreakers(serviceType)
+                        println("[CIRISApp][INFO][Screen.Services] Reset circuit breakers: $serviceType (stub)")
                     },
                     onNavigateBack = {
                         println("[CIRISApp][INFO][Screen.Services] Navigating back to Interact")
@@ -1135,64 +835,95 @@ fun CIRISApp(
                 )
             }
 
+            Screen.Audit -> {
+                println("[CIRISApp][DEBUG][Screen.Audit] Rendering audit screen (stub)")
+                AuditScreen(
+                    auditState = AuditScreenState(),
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Audit] Refresh (stub)") },
+                    onLoadMore = { println("[CIRISApp][INFO][Screen.Audit] Load more (stub)") },
+                    onFilterChange = { println("[CIRISApp][INFO][Screen.Audit] Filter change (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.Logs -> {
+                println("[CIRISApp][DEBUG][Screen.Logs] Rendering logs screen (stub)")
+                LogsScreen(
+                    logsState = LogsScreenState(),
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Logs] Refresh (stub)") },
+                    onFilterChange = { println("[CIRISApp][INFO][Screen.Logs] Filter change (stub)") },
+                    onSearchChange = { println("[CIRISApp][INFO][Screen.Logs] Search change (stub)") },
+                    onToggleAutoScroll = { println("[CIRISApp][INFO][Screen.Logs] Toggle auto-scroll (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.Memory -> {
+                println("[CIRISApp][DEBUG][Screen.Memory] Rendering memory screen (stub)")
+                MemoryScreen(
+                    memoryState = MemoryScreenState(),
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Memory] Refresh (stub)") },
+                    onSearch = { println("[CIRISApp][INFO][Screen.Memory] Search (stub)") },
+                    onFilterChange = { println("[CIRISApp][INFO][Screen.Memory] Filter change (stub)") },
+                    onNodeSelect = { println("[CIRISApp][INFO][Screen.Memory] Node select (stub)") },
+                    onClearSelection = { println("[CIRISApp][INFO][Screen.Memory] Clear selection (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.Config -> {
+                println("[CIRISApp][DEBUG][Screen.Config] Rendering config screen (stub)")
+                ConfigScreen(
+                    configData = ConfigScreenData(),
+                    isLoading = false,
+                    searchQuery = "",
+                    selectedCategory = null,
+                    expandedSections = emptySet(),
+                    onSearchQueryChange = { println("[CIRISApp][INFO][Screen.Config] Search change (stub)") },
+                    onCategorySelect = { println("[CIRISApp][INFO][Screen.Config] Category select (stub)") },
+                    onToggleSection = { println("[CIRISApp][INFO][Screen.Config] Toggle section (stub)") },
+                    onUpdateConfig = { _, _ -> println("[CIRISApp][INFO][Screen.Config] Update config (stub)") },
+                    onDeleteConfig = { println("[CIRISApp][INFO][Screen.Config] Delete config (stub)") },
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Config] Refresh (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.Consent -> {
+                println("[CIRISApp][DEBUG][Screen.Consent] Rendering consent screen (stub)")
+                ConsentScreen(
+                    consentData = ConsentScreenData(),
+                    isLoading = false,
+                    onStreamSelect = { println("[CIRISApp][INFO][Screen.Consent] Stream select (stub)") },
+                    onRequestPartnership = { println("[CIRISApp][INFO][Screen.Consent] Request partnership (stub)") },
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Consent] Refresh (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
+            Screen.System -> {
+                println("[CIRISApp][DEBUG][Screen.System] Rendering system screen (stub)")
+                SystemScreen(
+                    systemData = SystemScreenData(),
+                    isLoading = false,
+                    onPauseRuntime = { println("[CIRISApp][INFO][Screen.System] Pause (stub)") },
+                    onResumeRuntime = { println("[CIRISApp][INFO][Screen.System] Resume (stub)") },
+                    onRefresh = { println("[CIRISApp][INFO][Screen.System] Refresh (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
+                )
+            }
+
             Screen.Runtime -> {
-                val runtimeData by runtimeViewModel.runtimeData.collectAsState()
-                val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
-                val isRuntimeAdmin by runtimeViewModel.isAdmin.collectAsState()
-                val runtimeError by runtimeViewModel.error.collectAsState()
-                val runtimeStatus by runtimeViewModel.statusMessage.collectAsState()
-
-                println("[CIRISApp][DEBUG][Screen.Runtime] Rendering runtime screen: " +
-                        "state=${runtimeData.processorState}, cognitive=${runtimeData.cognitiveState}, " +
-                        "queue=${runtimeData.queueDepth}, isLoading=$isRuntimeLoading")
-
-                // Start polling when screen is visible
-                DisposableEffect(Unit) {
-                    println("[CIRISApp][INFO][Screen.Runtime] Starting runtime polling")
-                    runtimeViewModel.startPolling()
-                    onDispose {
-                        println("[CIRISApp][INFO][Screen.Runtime] Stopping runtime polling")
-                        runtimeViewModel.stopPolling()
-                    }
-                }
-
-                // Log status/error messages
-                LaunchedEffect(runtimeError) {
-                    if (runtimeError != null) {
-                        println("[CIRISApp][WARN][Screen.Runtime] Error: $runtimeError")
-                    }
-                }
-                LaunchedEffect(runtimeStatus) {
-                    if (runtimeStatus != null) {
-                        println("[CIRISApp][INFO][Screen.Runtime] Status: $runtimeStatus")
-                        runtimeViewModel.clearStatus()
-                    }
-                }
-
+                println("[CIRISApp][DEBUG][Screen.Runtime] Rendering runtime screen (stub)")
                 RuntimeScreen(
-                    runtimeData = runtimeData,
-                    isLoading = isRuntimeLoading,
-                    isAdmin = isRuntimeAdmin,
-                    onPause = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Pausing runtime")
-                        runtimeViewModel.pauseRuntime()
-                    },
-                    onResume = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Resuming runtime")
-                        runtimeViewModel.resumeRuntime()
-                    },
-                    onSingleStep = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Executing single step")
-                        runtimeViewModel.singleStep()
-                    },
-                    onRefresh = {
-                        println("[CIRISApp][INFO][Screen.Runtime] User triggered refresh")
-                        runtimeViewModel.refresh()
-                    },
-                    onNavigateBack = {
-                        println("[CIRISApp][INFO][Screen.Runtime] Navigating back to Interact")
-                        currentScreen = Screen.Interact
-                    }
+                    runtimeData = RuntimeData(),
+                    isLoading = false,
+                    isAdmin = true,
+                    onPause = { println("[CIRISApp][INFO][Screen.Runtime] Pause (stub)") },
+                    onResume = { println("[CIRISApp][INFO][Screen.Runtime] Resume (stub)") },
+                    onSingleStep = { println("[CIRISApp][INFO][Screen.Runtime] Single step (stub)") },
+                    onRefresh = { println("[CIRISApp][INFO][Screen.Runtime] Refresh (stub)") },
+                    onNavigateBack = { currentScreen = Screen.Interact }
                 )
             }
         }
@@ -1237,13 +968,13 @@ private fun CIRISTopBar(
     onSessionsClick: () -> Unit = {},
     onAdaptersClick: () -> Unit = {},
     onWiseAuthorityClick: () -> Unit = {},
+    onServicesClick: () -> Unit = {},
     onAuditClick: () -> Unit = {},
     onLogsClick: () -> Unit = {},
     onMemoryClick: () -> Unit = {},
     onConfigClick: () -> Unit = {},
     onConsentClick: () -> Unit = {},
-    onSystemClick: () -> Unit = {}
-    onServicesClick: () -> Unit = {},
+    onSystemClick: () -> Unit = {},
     onRuntimeClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -1338,6 +1069,19 @@ private fun CIRISTopBar(
                         }
                     )
                     DropdownMenuItem(
+                        text = { Text("Services") },
+                        onClick = {
+                            showMenu = false
+                            onServicesClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Build,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
                         text = { Text("Audit Trail") },
                         onClick = {
                             showMenu = false
@@ -1345,7 +1089,7 @@ private fun CIRISTopBar(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Info,
+                                imageVector = Icons.Default.List,
                                 contentDescription = null
                             )
                         }
@@ -1358,7 +1102,7 @@ private fun CIRISTopBar(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Info,
+                                imageVector = Icons.Default.List,
                                 contentDescription = null
                             )
                         }
@@ -1397,7 +1141,7 @@ private fun CIRISTopBar(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Info,
+                                imageVector = Icons.Default.Check,
                                 contentDescription = null
                             )
                         }
@@ -1407,14 +1151,10 @@ private fun CIRISTopBar(
                         onClick = {
                             showMenu = false
                             onSystemClick()
-                        text = { Text("Services") },
-                        onClick = {
-                            showMenu = false
-                            onServicesClick()
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Build,
+                                imageVector = Icons.Default.Info,
                                 contentDescription = null
                             )
                         }
@@ -1427,7 +1167,7 @@ private fun CIRISTopBar(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Settings,
+                                imageVector = Icons.Default.PlayArrow,
                                 contentDescription = null
                             )
                         }
@@ -1456,12 +1196,12 @@ private sealed class Screen {
     object Sessions : Screen()
     object Adapters : Screen()
     object WiseAuthority : Screen()
+    object Services : Screen()
     object Audit : Screen()
     object Logs : Screen()
     object Memory : Screen()
     object Config : Screen()
     object Consent : Screen()
     object System : Screen()
-    object Services : Screen()
     object Runtime : Screen()
 }

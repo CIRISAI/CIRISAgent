@@ -16,6 +16,8 @@ import ai.ciris.mobile.shared.viewmodels.BillingViewModel
 import ai.ciris.mobile.shared.viewmodels.ConfigViewModel
 import ai.ciris.mobile.shared.viewmodels.ConsentViewModel
 import ai.ciris.mobile.shared.viewmodels.InteractViewModel
+import ai.ciris.mobile.shared.viewmodels.RuntimeViewModel
+import ai.ciris.mobile.shared.viewmodels.ServicesViewModel
 import ai.ciris.mobile.shared.viewmodels.SessionsViewModel
 import ai.ciris.mobile.shared.viewmodels.SettingsViewModel
 import ai.ciris.mobile.shared.viewmodels.SetupViewModel
@@ -279,6 +281,12 @@ fun CIRISApp(
     }
     val systemViewModel: SystemViewModel = viewModel {
         SystemViewModel(apiClient)
+    }
+    val servicesViewModel: ServicesViewModel = viewModel {
+        ServicesViewModel(apiClient)
+    }
+    val runtimeViewModel: RuntimeViewModel = viewModel {
+        RuntimeViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -577,7 +585,9 @@ fun CIRISApp(
                             onMemoryClick = { currentScreen = Screen.Memory },
                             onConfigClick = { currentScreen = Screen.Config },
                             onConsentClick = { currentScreen = Screen.Consent },
-                            onSystemClick = { currentScreen = Screen.System }
+                            onSystemClick = { currentScreen = Screen.System },
+                            onServicesClick = { currentScreen = Screen.Services },
+                            onRuntimeClick = { currentScreen = Screen.Runtime }
                         )
                     }
                 ) { paddingValues ->
@@ -1041,6 +1051,23 @@ fun CIRISApp(
                     onDispose {
                         println("[CIRISApp][INFO][Screen.System] Stopping system polling")
                         systemViewModel.stopPolling()
+            Screen.Services -> {
+                val servicesData by servicesViewModel.servicesData.collectAsState()
+                val isServicesLoading by servicesViewModel.isLoading.collectAsState()
+                val servicesError by servicesViewModel.error.collectAsState()
+                val servicesStatus by servicesViewModel.statusMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Services] Rendering services screen: " +
+                        "total=${servicesData.totalServices}, healthy=${servicesData.healthyServices}, " +
+                        "isLoading=$isServicesLoading")
+
+                // Start polling when screen is visible
+                DisposableEffect(Unit) {
+                    println("[CIRISApp][INFO][Screen.Services] Starting services polling")
+                    servicesViewModel.startPolling()
+                    onDispose {
+                        println("[CIRISApp][INFO][Screen.Services] Stopping services polling")
+                        servicesViewModel.stopPolling()
                     }
                 }
 
@@ -1074,6 +1101,96 @@ fun CIRISApp(
                     },
                     onNavigateBack = {
                         println("[CIRISApp][INFO][Screen.System] Navigating back to Interact")
+                LaunchedEffect(servicesError) {
+                    if (servicesError != null) {
+                        println("[CIRISApp][WARN][Screen.Services] Error: $servicesError")
+                    }
+                }
+                LaunchedEffect(servicesStatus) {
+                    if (servicesStatus != null) {
+                        println("[CIRISApp][INFO][Screen.Services] Status: $servicesStatus")
+                        servicesViewModel.clearStatus()
+                    }
+                }
+
+                ServicesScreen(
+                    servicesData = servicesData,
+                    isLoading = isServicesLoading,
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Services] User triggered refresh")
+                        servicesViewModel.refresh()
+                    },
+                    onDiagnose = {
+                        println("[CIRISApp][INFO][Screen.Services] Running diagnostics")
+                        servicesViewModel.runDiagnostics()
+                    },
+                    onResetCircuitBreakers = { serviceType ->
+                        println("[CIRISApp][INFO][Screen.Services] Resetting circuit breakers: $serviceType")
+                        servicesViewModel.resetCircuitBreakers(serviceType)
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Services] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.Runtime -> {
+                val runtimeData by runtimeViewModel.runtimeData.collectAsState()
+                val isRuntimeLoading by runtimeViewModel.isLoading.collectAsState()
+                val isRuntimeAdmin by runtimeViewModel.isAdmin.collectAsState()
+                val runtimeError by runtimeViewModel.error.collectAsState()
+                val runtimeStatus by runtimeViewModel.statusMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Runtime] Rendering runtime screen: " +
+                        "state=${runtimeData.processorState}, cognitive=${runtimeData.cognitiveState}, " +
+                        "queue=${runtimeData.queueDepth}, isLoading=$isRuntimeLoading")
+
+                // Start polling when screen is visible
+                DisposableEffect(Unit) {
+                    println("[CIRISApp][INFO][Screen.Runtime] Starting runtime polling")
+                    runtimeViewModel.startPolling()
+                    onDispose {
+                        println("[CIRISApp][INFO][Screen.Runtime] Stopping runtime polling")
+                        runtimeViewModel.stopPolling()
+                    }
+                }
+
+                // Log status/error messages
+                LaunchedEffect(runtimeError) {
+                    if (runtimeError != null) {
+                        println("[CIRISApp][WARN][Screen.Runtime] Error: $runtimeError")
+                    }
+                }
+                LaunchedEffect(runtimeStatus) {
+                    if (runtimeStatus != null) {
+                        println("[CIRISApp][INFO][Screen.Runtime] Status: $runtimeStatus")
+                        runtimeViewModel.clearStatus()
+                    }
+                }
+
+                RuntimeScreen(
+                    runtimeData = runtimeData,
+                    isLoading = isRuntimeLoading,
+                    isAdmin = isRuntimeAdmin,
+                    onPause = {
+                        println("[CIRISApp][INFO][Screen.Runtime] Pausing runtime")
+                        runtimeViewModel.pauseRuntime()
+                    },
+                    onResume = {
+                        println("[CIRISApp][INFO][Screen.Runtime] Resuming runtime")
+                        runtimeViewModel.resumeRuntime()
+                    },
+                    onSingleStep = {
+                        println("[CIRISApp][INFO][Screen.Runtime] Executing single step")
+                        runtimeViewModel.singleStep()
+                    },
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Runtime] User triggered refresh")
+                        runtimeViewModel.refresh()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Runtime] Navigating back to Interact")
                         currentScreen = Screen.Interact
                     }
                 )
@@ -1126,6 +1243,8 @@ private fun CIRISTopBar(
     onConfigClick: () -> Unit = {},
     onConsentClick: () -> Unit = {},
     onSystemClick: () -> Unit = {}
+    onServicesClick: () -> Unit = {},
+    onRuntimeClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -1288,10 +1407,27 @@ private fun CIRISTopBar(
                         onClick = {
                             showMenu = false
                             onSystemClick()
+                        text = { Text("Services") },
+                        onClick = {
+                            showMenu = false
+                            onServicesClick()
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Build,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Runtime") },
+                        onClick = {
+                            showMenu = false
+                            onRuntimeClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
                                 contentDescription = null
                             )
                         }
@@ -1326,4 +1462,6 @@ private sealed class Screen {
     object Config : Screen()
     object Consent : Screen()
     object System : Screen()
+    object Services : Screen()
+    object Runtime : Screen()
 }

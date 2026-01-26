@@ -21,6 +21,9 @@ import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
 import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
+import ai.ciris.mobile.shared.viewmodels.AuditViewModel
+import ai.ciris.mobile.shared.viewmodels.LogsViewModel
+import ai.ciris.mobile.shared.viewmodels.MemoryViewModel
 import androidx.compose.foundation.layout.*
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
@@ -255,6 +258,15 @@ fun CIRISApp(
     }
     val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
         WiseAuthorityViewModel(apiClient)
+    }
+    val auditViewModel: AuditViewModel = viewModel {
+        AuditViewModel(apiClient)
+    }
+    val logsViewModel: LogsViewModel = viewModel {
+        LogsViewModel(apiClient)
+    }
+    val memoryViewModel: MemoryViewModel = viewModel {
+        MemoryViewModel(apiClient)
     }
 
     // Set up purchase result callback
@@ -547,7 +559,10 @@ fun CIRISApp(
                             onTelemetryClick = { currentScreen = Screen.Telemetry },
                             onSessionsClick = { currentScreen = Screen.Sessions },
                             onAdaptersClick = { currentScreen = Screen.Adapters },
-                            onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority }
+                            onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority },
+                            onAuditClick = { currentScreen = Screen.Audit },
+                            onLogsClick = { currentScreen = Screen.Logs },
+                            onMemoryClick = { currentScreen = Screen.Memory }
                         )
                     }
                 ) { paddingValues ->
@@ -799,6 +814,107 @@ fun CIRISApp(
                     }
                 )
             }
+
+            Screen.Audit -> {
+                val auditState by auditViewModel.state.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Audit] Rendering audit screen: " +
+                        "entries=${auditState.entries.size}, total=${auditState.totalEntries}, " +
+                        "isLoading=${auditState.isLoading}")
+
+                AuditScreen(
+                    auditState = auditState,
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Audit] User triggered refresh")
+                        auditViewModel.refresh()
+                    },
+                    onLoadMore = {
+                        println("[CIRISApp][INFO][Screen.Audit] Loading more entries")
+                        auditViewModel.loadMore()
+                    },
+                    onFilterChange = { newFilter ->
+                        println("[CIRISApp][INFO][Screen.Audit] Filter changed: severity=${newFilter.severity}, outcome=${newFilter.outcome}")
+                        auditViewModel.updateFilter(newFilter)
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Audit] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.Logs -> {
+                val logsState by logsViewModel.state.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Logs] Rendering logs screen: " +
+                        "logs=${logsState.logs.size}, isLoading=${logsState.isLoading}, " +
+                        "autoScroll=${logsState.autoScroll}")
+
+                // Stop polling when leaving screen
+                DisposableEffect(Unit) {
+                    onDispose {
+                        println("[CIRISApp][INFO][Screen.Logs] Stopping log polling")
+                        logsViewModel.stopPolling()
+                    }
+                }
+
+                LogsScreen(
+                    logsState = logsState,
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Logs] User triggered refresh")
+                        logsViewModel.refresh()
+                    },
+                    onFilterChange = { newFilter ->
+                        println("[CIRISApp][INFO][Screen.Logs] Filter changed: level=${newFilter.level}, service=${newFilter.service}")
+                        logsViewModel.updateFilter(newFilter)
+                    },
+                    onSearchChange = { query ->
+                        logsViewModel.updateSearch(query)
+                    },
+                    onToggleAutoScroll = {
+                        logsViewModel.toggleAutoScroll()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Logs] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
+
+            Screen.Memory -> {
+                val memoryState by memoryViewModel.state.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.Memory] Rendering memory screen: " +
+                        "nodes=${memoryState.timelineNodes.size}, results=${memoryState.searchResults.size}, " +
+                        "isLoading=${memoryState.isLoading}")
+
+                MemoryScreen(
+                    memoryState = memoryState,
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.Memory] User triggered refresh")
+                        memoryViewModel.refresh()
+                    },
+                    onSearch = { query ->
+                        println("[CIRISApp][INFO][Screen.Memory] Search: $query")
+                        memoryViewModel.search(query)
+                    },
+                    onFilterChange = { newFilter ->
+                        println("[CIRISApp][INFO][Screen.Memory] Filter changed: scope=${newFilter.scope}, type=${newFilter.nodeType}")
+                        memoryViewModel.updateFilter(newFilter)
+                    },
+                    onNodeSelect = { nodeId ->
+                        println("[CIRISApp][INFO][Screen.Memory] Node selected: $nodeId")
+                        memoryViewModel.selectNode(nodeId)
+                    },
+                    onClearSelection = {
+                        memoryViewModel.clearSelection()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.Memory] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
 }
@@ -840,7 +956,10 @@ private fun CIRISTopBar(
     onTelemetryClick: () -> Unit = {},
     onSessionsClick: () -> Unit = {},
     onAdaptersClick: () -> Unit = {},
-    onWiseAuthorityClick: () -> Unit = {}
+    onWiseAuthorityClick: () -> Unit = {},
+    onAuditClick: () -> Unit = {},
+    onLogsClick: () -> Unit = {},
+    onMemoryClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -933,6 +1052,45 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Audit Trail") },
+                        onClick = {
+                            showMenu = false
+                            onAuditClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Logs") },
+                        onClick = {
+                            showMenu = false
+                            onLogsClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Memory") },
+                        onClick = {
+                            showMenu = false
+                            onMemoryClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -957,4 +1115,7 @@ private sealed class Screen {
     object Sessions : Screen()
     object Adapters : Screen()
     object WiseAuthority : Screen()
+    object Audit : Screen()
+    object Logs : Screen()
+    object Memory : Screen()
 }

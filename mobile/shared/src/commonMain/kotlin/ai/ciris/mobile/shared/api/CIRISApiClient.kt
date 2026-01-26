@@ -139,6 +139,20 @@ class CIRISApiClient(
         jsonSerializer = jsonConfig
     )
 
+    private val auditApi = AuditApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
+    private val memoryApi = MemoryApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
     init {
         logInfo("init", "CIRISApiClient initialized with baseUrl=$baseUrl")
     }
@@ -156,7 +170,9 @@ class CIRISApiClient(
             telemetryApi.setBearerToken(token)
             billingApi.setBearerToken(token)
             wiseAuthorityApi.setBearerToken(token)
-            logInfo(method, "Bearer token set on all API instances (7 APIs)")
+            auditApi.setBearerToken(token)
+            memoryApi.setBearerToken(token)
+            logInfo(method, "Bearer token set on all API instances (9 APIs)")
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
@@ -855,6 +871,318 @@ class CIRISApiClient(
     override fun close() {
         logInfo("close", "Closing CIRISApiClient")
     }
+
+    // ===== Audit API =====
+
+    /**
+     * Get audit entries with optional filtering.
+     */
+    suspend fun getAuditEntries(
+        severity: String? = null,
+        outcome: String? = null,
+        actor: String? = null,
+        eventType: String? = null,
+        limit: Int = 100,
+        offset: Int = 0
+    ): AuditEntriesData {
+        val method = "getAuditEntries"
+        logInfo(method, "Fetching audit entries: severity=$severity, outcome=$outcome, limit=$limit, offset=$offset")
+
+        return try {
+            val response = auditApi.queryAuditEntriesV1AuditEntriesGet(
+                startTime = null,
+                endTime = null,
+                actor = actor,
+                eventType = eventType,
+                entityId = null,
+                search = null,
+                severity = severity,
+                outcome = outcome,
+                limit = limit,
+                offset = offset,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Fetched ${data.propertyEntries.size} audit entries, total=${data.total}")
+
+            AuditEntriesData(
+                entries = data.propertyEntries.map { entry ->
+                    AuditEntryApiData(
+                        id = entry.id,
+                        action = entry.action,
+                        actor = entry.actor,
+                        timestamp = entry.timestamp,
+                        context = entry.context.let { ctx ->
+                            AuditContextApiData(
+                                outcome = ctx.result,
+                                details = ctx.description,
+                                entityId = ctx.entityId,
+                                service = ctx.entityType,
+                                ipAddress = ctx.ipAddress
+                            )
+                        },
+                        signature = entry.signature,
+                        hashChain = entry.hashChain,
+                        storageSources = entry.storageSources
+                    )
+                },
+                total = data.total,
+                offset = data.offset ?: 0,
+                limit = data.limit ?: 100
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    // ===== Logs API (via Telemetry) =====
+
+    /**
+     * Get system logs with optional filtering.
+     */
+    suspend fun getSystemLogs(
+        level: String? = null,
+        service: String? = null,
+        limit: Int = 100
+    ): SystemLogsData {
+        val method = "getSystemLogs"
+        logInfo(method, "Fetching system logs: level=$level, service=$service, limit=$limit")
+
+        return try {
+            val response = telemetryApi.getSystemLogsV1TelemetryLogsGet(
+                startTime = null,
+                endTime = null,
+                level = level,
+                service = service,
+                limit = limit,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Fetched ${data.logs.size} logs, total=${data.total}")
+
+            SystemLogsData(
+                logs = data.logs.map { log ->
+                    SystemLogApiData(
+                        timestamp = log.timestamp ?: "",
+                        level = log.level,
+                        service = log.service,
+                        message = log.message,
+                        context = log.context?.let { ctx ->
+                            mapOf(
+                                "traceId" to (ctx.traceId ?: ""),
+                                "userId" to (ctx.userId ?: ""),
+                                "entityId" to (ctx.entityId ?: "")
+                            ).filterValues { v -> v.isNotEmpty() }
+                        },
+                        traceId = log.traceId
+                    )
+                },
+                total = data.total,
+                hasMore = data.hasMore ?: false
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    // ===== Memory API =====
+
+    /**
+     * Get memory statistics.
+     */
+    suspend fun getMemoryStats(): MemoryStatsApiData {
+        val method = "getMemoryStats"
+        logInfo(method, "Fetching memory stats")
+
+        return try {
+            val response = memoryApi.getStatsV1MemoryStatsGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Memory stats: totalNodes=${data.totalNodes}, recent24h=${data.recentNodes24h}")
+
+            MemoryStatsApiData(
+                totalNodes = data.totalNodes,
+                nodesByType = data.nodesByType,
+                nodesByScope = data.nodesByScope,
+                recentNodes24h = data.recentNodes24h,
+                oldestNodeDate = data.oldestNodeDate,
+                newestNodeDate = data.newestNodeDate
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get memory timeline nodes.
+     */
+    suspend fun getMemoryTimeline(
+        hours: Int = 24,
+        scope: String? = null,
+        nodeType: String? = null
+    ): List<ai.ciris.mobile.shared.ui.screens.MemoryNodeData> {
+        val method = "getMemoryTimeline"
+        logInfo(method, "Fetching memory timeline: hours=$hours, scope=$scope, type=$nodeType")
+
+        return try {
+            val response = memoryApi.getTimelineV1MemoryTimelineGet(
+                hours = hours,
+                scope = scope,
+                type = nodeType,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Fetched timeline with ${data.memories.size} memories")
+
+            data.memories.map { node ->
+                ai.ciris.mobile.shared.ui.screens.MemoryNodeData(
+                    id = node.id,
+                    type = node.type.value,
+                    scope = node.scope.value,
+                    contentPreview = node.attributes.content.take(200),
+                    attributesJson = buildString {
+                        appendLine("content: ${node.attributes.content.take(500)}")
+                        appendLine("description: ${node.attributes.description}")
+                        appendLine("source: ${node.attributes.source}")
+                        node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
+                    },
+                    createdAt = node.updatedAt?.toString(),
+                    updatedAt = node.updatedAt?.toString()
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Query memory nodes by search text.
+     */
+    suspend fun queryMemory(
+        query: String,
+        scope: String? = null,
+        nodeType: String? = null,
+        limit: Int = 50
+    ): List<ai.ciris.mobile.shared.ui.screens.MemoryNodeData> {
+        val method = "queryMemory"
+        logInfo(method, "Querying memory: query='$query', scope=$scope, type=$nodeType, limit=$limit")
+
+        return try {
+            val request = ai.ciris.api.models.QueryRequest(
+                query = query,
+                scope = scope?.let { ai.ciris.api.models.GraphScope.valueOf(it.uppercase()) },
+                type = nodeType?.let { ai.ciris.api.models.NodeType.valueOf(it.uppercase()) },
+                limit = limit
+            )
+            val response = memoryApi.queryMemoryV1MemoryQueryPost(request, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Query returned ${data.size} nodes")
+
+            data.map { node ->
+                ai.ciris.mobile.shared.ui.screens.MemoryNodeData(
+                    id = node.id,
+                    type = node.type.value,
+                    scope = node.scope.value,
+                    contentPreview = node.attributes.content.take(200),
+                    attributesJson = buildString {
+                        appendLine("content: ${node.attributes.content.take(500)}")
+                        appendLine("description: ${node.attributes.description}")
+                        appendLine("source: ${node.attributes.source}")
+                        node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
+                    },
+                    createdAt = node.updatedAt?.toString(),
+                    updatedAt = node.updatedAt?.toString()
+                )
+            }
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    /**
+     * Get a specific memory node by ID.
+     */
+    suspend fun getMemoryNode(nodeId: String): ai.ciris.mobile.shared.ui.screens.MemoryNodeData {
+        val method = "getMemoryNode"
+        logInfo(method, "Fetching memory node: $nodeId")
+
+        return try {
+            val response = memoryApi.getNodeV1MemoryNodeIdGet(nodeId, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val node = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Fetched node: id=${node.id}, type=${node.type}")
+
+            ai.ciris.mobile.shared.ui.screens.MemoryNodeData(
+                id = node.id,
+                type = node.type.value,
+                scope = node.scope.value,
+                contentPreview = node.attributes.content.take(200),
+                attributesJson = buildString {
+                    appendLine("content: ${node.attributes.content}")
+                    appendLine("description: ${node.attributes.description}")
+                    appendLine("source: ${node.attributes.source}")
+                    node.attributes.confidence?.let { c -> appendLine("confidence: $c") }
+                    node.attributes.category.let { cat -> appendLine("category: $cat") }
+                },
+                createdAt = node.updatedAt?.toString(),
+                updatedAt = node.updatedAt?.toString()
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
 }
 
 // ===== Wise Authority Data Models =====
@@ -892,4 +1220,60 @@ data class ResolveDeferralData(
     val deferralId: String,
     val success: Boolean,
     val resolvedAt: String
+)
+
+// ===== Audit Data Models =====
+
+data class AuditEntriesData(
+    val entries: List<AuditEntryApiData>,
+    val total: Int,
+    val offset: Int,
+    val limit: Int
+)
+
+data class AuditEntryApiData(
+    val id: String,
+    val action: String,
+    val actor: String,
+    val timestamp: String?,
+    val context: AuditContextApiData?,
+    val signature: String? = null,
+    val hashChain: String? = null,
+    val storageSources: List<String>? = null
+)
+
+data class AuditContextApiData(
+    val outcome: String? = null,
+    val details: String? = null,
+    val entityId: String? = null,
+    val service: String? = null,
+    val ipAddress: String? = null
+)
+
+// ===== Logs Data Models =====
+
+data class SystemLogsData(
+    val logs: List<SystemLogApiData>,
+    val total: Int,
+    val hasMore: Boolean
+)
+
+data class SystemLogApiData(
+    val timestamp: String,
+    val level: String,
+    val service: String,
+    val message: String,
+    val context: Map<String, String>? = null,
+    val traceId: String? = null
+)
+
+// ===== Memory Data Models =====
+
+data class MemoryStatsApiData(
+    val totalNodes: Int,
+    val nodesByType: Map<String, Int>,
+    val nodesByScope: Map<String, Int>,
+    val recentNodes24h: Int,
+    val oldestNodeDate: String? = null,
+    val newestNodeDate: String? = null
 )

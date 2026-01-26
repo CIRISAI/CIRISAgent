@@ -120,6 +120,13 @@ class CIRISApiClient(
         jsonSerializer = jsonConfig
     )
 
+    private val wiseAuthorityApi = WiseAuthorityApi(
+        baseUrl = baseUrl,
+        httpClientEngine = null,
+        httpClientConfig = httpClientConfig,
+        jsonSerializer = jsonConfig
+    )
+
     init {
         logInfo("init", "CIRISApiClient initialized with baseUrl=$baseUrl")
     }
@@ -136,7 +143,8 @@ class CIRISApiClient(
             systemApi.setBearerToken(token)
             telemetryApi.setBearerToken(token)
             billingApi.setBearerToken(token)
-            logInfo(method, "Bearer token set on all API instances (6 APIs)")
+            wiseAuthorityApi.setBearerToken(token)
+            logInfo(method, "Bearer token set on all API instances (7 APIs)")
         } catch (e: Exception) {
             logException(method, e, "Failed to set bearer token on API instances")
         }
@@ -674,7 +682,158 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Wise Authority API =====
+
+    suspend fun getWAStatus(): WAStatusData {
+        val method = "getWAStatus"
+        logInfo(method, "Fetching WA status")
+
+        return try {
+            val response = wiseAuthorityApi.getWaStatusV1WaStatusGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "WA Status: healthy=${data.serviceHealthy}, activeWAs=${data.activeWas}, " +
+                    "pendingDeferrals=${data.pendingDeferrals}, deferrals24h=${data.deferrals24h}")
+
+            WAStatusData(
+                serviceHealthy = data.serviceHealthy,
+                activeWAs = data.activeWas,
+                pendingDeferrals = data.pendingDeferrals,
+                deferrals24h = data.deferrals24h,
+                averageResolutionTimeMinutes = data.averageResolutionTimeMinutes,
+                timestamp = data.timestamp
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun getDeferrals(waId: String? = null): List<DeferralData> {
+        val method = "getDeferrals"
+        logInfo(method, "Fetching deferrals, waId=$waId")
+
+        return try {
+            val response = wiseAuthorityApi.getDeferralsV1WaDeferralsGet(waId, authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            val deferrals = data.deferrals.map { deferral ->
+                DeferralData(
+                    deferralId = deferral.deferralId,
+                    createdAt = deferral.createdAt.toString(),
+                    deferredBy = deferral.deferredBy,
+                    taskId = deferral.taskId,
+                    thoughtId = deferral.thoughtId,
+                    reason = deferral.reason,
+                    channelId = deferral.channelId,
+                    userId = deferral.userId,
+                    priority = deferral.priority ?: "normal",
+                    assignedWaId = deferral.assignedWaId,
+                    requiresRole = deferral.requiresRole,
+                    status = deferral.status ?: "pending",
+                    resolution = deferral.resolution,
+                    resolvedAt = deferral.resolvedAt?.toString(),
+                    question = deferral.question,
+                    context = deferral.context,
+                    timeoutAt = deferral.timeoutAt
+                )
+            }
+            logInfo(method, "Fetched ${deferrals.size} deferrals")
+            deferrals
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    suspend fun resolveDeferral(deferralId: String, resolution: String, guidance: String): ResolveDeferralData {
+        val method = "resolveDeferral"
+        logInfo(method, "Resolving deferral: id=$deferralId, resolution=$resolution")
+
+        return try {
+            val request = ai.ciris.api.models.ResolveDeferralRequest(
+                resolution = resolution,
+                guidance = guidance
+            )
+            val response = wiseAuthorityApi.resolveDeferralV1WaDeferralsDeferralIdResolvePost(
+                deferralId = deferralId,
+                resolveDeferralRequest = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+            logInfo(method, "Deferral resolved: deferralId=${data.deferralId}, success=${data.success}")
+
+            ResolveDeferralData(
+                deferralId = data.deferralId,
+                success = data.success,
+                resolvedAt = data.resolvedAt.toString()
+            )
+        } catch (e: Exception) {
+            logException(method, e, "deferralId=$deferralId")
+            throw e
+        }
+    }
+
     override fun close() {
         logInfo("close", "Closing CIRISApiClient")
     }
 }
+
+// ===== Wise Authority Data Models =====
+
+data class WAStatusData(
+    val serviceHealthy: Boolean,
+    val activeWAs: Int,
+    val pendingDeferrals: Int,
+    val deferrals24h: Int,
+    val averageResolutionTimeMinutes: Double,
+    val timestamp: String?
+)
+
+data class DeferralData(
+    val deferralId: String,
+    val createdAt: String,
+    val deferredBy: String,
+    val taskId: String,
+    val thoughtId: String,
+    val reason: String,
+    val channelId: String?,
+    val userId: String?,
+    val priority: String,
+    val assignedWaId: String?,
+    val requiresRole: String?,
+    val status: String,
+    val resolution: String?,
+    val resolvedAt: String?,
+    val question: String?,
+    val context: Map<String, String>?,
+    val timeoutAt: String?
+)
+
+data class ResolveDeferralData(
+    val deferralId: String,
+    val success: Boolean,
+    val resolvedAt: String
+)

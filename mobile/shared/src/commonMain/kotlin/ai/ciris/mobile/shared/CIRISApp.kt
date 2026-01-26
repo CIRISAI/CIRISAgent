@@ -20,6 +20,7 @@ import ai.ciris.mobile.shared.viewmodels.SetupViewModel
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
 import ai.ciris.mobile.shared.viewmodels.TelemetryViewModel
+import ai.ciris.mobile.shared.viewmodels.WiseAuthorityViewModel
 import androidx.compose.foundation.layout.*
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
@@ -216,6 +217,9 @@ fun CIRISApp(
     }
     val adaptersViewModel: AdaptersViewModel = viewModel {
         AdaptersViewModel(apiClient, baseUrl)
+    }
+    val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
+        WiseAuthorityViewModel(apiClient)
     }
 
     // Watch startup phase to check first-run when ready
@@ -487,7 +491,8 @@ fun CIRISApp(
                             onBillingClick = { currentScreen = Screen.Billing },
                             onTelemetryClick = { currentScreen = Screen.Telemetry },
                             onSessionsClick = { currentScreen = Screen.Sessions },
-                            onAdaptersClick = { currentScreen = Screen.Adapters }
+                            onAdaptersClick = { currentScreen = Screen.Adapters },
+                            onWiseAuthorityClick = { currentScreen = Screen.WiseAuthority }
                         )
                     }
                 ) { paddingValues ->
@@ -681,6 +686,51 @@ fun CIRISApp(
                     }
                 )
             }
+
+            Screen.WiseAuthority -> {
+                val waStatus by wiseAuthorityViewModel.waStatus.collectAsState()
+                val deferrals by wiseAuthorityViewModel.deferrals.collectAsState()
+                val isWALoading by wiseAuthorityViewModel.isLoading.collectAsState()
+                val isResolving by wiseAuthorityViewModel.isResolving.collectAsState()
+                val waError by wiseAuthorityViewModel.error.collectAsState()
+                val waSuccess by wiseAuthorityViewModel.successMessage.collectAsState()
+
+                println("[CIRISApp][DEBUG][Screen.WiseAuthority] Rendering WA screen: " +
+                        "status=${waStatus?.serviceHealthy}, deferrals=${deferrals.size}, " +
+                        "isLoading=$isWALoading, isResolving=$isResolving")
+
+                // Log status/error messages
+                LaunchedEffect(waError) {
+                    if (waError != null) {
+                        println("[CIRISApp][WARN][Screen.WiseAuthority] Error: $waError")
+                    }
+                }
+                LaunchedEffect(waSuccess) {
+                    if (waSuccess != null) {
+                        println("[CIRISApp][INFO][Screen.WiseAuthority] Success: $waSuccess")
+                        wiseAuthorityViewModel.clearSuccess()
+                    }
+                }
+
+                WiseAuthorityScreen(
+                    waStatus = waStatus,
+                    deferrals = deferrals,
+                    isLoading = isWALoading,
+                    isResolving = isResolving,
+                    onResolveDeferral = { deferralId, resolution, guidance ->
+                        println("[CIRISApp][INFO][Screen.WiseAuthority] Resolving deferral: $deferralId -> $resolution")
+                        wiseAuthorityViewModel.resolveDeferral(deferralId, resolution, guidance)
+                    },
+                    onRefresh = {
+                        println("[CIRISApp][INFO][Screen.WiseAuthority] User triggered refresh")
+                        wiseAuthorityViewModel.refresh()
+                    },
+                    onNavigateBack = {
+                        println("[CIRISApp][INFO][Screen.WiseAuthority] Navigating back to Interact")
+                        currentScreen = Screen.Interact
+                    }
+                )
+            }
         }
     }
 }
@@ -721,7 +771,8 @@ private fun CIRISTopBar(
     onBillingClick: () -> Unit = {},
     onTelemetryClick: () -> Unit = {},
     onSessionsClick: () -> Unit = {},
-    onAdaptersClick: () -> Unit = {}
+    onAdaptersClick: () -> Unit = {},
+    onWiseAuthorityClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -801,6 +852,19 @@ private fun CIRISTopBar(
                             )
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Wise Authority") },
+                        onClick = {
+                            showMenu = false
+                            onWiseAuthorityClick()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null
+                            )
+                        }
+                    )
                 }
             }
         },
@@ -824,4 +888,5 @@ private sealed class Screen {
     object Telemetry : Screen()
     object Sessions : Screen()
     object Adapters : Screen()
+    object WiseAuthority : Screen()
 }

@@ -347,6 +347,78 @@ secrets_tool
 - **RuntimeControlBus** → Multiple control interfaces
 - **WiseBus** → Multiple wisdom sources *(FOCUS AREA)*
 
+## Mobile Development
+
+### Pull Device Logs (ALWAYS USE THIS)
+
+When debugging mobile app issues, **always** use the device logs script:
+
+```bash
+# Pull all logs from device (debug build)
+bash mobile/androidApp/tools/pull-device-logs.sh
+
+# Live tail Python logs
+bash mobile/androidApp/tools/pull-device-logs.sh --live
+
+# Specify output directory
+bash mobile/androidApp/tools/pull-device-logs.sh /path/to/output
+
+# Specific device
+bash mobile/androidApp/tools/pull-device-logs.sh -s emulator-5554
+```
+
+**Files collected:**
+- `logs/latest.log` - Python runtime logs (CIRIS engine)
+- `logs/incidents_latest.log` - Incident/error logs
+- `logcat_combined.txt` - Android logcat (Python + Kotlin)
+- `databases/*.db` - SQLite databases (ciris_engine.db, secrets.db, audit.db)
+- `app_info.txt` - Device and package info
+
+**Quick analysis:**
+```bash
+# Check for errors
+cat /tmp/ciris-device-logs/*/logs/incidents_latest.log | grep -i error
+
+# Recent Python logs
+cat /tmp/ciris-device-logs/*/logs/latest.log | tail -100
+
+# Kotlin/KMP logs (CIRISApiClient, InteractViewModel)
+grep "System.out.*CIRIS" /tmp/ciris-device-logs/*/logcat_combined.txt
+```
+
+### Mobile QA Runner
+
+Automated UI testing for the CIRIS mobile app:
+
+```bash
+# Full flow test with test account
+python3 -m tools.qa_runner.modules.mobile full_flow
+
+# Individual tests
+python3 -m tools.qa_runner.modules.mobile app_launch
+python3 -m tools.qa_runner.modules.mobile google_signin
+python3 -m tools.qa_runner.modules.mobile setup_wizard
+python3 -m tools.qa_runner.modules.mobile chat_interaction
+
+# Build and test
+python3 -m tools.qa_runner.modules.mobile --build full_flow
+```
+
+**Test account:** ciristest1@gmail.com (password in `~/.ciristest1_password`)
+
+### Build and Deploy
+
+```bash
+# Build debug APK
+cd mobile && ./gradlew :androidApp:assembleDebug
+
+# Install to device
+adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+
+# Or use ADB from Android SDK
+~/Android/Sdk/platform-tools/adb install -r ...
+```
+
 ## Development Workflow
 
 ### Grace - Your Development Companion

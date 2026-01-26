@@ -900,3 +900,256 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
             message=f"Error: {str(e)}",
             screenshots=all_screenshots,
         )
+
+
+# ========== Screen Navigation Tests ==========
+# Tests for each mobile screen added in 1.9.2
+
+# Screen definitions with expected UI indicators
+SCREEN_TESTS = {
+    "audit": {
+        "menu_text": "Audit Trail",
+        "indicators": ["Audit", "entries", "severity"],
+        "description": "Audit trail viewer",
+    },
+    "logs": {
+        "menu_text": "Logs",
+        "indicators": ["Logs", "level", "service"],
+        "description": "System logs viewer",
+    },
+    "memory": {
+        "menu_text": "Memory",
+        "indicators": ["Memory", "nodes", "search"],
+        "description": "Memory/graph viewer",
+    },
+    "config": {
+        "menu_text": "Config",
+        "indicators": ["Config", "settings", "category"],
+        "description": "Configuration management",
+    },
+    "consent": {
+        "menu_text": "Consent",
+        "indicators": ["Consent", "stream", "partnership"],
+        "description": "User consent/GDPR",
+    },
+    "system": {
+        "menu_text": "System",
+        "indicators": ["System", "health", "runtime"],
+        "description": "System management",
+    },
+    "services": {
+        "menu_text": "Services",
+        "indicators": ["Services", "status", "healthy"],
+        "description": "Service status management",
+    },
+    "runtime": {
+        "menu_text": "Runtime",
+        "indicators": ["Runtime", "control", "pause"],
+        "description": "Runtime control panel",
+    },
+}
+
+
+def _navigate_to_screen(adb: ADBHelper, ui: UIAutomator, menu_text: str) -> bool:
+    """
+    Navigate to a screen via the overflow menu.
+    Returns True if navigation succeeded.
+    """
+    # Open overflow menu
+    overflow_clicked = False
+    for desc in ["More options", "MoreVert", "More"]:
+        element = ui.find_by_content_desc(desc, exact=False)
+        if element:
+            ui.click(element)
+            overflow_clicked = True
+            time.sleep(0.5)
+            break
+
+    if not overflow_clicked:
+        # Try text-based menu button
+        element = ui.find_by_text("More")
+        if element:
+            ui.click(element)
+            overflow_clicked = True
+            time.sleep(0.5)
+
+    if not overflow_clicked:
+        return False
+
+    # Click the menu item
+    time.sleep(0.3)
+    ui.refresh_hierarchy()
+    element = ui.find_by_text(menu_text, exact=False)
+    if element:
+        ui.click(element)
+        time.sleep(1)
+        return True
+
+    return False
+
+
+def test_screen_navigation(
+    adb: ADBHelper, ui: UIAutomator, config: dict, screen_name: str = None
+) -> TestReport:
+    """
+    Test: Navigate to a specific screen and verify it loads.
+
+    Args:
+        screen_name: Name of screen to test (from SCREEN_TESTS keys).
+                    If None, tests all screens sequentially.
+    """
+    start_time = time.time()
+    screenshots = []
+
+    if screen_name and screen_name not in SCREEN_TESTS:
+        return TestReport(
+            name=f"test_screen_{screen_name}",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Unknown screen: {screen_name}. Available: {list(SCREEN_TESTS.keys())}",
+        )
+
+    screens_to_test = [screen_name] if screen_name else list(SCREEN_TESTS.keys())
+    results = []
+
+    try:
+        # Verify we're on chat/interact screen first
+        chat_visible = False
+        for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_PRIMARY:
+            if ui.is_text_visible(indicator):
+                chat_visible = True
+                break
+        if not chat_visible:
+            for indicator in ["Shutdown", "STOP"]:
+                if ui.is_text_visible(indicator):
+                    chat_visible = True
+                    break
+
+        if not chat_visible:
+            return TestReport(
+                name="test_screen_navigation",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Not on chat screen - must complete setup first",
+            )
+
+        for sname in screens_to_test:
+            screen_config = SCREEN_TESTS[sname]
+            print(f"\n  Testing screen: {sname} ({screen_config['description']})")
+
+            # Navigate to screen
+            if not _navigate_to_screen(adb, ui, screen_config["menu_text"]):
+                results.append((sname, False, "Failed to navigate via menu"))
+                continue
+
+            time.sleep(1.5)
+            ui.refresh_hierarchy()
+
+            # Take screenshot
+            screenshot_path = f"/tmp/ciris_screen_{sname}_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+
+            # Check for any indicator
+            found_indicator = None
+            for indicator in screen_config["indicators"]:
+                if ui.is_text_visible(indicator, case_insensitive=True):
+                    found_indicator = indicator
+                    break
+
+            if found_indicator:
+                results.append((sname, True, f"Found: {found_indicator}"))
+                print(f"    ✓ Screen loaded (found: {found_indicator})")
+            else:
+                screen_texts = ui.get_screen_text()
+                results.append((sname, False, f"No indicators found. Visible: {screen_texts[:5]}"))
+                print(f"    ✗ Screen indicators not found")
+
+            # Navigate back to chat screen
+            adb.press_back()
+            time.sleep(1)
+
+        # Summarize results
+        passed = sum(1 for _, success, _ in results if success)
+        total = len(results)
+
+        if passed == total:
+            return TestReport(
+                name="test_screen_navigation",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message=f"All {total} screens loaded successfully",
+                screenshots=screenshots,
+            )
+        elif passed > 0:
+            failed_screens = [name for name, success, _ in results if not success]
+            return TestReport(
+                name="test_screen_navigation",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"{passed}/{total} screens passed. Failed: {failed_screens}",
+                screenshots=screenshots,
+            )
+        else:
+            return TestReport(
+                name="test_screen_navigation",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="All screen tests failed",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_screen_navigation",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+# Individual screen test functions for granular testing
+def test_screen_audit(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Audit screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "audit")
+
+
+def test_screen_logs(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Logs screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "logs")
+
+
+def test_screen_memory(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Memory screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "memory")
+
+
+def test_screen_config(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Config screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "config")
+
+
+def test_screen_consent(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Consent screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "consent")
+
+
+def test_screen_system(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to System screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "system")
+
+
+def test_screen_services(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Services screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "services")
+
+
+def test_screen_runtime(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to Runtime screen and verify it loads."""
+    return test_screen_navigation(adb, ui, config, "runtime")
+
+
+def test_all_screens(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Test: Navigate to all screens and verify they load."""
+    return test_screen_navigation(adb, ui, config, None)

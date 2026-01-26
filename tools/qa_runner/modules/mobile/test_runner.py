@@ -24,6 +24,16 @@ from .test_cases import (
     test_google_signin,
     test_local_login,
     test_setup_wizard,
+    # Screen navigation tests (new in 1.9.2)
+    test_all_screens,
+    test_screen_audit,
+    test_screen_config,
+    test_screen_consent,
+    test_screen_logs,
+    test_screen_memory,
+    test_screen_runtime,
+    test_screen_services,
+    test_screen_system,
 )
 from .ui_automator import UIAutomator
 
@@ -232,6 +242,16 @@ class MobileTestRunner:
             "setup_wizard": test_setup_wizard,
             "chat_interaction": test_chat_interaction,
             "full_flow": test_full_flow,
+            # Screen navigation tests (new in 1.9.2)
+            "all_screens": test_all_screens,
+            "screen_audit": test_screen_audit,
+            "screen_logs": test_screen_logs,
+            "screen_memory": test_screen_memory,
+            "screen_config": test_screen_config,
+            "screen_consent": test_screen_consent,
+            "screen_system": test_screen_system,
+            "screen_services": test_screen_services,
+            "screen_runtime": test_screen_runtime,
         }
 
         # Determine which tests to run
@@ -348,7 +368,7 @@ def main():
         "tests",
         nargs="*",
         default=["full_flow"],
-        help="Tests to run (default: full_flow). Options: app_launch, google_signin, local_login, setup_wizard, chat_interaction, full_flow",
+        help="Tests to run (default: full_flow). Options: app_launch, google_signin, local_login, setup_wizard, chat_interaction, full_flow, all_screens, screen_audit, screen_logs, screen_memory, screen_config, screen_consent, screen_system, screen_services, screen_runtime",
     )
 
     # Device settings

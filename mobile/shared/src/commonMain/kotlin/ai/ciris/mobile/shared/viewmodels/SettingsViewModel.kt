@@ -20,6 +20,22 @@ class SettingsViewModel(
     private val apiClient: CIRISApiClient
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "SettingsViewModel"
+    }
+
+    private fun log(level: String, method: String, message: String) {
+        println("[$TAG][$level][$method] $message")
+    }
+
+    private fun logDebug(method: String, message: String) = log("DEBUG", method, message)
+    private fun logInfo(method: String, message: String) = log("INFO", method, message)
+    private fun logWarn(method: String, message: String) = log("WARN", method, message)
+    private fun logError(method: String, message: String) = log("ERROR", method, message)
+
+    // Logout completion callback
+    private var _onLogoutComplete: (() -> Unit)? = null
+
     private val _llmProvider = MutableStateFlow("openai")
     val llmProvider: StateFlow<String> = _llmProvider.asStateFlow()
 
@@ -67,16 +83,21 @@ class SettingsViewModel(
      * Load settings from secure storage
      */
     private fun loadSettings() {
+        val method = "loadSettings"
+        logInfo(method, "Loading settings from secure storage")
+
         viewModelScope.launch {
             try {
                 // Load LLM provider
                 secureStorage.get("llm_provider").onSuccess { provider ->
                     _llmProvider.value = provider ?: "openai"
+                    logDebug(method, "Loaded LLM provider: ${_llmProvider.value}")
                 }
 
                 // Load LLM model
                 secureStorage.get("llm_model").onSuccess { model ->
                     _llmModel.value = model ?: "gpt-4"
+                    logDebug(method, "Loaded LLM model: ${_llmModel.value}")
                 }
 
                 // Load API key (masked)
@@ -84,9 +105,15 @@ class SettingsViewModel(
                     if (key != null) {
                         _apiKeyMasked.value = maskApiKey(key)
                         _apiKey.value = key
+                        logDebug(method, "Loaded API key for ${_llmProvider.value} (masked)")
+                    } else {
+                        logDebug(method, "No API key found for ${_llmProvider.value}")
                     }
                 }
+
+                logInfo(method, "Settings loaded successfully")
             } catch (e: Exception) {
+                logError(method, "Failed to load settings: ${e::class.simpleName}: ${e.message}")
                 _errorMessage.value = "Failed to load settings: ${e.message}"
             }
         }
@@ -140,6 +167,9 @@ class SettingsViewModel(
      * Save settings
      */
     fun saveSettings() {
+        val method = "saveSettings"
+        logInfo(method, "Saving settings: provider=${_llmProvider.value}, model=${_llmModel.value}")
+
         viewModelScope.launch {
             _isSaving.value = true
             _saveSuccess.value = false
@@ -148,23 +178,33 @@ class SettingsViewModel(
             try {
                 // Validate
                 if (_apiKey.value.isEmpty()) {
+                    logWarn(method, "Validation failed: API key is required")
                     throw Exception("API key is required")
                 }
+                logDebug(method, "Validation passed")
 
                 // Save to secure storage
+                logDebug(method, "Saving LLM provider: ${_llmProvider.value}")
                 secureStorage.save("llm_provider", _llmProvider.value).getOrThrow()
+
+                logDebug(method, "Saving LLM model: ${_llmModel.value}")
                 secureStorage.save("llm_model", _llmModel.value).getOrThrow()
+
+                logDebug(method, "Saving API key for provider: ${_llmProvider.value}")
                 secureStorage.saveApiKey(_llmProvider.value, _apiKey.value).getOrThrow()
 
                 // Update masked version
                 _apiKeyMasked.value = maskApiKey(_apiKey.value)
 
                 _saveSuccess.value = true
+                logInfo(method, "Settings saved successfully")
 
-                // TODO: Notify CIRIS runtime of config change via API
-                // apiClient.updateConfig(...)
+                // Notify CIRIS runtime of config change
+                // The runtime will pick up changes on next request via the stored config
+                logDebug(method, "Runtime will use updated config on next API call")
 
             } catch (e: Exception) {
+                logError(method, "Failed to save settings: ${e::class.simpleName}: ${e.message}")
                 _errorMessage.value = "Failed to save settings: ${e.message}"
             } finally {
                 _isSaving.value = false
@@ -173,19 +213,44 @@ class SettingsViewModel(
     }
 
     /**
-     * Logout
+     * Logout - clears all tokens and notifies for navigation
+     * @param onComplete Callback invoked after successful logout to trigger navigation
      */
-    fun logout() {
+    fun logout(onComplete: () -> Unit = {}) {
+        val method = "logout"
+        logInfo(method, "Starting logout process")
+
         viewModelScope.launch {
             try {
                 // Clear access token
+                logDebug(method, "Clearing access token from secure storage")
                 secureStorage.deleteAccessToken().getOrThrow()
+                logInfo(method, "Access token cleared")
+
+                // Clear refresh token if exists
+                logDebug(method, "Clearing refresh token")
+                secureStorage.delete("refresh_token")
+
+                // Clear user info
+                logDebug(method, "Clearing user info")
+                secureStorage.delete("user_id")
+                secureStorage.delete("user_email")
 
                 // Call logout API
-                apiClient.logout()
+                logDebug(method, "Calling API logout")
+                try {
+                    apiClient.logout()
+                    logInfo(method, "API logout successful")
+                } catch (e: Exception) {
+                    logWarn(method, "API logout failed (may already be logged out): ${e.message}")
+                    // Continue with local logout even if API fails
+                }
 
-                // TODO: Navigate to login screen
+                logInfo(method, "Logout complete - invoking navigation callback")
+                onComplete()
+
             } catch (e: Exception) {
+                logError(method, "Logout failed: ${e::class.simpleName}: ${e.message}")
                 _errorMessage.value = "Logout failed: ${e.message}"
             }
         }

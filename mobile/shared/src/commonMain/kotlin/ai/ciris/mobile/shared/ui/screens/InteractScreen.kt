@@ -24,7 +24,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlinx.datetime.Instant
 
 /**
@@ -55,99 +65,89 @@ fun InteractScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val processingStatus by viewModel.processingStatus.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Chat with CIRIS") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF419CA0), // CIRIS primary color from colors.xml
-                    titleContentColor = Color.White
-                )
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(Color(0xFFFAFAFA)) // Light gray background from fragment_interact.xml
+    // Focus requester for the text input
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Note: CIRISApp wraps this screen in a Scaffold with TopAppBar,
+    // so we don't need our own Scaffold here. Just use the column directly.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFFAFAFA)) // Light gray background
+            .imePadding() // Handle keyboard insets
+    ) {
+        // Status bar (from fragment_interact.xml:10-63)
+        ConnectionStatusBar(
+            isConnected = isConnected,
+            status = agentStatus,
+            onShutdown = { viewModel.shutdown(emergency = false) },
+            onEmergencyStop = { viewModel.shutdown(emergency = true) }
+        )
+
+        // AI Warning banner (from fragment_interact.xml:65-76)
+        AIWarningBanner()
+
+        // Processing status (from fragment_interact.xml:78-117)
+        AnimatedVisibility(
+            visible = processingStatus.isNotEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut()
         ) {
-            // Status bar (from fragment_interact.xml:10-63)
-            ConnectionStatusBar(
-                isConnected = isConnected,
-                status = agentStatus,
-                onShutdown = { viewModel.shutdown(emergency = false) },
-                onEmergencyStop = { viewModel.shutdown(emergency = true) }
-            )
+            ProcessingStatusBar(status = processingStatus)
+        }
 
-            // AI Warning banner (from fragment_interact.xml:65-76)
-            AIWarningBanner()
-
-            // Processing status (from fragment_interact.xml:78-117)
-            AnimatedVisibility(
-                visible = processingStatus.isNotEmpty(),
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                ProcessingStatusBar(status = processingStatus)
-            }
-
-            // Loading indicator (from fragment_interact.xml:119-125)
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            // Chat messages container with empty state (from fragment_interact.xml:127-190)
+        // Loading indicator (from fragment_interact.xml:119-125)
+        if (isLoading) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                if (messages.isEmpty() && !isLoading) {
-                    EmptyStateView()
-                } else {
-                    ChatMessageList(messages = messages)
-                }
+                CircularProgressIndicator()
             }
+        }
 
-            // Message count indicator (from fragment_interact.xml:192-200)
-            if (messages.isNotEmpty()) {
-                Text(
-                    text = "Showing last ${messages.size} messages",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White)
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    fontSize = 11.sp,
-                    color = Color(0xFF9CA3AF),
-                    textAlign = TextAlign.Center
-                )
+        // Chat messages container with empty state (from fragment_interact.xml:127-190)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            if (messages.isEmpty() && !isLoading) {
+                EmptyStateView()
+            } else {
+                ChatMessageList(messages = messages)
             }
+        }
 
-            // Input bar (from fragment_interact.xml:243-291)
-            ChatInputBar(
-                text = inputText,
-                onTextChange = { viewModel.onInputTextChanged(it) },
-                onSend = { viewModel.sendMessage() },
-                enabled = isConnected && !isSending,
-                modifier = Modifier.fillMaxWidth()
+        // Message count indicator (from fragment_interact.xml:192-200)
+        if (messages.isNotEmpty()) {
+            Text(
+                text = "Showing last ${messages.size} messages",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                fontSize = 11.sp,
+                color = Color(0xFF9CA3AF),
+                textAlign = TextAlign.Center
             )
         }
+
+        // Input bar (from fragment_interact.xml:243-291)
+        ChatInputBar(
+            text = inputText,
+            onTextChange = { viewModel.onInputTextChanged(it) },
+            onSend = { viewModel.sendMessage() },
+            enabled = isConnected && !isSending,
+            focusRequester = focusRequester,
+            onFocused = { keyboardController?.show() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+        )
     }
 }
 
@@ -581,6 +581,8 @@ private fun ChatInputBar(
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
     enabled: Boolean,
+    focusRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -599,7 +601,21 @@ private fun ChatInputBar(
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("input_message")
+                    .let { mod ->
+                        if (focusRequester != null) {
+                            mod.focusRequester(focusRequester)
+                        } else {
+                            mod
+                        }
+                    }
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            onFocused()
+                        }
+                    },
                 placeholder = { Text("Type your message...") },
                 enabled = enabled,
                 singleLine = false,
@@ -624,6 +640,7 @@ private fun ChatInputBar(
                         },
                         shape = CircleShape
                     )
+                    .testTag("btn_send")
             ) {
                 Icon(
                     imageVector = Icons.Default.Send,

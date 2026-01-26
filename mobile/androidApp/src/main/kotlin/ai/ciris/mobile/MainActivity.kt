@@ -137,10 +137,49 @@ class MainActivity : ComponentActivity() {
      */
     private val googleSignInCallback = object : GoogleSignInCallback {
         override fun onGoogleSignInRequested(onResult: (GoogleSignInResult) -> Unit) {
-            Log.i(TAG, "Google Sign-In requested from CIRISApp")
+            Log.i(TAG, "Google Sign-In requested from CIRISApp (interactive)")
             pendingGoogleSignInCallback = onResult
             val signInIntent = googleSignInClient.signInIntent
             startActivityForResult(signInIntent, RC_SIGN_IN)
+        }
+
+        override fun onSilentSignInRequested(onResult: (GoogleSignInResult) -> Unit) {
+            Log.i(TAG, "Silent Sign-In requested from CIRISApp")
+
+            // Check if we have a cached account first
+            val cachedAccount = GoogleSignIn.getLastSignedInAccount(this@MainActivity)
+            if (cachedAccount != null) {
+                Log.i(TAG, "Found cached account: ${cachedAccount.email}")
+            }
+
+            // Attempt silent sign-in to get fresh token
+            googleSignInClient.silentSignIn()
+                .addOnSuccessListener { account ->
+                    Log.i(TAG, "Silent Sign-In successful: ${account.email}")
+                    val token = account.idToken
+                    if (token != null) {
+                        onResult(GoogleSignInResult.Success(
+                            idToken = token,
+                            userId = account.id ?: "",
+                            email = account.email,
+                            displayName = account.displayName
+                        ))
+                    } else {
+                        Log.w(TAG, "Silent Sign-In returned null token")
+                        onResult(GoogleSignInResult.Error("4: SIGN_IN_REQUIRED - No token returned"))
+                    }
+                }
+                .addOnFailureListener { e ->
+                    val errorCode = if (e is ApiException) e.statusCode else -1
+                    Log.w(TAG, "Silent Sign-In failed: code=$errorCode, message=${e.message}")
+
+                    // Error code 4 = SIGN_IN_REQUIRED - user needs to interactively sign in
+                    if (errorCode == 4) {
+                        onResult(GoogleSignInResult.Error("4: SIGN_IN_REQUIRED"))
+                    } else {
+                        onResult(GoogleSignInResult.Error("$errorCode: ${e.message}"))
+                    }
+                }
         }
     }
 

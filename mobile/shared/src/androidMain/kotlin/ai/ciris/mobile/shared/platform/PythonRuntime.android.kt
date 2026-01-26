@@ -14,7 +14,7 @@ import java.net.URL
  * Note: Actual Python/Chaquopy initialization must happen in MainActivity
  * This implementation manages state and reads logcat for service status
  */
-actual class PythonRuntime {
+actual class PythonRuntime : PythonRuntimeProtocol {
 
     companion object {
         private const val TAG = "PythonRuntime"
@@ -75,7 +75,7 @@ actual class PythonRuntime {
     private var serverStarted = false
 
     // Server URL - must use localhost (not 127.0.0.1) for Same-Origin Policy
-    actual val serverUrl: String = "http://localhost:8080"
+    actual override val serverUrl: String = "http://localhost:8080"
 
     /**
      * Mark Python as initialized (called from MainActivity after Chaquopy starts)
@@ -91,17 +91,17 @@ actual class PythonRuntime {
         serverStarted = true
     }
 
-    actual suspend fun initialize(pythonHome: String): Result<Unit> = withContext(Dispatchers.IO) {
+    actual override suspend fun initialize(pythonHome: String): Result<Unit> = withContext(Dispatchers.IO) {
         pythonInitialized = true
         Result.success(Unit)
     }
 
-    actual suspend fun startServer(): Result<String> = withContext(Dispatchers.IO) {
+    actual override suspend fun startServer(): Result<String> = withContext(Dispatchers.IO) {
         serverStarted = true
         Result.success("http://localhost:8080")
     }
 
-    actual suspend fun checkHealth(): Result<Boolean> = withContext(Dispatchers.IO) {
+    actual override suspend fun checkHealth(): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val url = URL("http://localhost:8080/v1/system/health")
             val connection = url.openConnection() as HttpURLConnection
@@ -121,20 +121,20 @@ actual class PythonRuntime {
         }
     }
 
-    actual suspend fun getServicesStatus(): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
+    actual override suspend fun getServicesStatus(): Result<Pair<Int, Int>> = withContext(Dispatchers.IO) {
         // Return the cached values from logcat parsing
         Result.success(servicesOnline to totalServices)
     }
 
-    actual fun shutdown() {
+    actual override fun shutdown() {
         serverStarted = false
     }
 
-    actual fun isInitialized(): Boolean {
+    actual override fun isInitialized(): Boolean {
         return pythonInitialized
     }
 
-    actual fun isServerStarted(): Boolean {
+    actual override fun isServerStarted(): Boolean {
         return serverStarted
     }
 
@@ -146,7 +146,7 @@ actual class PythonRuntime {
      * The full implementation with Chaquopy calls must remain in MainActivity.
      * This provides the interface for future migration.
      */
-    actual suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> = withContext(Dispatchers.IO) {
+    actual override suspend fun startPythonServer(onStatus: ((String) -> Unit)?): Result<String> = withContext(Dispatchers.IO) {
         try {
             onStatus?.invoke("Starting CIRIS runtime...")
             Log.i(TAG, "Starting Python server...")
@@ -224,7 +224,7 @@ actual class PythonRuntime {
      *
      * Sets System properties for Python to read
      */
-    actual fun injectPythonConfig(config: Map<String, String>) {
+    actual override fun injectPythonConfig(config: Map<String, String>) {
         try {
             val apiBase = config["OPENAI_API_BASE"]
             val apiKey = config["OPENAI_API_KEY"]

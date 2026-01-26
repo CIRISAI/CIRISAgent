@@ -852,6 +852,192 @@ class CIRISApiClient(
         }
     }
 
+    // ===== Services API =====
+
+    override suspend fun getServices(): ServicesResponse {
+        val method = "getServices"
+        logInfo(method, "Fetching services status")
+
+        return try {
+            val response = systemApi.getServicesStatusV1SystemServicesGet(authHeader())
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            // Group services by type into global services map
+            // The API returns a flat list of ServiceStatus objects
+            val globalServices = mutableMapOf<String, List<ServiceProviderData>>()
+            data.services.groupBy { it.type }.forEach { (serviceType, services) ->
+                globalServices[serviceType] = services.map { service ->
+                    ServiceProviderData(
+                        name = service.name,
+                        priority = "NORMAL",
+                        priorityGroup = 0,
+                        strategy = "FALLBACK",
+                        circuitBreakerState = if (service.healthy) "closed" else "open",
+                        capabilities = emptyList()
+                    )
+                }
+            }
+
+            logInfo(method, "Services fetched: ${data.totalServices} total, ${data.healthyServices} healthy")
+
+            ServicesResponse(
+                globalServices = globalServices,
+                handlers = emptyMap() // Handler-specific services not in current API
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    // ===== Runtime Control API =====
+
+    override suspend fun getRuntimeState(): RuntimeStateResponse {
+        val method = "getRuntimeState"
+        logDebug(method, "Fetching runtime state via 'state' action")
+
+        return try {
+            val request = ai.ciris.api.models.RuntimeAction(reason = null)
+            val response = systemApi.controlRuntimeV1SystemRuntimeActionPost(
+                action = "state",
+                runtimeAction = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Runtime state: processorState=${data.processorState}, " +
+                    "cognitiveState=${data.cognitiveState}, queueDepth=${data.queueDepth}")
+
+            RuntimeStateResponse(
+                processorState = data.processorState,
+                cognitiveState = data.cognitiveState ?: "WORK",
+                queueDepth = data.queueDepth ?: 0,
+                activeTasks = emptyList() // Active tasks not in current API response
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun pauseRuntime(): RuntimeControlResponse {
+        val method = "pauseRuntime"
+        logInfo(method, "Pausing runtime")
+
+        return try {
+            val request = ai.ciris.api.models.RuntimeAction(reason = "Mobile app pause request")
+            val response = systemApi.controlRuntimeV1SystemRuntimeActionPost(
+                action = "pause",
+                runtimeAction = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Runtime paused: processorState=${data.processorState}")
+
+            RuntimeControlResponse(
+                processorState = data.processorState,
+                message = data.message
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun resumeRuntime(): RuntimeControlResponse {
+        val method = "resumeRuntime"
+        logInfo(method, "Resuming runtime")
+
+        return try {
+            val request = ai.ciris.api.models.RuntimeAction(reason = "Mobile app resume request")
+            val response = systemApi.controlRuntimeV1SystemRuntimeActionPost(
+                action = "resume",
+                runtimeAction = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Runtime resumed: processorState=${data.processorState}")
+
+            RuntimeControlResponse(
+                processorState = data.processorState,
+                message = data.message
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
+    override suspend fun singleStepProcessor(): SingleStepResponse {
+        val method = "singleStepProcessor"
+        logInfo(method, "Executing single step")
+
+        return try {
+            // Single step uses 'step' action
+            val request = ai.ciris.api.models.RuntimeAction(reason = "Mobile app single step")
+            val response = systemApi.controlRuntimeV1SystemRuntimeActionPost(
+                action = "step",
+                runtimeAction = request,
+                authorization = authHeader()
+            )
+            logDebug(method, "Response: status=${response.status}")
+
+            if (!response.success) {
+                logError(method, "API returned non-success status: ${response.status}")
+                throw RuntimeException("API error: HTTP ${response.status}")
+            }
+
+            val body = response.body()
+            val data = body.`data` ?: throw RuntimeException("API returned null data")
+
+            logInfo(method, "Single step completed: currentStep=${data.currentStep}, message=${data.message}")
+
+            SingleStepResponse(
+                stepPoint = data.currentStep,
+                message = data.message,
+                processingTimeMs = null, // Not in API response
+                tokensUsed = null // Not in API response
+            )
+        } catch (e: Exception) {
+            logException(method, e)
+            throw e
+        }
+    }
+
     override fun close() {
         logInfo("close", "Closing CIRISApiClient")
     }

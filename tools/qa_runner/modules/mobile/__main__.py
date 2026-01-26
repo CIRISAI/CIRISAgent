@@ -57,6 +57,8 @@ SCREEN_REGISTRY: Dict[str, Tuple[str, Optional[str], str]] = {
     "sessions": ("Sessions", "Sessions", "Active sessions screen"),
     "adapters": ("Adapters", "Adapters", "Adapter management screen"),
     "wise_authority": ("Wise Authority", "Wise Authority", "Wise Authority deferrals screen"),
+    "services": ("Services", "Services", "Service status management screen"),
+    "runtime": ("Runtime", "Runtime", "Runtime control panel screen"),
 }
 
 

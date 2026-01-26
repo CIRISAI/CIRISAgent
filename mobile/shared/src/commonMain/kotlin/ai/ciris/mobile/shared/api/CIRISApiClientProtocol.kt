@@ -117,6 +117,35 @@ interface CIRISApiClientProtocol {
      * Remove/unload an adapter
      */
     suspend fun removeAdapter(adapterId: String): AdapterActionData
+
+    // ===== Services API =====
+
+    /**
+     * Get registered services information
+     */
+    suspend fun getServices(): ServicesResponse
+
+    // ===== Runtime Control API =====
+
+    /**
+     * Get runtime state (processor state, queue depth, etc.)
+     */
+    suspend fun getRuntimeState(): RuntimeStateResponse
+
+    /**
+     * Pause runtime processing
+     */
+    suspend fun pauseRuntime(): RuntimeControlResponse
+
+    /**
+     * Resume runtime processing
+     */
+    suspend fun resumeRuntime(): RuntimeControlResponse
+
+    /**
+     * Execute a single processing step (when paused)
+     */
+    suspend fun singleStepProcessor(): SingleStepResponse
 }
 
 /**
@@ -168,4 +197,66 @@ data class AdapterActionData(
     val adapterId: String,
     val success: Boolean,
     val message: String?
+)
+
+// ===== Services API Data Models =====
+
+/**
+ * Services response from /v1/system/services
+ */
+data class ServicesResponse(
+    val globalServices: Map<String, List<ServiceProviderData>>,
+    val handlers: Map<String, Map<String, List<ServiceProviderData>>>
+)
+
+/**
+ * Service provider data
+ */
+data class ServiceProviderData(
+    val name: String,
+    val priority: String,
+    val priorityGroup: Int,
+    val strategy: String,
+    val circuitBreakerState: String,
+    val capabilities: List<String>
+)
+
+// ===== Runtime API Data Models =====
+
+/**
+ * Runtime state response from /v1/system/runtime
+ */
+data class RuntimeStateResponse(
+    val processorState: String,
+    val cognitiveState: String,
+    val queueDepth: Int,
+    val activeTasks: List<RuntimeTaskData>
+)
+
+/**
+ * Active task data in runtime state
+ */
+data class RuntimeTaskData(
+    val taskId: String,
+    val status: String,
+    val thoughtCount: Int,
+    val lastUpdated: String
+)
+
+/**
+ * Response from pause/resume runtime operations
+ */
+data class RuntimeControlResponse(
+    val processorState: String,
+    val message: String?
+)
+
+/**
+ * Response from single-step processor operation
+ */
+data class SingleStepResponse(
+    val stepPoint: String?,
+    val message: String?,
+    val processingTimeMs: Long?,
+    val tokensUsed: Int?
 )

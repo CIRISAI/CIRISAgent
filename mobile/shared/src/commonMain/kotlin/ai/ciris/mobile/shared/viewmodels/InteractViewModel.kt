@@ -1,6 +1,8 @@
 package ai.ciris.mobile.shared.viewmodels
 
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.ReasoningEvent
+import ai.ciris.mobile.shared.api.ReasoningStreamClient
 import ai.ciris.mobile.shared.models.ChatMessage
 import ai.ciris.mobile.shared.models.MessageType
 import androidx.lifecycle.ViewModel
@@ -15,13 +17,38 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 /**
+ * A bubble emoji that floats up from the agent icon
+ */
+data class BubbleEmoji(
+    val id: Long,
+    val emoji: String
+)
+
+/**
+ * A timeline event - minimal storage (emoji + timestamp + event type)
+ */
+data class TimelineEvent(
+    val emoji: String,
+    val eventType: String, // action name for display
+    val timestamp: Long // epoch millis
+)
+
+/**
+ * Agent processing state for the icon
+ */
+enum class AgentProcessingState {
+    IDLE,       // 💭 - not processing
+    PROCESSING  // 🔄 - actively processing
+}
+
+/**
  * Shared ViewModel for chat interface
  * Ported from Android InteractFragment.kt
  *
  * Features:
  * - Message history polling
  * - Agent status monitoring
- * - Processing status tracking
+ * - Processing status tracking via SSE bubbles
  * - Message submission
  * - Shutdown controls
  */
@@ -33,6 +60,11 @@ class InteractViewModel(
         private const val TAG = "InteractViewModel"
         private const val POLL_INTERVAL_MS = 3000L
         private const val STATUS_POLL_INTERVAL_MS = 5000L
+        private const val MAX_BUBBLES = 8
+        private const val BUBBLE_LIFETIME_MS = 2000L
+        private const val MAX_TIMELINE_EVENTS = 100
+        private const val SSE_RECONNECT_BASE_MS = 1000L
+        private const val SSE_RECONNECT_MAX_MS = 30000L
     }
 
     private fun log(level: String, method: String, message: String) {
@@ -68,15 +100,49 @@ class InteractViewModel(
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
 
+    // Bubble emoji state - emojis float up from agent icon
+    private val _bubbleEmojis = MutableStateFlow<List<BubbleEmoji>>(emptyList())
+    val bubbleEmojis: StateFlow<List<BubbleEmoji>> = _bubbleEmojis.asStateFlow()
+
+    // Agent processing state for icon
+    private val _agentProcessingState = MutableStateFlow(AgentProcessingState.IDLE)
+    val agentProcessingState: StateFlow<AgentProcessingState> = _agentProcessingState.asStateFlow()
+
+    // SSE stream connected
+    private val _sseConnected = MutableStateFlow(false)
+    val sseConnected: StateFlow<Boolean> = _sseConnected.asStateFlow()
+
+    // Timeline events - minimal storage for bubble net
+    private val _timelineEvents = MutableStateFlow<List<TimelineEvent>>(emptyList())
+    val timelineEvents: StateFlow<List<TimelineEvent>> = _timelineEvents.asStateFlow()
+
+    // Show timeline popup
+    private val _showTimeline = MutableStateFlow(false)
+    val showTimeline: StateFlow<Boolean> = _showTimeline.asStateFlow()
+
+    // Show emoji legend popup
+    private val _showLegend = MutableStateFlow(false)
+    val showLegend: StateFlow<Boolean> = _showLegend.asStateFlow()
+
     private var pollingJob: Job? = null
     private var statusJob: Job? = null
+    private var sseJob: Job? = null
     private var isFirstLoad = true
     private var authErrorCount = 0
+    private var bubbleIdCounter = 0L
+    private var sseReconnectDelay = SSE_RECONNECT_BASE_MS
+
+    // SSE client for reasoning stream
+    private val sseClient = ReasoningStreamClient(
+        baseUrl = apiClient.baseUrl,
+        getToken = { apiClient.getAccessToken() }
+    )
 
     init {
         logInfo("init", "InteractViewModel initialized")
         startStatusPolling()
         startMessagePolling()
+        startSseStream()
     }
 
     fun onInputTextChanged(text: String) {
@@ -355,10 +421,124 @@ class InteractViewModel(
         return "msg_${Clock.System.now().toEpochMilliseconds()}"
     }
 
+    /**
+     * Toggle timeline visibility
+     */
+    fun toggleTimeline() {
+        _showTimeline.value = !_showTimeline.value
+    }
+
+    /**
+     * Toggle emoji legend visibility
+     */
+    fun toggleLegend() {
+        _showLegend.value = !_showLegend.value
+    }
+
+    /**
+     * Start SSE stream for live reasoning events with robust reconnection
+     */
+    private fun startSseStream() {
+        val method = "startSseStream"
+        logInfo(method, "Starting SSE reasoning stream")
+
+        sseJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    sseClient.connect().collect { event ->
+                        when (event) {
+                            is ReasoningEvent.Connected -> {
+                                logInfo(method, "SSE connected")
+                                _sseConnected.value = true
+                                sseReconnectDelay = SSE_RECONNECT_BASE_MS // Reset on success
+                            }
+                            is ReasoningEvent.Disconnected -> {
+                                logInfo(method, "SSE disconnected")
+                                _sseConnected.value = false
+                                _agentProcessingState.value = AgentProcessingState.IDLE
+                            }
+                            is ReasoningEvent.Emoji -> {
+                                // Add bubble emoji (floats up and disappears)
+                                addBubbleEmoji(event.emoji)
+
+                                // Add to timeline (persists for bubble net)
+                                addTimelineEvent(event.emoji, event.eventType)
+
+                                // Update processing state
+                                if (event.isComplete) {
+                                    _agentProcessingState.value = AgentProcessingState.IDLE
+                                } else {
+                                    _agentProcessingState.value = AgentProcessingState.PROCESSING
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logError(method, "SSE error: ${e.message}")
+                    _sseConnected.value = false
+                }
+
+                // Exponential backoff reconnection
+                logInfo(method, "Reconnecting in ${sseReconnectDelay}ms...")
+                delay(sseReconnectDelay)
+                sseReconnectDelay = (sseReconnectDelay * 2).coerceAtMost(SSE_RECONNECT_MAX_MS)
+            }
+        }
+    }
+
+    /**
+     * Add a bubble emoji that floats up
+     */
+    private fun addBubbleEmoji(emoji: String) {
+        val bubbleId = bubbleIdCounter++
+        val bubble = BubbleEmoji(id = bubbleId, emoji = emoji)
+
+        // Add to list (keep max bubbles)
+        _bubbleEmojis.value = (_bubbleEmojis.value + bubble).takeLast(MAX_BUBBLES)
+
+        // Remove after animation completes
+        viewModelScope.launch {
+            delay(BUBBLE_LIFETIME_MS)
+            _bubbleEmojis.value = _bubbleEmojis.value.filter { it.id != bubbleId }
+        }
+    }
+
+    /**
+     * Add event to timeline (minimal storage for bubble net)
+     */
+    private fun addTimelineEvent(emoji: String, eventType: String) {
+        val event = TimelineEvent(
+            emoji = emoji,
+            eventType = formatEventTypeName(eventType),
+            timestamp = Clock.System.now().toEpochMilliseconds()
+        )
+        _timelineEvents.value = (_timelineEvents.value + event).takeLast(MAX_TIMELINE_EVENTS)
+    }
+
+    /**
+     * Format event type for display (e.g., "action_result" -> "Action Result")
+     */
+    private fun formatEventTypeName(eventType: String): String {
+        return eventType
+            .replace("_", " ")
+            .split(" ")
+            .joinToString(" ") { word ->
+                word.replaceFirstChar { it.uppercase() }
+            }
+    }
+
+    /**
+     * Clear timeline events
+     */
+    fun clearTimeline() {
+        _timelineEvents.value = emptyList()
+    }
+
     override fun onCleared() {
         logInfo("onCleared", "ViewModel cleared, cancelling jobs")
         super.onCleared()
         pollingJob?.cancel()
         statusJob?.cancel()
+        sseJob?.cancel()
     }
 }

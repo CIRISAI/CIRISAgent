@@ -26,9 +26,14 @@ import kotlinx.serialization.json.JsonPrimitive
  * All methods include comprehensive error logging for debugging.
  */
 class CIRISApiClient(
-    private val baseUrl: String = "http://localhost:8080",
+    val baseUrl: String = "http://localhost:8080",
     private var accessToken: String? = null
 ) : CIRISApiClientProtocol {
+
+    /**
+     * Get current access token (for SSE client)
+     */
+    fun getAccessToken(): String? = accessToken
 
     companion object {
         private const val TAG = "CIRISApiClient"
